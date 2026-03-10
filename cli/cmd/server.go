@@ -4,7 +4,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -30,6 +29,8 @@ var (
 	serverPort    string
 	serverModel   string
 	serverVersion string
+	serverJar     string
+	serverLocal   bool
 	followLogs    bool
 )
 
@@ -60,6 +61,8 @@ func init() {
 	serverStartCmd.Flags().StringVarP(&serverPort, "port", "p", "8080", "Server port")
 	serverStartCmd.Flags().StringVarP(&serverModel, "model", "m", "", "Default LLM model (e.g. openai/gpt-4o)")
 	serverStartCmd.Flags().StringVar(&serverVersion, "version", "", "Specific server version to download (e.g. 0.1.0)")
+	serverStartCmd.Flags().StringVar(&serverJar, "jar", "", "Path to a local JAR file to use directly")
+	serverStartCmd.Flags().BoolVar(&serverLocal, "local", false, "Use locally built JAR from server/build/libs/")
 
 	serverLogsCmd.Flags().BoolVarP(&followLogs, "follow", "f", false, "Follow log output")
 
@@ -79,16 +82,6 @@ func logFile() string {
 	return filepath.Join(serverDir(), "server.log")
 }
 
-func metadataFile() string {
-	return filepath.Join(serverDir(), "latest.json")
-}
-
-type releaseMetadata struct {
-	ETag      string `json:"etag"`
-	UpdatedAt string `json:"updated_at"`
-	Version   string `json:"version"`
-}
-
 func runServerStart(cmd *cobra.Command, args []string) error {
 	dir := serverDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -96,12 +89,35 @@ func runServerStart(cmd *cobra.Command, args []string) error {
 	}
 
 	var jarPath string
-	if serverVersion != "" {
+	switch {
+	case serverJar != "":
+		// Use explicit JAR path
+		abs, err := filepath.Abs(serverJar)
+		if err != nil {
+			return fmt.Errorf("resolve JAR path: %w", err)
+		}
+		if _, err := os.Stat(abs); err != nil {
+			return fmt.Errorf("JAR not found: %s", abs)
+		}
+		jarPath = abs
+		color.Green("Using JAR: %s", jarPath)
+
+	case serverLocal:
+		// Find locally built JAR by walking up from executable or CWD
+		localJar, err := findLocalJAR()
+		if err != nil {
+			return err
+		}
+		jarPath = localJar
+		color.Green("Using local JAR: %s", jarPath)
+
+	case serverVersion != "":
 		jarPath = filepath.Join(dir, fmt.Sprintf("agentspan-runtime-%s.jar", serverVersion))
 		if err := ensureVersionedJAR(jarPath, serverVersion); err != nil {
 			return err
 		}
-	} else {
+
+	default:
 		jarPath = filepath.Join(dir, jarName)
 		if err := ensureLatestJAR(jarPath); err != nil {
 			return err
@@ -235,6 +251,43 @@ func runServerLogs(cmd *cobra.Command, args []string) error {
 	}
 }
 
+// --- Local JAR helpers ---
+
+func findLocalJAR() (string, error) {
+	// Try CWD first, then walk up to find 'server/build/libs/agentspan-runtime.jar'
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("get working directory: %w", err)
+	}
+
+	// Check common relative paths from likely CWD locations
+	candidates := []string{
+		filepath.Join(cwd, "server", "build", "libs", jarName),
+		filepath.Join(cwd, "build", "libs", jarName),
+		filepath.Join(cwd, "..", "server", "build", "libs", jarName),
+	}
+
+	// Also walk up from CWD looking for server/build/libs/
+	dir := cwd
+	for i := 0; i < 5; i++ {
+		candidate := filepath.Join(dir, "server", "build", "libs", jarName)
+		candidates = append(candidates, candidate)
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return filepath.Abs(c)
+		}
+	}
+
+	return "", fmt.Errorf("local JAR not found. Build it first with: cd server && ./gradlew build")
+}
+
 // --- JAR download helpers ---
 
 func ensureVersionedJAR(jarPath, version string) error {
@@ -243,106 +296,37 @@ func ensureVersionedJAR(jarPath, version string) error {
 		return nil
 	}
 
-	tag := "server-v" + version
-	asset := fmt.Sprintf("agentspan-runtime-%s.jar", version)
-	downloadURL := fmt.Sprintf("https://github.com/%s/releases/download/%s/%s", githubRepo, tag, asset)
-
+	downloadURL := fmt.Sprintf("https://github.com/%s/releases/download/%s/%s", githubRepo, version, jarName)
 	return downloadJAR(downloadURL, jarPath)
 }
 
 func ensureLatestJAR(jarPath string) error {
-	// Check GitHub for latest release metadata
-	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/releases/tags/%s", githubRepo, latestTag)
+	downloadURL := fmt.Sprintf("https://github.com/%s/releases/download/%s/%s", githubRepo, latestTag, jarName)
 
-	httpClient := &http.Client{Timeout: 15 * time.Second}
-	req, err := http.NewRequest("GET", apiURL, nil)
-	if err != nil {
-		return checkFallback(jarPath, err)
-	}
-	req.Header.Set("Accept", "application/vnd.github.v3+json")
-
-	// Use If-None-Match if we have a cached etag
-	var cached releaseMetadata
-	if data, err := os.ReadFile(metadataFile()); err == nil {
-		json.Unmarshal(data, &cached)
-		if cached.ETag != "" {
-			req.Header.Set("If-None-Match", cached.ETag)
+	// If we already have a cached JAR, do a HEAD request to check if remote has changed
+	if info, err := os.Stat(jarPath); err == nil {
+		httpClient := &http.Client{Timeout: 15 * time.Second}
+		resp, err := httpClient.Head(downloadURL)
+		if err != nil {
+			color.Yellow("Could not check for updates (%v), using cached JAR", err)
+			return nil
 		}
-	}
+		resp.Body.Close()
 
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return checkFallback(jarPath, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotModified {
-		// Latest hasn't changed
-		if _, err := os.Stat(jarPath); err == nil {
-			color.Green("Server JAR is up to date")
+		if resp.StatusCode == http.StatusOK {
+			// Compare content-length as a simple freshness check
+			remoteSize := resp.ContentLength
+			if remoteSize > 0 && remoteSize == info.Size() {
+				color.Green("Server JAR is up to date")
+				return nil
+			}
+		} else if resp.StatusCode == http.StatusNotFound {
+			color.Yellow("No remote release found, using cached JAR")
 			return nil
 		}
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return checkFallback(jarPath, fmt.Errorf("GitHub API returned %d", resp.StatusCode))
-	}
-
-	// Parse release to find the JAR asset URL
-	var release struct {
-		Assets []struct {
-			Name               string `json:"name"`
-			BrowserDownloadURL string `json:"browser_download_url"`
-			UpdatedAt          string `json:"updated_at"`
-		} `json:"assets"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return checkFallback(jarPath, err)
-	}
-
-	var assetURL, updatedAt string
-	for _, a := range release.Assets {
-		if a.Name == jarName {
-			assetURL = a.BrowserDownloadURL
-			updatedAt = a.UpdatedAt
-			break
-		}
-	}
-	if assetURL == "" {
-		return checkFallback(jarPath, fmt.Errorf("JAR asset not found in latest release"))
-	}
-
-	// Check if we need to re-download
-	if cached.UpdatedAt == updatedAt {
-		if _, err := os.Stat(jarPath); err == nil {
-			color.Green("Server JAR is up to date")
-			return nil
-		}
-	}
-
-	// Download
-	if err := downloadJAR(assetURL, jarPath); err != nil {
-		return err
-	}
-
-	// Save metadata
-	meta := releaseMetadata{
-		ETag:      resp.Header.Get("ETag"),
-		UpdatedAt: updatedAt,
-	}
-	if data, err := json.Marshal(meta); err == nil {
-		os.WriteFile(metadataFile(), data, 0o644)
-	}
-
-	return nil
-}
-
-func checkFallback(jarPath string, origErr error) error {
-	if _, err := os.Stat(jarPath); err == nil {
-		color.Yellow("Could not check for updates (%v), using cached JAR", origErr)
-		return nil
-	}
-	return fmt.Errorf("download server JAR: %w", origErr)
+	return downloadJAR(downloadURL, jarPath)
 }
 
 func downloadJAR(downloadURL, destPath string) error {

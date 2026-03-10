@@ -31,16 +31,14 @@ jobs:
         run: ./gradlew bootJar
 
       - name: Prepare release asset
-        run: |
-          cp build/libs/agentspan-runtime.jar ../agentspan-runtime-${{ inputs.version }}.jar
-          cp build/libs/agentspan-runtime.jar ../agentspan-runtime.jar
+        run: cp build/libs/agentspan-runtime.jar ../agentspan-runtime.jar
 
       - name: Create versioned release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "server-v${{ inputs.version }}" \
-            ../agentspan-runtime-${{ inputs.version }}.jar \
+          gh release create "${{ inputs.version }}" \
+            ../agentspan-runtime.jar \
             --repo "${{ github.repository }}" \
             --title "Server v${{ inputs.version }}" \
             --generate-notes
