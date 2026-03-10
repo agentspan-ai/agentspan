@@ -1,4 +1,4 @@
-# Conductor Agent SDK
+# AgentSpan
 
 Build **durable, scalable, observable AI agents** backed by [Conductor](https://github.com/conductor-oss/conductor) workflows.
 
@@ -14,11 +14,11 @@ agent = Agent(name="weatherbot", model="openai/gpt-4o", tools=[get_weather])
 result = run(agent, "What's the weather in NYC?")
 ```
 
-Every other agent SDK runs agents in-memory. When the process dies, the agent dies. Conductor Agent SDK compiles agents into **durable Conductor workflows** — agents that survive crashes, tools that scale as distributed workers, and human-in-the-loop approvals that can pause for days.
+Every other agent SDK runs agents in-memory. When the process dies, the agent dies. AgentSpan compiles agents into **durable Conductor workflows** — agents that survive crashes, tools that scale as distributed workers, and human-in-the-loop approvals that can pause for days.
 
-## Why Conductor Agent SDK?
+## Why AgentSpan?
 
-| Capability | In-memory SDKs | Conductor Agent SDK |
+| Capability | In-memory SDKs | AgentSpan |
 |---|---|---|
 | Process crashes | Agent dies | **Agent continues** (workflow-backed) |
 | Tool scaling | Single process | **Distributed workers, any language** |

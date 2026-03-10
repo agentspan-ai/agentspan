@@ -9,3 +9,4 @@ build/
 bin/
 /sdk/python/src/conductor_agents.egg-info
 /sdk/python/src/conductor_agents_sdk.egg-info
+server/agent-runtime.db-wal
