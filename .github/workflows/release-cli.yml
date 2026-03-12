@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'cli-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 1.0.0)"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -14,6 +20,9 @@ jobs:
     defaults:
       run:
         working-directory: cli
+    outputs:
+      version: ${{ steps.get_version.outputs.VERSION }}
+      tag: ${{ steps.get_version.outputs.TAG }}
 
     steps:
     - uses: actions/checkout@v4
@@ -25,9 +34,18 @@ jobs:
       with:
         go-version: '1.23'
 
-    - name: Get version from tag
+    - name: Get version
       id: get_version
-      run: echo "VERSION=${GITHUB_REF#refs/tags/cli-}" >> $GITHUB_OUTPUT
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ inputs.version }}"
+          TAG="cli-v${VERSION}"
+        else
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#cli-v}"
+        fi
+        echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+        echo "TAG=${TAG}" >> $GITHUB_OUTPUT
 
     - name: Build binaries for all platforms
       run: |
@@ -64,6 +82,7 @@ jobs:
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
+        tag_name: ${{ steps.get_version.outputs.TAG }}
         body_path: cli/CHANGELOG.txt
         files: |
           cli/dist/agentspan_linux_amd64
@@ -77,87 +96,18 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        registry-url: 'https://registry.npmjs.org'
+  publish-npm:
+    needs: release
+    uses: ./.github/workflows/release-cli-npm.yml
+    with:
+      version: ${{ needs.release.outputs.version }}
+    secrets: inherit
 
-    - name: Update package.json version
-      run: |
-        VERSION="${{ steps.get_version.outputs.VERSION }}"
-        NPM_VERSION="${VERSION#v}"
-        npm version $NPM_VERSION --no-git-tag-version --allow-same-version
-
-    - name: Publish to npm
-      run: npm publish --access public
-      env:
-        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-    - name: Checkout Homebrew tap
-      if: "!contains(steps.get_version.outputs.VERSION, '-')"
-      uses: actions/checkout@v4
-      with:
-        repository: agentspan/homebrew-agentspan
-        token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-        path: homebrew-tap
-
-    - name: Update Homebrew formula
-      if: "!contains(steps.get_version.outputs.VERSION, '-')"
-      run: |
-        VERSION="${{ steps.get_version.outputs.VERSION }}"
-        BREW_VERSION="${VERSION#v}"
-
-        SHA256_DARWIN_AMD64=$(shasum -a 256 dist/agentspan_darwin_amd64 | awk '{print $1}')
-        SHA256_DARWIN_ARM64=$(shasum -a 256 dist/agentspan_darwin_arm64 | awk '{print $1}')
-        SHA256_LINUX_AMD64=$(shasum -a 256 dist/agentspan_linux_amd64 | awk '{print $1}')
-        SHA256_LINUX_ARM64=$(shasum -a 256 dist/agentspan_linux_arm64 | awk '{print $1}')
-
-        cd ../homebrew-tap
-
-        mkdir -p Formula
-
-        cat > Formula/agentspan.rb << EOF
-        class Agentspan < Formula
-          desc "CLI for AgentSpan - Build, run, and manage AI agents"
-          homepage "https://github.com/agentspan/agentspan"
-          version "$BREW_VERSION"
-
-          on_macos do
-            if Hardware::CPU.arm?
-              url "https://github.com/agentspan/agentspan/releases/download/cli-v${BREW_VERSION}/agentspan_darwin_arm64"
-              sha256 "$SHA256_DARWIN_ARM64"
-            else
-              url "https://github.com/agentspan/agentspan/releases/download/cli-v${BREW_VERSION}/agentspan_darwin_amd64"
-              sha256 "$SHA256_DARWIN_AMD64"
-            end
-          end
-
-          on_linux do
-            if Hardware::CPU.arm?
-              url "https://github.com/agentspan/agentspan/releases/download/cli-v${BREW_VERSION}/agentspan_linux_arm64"
-              sha256 "$SHA256_LINUX_ARM64"
-            else
-              url "https://github.com/agentspan/agentspan/releases/download/cli-v${BREW_VERSION}/agentspan_linux_amd64"
-              sha256 "$SHA256_LINUX_AMD64"
-            end
-          end
-
-          def install
-            bin.install "agentspan_darwin_arm64" => "agentspan" if Hardware::CPU.arm? && OS.mac?
-            bin.install "agentspan_darwin_amd64" => "agentspan" if Hardware::CPU.intel? && OS.mac?
-            bin.install "agentspan_linux_arm64" => "agentspan" if Hardware::CPU.arm? && OS.linux?
-            bin.install "agentspan_linux_amd64" => "agentspan" if Hardware::CPU.intel? && OS.linux?
-          end
-
-          test do
-            system "#{bin}/agentspan", "version"
-          end
-        end
-        EOF
-
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        git add Formula/agentspan.rb
-        git commit -m "Update agentspan to $BREW_VERSION"
-        git push
+  publish-homebrew:
+    needs: release
+    if: "!contains(needs.release.outputs.version, '-')"
+    uses: ./.github/workflows/release-cli-homebrew.yml
+    with:
+      version: ${{ needs.release.outputs.version }}
+      tag: ${{ needs.release.outputs.tag }}
+    secrets: inherit

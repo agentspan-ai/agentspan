@@ -1,0 +1,104 @@
+name: Release CLI - Homebrew
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (e.g. 1.0.0)"
+        required: true
+        type: string
+      tag:
+        description: "GitHub release tag to download binaries from (e.g. v1.0.0 or cli-v1.0.0)"
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      tag:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish-homebrew:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release binaries
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ inputs.tag }}"
+          REPO="${{ github.repository }}"
+          mkdir -p dist
+          for binary in agentspan_darwin_amd64 agentspan_darwin_arm64 agentspan_linux_amd64 agentspan_linux_arm64; do
+            gh release download "${TAG}" --pattern "${binary}" --dir dist --repo "${REPO}"
+          done
+
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: agentspan/homebrew-agentspan
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update Homebrew formula
+        run: |
+          BREW_VERSION="${{ inputs.version }}"
+
+          SHA256_DARWIN_AMD64=$(shasum -a 256 dist/agentspan_darwin_amd64 | awk '{print $1}')
+          SHA256_DARWIN_ARM64=$(shasum -a 256 dist/agentspan_darwin_arm64 | awk '{print $1}')
+          SHA256_LINUX_AMD64=$(shasum -a 256 dist/agentspan_linux_amd64 | awk '{print $1}')
+          SHA256_LINUX_ARM64=$(shasum -a 256 dist/agentspan_linux_arm64 | awk '{print $1}')
+
+          cd homebrew-tap
+
+          mkdir -p Formula
+
+          cat > Formula/agentspan.rb << EOF
+          class Agentspan < Formula
+            desc "CLI for AgentSpan - Build, run, and manage AI agents"
+            homepage "https://github.com/agentspan/agentspan"
+            version "$BREW_VERSION"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/agentspan/agentspan/releases/download/v${BREW_VERSION}/agentspan_darwin_arm64"
+                sha256 "$SHA256_DARWIN_ARM64"
+              else
+                url "https://github.com/agentspan/agentspan/releases/download/v${BREW_VERSION}/agentspan_darwin_amd64"
+                sha256 "$SHA256_DARWIN_AMD64"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm?
+                url "https://github.com/agentspan/agentspan/releases/download/v${BREW_VERSION}/agentspan_linux_arm64"
+                sha256 "$SHA256_LINUX_ARM64"
+              else
+                url "https://github.com/agentspan/agentspan/releases/download/v${BREW_VERSION}/agentspan_linux_amd64"
+                sha256 "$SHA256_LINUX_AMD64"
+              end
+            end
+
+            def install
+              bin.install "agentspan_darwin_arm64" => "agentspan" if Hardware::CPU.arm? && OS.mac?
+              bin.install "agentspan_darwin_amd64" => "agentspan" if Hardware::CPU.intel? && OS.mac?
+              bin.install "agentspan_linux_arm64" => "agentspan" if Hardware::CPU.arm? && OS.linux?
+              bin.install "agentspan_linux_amd64" => "agentspan" if Hardware::CPU.intel? && OS.linux?
+            end
+
+            test do
+              system "#{bin}/agentspan", "version"
+            end
+          end
+          EOF
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/agentspan.rb
+          git commit -m "Update agentspan to $BREW_VERSION"
+          git push
