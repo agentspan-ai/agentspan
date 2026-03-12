@@ -42,6 +42,12 @@ dev = [
 testing = [
     "litellm>=1.0",
 ]
+validation = [
+    "openai-agents>=0.1",
+    "google-adk>=1.18.0",
+    "openai>=1.0",
+    "litellm>=1.0",
+]
 
 [project.entry-points."pytest11"]
 agentspan-testing = "agentspan.agents.testing.pytest_plugin"
