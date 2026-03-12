@@ -9,8 +9,9 @@ permissions:
   id-token: write
 
 jobs:
-  # Only run for vX.Y.Z tags (skip cli-v* or other prefixed tags)
-  server:
+  # ── Build phase (all run in parallel) ──────────────────────────────────
+
+  build-server:
     runs-on: ubuntu-latest
     if: startsWith(github.event.release.tag_name, 'v') && !contains(github.event.release.tag_name, '-')
     defaults:
@@ -36,43 +37,30 @@ jobs:
         id: version
         run: |
           TAG="${{ github.event.release.tag_name }}"
-          # Strip leading 'v' from tag (v1.0.0 -> 1.0.0)
           VERSION="${TAG#v}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
-      - name: Prepare release assets
+      - name: Prepare release asset
         run: |
           cp build/libs/agentspan-runtime.jar ../agentspan-server-${{ steps.version.outputs.version }}.jar
 
-      - name: Upload JAR to GitHub release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload "${{ steps.version.outputs.tag }}" \
-            ../agentspan-server-${{ steps.version.outputs.version }}.jar \
-            --repo "${{ github.repository }}"
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-jar
+          path: agentspan-server-${{ steps.version.outputs.version }}.jar
+          retention-days: 1
 
-      - name: Upload to S3 (versioned and latest)
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
-        run: |
-          # Upload versioned artifact
-          aws s3 cp ../agentspan-server-${{ steps.version.outputs.version }}.jar \
-            s3://agentspan/agentspan-server-${{ steps.version.outputs.version }}.jar
-
-          # Upload as latest
-          aws s3 cp ../agentspan-server-${{ steps.version.outputs.version }}.jar \
-            s3://agentspan/agentspan-server-latest.jar
-
-  cli:
+  build-cli:
     runs-on: ubuntu-latest
     if: startsWith(github.event.release.tag_name, 'v') && !contains(github.event.release.tag_name, '-')
     defaults:
       run:
         working-directory: cli
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -109,11 +97,106 @@ jobs:
 
           chmod +x dist/agentspan_*
 
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-binaries
+          path: cli/dist/
+          retention-days: 1
+
+  build-python-sdk:
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.release.tag_name, 'v') && !contains(github.event.release.tag_name, '-')
+    defaults:
+      run:
+        working-directory: sdk/python
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Determine version
+        id: version
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Update pyproject.toml version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          sed -i "s/^version = .*/version = \"${VERSION}\"/" pyproject.toml
+
+      - name: Install build tools
+        run: pip install build
+
+      - name: Build package
+        run: python -m build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: sdk/python/dist/
+          retention-days: 1
+
+  # ── Deploy phase (gated on ALL builds succeeding) ──────────────────────
+
+  deploy-server:
+    runs-on: ubuntu-latest
+    needs: [build-server, build-cli, build-python-sdk]
+    steps:
+      - name: Download server JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: server-jar
+
+      - name: Upload JAR to GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ needs.build-server.outputs.tag }}" \
+            agentspan-server-${{ needs.build-server.outputs.version }}.jar \
+            --repo "${{ github.repository }}"
+
+      - name: Upload to S3 (versioned and latest)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          VERSION="${{ needs.build-server.outputs.version }}"
+          aws s3 cp agentspan-server-${VERSION}.jar \
+            s3://agentspan/agentspan-server-${VERSION}.jar
+          aws s3 cp agentspan-server-${VERSION}.jar \
+            s3://agentspan/agentspan-server-latest.jar
+
+  deploy-cli:
+    runs-on: ubuntu-latest
+    needs: [build-server, build-cli, build-python-sdk]
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: cli
+
+      - name: Download CLI binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: cli-binaries
+          path: cli/dist
+
       - name: Upload CLI binaries to GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ steps.version.outputs.tag }}" \
+          gh release upload "${{ needs.build-cli.outputs.tag }}" \
             dist/agentspan_linux_amd64 \
             dist/agentspan_linux_arm64 \
             dist/agentspan_darwin_amd64 \
@@ -128,7 +211,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
+          VERSION="${{ needs.build-cli.outputs.version }}"
           for binary in dist/agentspan_*; do
             filename=$(basename "$binary")
             aws s3 cp "$binary" "s3://agentspan/cli/${VERSION}/${filename}"
@@ -143,7 +226,7 @@ jobs:
 
       - name: Update package.json version
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
+          VERSION="${{ needs.build-cli.outputs.version }}"
           npm version $VERSION --no-git-tag-version --allow-same-version
 
       - name: Publish to npm
@@ -152,7 +235,6 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Checkout Homebrew tap
-        if: "!contains(github.event.release.tag_name, '-')"
         uses: actions/checkout@v4
         with:
           repository: agentspan/homebrew-agentspan
@@ -160,10 +242,9 @@ jobs:
           path: homebrew-tap
 
       - name: Update Homebrew formula
-        if: "!contains(github.event.release.tag_name, '-')"
         run: |
-          VERSION="${{ steps.version.outputs.tag }}"
-          BREW_VERSION="${{ steps.version.outputs.version }}"
+          VERSION="${{ needs.build-cli.outputs.tag }}"
+          BREW_VERSION="${{ needs.build-cli.outputs.version }}"
 
           SHA256_DARWIN_AMD64=$(shasum -a 256 dist/agentspan_darwin_amd64 | awk '{print $1}')
           SHA256_DARWIN_ARM64=$(shasum -a 256 dist/agentspan_darwin_arm64 | awk '{print $1}')
@@ -219,39 +300,18 @@ jobs:
           git commit -m "Update agentspan to $BREW_VERSION"
           git push
 
-  python-sdk:
+  deploy-python-sdk:
     runs-on: ubuntu-latest
-    if: startsWith(github.event.release.tag_name, 'v') && !contains(github.event.release.tag_name, '-')
+    needs: [build-server, build-cli, build-python-sdk]
     environment: pypi
-    defaults:
-      run:
-        working-directory: sdk/python
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
+      - name: Download Python dist
+        uses: actions/download-artifact@v4
         with:
-          python-version: "3.12"
-
-      - name: Determine version
-        id: version
-        run: |
-          TAG="${{ github.event.release.tag_name }}"
-          VERSION="${TAG#v}"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-
-      - name: Update pyproject.toml version
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          sed -i "s/^version = .*/version = \"${VERSION}\"/" pyproject.toml
-
-      - name: Install build tools
-        run: pip install build
-
-      - name: Build package
-        run: python -m build
+          name: python-dist
+          path: dist
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: sdk/python/dist/
+          packages-dir: dist/
