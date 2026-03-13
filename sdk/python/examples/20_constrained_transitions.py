@@ -13,15 +13,16 @@ In this example, a code review workflow enforces:
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, Strategy
-from model_config import get_model
+from settings import settings
 
 developer = Agent(
     name="developer",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a software developer. Write or revise code based on feedback. "
         "Keep responses focused on code changes."
@@ -30,7 +31,7 @@ developer = Agent(
 
 reviewer = Agent(
     name="reviewer",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a code reviewer. Review the developer's code for bugs, style, "
         "and best practices. Provide specific, actionable feedback."
@@ -39,7 +40,7 @@ reviewer = Agent(
 
 approver = Agent(
     name="approver",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are the tech lead. Review the code and feedback. Either approve "
         "the code or request revisions with specific guidance."
@@ -52,7 +53,7 @@ approver = Agent(
 #   approver → developer (request revisions)
 code_review = Agent(
     name="code_review",
-    model=get_model(),
+    model=settings.llm_model,
     agents=[developer, reviewer, approver],
     strategy=Strategy.ROUND_ROBIN,
     max_turns=6,

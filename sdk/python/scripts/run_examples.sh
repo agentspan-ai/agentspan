@@ -212,7 +212,7 @@ if [[ ${#FAILED[@]} -gt 0 ]]; then
 import os, json
 try:
     from agentspan.agents.runtime.config import AgentConfig
-    cfg = AgentConfig.from_env()
+    cfg = AgentConfig()
     configuration = cfg.to_conductor_configuration()
     from conductor.client.orkes_clients import OrkesClients
     client = OrkesClients(configuration=configuration).get_workflow_client()

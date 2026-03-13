@@ -13,6 +13,8 @@ from google.adk.agents import Agent
 
 from agentspan.agents import AgentRuntime
 
+from settings import settings
+
 
 def main():
     def search_topic(topic: str) -> dict:
@@ -55,7 +57,7 @@ def main():
     # Research agent gathers information
     researcher = Agent(
         name="blog_researcher",
-        model="gemini-2.0-flash",
+        model=settings.llm_model,
         description="Researches topics and gathers key facts.",
         instruction=(
             "You are a research assistant. Use the search tool to gather information "
@@ -68,7 +70,7 @@ def main():
     # Writer creates the blog post draft
     writer = Agent(
         name="blog_writer",
-        model="gemini-2.0-flash",
+        model=settings.llm_model,
         description="Writes blog post drafts based on research.",
         instruction=(
             "You are a blog writer. Based on the research notes provided, "
@@ -81,7 +83,7 @@ def main():
     # Editor polishes the post
     editor = Agent(
         name="blog_editor",
-        model="gemini-2.0-flash",
+        model=settings.llm_model,
         description="Edits and polishes blog posts.",
         instruction=(
             "You are a blog editor. Review and polish the blog draft. "
@@ -93,7 +95,7 @@ def main():
     # Coordinator manages the pipeline
     coordinator = Agent(
         name="content_coordinator",
-        model="gemini-2.0-flash",
+        model=settings.llm_model,
         instruction=(
             "You are a content coordinator. First use the researcher to gather information, "
             "then the writer to create a draft, and finally the editor to polish it. "

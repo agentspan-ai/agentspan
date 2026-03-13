@@ -11,7 +11,8 @@ Demonstrates:
 Requirements:
     - pip install openai-agents pydantic
     - Conductor server with OpenAI LLM integration configured
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from typing import List
@@ -20,6 +21,8 @@ from agents import Agent, ModelSettings
 from pydantic import BaseModel
 
 from agentspan.agents import AgentRuntime
+
+from settings import settings
 
 
 class MovieRecommendation(BaseModel):
@@ -41,7 +44,7 @@ agent = Agent(
         "return a structured list of recommendations with title, year, genre, "
         "and a brief reason for each recommendation. Identify the overall theme."
     ),
-    model="gpt-4o",
+    model=settings.llm_model,
     output_type=MovieList,
     model_settings=ModelSettings(
         temperature=0.3,

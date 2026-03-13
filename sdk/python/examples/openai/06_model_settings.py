@@ -12,12 +12,15 @@ Demonstrates:
 Requirements:
     - pip install openai-agents
     - Conductor server with OpenAI LLM integration configured
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agents import Agent, ModelSettings
 
 from agentspan.agents import AgentRuntime
+
+from settings import settings
 
 # Creative agent with high temperature
 creative_agent = Agent(
@@ -26,7 +29,7 @@ creative_agent = Agent(
         "You are a creative writing assistant. Write with vivid imagery "
         "and unexpected metaphors. Be bold and imaginative."
     ),
-    model="gpt-4o",
+    model=settings.llm_model,
     model_settings=ModelSettings(
         temperature=0.9,
         max_tokens=500,
@@ -40,7 +43,7 @@ precise_agent = Agent(
         "You are a precise code reviewer. Analyze code snippets for bugs, "
         "security issues, and best practices. Be concise and specific."
     ),
-    model="gpt-4o",
+    model=settings.llm_model,
     model_settings=ModelSettings(
         temperature=0.1,
         max_tokens=300,

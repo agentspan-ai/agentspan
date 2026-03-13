@@ -9,17 +9,18 @@ monitored from the UI or via the API.
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 import time
 
 from agentspan.agents import Agent, AgentRuntime
-from model_config import get_model
+from settings import settings
 
 agent = Agent(
     name="saas_analyst",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a data analyst. Provide a brief analysis "
         "when asked about data topics."

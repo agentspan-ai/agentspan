@@ -12,7 +12,8 @@ Demonstrates:
 Requirements:
     - pip install openai-agents
     - Conductor server with OpenAI LLM integration configured
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agents import Agent, function_tool
@@ -36,6 +37,8 @@ def get_weather(city: str) -> str:
 def calculate(expression: str) -> str:
     """Evaluate a mathematical expression and return the result."""
     import math
+
+from settings import settings
 
     safe_builtins = {
         "abs": abs, "round": round, "min": min, "max": max,
@@ -66,7 +69,7 @@ agent = Agent(
         "You are a helpful assistant with access to weather, calculator, "
         "and population lookup tools. Use them to answer questions accurately."
     ),
-    model="gpt-4o",
+    model=settings.llm_model,
     tools=[get_weather, calculate, lookup_population],
 )
 

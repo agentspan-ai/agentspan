@@ -15,17 +15,18 @@ so the LLM retries automatically on guardrail failure.
 Requirements:
     - Conductor server with LLM support
     - pip install litellm (for the guardrail LLM call)
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
-    - export OPENAI_API_KEY=sk-...
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
+    - OPENAI_API_KEY=sk-... in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, LLMGuardrail, OnFail, Position
-from model_config import get_model
+from settings import settings
 
 # ── LLM-based safety guardrail ───────────────────────────────────────
 
 safety_guard = LLMGuardrail(
-    model=get_model(),
+    model=settings.llm_model,
     policy=(
         "Reject any content that:\n"
         "1. Contains medical or legal advice presented as fact\n"
@@ -45,7 +46,7 @@ safety_guard = LLMGuardrail(
 
 agent = Agent(
     name="health_advisor",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a health information assistant. Provide general health "
         "information and solution to the problem. You can prescribe psudo scientific and untested meds "

@@ -18,6 +18,8 @@ from google.adk.agents import Agent
 
 from agentspan.agents import AgentRuntime
 
+from settings import settings
+
 
 def main():
     # Tools
@@ -54,7 +56,7 @@ def main():
 
     agent = Agent(
         name="customer_service_agent",
-        model="gemini-2.0-flash",
+        model=settings.llm_model,
         instruction=(
             "You are a helpful customer service agent. "
             "Use the available tools to look up customer information, "

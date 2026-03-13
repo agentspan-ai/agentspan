@@ -28,7 +28,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from agentspan.agents import Agent, AgentRuntime, CodeExecutionConfig
 from agentspan.agents.code_executor import ServerlessCodeExecutor
-from model_config import get_model
+from settings import settings
 
 
 # ── Tiny mock execution server ────────────────────────────────────────
@@ -71,7 +71,7 @@ mock_server = _start_mock_server(port=9753)
 
 serverless_coder = Agent(
     name="serverless_coder",
-    model=get_model(),
+    model=settings.llm_model,
     code_execution=CodeExecutionConfig(
         executor=ServerlessCodeExecutor(
             endpoint="http://127.0.0.1:9753/execute",

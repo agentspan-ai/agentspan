@@ -15,17 +15,18 @@ Supported media types:
 
 Requirements:
     - Conductor server with LLM support (OpenAI key configured)
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, tool
-from model_config import get_model
+from settings import settings
 
 # ── Example 1: Simple image analysis ─────────────────────────────────
 
 vision_agent = Agent(
     name="vision_analyst",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a visual analysis expert. Describe images in detail, "
         "noting composition, colors, subjects, and any text visible."
@@ -48,7 +49,7 @@ def save_analysis(title: str, analysis: str) -> str:
 
 vision_with_tools = Agent(
     name="vision_researcher",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a visual research assistant. Analyze images, search for "
         "similar ones, and save your findings. Always save your analysis."
@@ -60,7 +61,7 @@ vision_with_tools = Agent(
 
 comparator = Agent(
     name="image_comparator",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are an image comparison specialist. When given multiple images, "
         "compare and contrast them in detail: similarities, differences, "
@@ -73,13 +74,13 @@ comparator = Agent(
 
 describer = Agent(
     name="describer",
-    model=get_model(),
+    model=settings.llm_model,
     instructions="Describe the image in 2-3 vivid sentences.",
 )
 
 storyteller = Agent(
     name="storyteller",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You receive an image description. Write a short creative "
         "story (3-4 sentences) inspired by it."

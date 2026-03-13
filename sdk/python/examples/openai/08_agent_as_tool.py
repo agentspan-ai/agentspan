@@ -11,12 +11,15 @@ Demonstrates:
 Requirements:
     - pip install openai-agents
     - Conductor server with OpenAI LLM integration configured
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agents import Agent, function_tool
 
 from agentspan.agents import AgentRuntime
+
+from settings import settings
 
 
 # ── Specialist tools ──────────────────────────────────────────────────
@@ -54,14 +57,14 @@ def extract_keywords(text: str) -> str:
 sentiment_agent = Agent(
     name="sentiment_analyzer",
     instructions="You analyze text sentiment. Use the analyze_sentiment tool and provide a brief interpretation.",
-    model="gpt-4o",
+    model=settings.llm_model,
     tools=[analyze_sentiment],
 )
 
 keyword_agent = Agent(
     name="keyword_extractor",
     instructions="You extract keywords from text. Use the extract_keywords tool and categorize the results.",
-    model="gpt-4o",
+    model=settings.llm_model,
     tools=[extract_keywords],
 )
 
@@ -76,7 +79,7 @@ manager = Agent(
         "3. Synthesize the results into a concise summary\n\n"
         "Always use both tools before providing your summary."
     ),
-    model="gpt-4o",
+    model=settings.llm_model,
     tools=[
         sentiment_agent.as_tool(
             tool_name="sentiment_analyzer",

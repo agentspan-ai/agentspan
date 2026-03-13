@@ -176,12 +176,12 @@ class TestAgentRuntimeInit:
         import os
 
         env_backup = {}
-        for key in ["CONDUCTOR_SERVER_URL", "CONDUCTOR_AUTH_KEY", "CONDUCTOR_AUTH_SECRET"]:
+        for key in ["AGENTSPAN_SERVER_URL", "AGENTSPAN_AUTH_KEY", "AGENTSPAN_AUTH_SECRET"]:
             env_backup[key] = os.environ.pop(key, None)
 
-        os.environ["CONDUCTOR_SERVER_URL"] = "http://env-server/api"
-        os.environ["CONDUCTOR_AUTH_KEY"] = "env-key"
-        os.environ["CONDUCTOR_AUTH_SECRET"] = "env-secret"
+        os.environ["AGENTSPAN_SERVER_URL"] = "http://env-server/api"
+        os.environ["AGENTSPAN_AUTH_KEY"] = "env-key"
+        os.environ["AGENTSPAN_AUTH_SECRET"] = "env-secret"
 
         try:
             with patch("conductor.client.orkes_clients.OrkesClients"):
@@ -192,7 +192,7 @@ class TestAgentRuntimeInit:
                     assert rt._config.auth_key == "env-key"
                     assert rt._config.auth_secret == "env-secret"
         finally:
-            for key in ["CONDUCTOR_SERVER_URL", "CONDUCTOR_AUTH_KEY", "CONDUCTOR_AUTH_SECRET"]:
+            for key in ["AGENTSPAN_SERVER_URL", "AGENTSPAN_AUTH_KEY", "AGENTSPAN_AUTH_SECRET"]:
                 os.environ.pop(key, None)
             for key, val in env_backup.items():
                 if val is not None:
@@ -262,31 +262,27 @@ class TestAgentRuntimeInit:
                 assert rt._config.worker_thread_count == 4
 
 
-class TestConfigFromEnv:
-    """Test AgentConfig.from_env() with defaults."""
+class TestAgentConfig:
+    """Test AgentConfig BaseSettings loads from env."""
 
     def test_defaults(self):
         from agentspan.agents.runtime.config import AgentConfig
-        import os
+        from unittest.mock import patch
 
-        # Clear relevant env vars
-        env_backup = {}
-        for key in ["CONDUCTOR_SERVER_URL", "CONDUCTOR_AUTH_KEY", "CONDUCTOR_AGENT_TIMEOUT",
-                     "CONDUCTOR_LLM_RETRY_COUNT",
-                     "AGENTSPAN_SERVER_URL", "AGENTSPAN_AUTH_KEY", "AGENTSPAN_AGENT_TIMEOUT",
-                     "AGENTSPAN_LLM_RETRY_COUNT"]:
-            env_backup[key] = os.environ.pop(key, None)
-
-        try:
-            config = AgentConfig.from_env()
+        with patch.dict("os.environ", {}, clear=True):
+            config = AgentConfig()
             assert config.server_url == "http://localhost:8080/api"
             assert config.default_timeout_seconds == 0
             assert config.llm_retry_count == 3
             assert config.worker_poll_interval_ms == 100
-        finally:
-            for key, val in env_backup.items():
-                if val is not None:
-                    os.environ[key] = val
+
+    def test_env_override(self):
+        from agentspan.agents.runtime.config import AgentConfig
+        from unittest.mock import patch
+
+        with patch.dict("os.environ", {"AGENTSPAN_SERVER_URL": "http://custom:9090/api"}, clear=True):
+            config = AgentConfig()
+            assert config.server_url == "http://custom:9090/api"
 
     def test_custom_timeout(self):
         from agentspan.agents.runtime.config import AgentConfig
@@ -1189,7 +1185,7 @@ class TestRuntimeStream:
         sub_task = MagicMock()
         sub_task.task_id = "t-sub"
         sub_task.task_type = "SUB_WORKFLOW"
-        sub_task.reference_task_name = "test_handoff_0_agent_b"
+        sub_task.reference_task_name = "test_handoff_agent_b"
         sub_task.status = "IN_PROGRESS"
         sub_task.output_data = {}
 

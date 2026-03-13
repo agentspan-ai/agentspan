@@ -13,11 +13,12 @@ Compiled workflow:
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, tool
-from model_config import get_model
+from settings import settings
 
 
 @tool
@@ -28,7 +29,7 @@ def get_weather(city: str) -> dict:
 
 agent = Agent(
     name="weather_agent",
-    model=get_model(),
+    model=settings.llm_model,
     instructions="You are a weather assistant. Use the get_weather tool to answer.",
     tools=[get_weather],
     max_turns=2,  # 1 turn to call the tool, 1 turn to answer

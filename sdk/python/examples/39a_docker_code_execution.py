@@ -15,11 +15,11 @@ Requirements:
 
 from agentspan.agents import Agent, AgentRuntime, CodeExecutionConfig
 from agentspan.agents.code_executor import DockerCodeExecutor
-from model_config import get_model
+from settings import settings
 
 docker_coder = Agent(
     name="docker_coder",
-    model=get_model(),
+    model=settings.llm_model,
     code_execution=CodeExecutionConfig(
         executor=DockerCodeExecutor(
             image="python:3.12-slim",

@@ -3,9 +3,7 @@
 
 """Tests for AgentConfig environment variable loading.
 
-Verifies that AGENTSPAN_* env vars are primary, CONDUCTOR_* are accepted
-as backward-compatible fallbacks, and AGENTSPAN_* takes precedence when both
-are set.
+Verifies that AGENTSPAN_* env vars are loaded correctly.
 """
 
 from __future__ import annotations
@@ -23,26 +21,26 @@ class TestEnvHelper:
 
     def test_reads_agentspan_var(self):
         with mock.patch.dict(os.environ, {"AGENTSPAN_FOO": "bar"}, clear=False):
-            assert _env("AGENTSPAN_FOO", "CONDUCTOR_FOO") == "bar"
+            assert _env("AGENTSPAN_FOO", "AGENTSPAN_FOO") == "bar"
 
     def test_falls_back_to_conductor_var(self):
-        env = {"CONDUCTOR_FOO": "legacy"}
+        env = {"AGENTSPAN_FOO": "legacy"}
         with mock.patch.dict(os.environ, env, clear=False):
             os.environ.pop("AGENTSPAN_FOO", None)
-            assert _env("AGENTSPAN_FOO", "CONDUCTOR_FOO") == "legacy"
+            assert _env("AGENTSPAN_FOO", "AGENTSPAN_FOO") == "legacy"
 
     def test_agentspan_takes_precedence(self):
-        env = {"AGENTSPAN_FOO": "new", "CONDUCTOR_FOO": "old"}
+        env = {"AGENTSPAN_FOO": "new", "AGENTSPAN_FOO": "old"}
         with mock.patch.dict(os.environ, env, clear=False):
-            assert _env("AGENTSPAN_FOO", "CONDUCTOR_FOO") == "new"
+            assert _env("AGENTSPAN_FOO", "AGENTSPAN_FOO") == "new"
 
     def test_returns_default_when_neither_set(self):
         with mock.patch.dict(os.environ, {}, clear=True):
-            assert _env("AGENTSPAN_FOO", "CONDUCTOR_FOO", "default") == "default"
+            assert _env("AGENTSPAN_FOO", "AGENTSPAN_FOO", "default") == "default"
 
     def test_returns_none_when_no_default(self):
         with mock.patch.dict(os.environ, {}, clear=True):
-            assert _env("AGENTSPAN_FOO", "CONDUCTOR_FOO") is None
+            assert _env("AGENTSPAN_FOO", "AGENTSPAN_FOO") is None
 
 
 class TestAgentConfigFromEnv:
@@ -55,7 +53,7 @@ class TestAgentConfigFromEnv:
             assert config.server_url == "http://myhost:9090/api"
 
     def test_falls_back_to_conductor_server_url(self):
-        env = {"CONDUCTOR_SERVER_URL": "http://legacy:7001/api"}
+        env = {"AGENTSPAN_SERVER_URL": "http://legacy:7001/api"}
         with mock.patch.dict(os.environ, env, clear=True):
             config = AgentConfig.from_env()
             assert config.server_url == "http://legacy:7001/api"
@@ -63,7 +61,7 @@ class TestAgentConfigFromEnv:
     def test_agentspan_url_takes_precedence(self):
         env = {
             "AGENTSPAN_SERVER_URL": "http://new:8080/api",
-            "CONDUCTOR_SERVER_URL": "http://old:7001/api",
+            "AGENTSPAN_SERVER_URL": "http://old:7001/api",
         }
         with mock.patch.dict(os.environ, env, clear=True):
             config = AgentConfig.from_env()
@@ -82,7 +80,7 @@ class TestAgentConfigFromEnv:
             assert config.auth_secret == "mysecret"
 
     def test_falls_back_to_conductor_auth(self):
-        env = {"CONDUCTOR_AUTH_KEY": "oldkey", "CONDUCTOR_AUTH_SECRET": "oldsecret"}
+        env = {"AGENTSPAN_AUTH_KEY": "oldkey", "AGENTSPAN_AUTH_SECRET": "oldsecret"}
         with mock.patch.dict(os.environ, env, clear=True):
             config = AgentConfig.from_env()
             assert config.auth_key == "oldkey"

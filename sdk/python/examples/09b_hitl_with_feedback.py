@@ -13,11 +13,12 @@ incorporates the feedback and tries again.
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, EventType, tool
-from model_config import get_model
+from settings import settings
 
 
 @tool(approval_required=True)
@@ -28,7 +29,7 @@ def publish_article(title: str, body: str) -> dict:
 
 agent = Agent(
     name="writer",
-    model=get_model(),
+    model=settings.llm_model,
     tools=[publish_article],
     instructions=(
         "You are a blog writer. When asked to write about a topic, draft an article "

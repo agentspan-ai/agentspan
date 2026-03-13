@@ -15,11 +15,12 @@ no manual executor setup needed.
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, CodeExecutionConfig
-from model_config import get_model
+from settings import settings
 
 
 # ── Example 1: Simple flag ─────────────────────────────────────────────
@@ -27,7 +28,7 @@ from model_config import get_model
 
 simple_coder = Agent(
     name="simple_coder",
-    model=get_model(),
+    model=settings.llm_model,
     local_code_execution=True,
     instructions="You are a Python developer. Write and execute code to solve problems.",
 )
@@ -37,7 +38,7 @@ simple_coder = Agent(
 
 restricted_coder = Agent(
     name="restricted_coder",
-    model=get_model(),
+    model=settings.llm_model,
     local_code_execution=True,
     allowed_languages=["python", "bash"],
     allowed_commands=["pip", "ls", "cat", "git"],
@@ -53,7 +54,7 @@ restricted_coder = Agent(
 
 config_coder = Agent(
     name="config_coder",
-    model=get_model(),
+    model=settings.llm_model,
     code_execution=CodeExecutionConfig(
         allowed_languages=["python"],
         allowed_commands=["pip"],
@@ -61,6 +62,24 @@ config_coder = Agent(
     ),
     instructions="You are a Python developer with a 60s timeout and pip access only.",
 )
+
+# ── Example 4: Docker sandbox (uncomment if Docker is available) ───────
+# from agentspan.agents.code_executor import DockerCodeExecutor
+#
+# sandboxed_coder = Agent(
+#     name="sandboxed_coder",
+#     model=settings.llm_model,
+#     code_execution=CodeExecutionConfig(
+#         allowed_languages=["python"],
+#         executor=DockerCodeExecutor(
+#             image="python:3.12-slim",
+#             timeout=30,
+#             network_enabled=False,
+#             memory_limit="256m",
+#         ),
+#     ),
+#     instructions="You write Python code that runs in a sandboxed Docker container.",
+# )
 
 # ── Run ─────────────────────────────────────────────────────────────
 

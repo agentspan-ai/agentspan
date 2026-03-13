@@ -13,6 +13,8 @@ from google.adk.agents import Agent
 
 from agentspan.agents import AgentRuntime
 
+from settings import settings
+
 
 def main():
     # ── Inventory tools ───────────────────────────────────────────
@@ -88,7 +90,7 @@ def main():
 
     inventory_agent = Agent(
         name="inventory_manager",
-        model="gemini-2.0-flash",
+        model=settings.llm_model,
         description="Manages inventory levels and supplier relationships.",
         instruction="Check inventory levels and supplier status. Flag items below reorder points.",
         tools=[get_inventory_levels, check_supplier_status],
@@ -96,7 +98,7 @@ def main():
 
     logistics_agent = Agent(
         name="logistics_coordinator",
-        model="gemini-2.0-flash",
+        model=settings.llm_model,
         description="Handles shipping routes and shipment tracking.",
         instruction="Find optimal shipping routes and track pending shipments.",
         tools=[get_shipping_routes, get_pending_shipments],
@@ -104,7 +106,7 @@ def main():
 
     demand_agent = Agent(
         name="demand_planner",
-        model="gemini-2.0-flash",
+        model=settings.llm_model,
         description="Forecasts product demand.",
         instruction="Analyze demand forecasts and identify trends.",
         tools=[get_demand_forecast],
@@ -112,7 +114,7 @@ def main():
 
     coordinator = Agent(
         name="supply_chain_coordinator",
-        model="gemini-2.0-flash",
+        model=settings.llm_model,
         instruction=(
             "You are a supply chain coordinator. Analyze inventory, logistics, and demand. "
             "Identify items that need restocking, recommend optimal shipping, and provide "

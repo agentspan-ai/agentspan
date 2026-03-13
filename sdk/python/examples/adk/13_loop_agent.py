@@ -13,12 +13,14 @@ from google.adk.agents import Agent, LoopAgent, SequentialAgent
 
 from agentspan.agents import AgentRuntime
 
+from settings import settings
+
 
 def main():
     # Writer drafts content
     writer = Agent(
         name="draft_writer",
-        model="gemini-2.0-flash",
+        model=settings.llm_model,
         instruction=(
             "You are a writer. Write or revise a short haiku (3 lines: 5-7-5 syllables) "
             "about the given topic. If there is feedback from a previous critique in the conversation, "
@@ -29,7 +31,7 @@ def main():
     # Critic reviews and provides feedback
     critic = Agent(
         name="critic",
-        model="gemini-2.0-flash",
+        model=settings.llm_model,
         instruction=(
             "You are a poetry critic. Review the haiku from the writer. "
             "Check: (1) Does it follow 5-7-5 syllable structure? "

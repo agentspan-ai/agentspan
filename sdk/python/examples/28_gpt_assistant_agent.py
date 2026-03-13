@@ -14,18 +14,20 @@ Two modes:
 Requirements:
     - pip install openai
     - Conductor server with LLM support
-    - export OPENAI_API_KEY=sk-...
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - OPENAI_API_KEY=sk-... in .env or environment
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import AgentRuntime
 from agentspan.agents.ext import GPTAssistantAgent
+from settings import settings
 
 # ── Example 1: Create assistant on the fly ───────────────────────────
 
 data_analyst = GPTAssistantAgent(
     name="data_analyst",
-    model="gpt-4o",
+    model=settings.llm_model,
     instructions=(
         "You are a data analyst. Use the code interpreter to analyze data, "
         "create charts, and perform calculations."

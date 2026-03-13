@@ -13,6 +13,8 @@ from google.adk.agents import Agent
 
 from agentspan.agents import AgentRuntime
 
+from settings import settings
+
 
 def main():
     # ── Domain tools ──────────────────────────────────────────────
@@ -78,7 +80,7 @@ def main():
 
     agent = Agent(
         name="customer_service_rep",
-        model="gemini-2.0-flash",
+        model=settings.llm_model,
         instruction=(
             "You are a customer service representative for CloudServe Inc. "
             "Help customers with account inquiries, billing questions, plan changes, "

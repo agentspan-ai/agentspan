@@ -17,11 +17,12 @@ This is useful when:
 Requirements:
     - Conductor server with LLM support
     - The referenced workers must be running somewhere
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, tool
-from model_config import get_model
+from settings import settings
 
 
 # ── Example 1: Basic external worker reference ───────────────────────
@@ -68,7 +69,7 @@ def check_inventory(product_id: str, warehouse: str = "default") -> dict:
 
 support_agent = Agent(
     name="support_agent",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a customer support agent. Use the available tools to "
         "look up customers, check inventory, process orders, and format "

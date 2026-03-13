@@ -9,15 +9,16 @@ selection adds variety — useful for brainstorming or diverse perspectives.
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, Strategy
-from model_config import get_model
+from settings import settings
 
 creative = Agent(
     name="creative",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a creative thinker. Suggest innovative, unconventional ideas. "
         "Keep your response to 2-3 sentences."
@@ -26,7 +27,7 @@ creative = Agent(
 
 practical = Agent(
     name="practical",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a practical thinker. Focus on feasibility and cost-effectiveness. "
         "Keep your response to 2-3 sentences."
@@ -35,7 +36,7 @@ practical = Agent(
 
 critical = Agent(
     name="critical",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a critical thinker. Identify risks and potential issues. "
         "Keep your response to 2-3 sentences."
@@ -45,7 +46,7 @@ critical = Agent(
 # Random selection: each turn, one of the three agents is picked at random
 brainstorm = Agent(
     name="brainstorm",
-    model=get_model(),
+    model=settings.llm_model,
     agents=[creative, practical, critical],
     strategy=Strategy.RANDOM,
     max_turns=6,

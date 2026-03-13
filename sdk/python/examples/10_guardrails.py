@@ -22,7 +22,8 @@ loop as durable workflow tasks.  This means:
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 import re
@@ -37,7 +38,7 @@ from agentspan.agents import (
     guardrail,
     tool,
 )
-from model_config import get_model
+from settings import settings
 
 
 # ── Tools ─────────────────────────────────────────────────────────────
@@ -90,7 +91,7 @@ def no_pii(content: str) -> GuardrailResult:
 
 agent = Agent(
     name="support_agent",
-    model=get_model(),
+    model=settings.llm_model,
     tools=[get_order_status, get_customer_info],
     instructions=(
         "You are a customer support assistant. Use the available tools to "

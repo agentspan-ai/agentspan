@@ -13,11 +13,12 @@ in real time and intervenes only for destructive actions.
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, EventType, tool
-from model_config import get_model
+from settings import settings
 
 
 @tool
@@ -40,7 +41,7 @@ def delete_service_data(service_name: str, data_type: str) -> dict:
 
 agent = Agent(
     name="ops_agent",
-    model=get_model(),
+    model=settings.llm_model,
     tools=[check_service, restart_service, delete_service_data],
     instructions=(
         "You are an operations assistant. You can check, restart, and manage services. "

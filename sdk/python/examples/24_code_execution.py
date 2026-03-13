@@ -16,11 +16,12 @@ Requirements:
     - Conductor server with LLM support
     - Docker (for DockerCodeExecutor example)
     - pip install jupyter_client ipykernel (for JupyterCodeExecutor)
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime
-from model_config import get_model
+from settings import settings
 from agentspan.agents.code_executor import (
     DockerCodeExecutor,
     JupyterCodeExecutor,
@@ -34,7 +35,7 @@ local_executor = LocalCodeExecutor(language="python", timeout=10)
 
 coder = Agent(
     name="local_coder",
-    model=get_model(),
+    model=settings.llm_model,
     tools=[local_executor.as_tool()],
     instructions=(
         "You are a Python developer. Write and execute code to solve problems. "
@@ -53,7 +54,7 @@ docker_executor = DockerCodeExecutor(
 
 sandboxed_coder = Agent(
     name="sandboxed_coder",
-    model=get_model(),
+    model=settings.llm_model,
     tools=[docker_executor.as_tool(name="run_sandboxed")],
     instructions=(
         "You write Python code that runs in a sandboxed Docker container. "
@@ -66,7 +67,7 @@ sandboxed_coder = Agent(
 # jupyter_executor = JupyterCodeExecutor(timeout=30)
 # data_scientist = Agent(
 #     name="data_scientist",
-#     model=get_model(),
+#     model=settings.llm_model,
 #     tools=[jupyter_executor.as_tool(name="run_notebook")],
 #     instructions=(
 #         "You are a data scientist. Use the run_notebook tool to execute "

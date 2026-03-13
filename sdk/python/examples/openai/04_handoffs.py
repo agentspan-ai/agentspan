@@ -12,12 +12,15 @@ Demonstrates:
 Requirements:
     - pip install openai-agents
     - Conductor server with OpenAI LLM integration configured
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agents import Agent, function_tool
 
 from agentspan.agents import AgentRuntime
+
+from settings import settings
 
 
 # ── Specialist tools ──────────────────────────────────────────────────
@@ -58,7 +61,7 @@ order_agent = Agent(
         "You handle order-related inquiries. Use the check_order_status tool "
         "to look up orders. Be professional and concise."
     ),
-    model="gpt-4o",
+    model=settings.llm_model,
     tools=[check_order_status],
 )
 
@@ -68,7 +71,7 @@ refund_agent = Agent(
         "You handle refund requests. Use the process_refund tool to initiate "
         "refunds. Always confirm the order ID and reason before processing."
     ),
-    model="gpt-4o",
+    model=settings.llm_model,
     tools=[process_refund],
 )
 
@@ -78,7 +81,7 @@ sales_agent = Agent(
         "You handle product inquiries and sales. Use the get_product_info tool "
         "to look up products. Be enthusiastic but not pushy."
     ),
-    model="gpt-4o",
+    model=settings.llm_model,
     tools=[get_product_info],
 )
 
@@ -94,7 +97,7 @@ triage_agent = Agent(
         "- Product questions or purchases → sales_specialist\n"
         "Be brief in your initial response before handing off."
     ),
-    model="gpt-4o",
+    model=settings.llm_model,
     handoffs=[order_agent, refund_agent, sales_agent],
 )
 

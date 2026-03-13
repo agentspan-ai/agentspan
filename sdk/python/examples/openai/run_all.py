@@ -25,11 +25,13 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 # ---------------------------------------------------------------------------
-# Ensure examples/ is on sys.path so model_config imports work
+# Ensure examples/ is on sys.path so settings imports work
 # ---------------------------------------------------------------------------
 EXAMPLES_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if EXAMPLES_DIR not in sys.path:
     sys.path.insert(0, EXAMPLES_DIR)
+
+from settings import settings
 
 # ---------------------------------------------------------------------------
 # Conductor agent runtime imports
@@ -44,13 +46,12 @@ from agents import (
 )
 
 from agentspan.agents import AgentRuntime
+from agentspan.agents.runtime.config import AgentConfig
 
 # ---------------------------------------------------------------------------
-# Server config
+# Server config — loaded from .env / environment via pydantic-settings
 # ---------------------------------------------------------------------------
-SERVER_URL = os.environ.get("AGENTSPAN_SERVER_URL") or os.environ.get("CONDUCTOR_SERVER_URL", "http://localhost:8080/api")
-AUTH_KEY = os.environ.get("AGENTSPAN_AUTH_KEY") or os.environ.get("CONDUCTOR_AUTH_KEY", "")
-AUTH_SECRET = os.environ.get("AGENTSPAN_AUTH_SECRET") or os.environ.get("CONDUCTOR_AUTH_SECRET", "")
+_cfg = AgentConfig()
 
 
 # ---------------------------------------------------------------------------
@@ -75,12 +76,12 @@ def _get_workflow_detail(runtime: AgentRuntime, workflow_id: str) -> Dict[str, A
     """Fetch full workflow execution from Conductor API."""
     import requests
 
-    url = SERVER_URL.replace("/api", "") + f"/api/workflow/{workflow_id}"
+    url = _cfg.server_url.replace("/api", "") + f"/api/workflow/{workflow_id}"
     headers: Dict[str, str] = {}
-    if AUTH_KEY:
-        headers["X-Auth-Key"] = AUTH_KEY
-    if AUTH_SECRET:
-        headers["X-Auth-Secret"] = AUTH_SECRET
+    if _cfg.auth_key:
+        headers["X-Auth-Key"] = _cfg.auth_key
+    if _cfg.auth_secret:
+        headers["X-Auth-Secret"] = _cfg.auth_secret
     resp = requests.get(url, headers=headers, timeout=30)
     resp.raise_for_status()
     return resp.json()
@@ -131,7 +132,7 @@ def ex01_basic_agent(runtime: AgentRuntime) -> ExampleResult:
     agent = Agent(
         name="greeter",
         instructions="You are a friendly assistant. Keep your responses concise and helpful.",
-        model="gpt-4o",
+        model=settings.llm_model,
     )
     result = runtime.run(agent, "Say hello and tell me a fun fact about the Python programming language.")
     r.workflow_id = result.workflow_id
@@ -200,7 +201,7 @@ def ex02_function_tools(runtime: AgentRuntime) -> ExampleResult:
     agent = Agent(
         name="multi_tool_agent",
         instructions="You are a helpful assistant with access to weather, calculator, and population lookup tools. Use them to answer questions accurately.",
-        model="gpt-4o",
+        model=settings.llm_model,
         tools=[get_weather, calculate, lookup_population],
     )
     result = runtime.run(
@@ -260,7 +261,7 @@ def ex03_structured_output(runtime: AgentRuntime) -> ExampleResult:
     agent = Agent(
         name="movie_recommender",
         instructions="You are a movie recommendation expert. Return a structured list of recommendations with title, year, genre, and a brief reason. Identify the overall theme.",
-        model="gpt-4o",
+        model=settings.llm_model,
         output_type=MovieList,
         model_settings=ModelSettings(temperature=0.3, max_tokens=1000),
     )
@@ -324,14 +325,14 @@ def ex04_handoffs(runtime: AgentRuntime) -> ExampleResult:
         products = {"laptop pro": "Laptop Pro X1 — $1,299"}
         return products.get(product_name.lower(), f"Product '{product_name}' not found")
 
-    order_agent = Agent(name="order_specialist", instructions="Handle order inquiries.", model="gpt-4o", tools=[check_order_status])
-    refund_agent = Agent(name="refund_specialist", instructions="Handle refund requests. Use process_refund tool.", model="gpt-4o", tools=[process_refund])
-    sales_agent = Agent(name="sales_specialist", instructions="Handle product questions.", model="gpt-4o", tools=[get_product_info])
+    order_agent = Agent(name="order_specialist", instructions="Handle order inquiries.", model=settings.llm_model, tools=[check_order_status])
+    refund_agent = Agent(name="refund_specialist", instructions="Handle refund requests. Use process_refund tool.", model=settings.llm_model, tools=[process_refund])
+    sales_agent = Agent(name="sales_specialist", instructions="Handle product questions.", model=settings.llm_model, tools=[get_product_info])
 
     triage_agent = Agent(
         name="customer_service_triage",
         instructions="Triage agent. Route to: order_specialist, refund_specialist, or sales_specialist.",
-        model="gpt-4o",
+        model=settings.llm_model,
         handoffs=[order_agent, refund_agent, sales_agent],
     )
 
@@ -412,7 +413,7 @@ def ex05_guardrails(runtime: AgentRuntime) -> ExampleResult:
     agent = Agent(
         name="banking_assistant",
         instructions="You are a secure banking assistant. Help users check balances and transfer funds.",
-        model="gpt-4o",
+        model=settings.llm_model,
         tools=[get_account_balance, transfer_funds],
         input_guardrails=[InputGuardrail(guardrail_function=check_for_pii)],
         output_guardrails=[OutputGuardrail(guardrail_function=check_output_safety)],
@@ -463,13 +464,13 @@ def ex06_model_settings(runtime: AgentRuntime) -> ExampleResult:
     creative_agent = Agent(
         name="creative_writer",
         instructions="You are a creative writing assistant. Write with vivid imagery.",
-        model="gpt-4o",
+        model=settings.llm_model,
         model_settings=ModelSettings(temperature=0.9, max_tokens=500),
     )
     precise_agent = Agent(
         name="code_reviewer",
         instructions="You are a precise code reviewer. Be concise and specific.",
-        model="gpt-4o",
+        model=settings.llm_model,
         model_settings=ModelSettings(temperature=0.1, max_tokens=300),
     )
 
@@ -540,7 +541,7 @@ def ex07_streaming(runtime: AgentRuntime) -> ExampleResult:
     agent = Agent(
         name="support_agent",
         instructions="You are a customer support agent. Use the knowledge base to answer questions.",
-        model="gpt-4o",
+        model=settings.llm_model,
         tools=[search_knowledge_base],
     )
 
@@ -616,13 +617,13 @@ def ex08_agent_as_tool(runtime: AgentRuntime) -> ExampleResult:
         unique = list(dict.fromkeys(keywords))[:10]
         return f"Keywords: {', '.join(unique)}"
 
-    sentiment_agent = Agent(name="sentiment_analyzer", instructions="Analyze text sentiment using the tool.", model="gpt-4o", tools=[analyze_sentiment])
-    keyword_agent = Agent(name="keyword_extractor", instructions="Extract keywords using the tool.", model="gpt-4o", tools=[extract_keywords])
+    sentiment_agent = Agent(name="sentiment_analyzer", instructions="Analyze text sentiment using the tool.", model=settings.llm_model, tools=[analyze_sentiment])
+    keyword_agent = Agent(name="keyword_extractor", instructions="Extract keywords using the tool.", model=settings.llm_model, tools=[extract_keywords])
 
     manager = Agent(
         name="text_analysis_manager",
         instructions="You are a text analysis manager. Use sentiment analyzer and keyword extractor, then synthesize.",
-        model="gpt-4o",
+        model=settings.llm_model,
         tools=[
             sentiment_agent.as_tool(tool_name="sentiment_analyzer", tool_description="Analyze sentiment."),
             keyword_agent.as_tool(tool_name="keyword_extractor", tool_description="Extract keywords."),
@@ -684,7 +685,7 @@ def ex09_dynamic_instructions(runtime: AgentRuntime) -> ExampleResult:
     agent = Agent(
         name="personal_assistant",
         instructions=get_dynamic_instructions,
-        model="gpt-4o",
+        model=settings.llm_model,
         tools=[get_todo_list, add_todo],
     )
 
@@ -716,7 +717,7 @@ def ex09_dynamic_instructions(runtime: AgentRuntime) -> ExampleResult:
 
 
 def ex10_multi_model(runtime: AgentRuntime) -> ExampleResult:
-    """10 — Multi-model handoff: triage (gpt-4o-mini) → specialists (gpt-4o)."""
+    """10 — Multi-model handoff: triage (llm_model) → specialists (secondary_llm_model)."""
     r = ExampleResult(name="10_multi_model")
 
     @function_tool
@@ -736,13 +737,13 @@ def ex10_multi_model(runtime: AgentRuntime) -> ExampleResult:
         """Generate a code sample."""
         return f"# {topic} in {language}\nimport requests\nresp = requests.post('/auth/login')"
 
-    doc_specialist = Agent(name="doc_specialist", instructions="Search docs and provide answers.", model="gpt-4o", tools=[search_docs], model_settings=ModelSettings(temperature=0.2))
-    code_specialist = Agent(name="code_specialist", instructions="Generate code examples.", model="gpt-4o", tools=[generate_code_sample], model_settings=ModelSettings(temperature=0.3))
+    doc_specialist = Agent(name="doc_specialist", instructions="Search docs and provide answers.", model=settings.secondary_llm_model, tools=[search_docs], model_settings=ModelSettings(temperature=0.2))
+    code_specialist = Agent(name="code_specialist", instructions="Generate code examples.", model=settings.secondary_llm_model, tools=[generate_code_sample], model_settings=ModelSettings(temperature=0.3))
 
     triage = Agent(
         name="triage",
         instructions="Route to doc_specialist or code_specialist based on the request.",
-        model="gpt-4o-mini",
+        model=settings.llm_model,
         model_settings=ModelSettings(temperature=0.1),
         handoffs=[doc_specialist, code_specialist],
     )
@@ -843,7 +844,7 @@ def print_report(results: List[ExampleResult]) -> None:
 
 def main() -> int:
     print("Starting OpenAI examples test run...")
-    print(f"Server: {SERVER_URL}\n")
+    print(f"Server: {_cfg.server_url}\n")
 
     with AgentRuntime() as runtime:
         for example_fn in EXAMPLES:

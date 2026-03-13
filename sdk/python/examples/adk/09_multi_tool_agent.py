@@ -12,7 +12,8 @@ Demonstrates:
 Requirements:
     - pip install google-adk
     - Conductor server with Google Gemini LLM integration configured
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
 """
 
 from typing import List
@@ -20,6 +21,8 @@ from typing import List
 from google.adk.agents import Agent
 
 from agentspan.agents import AgentRuntime
+
+from settings import settings
 
 
 def search_products(query: str, category: str = "all", max_results: int = 5) -> dict:
@@ -130,7 +133,7 @@ def apply_coupon(subtotal: float, coupon_code: str) -> dict:
 
 agent = Agent(
     name="shopping_assistant",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a helpful shopping assistant. Help users find products, "
         "check availability, calculate shipping, and apply coupons. "

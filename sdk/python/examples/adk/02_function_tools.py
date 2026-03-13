@@ -12,12 +12,15 @@ Demonstrates:
 Requirements:
     - pip install google-adk
     - Conductor server with Google Gemini LLM integration configured
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
 """
 
 from google.adk.agents import Agent
 
 from agentspan.agents import AgentRuntime
+
+from settings import settings
 
 
 def get_weather(city: str) -> dict:
@@ -78,7 +81,7 @@ def get_time_zone(city: str) -> dict:
 
 agent = Agent(
     name="travel_assistant",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a travel assistant. Help users with weather information, "
         "temperature conversions, and timezone lookups. Be concise and accurate."

@@ -12,11 +12,12 @@ These tools execute entirely server-side — no Python worker process needed.
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, tool, http_tool, mcp_tool
-from model_config import get_model
+from settings import settings
 
 
 # Python tool (needs a worker)
@@ -82,7 +83,7 @@ github_tools = mcp_tool(
 
 agent = Agent(
     name="api_assistant",
-    model=get_model(),
+    model=settings.llm_model,
     tools=[format_report, weather_api],
     max_tokens=102040,
     instructions="You have access to weather data, GitHub, and report formatting.",

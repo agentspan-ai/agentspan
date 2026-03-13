@@ -14,13 +14,14 @@ Modes:
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 import time
 
 from agentspan.agents import Agent, AgentRuntime, Strategy
-from model_config import get_model
+from settings import settings
 from agentspan.agents.ext import UserProxyAgent
 
 # ── Human proxy ──────────────────────────────────────────────────────
@@ -34,7 +35,7 @@ human = UserProxyAgent(
 
 assistant = Agent(
     name="assistant",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a helpful coding assistant. Help the user write Python code. "
         "Ask clarifying questions when needed."
@@ -45,7 +46,7 @@ assistant = Agent(
 
 conversation = Agent(
     name="pair_programming",
-    model=get_model(),
+    model=settings.llm_model,
     agents=[human, assistant],
     strategy=Strategy.ROUND_ROBIN,
     max_turns=4,  # 2 exchanges (human, assistant, human, assistant)

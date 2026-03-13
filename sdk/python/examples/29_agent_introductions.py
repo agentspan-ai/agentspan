@@ -12,17 +12,18 @@ establishes context for the discussion.
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, Strategy
-from model_config import get_model
+from settings import settings
 
 # ── Agents with introductions ────────────────────────────────────────
 
 architect = Agent(
     name="architect",
-    model=get_model(),
+    model=settings.llm_model,
     introduction=(
         "I am the Software Architect. I focus on system design, scalability, "
         "and technical trade-offs. I'll evaluate proposals from an architecture "
@@ -36,7 +37,7 @@ architect = Agent(
 
 security_engineer = Agent(
     name="security_engineer",
-    model=get_model(),
+    model=settings.llm_model,
     introduction=(
         "I am the Security Engineer. I focus on threat modeling, authentication, "
         "authorization, and data protection. I'll flag any security concerns."
@@ -49,7 +50,7 @@ security_engineer = Agent(
 
 product_manager = Agent(
     name="product_manager",
-    model=get_model(),
+    model=settings.llm_model,
     introduction=(
         "I am the Product Manager. I focus on user needs, business value, "
         "and delivery timelines. I'll ensure we stay focused on what matters "
@@ -67,7 +68,7 @@ product_manager = Agent(
 # before the first turn, so each agent knows who's in the room.
 design_review = Agent(
     name="design_review",
-    model=get_model(),
+    model=settings.llm_model,
     agents=[architect, security_engineer, product_manager],
     strategy=Strategy.ROUND_ROBIN,
     max_turns=6,

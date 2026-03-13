@@ -14,6 +14,8 @@ from google.adk.agents import Agent
 
 from agentspan.agents import AgentRuntime
 
+from settings import settings
+
 
 def main():
     def get_product_info(product_name: str) -> dict:
@@ -53,7 +55,7 @@ def main():
 
     agent = Agent(
         name="store_assistant",
-        model="gemini-2.0-flash",
+        model=settings.llm_model,
         global_instruction=(
             "You work for TechStore, a premium electronics retailer. "
             "Always be professional and mention our satisfaction guarantee. "

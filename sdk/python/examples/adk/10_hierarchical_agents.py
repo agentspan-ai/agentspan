@@ -12,12 +12,15 @@ Demonstrates:
 Requirements:
     - pip install google-adk
     - Conductor server with Google Gemini LLM integration configured
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
 """
 
 from google.adk.agents import Agent
 
 from agentspan.agents import AgentRuntime
+
+from settings import settings
 
 
 # ── Level 3: Specialist tools ─────────────────────────────────────────
@@ -100,7 +103,7 @@ def check_performance_metrics(service: str) -> dict:
 
 ops_agent = Agent(
     name="ops_specialist",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     description="Monitors service health and investigates operational issues.",
     instruction="Check service health and error logs. Identify issues and their severity.",
     tools=[check_api_health, check_error_logs],
@@ -108,7 +111,7 @@ ops_agent = Agent(
 
 security_agent = Agent(
     name="security_specialist",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     description="Runs security scans and identifies vulnerabilities.",
     instruction="Run security scans and report findings with recommendations.",
     tools=[run_security_scan],
@@ -116,7 +119,7 @@ security_agent = Agent(
 
 performance_agent = Agent(
     name="performance_specialist",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     description="Analyzes performance metrics and identifies bottlenecks.",
     instruction="Check performance metrics and identify latency issues.",
     tools=[check_performance_metrics],
@@ -126,7 +129,7 @@ performance_agent = Agent(
 
 reliability_lead = Agent(
     name="reliability_team_lead",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     description="Leads the reliability team covering ops and performance.",
     instruction=(
         "You lead the reliability team. Coordinate the ops specialist "
@@ -138,7 +141,7 @@ reliability_lead = Agent(
 
 security_lead = Agent(
     name="security_team_lead",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     description="Leads the security team for vulnerability assessment.",
     instruction=(
         "You lead the security team. Use the security specialist to "
@@ -151,7 +154,7 @@ security_lead = Agent(
 
 coordinator = Agent(
     name="platform_coordinator",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are the platform engineering coordinator. When asked to assess "
         "platform health:\n"

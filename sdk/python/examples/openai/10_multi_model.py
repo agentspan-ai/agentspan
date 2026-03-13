@@ -11,12 +11,16 @@ Demonstrates:
 Requirements:
     - pip install openai-agents
     - Conductor server with OpenAI LLM integrations configured
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
+    - AGENT_SECONDARY_LLM_MODEL=openai/gpt-4o in .env or environment
 """
 
 from agents import Agent, ModelSettings, function_tool
 
 from agentspan.agents import AgentRuntime
+
+from settings import settings
 
 
 @function_tool
@@ -67,7 +71,7 @@ triage = Agent(
         "- For code examples → code_specialist\n"
         "Keep your response to one sentence before handing off."
     ),
-    model="gpt-4o-mini",
+    model=settings.llm_model,
     model_settings=ModelSettings(temperature=0.1),
     handoffs=[],  # populated below
 )
@@ -79,7 +83,7 @@ doc_specialist = Agent(
         "You are a documentation specialist. Search the docs and provide "
         "clear, well-structured answers. Include relevant links and examples."
     ),
-    model="gpt-4o",
+    model=settings.secondary_llm_model,
     tools=[search_docs],
     model_settings=ModelSettings(temperature=0.2, max_tokens=500),
 )
@@ -91,7 +95,7 @@ code_specialist = Agent(
         "You are a code example specialist. Generate clean, well-commented "
         "code samples. Always specify the language and include error handling."
     ),
-    model="gpt-4o",
+    model=settings.secondary_llm_model,
     tools=[generate_code_sample],
     model_settings=ModelSettings(temperature=0.3, max_tokens=800),
 )

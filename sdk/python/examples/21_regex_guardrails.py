@@ -16,11 +16,12 @@ process is needed.  This makes them lightweight and fast.
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, OnFail, Position, RegexGuardrail, tool
-from model_config import get_model
+from settings import settings
 
 
 # ── Block mode: reject responses with PII ────────────────────────────
@@ -58,7 +59,7 @@ def get_user_profile(user_id: str) -> dict:
 
 agent = Agent(
     name="hr_assistant",
-    model=get_model(),
+    model=settings.llm_model,
     tools=[get_user_profile],
     instructions=(
         "You are an HR assistant. When asked about employees, look up their "

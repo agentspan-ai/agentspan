@@ -20,7 +20,8 @@ and the LLM tries again.
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import (
@@ -32,7 +33,7 @@ from agentspan.agents import (
     RegexGuardrail,
     guardrail,
 )
-from model_config import get_model
+from settings import settings
 
 
 # ── RegexGuardrail: block bullet-point lists ─────────────────────────
@@ -73,7 +74,7 @@ def min_length(content: str) -> GuardrailResult:
 
 agent = Agent(
     name="essay_writer",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a concise essay writer. Answer the user's question in "
         "well-structured prose paragraphs. Do NOT use bullet points or "

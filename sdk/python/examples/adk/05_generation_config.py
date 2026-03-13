@@ -12,17 +12,20 @@ Demonstrates:
 Requirements:
     - pip install google-adk
     - Conductor server with Google Gemini LLM integration configured
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
 """
 
 from google.adk.agents import Agent
 
 from agentspan.agents import AgentRuntime
 
+from settings import settings
+
 # Precise agent — low temperature for factual responses
 factual_agent = Agent(
     name="fact_checker",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a precise fact-checker. Provide accurate, well-sourced "
         "answers. Be concise and avoid speculation."
@@ -36,7 +39,7 @@ factual_agent = Agent(
 # Creative agent — high temperature for creative writing
 creative_agent = Agent(
     name="storyteller",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are an imaginative storyteller. Create vivid, engaging "
         "narratives with rich descriptions and unexpected twists."

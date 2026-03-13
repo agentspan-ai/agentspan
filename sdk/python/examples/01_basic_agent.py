@@ -7,14 +7,14 @@ Demonstrates the simplest possible agent: a single LLM with no tools.
 
 Requirements:
     - Conductor server with LLM support
-    - LLM provider "openai" configured
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime
-from model_config import get_model
+from settings import settings
 
-agent = Agent(name="greeter", model=get_model())
+agent = Agent(name="greeter", model=settings.llm_model)
 
 with AgentRuntime() as runtime:
     result = runtime.run(agent, "Say hello and tell me a fun fact about Python programming.")

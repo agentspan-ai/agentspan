@@ -18,7 +18,8 @@ Architecture:
 Requirements:
     - pip install google-adk
     - Conductor server with AgentTool support
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
 """
 
 from google.adk.agents import Agent
@@ -58,7 +59,7 @@ def search_knowledge_base(query: str) -> dict:
 
 researcher = Agent(
     name="researcher",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a research assistant. Use the knowledge base tool to find "
         "information and provide concise, factual answers."
@@ -77,6 +78,8 @@ def compute(expression: str) -> dict:
         Dictionary with the result.
     """
     import math
+
+from settings import settings
     safe = {"abs": abs, "round": round, "min": min, "max": max,
             "sqrt": math.sqrt, "pow": pow, "pi": math.pi, "e": math.e}
     try:
@@ -88,7 +91,7 @@ def compute(expression: str) -> dict:
 
 calculator = Agent(
     name="calculator",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction="You are a math assistant. Use the compute tool for calculations.",
     tools=[compute],
 )
@@ -98,7 +101,7 @@ calculator = Agent(
 
 manager = Agent(
     name="manager",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a manager agent. You have two specialist agents available as tools:\n"
         "- researcher: for looking up information\n"

@@ -16,11 +16,11 @@ Requirements:
 
 from agentspan.agents import Agent, AgentRuntime, CodeExecutionConfig
 from agentspan.agents.code_executor import JupyterCodeExecutor
-from model_config import get_model
+from settings import settings
 
 jupyter_coder = Agent(
     name="jupyter_coder",
-    model=get_model(),
+    model=settings.llm_model,
     code_execution=CodeExecutionConfig(
         executor=JupyterCodeExecutor(
             kernel_name="python3",

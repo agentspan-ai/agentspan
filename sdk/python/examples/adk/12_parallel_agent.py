@@ -13,12 +13,14 @@ from google.adk.agents import Agent, ParallelAgent
 
 from agentspan.agents import AgentRuntime
 
+from settings import settings
+
 
 def main():
     # Three analysts run in parallel
     market_analyst = Agent(
         name="market_analyst",
-        model="gemini-2.0-flash",
+        model=settings.llm_model,
         description="Analyzes market trends.",
         instruction=(
             "You are a market analyst. Given the company or product topic, "
@@ -28,7 +30,7 @@ def main():
 
     tech_analyst = Agent(
         name="tech_analyst",
-        model="gemini-2.0-flash",
+        model=settings.llm_model,
         description="Evaluates technology aspects.",
         instruction=(
             "You are a technology analyst. Given the company or product topic, "
@@ -38,7 +40,7 @@ def main():
 
     risk_analyst = Agent(
         name="risk_analyst",
-        model="gemini-2.0-flash",
+        model=settings.llm_model,
         description="Assesses risks.",
         instruction=(
             "You are a risk analyst. Given the company or product topic, "

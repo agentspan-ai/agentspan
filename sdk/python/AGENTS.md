@@ -1045,15 +1045,13 @@ The SDK reads configuration from environment variables:
 | `AGENTSPAN_WORKER_POLL_INTERVAL` | Worker poll interval (ms) | 100 |
 | `AGENTSPAN_WORKER_THREADS` | Worker threads per tool | 1 |
 
-> **Note:** The legacy `CONDUCTOR_*` prefixed environment variables (e.g. `CONDUCTOR_SERVER_URL`) are still accepted for backward compatibility, but the `AGENTSPAN_*` equivalents take precedence.
-
 ### Programmatic Configuration
 
 ```python
 from agentspan.agents.runtime import AgentConfig, AgentRuntime
 
 config = AgentConfig(
-    server_url="http://localhost:7001/api",
+    server_url="http://localhost:8080/api",
     default_timeout_seconds=600,
     worker_thread_count=5,
 )

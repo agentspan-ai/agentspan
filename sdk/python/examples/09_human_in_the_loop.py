@@ -10,11 +10,12 @@ and resumes after the reviewer decides.
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, EventType, tool
-from model_config import get_model
+from settings import settings
 
 
 @tool
@@ -31,7 +32,7 @@ def transfer_funds(from_acct: str, to_acct: str, amount: float) -> dict:
 
 agent = Agent(
     name="banker",
-    model=get_model(),
+    model=settings.llm_model,
     tools=[check_balance, transfer_funds],
     instructions="You are a banking assistant. Help with balance inquiries and transfers.",
 )

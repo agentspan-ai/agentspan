@@ -16,7 +16,6 @@ import pytest
 from agentspan.agents import AgentRuntime
 from agentspan.agents.runtime.config import AgentConfig
 
-
 DEFAULT_MODEL = os.environ.get("AGENT_LLM_MODEL", "openai/gpt-4o-mini")
 
 
@@ -27,16 +26,7 @@ def runtime():
     SSE streaming is enabled by default. Set AGENTSPAN_STREAMING_ENABLED=false
     to disable it explicitly.
     """
-    config = AgentConfig.from_env()
-    # SSE enabled by default; only disable if explicitly set to "false"
-    streaming_val = (
-        os.environ.get("AGENTSPAN_STREAMING_ENABLED")
-        or os.environ.get("CONDUCTOR_STREAMING_ENABLED", "")
-    )
-    if streaming_val.lower() == "false":
-        config.streaming_enabled = False
-    else:
-        config.streaming_enabled = True
+    config = AgentConfig()
     with AgentRuntime(config=config) as rt:
         yield rt
 

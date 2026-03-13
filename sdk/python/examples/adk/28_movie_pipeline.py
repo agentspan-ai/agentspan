@@ -14,12 +14,15 @@ a multi-stage pipeline for creative content production.
 Requirements:
     - pip install google-adk
     - Conductor server
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
 """
 
 from google.adk.agents import Agent, SequentialAgent
 
 from agentspan.agents import AgentRuntime
+
+from settings import settings
 
 
 # ── Stage tools ──────────────────────────────────────────────────
@@ -136,7 +139,7 @@ def assemble_production(title: str, total_scenes: int,
 
 concept_developer = Agent(
     name="concept_developer",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a creative director. Develop a concept for a short film "
         "based on the given theme. Use create_concept to document the "
@@ -147,7 +150,7 @@ concept_developer = Agent(
 
 scriptwriter = Agent(
     name="scriptwriter",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a scriptwriter. Based on the concept from the previous "
         "stage, write 3 short scenes using write_scene for each. "
@@ -158,7 +161,7 @@ scriptwriter = Agent(
 
 visual_director = Agent(
     name="visual_director",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a visual director. For each scene written by the "
         "scriptwriter, use describe_visual to specify camera shots, "
@@ -169,7 +172,7 @@ visual_director = Agent(
 
 audio_designer = Agent(
     name="audio_designer",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are an audio designer. For each scene, use specify_audio "
         "to define the music mood and key sound effects. Match the "
@@ -180,7 +183,7 @@ audio_designer = Agent(
 
 producer = Agent(
     name="producer",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are the producer. Review all previous stages and use "
         "assemble_production to create final production notes. "

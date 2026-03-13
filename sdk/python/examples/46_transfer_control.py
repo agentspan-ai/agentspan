@@ -9,11 +9,12 @@ directly back to the coordinator).
 
 Requirements:
     - Conductor server
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, tool
-from model_config import get_model
+from settings import settings
 
 
 @tool
@@ -57,21 +58,21 @@ def write_summary(findings: str) -> dict:
 
 data_collector = Agent(
     name="data_collector_46",
-    model=get_model(),
+    model=settings.llm_model,
     instructions="Collect data using collect_data. Then transfer to the analyst.",
     tools=[collect_data],
 )
 
 analyst = Agent(
     name="analyst_46",
-    model=get_model(),
+    model=settings.llm_model,
     instructions="Analyze data using analyze_data. Transfer to summarizer when done.",
     tools=[analyze_data],
 )
 
 summarizer = Agent(
     name="summarizer_46",
-    model=get_model(),
+    model=settings.llm_model,
     instructions="Write a summary using write_summary.",
     tools=[write_summary],
 )
@@ -82,7 +83,7 @@ summarizer = Agent(
 # - summarizer can only return to coordinator
 coordinator = Agent(
     name="coordinator_46",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You coordinate a data pipeline. Route to data_collector_46 first, "
         "then analyst_46, then summarizer_46."

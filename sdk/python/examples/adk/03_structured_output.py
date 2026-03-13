@@ -11,7 +11,8 @@ Demonstrates:
 Requirements:
     - pip install google-adk pydantic
     - Conductor server with Google Gemini LLM integration configured
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
 """
 
 from typing import List
@@ -20,6 +21,8 @@ from google.adk.agents import Agent
 from pydantic import BaseModel
 
 from agentspan.agents import AgentRuntime
+
+from settings import settings
 
 
 class Ingredient(BaseModel):
@@ -46,7 +49,7 @@ class Recipe(BaseModel):
 
 agent = Agent(
     name="recipe_generator",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a professional chef assistant. When asked for a recipe, "
         "provide a complete, well-structured recipe with precise measurements, "

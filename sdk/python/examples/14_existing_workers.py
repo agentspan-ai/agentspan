@@ -11,14 +11,14 @@ Demonstrates:
 Requirements:
     - Conductor server with LLM support
     - conductor-python installed (provides @worker_task)
-    - LLM provider "openai" configured
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from conductor.client.worker.worker_task import worker_task
 
 from agentspan.agents import Agent, AgentRuntime, tool
-from model_config import get_model
+from settings import settings
 
 
 # --- Existing @worker_task functions (already deployed, already working) ---
@@ -61,7 +61,7 @@ def create_support_ticket(customer_id: str, issue: str, priority: str = "medium"
 
 agent = Agent(
     name="customer_support",
-    model=get_model(),
+    model=settings.llm_model,
     tools=[get_customer_data, get_order_history, create_support_ticket],
     instructions=(
         "You are a customer support agent. Use the available tools to look up "

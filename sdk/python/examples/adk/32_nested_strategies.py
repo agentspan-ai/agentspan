@@ -9,18 +9,21 @@ concurrently, then results flow into a sequential summarizer.
 Requirements:
     - pip install google-adk
     - Conductor server
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
 """
 
 from google.adk.agents import Agent, ParallelAgent, SequentialAgent
 
 from agentspan.agents import AgentRuntime
 
+from settings import settings
+
 # ── Parallel research agents ───────────────────────────────────────
 
 market_analyst = Agent(
     name="market_analyst",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a market analyst. Analyze the market size, growth rate, "
         "and key players for the given topic. Be concise (3-4 bullet points)."
@@ -29,7 +32,7 @@ market_analyst = Agent(
 
 risk_analyst = Agent(
     name="risk_analyst",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a risk analyst. Identify the top 3 risks: regulatory, "
         "technical, and competitive. Be concise."
@@ -46,7 +49,7 @@ parallel_research = ParallelAgent(
 
 summarizer = Agent(
     name="summarizer",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are an executive briefing writer. Synthesize the market analysis "
         "and risk assessment into a concise executive summary (1 paragraph)."

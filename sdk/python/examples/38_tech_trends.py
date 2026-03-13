@@ -27,9 +27,10 @@ Architecture:
         generate_pdf           — Conductor GENERATE_PDF task (markdown → PDF)
 
 Run:
-    export AGENTSPAN_SERVER_URL=https://developer.orkescloud.com/api
-    export AGENTSPAN_AUTH_KEY=<key>
-    export AGENTSPAN_AUTH_SECRET=<secret>
+    Add to .env or environment:
+        AGENTSPAN_SERVER_URL=https://developer.orkescloud.com/api
+        AGENTSPAN_AUTH_KEY=<key>
+        AGENTSPAN_AUTH_SECRET=<secret>
     python 38_tech_trends.py
 """
 
@@ -42,6 +43,7 @@ import urllib.parse
 import urllib.request
 
 from agentspan.agents import Agent, AgentRuntime, pdf_tool, tool
+from settings import settings
 
 # ── Researcher tools (HackerNews + Wikipedia) ────────────────────────────────
 
@@ -222,7 +224,7 @@ def compare_numbers(
 
 researcher = Agent(
     name="hn_researcher",
-    model="openai/gpt-4o",
+    model=settings.llm_model,
     tools=[search_hackernews, get_hn_story_comments, get_wikipedia_summary],
     max_tokens=4000,
     instructions=(
@@ -252,7 +254,7 @@ researcher = Agent(
 
 analyst = Agent(
     name="hn_analyst",
-    model="openai/gpt-4o",
+    model=settings.llm_model,
     tools=[fetch_pypi_downloads, fetch_npm_downloads, compare_numbers],
     max_tokens=4000,
     instructions=(
@@ -288,7 +290,7 @@ analyst = Agent(
 
 pdf_generator = Agent(
     name="pdf_report_generator",
-    model="openai/gpt-4o",
+    model=settings.llm_model,
     tools=[pdf_tool()],
     max_tokens=4000,
     instructions=(

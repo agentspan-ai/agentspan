@@ -13,12 +13,14 @@ from google.adk.agents import Agent, SequentialAgent
 
 from agentspan.agents import AgentRuntime
 
+from settings import settings
+
 
 def main():
     # Step 1: Research agent gathers facts
     researcher = Agent(
         name="researcher",
-        model="gemini-2.0-flash",
+        model=settings.llm_model,
         instruction=(
             "You are a research assistant. Given the user's topic, "
             "provide 3 key facts about it in a numbered list. Be concise."
@@ -28,7 +30,7 @@ def main():
     # Step 2: Writer agent takes the research and writes a summary
     writer = Agent(
         name="writer",
-        model="gemini-2.0-flash",
+        model=settings.llm_model,
         instruction=(
             "You are a skilled writer. Take the research provided in the conversation "
             "and write a single engaging paragraph summarizing the key points. "
@@ -39,7 +41,7 @@ def main():
     # Step 3: Editor agent polishes the summary
     editor = Agent(
         name="editor",
-        model="gemini-2.0-flash",
+        model=settings.llm_model,
         instruction=(
             "You are an editor. Review the paragraph from the writer and improve it. "
             "Fix any issues with clarity, grammar, or flow. Output only the final polished paragraph."

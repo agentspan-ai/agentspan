@@ -14,7 +14,8 @@ for secure, controlled LLM agent data flow.
 Requirements:
     - pip install google-adk
     - Conductor server
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
 """
 
 from google.adk.agents import Agent, SequentialAgent
@@ -60,6 +61,8 @@ def redact_sensitive_fields(data: str) -> dict:
         Dictionary with redacted data.
     """
     import json
+
+from settings import settings
     try:
         parsed = json.loads(data) if isinstance(data, str) else data
     except (json.JSONDecodeError, TypeError):
@@ -78,7 +81,7 @@ def redact_sensitive_fields(data: str) -> dict:
 # Data collector fetches raw user data
 collector = Agent(
     name="data_collector",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a data collection agent. When asked about a user, "
         "call fetch_user_data with their ID. Pass the raw data along "
@@ -90,7 +93,7 @@ collector = Agent(
 # Validator enforces data security policy
 validator = Agent(
     name="security_validator",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a security validator. Review data for sensitive information "
         "(SSN, account balances, email addresses). Use the redact_sensitive_fields "
@@ -103,7 +106,7 @@ validator = Agent(
 # Responder formats the final answer
 responder = Agent(
     name="responder",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a customer service agent. Use the validated, redacted data "
         "to answer the user's question. NEVER reveal redacted information. "

@@ -20,17 +20,18 @@ Flow (all server-side):
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, Strategy
-from model_config import get_model
+from settings import settings
 
 # ── Discussion participants ──────────────────────────────────────────
 
 optimist = Agent(
     name="optimist",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are an optimistic technologist debating a topic. "
         "Argue FOR the topic. Keep your response to 2-3 concise paragraphs. "
@@ -40,7 +41,7 @@ optimist = Agent(
 
 skeptic = Agent(
     name="skeptic",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a thoughtful skeptic debating a topic. "
         "Raise concerns and argue AGAINST the topic. "
@@ -51,7 +52,7 @@ skeptic = Agent(
 
 summarizer = Agent(
     name="summarizer",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a neutral moderator. You have just observed a debate "
         "between an optimist and a skeptic. Summarize the key arguments "
@@ -65,7 +66,7 @@ summarizer = Agent(
 
 discussion = Agent(
     name="discussion",
-    model=get_model(),
+    model=settings.llm_model,
     agents=[optimist, skeptic],
     strategy=Strategy.ROUND_ROBIN,
     max_turns=6,

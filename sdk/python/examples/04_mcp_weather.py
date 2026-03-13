@@ -14,11 +14,12 @@ Flow:
 Requirements:
     - Conductor server with LLM support
     - MCP weather server running on http://localhost:3001/mcp
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, mcp_tool
-from model_config import get_model
+from settings import settings
 
 # Create MCP tool from the weather server — Conductor discovers tools at runtime
 weather = mcp_tool(
@@ -30,7 +31,7 @@ weather = mcp_tool(
 
 agent = Agent(
     name="weather_mcp_agent",
-    model=get_model(),
+    model=settings.llm_model,
     max_tokens=10240,
     tools=[weather],
     instructions=(

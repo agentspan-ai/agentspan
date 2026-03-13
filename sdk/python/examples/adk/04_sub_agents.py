@@ -11,12 +11,15 @@ Demonstrates:
 Requirements:
     - pip install google-adk
     - Conductor server with Google Gemini LLM integration configured
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
 """
 
 from google.adk.agents import Agent
 
 from agentspan.agents import AgentRuntime
+
+from settings import settings
 
 
 # ── Specialist tools ──────────────────────────────────────────────────
@@ -85,7 +88,7 @@ def get_travel_advisory(country: str) -> dict:
 
 flight_agent = Agent(
     name="flight_specialist",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     description="Handles flight searches and booking inquiries.",
     instruction=(
         "You are a flight specialist. Search for flights and present "
@@ -96,7 +99,7 @@ flight_agent = Agent(
 
 hotel_agent = Agent(
     name="hotel_specialist",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     description="Handles hotel searches and accommodation inquiries.",
     instruction=(
         "You are a hotel specialist. Search for hotels and present "
@@ -107,7 +110,7 @@ hotel_agent = Agent(
 
 advisory_agent = Agent(
     name="travel_advisory_specialist",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     description="Provides travel advisories, visa requirements, and safety information.",
     instruction=(
         "You are a travel advisory specialist. Provide safety levels "
@@ -120,7 +123,7 @@ advisory_agent = Agent(
 
 coordinator = Agent(
     name="travel_coordinator",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a travel planning coordinator. When a user wants to plan a trip:\n"
         "1. Use the travel advisory specialist to check safety and visa info\n"

@@ -11,12 +11,15 @@ Demonstrates:
 Requirements:
     - pip install google-adk
     - Conductor server with Google Gemini LLM integration configured
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
 """
 
 from google.adk.agents import Agent
 
 from agentspan.agents import AgentRuntime
+
+from settings import settings
 
 
 def analyze_data(dataset: str) -> dict:
@@ -66,7 +69,7 @@ def generate_chart_description(metric: str, value: str) -> dict:
 # Analyst agent — stores its findings in state via output_key
 analyst = Agent(
     name="data_analyst",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a data analyst. Use the analyze_data tool to examine datasets. "
         "Provide a clear summary of the key findings."
@@ -78,7 +81,7 @@ analyst = Agent(
 # Visualizer agent — reads from state
 visualizer = Agent(
     name="chart_designer",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a data visualization expert. Based on the analysis results, "
         "suggest appropriate visualizations. Use the generate_chart_description "
@@ -90,7 +93,7 @@ visualizer = Agent(
 # Coordinator delegates to both
 coordinator = Agent(
     name="report_coordinator",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a report coordinator. First, have the data analyst examine "
         "the requested dataset. Then, have the chart designer suggest "

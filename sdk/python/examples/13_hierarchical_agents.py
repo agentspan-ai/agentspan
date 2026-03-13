@@ -17,17 +17,18 @@ Structure:
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, Strategy, OnTextMention
-from model_config import get_model
+from settings import settings
 
 # ── Level 3: Individual specialists ─────────────────────────────────
 
 backend_dev = Agent(
     name="backend_dev",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a backend developer. You design APIs, databases, and server "
         "architecture. Provide technical recommendations with code examples."
@@ -36,7 +37,7 @@ backend_dev = Agent(
 
 frontend_dev = Agent(
     name="frontend_dev",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a frontend developer. You design UI components, user flows, "
         "and client-side architecture. Provide recommendations with code examples."
@@ -45,7 +46,7 @@ frontend_dev = Agent(
 
 content_writer = Agent(
     name="content_writer",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a content writer. You create blog posts, landing page copy, "
         "and marketing materials. Write engaging, clear content."
@@ -54,7 +55,7 @@ content_writer = Agent(
 
 seo_specialist = Agent(
     name="seo_specialist",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are an SEO specialist. You optimize content for search engines, "
         "suggest keywords, and improve page rankings."
@@ -65,7 +66,7 @@ seo_specialist = Agent(
 
 engineering_lead = Agent(
     name="engineering_lead",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are the engineering lead. Route technical questions to the right "
         "specialist: backend_dev for APIs/databases/servers, "
@@ -77,7 +78,7 @@ engineering_lead = Agent(
 
 marketing_lead = Agent(
     name="marketing_lead",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are the marketing lead. Route marketing questions to the right "
         "specialist: content_writer for blog posts/copy, "
@@ -91,7 +92,7 @@ marketing_lead = Agent(
 
 ceo = Agent(
     name="ceo",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are the CEO. Route requests to the right department: "
         "engineering_lead for technical/development questions, "

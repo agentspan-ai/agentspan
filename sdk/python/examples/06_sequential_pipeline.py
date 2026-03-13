@@ -10,17 +10,18 @@ Also shows the >> operator shorthand.
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, Strategy
-from model_config import get_model
+from settings import settings
 
 # ── Pipeline agents ─────────────────────────────────────────────────
 
 researcher = Agent(
     name="researcher",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a researcher. Given a topic, provide key facts and data points. "
         "Be thorough but concise. Output raw research findings."
@@ -29,7 +30,7 @@ researcher = Agent(
 
 writer = Agent(
     name="writer",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a writer. Take research findings and write a clear, engaging "
         "article. Use headers and bullet points where appropriate."
@@ -38,7 +39,7 @@ writer = Agent(
 
 editor = Agent(
     name="editor",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are an editor. Review the article for clarity, grammar, and tone. "
         "Make improvements and output the final polished version."
@@ -57,7 +58,7 @@ with AgentRuntime() as runtime:
 
 # pipeline = Agent(
 #     name="content_pipeline",
-#     model=get_model(),
+#     model=settings.llm_model,
 #     agents=[researcher, writer, editor],
 #     strategy=Strategy.SEQUENTIAL,
 # )

@@ -14,7 +14,7 @@ tests verify "did the agents do the right thing TOGETHER?"  For each strategy:
   - SWARM:     Multiple agents participate in a single request when context demands it
 
 Requires:
-  - Agentspan server running (CONDUCTOR_SERVER_URL)
+  - Agentspan server running (AGENTSPAN_SERVER_URL)
   - OPENAI_API_KEY set
 
 Run with:

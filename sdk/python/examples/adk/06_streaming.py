@@ -11,12 +11,15 @@ Demonstrates:
 Requirements:
     - pip install google-adk
     - Conductor server with Google Gemini LLM integration configured
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
 """
 
 from google.adk.agents import Agent
 
 from agentspan.agents import AgentRuntime
+
+from settings import settings
 
 
 def search_documentation(query: str) -> dict:
@@ -50,7 +53,7 @@ def search_documentation(query: str) -> dict:
 
 agent = Agent(
     name="docs_assistant",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a documentation assistant. Use the search tool to find "
         "relevant docs and provide clear, well-formatted answers."

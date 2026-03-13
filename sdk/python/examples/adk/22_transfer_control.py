@@ -18,16 +18,19 @@ Architecture:
 Requirements:
     - pip install google-adk
     - Conductor server with transfer control support
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
 """
 
 from google.adk.agents import LlmAgent
 
 from agentspan.agents import AgentRuntime
 
+from settings import settings
+
 specialist_a = LlmAgent(
     name="data_collector",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a data collection specialist. Gather relevant data points "
         "about the topic and pass them to the analyst for analysis. "
@@ -38,7 +41,7 @@ specialist_a = LlmAgent(
 
 specialist_b = LlmAgent(
     name="analyst",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a data analyst. Take the data collected and provide "
         "a concise analysis with insights. You can transfer to any agent."
@@ -47,7 +50,7 @@ specialist_b = LlmAgent(
 
 specialist_c = LlmAgent(
     name="summarizer",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a summarizer. Take the analysis and create a brief "
         "executive summary. Return the summary to the coordinator. "
@@ -58,7 +61,7 @@ specialist_c = LlmAgent(
 
 coordinator = LlmAgent(
     name="research_coordinator",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a research coordinator managing a team of specialists:\n"
         "- data_collector: gathers raw data (cannot return to you directly)\n"

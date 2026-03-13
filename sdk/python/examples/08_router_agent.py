@@ -8,29 +8,30 @@ to the appropriate sub-agent based on the user's request.
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, Strategy
-from model_config import get_model
+from settings import settings
 
 # ── Specialist agents ───────────────────────────────────────────────
 
 planner = Agent(
     name="planner",
-    model=get_model(),
+    model=settings.llm_model,
     instructions="You create implementation plans. Break down tasks into clear numbered steps.",
 )
 
 coder = Agent(
     name="coder",
-    model=get_model(),
+    model=settings.llm_model,
     instructions="You write code. Output clean, well-documented Python code.",
 )
 
 reviewer = Agent(
     name="reviewer",
-    model=get_model(),
+    model=settings.llm_model,
     instructions="You review code. Check for bugs, style issues, and suggest improvements.",
 )
 
@@ -38,7 +39,7 @@ reviewer = Agent(
 
 team = Agent(
     name="dev_team",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are the tech lead. Route requests to the right team member: "
         "planner for design/architecture, coder for implementation, "

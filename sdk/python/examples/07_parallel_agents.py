@@ -8,17 +8,18 @@ on the same input and their results are aggregated.
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, Strategy
-from model_config import get_model
+from settings import settings
 
 # ── Specialist analysts ─────────────────────────────────────────────
 
 market_analyst = Agent(
     name="market_analyst",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a market analyst. Analyze the given topic from a market perspective: "
         "market size, growth trends, key players, and opportunities."
@@ -27,7 +28,7 @@ market_analyst = Agent(
 
 risk_analyst = Agent(
     name="risk_analyst",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a risk analyst. Analyze the given topic for risks: "
         "regulatory risks, technical risks, competitive threats, and mitigation strategies."
@@ -36,7 +37,7 @@ risk_analyst = Agent(
 
 compliance_checker = Agent(
     name="compliance",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a compliance specialist. Check the given topic for compliance considerations: "
         "data privacy, regulatory requirements, and industry standards."
@@ -47,7 +48,7 @@ compliance_checker = Agent(
 
 analysis = Agent(
     name="analysis",
-    model=get_model(),
+    model=settings.llm_model,
     agents=[market_analyst, risk_analyst, compliance_checker],
     strategy=Strategy.PARALLEL,
 )

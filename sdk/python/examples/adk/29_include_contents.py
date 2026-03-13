@@ -9,17 +9,20 @@ the parent's conversation history.
 Requirements:
     - pip install google-adk
     - Conductor server with include_contents support
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
 """
 
 from google.adk.agents import Agent
 
 from agentspan.agents import AgentRuntime
 
+from settings import settings
+
 # Sub-agent with no parent context
 independent_summarizer = Agent(
     name="independent_summarizer",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a summarizer. Summarize any text given to you concisely."
     ),
@@ -29,7 +32,7 @@ independent_summarizer = Agent(
 # Sub-agent that sees parent context (default)
 context_aware_helper = Agent(
     name="context_aware_helper",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a helpful assistant that builds on prior conversation context."
     ),
@@ -37,7 +40,7 @@ context_aware_helper = Agent(
 
 coordinator = Agent(
     name="coordinator",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You coordinate tasks. Route summarization to independent_summarizer "
         "and general questions to context_aware_helper."

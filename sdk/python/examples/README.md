@@ -2,21 +2,56 @@
 
 Runnable examples demonstrating every feature of the Conductor Agents SDK.
 
-## Prerequisites
+## Getting Started
 
-All examples require a running Conductor server with LLM integration configured:
+### 1. Configure your environment
+
+Create a `.env` file in the project root (recommended):
+
+```dotenv
+AGENT_LLM_MODEL=openai/gpt-4o-mini
+AGENTSPAN_SERVER_URL=http://localhost:8080/api
+#AGENTSPAN_AUTH_KEY=<key> # if authentication is enabled
+#AGENTSPAN_AUTH_SECRET=<secret> # if authentication is enabled..
+```
+
+Or export environment variables directly:
 
 ```bash
+export AGENT_LLM_MODEL=openai/gpt-4o-mini
 export AGENTSPAN_SERVER_URL=http://localhost:8080/api
-export AGENTSPAN_AUTH_KEY=...       # if authentication is enabled
-export AGENTSPAN_AUTH_SECRET=...    # if authentication is enabled
+#export AGENTSPAN_AUTH_KEY=<key> # if authentication is enabled
+#export AGENTSPAN_AUTH_SECRET=<secret> # if authentication is enabled..
+```
+
+#### 1.1. Choose a model
+
+The `AGENT_LLM_MODEL` variable uses the `provider/model-name` format. Examples:
+
+| Provider | Model string |
+|----------|-------------|
+| OpenAI | `openai/gpt-4o-mini` (default) |
+| Anthropic | `anthropic/claude-sonnet-4-20250514` |
+| Google Gemini | `google_gemini/gemini-2.0-flash` |
+| AWS Bedrock | `aws_bedrock/...` |
+| Azure OpenAI | `azure_openai/...` |
+
+All supported providers: `openai`, `anthropic`, `google_gemini`, `google_vertex_ai`,
+`azure_openai`, `aws_bedrock`, `cohere`, `mistral`, `groq`, `perplexity`,
+`hugging_face`, `deepseek`.
+
+### 3. Run an example
+
+```bash
+python examples/01_basic_agent.py
+python examples/15_agent_discussion.py
 ```
 
 Some examples have additional dependencies noted in their headers.
 
 ---
 
-## Getting Started
+## Basic Examples
 
 | # | Example | What it demonstrates |
 |---|---------|---------------------|
@@ -126,46 +161,6 @@ Some examples have additional dependencies noted in their headers.
 | 28 | [GPT Assistant Agent](28_gpt_assistant_agent.py) | Wrap OpenAI Assistants API (with code interpreter) as a Conductor agent | `GPTAssistantAgent` |
 
 ---
-
-## Configuring the LLM Model
-
-All examples use `model_config.get_model()` to resolve the model at runtime.
-By default this returns `openai/gpt-4o`, but you can override it with the
-`AGENT_LLM_MODEL` environment variable:
-
-```bash
-# Default — OpenAI GPT-4o
-python examples/01_basic_agent.py
-
-# Anthropic Claude
-AGENT_LLM_MODEL="anthropic/claude-sonnet-4-20250514" python examples/01_basic_agent.py
-
-# Google Gemini
-AGENT_LLM_MODEL="google_gemini/gemini-2.0-flash" python examples/01_basic_agent.py
-```
-
-The model string format is `provider/model-name`. Supported providers include:
-`openai`, `anthropic`, `google_gemini`, `google_vertex_ai`, `azure_openai`,
-`aws_bedrock`, `cohere`, `mistral`, `groq`, `perplexity`, `hugging_face`,
-and `deepseek`.
-
-> **Note:** Example 28 (GPT Assistant Agent) is hardcoded to `gpt-4o` because
-> it uses the OpenAI Assistants API directly, which does not use the
-> `provider/model` format.
-
----
-
-## Running an Example
-
-```bash
-# Set up your environment
-export AGENTSPAN_SERVER_URL=http://localhost:8080/api
-
-# Run any example
-python examples/01_basic_agent.py
-python examples/15_agent_discussion.py
-python examples/19_composable_termination.py
-```
 
 ## Troubleshooting
 

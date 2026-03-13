@@ -9,13 +9,14 @@ using Pydantic models.
 Requirements:
     - Conductor server with LLM support
     - pydantic installed
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from pydantic import BaseModel
 
 from agentspan.agents import Agent, AgentRuntime, tool
-from model_config import get_model
+from settings import settings
 
 
 class WeatherReport(BaseModel):
@@ -33,7 +34,7 @@ def get_weather(city: str) -> dict:
 
 agent = Agent(
     name="weather_reporter",
-    model=get_model(),
+    model=settings.llm_model,
     tools=[get_weather],
     output_type=WeatherReport,
     instructions="You are a weather reporter. Get the weather and provide a recommendation.",

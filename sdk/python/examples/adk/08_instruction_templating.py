@@ -11,12 +11,15 @@ Demonstrates:
 Requirements:
     - pip install google-adk
     - Conductor server with Google Gemini LLM integration configured
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
 """
 
 from google.adk.agents import Agent
 
 from agentspan.agents import AgentRuntime
+
+from settings import settings
 
 
 def get_user_preferences(user_id: str) -> dict:
@@ -75,7 +78,7 @@ def search_tutorials(topic: str, level: str = "intermediate") -> dict:
 # get replaced from session state when the agent runs.
 agent = Agent(
     name="adaptive_tutor",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a personalized programming tutor. "
         "The current user is {user_name} with {expertise_level} expertise. "

@@ -20,18 +20,19 @@ Flow:
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, Strategy
-from model_config import get_model
+from settings import settings
 from agentspan.agents.handoff import OnTextMention
 
 # ── Specialist agents ────────────────────────────────────────────────
 
 refund_agent = Agent(
     name="refund_specialist",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a refund specialist. Process the customer's refund request. "
         "Check eligibility, confirm the refund amount, and let them know the "
@@ -42,7 +43,7 @@ refund_agent = Agent(
 
 tech_agent = Agent(
     name="tech_support",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a technical support specialist. Diagnose the customer's "
         "technical issue and provide clear troubleshooting steps."
@@ -53,7 +54,7 @@ tech_agent = Agent(
 
 support = Agent(
     name="support",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are the front-line customer support agent. Triage customer requests. "
         "If the customer needs a refund, transfer to the refund specialist. "

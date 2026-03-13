@@ -368,24 +368,24 @@ class TestAgentConfigAutoRegister:
         config = AgentConfig()
         assert config.auto_register_integrations is False
 
-    def test_from_env_reads_flag(self):
+    def test_env_reads_flag(self):
         from agentspan.agents.runtime.config import AgentConfig
 
-        with patch.dict("os.environ", {"CONDUCTOR_INTEGRATIONS_AUTO_REGISTER": "true"}):
-            config = AgentConfig.from_env()
+        with patch.dict("os.environ", {"AGENTSPAN_INTEGRATIONS_AUTO_REGISTER": "true"}):
+            config = AgentConfig()
             assert config.auto_register_integrations is True
 
-    def test_from_env_false_by_default(self):
+    def test_false_by_default(self):
         from agentspan.agents.runtime.config import AgentConfig
 
         with patch.dict("os.environ", {}, clear=True):
-            config = AgentConfig.from_env()
+            config = AgentConfig()
             assert config.auto_register_integrations is False
 
-    def test_from_env_various_truthy_values(self):
+    def test_various_truthy_values(self):
         from agentspan.agents.runtime.config import AgentConfig
 
         for val in ("true", "True", "TRUE", "1", "yes"):
-            with patch.dict("os.environ", {"CONDUCTOR_INTEGRATIONS_AUTO_REGISTER": val}):
-                config = AgentConfig.from_env()
+            with patch.dict("os.environ", {"AGENTSPAN_INTEGRATIONS_AUTO_REGISTER": val}):
+                config = AgentConfig()
                 assert config.auto_register_integrations is True, f"Failed for {val!r}"

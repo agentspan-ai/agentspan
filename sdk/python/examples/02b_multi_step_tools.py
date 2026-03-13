@@ -18,13 +18,14 @@ with clear inputs/outputs, making it easy to trace the reasoning chain.
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from typing import List
 
 from agentspan.agents import Agent, AgentRuntime, tool
-from model_config import get_model
+from settings import settings
 
 
 @tool
@@ -66,7 +67,7 @@ def send_summary_email(to: str, subject: str, body: str) -> dict:
 
 agent = Agent(
     name="account_analyst",
-    model=get_model(),
+    model=settings.llm_model,
     tools=[lookup_customer, get_transactions, calculate_total, send_summary_email],
     instructions=(
         "You are an account analyst. When asked about a customer, look them up, "

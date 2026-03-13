@@ -14,6 +14,8 @@ from google.adk.agents import Agent
 
 from agentspan.agents import AgentRuntime
 
+from settings import settings
+
 
 def main():
     # ── Portfolio tools ───────────────────────────────────────────
@@ -91,7 +93,7 @@ def main():
 
     portfolio_analyst = Agent(
         name="portfolio_analyst",
-        model="gemini-2.0-flash",
+        model=settings.llm_model,
         description="Analyzes client portfolios and calculates returns.",
         instruction="You are a portfolio analyst. Use tools to retrieve and analyze client portfolios.",
         tools=[get_portfolio, calculate_returns],
@@ -99,7 +101,7 @@ def main():
 
     market_researcher = Agent(
         name="market_researcher",
-        model="gemini-2.0-flash",
+        model=settings.llm_model,
         description="Researches market conditions and economic indicators.",
         instruction="You are a market researcher. Provide sector analysis and economic outlook.",
         tools=[get_market_data, get_economic_indicators],
@@ -107,7 +109,7 @@ def main():
 
     tax_advisor = Agent(
         name="tax_advisor",
-        model="gemini-2.0-flash",
+        model=settings.llm_model,
         description="Advises on tax implications of investment decisions.",
         instruction="You are a tax advisor. Estimate tax impacts of proposed changes.",
         tools=[estimate_tax_impact],
@@ -117,7 +119,7 @@ def main():
 
     coordinator = Agent(
         name="financial_advisor",
-        model="gemini-2.0-flash",
+        model=settings.llm_model,
         instruction=(
             "You are a senior financial advisor. Help clients with investment advice. "
             "Use the portfolio analyst to review holdings, market researcher for conditions, "

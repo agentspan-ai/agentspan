@@ -18,11 +18,12 @@ Architecture:
 
 Requirements:
     - Conductor server with OpenAI integration configured
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, audio_tool, image_tool, video_tool
-from model_config import get_model
+from settings import settings
 
 # ── Media generation tools (server-side, no worker needed) ────────────
 
@@ -53,7 +54,7 @@ gen_video = video_tool(
 
 media_agent = Agent(
     name="media_generator",
-    model=get_model(),
+    model=settings.llm_model,
     tools=[gen_image, gen_audio, gen_video],
     instructions=(
         "You are a creative media generation assistant. You can generate:\n\n"

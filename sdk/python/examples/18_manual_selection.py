@@ -15,36 +15,37 @@ Flow:
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 import time
 
 from agentspan.agents import Agent, AgentRuntime, Strategy
-from model_config import get_model
+from settings import settings
 
 writer = Agent(
     name="writer",
-    model=get_model(),
+    model=settings.llm_model,
     instructions="You are a creative writer. Expand on ideas with vivid prose.",
 )
 
 editor = Agent(
     name="editor",
-    model=get_model(),
+    model=settings.llm_model,
     instructions="You are a strict editor. Improve clarity, fix issues, tighten prose.",
 )
 
 fact_checker = Agent(
     name="fact_checker",
-    model=get_model(),
+    model=settings.llm_model,
     instructions="You verify claims and flag anything inaccurate or unsupported.",
 )
 
 # Manual strategy: human picks who speaks each turn
 team = Agent(
     name="editorial_team",
-    model=get_model(),
+    model=settings.llm_model,
     agents=[writer, editor, fact_checker],
     strategy=Strategy.MANUAL,
     max_turns=3,

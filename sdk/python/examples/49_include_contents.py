@@ -10,11 +10,12 @@ by prior messages.
 
 Requirements:
     - Conductor server with include_contents support
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, tool
-from model_config import get_model
+from settings import settings
 
 
 @tool
@@ -34,7 +35,7 @@ def summarize_text(text: str) -> dict:
 # This sub-agent won't see the parent's conversation history
 independent_summarizer = Agent(
     name="independent_summarizer_49",
-    model=get_model(),
+    model=settings.llm_model,
     instructions="You are a summarizer. Summarize any text given to you concisely.",
     tools=[summarize_text],
     include_contents="none",  # No parent context
@@ -43,13 +44,13 @@ independent_summarizer = Agent(
 # This sub-agent WILL see the parent's conversation history (default)
 context_aware_helper = Agent(
     name="context_aware_helper_49",
-    model=get_model(),
+    model=settings.llm_model,
     instructions="You are a helpful assistant that builds on prior conversation context.",
 )
 
 coordinator = Agent(
     name="coordinator_49",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You coordinate tasks. Route summarization requests to "
         "independent_summarizer_49 and general questions to context_aware_helper_49."

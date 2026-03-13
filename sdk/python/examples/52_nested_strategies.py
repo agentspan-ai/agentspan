@@ -10,17 +10,18 @@ research agents concurrently, followed by a sequential summarizer.
 
 Requirements:
     - Conductor server
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime
-from model_config import get_model
+from settings import settings
 
 # ── Parallel research phase ────────────────────────────────────────
 
 market_analyst = Agent(
     name="market_analyst_52",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a market analyst. Analyze the market size, growth rate, "
         "and key players for the given topic. Be concise (3-4 bullet points)."
@@ -29,7 +30,7 @@ market_analyst = Agent(
 
 risk_analyst = Agent(
     name="risk_analyst_52",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a risk analyst. Identify the top 3 risks: regulatory, "
         "technical, and competitive. Be concise."
@@ -39,7 +40,7 @@ risk_analyst = Agent(
 # Both analysts run concurrently
 parallel_research = Agent(
     name="research_phase_52",
-    model=get_model(),
+    model=settings.llm_model,
     agents=[market_analyst, risk_analyst],
     strategy="parallel",
 )
@@ -48,7 +49,7 @@ parallel_research = Agent(
 
 summarizer = Agent(
     name="summarizer_52",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are an executive briefing writer. Synthesize the market analysis "
         "and risk assessment into a concise executive summary (1 paragraph)."

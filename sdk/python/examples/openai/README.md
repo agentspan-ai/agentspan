@@ -8,8 +8,22 @@ The agents are defined using standard OpenAI SDK classes and decorators — the 
 
 ```bash
 pip install openai-agents agentspan-sdk
-export AGENTSPAN_SERVER_URL=http://localhost:7001/api
-export OPENAI_API_KEY=your-key  # or configure via Conductor server
+```
+
+Configure via `.env` file in the project root (recommended):
+
+```dotenv
+AGENT_LLM_MODEL=openai/gpt-4o-mini
+AGENTSPAN_SERVER_URL=http://localhost:8080/api
+OPENAI_API_KEY=your-key  # or configure via Conductor server
+```
+
+Or export environment variables directly:
+
+```bash
+export AGENT_LLM_MODEL=openai/gpt-4o-mini
+export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+export OPENAI_API_KEY=your-key
 ```
 
 ## Examples
@@ -25,7 +39,7 @@ export OPENAI_API_KEY=your-key  # or configure via Conductor server
 | 07 | [07_streaming.py](07_streaming.py) | **Streaming** | Real-time SSE event streaming via `runtime.stream()`. Shows tool_call, tool_result, and done events. |
 | 08 | [08_agent_as_tool.py](08_agent_as_tool.py) | **Agent-as-Tool** | Manager pattern with `Agent.as_tool()`. Manager retains control and synthesizes specialist results. |
 | 09 | [09_dynamic_instructions.py](09_dynamic_instructions.py) | **Dynamic Instructions** | Callable instruction function that generates context-aware prompts (time-of-day, user preferences). |
-| 10 | [10_multi_model.py](10_multi_model.py) | **Multi-Model** | Different agents using different models (gpt-4o-mini for triage, gpt-4o for specialists). Cost/performance optimization. |
+| 10 | [10_multi_model.py](10_multi_model.py) | **Multi-Model** | Multiple agents with shared `settings.llm_model`. Override via `AGENT_LLM_MODEL` env var. |
 
 ## Feature Coverage
 

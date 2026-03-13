@@ -11,7 +11,8 @@ Demonstrates:
 Requirements:
     - pip install openai-agents
     - Conductor server with OpenAI LLM integration configured
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from datetime import datetime
@@ -19,6 +20,8 @@ from datetime import datetime
 from agents import Agent, function_tool
 
 from agentspan.agents import AgentRuntime
+
+from settings import settings
 
 
 def get_dynamic_instructions(ctx, agent) -> str:
@@ -63,7 +66,7 @@ def add_todo(task: str, priority: str = "medium") -> str:
 agent = Agent(
     name="personal_assistant",
     instructions=get_dynamic_instructions,
-    model="gpt-4o",
+    model=settings.llm_model,
     tools=[get_todo_list, add_todo],
 )
 

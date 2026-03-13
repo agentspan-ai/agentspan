@@ -15,7 +15,8 @@ Same functions, two execution modes.
 Requirements:
     Part 1 (standalone): none — no server, no LLM, no workers.
     Part 2 (as workers): Conductor server
-        - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+        - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 import re
@@ -158,8 +159,6 @@ def register_guardrail_worker(guardrail_fn):
 
 
 def run_as_workers():
-    import os
-
     from conductor.client.automator.task_handler import TaskHandler
     from conductor.client.configuration.configuration import Configuration
 
@@ -173,8 +172,8 @@ def run_as_workers():
         print(f"  Registered worker: {name}")
 
     # Start polling — TaskHandler discovers all @worker_task functions
-    server_url = os.environ.get("AGENTSPAN_SERVER_URL") or os.environ.get("CONDUCTOR_SERVER_URL", "http://localhost:8080/api")
-    config = Configuration(server_api_url=server_url)
+    from agentspan.agents.runtime.config import AgentConfig
+    config = Configuration(server_api_url=AgentConfig().server_url)
     handler = TaskHandler(
         workers=[],
         configuration=config,

@@ -8,11 +8,12 @@ aggregated token usage across all LLM calls in an agent execution.
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, tool
-from model_config import get_model
+from settings import settings
 
 
 @tool
@@ -24,7 +25,7 @@ def calculate(expression: str) -> str:
 
 agent = Agent(
     name="math_tutor",
-    model=get_model(),
+    model=settings.llm_model,
     tools=[calculate],
     instructions=(
         "You are a math tutor. Solve problems step by step, using the calculate "

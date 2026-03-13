@@ -11,7 +11,8 @@ Demonstrates:
 Requirements:
     - pip install google-adk
     - Conductor server
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
 """
 
 from google.adk.agents import LlmAgent
@@ -19,6 +20,8 @@ from google.adk.planners import BuiltInPlanner
 from google.genai import types
 
 from agentspan.agents import AgentRuntime
+
+from settings import settings
 
 
 def search_web(query: str) -> dict:
@@ -69,7 +72,7 @@ def write_section(title: str, content: str) -> dict:
 # with planning instructions when it detects the planner field
 agent = LlmAgent(
     name="research_writer",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a research writer. When given a topic, research it "
         "thoroughly and write a structured report with multiple sections."

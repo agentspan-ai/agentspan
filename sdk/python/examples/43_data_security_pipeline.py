@@ -17,13 +17,14 @@ user-facing responses, ensuring PII never reaches the final output.
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 import json
 
 from agentspan.agents import Agent, AgentRuntime, tool
-from model_config import get_model
+from settings import settings
 
 
 # ── Data tools ───────────────────────────────────────────────────────
@@ -89,7 +90,7 @@ def redact_sensitive_fields(data: str) -> dict:
 # Data collector fetches raw user data
 collector = Agent(
     name="data_collector",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a data collection agent. When asked about a user, "
         "call fetch_user_data with their ID. Pass the raw data along "
@@ -101,7 +102,7 @@ collector = Agent(
 # Validator enforces data security policy
 validator = Agent(
     name="security_validator",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a security validator. Review data for sensitive information "
         "(SSN, account balances, email addresses). Use the redact_sensitive_fields "
@@ -114,7 +115,7 @@ validator = Agent(
 # Responder formats the final answer
 responder = Agent(
     name="responder",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a customer service agent. Use the validated, redacted data "
         "to answer the user's question. NEVER reveal redacted information. "

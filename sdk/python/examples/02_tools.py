@@ -10,12 +10,12 @@ Demonstrates:
 
 Requirements:
     - Conductor server with LLM support
-    - LLM provider "openai" configured
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, EventType, tool
-from model_config import get_model
+from settings import settings
 
 
 @tool
@@ -54,7 +54,7 @@ def send_email(to: str, subject: str, body: str) -> dict:
 
 agent = Agent(
     name="tool_demo_agent",
-    model=get_model(),
+    model=settings.llm_model,
     tools=[get_weather, calculate, send_email],
     instructions="You are a helpful assistant with access to weather, calculator, and email tools.",
 )

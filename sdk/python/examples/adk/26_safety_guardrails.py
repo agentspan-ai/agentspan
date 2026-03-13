@@ -14,7 +14,8 @@ BasePlugin for global safety. We use guardrails + sequential agents.
 Requirements:
     - pip install google-adk
     - Conductor server
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
 """
 
 import re
@@ -22,6 +23,8 @@ import re
 from google.adk.agents import Agent, SequentialAgent
 
 from agentspan.agents import AgentRuntime
+
+from settings import settings
 
 
 def check_pii(text: str) -> dict:
@@ -80,7 +83,7 @@ def sanitize_response(text: str, pii_types: str = "") -> dict:
 # Main assistant generates responses
 assistant = Agent(
     name="helpful_assistant",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a helpful customer service assistant. Answer questions "
         "about account details, contact information, and general inquiries. "
@@ -91,7 +94,7 @@ assistant = Agent(
 # Safety checker scans the response
 safety_checker = Agent(
     name="safety_checker",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a safety reviewer. Check the previous agent's response "
         "for any PII (emails, phone numbers, SSNs, credit card numbers). "

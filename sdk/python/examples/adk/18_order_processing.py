@@ -13,6 +13,8 @@ from google.adk.agents import Agent
 
 from agentspan.agents import AgentRuntime
 
+from settings import settings
+
 
 def main():
     def search_catalog(query: str, category: str = "all") -> dict:
@@ -78,7 +80,7 @@ def main():
 
     agent = Agent(
         name="order_processor",
-        model="gemini-2.0-flash",
+        model=settings.llm_model,
         instruction=(
             "You are an order processing assistant for TechMart. "
             "Help customers search products, check availability, calculate totals, and place orders. "

@@ -9,7 +9,8 @@ allowing the LLM to reason step-by-step before responding.
 Requirements:
     - pip install google-adk
     - Conductor server with thinking config support
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
 """
 
 from google.adk.agents import Agent
@@ -17,6 +18,8 @@ from google.adk.tools import FunctionTool
 from google.genai import types
 
 from agentspan.agents import AgentRuntime
+
+from settings import settings
 
 
 def calculate(expression: str) -> dict:
@@ -37,7 +40,7 @@ def calculate(expression: str) -> dict:
 
 agent = Agent(
     name="deep_thinker",
-    model="gemini-2.0-flash-thinking-exp",
+    model=settings.llm_model,
     instruction=(
         "You are an analytical assistant. Think carefully through complex "
         "problems step by step. Use the calculate tool for math."

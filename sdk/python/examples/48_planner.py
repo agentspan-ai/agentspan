@@ -9,11 +9,12 @@ tools. This improves performance on complex, multi-step tasks.
 
 Requirements:
     - Conductor server with planner support
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, tool
-from model_config import get_model
+from settings import settings
 
 
 @tool
@@ -58,7 +59,7 @@ def write_section(title: str, content: str) -> dict:
 
 agent = Agent(
     name="research_writer_48",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a research writer. Research topics thoroughly and "
         "write structured reports with multiple sections."

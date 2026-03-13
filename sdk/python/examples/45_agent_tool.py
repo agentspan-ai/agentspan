@@ -14,11 +14,12 @@ own workflow and returns the result as a tool output.
 
 Requirements:
     - Conductor server with AgentTool support
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, agent_tool, tool
-from model_config import get_model
+from settings import settings
 
 
 # ── Child agent's tool ─────────────────────────────────────────────
@@ -71,7 +72,7 @@ def calculate(expression: str) -> dict:
 # ── Child agent (has its own tools) ────────────────────────────────
 researcher = Agent(
     name="researcher_45",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a research assistant. Use search_knowledge_base to find "
         "information about topics. Provide concise summaries."
@@ -82,7 +83,7 @@ researcher = Agent(
 # ── Parent agent (uses researcher as a tool) ───────────────────────
 manager = Agent(
     name="manager_45",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a project manager. Use the researcher tool to gather "
         "information and the calculate tool for math. Synthesize findings."

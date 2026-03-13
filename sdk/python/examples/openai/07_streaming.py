@@ -11,12 +11,15 @@ Demonstrates:
 Requirements:
     - pip install openai-agents
     - Conductor server with OpenAI LLM integration configured
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agents import Agent, function_tool
 
 from agentspan.agents import AgentRuntime
+
+from settings import settings
 
 
 @function_tool
@@ -43,7 +46,7 @@ agent = Agent(
         "You are a customer support agent. Use the knowledge base to answer "
         "questions accurately. If you can't find the answer, say so honestly."
     ),
-    model="gpt-4o",
+    model=settings.llm_model,
     tools=[search_knowledge_base],
 )
 

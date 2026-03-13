@@ -8,11 +8,12 @@ which sub-agent to delegate to. Sub-agents appear as callable tools.
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, Strategy, tool
-from model_config import get_model
+from settings import settings
 
 
 # ── Sub-agent tools ─────────────────────────────────────────────────
@@ -39,21 +40,21 @@ def get_pricing(product: str) -> dict:
 
 billing_agent = Agent(
     name="billing",
-    model=get_model(),
+    model=settings.llm_model,
     instructions="You handle billing questions: balances, payments, invoices.",
     tools=[check_balance],
 )
 
 technical_agent = Agent(
     name="technical",
-    model=get_model(),
+    model=settings.llm_model,
     instructions="You handle technical questions: order status, shipping, returns.",
     tools=[lookup_order],
 )
 
 sales_agent = Agent(
     name="sales",
-    model=get_model(),
+    model=settings.llm_model,
     instructions="You handle sales questions: pricing, products, promotions.",
     tools=[get_pricing],
 )
@@ -62,7 +63,7 @@ sales_agent = Agent(
 
 support = Agent(
     name="support",
-    model=get_model(),
+    model=settings.llm_model,
     instructions="Route customer requests to the right specialist: billing, technical, or sales.",
     agents=[billing_agent, technical_agent, sales_agent],
     strategy=Strategy.HANDOFF,

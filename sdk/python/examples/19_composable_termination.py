@@ -13,7 +13,8 @@ Demonstrates composable termination conditions using ``&`` (AND) and
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import (
@@ -25,7 +26,7 @@ from agentspan.agents import (
     TokenUsageTermination,
     tool,
 )
-from model_config import get_model
+from settings import settings
 
 
 # ── Example 1: Simple text mention ───────────────────────────────────
@@ -37,7 +38,7 @@ def search(query: str) -> str:
 
 agent1 = Agent(
     name="researcher",
-    model=get_model(),
+    model=settings.llm_model,
     tools=[search],
     instructions="Research the topic and say DONE when you have enough info.",
     termination=TextMentionTermination("DONE"),
@@ -48,7 +49,7 @@ agent1 = Agent(
 
 agent2 = Agent(
     name="chatbot",
-    model=get_model(),
+    model=settings.llm_model,
     instructions="Have a conversation. Say GOODBYE when you're finished.",
     termination=(
         TextMentionTermination("GOODBYE") | MaxMessageTermination(20)
@@ -62,7 +63,7 @@ agent2 = Agent(
 # at least 5 messages (ensuring sufficient deliberation)
 agent3 = Agent(
     name="deliberator",
-    model=get_model(),
+    model=settings.llm_model,
     tools=[search],
     instructions=(
         "Research thoroughly. Only provide your FINAL ANSWER after "
@@ -85,7 +86,7 @@ complex_stop = (
 
 agent4 = Agent(
     name="complex_agent",
-    model=get_model(),
+    model=settings.llm_model,
     tools=[search],
     instructions="Research and provide a comprehensive answer.",
     termination=complex_stop,

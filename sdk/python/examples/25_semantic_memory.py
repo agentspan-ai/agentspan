@@ -11,11 +11,12 @@ giving the agent access to relevant past knowledge.
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, tool
-from model_config import get_model
+from settings import settings
 from agentspan.agents.semantic_memory import SemanticMemory
 
 # ── Build up a knowledge base ────────────────────────────────────────
@@ -41,7 +42,7 @@ def get_customer_context(query: str) -> str:
 
 agent = Agent(
     name="memory_agent",
-    model=get_model(),
+    model=settings.llm_model,
     tools=[get_customer_context],
     instructions=(
         "You are a customer support agent with access to a memory system. "

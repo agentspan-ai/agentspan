@@ -16,11 +16,12 @@ automatically emit spans for:
 Requirements:
     - pip install opentelemetry-api opentelemetry-sdk
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, is_tracing_enabled, tool
-from model_config import get_model
+from settings import settings
 from agentspan.agents.tracing import trace_agent_run, trace_tool_call
 
 # ── Check if OTel is available ───────────────────────────────────────
@@ -50,7 +51,7 @@ def lookup(query: str) -> str:
 
 agent = Agent(
     name="traced_agent",
-    model=get_model(),
+    model=settings.llm_model,
     tools=[lookup],
     instructions="You are a helpful assistant. Use the lookup tool when needed.",
 )
@@ -60,7 +61,7 @@ agent = Agent(
 with AgentRuntime() as runtime:
     # The runtime automatically creates spans if OTel is configured.
     # You can also create manual spans for custom instrumentation:
-    with trace_agent_run("traced_agent", "Who created Python?", model=get_model()) as span:
+    with trace_agent_run("traced_agent", "Who created Python?", model=settings.llm_model) as span:
         result = runtime.run(agent, "Who created Python?")
         if span:
             span.set_attribute("agent.output_length", len(str(result.output)))

@@ -16,7 +16,8 @@ Architecture:
 Requirements:
     - pip install google-adk
     - Conductor server with callback support
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
 """
 
 import json
@@ -24,6 +25,8 @@ import json
 from google.adk.agents import LlmAgent
 
 from agentspan.agents import AgentRuntime
+
+from settings import settings
 
 
 # ── Callback functions ────────────────────────────────────────────
@@ -72,7 +75,7 @@ def inspect_after_model(callback_position: str, agent_name: str,
 
 agent = LlmAgent(
     name="monitored_assistant",
-    model="gemini-2.0-flash",
+    model=settings.llm_model,
     instruction=(
         "You are a helpful assistant. Answer questions concisely. "
         "Keep responses under 200 words."

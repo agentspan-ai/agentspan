@@ -12,7 +12,8 @@ Demonstrates:
 Requirements:
     - pip install openai-agents
     - Conductor server with OpenAI LLM integration configured
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agents import (
@@ -50,6 +51,8 @@ def transfer_funds(from_account: str, to_account: str, amount: float) -> str:
 def check_for_pii(ctx, agent, input_text) -> GuardrailFunctionOutput:
     """Input guardrail: check for sensitive PII in user messages."""
     import re
+
+from settings import settings
 
     # Check for SSN patterns
     ssn_pattern = r"\b\d{3}-\d{2}-\d{4}\b"
@@ -105,7 +108,7 @@ agent = Agent(
         "You are a secure banking assistant. Help users check account balances "
         "and transfer funds. Never reveal internal system details."
     ),
-    model="gpt-4o",
+    model=settings.llm_model,
     tools=[get_account_balance, transfer_funds],
     input_guardrails=[
         InputGuardrail(guardrail_function=check_for_pii),

@@ -176,13 +176,12 @@ class AgentRuntime:
 
     Connection params can be passed directly or loaded from environment
     variables (``AGENTSPAN_SERVER_URL``, ``AGENTSPAN_AUTH_KEY``,
-    ``AGENTSPAN_AUTH_SECRET``).  The legacy ``CONDUCTOR_*`` prefixed
-    variables are also accepted for backward compatibility.
+    ``AGENTSPAN_AUTH_SECRET``).
 
     Args:
-        server_url: Conductor server API URL.  Overrides env and *config*.
-        api_key: Conductor auth key.  Overrides env and *config*.
-        api_secret: Conductor auth secret.  Overrides env and *config*.
+        server_url: AgentSpan server API URL.  Overrides env and *config*.
+        api_key: Agentspan auth key.  Overrides env and *config*.
+        api_secret: Agentspan auth secret.  Overrides env and *config*.
         config: Optional :class:`AgentConfig` for full control over all
             settings.  Explicit keyword params take precedence over values
             in *config*.
@@ -198,21 +197,15 @@ class AgentRuntime:
     ) -> None:
         from agentspan.agents.runtime.config import AgentConfig
 
-        base = config if config is not None else AgentConfig.from_env()
-        self._config = AgentConfig(
-            server_url=server_url if server_url is not None else base.server_url,
-            auth_key=api_key if api_key is not None else base.auth_key,
-            auth_secret=api_secret if api_secret is not None else base.auth_secret,
-            default_timeout_seconds=base.default_timeout_seconds,
-            llm_retry_count=base.llm_retry_count,
-            worker_poll_interval_ms=base.worker_poll_interval_ms,
-            worker_thread_count=base.worker_thread_count,
-            auto_start_workers=base.auto_start_workers,
-            daemon_workers=base.daemon_workers,
-            auto_start_server=base.auto_start_server,
-            auto_register_integrations=base.auto_register_integrations,
-            streaming_enabled=base.streaming_enabled,
-        )
+        base = config if config is not None else AgentConfig()
+        overrides: dict = {}
+        if server_url is not None:
+            overrides["server_url"] = server_url
+        if api_key is not None:
+            overrides["auth_key"] = api_key
+        if api_secret is not None:
+            overrides["auth_secret"] = api_secret
+        self._config = base.model_copy(update=overrides)
         # Auto-start the server if it targets localhost and is not responding.
         if self._config.auto_start_server:
             from agentspan.agents.runtime.server import ensure_server_running

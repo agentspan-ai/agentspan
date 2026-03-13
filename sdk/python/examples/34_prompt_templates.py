@@ -15,11 +15,12 @@ PromptTemplate supports:
 Requirements:
     - Conductor server with LLM support
     - Prompt templates created on the server (see setup below)
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, PromptTemplate, tool
-from model_config import get_model
+from settings import settings
 
 # ── Example 1: Instructions from a template ──────────────────────────
 # The system prompt comes from a named template stored on the server.
@@ -27,7 +28,7 @@ from model_config import get_model
 
 support_agent = Agent(
     name="support_agent",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=PromptTemplate(
         "customer-support",
         variables={"company": "Acme Corp", "tone": "friendly and professional"},
@@ -53,7 +54,7 @@ def lookup_customer(email: str) -> dict:
 
 order_agent = Agent(
     name="order_assistant",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=PromptTemplate(
         "order-support",
         variables={"max_refund": "$500", "escalation_email": "help@acme.com"},
@@ -68,7 +69,7 @@ order_agent = Agent(
 
 stable_agent = Agent(
     name="stable_agent",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=PromptTemplate("production-prompt", version=3),
 )
 

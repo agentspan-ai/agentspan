@@ -14,11 +14,12 @@ composing them into an ordered sequence using the >> operator.
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, tool
-from model_config import get_model
+from settings import settings
 
 
 # ── Stage tools ──────────────────────────────────────────────────────
@@ -140,7 +141,7 @@ def assemble_production(title: str, total_scenes: int,
 
 concept_developer = Agent(
     name="concept_developer",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a creative director. Develop a concept for a short film "
         "based on the given theme. Use create_concept to document the "
@@ -151,7 +152,7 @@ concept_developer = Agent(
 
 scriptwriter = Agent(
     name="scriptwriter",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a scriptwriter. Based on the concept from the previous "
         "stage, write 3 short scenes using write_scene for each. "
@@ -162,7 +163,7 @@ scriptwriter = Agent(
 
 visual_director = Agent(
     name="visual_director",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a visual director. For each scene written by the "
         "scriptwriter, use describe_visual to specify camera shots, "
@@ -173,7 +174,7 @@ visual_director = Agent(
 
 audio_designer = Agent(
     name="audio_designer",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are an audio designer. For each scene, use specify_audio "
         "to define the music mood and key sound effects. Match the "
@@ -184,7 +185,7 @@ audio_designer = Agent(
 
 producer = Agent(
     name="producer",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are the producer. Review all previous stages and use "
         "assemble_production to create final production notes. "

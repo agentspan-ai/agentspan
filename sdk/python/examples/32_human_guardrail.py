@@ -11,7 +11,8 @@ Since the workflow pauses at a HumanTask, this example uses ``start()``
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 import time
@@ -26,7 +27,7 @@ from agentspan.agents import (
     guardrail,
     tool,
 )
-from model_config import get_model
+from settings import settings
 
 
 # ── Guardrail ────────────────────────────────────────────────────────────
@@ -61,7 +62,7 @@ def get_market_data(ticker: str) -> dict:
 
 agent = Agent(
     name="finance_agent",
-    model=get_model(),
+    model=settings.llm_model,
     tools=[get_market_data],
     instructions=(
         "You are a financial information assistant. Provide market data "

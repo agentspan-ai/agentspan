@@ -18,13 +18,14 @@ policies through explicit scanning and redaction.
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 import re
 
 from agentspan.agents import Agent, AgentRuntime, tool
-from model_config import get_model
+from settings import settings
 
 
 # ── Safety tools ─────────────────────────────────────────────────────
@@ -93,7 +94,7 @@ def sanitize_response(text: str, pii_types: str = "") -> dict:
 # Main assistant generates responses
 assistant = Agent(
     name="helpful_assistant",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a helpful customer service assistant. Answer questions "
         "about account details, contact information, and general inquiries. "
@@ -104,7 +105,7 @@ assistant = Agent(
 # Safety checker scans the response for PII
 safety_checker = Agent(
     name="safety_checker",
-    model=get_model(),
+    model=settings.llm_model,
     instructions=(
         "You are a safety reviewer. Check the previous agent's response "
         "for any PII (emails, phone numbers, SSNs, credit card numbers). "
