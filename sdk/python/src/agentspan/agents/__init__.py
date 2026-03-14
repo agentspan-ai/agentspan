@@ -111,6 +111,9 @@ from agentspan.agents.code_executor import (
     ServerlessCodeExecutor,
 )
 
+# Callback handlers
+from agentspan.agents.callback import CallbackHandler
+
 # Handoff conditions (for swarm strategy)
 from agentspan.agents.handoff import HandoffCondition, OnCondition, OnTextMention, OnToolResult
 
@@ -194,6 +197,8 @@ __all__ = [
     "JupyterCodeExecutor",
     "ServerlessCodeExecutor",
     "ExecutionResult",
+    # Callback handlers
+    "CallbackHandler",
     # Handoff conditions
     "HandoffCondition",
     "OnToolResult",

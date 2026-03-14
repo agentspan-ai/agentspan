@@ -125,14 +125,24 @@ class AgentConfigSerializer:
         if getattr(agent, 'planner', False):
             config["planner"] = True
 
-        # Callbacks
+        # Callbacks — emit for any position that has handlers or legacy callables
+        from agentspan.agents.callback import (
+            POSITION_TO_METHOD,
+            _LEGACY_ATTR_TO_POSITION,
+            _chain_callbacks_for_position,
+        )
+
+        handlers = getattr(agent, "callbacks", None) or []
         callbacks = []
-        if getattr(agent, 'before_model_callback', None) is not None:
-            task_name = f"{agent.name}_before_model"
-            callbacks.append({"position": "before_model", "taskName": task_name})
-        if getattr(agent, 'after_model_callback', None) is not None:
-            task_name = f"{agent.name}_after_model"
-            callbacks.append({"position": "after_model", "taskName": task_name})
+        for position in POSITION_TO_METHOD:
+            legacy_attr = next(
+                (attr for attr, pos in _LEGACY_ATTR_TO_POSITION.items() if pos == position),
+                None,
+            )
+            legacy_fn = getattr(agent, legacy_attr, None) if legacy_attr else None
+            if _chain_callbacks_for_position(position, handlers, legacy_fn) is not None:
+                task_name = f"{agent.name}_{position}"
+                callbacks.append({"position": position, "taskName": task_name})
         if callbacks:
             config["callbacks"] = callbacks
 

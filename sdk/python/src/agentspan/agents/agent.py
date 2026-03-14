@@ -13,6 +13,7 @@ from __future__ import annotations
 import functools
 import inspect
 import re
+import warnings
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Union
@@ -271,12 +272,20 @@ class Agent:
             Mutually exclusive with ``local_code_execution``.
         planner: When ``True``, the server enhances the system prompt with
             planning instructions so the agent plans before executing.
-        before_model_callback: A callable invoked before each LLM call.
-            Registered as a Conductor worker task. Receives the current
-            messages and can return an override response to skip the LLM.
-        after_model_callback: A callable invoked after each LLM call.
-            Registered as a Conductor worker task. Receives the LLM
-            response and can modify or replace it.
+        callbacks: List of :class:`CallbackHandler` instances for lifecycle
+            hooks.  Multiple handlers chain per-position in list order;
+            first non-empty dict return short-circuits remaining handlers.
+            Supports 6 positions: ``on_agent_start``, ``on_agent_end``,
+            ``on_model_start``, ``on_model_end``, ``on_tool_start``,
+            ``on_tool_end``.
+        before_agent_callback: *Deprecated* — use ``callbacks`` instead.
+            A callable invoked before the agent starts processing.
+        after_agent_callback: *Deprecated* — use ``callbacks`` instead.
+            A callable invoked after the agent finishes processing.
+        before_model_callback: *Deprecated* — use ``callbacks`` instead.
+            A callable invoked before each LLM call.
+        after_model_callback: *Deprecated* — use ``callbacks`` instead.
+            A callable invoked after each LLM call.
         include_contents: Controls parent conversation context for sub-agents.
             ``"default"`` passes full context, ``"none"`` gives fresh context.
         thinking_budget_tokens: Token budget for extended reasoning/thinking
@@ -312,6 +321,9 @@ class Agent:
         allowed_commands: Optional[List[str]] = None,
         code_execution: Optional[Any] = None,
         planner: bool = False,
+        callbacks: Optional[List[Any]] = None,
+        before_agent_callback: Optional[Callable[..., Any]] = None,
+        after_agent_callback: Optional[Callable[..., Any]] = None,
         before_model_callback: Optional[Callable[..., Any]] = None,
         after_model_callback: Optional[Callable[..., Any]] = None,
         include_contents: Optional[str] = None,
@@ -366,8 +378,23 @@ class Agent:
         self.introduction = introduction
         self.metadata: Dict[str, Any] = dict(metadata) if metadata else {}
         self.planner = planner
+        self.callbacks: List[Any] = list(callbacks) if callbacks else []
+        self.before_agent_callback = before_agent_callback
+        self.after_agent_callback = after_agent_callback
         self.before_model_callback = before_model_callback
         self.after_model_callback = after_model_callback
+        for _attr in (
+            "before_agent_callback",
+            "after_agent_callback",
+            "before_model_callback",
+            "after_model_callback",
+        ):
+            if getattr(self, _attr) is not None:
+                warnings.warn(
+                    f"{_attr} is deprecated, use callbacks=[CallbackHandler()] instead",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
         self.include_contents = include_contents
         self.thinking_budget_tokens = thinking_budget_tokens
 

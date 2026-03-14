@@ -1,6 +1,9 @@
 <p align="center">
-  <img src="https://github.com/agentspan/agentspan/raw/main/assets/logo-light.png#gh-light-mode-only" alt="Agentspan" width="400">
-  <img src="https://github.com/agentspan/agentspan/raw/main/assets/logo-dark.png#gh-dark-mode-only" alt="Agentspan" width="400">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../../assets/logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="../../assets/logo-light.svg">
+    <img src="../../assets/logo-light.svg" alt="Agentspan" width="400">
+  </picture>
 </p>
 
 <h3 align="center">AI agents that don't die when your process does.</h3>
@@ -384,6 +387,42 @@ with AgentRuntime() as runtime:
     result.print_result()
 ```
 
+### Agent Lifecycle Callbacks
+
+Hook into agent, model, and tool lifecycle events with `CallbackHandler` classes. Multiple handlers chain per-position in list order — each one handles a single concern:
+
+```python
+import time
+from agentspan.agents import Agent, AgentRuntime, CallbackHandler
+
+class TimingHandler(CallbackHandler):
+    def on_agent_start(self, **kwargs):
+        self.t0 = time.time()
+    def on_agent_end(self, **kwargs):
+        print(f"Took {time.time() - self.t0:.2f}s")
+
+class LoggingHandler(CallbackHandler):
+    def on_model_start(self, *, messages=None, **kwargs):
+        print(f"Sending {len(messages or [])} messages")
+    def on_model_end(self, *, llm_result=None, **kwargs):
+        print(f"LLM responded: {(llm_result or '')[:80]}")
+
+agent = Agent(
+    name="my_agent",
+    model="openai/gpt-4o-mini",
+    instructions="You are a helpful assistant.",
+    callbacks=[TimingHandler(), LoggingHandler()],
+)
+
+with AgentRuntime() as runtime:
+    result = runtime.run(agent, "Hello!")
+    result.print_result()
+```
+
+Six hook positions: `on_agent_start`, `on_agent_end`, `on_model_start`, `on_model_end`, `on_tool_start`, `on_tool_end`.
+
+Execution order: `on_agent_start` → (`on_model_start` → LLM → `on_model_end`)* → `on_agent_end`
+
 ## Multi-Agent Strategies
 
 | Strategy | Description |
@@ -463,6 +502,7 @@ Runnable examples covering every feature:
 | [`50_thinking_config.py`](examples/50_thinking_config.py) | Extended reasoning |
 | [`51_shared_state.py`](examples/51_shared_state.py) | Shared state via ToolContext |
 | [`52_nested_strategies.py`](examples/52_nested_strategies.py) | Nested parallel + sequential |
+| [`53_agent_lifecycle_callbacks.py`](examples/53_agent_lifecycle_callbacks.py) | Agent-level before/after hooks |
 
 ### Google ADK Compatibility
 

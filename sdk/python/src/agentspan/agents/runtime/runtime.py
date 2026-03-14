@@ -659,11 +659,24 @@ class AgentRuntime:
         if agent.stop_when and callable(agent.stop_when):
             self._register_stop_when_worker(agent.name, agent.stop_when)
 
-        # 3b. Callbacks
-        if getattr(agent, 'before_model_callback', None) is not None:
-            self._register_callback_worker(agent.name, "before_model", agent.before_model_callback)
-        if getattr(agent, 'after_model_callback', None) is not None:
-            self._register_callback_worker(agent.name, "after_model", agent.after_model_callback)
+        # 3b. Callbacks (legacy + CallbackHandler chaining)
+        from agentspan.agents.callback import (
+            POSITION_TO_METHOD,
+            _LEGACY_ATTR_TO_POSITION,
+            _chain_callbacks_for_position,
+        )
+
+        handlers = getattr(agent, "callbacks", None) or []
+        for position in POSITION_TO_METHOD:
+            # Find the legacy callable for this position (if any).
+            legacy_attr = next(
+                (attr for attr, pos in _LEGACY_ATTR_TO_POSITION.items() if pos == position),
+                None,
+            )
+            legacy_fn = getattr(agent, legacy_attr, None) if legacy_attr else None
+            chained = _chain_callbacks_for_position(position, handlers, legacy_fn)
+            if chained is not None:
+                self._register_callback_worker(agent.name, position, chained)
 
         # 4. termination
         if agent.termination:
