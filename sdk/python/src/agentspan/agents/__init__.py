@@ -34,8 +34,10 @@ from agentspan.agents.tool import (
     audio_tool,
     http_tool,
     image_tool,
+    index_tool,
     mcp_tool,
     pdf_tool,
+    search_tool,
     tool,
     video_tool,
 )
@@ -146,6 +148,8 @@ __all__ = [
     "audio_tool",
     "video_tool",
     "pdf_tool",
+    "index_tool",
+    "search_tool",
     "clear_discovery_cache",
     # Convenience execution (uses a singleton AgentRuntime)
     "configure",

@@ -116,12 +116,14 @@ public class JavaScriptBuilder {
      * so that ToolContext.state is available server-side.
      */
     public static String enrichToolsScript(String httpConfigJson, String mcpConfigJson,
-                                              String mediaConfigJson, String agentToolConfigJson) {
+                                              String mediaConfigJson, String agentToolConfigJson,
+                                              String ragConfigJson) {
         return iife(
             "  var httpCfg = " + httpConfigJson + ";" +
             "  var mcpCfg = " + mcpConfigJson + ";" +
             "  var mediaCfg = " + mediaConfigJson + ";" +
             "  var agentToolCfg = " + agentToolConfigJson + ";" +
+            "  var ragCfg = " + ragConfigJson + ";" +
             "  var agentState = $.agentState || {};" +
             "  var tcs = $.toolCalls || [];" +
             "  var result = [];" +
@@ -164,6 +166,15 @@ public class JavaScriptBuilder {
             "      t.name = mediaCfg[n].taskType.toLowerCase();" +
             "      var merged = {};" +
             "      var defs = mediaCfg[n].defaults || {};" +
+            "      for (var k in defs) { merged[k] = defs[k]; }" +
+            "      var inp = tc.inputParameters || {};" +
+            "      for (var k in inp) { merged[k] = inp[k]; }" +
+            "      t.inputParameters = merged;" +
+            "    } else if (ragCfg[n]) {" +
+            "      t.type = ragCfg[n].taskType;" +
+            "      t.name = ragCfg[n].taskType.toLowerCase();" +
+            "      var merged = {};" +
+            "      var defs = ragCfg[n].defaults || {};" +
             "      for (var k in defs) { merged[k] = defs[k]; }" +
             "      var inp = tc.inputParameters || {};" +
             "      for (var k in inp) { merged[k] = inp[k]; }" +
@@ -398,12 +409,13 @@ public class JavaScriptBuilder {
      * HTTP and media configs are still baked in since they're known at compile time.</p>
      */
     public static String enrichToolsScriptDynamic(String httpConfigJson, String mediaConfigJson,
-                                                     String agentToolConfigJson) {
+                                                     String agentToolConfigJson, String ragConfigJson) {
         return iife(
             "  var httpCfg = " + httpConfigJson + ";" +
             "  var mcpCfg = $.mcpConfig || {};" +
             "  var mediaCfg = " + mediaConfigJson + ";" +
             "  var agentToolCfg = " + agentToolConfigJson + ";" +
+            "  var ragCfg = " + ragConfigJson + ";" +
             "  var agentState = $.agentState || {};" +
             "  var tcs = $.toolCalls || [];" +
             "  var result = [];" +
@@ -446,6 +458,15 @@ public class JavaScriptBuilder {
             "      t.name = mediaCfg[n].taskType.toLowerCase();" +
             "      var merged = {};" +
             "      var defs = mediaCfg[n].defaults || {};" +
+            "      for (var k in defs) { merged[k] = defs[k]; }" +
+            "      var inp = tc.inputParameters || {};" +
+            "      for (var k in inp) { merged[k] = inp[k]; }" +
+            "      t.inputParameters = merged;" +
+            "    } else if (ragCfg[n]) {" +
+            "      t.type = ragCfg[n].taskType;" +
+            "      t.name = ragCfg[n].taskType.toLowerCase();" +
+            "      var merged = {};" +
+            "      var defs = ragCfg[n].defaults || {};" +
             "      for (var k in defs) { merged[k] = defs[k]; }" +
             "      var inp = tc.inputParameters || {};" +
             "      for (var k in inp) { merged[k] = inp[k]; }" +

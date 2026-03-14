@@ -524,6 +524,169 @@ def pdf_tool(
     )
 
 
+# ── RAG tool constructors ──────────────────────────────────────────────
+
+RAG_TOOL_TYPES = frozenset({"rag_index", "rag_search"})
+
+
+def index_tool(
+    name: str,
+    description: str,
+    vector_db: str,
+    index: str,
+    embedding_model_provider: str,
+    embedding_model: str,
+    namespace: str = "default_ns",
+    chunk_size: Optional[int] = None,
+    chunk_overlap: Optional[int] = None,
+    dimensions: Optional[int] = None,
+    input_schema: Optional[Dict[str, Any]] = None,
+) -> ToolDef:
+    """Create a tool that indexes documents into a vector database (Conductor ``LLM_INDEX_TEXT`` task).
+
+    No worker process is needed — the Conductor server handles embedding
+    generation and vector storage directly.
+
+    The LLM decides *when* to call this tool and provides dynamic parameters
+    (``text``, ``docId``, ``metadata``).  Static parameters like ``vectorDB``,
+    ``index``, and embedding model are baked in at compile time.
+
+    Args:
+        name: Tool name (shown to the LLM).
+        description: Human-readable description for the LLM.
+        vector_db: Vector database type (e.g. ``"pgvectordb"``, ``"pineconedb"``, ``"mongodb_atlas"``).
+        index: Collection/index name in the vector database.
+        embedding_model_provider: Embedding provider (e.g. ``"openai"``).
+        embedding_model: Embedding model name (e.g. ``"text-embedding-3-small"``).
+        namespace: Namespace/partition within the index (default ``"default_ns"``).
+        chunk_size: Optional chunk size for text splitting.
+        chunk_overlap: Optional chunk overlap for text splitting.
+        dimensions: Optional embedding dimensions override.
+        input_schema: JSON Schema for the LLM-provided parameters.
+            If ``None``, a default schema with ``text``, ``docId``, and
+            ``metadata`` is used.
+
+    Example::
+
+        kb_index = index_tool(
+            name="index_document",
+            description="Add a document to the knowledge base.",
+            vector_db="pgvectordb",
+            index="product_docs",
+            embedding_model_provider="openai",
+            embedding_model="text-embedding-3-small",
+        )
+
+        agent = Agent(name="indexer", model="openai/gpt-4o", tools=[kb_index])
+    """
+    if input_schema is None:
+        input_schema = {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string", "description": "The text content to index."},
+                "docId": {"type": "string", "description": "Unique document identifier."},
+                "metadata": {"type": "object", "description": "Optional metadata to store with the document."},
+            },
+            "required": ["text", "docId"],
+        }
+    config: Dict[str, Any] = {
+        "taskType": "LLM_INDEX_TEXT",
+        "vectorDB": vector_db,
+        "namespace": namespace,
+        "index": index,
+        "embeddingModelProvider": embedding_model_provider,
+        "embeddingModel": embedding_model,
+    }
+    if chunk_size is not None:
+        config["chunkSize"] = chunk_size
+    if chunk_overlap is not None:
+        config["chunkOverlap"] = chunk_overlap
+    if dimensions is not None:
+        config["dimensions"] = dimensions
+    return ToolDef(
+        name=name,
+        description=description,
+        input_schema=input_schema,
+        tool_type="rag_index",
+        config=config,
+    )
+
+
+def search_tool(
+    name: str,
+    description: str,
+    vector_db: str,
+    index: str,
+    embedding_model_provider: str,
+    embedding_model: str,
+    namespace: str = "default_ns",
+    max_results: int = 5,
+    dimensions: Optional[int] = None,
+    input_schema: Optional[Dict[str, Any]] = None,
+) -> ToolDef:
+    """Create a tool that searches a vector database (Conductor ``LLM_SEARCH_INDEX`` task).
+
+    No worker process is needed — the Conductor server handles embedding
+    generation and vector search directly.
+
+    The LLM decides *when* to call this tool and provides the ``query``
+    parameter.  Static parameters like ``vectorDB``, ``index``, and
+    embedding model are baked in at compile time.
+
+    Args:
+        name: Tool name (shown to the LLM).
+        description: Human-readable description for the LLM.
+        vector_db: Vector database type (e.g. ``"pgvectordb"``, ``"pineconedb"``, ``"mongodb_atlas"``).
+        index: Collection/index name in the vector database.
+        embedding_model_provider: Embedding provider (e.g. ``"openai"``).
+        embedding_model: Embedding model name (e.g. ``"text-embedding-3-small"``).
+        namespace: Namespace/partition within the index (default ``"default_ns"``).
+        max_results: Maximum number of results to return (default 5).
+        dimensions: Optional embedding dimensions override.
+        input_schema: JSON Schema for the LLM-provided parameters.
+            If ``None``, a default schema with ``query`` is used.
+
+    Example::
+
+        kb_search = search_tool(
+            name="search_knowledge_base",
+            description="Search the product documentation.",
+            vector_db="pgvectordb",
+            index="product_docs",
+            embedding_model_provider="openai",
+            embedding_model="text-embedding-3-small",
+        )
+
+        agent = Agent(name="assistant", model="openai/gpt-4o", tools=[kb_search])
+    """
+    if input_schema is None:
+        input_schema = {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "The search query."},
+            },
+            "required": ["query"],
+        }
+    config: Dict[str, Any] = {
+        "taskType": "LLM_SEARCH_INDEX",
+        "vectorDB": vector_db,
+        "namespace": namespace,
+        "index": index,
+        "embeddingModelProvider": embedding_model_provider,
+        "embeddingModel": embedding_model,
+        "maxResults": max_results,
+    }
+    if dimensions is not None:
+        config["dimensions"] = dimensions
+    return ToolDef(
+        name=name,
+        description=description,
+        input_schema=input_schema,
+        tool_type="rag_search",
+        config=config,
+    )
+
+
 # ── Agent-as-tool ──────────────────────────────────────────────────────
 
 

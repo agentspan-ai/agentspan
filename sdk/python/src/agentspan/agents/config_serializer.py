@@ -194,7 +194,9 @@ class AgentConfigSerializer:
         if td.config:
             if td.tool_type == "agent_tool" and "agent" in td.config:
                 serialized_config = dict(td.config)
-                serialized_config["agent"] = self._serialize_agent(td.config["agent"])
+                serialized_config["agentConfig"] = self._serialize_agent(
+                    serialized_config.pop("agent")
+                )
                 result["config"] = serialized_config
             else:
                 result["config"] = td.config

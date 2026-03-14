@@ -38,6 +38,9 @@ public class ToolCompiler {
             "generate_image", "generate_audio", "generate_video", "generate_pdf"
     );
 
+    /** RAG tool types that map to Conductor RAG system tasks. */
+    private static final Set<String> RAG_TOOL_TYPES = Set.of("rag_index", "rag_search");
+
     /** Maps SDK tool type strings to Conductor task type strings. */
     private static final Map<String, String> TYPE_MAP = Map.ofEntries(
             Map.entry("worker", "SIMPLE"),
@@ -46,7 +49,9 @@ public class ToolCompiler {
             Map.entry("agent_tool", "SUB_WORKFLOW"),
             Map.entry("generate_image", "GENERATE_IMAGE"),
             Map.entry("generate_audio", "GENERATE_AUDIO"),
-            Map.entry("generate_video", "GENERATE_VIDEO")
+            Map.entry("generate_video", "GENERATE_VIDEO"),
+            Map.entry("rag_index", "LLM_INDEX_TEXT"),
+            Map.entry("rag_search", "LLM_SEARCH_INDEX")
     );
 
     // ── Public API ───────────────────────────────────────────────────────
@@ -186,10 +191,12 @@ public class ToolCompiler {
         Map<String, Object> mcpConfig = new LinkedHashMap<>();
         Map<String, Object> mediaConfig = new LinkedHashMap<>();
         Map<String, Object> agentToolConfig = new LinkedHashMap<>();
+        Map<String, Object> ragConfig = new LinkedHashMap<>();
 
         if (tools != null) {
             Set<String> serverSideTypes = Set.of("http", "mcp", "agent_tool",
-                    "generate_image", "generate_audio", "generate_video", "generate_pdf");
+                    "generate_image", "generate_audio", "generate_video", "generate_pdf",
+                    "rag_index", "rag_search");
 
             for (ToolConfig tool : tools) {
                 String toolType = tool.getToolType() != null ? tool.getToolType() : "worker";
@@ -224,6 +231,15 @@ public class ToolCompiler {
                     mediaEntry.put("taskType", taskType);
                     mediaEntry.put("defaults", cfgCopy);
                     mediaConfig.put(tool.getName(), mediaEntry);
+                } else if (RAG_TOOL_TYPES.contains(toolType)) {
+                    Map<String, Object> cfgCopy = new LinkedHashMap<>(cfg);
+                    String taskType = cfgCopy.containsKey("taskType")
+                            ? (String) cfgCopy.remove("taskType")
+                            : TYPE_MAP.getOrDefault(toolType, toolType.toUpperCase());
+                    Map<String, Object> ragEntry = new LinkedHashMap<>();
+                    ragEntry.put("taskType", taskType);
+                    ragEntry.put("defaults", cfgCopy);
+                    ragConfig.put(tool.getName(), ragEntry);
                 }
             }
         }
@@ -232,8 +248,9 @@ public class ToolCompiler {
         String mcpJson = JavaScriptBuilder.toJson(mcpConfig);
         String mediaJson = JavaScriptBuilder.toJson(mediaConfig);
         String agentToolJson = JavaScriptBuilder.toJson(agentToolConfig);
+        String ragJson = JavaScriptBuilder.toJson(ragConfig);
 
-        String script = JavaScriptBuilder.enrichToolsScript(httpJson, mcpJson, mediaJson, agentToolJson);
+        String script = JavaScriptBuilder.enrichToolsScript(httpJson, mcpJson, mediaJson, agentToolJson, ragJson);
 
         String enrichRef = agentName + "_" + p + "enrich_tools";
 
@@ -741,10 +758,11 @@ public class ToolCompiler {
     public Object[] buildEnrichTaskDynamic(String agentName, String llmRef,
                                             List<ToolConfig> tools, String p,
                                             String mcpConfigRef) {
-        // Build static configs (HTTP, media, agent_tool) at compile time — same as buildEnrichTask
+        // Build static configs (HTTP, media, agent_tool, RAG) at compile time — same as buildEnrichTask
         Map<String, Object> httpConfig = new LinkedHashMap<>();
         Map<String, Object> mediaConfig = new LinkedHashMap<>();
         Map<String, Object> agentToolConfig = new LinkedHashMap<>();
+        Map<String, Object> ragConfig = new LinkedHashMap<>();
 
         if (tools != null) {
             for (ToolConfig tool : tools) {
@@ -769,6 +787,15 @@ public class ToolCompiler {
                     mediaEntry.put("taskType", taskType);
                     mediaEntry.put("defaults", cfgCopy);
                     mediaConfig.put(tool.getName(), mediaEntry);
+                } else if (RAG_TOOL_TYPES.contains(toolType)) {
+                    Map<String, Object> cfgCopy = new LinkedHashMap<>(cfg);
+                    String taskType = cfgCopy.containsKey("taskType")
+                            ? (String) cfgCopy.remove("taskType")
+                            : TYPE_MAP.getOrDefault(toolType, toolType.toUpperCase());
+                    Map<String, Object> ragEntry = new LinkedHashMap<>();
+                    ragEntry.put("taskType", taskType);
+                    ragEntry.put("defaults", cfgCopy);
+                    ragConfig.put(tool.getName(), ragEntry);
                 }
                 // MCP config comes from runtime — skip here
             }
@@ -777,7 +804,8 @@ public class ToolCompiler {
         String httpJson = JavaScriptBuilder.toJson(httpConfig);
         String mediaJson = JavaScriptBuilder.toJson(mediaConfig);
         String agentToolJson = JavaScriptBuilder.toJson(agentToolConfig);
-        String script = JavaScriptBuilder.enrichToolsScriptDynamic(httpJson, mediaJson, agentToolJson);
+        String ragJson = JavaScriptBuilder.toJson(ragConfig);
+        String script = JavaScriptBuilder.enrichToolsScriptDynamic(httpJson, mediaJson, agentToolJson, ragJson);
 
         String enrichRef = agentName + "_" + p + "enrich_tools";
 

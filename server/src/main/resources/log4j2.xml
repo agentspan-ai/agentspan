@@ -27,8 +27,6 @@
         <Root level="INFO">
             <AppenderRef ref="CONSOLE" />
         </Root>
-        <logger name="org.conductoross.conductor" level="warn" additivity="false" />
-        <logger name="com.netflix.conductor" level="warn" additivity="false" />
         <logger name="com.mongodb" level="error" additivity="false" />
         <logger name="org.flywaydb" level="error" additivity="false" />
     </Loggers>

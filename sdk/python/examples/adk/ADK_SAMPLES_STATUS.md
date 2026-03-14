@@ -2,7 +2,7 @@
 
 Tracking coverage of [google/adk-samples/python/agents](https://github.com/google/adk-samples/tree/main/python/agents) (45 samples) in our ADK compatibility layer.
 
-## Our Examples (32)
+## Our Examples (35)
 
 | # | Example | ADK Feature | Status |
 |---|---------|-------------|--------|
@@ -34,16 +34,19 @@ Tracking coverage of [google/adk-samples/python/agents](https://github.com/googl
 | 26 | [26_safety_guardrails.py](26_safety_guardrails.py) | Safety guardrails with PII detection | ✅ Passing |
 | 27 | [27_security_agent.py](27_security_agent.py) | Red-team security testing pipeline | ✅ Passing |
 | 28 | [28_movie_pipeline.py](28_movie_pipeline.py) | Sequential content production pipeline | ✅ Passing |
-| 29 | [29_include_contents.py](29_include_contents.py) | `include_contents="none"` | ⏳ Needs server support |
-| 30 | [30_thinking_config.py](30_thinking_config.py) | `ThinkingConfig` extended reasoning | ⏳ Needs server support |
-| 31 | [31_shared_state.py](31_shared_state.py) | `ToolContext.state` shared state | ⏳ Needs server support |
+| 29 | [29_include_contents.py](29_include_contents.py) | `include_contents="none"` | ✅ Passing |
+| 30 | [30_thinking_config.py](30_thinking_config.py) | `ThinkingConfig` extended reasoning | ✅ Passing |
+| 31 | [31_shared_state.py](31_shared_state.py) | `ToolContext.state` shared state | ✅ Passing |
 | 32 | [32_nested_strategies.py](32_nested_strategies.py) | `ParallelAgent` inside `SequentialAgent` | ✅ Passing |
+| 33 | [33_software_bug_assistant.py](33_software_bug_assistant.py) | `agent_tool` + `mcp_tool` + ticket CRUD | ✅ Passing |
+| 34 | [34_ml_engineering.py](34_ml_engineering.py) | ML pipeline: Sequential + Parallel + Loop | ✅ Passing |
+| 35 | [35_rag_agent.py](35_rag_agent.py) | RAG: search_tool + index_tool | ✅ Passing |
 
 ---
 
 ## Google ADK Samples Coverage (45 total)
 
-### ✅ Covered — Pattern replicated in our examples (28 samples)
+### ✅ Covered — Pattern replicated in our examples (31 samples)
 
 | ADK Sample | Our Example(s) |
 |-----------|----------------|
@@ -75,12 +78,14 @@ Tracking coverage of [google/adk-samples/python/agents](https://github.com/googl
 | [fomc-research](https://github.com/google/adk-samples/tree/main/python/agents/fomc-research) | [23](23_callbacks.py) |
 | [swe-benchmark-agent](https://github.com/google/adk-samples/tree/main/python/agents/swe-benchmark-agent) | [24](24_planner.py) |
 | [tau2-benchmark-agent](https://github.com/google/adk-samples/tree/main/python/agents/tau2-benchmark-agent) | [24](24_planner.py) |
+| [software-bug-assistant](https://github.com/google/adk-samples/tree/main/python/agents/software-bug-assistant) | [33](33_software_bug_assistant.py) |
+| [machine-learning-engineering](https://github.com/google/adk-samples/tree/main/python/agents/machine-learning-engineering) | [34](34_ml_engineering.py) |
+| [RAG](https://github.com/google/adk-samples/tree/main/python/agents/RAG) | [35](35_rag_agent.py) |
 
-### ⛔ Not Applicable — Requires Google-specific external services (17 samples)
+### ⛔ Not Applicable — Requires Google-specific external services (14 samples)
 
 | ADK Sample | External Dependency |
 |-----------|-------------------|
-| [RAG](https://github.com/google/adk-samples/tree/main/python/agents/RAG) | Vertex AI RAG Engine + GCP |
 | [antom-payment](https://github.com/google/adk-samples/tree/main/python/agents/antom-payment) | Antom/Alipay payment APIs |
 | [auto-insurance-agent](https://github.com/google/adk-samples/tree/main/python/agents/auto-insurance-agent) | Apigee API Hub + Vertex AI Agent Engine |
 | [bidi-demo](https://github.com/google/adk-samples/tree/main/python/agents/bidi-demo) | Gemini Live API (streaming mode) |
@@ -90,13 +95,11 @@ Tracking coverage of [google/adk-samples/python/agents](https://github.com/googl
 | [data-engineering](https://github.com/google/adk-samples/tree/main/python/agents/data-engineering) | BigQuery + Dataform + GCP |
 | [gemini-fullstack](https://github.com/google/adk-samples/tree/main/python/agents/gemini-fullstack) | _(Deprecated — redirects to deep-search)_ |
 | [incident-management](https://github.com/google/adk-samples/tree/main/python/agents/incident-management) | ServiceNow + Application Integration |
-| [machine-learning-engineering](https://github.com/google/adk-samples/tree/main/python/agents/machine-learning-engineering) | Vertex AI + GCS |
 | [medical-pre-authorization](https://github.com/google/adk-samples/tree/main/python/agents/medical-pre-authorization) | Vertex AI Agent Builder + Cloud Run + GCS |
 | [plumber-data-engineering-assistant](https://github.com/google/adk-samples/tree/main/python/agents/plumber-data-engineering-assistant) | Dataflow + Dataproc + GKE + GCP |
 | [policy-as-code](https://github.com/google/adk-samples/tree/main/python/agents/policy-as-code) | Dataplex + BigQuery + Firestore + GCS |
 | [product-catalog-ad-generation](https://github.com/google/adk-samples/tree/main/python/agents/product-catalog-ad-generation) | BigQuery + GCS + Veo-3.1 + Imagen + Lyria |
 | [realtime-conversational-agent](https://github.com/google/adk-samples/tree/main/python/agents/realtime-conversational-agent) | Google AI Studio / Vertex AI (live audio/video) |
-| [software-bug-assistant](https://github.com/google/adk-samples/tree/main/python/agents/software-bug-assistant) | GitHub MCP Server + PostgreSQL/Cloud SQL |
 
 ---
 
@@ -109,9 +112,10 @@ Tracking coverage of [google/adk-samples/python/agents](https://github.com/googl
 | **Callbacks** | CallbackConfig (new), AgentConfig, GoogleADKNormalizer, AgentCompiler | ✅ Deployed + tested |
 | **BuiltInPlanner** | GoogleADKNormalizer, AgentCompiler (prompt enhancement) | ✅ Deployed + tested |
 | **Sequential null coercion** | AgentCompiler, MultiAgentCompiler, JavaScriptBuilder | ✅ Deployed + tested |
-| **include_contents** | AgentConfig, GoogleADKNormalizer, AgentCompiler | ✅ Compiled (server-side) |
-| **ThinkingConfig** | ThinkingConfig (new), AgentConfig, GoogleADKNormalizer, AgentCompiler | ✅ Compiled (server-side) |
-| **ToolContext.state** | — | ⏳ Needs ToolCompiler changes |
+| **include_contents** | AgentConfig, GoogleADKNormalizer, AgentCompiler | ✅ Deployed + tested |
+| **ThinkingConfig** | ThinkingConfig (new), AgentConfig, GoogleADKNormalizer, AgentCompiler | ✅ Deployed + tested |
+| **ToolContext.state** | — | ✅ Deployed + tested |
+| **RAG Tools** | ToolCompiler, JavaScriptBuilder, ToolConfig | ✅ Deployed + tested |
 
 ---
 
@@ -119,11 +123,10 @@ Tracking coverage of [google/adk-samples/python/agents](https://github.com/googl
 
 | Category | Count |
 |----------|-------|
-| ✅ Covered + passing | 28 |
-| ⏳ Depth improvements (examples created, partial server support) | 3 |
-| ⛔ Not applicable (Google-specific services) | 17 |
+| ✅ Covered + passing | 31 |
+| ⛔ Not applicable (Google-specific services) | 14 |
 | **Total ADK samples** | **45** |
-| **Feasible coverage** | **28/28 (100%)** |
+| **Feasible coverage** | **31/31 (100%)** |
 
 ---
 
@@ -139,3 +142,6 @@ Tracking coverage of [google/adk-samples/python/agents](https://github.com/googl
 | 30 | [50_thinking_config.py](../50_thinking_config.py) | ThinkingConfig |
 | 31 | [51_shared_state.py](../51_shared_state.py) | Shared state |
 | 32 | [52_nested_strategies.py](../52_nested_strategies.py) | Nested strategies |
+| 33 | [54_software_bug_assistant.py](../54_software_bug_assistant.py) | Software bug assistant |
+| 34 | [55_ml_engineering.py](../55_ml_engineering.py) | ML engineering pipeline |
+| 35 | [56_rag_agent.py](../56_rag_agent.py) | RAG (search + index) |

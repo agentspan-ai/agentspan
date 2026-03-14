@@ -134,6 +134,124 @@ export SPRING_DATASOURCE_PASSWORD=your_password
 java -jar build/libs/agentspan-runtime.jar
 ```
 
+## RAG (Vector Search)
+
+The server supports RAG (Retrieval-Augmented Generation) via built-in `LLM_INDEX_TEXT` and `LLM_SEARCH_INDEX` system tasks. These let agents index documents into a vector database and search them — no external RAG service needed.
+
+Activate with the `rag` Spring profile:
+
+```bash
+java -jar build/libs/agentspan-runtime.jar --spring.profiles.active=rag
+
+# Combine with PostgreSQL backend:
+java -jar build/libs/agentspan-runtime.jar --spring.profiles.active=postgres,rag
+```
+
+### Supported Vector Databases
+
+#### PostgreSQL + pgvector
+
+Uses [pgvector](https://github.com/pgvector/pgvector) for vector similarity search in PostgreSQL.
+
+**1. Install pgvector:**
+
+```bash
+# macOS (Homebrew)
+brew install pgvector
+
+# Ubuntu/Debian
+sudo apt install postgresql-16-pgvector
+
+# Docker (pgvector is included in the official image)
+docker run -d --name pgvector -e POSTGRES_PASSWORD=postgres -p 5432:5432 pgvector/pgvector:pg16
+```
+
+**2. Create the database and enable the extension:**
+
+```sql
+CREATE DATABASE agentspan;
+\c agentspan
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+**3. Configure** in `application-rag.properties` (already included):
+
+```properties
+conductor.vectordb.instances[0].name=pgvectordb
+conductor.vectordb.instances[0].type=postgres
+conductor.vectordb.instances[0].postgres.datasourceURL=jdbc:postgresql://localhost:5432/agentspan
+conductor.vectordb.instances[0].postgres.user=postgres
+conductor.vectordb.instances[0].postgres.password=postgres
+conductor.vectordb.instances[0].postgres.dimensions=1536
+conductor.vectordb.instances[0].postgres.distanceMetric=cosine
+conductor.vectordb.instances[0].postgres.indexingMethod=ivfflat
+```
+
+Override via environment variables: `PGVECTOR_JDBC_URL`, `PGVECTOR_USER`, `PGVECTOR_PASSWORD`, `PGVECTOR_DIMENSIONS`, `PGVECTOR_DISTANCE`, `PGVECTOR_INDEX_METHOD`.
+
+Tables and indexes are created automatically on first use.
+
+#### Pinecone
+
+**1.** Create an index at [app.pinecone.io](https://app.pinecone.io) with the desired dimensions (e.g. 1536 for `text-embedding-3-small`).
+
+**2.** Add to `application-rag.properties`:
+
+```properties
+conductor.vectordb.instances[0].name=pineconedb
+conductor.vectordb.instances[0].type=pinecone
+conductor.vectordb.instances[0].pinecone.apiKey=${PINECONE_API_KEY}
+conductor.vectordb.instances[0].pinecone.projectName=your-project
+conductor.vectordb.instances[0].pinecone.environment=us-east-1
+```
+
+#### MongoDB Atlas Vector Search
+
+**1.** Create a MongoDB Atlas cluster and enable [Atlas Vector Search](https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-overview/) on your collection.
+
+**2.** Add to `application-rag.properties`:
+
+```properties
+conductor.vectordb.instances[0].name=mongodb_atlas
+conductor.vectordb.instances[0].type=mongodb_atlas
+conductor.vectordb.instances[0].mongodb.connectionString=${MONGODB_URI:mongodb+srv://user:pass@cluster.mongodb.net}
+conductor.vectordb.instances[0].mongodb.databaseName=vectordb
+conductor.vectordb.instances[0].mongodb.collectionName=embeddings
+```
+
+### SDK Usage
+
+```python
+from agentspan.agents import Agent, search_tool, index_tool
+
+kb_search = search_tool(
+    name="search_docs",
+    description="Search the knowledge base.",
+    vector_db="pgvectordb",          # matches instances[0].name
+    index="product_docs",
+    embedding_model_provider="openai",
+    embedding_model="text-embedding-3-small",
+)
+
+kb_index = index_tool(
+    name="index_doc",
+    description="Add a document to the knowledge base.",
+    vector_db="pgvectordb",
+    index="product_docs",
+    embedding_model_provider="openai",
+    embedding_model="text-embedding-3-small",
+)
+
+agent = Agent(
+    name="rag_assistant",
+    model="openai/gpt-4o",
+    tools=[kb_search, kb_index],
+    instructions="Search the knowledge base before answering questions.",
+)
+```
+
+See [`examples/adk/35_rag_agent.py`](../sdk/python/examples/adk/35_rag_agent.py) for a full end-to-end example.
+
 ## Configuration
 
 ### Server Settings
@@ -244,7 +362,8 @@ server/
 │   │       └── util/                      # Helpers
 │   └── resources/
 │       ├── application.properties         # Default config (SQLite)
-│       └── application-postgres.properties
+│       ├── application-postgres.properties
+│       └── application-rag.properties     # Vector DB config (pgvector/Pinecone/MongoDB)
 └── src/test/
     └── resources/
         └── application-test.properties    # Test config
