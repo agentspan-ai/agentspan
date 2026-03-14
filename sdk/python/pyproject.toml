@@ -10,7 +10,7 @@ readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.9"
 dependencies = [
-    "conductor-python>=1.3.5-rc1",
+    "conductor-python>=1.3.5",
     "httpx>=0.24",
     "pydantic-settings>=2.0",
 ]

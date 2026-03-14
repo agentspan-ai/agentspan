@@ -1,9 +1,35 @@
-# AgentSpan
+<p align="center">
+  <img src="https://github.com/agentspan/agentspan/raw/main/assets/logo-light.png#gh-light-mode-only" alt="Agentspan" width="400">
+  <img src="https://github.com/agentspan/agentspan/raw/main/assets/logo-dark.png#gh-dark-mode-only" alt="Agentspan" width="400">
+</p>
 
-Build **durable, scalable, observable AI agents** backed by [Conductor](https://github.com/conductor-oss/conductor) workflows.
+<h3 align="center">AI agents that don't die when your process does.</h3>
+
+<p align="center">
+  <a href="https://pypi.org/project/agentspan/"><img src="https://img.shields.io/pypi/v/agentspan?color=blue" alt="PyPI"></a>
+  <a href="https://pypi.org/project/agentspan/"><img src="https://img.shields.io/pypi/dm/agentspan?color=blue" alt="Downloads"></a>
+  <a href="https://github.com/agentspan/agentspan/stargazers"><img src="https://img.shields.io/github/stars/agentspan/agentspan?style=social" alt="Stars"></a>
+  <a href="https://github.com/agentspan/agentspan/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
+  <a href="https://discord.gg/agentspan"><img src="https://img.shields.io/discord/1234567890?label=Discord&logo=discord&color=5865F2" alt="Discord"></a>
+  <a href="https://github.com/agentspan/agentspan/actions"><img src="https://img.shields.io/github/actions/workflow/status/agentspan/agentspan/ci.yml?label=CI" alt="CI"></a>
+</p>
+
+<p align="center">
+  <a href="https://docs.agentspan.dev">Docs</a> &bull;
+  <a href="#quickstart">Quickstart</a> &bull;
+  <a href="#examples">52+ Examples</a> &bull;
+  <a href="https://discord.gg/agentspan">Discord</a> &bull;
+  <a href="sdk/python/AGENTS.md">API Reference</a>
+</p>
+
+---
+
+**Agentspan** is a distributed, durable runtime for AI agents that survive crashes, scale across machines, and pause for human approval for days — not minutes.
+
+Every other agent SDK runs agents in-memory. When the process dies, the agent dies. Agentspan compiles your agents to durable workflows that execute on a server, giving you reliability, observability, and distributed scaling out of the box.
 
 ```python
-from conductor.agents import Agent, tool, run
+from agentspan.agents import Agent, tool, run
 
 @tool
 def get_weather(city: str) -> str:
@@ -14,79 +40,130 @@ agent = Agent(name="weatherbot", model="openai/gpt-4o", tools=[get_weather])
 result = run(agent, "What's the weather in NYC?")
 ```
 
-Every other agent SDK runs agents in-memory. When the process dies, the agent dies. AgentSpan compiles agents into **durable Conductor workflows** — agents that survive crashes, tools that scale as distributed workers, and human-in-the-loop approvals that can pause for days.
+## Why Agentspan?
 
-## Why AgentSpan?
+Other frameworks give you a Python library. Agentspan gives you a **production runtime**.
 
-| Capability | In-memory SDKs | AgentSpan |
-|---|---|---|
-| Process crashes | Agent dies | **Agent continues** (workflow-backed) |
-| Tool scaling | Single process | **Distributed workers, any language** |
-| Human approval | Minutes at best | **Days/weeks** (native WaitTask) |
-| Debugging | Log files | **Visual workflow UI** |
-| Long-running | Process-bound | **Weeks** (workflow-bound) |
-| Observability | Limited traces | **Prometheus + UI + execution history** |
+Your agent code compiles to a durable, server-side workflow. The server manages execution, retries, scaling, and state — so your agents keep running even when your process doesn't.
+
+| | CrewAI | LangChain | AutoGen | OpenAI Agents | **Agentspan** |
+|---|---|---|---|---|---|
+| **Execution model** | In-memory | Checkpoints | In-memory | Client-side loop | **Server-side workflows** |
+| **Crash recovery** | Manual replay from checkpoints | Resume from checkpointer (Postgres, Redis) | None (v0.4) | None (Temporal add-on available) | **Automatic — workflow resumes exactly where it left off** |
+| **Tool scaling** | Single process | Single process (Platform for managed scaling) | Distributed runtime | Single process | **Distributed workers in any language (Python, Java, Go, etc.)** |
+| **Human approval** | Stdin-blocking (minutes) | `interrupt()` + checkpointer (days) | Stdin-blocking (minutes) | In-process | **Durable pause — approve from any process, any machine, days later** |
+| **Orchestration API** | Crew, Task, Agent, Flow | StateGraph, Node, Edge, ToolNode | AssistantAgent, GroupChat, Swarm, Team | Agent, Runner, Handoff | **One class: `Agent`** |
+| **Pipeline syntax** | YAML + Python | Graph builder API | Nested class hierarchy | Handoff chains | **`agent_a >> agent_b >> agent_c`** |
+| **Guardrails** | Task guardrails | Middleware-based | Limited | Input, output, tool guardrails | **Custom, regex, LLM — 4 failure modes: retry, raise, fix, human** |
+| **Code execution** | Docker sandbox | Community packages | Docker, Jupyter | Hosted Code Interpreter | **4 built-in: local, Docker, Jupyter, serverless** |
+| **MCP tools** | Manual config | Manual config | Manual config | Manual config | **Auto-discovered, server-side (no worker needed)** |
+| **Observability** | OTel + CrewAI AMP | LangSmith + OTel | OTel + AutoGen Studio | Built-in traces | **OTel + Prometheus + visual workflow UI + execution replay** |
+
+### What makes it different
+
+1. **True durable execution** — Not checkpoints. Not client-side loops. Your agent compiles to a server-side workflow that the Agentspan server executes independently of your process. Deploy new code, restart your machine, kill the process — the agent keeps running. When it finishes, poll for the result from anywhere. This is the same execution model that powers mission-critical systems at scale.
+
+2. **Distributed workers in any language** — Tools don't run inside your agent process. They execute as distributed tasks that workers pick up. Write workers in Python, Java, Go, or any language. Scale each tool independently. Load-balance automatically. Your agent process just submits work — the server and workers handle the rest.
+
+3. **One primitive** — No `Crew`, `Task`, `StateGraph`, `Node`, or `AssistantAgent`. Everything is an `Agent`. Single agents, multi-agent teams, nested hierarchies — one class.
+
+4. **The `>>` operator** — Compose pipelines with Python syntax: `researcher >> writer >> editor`. No YAML, no graph builders.
+
+5. **Real human-in-the-loop** — `@tool(approval_required=True)` pauses the workflow durably on the server. No process stays alive waiting. Approve from any machine, any process, days later.
+
+6. **Production guardrails** — Custom functions, regex patterns, or LLM judges. Four failure modes: retry, raise, fix, or escalate to human. Guardrails are durable tasks, not post-processing — they survive workflow restarts.
+
+7. **Server-side tools** — HTTP endpoints and MCP servers execute as server-side tasks. No worker process needed. MCP tools are auto-discovered at compile time.
+
+8. **Code execution sandboxes** — Local subprocess, Docker containers, Jupyter kernels, or serverless functions. Four options, built in.
+
+9. **Full observability** — OpenTelemetry spans, Prometheus metrics, visual workflow UI, execution history, and token/cost tracking — all built in.
+
+10. **Google ADK compatible** — Use the `google.adk.agents` API you already know, backed by Agentspan's durable execution. [32 ADK examples included](sdk/python/examples/adk/).
 
 ## Quickstart
 
-### Install
+### 1. Install the CLI
 
 ```bash
-# Install the CLI
 brew install agentspan/agentspan/agentspan
 # or: npm install -g @agentspan/agentspan
 # or: curl -fsSL https://raw.githubusercontent.com/agentspan/agentspan/main/cli/install.sh | sh
+```
 
-# Check that all dependencies are met
+Verify everything is ready:
+
+```bash
 agentspan doctor
 ```
 
-### Configure
-
-Set at least one AI provider API key:
+### 2. Set your LLM provider API key
 
 ```bash
-# OpenAI
-export OPENAI_API_KEY=sk-...
-
-# Anthropic
-export ANTHROPIC_API_KEY=sk-ant-...
-
-# Google Gemini (requires both)
-export GEMINI_API_KEY=AI...
-export GOOGLE_CLOUD_PROJECT=your-gcp-project-id
-
-# See all providers: docs/ai-models.md
+export OPENAI_API_KEY=sk-...          # For OpenAI models (gpt-4o, gpt-4o-mini, etc.)
+# export ANTHROPIC_API_KEY=sk-ant-... # For Anthropic models (claude-sonnet, etc.)
+# export GEMINI_API_KEY=AI...         # For Google models (gemini, etc.)
 ```
 
-### Start the server
+<details><summary>All supported providers</summary>
+
+| Provider | Env Var | Model Format |
+|---|---|---|
+| OpenAI | `OPENAI_API_KEY` | `openai/gpt-4o` |
+| Anthropic | `ANTHROPIC_API_KEY` | `anthropic/claude-sonnet-4-20250514` |
+| Google Gemini | `GEMINI_API_KEY` | `google_gemini/gemini-pro` |
+| Azure OpenAI | `AZURE_OPENAI_API_KEY` | `azure_openai/gpt-4o` |
+| Google Vertex AI | `GOOGLE_CLOUD_PROJECT` | `google_vertex_ai/gemini-pro` |
+| AWS Bedrock | `AWS_ACCESS_KEY_ID` | `aws_bedrock/anthropic.claude-v2` |
+| Mistral | `MISTRAL_API_KEY` | `mistral/mistral-large` |
+| Cohere | `COHERE_API_KEY` | `cohere/command-r-plus` |
+| Groq | `GROQ_API_KEY` | `groq/llama-3-70b` |
+| Perplexity | `PERPLEXITY_API_KEY` | `perplexity/sonar-medium` |
+| DeepSeek | `DEEPSEEK_API_KEY` | `deepseek/deepseek-chat` |
+| Grok / xAI | `XAI_API_KEY` | `grok/grok-3` |
+| HuggingFace | `HUGGINGFACE_API_KEY` | `hugging_face/meta-llama/Llama-3-70b` |
+| Stability AI | `STABILITY_API_KEY` | `stabilityai/sd3.5-large` |
+| Ollama (local) | `OLLAMA_HOST` | `ollama/llama3` |
+
+</details>
+
+### 3. Start the server
 
 ```bash
 agentspan server start
 ```
 
-### Install the Python SDK
+The server runs on `http://localhost:8080` by default. Manage it with:
+
+```bash
+agentspan server start   # Start the server
+agentspan server stop    # Stop the server
+agentspan server logs    # View server logs
+```
+
+### 4. Install the Python SDK
 
 ```bash
 uv venv && source .venv/bin/activate
-uv pip install -e "./python[dev]"
+uv pip install agentspan
 ```
 
-### Hello World
+### 5. Run your first agent
 
 ```python
-from conductor.agents import Agent, run
+from agentspan.agents import Agent, run
 
 agent = Agent(name="hello", model="openai/gpt-4o")
 result = run(agent, "Say hello and tell me a fun fact.")
 print(result.output)
-print(f"Workflow: {result.workflow_id}")  # View in Conductor UI
 ```
+
+## Code Examples
 
 ### Agent with Tools
 
 ```python
-from conductor.agents import Agent, tool, run
+from agentspan.agents import Agent, tool, run
 
 @tool
 def get_weather(city: str) -> dict:
@@ -106,14 +183,13 @@ agent = Agent(
 )
 
 result = run(agent, "What's the weather in NYC? Also, what's 42 * 17?")
-print(result.output)
 ```
 
 ### Structured Output
 
 ```python
 from pydantic import BaseModel
-from conductor.agents import Agent, tool, run
+from agentspan.agents import Agent, tool, run
 
 class WeatherReport(BaseModel):
     city: str
@@ -126,40 +202,29 @@ def get_weather(city: str) -> dict:
     """Get weather data for a city."""
     return {"city": city, "temp_f": 72, "condition": "Sunny", "humidity": 45}
 
-agent = Agent(
-    name="weather_reporter",
-    model="openai/gpt-4o",
-    tools=[get_weather],
-    output_type=WeatherReport,
-)
-
+agent = Agent(name="reporter", model="openai/gpt-4o", tools=[get_weather], output_type=WeatherReport)
 result = run(agent, "What's the weather in NYC?")
-report: WeatherReport = result.output
-print(f"{report.city}: {report.temperature}F, {report.condition}")
+report: WeatherReport = result.output  # Fully typed
 ```
 
 ### Multi-Agent Handoffs
 
 ```python
-from conductor.agents import Agent, tool, run
+from agentspan.agents import Agent, tool, run
 
 @tool
 def check_balance(account_id: str) -> dict:
     """Check account balance."""
     return {"account_id": account_id, "balance": 5432.10}
 
-billing = Agent(
-    name="billing", model="openai/gpt-4o",
-    instructions="Handle billing: balances, payments, invoices.",
-    tools=[check_balance],
-)
-technical = Agent(
-    name="technical", model="openai/gpt-4o",
-    instructions="Handle technical: orders, shipping, returns.",
-)
+billing = Agent(name="billing", model="openai/gpt-4o",
+                instructions="Handle billing inquiries.", tools=[check_balance])
+technical = Agent(name="technical", model="openai/gpt-4o",
+                  instructions="Handle technical issues.")
+
 support = Agent(
     name="support", model="openai/gpt-4o",
-    instructions="Route customer requests to billing or technical.",
+    instructions="Route customer requests to the right team.",
     agents=[billing, technical],
     strategy="handoff",
 )
@@ -167,10 +232,10 @@ support = Agent(
 result = run(support, "What's the balance on account ACC-123?")
 ```
 
-### Sequential Pipeline
+### Pipeline Composition
 
 ```python
-from conductor.agents import Agent, run
+from agentspan.agents import Agent, run
 
 researcher = Agent(name="researcher", model="openai/gpt-4o",
                    instructions="Research the topic and provide key facts.")
@@ -183,29 +248,10 @@ pipeline = researcher >> writer >> editor
 result = run(pipeline, "AI agents in software development")
 ```
 
-### Parallel Agents
+### Human-in-the-Loop (Durable)
 
 ```python
-from conductor.agents import Agent, run
-
-market = Agent(name="market", model="openai/gpt-4o",
-               instructions="Analyze market size, growth, key players.")
-risk = Agent(name="risk", model="openai/gpt-4o",
-             instructions="Analyze regulatory, technical, competitive risks.")
-
-analysis = Agent(
-    name="analysis", model="openai/gpt-4o",
-    agents=[market, risk],
-    strategy="parallel",
-)
-
-result = run(analysis, "Launching an AI healthcare tool in the US")
-```
-
-### Human-in-the-Loop
-
-```python
-from conductor.agents import Agent, tool, start
+from agentspan.agents import Agent, tool, start
 
 @tool(approval_required=True)
 def transfer_funds(from_acct: str, to_acct: str, amount: float) -> dict:
@@ -213,11 +259,9 @@ def transfer_funds(from_acct: str, to_acct: str, amount: float) -> dict:
     return {"status": "completed", "amount": amount}
 
 agent = Agent(name="banker", model="openai/gpt-4o", tools=[transfer_funds])
-
 handle = start(agent, "Transfer $5000 from checking to savings")
-# Workflow pauses at transfer_funds...
 
-# Hours or days later, from any process:
+# Days later, from any process, any machine:
 status = handle.get_status()
 if status.is_waiting:
     handle.approve()   # Or: handle.reject("Amount too high")
@@ -226,59 +270,50 @@ if status.is_waiting:
 ### Guardrails
 
 ```python
-from conductor.agents import Agent, Guardrail, GuardrailResult, RegexGuardrail, run
+from agentspan.agents import Agent, Guardrail, GuardrailResult, OnFail, guardrail, run
 
-# Function-based guardrail
+@guardrail
 def word_limit(content: str) -> GuardrailResult:
+    """Keep responses concise."""
     if len(content.split()) > 500:
         return GuardrailResult(passed=False, message="Too long. Be more concise.")
     return GuardrailResult(passed=True)
 
-# Regex-based guardrail (block PII)
-no_ssn = RegexGuardrail(
-    patterns=[r"\b\d{3}-\d{2}-\d{4}\b"],
-    name="no_ssn",
-    message="Do not include SSNs.",
+agent = Agent(
+    name="concise_bot", model="openai/gpt-4o",
+    guardrails=[Guardrail(word_limit, on_fail=OnFail.RETRY)],
 )
 
-agent = Agent(
-    name="safe_bot", model="openai/gpt-4o",
-    guardrails=[
-        Guardrail(word_limit, position="output", on_fail="retry"),
-        no_ssn,
-    ],
-)
+result = run(agent, "Explain quantum computing.")
 ```
 
 ### Streaming
 
 ```python
-from conductor.agents import Agent, stream
+from agentspan.agents import Agent, stream
 
 agent = Agent(name="writer", model="openai/gpt-4o")
 for event in stream(agent, "Write a haiku about Python"):
     match event.type:
-        case "tool_call":   print(f"Calling {event.tool_name}...")
-        case "thinking":    print(f"Thinking: {event.content}")
-        case "done":        print(f"\n{event.output}")
+        case "tool_call":       print(f"Calling {event.tool_name}...")
+        case "thinking":        print(f"Thinking: {event.content}")
+        case "guardrail_pass":  print(f"Guardrail passed: {event.guardrail_name}")
+        case "guardrail_fail":  print(f"Guardrail failed: {event.guardrail_name}")
+        case "done":            print(f"\n{event.output}")
 ```
 
 ### Server-Side Tools (No Workers Needed)
 
 ```python
-from conductor.agents import Agent, http_tool, mcp_tool, run
+from agentspan.agents import Agent, http_tool, mcp_tool, run
 
-# HTTP endpoint as a tool
 weather_api = http_tool(
-    name="get_weather",
-    description="Get weather for a city",
-    url="https://api.weather.com/v1/current",
-    method="GET",
+    name="get_weather", description="Get weather for a city",
+    url="https://api.weather.com/v1/current", method="GET",
     input_schema={"type": "object", "properties": {"city": {"type": "string"}}},
 )
 
-# MCP server tools
-github = mcp_tool(server_url="http://localhost:8080/mcp")
+github = mcp_tool(server_url="http://localhost:8080/mcp")  # Auto-discovered
 
 agent = Agent(name="assistant", model="openai/gpt-4o", tools=[weather_api, github])
 ```
@@ -286,8 +321,8 @@ agent = Agent(name="assistant", model="openai/gpt-4o", tools=[weather_api, githu
 ### Code Execution
 
 ```python
-from conductor.agents import Agent
-from conductor.agents.code_executor import DockerCodeExecutor
+from agentspan.agents import Agent
+from agentspan.agents.code_executor import DockerCodeExecutor
 
 executor = DockerCodeExecutor(image="python:3.12-slim", timeout=30)
 agent = Agent(
@@ -300,7 +335,7 @@ agent = Agent(
 ### Shared State (Tool Context)
 
 ```python
-from conductor.agents import Agent, tool, ToolContext, run
+from agentspan.agents import Agent, tool, ToolContext, run
 
 @tool
 def add_item(item: str, context: ToolContext) -> str:
@@ -327,200 +362,253 @@ result = run(agent, "Add apples, bananas, and cherries, then show the list.")
 
 ## Multi-Agent Strategies
 
-| Strategy | Description | Conductor Mapping |
-|---|---|---|
-| `handoff` (default) | LLM chooses which sub-agent handles the request | SwitchTask + InlineSubWorkflow |
-| `sequential` | Sub-agents run in order, output feeds forward (`>>` operator) | Chain of SubWorkflowTask |
-| `parallel` | All sub-agents run concurrently, results aggregated | ForkTask + JoinTask |
-| `router` | Router agent or function selects the sub-agent | LlmChatComplete + SwitchTask |
-| `round_robin` | Agents take turns in a fixed rotation | DoWhile with turn tracking |
-| `swarm` | Condition-based handoffs between agents | DoWhile + HandoffConditions |
-| `random` | Random sub-agent selection each turn | DoWhile with random selection |
-
-## Supported LLM Providers
-
-Any provider configured as an AI integration in Conductor:
-
-| Provider | Model Format |
+| Strategy | Description |
 |---|---|
-| OpenAI | `openai/gpt-4o` |
-| Anthropic | `anthropic/claude-sonnet-4-20250514` |
-| Azure OpenAI | `azure_openai/gpt-4o` |
-| Google Gemini | `google_gemini/gemini-pro` |
-| Google Vertex AI | `google_vertex_ai/gemini-pro` |
-| AWS Bedrock | `aws_bedrock/anthropic.claude-v2` |
-| Cohere | `cohere/command-r-plus` |
-| Mistral | `mistral/mistral-large` |
-| Groq | `groq/llama-3-70b` |
-| Perplexity | `perplexity/sonar-medium` |
-| Hugging Face | `hugging_face/meta-llama/Llama-3-70b` |
-| DeepSeek | `deepseek/deepseek-chat` |
-
-## Public API
-
-All exports from `conductor.agents`:
-
-```python
-# Core
-Agent, AgentDef, AgentRuntime, AgentConfig, Strategy, PromptTemplate
-
-# Extended agent types
-UserProxyAgent, GPTAssistantAgent
-
-# Tools
-tool, ToolDef, ToolContext, agent_tool, http_tool, mcp_tool
-image_tool, audio_tool, video_tool, pdf_tool
-clear_discovery_cache
-
-# Execution
-run, run_async, start, stream, plan, shutdown
-
-# Results
-AgentResult, AgentHandle, AgentStatus, AgentStream, AgentEvent, EventType, TokenUsage
-
-# Guardrails
-guardrail, Guardrail, GuardrailDef, GuardrailResult, OnFail, Position
-RegexGuardrail, LLMGuardrail
-
-# Termination conditions
-TerminationCondition, TerminationResult
-TextMentionTermination, StopMessageTermination, MaxMessageTermination, TokenUsageTermination
-
-# Memory
-ConversationMemory, SemanticMemory, MemoryStore, MemoryEntry
-
-# Code execution
-CodeExecutionConfig, CodeExecutor, LocalCodeExecutor, DockerCodeExecutor
-JupyterCodeExecutor, ServerlessCodeExecutor, ExecutionResult
-
-# Handoff conditions (swarm strategy)
-HandoffCondition, OnToolResult, OnTextMention, OnCondition
-
-# Tracing
-is_tracing_enabled
-```
+| `handoff` (default) | LLM chooses which sub-agent handles the request |
+| `sequential` | Sub-agents run in order, output feeds forward (`>>` operator) |
+| `parallel` | All sub-agents run concurrently, results aggregated |
+| `router` | Router agent or function selects the sub-agent |
+| `round_robin` | Agents take turns in a fixed rotation |
+| `swarm` | Condition-based handoffs between agents |
+| `random` | Random sub-agent selection each turn |
 
 ## Examples
 
+52+ runnable examples covering every feature:
+
 | Example | Description |
 |---|---|
-| [`01_basic_agent.py`](python/examples/01_basic_agent.py) | 5-line hello world |
-| [`02_tools.py`](python/examples/02_tools.py) | Multiple tools with approval |
-| [`02a_simple_tools.py`](python/examples/02a_simple_tools.py) | Two tools, LLM picks the right one |
-| [`02b_multi_step_tools.py`](python/examples/02b_multi_step_tools.py) | Chained lookups and calculations |
-| [`03_structured_output.py`](python/examples/03_structured_output.py) | Pydantic output types |
-| [`04_mcp_weather.py`](python/examples/04_mcp_weather.py) | MCP server tools (live weather) |
-| [`04_http_and_mcp_tools.py`](python/examples/04_http_and_mcp_tools.py) | HTTP and MCP server-side tools |
-| [`05_handoffs.py`](python/examples/05_handoffs.py) | Agent delegation |
-| [`06_sequential_pipeline.py`](python/examples/06_sequential_pipeline.py) | Agent >> Agent >> Agent |
-| [`07_parallel_agents.py`](python/examples/07_parallel_agents.py) | Fan-out / fan-in |
-| [`08_router_agent.py`](python/examples/08_router_agent.py) | LLM routing to specialists |
-| [`09_human_in_the_loop.py`](python/examples/09_human_in_the_loop.py) | Approval workflows |
-| [`09b_hitl_with_feedback.py`](python/examples/09b_hitl_with_feedback.py) | Custom feedback (respond API) |
-| [`09c_hitl_streaming.py`](python/examples/09c_hitl_streaming.py) | Streaming + HITL approval |
-| [`10_guardrails.py`](python/examples/10_guardrails.py) | Output validation + retry |
-| [`11_streaming.py`](python/examples/11_streaming.py) | Real-time events |
-| [`12_long_running.py`](python/examples/12_long_running.py) | Fire-and-forget with polling |
-| [`13_hierarchical_agents.py`](python/examples/13_hierarchical_agents.py) | Nested agent teams |
-| [`14_existing_workers.py`](python/examples/14_existing_workers.py) | Using existing Conductor workers |
-| [`15_agent_discussion.py`](python/examples/15_agent_discussion.py) | Round-robin debate |
-| [`16_random_strategy.py`](python/examples/16_random_strategy.py) | Random agent selection |
-| [`17_swarm_orchestration.py`](python/examples/17_swarm_orchestration.py) | Condition-based handoffs |
-| [`18_manual_selection.py`](python/examples/18_manual_selection.py) | Manual agent selection |
-| [`19_composable_termination.py`](python/examples/19_composable_termination.py) | Composable stop conditions |
-| [`20_constrained_transitions.py`](python/examples/20_constrained_transitions.py) | Allowed agent transitions |
-| [`21_regex_guardrails.py`](python/examples/21_regex_guardrails.py) | Regex-based guardrails |
-| [`22_llm_guardrails.py`](python/examples/22_llm_guardrails.py) | LLM-powered guardrails |
-| [`23_token_tracking.py`](python/examples/23_token_tracking.py) | Token usage tracking |
-| [`24_code_execution.py`](python/examples/24_code_execution.py) | Sandboxed code execution |
-| [`25_semantic_memory.py`](python/examples/25_semantic_memory.py) | Long-term memory with similarity search |
-| [`26_opentelemetry_tracing.py`](python/examples/26_opentelemetry_tracing.py) | OpenTelemetry spans |
-| [`27_user_proxy_agent.py`](python/examples/27_user_proxy_agent.py) | Human-in-the-loop proxy agent |
-| [`28_gpt_assistant_agent.py`](python/examples/28_gpt_assistant_agent.py) | OpenAI Assistants integration |
-| [`29_agent_introductions.py`](python/examples/29_agent_introductions.py) | Agent self-introductions |
-| [`30_multimodal_agent.py`](python/examples/30_multimodal_agent.py) | Images, video, audio input |
-| [`31_tool_guardrails.py`](python/examples/31_tool_guardrails.py) | Per-tool guardrails |
-| [`32_human_guardrail.py`](python/examples/32_human_guardrail.py) | Human review guardrail |
-| [`33_external_workers.py`](python/examples/33_external_workers.py) | Reference workers in other services |
-| [`33_single_turn_tool.py`](python/examples/33_single_turn_tool.py) | Single-turn tool call |
-| [`34_prompt_templates.py`](python/examples/34_prompt_templates.py) | Reusable, versioned prompt templates |
-| [`35_standalone_guardrails.py`](python/examples/35_standalone_guardrails.py) | Guardrails as plain callables |
-| [`36_simple_agent_guardrails.py`](python/examples/36_simple_agent_guardrails.py) | Output validation without tools |
-| [`37_fix_guardrail.py`](python/examples/37_fix_guardrail.py) | Auto-correct output instead of retry |
-| [`38_tech_trends.py`](python/examples/38_tech_trends.py) | Tech trends analysis |
-| [`39_local_code_execution.py`](python/examples/39_local_code_execution.py) | Local code execution |
-| [`40_media_generation_agent.py`](python/examples/40_media_generation_agent.py) | Media generation |
-| [`41_sequential_pipeline_tools.py`](python/examples/41_sequential_pipeline_tools.py) | Sequential pipeline with stage-level tools |
-| [`42_security_testing.py`](python/examples/42_security_testing.py) | Red-team AI safety evaluation |
-| [`43_data_security_pipeline.py`](python/examples/43_data_security_pipeline.py) | Controlled data flow with redaction |
-| [`44_safety_guardrails.py`](python/examples/44_safety_guardrails.py) | PII detection and sanitization |
-| [`45_agent_tool.py`](python/examples/45_agent_tool.py) | Wrap an agent as a callable tool |
-| [`46_transfer_control.py`](python/examples/46_transfer_control.py) | Restrict agent handoff targets |
-| [`47_callbacks.py`](python/examples/47_callbacks.py) | Lifecycle hooks (before/after LLM) |
-| [`48_planner.py`](python/examples/48_planner.py) | Plan-then-execute agent |
-| [`49_include_contents.py`](python/examples/49_include_contents.py) | Control context passed to sub-agents |
-| [`50_thinking_config.py`](python/examples/50_thinking_config.py) | Extended reasoning for complex tasks |
-| [`51_shared_state.py`](python/examples/51_shared_state.py) | Tools sharing state via ToolContext |
-| [`52_nested_strategies.py`](python/examples/52_nested_strategies.py) | Parallel agents inside sequential pipeline |
+| [`01_basic_agent.py`](sdk/python/examples/01_basic_agent.py) | Hello world |
+| [`02_tools.py`](sdk/python/examples/02_tools.py) | Multiple tools with approval |
+| [`02a_simple_tools.py`](sdk/python/examples/02a_simple_tools.py) | Two tools, LLM picks the right one |
+| [`02b_multi_step_tools.py`](sdk/python/examples/02b_multi_step_tools.py) | Chained lookups and calculations |
+| [`03_structured_output.py`](sdk/python/examples/03_structured_output.py) | Pydantic output types |
+| [`04_http_and_mcp_tools.py`](sdk/python/examples/04_http_and_mcp_tools.py) | Server-side HTTP and MCP tools |
+| [`04_mcp_weather.py`](sdk/python/examples/04_mcp_weather.py) | MCP server tools (live weather) |
+| [`05_handoffs.py`](sdk/python/examples/05_handoffs.py) | Agent delegation |
+| [`06_sequential_pipeline.py`](sdk/python/examples/06_sequential_pipeline.py) | `agent >> agent >> agent` |
+| [`07_parallel_agents.py`](sdk/python/examples/07_parallel_agents.py) | Fan-out / fan-in |
+| [`08_router_agent.py`](sdk/python/examples/08_router_agent.py) | LLM routing to specialists |
+| [`09_human_in_the_loop.py`](sdk/python/examples/09_human_in_the_loop.py) | Approval workflows |
+| [`09b_hitl_with_feedback.py`](sdk/python/examples/09b_hitl_with_feedback.py) | Custom feedback (respond API) |
+| [`09c_hitl_streaming.py`](sdk/python/examples/09c_hitl_streaming.py) | Streaming + HITL approval |
+| [`10_guardrails.py`](sdk/python/examples/10_guardrails.py) | Output validation + retry |
+| [`11_streaming.py`](sdk/python/examples/11_streaming.py) | Real-time events |
+| [`12_long_running.py`](sdk/python/examples/12_long_running.py) | Fire-and-forget with polling |
+| [`13_hierarchical_agents.py`](sdk/python/examples/13_hierarchical_agents.py) | Nested agent teams |
+| [`14_existing_workers.py`](sdk/python/examples/14_existing_workers.py) | Existing workers as tools |
+| [`15_agent_discussion.py`](sdk/python/examples/15_agent_discussion.py) | Round-robin debate |
+| [`16_random_strategy.py`](sdk/python/examples/16_random_strategy.py) | Random agent selection |
+| [`17_swarm_orchestration.py`](sdk/python/examples/17_swarm_orchestration.py) | Swarm with handoff conditions |
+| [`18_manual_selection.py`](sdk/python/examples/18_manual_selection.py) | Human picks which agent speaks |
+| [`19_composable_termination.py`](sdk/python/examples/19_composable_termination.py) | Composable termination conditions |
+| [`20_constrained_transitions.py`](sdk/python/examples/20_constrained_transitions.py) | Restricted agent transitions |
+| [`21_regex_guardrails.py`](sdk/python/examples/21_regex_guardrails.py) | RegexGuardrail (block/allow) |
+| [`22_llm_guardrails.py`](sdk/python/examples/22_llm_guardrails.py) | LLMGuardrail (AI judge) |
+| [`23_token_tracking.py`](sdk/python/examples/23_token_tracking.py) | Token usage and cost tracking |
+| [`24_code_execution.py`](sdk/python/examples/24_code_execution.py) | Code execution sandboxes |
+| [`25_semantic_memory.py`](sdk/python/examples/25_semantic_memory.py) | Long-term memory with retrieval |
+| [`26_opentelemetry_tracing.py`](sdk/python/examples/26_opentelemetry_tracing.py) | OpenTelemetry spans |
+| [`27_user_proxy_agent.py`](sdk/python/examples/27_user_proxy_agent.py) | Interactive conversations |
+| [`28_gpt_assistant_agent.py`](sdk/python/examples/28_gpt_assistant_agent.py) | OpenAI Assistants API wrapper |
+| [`29_agent_introductions.py`](sdk/python/examples/29_agent_introductions.py) | Agents introduce themselves |
+| [`30_multimodal_agent.py`](sdk/python/examples/30_multimodal_agent.py) | Vision model analysis |
+| [`31_tool_guardrails.py`](sdk/python/examples/31_tool_guardrails.py) | Pre-execution tool validation |
+| [`32_human_guardrail.py`](sdk/python/examples/32_human_guardrail.py) | Human review on guardrail failure |
+| [`33_external_workers.py`](sdk/python/examples/33_external_workers.py) | Workers in other services |
+| [`33_single_turn_tool.py`](sdk/python/examples/33_single_turn_tool.py) | Single-turn tool call |
+| [`34_prompt_templates.py`](sdk/python/examples/34_prompt_templates.py) | Server-side prompt templates |
+| [`35_standalone_guardrails.py`](sdk/python/examples/35_standalone_guardrails.py) | Guardrails without agents |
+| [`36_simple_agent_guardrails.py`](sdk/python/examples/36_simple_agent_guardrails.py) | Guardrails on simple agents |
+| [`37_fix_guardrail.py`](sdk/python/examples/37_fix_guardrail.py) | Auto-correct with on_fail="fix" |
+| [`38_tech_trends.py`](sdk/python/examples/38_tech_trends.py) | Tech trends research |
+| [`39_local_code_execution.py`](sdk/python/examples/39_local_code_execution.py) | Local code sandbox |
+| [`39a_docker_code_execution.py`](sdk/python/examples/39a_docker_code_execution.py) | Docker-sandboxed execution |
+| [`39b_jupyter_code_execution.py`](sdk/python/examples/39b_jupyter_code_execution.py) | Jupyter kernel execution |
+| [`39c_serverless_code_execution.py`](sdk/python/examples/39c_serverless_code_execution.py) | Serverless execution |
+| [`40_media_generation_agent.py`](sdk/python/examples/40_media_generation_agent.py) | Image/audio/video generation |
+| [`41_sequential_pipeline_tools.py`](sdk/python/examples/41_sequential_pipeline_tools.py) | Pipeline with per-stage tools |
+| [`42_security_testing.py`](sdk/python/examples/42_security_testing.py) | Security testing pipeline |
+| [`43_data_security_pipeline.py`](sdk/python/examples/43_data_security_pipeline.py) | Data redaction pipeline |
+| [`44_safety_guardrails.py`](sdk/python/examples/44_safety_guardrails.py) | PII detection and sanitization |
+| [`45_agent_tool.py`](sdk/python/examples/45_agent_tool.py) | Agent as a callable tool |
+| [`46_transfer_control.py`](sdk/python/examples/46_transfer_control.py) | Restricted handoff transitions |
+| [`47_callbacks.py`](sdk/python/examples/47_callbacks.py) | Lifecycle hooks |
+| [`48_planner.py`](sdk/python/examples/48_planner.py) | Planning before execution |
+| [`49_include_contents.py`](sdk/python/examples/49_include_contents.py) | Context control for sub-agents |
+| [`50_thinking_config.py`](sdk/python/examples/50_thinking_config.py) | Extended reasoning |
+| [`51_shared_state.py`](sdk/python/examples/51_shared_state.py) | Shared state via ToolContext |
+| [`52_nested_strategies.py`](sdk/python/examples/52_nested_strategies.py) | Nested parallel + sequential |
+
+### Google ADK Compatibility
+
+Drop-in compatibility with the [Google ADK](https://github.com/google/adk-python) API, backed by durable execution. [32 examples included](sdk/python/examples/adk/).
+
+```python
+from google.adk.agents import Agent, SequentialAgent
+
+researcher = Agent(name="researcher", model="gemini-2.0-flash",
+                   instruction="Research the topic.", tools=[search])
+writer = Agent(name="writer", model="gemini-2.0-flash",
+               instruction="Write an article from the research.")
+
+pipeline = SequentialAgent(name="pipeline", sub_agents=[researcher, writer])
+```
+
+## Deployment
+
+### Development (SQLite — zero setup)
+
+The default setup uses SQLite with WAL mode. No external database needed.
+
+```bash
+agentspan server start
+```
+
+Data is stored in `agent-runtime.db` in the working directory.
+
+### Production (PostgreSQL)
+
+For production workloads, use PostgreSQL for durability and concurrent access.
+
+**1. Start PostgreSQL with Docker Compose:**
+
+```bash
+cd server
+docker compose up -d
+```
+
+This starts PostgreSQL 16 on port 5432 with:
+- User: `conductor`
+- Password: `conductor`
+- Database: `conductor`
+
+**2. Start the server with the Postgres profile:**
+
+```bash
+SPRING_PROFILES_ACTIVE=postgres agentspan server start
+```
+
+Or configure the database connection directly:
+
+```bash
+export SPRING_DATASOURCE_URL=jdbc:postgresql://your-host:5432/conductor
+export SPRING_DATASOURCE_USERNAME=your_user
+export SPRING_DATASOURCE_PASSWORD=your_password
+export SPRING_PROFILES_ACTIVE=postgres
+agentspan server start
+```
+
+### Docker Deployment
+
+Run the Agentspan server and PostgreSQL together:
+
+```yaml
+# docker-compose.yml
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: conductor
+      POSTGRES_PASSWORD: conductor
+      POSTGRES_DB: conductor
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  agentspan:
+    image: agentspan/server:latest
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: postgres
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/conductor
+      SPRING_DATASOURCE_USERNAME: conductor
+      SPRING_DATASOURCE_PASSWORD: conductor
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # Add other provider keys as needed
+    depends_on:
+      - postgres
+
+volumes:
+  pgdata:
+```
+
+```bash
+docker compose up -d
+```
+
+### Configuration Reference
+
+The server auto-enables LLM providers when their API key is set. No manual integration setup needed.
+
+| Setting | Env Var | Default |
+|---|---|---|
+| Server port | `SERVER_PORT` | `8080` |
+| Database backend | `SPRING_PROFILES_ACTIVE` | `default` (SQLite) |
+| SQLite path | `SPRING_DATASOURCE_URL` | `jdbc:sqlite:agent-runtime.db` |
+| Postgres URL | `SPRING_DATASOURCE_URL` | `jdbc:postgresql://localhost:5432/conductor` |
+| Postgres user | `SPRING_DATASOURCE_USERNAME` | `postgres` |
+| Postgres password | `SPRING_DATASOURCE_PASSWORD` | `postgres` |
+| Postgres pool size | `SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE` | `8` |
 
 ## Project Structure
 
 ```
-python/
-├── src/conductor/agents/
-│   ├── __init__.py                 # Public API exports
-│   ├── agent.py                    # Agent, AgentDef, Strategy
-│   ├── tool.py                     # @tool, ToolDef, ToolContext, http_tool, mcp_tool
-│   ├── run.py                      # run, start, stream, run_async, plan, shutdown
-│   ├── result.py                   # AgentResult, AgentHandle, AgentEvent, EventType
-│   ├── config_serializer.py        # Serializes Agent tree → JSON for server
-│   ├── guardrail.py                # Guardrail, GuardrailResult, RegexGuardrail, LLMGuardrail
-│   ├── memory.py                   # ConversationMemory
-│   ├── semantic_memory.py          # SemanticMemory, MemoryStore, MemoryEntry
-│   ├── termination.py              # TerminationCondition and subclasses
-│   ├── handoff.py                  # HandoffCondition, OnToolResult, OnTextMention, OnCondition
-│   ├── code_executor.py            # CodeExecutor, Docker/Local/Jupyter/Serverless
-│   ├── code_execution_config.py    # CodeExecutionConfig
-│   ├── ext.py                      # UserProxyAgent, GPTAssistantAgent
-│   ├── tracing.py                  # OpenTelemetry integration
-│   ├── runtime/                    # Workflow execution and tool dispatch
-│   │   ├── runtime.py              # AgentRuntime (run/start/stream)
-│   │   ├── config.py               # AgentConfig (env vars)
-│   │   ├── tool_registry.py        # ToolRegistry (worker registration)
-│   │   ├── _dispatch.py            # Tool worker dispatch
-│   │   ├── mcp_discovery.py        # MCP tool discovery
-│   │   └── worker_manager.py       # Worker lifecycle management
-│   └── _internal/                  # Shared utilities
-│       ├── model_parser.py
-│       ├── provider_registry.py
-│       └── schema_utils.py
-├── examples/                       # 52 progressive examples
-├── tests/
-│   ├── unit/                       # Unit tests (no server required)
-│   └── integration/                # Integration tests (require Conductor server)
-├── pyproject.toml
-├── DESIGN.md                       # Internal architecture documentation
-└── REQUIREMENTS.md                 # Detailed requirements specification
+├── cli/                  # Go CLI (agentspan server start/stop/logs)
+├── server/               # Java runtime server (Spring Boot + Conductor)
+│   ├── docker-compose.yml
+│   └── src/
+└── sdk/
+    └── python/           # Python SDK
+        ├── src/agentspan/agents/
+        ├── examples/     # 52+ progressive examples
+        └── tests/
 ```
 
-## Development
+## CLI Reference
 
 ```bash
-# Create virtual environment and install with dev dependencies
-uv venv
-source .venv/bin/activate
-uv pip install -e "./python[dev]"
-
-# Run unit tests
-cd python && python3 -m pytest tests/unit/ -v
-
-# Lint
-ruff check python/src/
-
-# Type check
-mypy python/src/conductor/agents/ --ignore-missing-imports
+agentspan server start     # Start the Agentspan server
+agentspan server stop      # Stop the server
+agentspan server logs      # View server logs
+agentspan doctor           # Check system dependencies
 ```
+
+## Community
+
+We're building Agentspan in the open and would love your help.
+
+- **[Discord](https://discord.gg/agentspan)** — Ask questions, share what you're building, get help
+- **[GitHub Issues](https://github.com/agentspan/agentspan/issues)** — Bug reports and feature requests
+- **[Contributing Guide](CONTRIBUTING.md)** — How to contribute code, docs, and examples
+
+### Contributing
+
+```bash
+git clone https://github.com/agentspan/agentspan.git
+cd agentspan/sdk/python
+uv venv && source .venv/bin/activate
+uv pip install -e ".[dev]"
+pytest
+```
+
+We welcome PRs of all sizes — from typo fixes to new examples to core features.
+
+### Spread the Word
+
+If Agentspan is useful to you, help others find it:
+
+- [Star this repo](https://github.com/agentspan/agentspan) — it helps more than you think
+- [Share on LinkedIn](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/agentspan/agentspan) — tell your network
+- [Share on X/Twitter](https://twitter.com/intent/tweet?text=Agentspan%20%E2%80%94%20AI%20agents%20that%20don%27t%20die%20when%20your%20process%20does.%20Durable%2C%20scalable%2C%20observable.&url=https://github.com/agentspan/agentspan) — spread the word
+- [Share on Reddit](https://www.reddit.com/submit?url=https://github.com/agentspan/agentspan&title=Agentspan%20%E2%80%94%20AI%20agents%20that%20survive%20crashes%2C%20scale%20across%20machines%2C%20and%20pause%20for%20human%20approval%20for%20days) — post in r/MachineLearning or r/LocalLLaMA
+
+## API Reference
+
+See [AGENTS.md](sdk/python/AGENTS.md) for the complete API reference and architecture guide.
 
 ## License
 
-Apache 2.0
+[MIT](LICENSE)

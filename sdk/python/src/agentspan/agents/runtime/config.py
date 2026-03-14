@@ -51,13 +51,23 @@ class AgentConfig(BaseSettings):
         populate_by_name=True,
     )
 
-    @field_validator("*", mode="before")
+    @field_validator(
+        "default_timeout_seconds",
+        "llm_retry_count",
+        "worker_poll_interval_ms",
+        "worker_thread_count",
+        "auto_start_workers",
+        "auto_start_server",
+        "daemon_workers",
+        "auto_register_integrations",
+        "streaming_enabled",
+        mode="before",
+    )
     @classmethod
     def _empty_str_to_default(cls, v, info):
         """Treat empty-string env vars as unset so the field default is used."""
         if isinstance(v, str) and v.strip() == "":
-            field = cls.model_fields[info.field_name]
-            return field.default
+            return cls.model_fields[info.field_name].default
         return v
 
     server_url: str = Field(

@@ -1,4 +1,4 @@
-# AGENTS.md — Guide for AI Agents Working on the Runtime Server
+# AGENT.md — Guide for AI Agents Working on the Runtime Server
 
 This file provides context for AI coding agents working on the Agent Runtime server (Java/Spring Boot).
 
