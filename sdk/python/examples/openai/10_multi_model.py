@@ -12,8 +12,8 @@ Requirements:
     - pip install openai-agents
     - Conductor server with OpenAI LLM integrations configured
     - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
-    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
-    - AGENT_SECONDARY_LLM_MODEL=openai/gpt-4o in .env or environment
+    - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini in .env or environment
+    - AGENTSPAN_SECONDARY_LLM_MODEL=openai/gpt-4o in .env or environment
 """
 
 from agents import Agent, ModelSettings, function_tool

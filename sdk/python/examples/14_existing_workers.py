@@ -12,7 +12,7 @@ Requirements:
     - Conductor server with LLM support
     - conductor-python installed (provides @worker_task)
     - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
-    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
+    - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from conductor.client.worker.worker_task import worker_task

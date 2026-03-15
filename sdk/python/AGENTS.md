@@ -1181,7 +1181,7 @@ End-to-end streaming tests validate the complete SSE event stream for all agent 
 - Running Conductor server with streaming support
 - `export AGENTSPAN_SERVER_URL=http://localhost:8080/api`
 - LLM provider configured (OpenAI by default)
-- Optionally: `export AGENT_LLM_MODEL=openai/gpt-4o-mini` (default)
+- Optionally: `export AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini` (default)
 
 **Running:**
 

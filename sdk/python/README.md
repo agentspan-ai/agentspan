@@ -47,7 +47,7 @@ Copy `.env.example` to `.env` and edit, or export env vars directly:
 
 ```bash
 export AGENTSPAN_SERVER_URL=http://localhost:8080/api
-export AGENT_LLM_MODEL=openai/gpt-4o-mini  # default; see examples/README.md for all providers
+export AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini  # default; see examples/README.md for all providers
 # For Orkes Cloud:
 # export AGENTSPAN_AUTH_KEY=your_key
 # export AGENTSPAN_AUTH_SECRET=your_secret

@@ -17,7 +17,7 @@ Requirements:
     - pip install google-adk
     - Conductor server with callback support
     - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
-    - AGENT_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
+    - AGENTSPAN_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
 """
 
 import json

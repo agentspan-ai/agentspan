@@ -1,4 +1,4 @@
-.PHONY: test test-unit test-integration examples examples-all lint typecheck format all
+.PHONY: test test-unit test-integration examples examples-all lint typecheck format all validate validate-slow validate-judge validate-all
 
 all: lint typecheck test
 
@@ -25,3 +25,11 @@ typecheck:
 
 format:
 	ruff format src/ tests/
+
+validate:
+	python3 -m validation.scripts.run_examples
+
+validate-judge:
+	python3 -m validation.scripts.judge_results
+
+validate-all: validate validate-judge

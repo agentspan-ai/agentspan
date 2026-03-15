@@ -16,7 +16,7 @@ import pytest
 from agentspan.agents import AgentRuntime
 from agentspan.agents.runtime.config import AgentConfig
 
-DEFAULT_MODEL = os.environ.get("AGENT_LLM_MODEL", "openai/gpt-4o-mini")
+DEFAULT_MODEL = os.environ.get("AGENTSPAN_LLM_MODEL", "openai/gpt-4o-mini")
 
 
 @pytest.fixture(scope="module")
@@ -33,5 +33,5 @@ def runtime():
 
 @pytest.fixture
 def model():
-    """LLM model string, overridable via AGENT_LLM_MODEL env var."""
+    """LLM model string, overridable via AGENTSPAN_LLM_MODEL env var."""
     return DEFAULT_MODEL

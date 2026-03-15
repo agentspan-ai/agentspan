@@ -16,7 +16,7 @@ Requirements:
     - Conductor server with LLM support
     - pip install litellm (for the guardrail LLM call)
     - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
-    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
+    - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini in .env or environment
     - OPENAI_API_KEY=sk-... in .env or environment
 """
 

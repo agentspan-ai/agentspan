@@ -13,7 +13,7 @@ pip install google-adk agentspan-sdk
 Configure via `.env` file in the project root (recommended):
 
 ```dotenv
-AGENT_LLM_MODEL=openai/gpt-4o-mini
+AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini
 AGENTSPAN_SERVER_URL=http://localhost:8080/api
 GOOGLE_GEMINI_API_KEY=your-key  # or configure via Conductor server
 ```
@@ -21,7 +21,7 @@ GOOGLE_GEMINI_API_KEY=your-key  # or configure via Conductor server
 Or export environment variables directly:
 
 ```bash
-export AGENT_LLM_MODEL=openai/gpt-4o-mini
+export AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini
 export AGENTSPAN_SERVER_URL=http://localhost:8080/api
 export GOOGLE_GEMINI_API_KEY=your-key
 ```

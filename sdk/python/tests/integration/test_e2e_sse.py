@@ -37,7 +37,7 @@ DEFAULT_MODEL = "openai/gpt-4o-mini"
 
 
 def _model() -> str:
-    return os.environ.get("AGENT_LLM_MODEL", DEFAULT_MODEL)
+    return os.environ.get("AGENTSPAN_LLM_MODEL", DEFAULT_MODEL)
 
 
 def _unique_name(prefix: str) -> str:
