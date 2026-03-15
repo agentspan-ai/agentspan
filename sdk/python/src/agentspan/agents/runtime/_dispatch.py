@@ -14,6 +14,75 @@ import logging
 
 logger = logging.getLogger("agentspan.agents.dispatch")
 
+
+class ToolSerializationError(TypeError):
+    """Raised when a tool returns a value that cannot be JSON-serialized."""
+    pass
+
+
+def _validate_serializable(tool_name, result):
+    """Validate that a tool result is JSON-serializable. Raises ToolSerializationError if not."""
+    if result is None or isinstance(result, (str, int, float, bool)):
+        return
+    try:
+        json.dumps(result)
+    except (TypeError, ValueError) as exc:
+        result_type = type(result).__name__
+        raise ToolSerializationError(
+            f"Tool '{tool_name}' returned a non-serializable type '{result_type}'. "
+            f"Return dict, str, int, float, list, or bool. Error: {exc}"
+        ) from None
+
+def _coerce_value(value, annotation):
+    """Coerce a raw value to match the expected type annotation."""
+    if value is None or annotation is inspect.Parameter.empty:
+        return value
+
+    import typing
+    origin = getattr(annotation, "__origin__", None)
+    args = getattr(annotation, "__args__", ())
+
+    # Unwrap Optional[X] → X
+    if origin is getattr(typing, "Union", None):
+        non_none = [a for a in args if a is not type(None)]
+        if len(non_none) == 1:
+            return _coerce_value(value, non_none[0])
+        return value
+
+    # Already correct type — short-circuit
+    target = origin if origin is not None else annotation
+    try:
+        if isinstance(value, target):
+            return value
+    except TypeError:
+        return value
+
+    # String → list/dict: json.loads
+    if isinstance(value, str) and target in (list, dict):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, target):
+                return parsed
+        except (json.JSONDecodeError, ValueError):
+            pass
+        return value
+
+    # String → int/float/bool
+    if isinstance(value, str):
+        if annotation is int:
+            try: return int(value)
+            except (ValueError, TypeError): pass
+        elif annotation is float:
+            try: return float(value)
+            except (ValueError, TypeError): pass
+        elif annotation is bool:
+            lower = value.lower().strip()
+            if lower in ("true", "1", "yes"): return True
+            if lower in ("false", "0", "no"): return False
+
+    return value
+
+
 # Module-level registry: task_name -> {tool_name: tool_func}
 _tool_registry = {}
 
@@ -123,16 +192,19 @@ def make_tool_worker(tool_func, tool_name, guardrails=None):
 
         result = tool_func(**kwargs)
 
+        # Validate result is JSON-serializable before proceeding
+        _validate_serializable(tool_name, result)
+
         # Post-execution guardrails: check tool result
         if guardrails:
-            result_str = json.dumps(result, default=str) if not isinstance(result, str) else result
+            result_str = json.dumps(result) if not isinstance(result, str) else result
             for guard in guardrails:
                 if guard.position == "output":
                     check_result = guard.check(result_str)
                     if not check_result.passed:
                         if guard.on_fail == "fix" and check_result.fixed_output is not None:
                             result = check_result.fixed_output
-                            result_str = json.dumps(result, default=str) if not isinstance(result, str) else result
+                            result_str = json.dumps(result) if not isinstance(result, str) else result
                         elif guard.on_fail == "raise":
                             raise ValueError(
                                 f"Tool guardrail '{guard.name}' failed: "
@@ -179,7 +251,9 @@ def make_tool_worker(tool_func, tool_name, guardrails=None):
                 if param_name == "context":
                     continue
                 if param_name in task.input_data:
-                    fn_kwargs[param_name] = task.input_data[param_name]
+                    raw_value = task.input_data[param_name]
+                    ann = tool_func.__annotations__.get(param_name, inspect.Parameter.empty)
+                    fn_kwargs[param_name] = _coerce_value(raw_value, ann)
                 elif sig.parameters[param_name].default is not inspect.Parameter.empty:
                     fn_kwargs[param_name] = sig.parameters[param_name].default
                 else:

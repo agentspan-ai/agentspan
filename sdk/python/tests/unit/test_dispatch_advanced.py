@@ -5,12 +5,15 @@
 make_tool_worker, and ToolContext injection.
 """
 
+import inspect
 import json
+from typing import Dict, List, Optional
 
 import pytest
 
 from agentspan.agents.runtime._dispatch import (
     make_tool_worker,
+    _coerce_value,
     _tool_registry,
     _tool_type_registry,
     _tool_task_names,
@@ -352,3 +355,159 @@ class TestNeedsContext:
         from agentspan.agents.runtime._dispatch import _needs_context
         # Pass something that's not a function
         assert _needs_context(42) is False
+
+
+class TestToolSerializationValidation:
+    """Test BUG-P2-08: non-serializable return values raise ToolSerializationError."""
+
+    def test_set_return_raises(self):
+        from agentspan.agents.runtime._dispatch import ToolSerializationError
+
+        def bad_tool():
+            return {1, 2, 3}  # set is not JSON-serializable
+
+        worker = make_tool_worker(bad_tool, "bad_set_tool")
+        task = _make_task(input_data={})
+        result = worker(task)
+        # Worker catches exceptions and marks task FAILED
+        assert result.status.name == "FAILED"
+
+    def test_dict_return_ok(self):
+        def good_tool():
+            return {"key": "value", "count": 42}
+
+        worker = make_tool_worker(good_tool, "good_dict_tool")
+        task = _make_task(input_data={})
+        result = worker(task)
+        assert result.status.name == "COMPLETED"
+        assert result.output_data == {"key": "value", "count": 42}
+
+    def test_string_return_ok(self):
+        def str_tool():
+            return "hello"
+
+        worker = make_tool_worker(str_tool, "str_tool")
+        task = _make_task(input_data={})
+        result = worker(task)
+        assert result.status.name == "COMPLETED"
+
+    def test_bytes_return_raises(self):
+        def bytes_tool():
+            return b"binary data"
+
+        worker = make_tool_worker(bytes_tool, "bytes_tool")
+        task = _make_task(input_data={})
+        result = worker(task)
+        assert result.status.name == "FAILED"
+
+    def test_validate_serializable_function(self):
+        from agentspan.agents.runtime._dispatch import _validate_serializable, ToolSerializationError
+
+        # These should not raise
+        _validate_serializable("t", None)
+        _validate_serializable("t", "hello")
+        _validate_serializable("t", 42)
+        _validate_serializable("t", 3.14)
+        _validate_serializable("t", True)
+        _validate_serializable("t", {"key": "val"})
+        _validate_serializable("t", [1, 2, 3])
+
+        # These should raise
+        with pytest.raises(ToolSerializationError, match="non-serializable"):
+            _validate_serializable("t", {1, 2, 3})
+        with pytest.raises(ToolSerializationError, match="non-serializable"):
+            _validate_serializable("t", b"bytes")
+
+
+# ── Type coercion ────────────────────────────────────────────────────────
+
+
+class TestTypeCoercion:
+    """Test _coerce_value and end-to-end type coercion in make_tool_worker."""
+
+    # ── _coerce_value unit tests ─────────────────────────────────────
+
+    def test_list_str_from_json_string(self):
+        result = _coerce_value('["a", "b", "c"]', List[str])
+        assert result == ["a", "b", "c"]
+
+    def test_list_dict_from_json_string(self):
+        result = _coerce_value('[{"k": "v"}, {"k2": "v2"}]', List[dict])
+        assert result == [{"k": "v"}, {"k2": "v2"}]
+
+    def test_dict_from_json_string(self):
+        result = _coerce_value('{"key": "value"}', dict)
+        assert result == {"key": "value"}
+
+    def test_already_native_list_unchanged(self):
+        original = ["a", "b"]
+        result = _coerce_value(original, List[str])
+        assert result is original
+
+    def test_optional_list_str_unwrapped(self):
+        result = _coerce_value('["x", "y"]', Optional[List[str]])
+        assert result == ["x", "y"]
+
+    def test_invalid_json_passes_through(self):
+        result = _coerce_value("not json at all", List[str])
+        assert result == "not json at all"
+
+    def test_int_from_string(self):
+        assert _coerce_value("42", int) == 42
+
+    def test_float_from_string(self):
+        assert _coerce_value("3.14", float) == 3.14
+
+    def test_bool_from_string_true(self):
+        assert _coerce_value("true", bool) is True
+        assert _coerce_value("YES", bool) is True
+        assert _coerce_value("1", bool) is True
+
+    def test_bool_from_string_false(self):
+        assert _coerce_value("false", bool) is False
+        assert _coerce_value("NO", bool) is False
+        assert _coerce_value("0", bool) is False
+
+    def test_none_not_coerced(self):
+        assert _coerce_value(None, List[str]) is None
+
+    def test_wrong_json_type_passes_through(self):
+        """JSON array when dict expected should pass through unchanged."""
+        result = _coerce_value('[1, 2, 3]', dict)
+        assert result == '[1, 2, 3]'
+
+    def test_empty_annotation_no_coercion(self):
+        result = _coerce_value("42", inspect.Parameter.empty)
+        assert result == "42"
+
+    # ── End-to-end via make_tool_worker ───────────────────────────────
+
+    def test_e2e_list_str_coerced_in_worker(self):
+        def process_tags(tags: List[str]) -> dict:
+            return {"count": len(tags), "tags": tags}
+
+        wrapper = make_tool_worker(process_tags, "process_tags")
+        task = _make_task(input_data={"tags": '["python", "rust"]'})
+        result = wrapper(task)
+        assert result.status == "COMPLETED"
+        assert result.output_data == {"count": 2, "tags": ["python", "rust"]}
+
+    def test_e2e_dict_coerced_in_worker(self):
+        def process_config(config: dict) -> dict:
+            return {"keys": list(config.keys())}
+
+        wrapper = make_tool_worker(process_config, "process_config")
+        task = _make_task(input_data={"config": '{"a": 1, "b": 2}'})
+        result = wrapper(task)
+        assert result.status == "COMPLETED"
+        assert result.output_data == {"keys": ["a", "b"]}
+
+    def test_e2e_int_coerced_in_worker(self):
+        def repeat(text: str, count: int) -> str:
+            return text * count
+
+        wrapper = make_tool_worker(repeat, "repeat")
+        task = _make_task(input_data={"text": "ha", "count": "3"})
+        result = wrapper(task)
+        assert result.status == "COMPLETED"
+        assert result.output_data == {"result": "hahaha"}
