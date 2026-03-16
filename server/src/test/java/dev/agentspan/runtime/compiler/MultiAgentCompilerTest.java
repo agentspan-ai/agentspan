@@ -827,4 +827,141 @@ class MultiAgentCompilerTest {
         // Default AgentCompiler timeoutSeconds is 0, so no timeout should be set
         assertThat(wf.getTimeoutPolicy()).isNull();
     }
+
+    // ── Gate tests ──────────────────────────────────────────────────
+
+    @Test
+    void testSequentialWithTextGate() {
+        AgentConfig config = AgentConfig.builder()
+            .name("pipeline")
+            .model("openai/gpt-4o")
+            .strategy("sequential")
+            .agents(List.of(
+                AgentConfig.builder()
+                    .name("fetcher")
+                    .model("openai/gpt-4o")
+                    .instructions("Fetch issues")
+                    .gate(Map.of("type", "text_contains", "text", "NO_OPEN_ISSUES", "caseSensitive", true))
+                    .build(),
+                simpleSubAgent("coder", "Write code"),
+                simpleSubAgent("pusher", "Push PR")
+            ))
+            .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        // SUB_WORKFLOW(fetcher) + coerce + INLINE(gate) + SWITCH(gate_switch)
+        assertThat(wf.getTasks()).hasSize(4);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("SUB_WORKFLOW");
+        assertThat(wf.getTasks().get(0).getTaskReferenceName()).contains("fetcher");
+        assertThat(wf.getTasks().get(1).getType()).isEqualTo("INLINE"); // coerce
+        assertThat(wf.getTasks().get(2).getType()).isEqualTo("INLINE"); // gate
+        assertThat(wf.getTasks().get(2).getTaskReferenceName()).isEqualTo("pipeline_gate_0");
+        assertThat(wf.getTasks().get(3).getType()).isEqualTo("SWITCH");
+        assertThat(wf.getTasks().get(3).getTaskReferenceName()).isEqualTo("pipeline_gate_switch_0");
+
+        // SWITCH should have "continue" case with remaining stages
+        WorkflowTask switchTask = wf.getTasks().get(3);
+        assertThat(switchTask.getDecisionCases()).containsKey("continue");
+        List<WorkflowTask> continueTasks = switchTask.getDecisionCases().get("continue");
+        // coder SUB_WORKFLOW + coerce + pusher SUB_WORKFLOW
+        assertThat(continueTasks).hasSize(3);
+        assertThat(continueTasks.get(0).getType()).isEqualTo("SUB_WORKFLOW");
+        assertThat(continueTasks.get(0).getTaskReferenceName()).contains("coder");
+        assertThat(continueTasks.get(2).getType()).isEqualTo("SUB_WORKFLOW");
+        assertThat(continueTasks.get(2).getTaskReferenceName()).contains("pusher");
+
+        // Default case (stop) should be empty
+        assertThat(switchTask.getDefaultCase()).isEmpty();
+    }
+
+    @Test
+    void testSequentialWithoutGate() {
+        // Ensure no gate = no SWITCH task
+        AgentConfig config = AgentConfig.builder()
+            .name("pipeline")
+            .model("openai/gpt-4o")
+            .strategy("sequential")
+            .agents(List.of(
+                simpleSubAgent("a", "Step A"),
+                simpleSubAgent("b", "Step B")
+            ))
+            .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        // SUB_WORKFLOW(a) + coerce + SUB_WORKFLOW(b) — no SWITCH
+        assertThat(wf.getTasks()).hasSize(3);
+        boolean hasSwitch = wf.getTasks().stream()
+            .anyMatch(t -> "SWITCH".equals(t.getType()));
+        assertThat(hasSwitch).isFalse();
+    }
+
+    @Test
+    void testSequentialWithWorkerGate() {
+        AgentConfig config = AgentConfig.builder()
+            .name("pipeline")
+            .model("openai/gpt-4o")
+            .strategy("sequential")
+            .agents(List.of(
+                AgentConfig.builder()
+                    .name("fetcher")
+                    .model("openai/gpt-4o")
+                    .instructions("Fetch")
+                    .gate(Map.of("taskName", "fetcher_gate"))
+                    .build(),
+                simpleSubAgent("coder", "Code")
+            ))
+            .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        // SUB_WORKFLOW + coerce + SIMPLE(gate) + SWITCH
+        assertThat(wf.getTasks()).hasSize(4);
+        assertThat(wf.getTasks().get(2).getType()).isEqualTo("SIMPLE");
+        assertThat(wf.getTasks().get(2).getName()).isEqualTo("fetcher_gate");
+        assertThat(wf.getTasks().get(3).getType()).isEqualTo("SWITCH");
+    }
+
+    @Test
+    void testSequentialWithMultipleGates() {
+        // Two gates: stage 0 and stage 1 both have gates, stage 2 has none
+        AgentConfig config = AgentConfig.builder()
+            .name("pipeline")
+            .model("openai/gpt-4o")
+            .strategy("sequential")
+            .agents(List.of(
+                AgentConfig.builder()
+                    .name("a")
+                    .model("openai/gpt-4o")
+                    .instructions("A")
+                    .gate(Map.of("type", "text_contains", "text", "STOP_A", "caseSensitive", true))
+                    .build(),
+                AgentConfig.builder()
+                    .name("b")
+                    .model("openai/gpt-4o")
+                    .instructions("B")
+                    .gate(Map.of("type", "text_contains", "text", "STOP_B", "caseSensitive", true))
+                    .build(),
+                simpleSubAgent("c", "C")
+            ))
+            .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        // Top level: SUB_WORKFLOW(a) + coerce + gate_0 + SWITCH_0
+        assertThat(wf.getTasks()).hasSize(4);
+        assertThat(wf.getTasks().get(3).getType()).isEqualTo("SWITCH");
+
+        // Inside SWITCH_0's "continue" case: SUB_WORKFLOW(b) + coerce + gate_1 + SWITCH_1
+        List<WorkflowTask> continueCase0 = wf.getTasks().get(3).getDecisionCases().get("continue");
+        assertThat(continueCase0).hasSize(4);
+        assertThat(continueCase0.get(2).getTaskReferenceName()).isEqualTo("pipeline_gate_1");
+        assertThat(continueCase0.get(3).getType()).isEqualTo("SWITCH");
+
+        // Inside SWITCH_1's "continue" case: SUB_WORKFLOW(c)
+        List<WorkflowTask> continueCase1 = continueCase0.get(3).getDecisionCases().get("continue");
+        assertThat(continueCase1).hasSize(1);
+        assertThat(continueCase1.get(0).getTaskReferenceName()).contains("c");
+    }
 }

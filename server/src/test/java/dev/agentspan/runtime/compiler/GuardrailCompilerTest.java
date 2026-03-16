@@ -109,4 +109,50 @@ class GuardrailCompilerTest {
         List<WorkflowTask> raiseTasks = routing.getSwitchTask().getDecisionCases().get("raise");
         assertThat(raiseTasks.get(0).getType()).isEqualTo("TERMINATE");
     }
+
+    @Test
+    void testToolGuardrailCompilation_usesToolPrefix() {
+        GuardrailConfig g = GuardrailConfig.builder()
+            .name("no_rm_rf")
+            .guardrailType("regex")
+            .position("input")  // position is not filtered for tool guardrails
+            .onFail("raise")
+            .patterns(List.of("rm\\s+-rf"))
+            .mode("block")
+            .build();
+
+        GuardrailCompiler gc = new GuardrailCompiler();
+        var results = gc.compileToolGuardrailTasks(
+            List.of(g), "agent", "${agent_format_tool_calls.output.result.formatted}");
+
+        assertThat(results).hasSize(1);
+        // Ref name uses "_tool" prefix to avoid collision with agent-level guardrails
+        assertThat(results.get(0).getRefName()).startsWith("agent_tool_");
+        assertThat(results.get(0).getTasks()).hasSize(1);
+        assertThat(results.get(0).getTasks().get(0).getType()).isEqualTo("INLINE");
+    }
+
+    @Test
+    void testToolGuardrailCompilation_noPositionFiltering() {
+        // Tool guardrails with position="input" should still compile
+        // (unlike agent guardrails which filter to output only)
+        GuardrailConfig inputGuard = GuardrailConfig.builder()
+            .name("check_input")
+            .guardrailType("regex")
+            .position("input")
+            .onFail("raise")
+            .patterns(List.of("dangerous"))
+            .mode("block")
+            .build();
+
+        GuardrailCompiler gc = new GuardrailCompiler();
+
+        // compileGuardrailTasks filters out input guardrails
+        var agentResults = gc.compileGuardrailTasks(List.of(inputGuard), "agent", "${ref}");
+        assertThat(agentResults).isEmpty();
+
+        // compileToolGuardrailTasks does NOT filter
+        var toolResults = gc.compileToolGuardrailTasks(List.of(inputGuard), "agent", "${ref}");
+        assertThat(toolResults).hasSize(1);
+    }
 }

@@ -161,6 +161,10 @@ class AgentConfigSerializer:
         if getattr(agent, 'required_tools', None):
             config["requiredTools"] = agent.required_tools
 
+        # Gate condition (for sequential pipelines)
+        if getattr(agent, 'gate', None) is not None:
+            config["gate"] = self._serialize_gate(agent)
+
         # Code execution
         if hasattr(agent, 'code_execution_config') and agent.code_execution_config:
             cfg = agent.code_execution_config
@@ -169,6 +173,16 @@ class AgentConfigSerializer:
                 "allowedLanguages": cfg.allowed_languages,
                 "allowedCommands": cfg.allowed_commands,
                 "timeout": cfg.timeout,
+            }
+
+        # CLI command execution
+        if hasattr(agent, 'cli_config') and agent.cli_config:
+            cfg = agent.cli_config
+            config["cliConfig"] = {
+                "enabled": cfg.enabled,
+                "allowedCommands": cfg.allowed_commands,
+                "timeout": cfg.timeout,
+                "allowShell": cfg.allow_shell,
             }
 
         # Remove None values for cleaner JSON
@@ -342,6 +356,23 @@ class AgentConfigSerializer:
             return {
                 "className": output_type.__name__,
             }
+
+    def _serialize_gate(self, agent: "Agent") -> dict:
+        """Serialize a gate condition to a GateConfig dict."""
+        from agentspan.agents.gate import TextGate
+
+        gate = agent.gate
+        if isinstance(gate, TextGate):
+            return {
+                "type": "text_contains",
+                "text": gate.text,
+                "caseSensitive": gate.case_sensitive,
+            }
+        elif callable(gate):
+            task_name = f"{agent.name}_gate"
+            return {"taskName": task_name}
+        else:
+            raise ValueError(f"Unsupported gate type: {type(gate)}")
 
     def _serialize_memory(self, memory: Any) -> dict:
         """Serialize memory to a MemoryConfig dict."""

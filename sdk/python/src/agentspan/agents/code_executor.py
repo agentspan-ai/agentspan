@@ -114,17 +114,28 @@ class CodeExecutor(ABC):
         )
 
         @tool(name=tool_name)
-        def execute_code(code: str) -> str:
+        def execute_code(code: str) -> dict:
+            if not code:
+                return {"status": "success", "stdout": "No code provided. Nothing to execute.", "stderr": ""}
             result = executor.execute(code)
-            parts = []
-            if result.output:
-                parts.append(f"STDOUT:\n{result.output}")
-            if result.error:
-                parts.append(f"STDERR:\n{result.error}")
-            if result.timed_out:
-                parts.append(f"TIMED OUT after {executor.timeout}s")
-            parts.append(f"Exit code: {result.exit_code}")
-            return "\n".join(parts) if parts else "No output."
+            if result.success:
+                return {
+                    "status": "success",
+                    "stdout": result.output or "",
+                    "stderr": result.error or "",
+                }
+            else:
+                stderr_parts = []
+                if result.error:
+                    stderr_parts.append(result.error.rstrip())
+                if result.timed_out:
+                    stderr_parts.append(f"TIMED OUT after {executor.timeout}s")
+                stderr_parts.append(f"Exit code: {result.exit_code}")
+                return {
+                    "status": "error",
+                    "stdout": result.output or "",
+                    "stderr": "\n".join(stderr_parts),
+                }
 
         # Override the description on the tool def
         execute_code._tool_def.description = tool_desc
@@ -167,6 +178,13 @@ class LocalCodeExecutor(CodeExecutor):
     }
 
     def execute(self, code: str) -> ExecutionResult:
+        if not code:
+            return ExecutionResult(
+                output="No code provided. Nothing to execute.",
+                exit_code=0,
+            )
+        if not isinstance(code, str):
+            code = str(code)
         interpreter = self._INTERPRETERS.get(self.language)
         if interpreter is None:
             return ExecutionResult(

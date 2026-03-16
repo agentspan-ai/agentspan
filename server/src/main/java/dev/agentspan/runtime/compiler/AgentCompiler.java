@@ -147,8 +147,8 @@ public class AgentCompiler {
         // Build termination condition
         String guardrailContinue = buildGuardrailContinue(guardrailRefs);
         String termCondition = String.format(
-            "if ( $.%s['iteration'] < %d && $.%s['finishReason'] != 'LENGTH' && (%s) ) { true; } else { false; }",
-            loopRef, maxTurns, llmRef, guardrailContinue
+            "if ( $.%s['iteration'] < %d && ($.%s['finishReason'] == 'LENGTH' || $.%s['finishReason'] == 'MAX_TOKENS' || (%s)) ) { true; } else { false; }",
+            loopRef, maxTurns, llmRef, llmRef, guardrailContinue
         );
 
         Map<String, Object> loopInputs = new LinkedHashMap<>();
@@ -219,17 +219,18 @@ public class AgentCompiler {
             ));
         }
 
-        // Tool call routing SwitchTask
-        WorkflowTask toolRouter;
+        // Tool call routing SwitchTask (with tool-level guardrail metadata)
+        ToolCompiler.ToolCallRoutingResult toolRoutingResult;
         if (mcpResult != null) {
-            toolRouter = tc.buildToolCallRoutingDynamic(
+            toolRoutingResult = tc.buildToolCallRoutingDynamicWithResult(
                 config.getName(), llmRef, tools, hasApproval, config.getModel(),
                 mcpResult.getMcpConfigRef());
         } else {
-            toolRouter = tc.buildToolCallRouting(
+            toolRoutingResult = tc.buildToolCallRoutingWithResult(
                 config.getName(), llmRef, tools, hasApproval, config.getModel()
             );
         }
+        WorkflowTask toolRouter = toolRoutingResult.getRouterTask();
 
         // Build loop body
         List<WorkflowTask> loopTasks = new ArrayList<>();
@@ -271,17 +272,22 @@ public class AgentCompiler {
                 guardrailRefs.add(new String[]{gr.getRefName(), String.valueOf(gr.isInline())});
                 retryRefs.add(routing.getRetryRef());
             }
-
-            if (!retryRefs.isEmpty()) {
-                Map<String, Object> participants = new LinkedHashMap<>();
-                for (String rr : retryRefs) {
-                    participants.put(rr, "user");
-                }
-                llmTask.getInputParameters().put("participants", participants);
-            }
         }
 
         loopTasks.add(toolRouter);
+
+        // Merge tool-level guardrail refs (from tool routing) into tracking lists
+        guardrailRefs.addAll(toolRoutingResult.getToolGuardrailRefs());
+        retryRefs.addAll(toolRoutingResult.getToolGuardrailRetryRefs());
+
+        // Wire all retry refs (agent + tool guardrails) into LLM participants
+        if (!retryRefs.isEmpty()) {
+            Map<String, Object> participants = new LinkedHashMap<>();
+            for (String rr : retryRefs) {
+                participants.put(rr, "user");
+            }
+            llmTask.getInputParameters().put("participants", participants);
+        }
 
         // Optional stop_when worker
         String stopWhenRef = null;
@@ -322,8 +328,8 @@ public class AgentCompiler {
 
         StringBuilder termCondition = new StringBuilder();
         termCondition.append(String.format(
-            "if ( $.%s['iteration'] < %d && $.%s['finishReason'] != 'LENGTH' && %s",
-            loopRef, maxTurns, llmRef, loopReason
+            "if ( $.%s['iteration'] < %d && ($.%s['finishReason'] == 'LENGTH' || $.%s['finishReason'] == 'MAX_TOKENS' || %s)",
+            loopRef, maxTurns, llmRef, llmRef, loopReason
         ));
         if (stopWhenRef != null) {
             termCondition.append(String.format(" && $.%s.should_continue == true", stopWhenRef));
@@ -354,11 +360,18 @@ public class AgentCompiler {
             allTasks.addAll(mcpResult.getPreTasks());
         }
 
-        // Initialize _agent_state workflow variable for ToolContext.state
+        // Initialize workflow variables
+        Map<String, Object> initVars = new LinkedHashMap<>();
+        initVars.put("_agent_state", new LinkedHashMap<>());
+        if (hasApproval) {
+            // Pre-initialize to empty string so the system message doesn't
+            // have null content on the first loop iteration.
+            initVars.put("_human_feedback", "");
+        }
         WorkflowTask initState = new WorkflowTask();
         initState.setType("SET_VARIABLE");
         initState.setTaskReferenceName(config.getName() + "_init_state");
-        initState.setInputParameters(Map.of("_agent_state", new LinkedHashMap<>()));
+        initState.setInputParameters(initVars);
         allTasks.add(initState);
 
         // Required tools enforcement: wrap loop + check in outer DO_WHILE
@@ -461,17 +474,18 @@ public class AgentCompiler {
             llmTask = buildLlmTask(config, parsed, llmRef, toolSpecs);
         }
 
-        // Tool call routing
-        WorkflowTask toolRouter;
+        // Tool call routing (with tool-level guardrail metadata)
+        ToolCompiler.ToolCallRoutingResult toolRoutingResult;
         if (mcpResult != null) {
-            toolRouter = tc.buildToolCallRoutingDynamic(
+            toolRoutingResult = tc.buildToolCallRoutingDynamicWithResult(
                 config.getName(), llmRef, allTools, hasApproval, config.getModel(),
                 mcpResult.getMcpConfigRef());
         } else {
-            toolRouter = tc.buildToolCallRouting(
+            toolRoutingResult = tc.buildToolCallRoutingWithResult(
                 config.getName(), llmRef, allTools, hasApproval, config.getModel()
             );
         }
+        WorkflowTask toolRouter = toolRoutingResult.getRouterTask();
 
         // Check-transfer worker
         String checkTransferRef = config.getName() + "_check_transfer";
@@ -509,14 +523,20 @@ public class AgentCompiler {
                 guardrailRefs.add(new String[]{gr.getRefName(), String.valueOf(gr.isInline())});
                 retryRefs.add(routing.getRetryRef());
             }
-            if (!retryRefs.isEmpty()) {
-                Map<String, Object> participants = new LinkedHashMap<>();
-                for (String rr : retryRefs) participants.put(rr, "user");
-                llmTask.getInputParameters().put("participants", participants);
-            }
         }
 
         loopTasks.add(toolRouter);
+
+        // Merge tool-level guardrail refs
+        guardrailRefs.addAll(toolRoutingResult.getToolGuardrailRefs());
+        retryRefs.addAll(toolRoutingResult.getToolGuardrailRetryRefs());
+
+        // Wire all retry refs into LLM participants
+        if (!retryRefs.isEmpty()) {
+            Map<String, Object> participants = new LinkedHashMap<>();
+            for (String rr : retryRefs) participants.put(rr, "user");
+            llmTask.getInputParameters().put("participants", participants);
+        }
         loopTasks.add(checkTransferTask);
 
         // DoWhile loop
@@ -538,8 +558,8 @@ public class AgentCompiler {
         }
 
         String termCondition = String.format(
-            "if ( $.%s['iteration'] < %d && $.%s['finishReason'] != 'LENGTH' && %s && %s ) { true; } else { false; }",
-            loopRef, maxTurns, llmRef, loopReason, notTransfer
+            "if ( $.%s['iteration'] < %d && ($.%s['finishReason'] == 'LENGTH' || $.%s['finishReason'] == 'MAX_TOKENS' || (%s && %s)) ) { true; } else { false; }",
+            loopRef, maxTurns, llmRef, llmRef, loopReason, notTransfer
         );
 
         Map<String, Object> loopInputs = new LinkedHashMap<>();
@@ -567,11 +587,16 @@ public class AgentCompiler {
         }
         transferSwitch.setDecisionCases(transferCases);
 
-        // Initialize _agent_state workflow variable for ToolContext.state
+        // Initialize workflow variables
+        Map<String, Object> initHybridVars = new LinkedHashMap<>();
+        initHybridVars.put("_agent_state", new LinkedHashMap<>());
+        if (hasApproval) {
+            initHybridVars.put("_human_feedback", "");
+        }
         WorkflowTask initStateHybrid = new WorkflowTask();
         initStateHybrid.setType("SET_VARIABLE");
         initStateHybrid.setTaskReferenceName(config.getName() + "_init_state");
-        initStateHybrid.setInputParameters(Map.of("_agent_state", new LinkedHashMap<>()));
+        initStateHybrid.setInputParameters(initHybridVars);
 
         if (mcpResult != null) {
             List<WorkflowTask> allTasks = new ArrayList<>(mcpResult.getPreTasks());
@@ -744,6 +769,11 @@ public class AgentCompiler {
             // Append code execution instructions (both tool and simple agents)
             if (config.getCodeExecution() != null && config.getCodeExecution().isEnabled()) {
                 instrText += "\n\n" + buildCodeExecInstructions(config);
+            }
+
+            // Append CLI command execution instructions
+            if (config.getCliConfig() != null && config.getCliConfig().isEnabled()) {
+                instrText += "\n\n" + buildCliInstructions(config);
             }
 
             // Planner: enhance instructions with plan-then-execute prompt
@@ -931,10 +961,31 @@ public class AgentCompiler {
         String langs = (languages != null && !languages.isEmpty())
                 ? String.join(", ", languages)
                 : "python, javascript, bash";
-        String msg = "You have code execution capabilities. Use the execute_code tool to write and run code. Supported languages: " + langs + ".";
+        String msg = "You have code execution capabilities. Use the execute_code tool to write and run code. Supported languages: " + langs + "."
+                + " Each execution runs in an isolated environment — no state, variables, or imports persist between calls."
+                + " Always include all necessary imports at the top of every code block (e.g. import subprocess, import os, import json).";
         if (config.getCodeExecution().getAllowedCommands() != null && !config.getCodeExecution().getAllowedCommands().isEmpty()) {
             String cmds = String.join(", ", config.getCodeExecution().getAllowedCommands());
             msg += " Allowed shell commands: " + cmds + ". Do not use other commands.";
+        }
+        return msg;
+    }
+
+    /**
+     * Build CLI command execution instruction text for the system prompt.
+     */
+    private String buildCliInstructions(AgentConfig config) {
+        String msg = "You have CLI command execution capabilities. "
+            + "Use the run_command tool to execute shell commands directly. "
+            + "By default commands run without a shell interpreter (safer). "
+            + "Set shell=True only when you need pipes, redirects, or glob expansion.";
+        if (config.getCliConfig().getAllowedCommands() != null
+                && !config.getCliConfig().getAllowedCommands().isEmpty()) {
+            String cmds = String.join(", ", config.getCliConfig().getAllowedCommands());
+            msg += " Allowed commands: " + cmds + ". Do not use other commands.";
+        }
+        if (!config.getCliConfig().isAllowShell()) {
+            msg += " Shell mode is disabled — do not set shell=True.";
         }
         return msg;
     }

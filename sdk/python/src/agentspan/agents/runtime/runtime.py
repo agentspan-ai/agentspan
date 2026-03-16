@@ -620,6 +620,10 @@ class AgentRuntime:
         if agent.termination:
             names.add(f"{agent.name}_termination")
 
+        # Callable gate (sequential pipeline)
+        if getattr(agent, 'gate', None) is not None and callable(agent.gate):
+            names.add(f"{agent.name}_gate")
+
         # Check transfer (hybrid handoff: agent has tools + sub-agents)
         if agent.tools and agent.agents:
             names.add(f"{agent.name}_check_transfer")
@@ -703,6 +707,10 @@ class AgentRuntime:
             chained = _chain_callbacks_for_position(position, handlers, legacy_fn)
             if chained is not None:
                 self._register_callback_worker(agent.name, position, chained)
+
+        # 3c. Callable gate (sequential pipeline)
+        if getattr(agent, 'gate', None) is not None and callable(agent.gate):
+            self._register_gate_worker(agent.name, agent.gate)
 
         # 4. termination
         if agent.termination:
@@ -924,6 +932,29 @@ class AgentRuntime:
             overwrite_task_def=True,
         )(stop_when_worker)
 
+    def _register_gate_worker(self, agent_name: str, gate_fn) -> None:
+        """Register a callable gate worker for conditional sequential pipelines."""
+        from conductor.client.worker.worker_task import worker_task
+
+        task_name = f"{agent_name}_gate"
+
+        def gate_worker(result: str = "") -> object:
+            try:
+                output = {"result": result}
+                should_continue = gate_fn(output)
+                return {"decision": "continue" if should_continue else "stop"}
+            except Exception as e:
+                logger.error("Gate evaluation failed: %s", e)
+                return {"decision": "continue"}  # safe fallback
+
+        gate_worker.__annotations__ = {"result": str, "return": object}
+        worker_task(
+            task_definition_name=task_name,
+            task_def=_default_task_def(task_name),
+            register_task_def=True,
+            overwrite_task_def=True,
+        )(gate_worker)
+
     def _register_callback_worker(self, agent_name: str, position: str, callback_fn) -> None:
         """Register a before_model or after_model callback worker."""
         from conductor.client.worker.worker_task import worker_task
@@ -1033,6 +1064,26 @@ class AgentRuntime:
         # Parent agent is "0", sub-agents are "1", "2", ...
         name_to_idx = {agent.name: "0"}
         name_to_idx.update({sub.name: str(i + 1) for i, sub in enumerate(agent.agents)})
+        idx_to_name = {v: k for k, v in name_to_idx.items()}
+        allowed = agent.allowed_transitions
+        # Track consecutive blocked transfers per agent to prevent
+        # infinite loops. After max_blocked_retries, exit the loop.
+        max_blocked_retries = 3
+        blocked_counts: dict[str, int] = {}
+
+        def _is_transfer_truthy(val: object) -> bool:
+            if val is True:
+                return True
+            if isinstance(val, str):
+                return val.strip().lower() == "true"
+            return False
+
+        def _is_allowed(source_idx: str, target_name: str) -> bool:
+            """Check if transition is allowed. No constraints → allow all."""
+            if not allowed:
+                return True
+            source_name = idx_to_name.get(source_idx, "")
+            return target_name in allowed.get(source_name, [])
 
         def handoff_check_worker(
             result: str = "",
@@ -1042,10 +1093,22 @@ class AgentRuntime:
             transfer_to: str = "",
         ) -> object:
             # Priority 1: Transfer tool detected
-            if is_transfer is True or is_transfer == "true":
-                target_idx = name_to_idx.get(transfer_to, active_agent)
-                if target_idx != active_agent:
-                    return {"active_agent": target_idx, "handoff": True}
+            if _is_transfer_truthy(is_transfer):
+                if _is_allowed(active_agent, transfer_to):
+                    blocked_counts.pop(active_agent, None)
+                    target_idx = name_to_idx.get(transfer_to, active_agent)
+                    if target_idx != active_agent:
+                        return {"active_agent": target_idx, "handoff": True}
+                elif allowed:
+                    # Transfer blocked — give the agent a few retries to
+                    # self-correct, then exit the loop.
+                    count = blocked_counts.get(active_agent, 0) + 1
+                    blocked_counts[active_agent] = count
+                    if count <= max_blocked_retries:
+                        return {"active_agent": active_agent, "handoff": True}
+                    # Max retries exceeded — exit the loop
+                    blocked_counts.pop(active_agent, None)
+                    return {"active_agent": active_agent, "handoff": False}
 
             # Priority 2: Condition-based handoffs (fallback)
             context = {
@@ -1056,9 +1119,10 @@ class AgentRuntime:
             }
             for cond in handoff_conditions:
                 if cond.should_handoff(context):
-                    target_idx = name_to_idx.get(cond.target, active_agent)
-                    if target_idx != active_agent:
-                        return {"active_agent": target_idx, "handoff": True}
+                    if _is_allowed(active_agent, cond.target):
+                        target_idx = name_to_idx.get(cond.target, active_agent)
+                        if target_idx != active_agent:
+                            return {"active_agent": target_idx, "handoff": True}
 
             # Neither transfer nor condition → loop exits
             return {"active_agent": active_agent, "handoff": False}
@@ -1075,13 +1139,24 @@ class AgentRuntime:
         )(handoff_check_worker)
 
     def _register_swarm_transfer_workers(self, agent: Agent) -> None:
-        """Register no-op transfer_to_<name> workers for swarm agents.
+        """Register transfer_to_<name> workers for swarm agents.
 
         Each agent in the swarm gets transfer tools for its peers.
         The transfer tools are no-ops — the actual handoff is detected
         by check_transfer which inspects toolCalls output.
+
+        When allowed_transitions is set, transfers to targets that no
+        agent is allowed to reach return an error message so the LLM
+        knows to try a different tool.
         """
         from conductor.client.worker.worker_task import worker_task
+
+        # Build set of all valid transfer targets from allowed_transitions
+        allowed = agent.allowed_transitions
+        valid_targets: set[str] = set()
+        if allowed:
+            for targets in allowed.values():
+                valid_targets.update(targets)
 
         all_names = [agent.name] + [sub.name for sub in agent.agents]
         registered = set()
@@ -1094,17 +1169,31 @@ class AgentRuntime:
                     continue
                 registered.add(tool_name)
 
-                def make_worker(tn):
-                    def transfer_worker() -> object:
-                        return {}
-                    transfer_worker.__annotations__ = {"return": object}
+                # If this target is never reachable via allowed_transitions,
+                # return an error message so the LLM knows to stop trying.
+                is_unreachable = allowed and peer_name not in valid_targets
+
+                def make_worker(tn, target, unreachable):
+                    if unreachable:
+                        def transfer_worker() -> str:
+                            return (
+                                f"ERROR: transfer_to_{target} is not available. "
+                                f"Use a different transfer tool, or if you are "
+                                f"done, just provide your final response without "
+                                f"calling any transfer tool."
+                            )
+                        transfer_worker.__annotations__ = {"return": str}
+                    else:
+                        def transfer_worker() -> object:
+                            return {}
+                        transfer_worker.__annotations__ = {"return": object}
                     worker_task(
                         task_definition_name=tn,
                         task_def=_default_task_def(tn),
                         register_task_def=True,
                         overwrite_task_def=True,
                     )(transfer_worker)
-                make_worker(tool_name)
+                make_worker(tool_name, peer_name, is_unreachable)
 
     def _register_manual_selection_worker(self, agent: Agent) -> None:
         """Register a process_selection worker for manual strategy."""
@@ -1799,7 +1888,7 @@ class AgentRuntime:
 
     def _poll_status_until_complete(self, workflow_id: str, *, timeout: Optional[int] = None) -> AgentStatus:
         """Poll ``/api/agent/{id}/status`` until the workflow completes."""
-        effective_timeout = timeout if timeout and timeout > 0 else 300
+        effective_timeout = timeout if timeout and timeout > 0 else 30000
         poll_interval = 1
         elapsed = 0
 
@@ -1818,7 +1907,7 @@ class AgentRuntime:
 
     async def _poll_status_until_complete_async(self, workflow_id: str, *, timeout: Optional[int] = None) -> AgentStatus:
         """Async version of :meth:`_poll_status_until_complete`."""
-        effective_timeout = timeout if timeout and timeout > 0 else 300
+        effective_timeout = timeout if timeout and timeout > 0 else 30000
         poll_interval = 1
         elapsed = 0
 
@@ -3250,7 +3339,7 @@ class AgentRuntime:
                 fr = output.get("finishReason")
                 if fr == "rejected":
                     return FinishReason.REJECTED
-                if fr == "LENGTH":
+                if fr in ("LENGTH", "MAX_TOKENS"):
                     return FinishReason.LENGTH
                 if fr == "tool_calls":
                     return FinishReason.TOOL_CALLS
@@ -3267,7 +3356,7 @@ class AgentRuntime:
         """Extract finishReason from workflow output, with a descriptive message for LENGTH."""
         if hasattr(workflow_run, "output") and isinstance(workflow_run.output, dict):
             fr = workflow_run.output.get("finishReason")
-            if fr == "LENGTH":
+            if fr in ("LENGTH", "MAX_TOKENS"):
                 return (
                     "Token limit reached (finishReason=LENGTH). "
                     "Response may be truncated. Consider increasing max_tokens or reducing prompt size."

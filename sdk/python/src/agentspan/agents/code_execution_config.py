@@ -120,6 +120,8 @@ class CommandValidator:
         "read", "local", "export", "unset", "set", "shift", "return", "exit",
         "true", "false", "test", "[", "[[", "declare", "typeset", "readonly",
         "source", ".", "eval", "exec", "trap", "wait", "break", "continue",
+        "cd", "pushd", "popd", "pwd", "dirs", "hash", "type", "command",
+        "builtin", "enable", "let", "shopt", "complete", "compgen",
     })
 
     def __init__(self, allowed_commands: List[str]) -> None:
@@ -153,7 +155,15 @@ class CommandValidator:
                     )
         return None
 
+    # Heredoc delimiter pattern: << 'WORD' or << WORD or <<- WORD
+    _HEREDOC_RE = re.compile(r"<<-?\s*'?(\w+)'?")
+
     def _validate_bash(self, code: str) -> Optional[str]:
+        # Collect heredoc delimiters so we can skip them as "commands"
+        heredoc_delimiters = set()
+        for m in self._HEREDOC_RE.finditer(code):
+            heredoc_delimiters.add(m.group(1))
+
         # Strip comments
         lines = []
         for line in code.splitlines():
@@ -170,6 +180,8 @@ class CommandValidator:
         for match in self._BASH_COMMAND_RE.finditer(cleaned):
             cmd = match.group(1)
             if cmd in self._BASH_BUILTINS:
+                continue
+            if cmd in heredoc_delimiters:
                 continue
             if cmd not in self.allowed_commands:
                 return (
@@ -199,17 +211,26 @@ def _make_code_execution_tool(
     langs_str = ", ".join(allowed_languages)
 
     @tool(name="execute_code")
-    def execute_code(code: str, language: str = "python") -> str:
+    def execute_code(code: str, language: str = "python") -> dict:
         """Execute code in a sandboxed environment."""
+        # Guard against bad parameters (LLM may omit args or send wrong types)
+        if not code:
+            return {"status": "success", "stdout": "No code provided. Nothing to execute.", "stderr": ""}
+        if not isinstance(code, str):
+            # LLM sometimes sends code as a JSON object instead of a string
+            code = str(code)
+        if not language or not isinstance(language, str):
+            language = "python"
+
         # Validate language
         if language not in allowed_languages:
-            return f"Error: Language '{language}' is not allowed. Allowed: {langs_str}"
+            raise ValueError(f"Language '{language}' is not allowed. Allowed: {langs_str}")
 
         # Validate commands
         if validator:
             error = validator.validate(code, language)
             if error:
-                return f"Error: {error}"
+                raise ValueError(error)
 
         # Execute
         if isinstance(executor, LocalCodeExecutor):
@@ -223,16 +244,25 @@ def _make_code_execution_tool(
         else:
             result = executor.execute(code)
 
-        # Format output
-        parts = []
-        if result.output:
-            parts.append(f"STDOUT:\n{result.output}")
-        if result.error:
-            parts.append(f"STDERR:\n{result.error}")
-        if result.timed_out:
-            parts.append(f"TIMED OUT after {timeout}s")
-        parts.append(f"Exit code: {result.exit_code}")
-        return "\n".join(parts) if parts else "No output."
+        # Always return structured result (never raise on code errors)
+        if result.success:
+            return {
+                "status": "success",
+                "stdout": result.output or "",
+                "stderr": result.error or "",
+            }
+        else:
+            stderr_parts = []
+            if result.error:
+                stderr_parts.append(result.error.rstrip())
+            if result.timed_out:
+                stderr_parts.append(f"TIMED OUT after {timeout}s")
+            stderr_parts.append(f"Exit code: {result.exit_code}")
+            return {
+                "status": "error",
+                "stdout": result.output or "",
+                "stderr": "\n".join(stderr_parts),
+            }
 
     # Build dynamic description
     desc = f"Execute code in a sandboxed environment. Supported languages: {langs_str}. Timeout: {timeout}s."

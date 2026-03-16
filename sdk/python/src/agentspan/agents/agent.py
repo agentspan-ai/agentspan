@@ -96,6 +96,9 @@ class AgentDef:
     allowed_languages: List[str] = field(default_factory=list)
     allowed_commands: List[str] = field(default_factory=list)
     code_execution: Optional[Any] = None
+    cli_commands: bool = False
+    cli_config: Optional[Any] = None
+    cli_allowed_commands: List[str] = field(default_factory=list)
 
 
 # ── @agent decorator ────────────────────────────────────────────────────
@@ -118,6 +121,9 @@ def agent(
     allowed_languages: Optional[List[str]] = None,
     allowed_commands: Optional[List[str]] = None,
     code_execution: Optional[Any] = None,
+    cli_commands: bool = False,
+    cli_config: Optional[Any] = None,
+    cli_allowed_commands: Optional[List[str]] = None,
 ) -> Any:
     """Register a Python function as an agent definition.
 
@@ -166,6 +172,9 @@ def agent(
             allowed_languages=list(allowed_languages) if allowed_languages else [],
             allowed_commands=list(allowed_commands) if allowed_commands else [],
             code_execution=code_execution,
+            cli_commands=cli_commands,
+            cli_config=cli_config,
+            cli_allowed_commands=list(cli_allowed_commands) if cli_allowed_commands else [],
         )
 
         @functools.wraps(fn)
@@ -215,6 +224,9 @@ def _resolve_agent(obj: Any, parent_model: str = "") -> "Agent":
             allowed_languages=ad.allowed_languages or None,
             allowed_commands=ad.allowed_commands or None,
             code_execution=ad.code_execution,
+            cli_commands=ad.cli_commands,
+            cli_config=ad.cli_config,
+            cli_allowed_commands=ad.cli_allowed_commands or None,
         )
     raise TypeError(
         f"Expected an Agent or @agent-decorated function, "
@@ -320,6 +332,9 @@ class Agent:
         allowed_languages: Optional[List[str]] = None,
         allowed_commands: Optional[List[str]] = None,
         code_execution: Optional[Any] = None,
+        cli_commands: bool = False,
+        cli_allowed_commands: Optional[List[str]] = None,
+        cli_config: Optional[Any] = None,
         planner: bool = False,
         callbacks: Optional[List[Any]] = None,
         before_agent_callback: Optional[Callable[..., Any]] = None,
@@ -329,6 +344,7 @@ class Agent:
         include_contents: Optional[str] = None,
         thinking_budget_tokens: Optional[int] = None,
         required_tools: Optional[List[str]] = None,
+        gate: Optional[Any] = None,
     ) -> None:
         if not name or not isinstance(name, str):
             raise ValueError("Agent name must be a non-empty string")
@@ -411,7 +427,7 @@ class Agent:
         self.include_contents = include_contents
         self.thinking_budget_tokens = thinking_budget_tokens
         self.required_tools: List[str] = list(required_tools) if required_tools else []
-
+        self.gate = gate
         # ── Code execution setup ─────────────────────────────────────
         self.code_execution_config: Optional[Any] = None
         if code_execution is not None:
@@ -429,6 +445,22 @@ class Agent:
             )
         if self.code_execution_config and self.code_execution_config.enabled:
             self._attach_code_execution_tool()
+
+        # ── CLI command execution setup ───────────────────────────────
+        self.cli_config: Optional[Any] = None
+        if cli_config is not None:
+            self.cli_config = cli_config
+        elif cli_commands:
+            from agentspan.agents.cli_config import CliConfig
+            self.cli_config = CliConfig(
+                allowed_commands=(
+                    list(cli_allowed_commands) if cli_allowed_commands
+                    else list(allowed_commands) if allowed_commands
+                    else []
+                ),
+            )
+        if self.cli_config and self.cli_config.enabled:
+            self._attach_cli_tool()
 
     def _attach_code_execution_tool(self) -> None:
         """Auto-create and attach a code execution tool from config."""
@@ -453,6 +485,19 @@ class Agent:
             timeout=cfg.timeout,
         )
         self.tools.append(code_tool)
+
+    def _attach_cli_tool(self) -> None:
+        """Auto-create and attach a CLI command execution tool from config."""
+        from agentspan.agents.cli_config import _make_cli_tool
+
+        cfg = self.cli_config
+        self.tools.append(_make_cli_tool(
+            allowed_commands=cfg.allowed_commands,
+            timeout=cfg.timeout,
+            working_dir=cfg.working_dir,
+            allow_shell=cfg.allow_shell,
+            guardrails=cfg.guardrails if cfg.guardrails else None,
+        ))
 
     # ── External detection ────────────────────────────────────────────
 

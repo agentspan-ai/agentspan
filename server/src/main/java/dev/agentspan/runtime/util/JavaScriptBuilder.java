@@ -95,6 +95,26 @@ public class JavaScriptBuilder {
     }
 
     /**
+     * Build JavaScript that formats tool call inputs into a readable string for guardrail evaluation.
+     *
+     * <p>Input: {@code $.tool_calls} — array of {@code {name, input}} objects.
+     * Output: {@code {formatted: "Tool: name\nArguments: {...}\n---\n...", count: N}}
+     */
+    public static String formatToolCallsScript() {
+        return iife(
+            "  var tcs = $.tool_calls || [];" +
+            "  var lines = [];" +
+            "  for (var i = 0; i < tcs.length; i++) {" +
+            "    var tc = tcs[i];" +
+            "    lines.push('Tool: ' + tc.name);" +
+            "    lines.push('Arguments: ' + JSON.stringify(tc.input || {}));" +
+            "    lines.push('---');" +
+            "  }" +
+            "  return {formatted: lines.join('\\n'), count: tcs.length};"
+        );
+    }
+
+    /**
      * Build the guardrail retry feedback JavaScript.
      */
     public static String guardrailRetryScript() {

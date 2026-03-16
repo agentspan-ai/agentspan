@@ -7,6 +7,7 @@ package dev.agentspan.runtime.compiler;
 
 import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
 import org.junit.jupiter.api.Test;
+import dev.agentspan.runtime.model.GuardrailConfig;
 import dev.agentspan.runtime.model.ToolConfig;
 
 import java.util.List;
@@ -206,5 +207,122 @@ class ToolCompilerTest {
         assertThat(script).contains("\"retryCount\":5");
         assertThat(script).contains("\"retryDelaySeconds\":10");
         assertThat(script).contains("\"optional\":false");
+    }
+
+    // ── Tool-level guardrail tests ──────────────────────────────────────
+
+    @Test
+    void testBuildToolCallRoutingWithResult_hasGuardrails() {
+        GuardrailConfig guard = GuardrailConfig.builder()
+            .name("no_dangerous_cmds")
+            .guardrailType("regex")
+            .position("input")
+            .onFail("raise")
+            .patterns(List.of("rm\\s+-rf"))
+            .mode("block")
+            .build();
+
+        ToolConfig tool = ToolConfig.builder()
+            .name("run_command")
+            .description("Run a CLI command")
+            .inputSchema(Map.of("type", "object"))
+            .toolType("worker")
+            .guardrails(List.of(guard))
+            .build();
+
+        ToolCompiler tc = new ToolCompiler();
+        ToolCompiler.ToolCallRoutingResult result =
+            tc.buildToolCallRoutingWithResult("agent", "agent_llm", List.of(tool), false, "openai/gpt-4o");
+
+        // Should have a router task
+        assertThat(result.getRouterTask().getType()).isEqualTo("SWITCH");
+
+        // Should have guardrail refs
+        assertThat(result.getToolGuardrailRefs()).hasSize(1);
+        assertThat(result.getToolGuardrailRetryRefs()).hasSize(1);
+
+        // tool_call case should contain format + guardrail tasks before fork chain
+        List<WorkflowTask> toolCallTasks = result.getRouterTask().getDecisionCases().get("tool_call");
+        assertThat(toolCallTasks).isNotEmpty();
+
+        // First task should be the format_tool_calls INLINE
+        assertThat(toolCallTasks.get(0).getTaskReferenceName()).isEqualTo("agent_format_tool_calls");
+        assertThat(toolCallTasks.get(0).getType()).isEqualTo("INLINE");
+    }
+
+    @Test
+    void testBuildToolCallRoutingWithResult_noGuardrails() {
+        ToolConfig tool = ToolConfig.builder()
+            .name("search")
+            .description("Search")
+            .inputSchema(Map.of("type", "object"))
+            .toolType("worker")
+            .build();
+
+        ToolCompiler tc = new ToolCompiler();
+        ToolCompiler.ToolCallRoutingResult result =
+            tc.buildToolCallRoutingWithResult("agent", "agent_llm", List.of(tool), false, "");
+
+        // No guardrails -> empty refs
+        assertThat(result.getToolGuardrailRefs()).isEmpty();
+        assertThat(result.getToolGuardrailRetryRefs()).isEmpty();
+
+        // tool_call case should start with enrich (not format_tool_calls)
+        List<WorkflowTask> toolCallTasks = result.getRouterTask().getDecisionCases().get("tool_call");
+        assertThat(toolCallTasks.get(0).getTaskReferenceName()).contains("enrich_tools");
+    }
+
+    @Test
+    void testBuildToolCallRoutingWithResult_guardrailsBeforeApproval() {
+        GuardrailConfig guard = GuardrailConfig.builder()
+            .name("block_sudo")
+            .guardrailType("regex")
+            .position("input")
+            .onFail("raise")
+            .patterns(List.of("sudo"))
+            .mode("block")
+            .build();
+
+        ToolConfig guardedTool = ToolConfig.builder()
+            .name("run_command")
+            .description("Run a CLI command")
+            .inputSchema(Map.of("type", "object"))
+            .toolType("worker")
+            .guardrails(List.of(guard))
+            .approvalRequired(true)
+            .build();
+
+        ToolCompiler tc = new ToolCompiler();
+        ToolCompiler.ToolCallRoutingResult result =
+            tc.buildToolCallRoutingWithResult("agent", "agent_llm", List.of(guardedTool), true, "openai/gpt-4o");
+
+        List<WorkflowTask> toolCallTasks = result.getRouterTask().getDecisionCases().get("tool_call");
+
+        // First task: format_tool_calls (guardrails come first)
+        assertThat(toolCallTasks.get(0).getTaskReferenceName()).isEqualTo("agent_format_tool_calls");
+
+        // Approval tasks should come after guardrail tasks
+        WorkflowTask checkApproval = findTaskByRef(toolCallTasks, "agent_check_approval");
+        assertThat(checkApproval).isNotNull();
+
+        // Verify guardrail refs are populated
+        assertThat(result.getToolGuardrailRefs()).hasSize(1);
+    }
+
+    @Test
+    void testBuildToolCallRoutingWithResult_backwardCompatible() {
+        // Existing buildToolCallRouting should still work (returns just the task)
+        ToolConfig tool = ToolConfig.builder()
+            .name("search")
+            .description("Search")
+            .inputSchema(Map.of("type", "object"))
+            .toolType("worker")
+            .build();
+
+        ToolCompiler tc = new ToolCompiler();
+        WorkflowTask router = tc.buildToolCallRouting("agent", "agent_llm", List.of(tool), false, "");
+
+        assertThat(router.getType()).isEqualTo("SWITCH");
+        assertThat(router.getDecisionCases()).containsKey("tool_call");
     }
 }

@@ -67,10 +67,8 @@ public class GuardrailCompiler {
     public List<GuardrailTaskResult> compileGuardrailTasks(
             List<GuardrailConfig> guardrails, String agentName, String contentRef) {
 
-        List<GuardrailTaskResult> results = new ArrayList<>();
-
         if (guardrails == null || guardrails.isEmpty()) {
-            return results;
+            return new ArrayList<>();
         }
 
         // Filter to output guardrails only
@@ -79,22 +77,55 @@ public class GuardrailCompiler {
                 .toList();
 
         if (outputGuardrails.isEmpty()) {
-            return results;
+            return new ArrayList<>();
         }
 
         String iterationRef = "${" + agentName + "_loop.iteration}";
+        return compileGuardrailTasksInternal(outputGuardrails, agentName, contentRef, iterationRef);
+    }
 
-        for (GuardrailConfig guard : outputGuardrails) {
+    /**
+     * Compile tool-level guardrails into workflow tasks.
+     *
+     * <p>Unlike {@link #compileGuardrailTasks}, this method does not filter by position
+     * and uses a {@code "_tool"} prefix in ref names to avoid collisions with agent-level
+     * guardrails.</p>
+     *
+     * @param guardrails  List of guardrail configurations from tool definitions.
+     * @param agentName   Name of the owning agent.
+     * @param contentRef  Conductor expression referencing the formatted tool call content.
+     * @return List of {@link GuardrailTaskResult} entries, one per guardrail.
+     */
+    public List<GuardrailTaskResult> compileToolGuardrailTasks(
+            List<GuardrailConfig> guardrails, String agentName, String contentRef) {
+
+        if (guardrails == null || guardrails.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // Tool guardrails use a fixed iteration ref since retry is handled by the outer DoWhile
+        return compileGuardrailTasksInternal(guardrails, agentName + "_tool", contentRef, "1");
+    }
+
+    /**
+     * Internal helper that compiles guardrails without position filtering.
+     */
+    private List<GuardrailTaskResult> compileGuardrailTasksInternal(
+            List<GuardrailConfig> guardrails, String prefix, String contentRef, String iterationRef) {
+
+        List<GuardrailTaskResult> results = new ArrayList<>();
+
+        for (GuardrailConfig guard : guardrails) {
             String type = guard.getGuardrailType();
             if (type == null) {
                 continue;
             }
 
             switch (type) {
-                case "regex" -> results.add(compileRegexGuardrail(guard, agentName, contentRef, iterationRef));
-                case "llm" -> results.add(compileLlmGuardrail(guard, agentName, contentRef, iterationRef));
-                case "custom" -> results.add(compileCustomGuardrail(guard, agentName, contentRef, iterationRef));
-                case "external" -> results.add(compileExternalGuardrail(guard, agentName, contentRef, iterationRef));
+                case "regex" -> results.add(compileRegexGuardrail(guard, prefix, contentRef, iterationRef));
+                case "llm" -> results.add(compileLlmGuardrail(guard, prefix, contentRef, iterationRef));
+                case "custom" -> results.add(compileCustomGuardrail(guard, prefix, contentRef, iterationRef));
+                case "external" -> results.add(compileExternalGuardrail(guard, prefix, contentRef, iterationRef));
             }
         }
 
