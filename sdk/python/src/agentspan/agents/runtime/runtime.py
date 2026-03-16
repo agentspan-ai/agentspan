@@ -194,7 +194,6 @@ class AgentRuntime:
         server_url: Optional[str] = None,
         api_key: Optional[str] = None,
         api_secret: Optional[str] = None,
-        native: Optional[bool] = None,
         config: Optional[Any] = None,
     ) -> None:
         from agentspan.agents.runtime.config import AgentConfig
@@ -209,21 +208,7 @@ class AgentRuntime:
             overrides["auth_key"] = api_key
         if api_secret is not None:
             overrides["auth_secret"] = api_secret
-        if native is not None:
-            overrides["native"] = native
         self._config = replace(base, **overrides) if overrides else base
-
-        # Native mode — bypass server/Conductor entirely
-        if self._config.native:
-            self._compiled_workflows: Dict[str, Any] = {}
-            self._workers_started = False
-            self._registered_tool_names: set = set()
-            self._shutdown_lock = threading.Lock()
-            self._is_shutdown = False
-            self._worker_manager = None
-            self._http = None
-            logger.info("AgentRuntime initialized (native mode)")
-            return
 
         # Auto-start the server if it targets localhost and is not responding.
         if self._config.auto_start_server:
@@ -1479,17 +1464,6 @@ class AgentRuntime:
         from agentspan.agents.frameworks.serializer import detect_framework
         framework = detect_framework(agent)
 
-        # Native mode — run via framework SDK directly
-        if self._config.native:
-            if framework is None:
-                raise ValueError("native=True requires a framework agent (e.g. OpenAI)")
-            if framework != "openai":
-                raise ValueError(
-                    f"Native mode only supports OpenAI agents, got {framework!r}"
-                )
-            from agentspan.agents.runtime.native import run_openai_native
-            return run_openai_native(agent, str(prompt))
-
         if framework is not None:
             return self._run_framework(
                 agent, framework, prompt,
@@ -2095,8 +2069,6 @@ class AgentRuntime:
         Returns:
             An :class:`AgentHandle`.
         """
-        if self._config.native:
-            raise NotImplementedError("start() not supported in native mode")
         # Check for foreign framework agent
         from agentspan.agents.frameworks.serializer import detect_framework
         framework = detect_framework(agent)
@@ -2161,8 +2133,6 @@ class AgentRuntime:
         Returns:
             An :class:`AgentStream`.
         """
-        if self._config.native:
-            raise NotImplementedError("stream() not supported in native mode")
         if handle is not None:
             event_iter = self._stream_workflow(handle.workflow_id)
             return AgentStream(handle=handle, event_iterator=event_iter)
@@ -2410,17 +2380,6 @@ class AgentRuntime:
         # Foreign framework check
         from agentspan.agents.frameworks.serializer import detect_framework
         framework = detect_framework(agent)
-
-        # Native mode — run via framework SDK directly
-        if self._config.native:
-            if framework is None:
-                raise ValueError("native=True requires a framework agent (e.g. OpenAI)")
-            if framework != "openai":
-                raise ValueError(
-                    f"Native mode only supports OpenAI agents, got {framework!r}"
-                )
-            from agentspan.agents.runtime.native import run_openai_native_async
-            return await run_openai_native_async(agent, str(prompt))
 
         if framework is not None:
             return await self._run_framework_async(

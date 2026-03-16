@@ -77,7 +77,6 @@ class AgentConfig:
     daemon_workers: bool = True
     auto_register_integrations: bool = False
     streaming_enabled: bool = True
-    native: bool = False
 
     @classmethod
     def from_env(cls) -> AgentConfig:
@@ -95,7 +94,6 @@ class AgentConfig:
             daemon_workers=_env_bool("AGENTSPAN_DAEMON_WORKERS", True),
             auto_register_integrations=_env_bool("AGENTSPAN_INTEGRATIONS_AUTO_REGISTER", False),
             streaming_enabled=_env_bool("AGENTSPAN_STREAMING_ENABLED", True),
-            native=_env_bool("AGENTSPAN_NATIVE", False),
         )
 
     @property

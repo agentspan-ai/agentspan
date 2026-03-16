@@ -24,6 +24,7 @@ def run_sequential(
     retries: int,
     last_run: dict,
     last_run_lock: threading.Lock,
+    native: bool = False,
 ) -> list[ExampleResult]:
     all_results = []
     total = len(examples)
@@ -32,7 +33,7 @@ def run_sequential(
         name = example.name
         print(f"  [{i}/{total}] {name:<45s}", end="", flush=True)
 
-        results = run_example_all(example, timeout, retries, models=active_models)
+        results = run_example_all(example, timeout, retries, models=active_models, native=native)
         match, confidence, notes = compute_match(results)
 
         er = ExampleResult(
@@ -67,6 +68,7 @@ def run_parallel(
     server_urls: dict[str, str] | None,
     last_run: dict,
     last_run_lock: threading.Lock,
+    native: bool = False,
 ) -> list[ExampleResult]:
     abort_event = threading.Event()
     all_results: list[ExampleResult] = []
@@ -104,7 +106,8 @@ def run_parallel(
             if abort_event.is_set():
                 return None
             results = run_example_all(
-                example, timeout, retries, models=active_models, server_urls=server_urls
+                example, timeout, retries, models=active_models, server_urls=server_urls,
+                native=native,
             )
             if abort_event.is_set():
                 return None

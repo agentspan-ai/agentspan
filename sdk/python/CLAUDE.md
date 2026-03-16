@@ -24,6 +24,9 @@
 - Run judge: `uv run python3 -m validation.scripts.judge_results`
 - Groups defined in `validation/groups.py` — use `--group=NAME` to filter.
 - Quick smoke test: `--group=SMOKE_TEST`
+- Native mode (no server): `--native` — runs via framework SDK directly, bypasses Conductor
+  - `uv run python3 -m validation.scripts.run_examples --group=SMOKE_TEST --native --only openai`
+  - Shim: `uv run python3 -m validation.native.shim <example_script.py>`
 
 ### Judge Config
 

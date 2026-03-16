@@ -78,6 +78,9 @@ def main():
     )
     parser.add_argument("--list-groups", action="store_true", help="List available groups and exit")
     parser.add_argument(
+        "--native", action="store_true", help="Run via framework SDK directly (no Conductor server)"
+    )
+    parser.add_argument(
         "--format", type=str, choices=["csv", "json"], default="csv", help="Output format"
     )
     parser.add_argument(
@@ -179,7 +182,7 @@ def main():
         print("=" * 50)
         print(" DRY RUN — no examples will be executed")
         print("=" * 50)
-        print(f"\n  Mode: {'parallel' if args.parallel else 'sequential'}")
+        print(f"\n  Mode: {'native' if args.native else ('parallel' if args.parallel else 'sequential')}")
         print(f"  Models ({len(active_models)}):")
         if args.parallel:
             port = args.base_port
@@ -200,7 +203,7 @@ def main():
         return
 
     # Banner
-    mode = "parallel" if args.parallel else "sequential"
+    mode = "native" if args.native else ("parallel" if args.parallel else "sequential")
     group_label = f" (group: {args.group})" if args.group else ""
     print("=" * 50)
     print(f" Validation: {len(examples)} examples × {len(active_models)} models{group_label}")
@@ -224,7 +227,7 @@ def main():
             reused = "reused" if not srv.we_started else "started"
             print(f"  {name}: {url} ({reused})")
         print()
-    else:
+    elif not args.native:
         if not check_server_health():
             print("ERROR: Server not reachable. Start it first.", file=sys.stderr)
             sys.exit(1)
@@ -250,6 +253,7 @@ def main():
                 server_urls,
                 last_run,
                 last_run_lock,
+                native=args.native,
             )
         else:
             all_results = run_sequential(
@@ -262,6 +266,7 @@ def main():
                 args.retries,
                 last_run,
                 last_run_lock,
+                native=args.native,
             )
     finally:
         if pool:

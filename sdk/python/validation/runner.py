@@ -8,9 +8,11 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from .config import MODELS
+from .config import MODELS, SCRIPT_DIR
 from .models import Example, RunResult
 from .parsing import parse_output
+
+_PROJECT_ROOT = str(SCRIPT_DIR.parent)
 
 
 def _decode(val: str | bytes | None) -> str:
@@ -42,6 +44,7 @@ def run_example(
     timeout: int,
     retries: int,
     server_url: str | None = None,
+    native: bool = False,
 ) -> RunResult:
     env = os.environ.copy()
     env["AGENTSPAN_LLM_MODEL"] = model_id
@@ -61,13 +64,18 @@ def run_example(
     for attempt in range(1 + retries):
         start = time.monotonic()
         try:
+            cmd = (
+                [sys.executable, "-m", "validation.native.shim", str(example.path)]
+                if native
+                else [sys.executable, str(example.path)]
+            )
             proc = subprocess.run(
-                [sys.executable, str(example.path)],
+                cmd,
                 capture_output=True,
                 text=True,
                 timeout=timeout,
                 env=env,
-                cwd=str(example.cwd),
+                cwd=_PROJECT_ROOT if native else str(example.cwd),
                 input=stdin_data,
             )
             duration = time.monotonic() - start
@@ -90,6 +98,7 @@ def run_example_all(
     retries: int,
     models: dict[str, str] | None = None,
     server_urls: dict[str, str] | None = None,
+    native: bool = False,
 ) -> dict[str, RunResult]:
     active_models = models or MODELS
     results = {}
@@ -103,6 +112,7 @@ def run_example_all(
                 timeout,
                 retries,
                 server_url=(server_urls or {}).get(name),
+                native=native,
             ): name
             for name, model_id in active_models.items()
         }

@@ -1,7 +1,4 @@
-# Copyright (c) 2025 Agentspan
-# Licensed under the MIT License. See LICENSE file in the project root for details.
-
-"""Native execution — run framework agents via their own SDK, bypassing Conductor."""
+"""Native OpenAI execution — run agents via their SDK, bypassing Conductor."""
 
 from __future__ import annotations
 
@@ -16,7 +13,7 @@ from agentspan.agents.result import (
     TokenUsage,
 )
 
-logger = logging.getLogger("agentspan.agents.runtime.native")
+logger = logging.getLogger("validation.native.openai_runner")
 
 
 # ── OpenAI native runner ────────────────────────────────────────────────
@@ -24,7 +21,7 @@ logger = logging.getLogger("agentspan.agents.runtime.native")
 
 def run_openai_native(agent_obj: Any, prompt: str) -> AgentResult:
     """Run an OpenAI agent natively via ``agents.Runner.run_sync()``."""
-    from agents import Runner, RunConfig
+    from agents import RunConfig, Runner
     from agents.exceptions import (
         InputGuardrailTripwireTriggered,
         MaxTurnsExceeded,
@@ -73,7 +70,7 @@ def run_openai_native(agent_obj: Any, prompt: str) -> AgentResult:
 
 async def run_openai_native_async(agent_obj: Any, prompt: str) -> AgentResult:
     """Run an OpenAI agent natively via ``agents.Runner.run()`` (async)."""
-    from agents import Runner, RunConfig
+    from agents import RunConfig, Runner
     from agents.exceptions import (
         InputGuardrailTripwireTriggered,
         MaxTurnsExceeded,
@@ -154,7 +151,9 @@ def _strip_model_prefix(agent_obj: Any) -> Any:
                 new_tools.append(
                     stripped.as_tool(
                         tool_name=getattr(t, "tool_name", getattr(t, "name", "")),
-                        tool_description=getattr(t, "tool_description", getattr(t, "description", "")),
+                        tool_description=getattr(
+                            t, "tool_description", getattr(t, "description", "")
+                        ),
                     )
                 )
             else:
