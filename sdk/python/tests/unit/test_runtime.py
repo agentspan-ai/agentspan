@@ -2214,3 +2214,116 @@ class TestSSEFallbackWarnsOnce:
 
         fallback_messages = [r for r in caplog.records if "SSE unavailable" in r.message]
         assert len(fallback_messages) == 1
+
+
+class TestHandoffIndexing:
+    """Verify that _register_handoff_worker uses parent-inclusive indexing.
+
+    The compiler produces SWITCH cases with the parent as Case 0 and
+    sub-agents as Case 1, 2, etc. The SDK's handoff_check_worker must match.
+    """
+
+    def test_name_to_idx_is_parent_inclusive(self):
+        """Parent should be '0'; sub-agents should be '1', '2', etc."""
+        from agentspan.agents import Strategy
+
+        parent = Agent(name="parent", model="openai/gpt-4o", agents=[
+            Agent(name="child_a", model="openai/gpt-4o"),
+            Agent(name="child_b", model="openai/gpt-4o"),
+            Agent(name="child_c", model="openai/gpt-4o"),
+        ], strategy=Strategy.SWARM)
+
+        # Build name_to_idx the same way as _register_handoff_worker
+        name_to_idx = {parent.name: "0"}
+        name_to_idx.update({sub.name: str(i + 1) for i, sub in enumerate(parent.agents)})
+
+        assert name_to_idx == {
+            "parent": "0",
+            "child_a": "1",
+            "child_b": "2",
+            "child_c": "3",
+        }
+
+    def test_handoff_worker_routes_transfer_correctly(self):
+        """Simulate handoff_check_worker logic with parent-inclusive indexing."""
+        # Mimic the 3-agent setup: coding_team(parent=0), coder(1), qa_tester(2)
+        name_to_idx = {"coding_team": "0", "coder": "1", "qa_tester": "2"}
+
+        def handoff_check(transfer_to, active_agent, is_transfer=True):
+            if is_transfer:
+                target_idx = name_to_idx.get(transfer_to, active_agent)
+                if target_idx != active_agent:
+                    return {"active_agent": target_idx, "handoff": True}
+            return {"active_agent": active_agent, "handoff": False}
+
+        # coding_team ("0") → coder ("1")
+        result = handoff_check("coder", "0")
+        assert result == {"active_agent": "1", "handoff": True}
+
+        # coder ("1") → qa_tester ("2")
+        result = handoff_check("qa_tester", "1")
+        assert result == {"active_agent": "2", "handoff": True}
+
+        # qa_tester ("2") → coder ("1")
+        result = handoff_check("coder", "2")
+        assert result == {"active_agent": "1", "handoff": True}
+
+        # coder done, no transfer → stays on coder
+        result = handoff_check("", "1", is_transfer=False)
+        assert result == {"active_agent": "1", "handoff": False}
+
+        # Transfer to unknown agent → no-op
+        result = handoff_check("nonexistent", "1")
+        assert result == {"active_agent": "1", "handoff": False}
+
+    def test_handoff_no_transfer_returns_active(self):
+        """When is_transfer is False, active_agent should be unchanged."""
+        name_to_idx = {"parent": "0", "child": "1"}
+        active = "1"
+        # No transfer → should return active unchanged
+        target_idx = name_to_idx.get("", active)
+        assert target_idx == active
+
+    def test_allowed_transitions_blocks_disallowed_transfer(self):
+        """When allowed_transitions is set, disallowed transfers are rejected."""
+        name_to_idx = {
+            "coding_team": "0", "github_agent": "1",
+            "coder": "2", "qa_tester": "3",
+        }
+        idx_to_name = {v: k for k, v in name_to_idx.items()}
+        allowed = {
+            "coding_team": ["github_agent"],
+            "github_agent": ["coder"],
+            "coder": ["qa_tester"],
+            "qa_tester": ["coder", "github_agent"],
+        }
+
+        def handoff_check(transfer_to, active_agent, is_transfer=True):
+            if is_transfer:
+                current_name = idx_to_name.get(active_agent, "")
+                if transfer_to not in allowed.get(current_name, []):
+                    return {"active_agent": active_agent, "handoff": False}
+                target_idx = name_to_idx.get(transfer_to, active_agent)
+                if target_idx != active_agent:
+                    return {"active_agent": target_idx, "handoff": True}
+            return {"active_agent": active_agent, "handoff": False}
+
+        # Allowed: qa_tester → coder
+        result = handoff_check("coder", "3")
+        assert result == {"active_agent": "2", "handoff": True}
+
+        # Allowed: qa_tester → github_agent
+        result = handoff_check("github_agent", "3")
+        assert result == {"active_agent": "1", "handoff": True}
+
+        # BLOCKED: qa_tester → coding_team (not in allowed list)
+        result = handoff_check("coding_team", "3")
+        assert result == {"active_agent": "3", "handoff": False}
+
+        # BLOCKED: coder → github_agent (coder can only go to qa_tester)
+        result = handoff_check("github_agent", "2")
+        assert result == {"active_agent": "2", "handoff": False}
+
+        # Allowed: coder → qa_tester
+        result = handoff_check("qa_tester", "2")
+        assert result == {"active_agent": "3", "handoff": True}

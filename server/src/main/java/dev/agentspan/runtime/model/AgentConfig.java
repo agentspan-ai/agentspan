@@ -75,6 +75,7 @@ public class AgentConfig {
     private String introduction;
     private Map<String, Object> metadata;
     private CodeExecutionConfig codeExecution;
+    private CliConfig cliConfig;
 
     /**
      * Controls whether parent conversation context is passed to this sub-agent.
@@ -90,6 +91,12 @@ public class AgentConfig {
 
     /** Tools that must be called before the agent can complete. */
     private List<String> requiredTools;
+
+    /**
+     * Gate condition for conditional sequential pipelines.
+     * Can be a Map (declarative, e.g. text_contains) or a WorkerRef (callable).
+     */
+    private Map<String, Object> gate;
 
     /** Whether this is an external agent (no model, references existing workflow). */
     @Builder.Default

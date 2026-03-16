@@ -100,6 +100,16 @@ Do NOT rely solely on mock-based unit tests. Every feature that involves HTTP en
 - AI providers disabled
 - Random server port
 
+## Model Context Windows
+
+The `ModelContextWindows` utility (`src/main/java/dev/agentspan/runtime/util/ModelContextWindows.java`) maps model names to context window sizes (tokens) for proactive context condensation. When adding new models or updating capacities, use these authoritative sources:
+
+- **OpenAI:** https://developers.openai.com/api/docs/models
+- **Anthropic Claude:** https://platform.claude.com/docs/en/about-claude/models/overview
+- **Google Gemini:** https://ai.google.dev/gemini-api/docs/models
+
+Update the static defaults in `ModelContextWindows.java`. Users can also override at runtime via application properties or env vars — see `application.properties`.
+
 ## Validation Checklist
 
 Before merging any change:

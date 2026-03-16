@@ -181,9 +181,8 @@ class TestMakeCodeExecutionTool:
             allowed_commands=[],
             timeout=10,
         )
-        result = tool_fn("print('hi')", language="ruby")
-        assert "Error" in result
-        assert "ruby" in result
+        with pytest.raises(ValueError, match="ruby"):
+            tool_fn("print('hi')", language="ruby")
 
     def test_tool_rejects_disallowed_command(self):
         executor = LocalCodeExecutor(language="python", timeout=10)
@@ -193,9 +192,8 @@ class TestMakeCodeExecutionTool:
             allowed_commands=["pip"],
             timeout=10,
         )
-        result = tool_fn("subprocess.run(['rm', '-rf', '/'])", language="python")
-        assert "Error" in result
-        assert "rm" in result
+        with pytest.raises(ValueError, match="rm"):
+            tool_fn("subprocess.run(['rm', '-rf', '/'])", language="python")
 
     def test_tool_executes_python(self):
         executor = LocalCodeExecutor(language="python", timeout=10)
@@ -206,8 +204,9 @@ class TestMakeCodeExecutionTool:
             timeout=10,
         )
         result = tool_fn("print('hello world')", language="python")
-        assert "hello world" in result
-        assert "Exit code: 0" in result
+        assert result["status"] == "success"
+        assert "hello world" in result["stdout"]
+        assert result["stderr"] == ""
 
     def test_tool_executes_bash(self):
         executor = LocalCodeExecutor(language="bash", timeout=10)
@@ -218,8 +217,8 @@ class TestMakeCodeExecutionTool:
             timeout=10,
         )
         result = tool_fn("echo 'hello bash'", language="bash")
-        assert "hello bash" in result
-        assert "Exit code: 0" in result
+        assert result["status"] == "success"
+        assert "hello bash" in result["stdout"]
 
     def test_tool_reports_errors(self):
         executor = LocalCodeExecutor(language="python", timeout=10)
@@ -230,8 +229,21 @@ class TestMakeCodeExecutionTool:
             timeout=10,
         )
         result = tool_fn("raise ValueError('boom')", language="python")
-        assert "Exit code:" in result
-        assert "STDERR" in result
+        assert result["status"] == "error"
+        assert "Exit code:" in result["stderr"]
+
+    def test_tool_empty_code_returns_dict(self):
+        executor = LocalCodeExecutor(language="python", timeout=10)
+        tool_fn = _make_code_execution_tool(
+            executor=executor,
+            allowed_languages=["python"],
+            allowed_commands=[],
+            timeout=10,
+        )
+        result = tool_fn("", language="python")
+        assert result["status"] == "success"
+        assert "No code provided" in result["stdout"]
+        assert result["stderr"] == ""
 
 
 # ── Agent integration ──────────────────────────────────────────────────

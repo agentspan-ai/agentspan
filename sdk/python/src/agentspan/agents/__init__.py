@@ -104,6 +104,7 @@ from agentspan.agents.semantic_memory import MemoryEntry, MemoryStore, SemanticM
 
 # Code execution
 from agentspan.agents.code_execution_config import CodeExecutionConfig
+from agentspan.agents.cli_config import CliConfig
 from agentspan.agents.code_executor import (
     CodeExecutor,
     DockerCodeExecutor,
@@ -199,6 +200,7 @@ __all__ = [
     "MemoryEntry",
     # Code execution
     "CodeExecutionConfig",
+    "CliConfig",
     "CodeExecutor",
     "LocalCodeExecutor",
     "DockerCodeExecutor",

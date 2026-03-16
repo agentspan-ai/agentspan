@@ -209,6 +209,143 @@ class TestAgentConfigSerializer:
 
         assert config["memory"]["messages"] == [{"role": "system", "message": "context"}]
 
+    def test_serialize_gate_text(self):
+        """TextGate serializes to text_contains config."""
+        from agentspan.agents.agent import Agent
+        from agentspan.agents.gate import TextGate
+
+        agent = Agent(
+            name="fetcher",
+            model="openai/gpt-4o",
+            gate=TextGate("NO_OPEN_ISSUES"),
+        )
+        config = self.serializer.serialize(agent)
+
+        assert config["gate"]["type"] == "text_contains"
+        assert config["gate"]["text"] == "NO_OPEN_ISSUES"
+        assert config["gate"]["caseSensitive"] is True
+
+    def test_serialize_gate_text_case_insensitive(self):
+        """TextGate with case_sensitive=False serializes correctly."""
+        from agentspan.agents.agent import Agent
+        from agentspan.agents.gate import TextGate
+
+        agent = Agent(
+            name="fetcher",
+            model="openai/gpt-4o",
+            gate=TextGate("stop", case_sensitive=False),
+        )
+        config = self.serializer.serialize(agent)
+
+        assert config["gate"]["type"] == "text_contains"
+        assert config["gate"]["caseSensitive"] is False
+
+    def test_serialize_gate_callable(self):
+        """Callable gate serializes as worker reference."""
+        from agentspan.agents.agent import Agent
+
+        agent = Agent(
+            name="fetcher",
+            model="openai/gpt-4o",
+            gate=lambda output: "STOP" not in (output.get("result") or ""),
+        )
+        config = self.serializer.serialize(agent)
+
+        assert config["gate"]["taskName"] == "fetcher_gate"
+
+    def test_gate_not_serialized_when_none(self):
+        """Gate is not included when not set."""
+        from agentspan.agents.agent import Agent
+
+        agent = Agent(name="test", model="openai/gpt-4o")
+        config = self.serializer.serialize(agent)
+
+        assert "gate" not in config
+
+    def test_serialize_gate_in_sequential_pipeline(self):
+        """Gate on a sub-agent in a >> pipeline serializes correctly."""
+        from agentspan.agents.agent import Agent
+        from agentspan.agents.gate import TextGate
+
+        a = Agent(name="a", model="openai/gpt-4o", gate=TextGate("DONE"))
+        b = Agent(name="b", model="openai/gpt-4o")
+        pipeline = a >> b
+
+        config = self.serializer.serialize(pipeline)
+
+        assert config["strategy"] == "sequential"
+        assert len(config["agents"]) == 2
+        assert config["agents"][0]["gate"]["type"] == "text_contains"
+        assert config["agents"][0]["gate"]["text"] == "DONE"
+        assert "gate" not in config["agents"][1]
+
+    def test_serialize_cli_config(self):
+        """CliConfig serializes to cliConfig block."""
+        from agentspan.agents.agent import Agent
+        from agentspan.agents.cli_config import CliConfig
+
+        agent = Agent(
+            name="ops",
+            model="openai/gpt-4o",
+            cli_config=CliConfig(
+                allowed_commands=["git", "gh"],
+                timeout=60,
+                allow_shell=True,
+            ),
+        )
+        config = self.serializer.serialize(agent)
+
+        assert "cliConfig" in config
+        assert config["cliConfig"]["enabled"] is True
+        assert config["cliConfig"]["allowedCommands"] == ["git", "gh"]
+        assert config["cliConfig"]["timeout"] == 60
+        assert config["cliConfig"]["allowShell"] is True
+
+    def test_cli_config_not_present_by_default(self):
+        """cliConfig is not included when not set."""
+        from agentspan.agents.agent import Agent
+
+        agent = Agent(name="test", model="openai/gpt-4o")
+        config = self.serializer.serialize(agent)
+
+        assert "cliConfig" not in config
+
+    def test_serialize_cli_config_with_guardrails(self):
+        """CliConfig guardrails are attached to the run_command tool and serialized."""
+        from agentspan.agents.agent import Agent
+        from agentspan.agents.cli_config import CliConfig
+        from agentspan.agents.guardrail import RegexGuardrail
+
+        agent = Agent(
+            name="ops",
+            model="openai/gpt-4o",
+            cli_config=CliConfig(
+                allowed_commands=["git", "ls"],
+                guardrails=[
+                    RegexGuardrail(
+                        patterns=[r"rm\s+-rf"],
+                        name="no_destructive",
+                        on_fail="raise",
+                        mode="block",
+                    ),
+                ],
+            ),
+        )
+        config = self.serializer.serialize(agent)
+
+        # Should have a tool (the auto-generated run_command)
+        assert "tools" in config
+        run_cmd = next(t for t in config["tools"] if t["name"] == "run_command")
+
+        # Tool should have guardrails serialized
+        assert "guardrails" in run_cmd
+        assert len(run_cmd["guardrails"]) == 1
+        g = run_cmd["guardrails"][0]
+        assert g["name"] == "no_destructive"
+        assert g["guardrailType"] == "regex"
+        assert g["onFail"] == "raise"
+        assert r"rm\s+-rf" in g["patterns"]
+
     def test_none_values_omitted(self):
         """None values are not included in the output."""
         from agentspan.agents.agent import Agent

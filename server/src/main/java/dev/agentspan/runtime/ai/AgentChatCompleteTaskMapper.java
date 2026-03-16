@@ -9,6 +9,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.OptionalInt;
 import java.util.Set;
 
 import org.conductoross.conductor.ai.models.ChatCompletion;
@@ -18,6 +20,7 @@ import org.conductoross.conductor.ai.models.Media;
 import org.conductoross.conductor.ai.models.ToolCall;
 import org.conductoross.conductor.ai.tasks.mapper.AIModelTaskMapper;
 import org.conductoross.conductor.config.AIIntegrationEnabledCondition;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Primary;
 import org.springframework.core.Ordered;
@@ -30,6 +33,7 @@ import com.netflix.conductor.model.WorkflowModel;
 import com.netflix.conductor.core.exception.TerminateWorkflowException;
 import com.netflix.conductor.core.execution.mapper.TaskMapperContext;
 
+import dev.agentspan.runtime.util.ModelContextWindows;
 import lombok.extern.slf4j.Slf4j;
 
 import static com.netflix.conductor.common.metadata.tasks.TaskType.TASK_TYPE_HTTP;
@@ -63,6 +67,18 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
     private static final Set<String> TOOL_TASK_TYPES =
             Set.of(TASK_TYPE_HTTP, TASK_TYPE_SIMPLE, "MCP", "CALL_MCP_TOOL");
 
+    private static final int RECENT_EXCHANGES_TO_KEEP = 5;
+    private static final int SUMMARY_TEXT_LIMIT = 200;
+    private static final int TOOL_OUTPUT_SUMMARY_LIMIT = 150;
+    private static final double PROACTIVE_CONDENSATION_THRESHOLD = 0.75;
+    private static final double CHARS_PER_TOKEN = 4.0;
+
+    enum ExchangeType { TOOL_EXCHANGE, ASSISTANT_TEXT, USER_MESSAGE, OTHER }
+    record Exchange(List<ChatMessage> messages, ExchangeType type) {}
+
+    @Autowired(required = false)
+    private ModelContextWindows modelContextWindows;
+
     public AgentChatCompleteTaskMapper() {
         super(ChatCompletion.NAME);
     }
@@ -83,6 +99,7 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
                 history.add(new ChatMessage(ChatMessage.Role.user, chatCompletion.getUserInput()));
             }
             getHistory(workflowModel, taskModel, chatCompletion);
+            condenseIfNeeded(chatCompletion, taskModel, workflowModel);
             updateTaskModel(chatCompletion, taskModel);
         } catch (Exception e) {
             if (e instanceof TerminateWorkflowException) {
@@ -226,10 +243,24 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
                     List<TaskModel> toolModels =
                             refNameToTask.getOrDefault(toolRefName, new ArrayList<>());
                     for (TaskModel toolModel : toolModels) {
-                        if (toolModel.getStatus().isTerminal()
-                                && toolModel.getStatus().isSuccessful()) {
-                            assistantToolCalls.add(toolCall);
+                        if (!toolModel.getStatus().isTerminal()) continue;
 
+                        // Append retry count to ensure unique tool_use ids across retries
+                        String uniqueRefName = toolModel.getWorkflowTask().getTaskReferenceName();
+                        if (toolModel.getRetryCount() > 0) {
+                            uniqueRefName = uniqueRefName + "_retry" + toolModel.getRetryCount();
+                        }
+
+                        // Build a tool call with the unique ref name for the assistant message
+                        ToolCall uniqueToolCall = ToolCall.builder()
+                                .inputParameters(toolCall.getInputParameters())
+                                .name(toolCall.getName())
+                                .taskReferenceName(uniqueRefName)
+                                .type(toolCall.getType())
+                                .build();
+                        assistantToolCalls.add(uniqueToolCall);
+
+                        if (toolModel.getStatus().isSuccessful()) {
                             // For SUB_WORKFLOW tasks, extract clean result
                             Map<String, Object> toolOutput = toolModel.getOutputData();
                             Map<String, Object> toolInput = toolModel.getInputData();
@@ -243,11 +274,28 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
                                     ToolCall.builder()
                                             .inputParameters(toolInput)
                                             .name(toolModel.getTaskDefName())
-                                            .taskReferenceName(
-                                                    toolModel.getWorkflowTask()
-                                                            .getTaskReferenceName())
+                                            .taskReferenceName(uniqueRefName)
                                             .type(toolModel.getTaskType())
                                             .output(toolOutput)
+                                            .build();
+                            toolResponses.add(new ChatMessage(ChatMessage.Role.tool, toolCallResult));
+                        } else {
+                            // Failed tool — send error feedback to LLM
+                            String reason = toolModel.getReasonForIncompletion();
+                            if (reason == null || reason.isEmpty()) {
+                                reason = "Tool execution failed (status: " + toolModel.getStatus() + ")";
+                            }
+                            Map<String, Object> errorOutput = Map.of(
+                                    "status", "FAILED",
+                                    "error", reason
+                            );
+                            ToolCall toolCallResult =
+                                    ToolCall.builder()
+                                            .inputParameters(toolModel.getInputData())
+                                            .name(toolModel.getTaskDefName())
+                                            .taskReferenceName(uniqueRefName)
+                                            .type(toolModel.getTaskType())
+                                            .output(errorOutput)
                                             .build();
                             toolResponses.add(new ChatMessage(ChatMessage.Role.tool, toolCallResult));
                         }
@@ -282,6 +330,279 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         }
         chatCompletion.getMessages().addAll(history);
     }
+
+    // ── Context condensation ─────────────────────────────────────────
+
+    /**
+     * Condense conversation history proactively (approaching context window) or
+     * reactively (previous iteration hit the token limit).
+     */
+    private void condenseIfNeeded(ChatCompletion chatCompletion, TaskModel task, WorkflowModel workflow) {
+        boolean reactive = previousIterationHitTokenLimit(task, workflow);
+        boolean proactive = false;
+        if (!reactive && modelContextWindows != null) {
+            String model = (String) task.getInputData().get("model");
+            OptionalInt contextWindow = modelContextWindows.getContextWindow(model);
+            if (contextWindow.isPresent()) {
+                proactive = shouldCondenseProactively(chatCompletion, contextWindow.getAsInt());
+            }
+        }
+        if (!reactive && !proactive) {
+            return;
+        }
+
+        List<ChatMessage> messages = chatCompletion.getMessages();
+
+        // Find how many initial messages to always keep (system + first user)
+        int initialKeep = 0;
+        for (int i = 0; i < messages.size(); i++) {
+            ChatMessage.Role role = messages.get(i).getRole();
+            if (role == ChatMessage.Role.system || (role == ChatMessage.Role.user && initialKeep == i)) {
+                initialKeep = i + 1;
+            } else {
+                break;
+            }
+        }
+
+        // Split: initial messages (keep) + history (condense)
+        List<ChatMessage> initial = new ArrayList<>(messages.subList(0, initialKeep));
+        List<ChatMessage> history = new ArrayList<>(messages.subList(initialKeep, messages.size()));
+
+        if (history.isEmpty()) {
+            return;
+        }
+
+        List<ChatMessage> condensed = condenseHistory(history);
+
+        messages.clear();
+        messages.addAll(initial);
+        messages.addAll(condensed);
+
+        String trigger = reactive ? "token limit hit" : "proactive (approaching context window)";
+        log.info("Condensed conversation from {} to {} messages (triggered by {})",
+                initial.size() + history.size(), messages.size(), trigger);
+    }
+
+    /**
+     * Check if the estimated token count exceeds the proactive condensation threshold.
+     */
+    boolean shouldCondenseProactively(ChatCompletion chatCompletion, int contextWindow) {
+        int estimatedTokens = estimateTokenCount(chatCompletion);
+        int threshold = (int) (contextWindow * PROACTIVE_CONDENSATION_THRESHOLD);
+        if (estimatedTokens > threshold) {
+            log.info("Proactive condensation: estimated {} tokens > {} threshold ({}% of {} context window)",
+                    estimatedTokens, threshold, (int) (PROACTIVE_CONDENSATION_THRESHOLD * 100), contextWindow);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Estimate token count using a rough heuristic of ~4 characters per token.
+     * Accounts for message content, tool calls, tool definitions, and instructions.
+     */
+    int estimateTokenCount(ChatCompletion chatCompletion) {
+        long totalChars = 0;
+
+        // Message content
+        for (ChatMessage msg : chatCompletion.getMessages()) {
+            if (msg.getMessage() != null) {
+                totalChars += msg.getMessage().length();
+            }
+            if (msg.getToolCalls() != null) {
+                for (ToolCall tc : msg.getToolCalls()) {
+                    if (tc.getName() != null) totalChars += tc.getName().length();
+                    if (tc.getInputParameters() != null) {
+                        totalChars += tc.getInputParameters().toString().length();
+                    }
+                    if (tc.getOutput() != null) {
+                        totalChars += tc.getOutput().toString().length();
+                    }
+                }
+            }
+        }
+
+        // Tool definitions
+        if (chatCompletion.getTools() != null) {
+            totalChars += chatCompletion.getTools().toString().length();
+        }
+
+        // Instructions / system prompt
+        if (chatCompletion.getInstructions() != null) {
+            totalChars += chatCompletion.getInstructions().length();
+        }
+
+        return (int) (totalChars / CHARS_PER_TOKEN);
+    }
+
+    /**
+     * Check if the previous iteration of this task hit the token limit.
+     * Scans completed tasks in the workflow with the same reference name
+     * (i.e. previous loop iterations) and checks the most recent one's finishReason.
+     */
+    boolean previousIterationHitTokenLimit(TaskModel currentTask, WorkflowModel workflow) {
+        String currentRef = currentTask.getWorkflowTask().getTaskReferenceName();
+
+        TaskModel previousIteration = null;
+        for (TaskModel task : workflow.getTasks()) {
+            if (task == currentTask) continue;
+            if (!task.getStatus().isTerminal()) continue;
+            if (currentRef.equals(task.getWorkflowTask().getTaskReferenceName())) {
+                previousIteration = task; // last match = most recent iteration
+            }
+        }
+
+        if (previousIteration == null) return false;
+
+        Object finishReason = previousIteration.getOutputData().get("finishReason");
+        return "LENGTH".equals(finishReason) || "MAX_TOKENS".equals(finishReason);
+    }
+
+    /**
+     * Condense a history message list by summarizing older exchanges
+     * and keeping the most recent ones verbatim.
+     */
+    List<ChatMessage> condenseHistory(List<ChatMessage> history) {
+        List<Exchange> exchanges = groupExchanges(history);
+
+        int keepCount = Math.min(RECENT_EXCHANGES_TO_KEEP, exchanges.size());
+        int condenseBoundary = exchanges.size() - keepCount;
+
+        if (condenseBoundary <= 0) {
+            return history; // too few exchanges to condense
+        }
+
+        List<Exchange> olderExchanges = exchanges.subList(0, condenseBoundary);
+        List<Exchange> recentExchanges = exchanges.subList(condenseBoundary, exchanges.size());
+
+        String summaryText = buildSummary(olderExchanges);
+
+        List<ChatMessage> condensed = new ArrayList<>();
+        condensed.add(new ChatMessage(ChatMessage.Role.assistant, summaryText));
+        for (Exchange ex : recentExchanges) {
+            condensed.addAll(ex.messages());
+        }
+
+        return condensed;
+    }
+
+    /**
+     * Group a flat list of ChatMessages into logical exchanges.
+     * A tool_call + its subsequent tool responses form one exchange.
+     * An assistant text message is one exchange. Etc.
+     */
+    List<Exchange> groupExchanges(List<ChatMessage> history) {
+        List<Exchange> exchanges = new ArrayList<>();
+        int i = 0;
+        while (i < history.size()) {
+            ChatMessage msg = history.get(i);
+            if (msg.getRole() == ChatMessage.Role.tool_call) {
+                // Collect tool_call + all subsequent tool responses
+                List<ChatMessage> group = new ArrayList<>();
+                group.add(msg);
+                i++;
+                while (i < history.size() && history.get(i).getRole() == ChatMessage.Role.tool) {
+                    group.add(history.get(i));
+                    i++;
+                }
+                exchanges.add(new Exchange(group, ExchangeType.TOOL_EXCHANGE));
+            } else if (msg.getRole() == ChatMessage.Role.tool) {
+                // Orphaned tool message (standalone from TOOL_TASK_TYPES path)
+                exchanges.add(new Exchange(List.of(msg), ExchangeType.TOOL_EXCHANGE));
+                i++;
+            } else if (msg.getRole() == ChatMessage.Role.assistant) {
+                exchanges.add(new Exchange(List.of(msg), ExchangeType.ASSISTANT_TEXT));
+                i++;
+            } else if (msg.getRole() == ChatMessage.Role.user) {
+                exchanges.add(new Exchange(List.of(msg), ExchangeType.USER_MESSAGE));
+                i++;
+            } else {
+                exchanges.add(new Exchange(List.of(msg), ExchangeType.OTHER));
+                i++;
+            }
+        }
+        return exchanges;
+    }
+
+    /**
+     * Build a structured summary of older exchanges.
+     */
+    String buildSummary(List<Exchange> olderExchanges) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("[Earlier conversation condensed]\n\n");
+
+        int toolCount = 0;
+        int textCount = 0;
+
+        for (Exchange ex : olderExchanges) {
+            switch (ex.type()) {
+                case TOOL_EXCHANGE -> {
+                    toolCount++;
+                    summarizeToolExchange(sb, ex);
+                }
+                case ASSISTANT_TEXT -> {
+                    textCount++;
+                    String text = ex.messages().get(0).getMessage();
+                    if (text != null && !text.isEmpty()) {
+                        sb.append("- Response: ").append(truncate(text, SUMMARY_TEXT_LIMIT)).append("\n");
+                    }
+                }
+                case USER_MESSAGE -> {
+                    String text = ex.messages().get(0).getMessage();
+                    if (text != null && !text.isEmpty()) {
+                        sb.append("- User: ").append(truncate(text, SUMMARY_TEXT_LIMIT)).append("\n");
+                    }
+                }
+                default -> { /* skip */ }
+            }
+        }
+
+        sb.append("\n[End of condensed context — ")
+          .append(toolCount).append(" tool exchange(s), ")
+          .append(textCount).append(" assistant response(s) condensed]");
+
+        return sb.toString();
+    }
+
+    private void summarizeToolExchange(StringBuilder sb, Exchange ex) {
+        ChatMessage first = ex.messages().get(0);
+
+        if (first.getRole() == ChatMessage.Role.tool_call && first.getToolCalls() != null) {
+            List<String> toolNames = first.getToolCalls().stream()
+                    .map(ToolCall::getName)
+                    .filter(Objects::nonNull)
+                    .toList();
+            sb.append("- Called tools: ").append(String.join(", ", toolNames));
+
+            // Summarize each tool response
+            for (int i = 1; i < ex.messages().size(); i++) {
+                ChatMessage toolResponse = ex.messages().get(i);
+                if (toolResponse.getToolCalls() != null && !toolResponse.getToolCalls().isEmpty()) {
+                    ToolCall tc = toolResponse.getToolCalls().get(0);
+                    String output = tc.getOutput() != null ? tc.getOutput().toString() : "";
+                    sb.append("\n  ").append(tc.getName()).append(": ")
+                      .append(truncate(output, TOOL_OUTPUT_SUMMARY_LIMIT));
+                }
+            }
+        } else if (first.getRole() == ChatMessage.Role.tool) {
+            // Orphaned tool message
+            if (first.getToolCalls() != null && !first.getToolCalls().isEmpty()) {
+                ToolCall tc = first.getToolCalls().get(0);
+                String output = tc.getOutput() != null ? tc.getOutput().toString() : "";
+                sb.append("- Tool ").append(tc.getName()).append(": ")
+                  .append(truncate(output, TOOL_OUTPUT_SUMMARY_LIMIT));
+            }
+        }
+        sb.append("\n");
+    }
+
+    static String truncate(String text, int maxLen) {
+        if (text == null) return "";
+        if (text.length() <= maxLen) return text;
+        return text.substring(0, maxLen) + "...";
+    }
+
+    // ── SUB_WORKFLOW helpers ─────────────────────────────────────────
 
     /**
      * Extract clean result from SUB_WORKFLOW output.

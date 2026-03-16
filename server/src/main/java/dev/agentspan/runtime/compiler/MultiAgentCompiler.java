@@ -241,7 +241,53 @@ public class MultiAgentCompiler {
             if (i < config.getAgents().size() - 1) {
                 String coerceRef = taskRef + "_coerce";
                 tasks.add(AgentCompiler.createCoerceTask(rawRef, coerceRef));
-                prevOutputRef = AgentCompiler.coercedRef(coerceRef);
+                String coercedRef = AgentCompiler.coercedRef(coerceRef);
+
+                // Gate check: if this stage has a gate, insert INLINE + SWITCH
+                if (sub.getGate() != null) {
+                    String gateRef = config.getName() + "_gate_" + i;
+                    WorkflowTask gateTask = GateCompiler.compileGate(
+                            sub.getGate(), gateRef, coercedRef
+                    );
+                    tasks.add(gateTask);
+
+                    // SWITCH: "continue" → remaining stages, "stop" → end pipeline
+                    WorkflowTask switchTask = new WorkflowTask();
+                    switchTask.setType("SWITCH");
+                    switchTask.setTaskReferenceName(config.getName() + "_gate_switch_" + i);
+                    switchTask.setEvaluatorType("value-param");
+                    switchTask.setExpression("switchCaseValue");
+                    switchTask.setInputParameters(Map.of(
+                            "switchCaseValue", "${" + gateRef + ".output.result.decision}"
+                    ));
+
+                    // "continue" case: compile remaining stages recursively
+                    List<WorkflowTask> continueTasks = compileRemainingStages(
+                            config, i + 1, coercedRef
+                    );
+                    switchTask.setDecisionCases(Map.of(
+                            "continue", continueTasks
+                    ));
+                    // "stop" (default): no-op — pipeline returns current output
+                    switchTask.setDefaultCase(List.of());
+
+                    tasks.add(switchTask);
+
+                    // After the SWITCH, add an output-selector INLINE task.
+                    // It walks the stages in reverse and returns the first non-null result.
+                    // This ensures the workflow output is always the deepest stage that ran.
+                    String selectorRef = config.getName() + "_output_selector";
+                    WorkflowTask selector = buildOutputSelector(config, i, selectorRef);
+                    tasks.add(selector);
+
+                    String selectorOutputRef = "${" + selectorRef + ".output.result}";
+                    wf.setTasks(tasks);
+                    wf.setOutputParameters(Map.of("result", selectorOutputRef));
+                    agentCompiler.applyTimeout(wf, config);
+                    return wf;
+                }
+
+                prevOutputRef = coercedRef;
             } else {
                 prevOutputRef = rawRef;
             }
@@ -251,6 +297,101 @@ public class MultiAgentCompiler {
         wf.setOutputParameters(Map.of("result", prevOutputRef));
         agentCompiler.applyTimeout(wf, config);
         return wf;
+    }
+
+    /**
+     * Compile the remaining stages of a sequential pipeline (from startIndex onward).
+     * Used when a gate creates a SWITCH — the "continue" branch contains the rest.
+     */
+    private List<WorkflowTask> compileRemainingStages(
+            AgentConfig config, int startIndex, String prevOutputRef) {
+
+        List<WorkflowTask> tasks = new ArrayList<>();
+
+        for (int i = startIndex; i < config.getAgents().size(); i++) {
+            AgentConfig sub = config.getAgents().get(i);
+            String taskRef = config.getName() + "_step_" + i + "_" + sub.getName();
+            String mediaRef = "${workflow.input.media}";
+
+            WorkflowTask task = agentCompiler.compileSubAgent(sub, taskRef, prevOutputRef, mediaRef);
+            tasks.add(task);
+
+            String rawRef = AgentCompiler.subAgentResultRef(sub, taskRef);
+
+            if (i < config.getAgents().size() - 1) {
+                String coerceRef = taskRef + "_coerce";
+                tasks.add(AgentCompiler.createCoerceTask(rawRef, coerceRef));
+                String coercedRef = AgentCompiler.coercedRef(coerceRef);
+
+                // Nested gate
+                if (sub.getGate() != null) {
+                    String gateRef = config.getName() + "_gate_" + i;
+                    WorkflowTask gateTask = GateCompiler.compileGate(
+                            sub.getGate(), gateRef, coercedRef
+                    );
+                    tasks.add(gateTask);
+
+                    WorkflowTask switchTask = new WorkflowTask();
+                    switchTask.setType("SWITCH");
+                    switchTask.setTaskReferenceName(config.getName() + "_gate_switch_" + i);
+                    switchTask.setEvaluatorType("value-param");
+                    switchTask.setExpression("switchCaseValue");
+                    switchTask.setInputParameters(Map.of(
+                            "switchCaseValue", "${" + gateRef + ".output.result.decision}"
+                    ));
+
+                    List<WorkflowTask> continueTasks = compileRemainingStages(
+                            config, i + 1, coercedRef
+                    );
+                    switchTask.setDecisionCases(Map.of(
+                            "continue", continueTasks
+                    ));
+                    switchTask.setDefaultCase(List.of());
+                    tasks.add(switchTask);
+                    return tasks;
+                }
+
+                prevOutputRef = coercedRef;
+            } else {
+                prevOutputRef = rawRef;
+            }
+        }
+
+        return tasks;
+    }
+
+    /**
+     * Build an INLINE task that selects the deepest stage output that actually ran.
+     * Walks stages in reverse: the first non-null result wins.
+     * When a gate stops the pipeline, later stages never execute and their refs are null.
+     */
+    private WorkflowTask buildOutputSelector(AgentConfig config, int firstGateIndex, String refName) {
+        // Build JS that checks each stage in reverse order
+        StringBuilder sb = new StringBuilder();
+        for (int i = config.getAgents().size() - 1; i >= 0; i--) {
+            sb.append("if ($.s").append(i).append(" != null && $.s").append(i).append(" !== '') return $.s").append(i).append("; ");
+        }
+        sb.append("return '';");
+
+        String script = JavaScriptBuilder.iife(sb.toString());
+
+        Map<String, Object> inputs = new LinkedHashMap<>();
+        inputs.put("evaluatorType", "graaljs");
+        inputs.put("expression", script);
+
+        // Add each stage's output as s0, s1, s2, ...
+        for (int i = 0; i < config.getAgents().size(); i++) {
+            AgentConfig sub = config.getAgents().get(i);
+            String taskRef = config.getName() + "_step_" + i + "_" + sub.getName();
+            String resultRef = AgentCompiler.subAgentResultRef(sub, taskRef);
+            inputs.put("s" + i, resultRef);
+        }
+
+        WorkflowTask task = new WorkflowTask();
+        task.setType("INLINE");
+        task.setTaskReferenceName(refName);
+        task.setInputParameters(inputs);
+        return task;
     }
 
     // ── Parallel strategy ───────────────────────────────────────────
@@ -794,8 +935,8 @@ public class MultiAgentCompiler {
         );
         String notTransfer = String.format("($.%s.is_transfer != true)", checkTransferRef);
         String termCondition = String.format(
-            "if ( $.%s['iteration'] < %d && $.%s['finishReason'] != 'LENGTH' && %s && %s ) { true; } else { false; }",
-            loopRef, maxTurns, llmRef, hasToolCalls, notTransfer
+            "if ( $.%s['iteration'] < %d && ($.%s['finishReason'] == 'LENGTH' || $.%s['finishReason'] == 'MAX_TOKENS' || (%s && %s)) ) { true; } else { false; }",
+            loopRef, maxTurns, llmRef, llmRef, hasToolCalls, notTransfer
         );
 
         Map<String, Object> loopInputs = new LinkedHashMap<>();

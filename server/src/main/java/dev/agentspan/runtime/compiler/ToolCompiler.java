@@ -7,9 +7,13 @@ package dev.agentspan.runtime.compiler;
 
 import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
 
+import dev.agentspan.runtime.model.GuardrailConfig;
 import dev.agentspan.runtime.model.ToolConfig;
 import dev.agentspan.runtime.util.JavaScriptBuilder;
 import dev.agentspan.runtime.util.ModelParser;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,6 +36,17 @@ import java.util.Set;
 public class ToolCompiler {
 
     private static final Logger logger = LoggerFactory.getLogger(ToolCompiler.class);
+
+    /**
+     * Result of building tool call routing, including any tool-level guardrail metadata.
+     */
+    @Data
+    @AllArgsConstructor
+    public static class ToolCallRoutingResult {
+        private WorkflowTask routerTask;
+        private List<String> toolGuardrailRetryRefs;
+        private List<String[]> toolGuardrailRefs;  // [refName, isInline]
+    }
 
     /** Tool types whose execution is handled server-side (not by a worker). */
     private static final Set<String> MEDIA_TOOL_TYPES = Set.of(
@@ -139,6 +154,23 @@ public class ToolCompiler {
     public WorkflowTask buildToolCallRouting(String agentName, String llmRef,
                                              List<ToolConfig> tools,
                                              boolean hasApproval, String model) {
+        return buildToolCallRoutingWithResult(agentName, llmRef, tools, hasApproval, model)
+                .getRouterTask();
+    }
+
+    /**
+     * Build a SwitchTask that routes based on the LLM's native {@code toolCalls} output,
+     * including tool-level guardrails if any tools define them.
+     *
+     * @return A {@link ToolCallRoutingResult} containing the router task and any
+     *         tool guardrail metadata for wiring into the DoWhile loop.
+     */
+    public ToolCallRoutingResult buildToolCallRoutingWithResult(String agentName, String llmRef,
+                                                                 List<ToolConfig> tools,
+                                                                 boolean hasApproval, String model) {
+        List<String> retryRefs = new ArrayList<>();
+        List<String[]> guardrailRefs = new ArrayList<>();
+
         String switchExpr = "$.toolCalls != null && $.toolCalls.length > 0 "
                 + "? 'tool_call' : 'none'";
 
@@ -156,7 +188,8 @@ public class ToolCompiler {
         // "tool_call" case
         List<ToolConfig> effectiveTools = tools != null ? tools : Collections.emptyList();
         List<WorkflowTask> toolCallTasks = buildToolCallCase(
-                agentName, llmRef, hasApproval, model, effectiveTools);
+                agentName, llmRef, hasApproval, model, effectiveTools,
+                retryRefs, guardrailRefs);
         Map<String, List<WorkflowTask>> decisionCases = new LinkedHashMap<>();
         decisionCases.put("tool_call", toolCallTasks);
         switchTask.setDecisionCases(decisionCases);
@@ -164,8 +197,9 @@ public class ToolCompiler {
         // default case: empty (final answer, no-op)
         switchTask.setDefaultCase(Collections.emptyList());
 
-        logger.debug("Built tool call routing switch for agent '{}'", agentName);
-        return switchTask;
+        logger.debug("Built tool call routing switch for agent '{}' (toolGuardrails={})",
+                agentName, guardrailRefs.size());
+        return new ToolCallRoutingResult(switchTask, retryRefs, guardrailRefs);
     }
 
     /**
@@ -699,6 +733,20 @@ public class ToolCompiler {
                                                      List<ToolConfig> tools,
                                                      boolean hasApproval, String model,
                                                      String mcpConfigRef) {
+        return buildToolCallRoutingDynamicWithResult(agentName, llmRef, tools,
+                hasApproval, model, mcpConfigRef).getRouterTask();
+    }
+
+    /**
+     * Build tool call routing with dynamic MCP config, returning guardrail metadata.
+     */
+    public ToolCallRoutingResult buildToolCallRoutingDynamicWithResult(
+            String agentName, String llmRef, List<ToolConfig> tools,
+            boolean hasApproval, String model, String mcpConfigRef) {
+
+        List<String> retryRefs = new ArrayList<>();
+        List<String[]> guardrailRefs = new ArrayList<>();
+
         String switchExpr = "$.toolCalls != null && $.toolCalls.length > 0 "
                 + "? 'tool_call' : 'none'";
 
@@ -713,11 +761,23 @@ public class ToolCompiler {
         switchInput.put("toolCalls", "${" + llmRef + ".output.toolCalls}");
         switchTask.setInputParameters(switchInput);
 
-        List<WorkflowTask> toolCallTasks;
+        // Build tool guardrail gate + approval + fork chain
+        List<WorkflowTask> toolCallTasks = new ArrayList<>();
+
+        // Tool guardrails (before approval, before fork)
+        List<GuardrailConfig> toolGuardrails = collectToolGuardrails(
+                tools != null ? tools : Collections.emptyList());
+        if (!toolGuardrails.isEmpty()) {
+            toolCallTasks.addAll(buildToolGuardrailGate(
+                    agentName, llmRef, toolGuardrails, retryRefs, guardrailRefs));
+        }
+
         if (hasApproval) {
-            toolCallTasks = buildToolCallWithApprovalDynamic(agentName, llmRef, model, tools, mcpConfigRef);
+            toolCallTasks.addAll(buildToolCallWithApprovalDynamic(
+                    agentName, llmRef, model, tools, mcpConfigRef));
         } else {
-            toolCallTasks = buildForkChainDynamic(agentName, llmRef, tools, "", mcpConfigRef);
+            toolCallTasks.addAll(buildForkChainDynamic(
+                    agentName, llmRef, tools, "", mcpConfigRef));
         }
 
         Map<String, List<WorkflowTask>> decisionCases = new LinkedHashMap<>();
@@ -725,7 +785,7 @@ public class ToolCompiler {
         switchTask.setDecisionCases(decisionCases);
         switchTask.setDefaultCase(Collections.emptyList());
 
-        return switchTask;
+        return new ToolCallRoutingResult(switchTask, retryRefs, guardrailRefs);
     }
 
     /**
@@ -1060,16 +1120,96 @@ public class ToolCompiler {
     /**
      * Build the task chain for the "tool_call" case of the routing switch.
      *
-     * <p>If {@code hasApproval} is true, inserts a check-approval worker and
-     * a nested SwitchTask that gates execution behind a HumanTask.</p>
+     * <p>If tools have guardrails, prepends guardrail gate tasks. If {@code hasApproval}
+     * is true, inserts a check-approval worker and a nested SwitchTask that gates
+     * execution behind a HumanTask.</p>
+     *
+     * @param outRetryRefs     mutable list — tool guardrail retry refs are appended here
+     * @param outGuardrailRefs mutable list — tool guardrail refs are appended here
      */
     private List<WorkflowTask> buildToolCallCase(String agentName, String llmRef,
                                                   boolean hasApproval, String model,
-                                                  List<ToolConfig> tools) {
-        if (hasApproval) {
-            return buildToolCallWithApproval(agentName, llmRef, model, tools);
+                                                  List<ToolConfig> tools,
+                                                  List<String> outRetryRefs,
+                                                  List<String[]> outGuardrailRefs) {
+        List<WorkflowTask> tasks = new ArrayList<>();
+
+        // Tool guardrails (before approval, before fork)
+        List<GuardrailConfig> toolGuardrails = collectToolGuardrails(tools);
+        if (!toolGuardrails.isEmpty()) {
+            tasks.addAll(buildToolGuardrailGate(
+                    agentName, llmRef, toolGuardrails, outRetryRefs, outGuardrailRefs));
         }
-        return buildForkChain(agentName, llmRef, tools, "");
+
+        // Existing approval + fork chain
+        if (hasApproval) {
+            tasks.addAll(buildToolCallWithApproval(agentName, llmRef, model, tools));
+        } else {
+            tasks.addAll(buildForkChain(agentName, llmRef, tools, ""));
+        }
+        return tasks;
+    }
+
+    /**
+     * Collect all guardrail configs from tools that have them.
+     */
+    private List<GuardrailConfig> collectToolGuardrails(List<ToolConfig> tools) {
+        if (tools == null) return Collections.emptyList();
+        return tools.stream()
+                .filter(t -> t.getGuardrails() != null && !t.getGuardrails().isEmpty())
+                .flatMap(t -> t.getGuardrails().stream())
+                .toList();
+    }
+
+    /**
+     * Build the tool guardrail gate: format tool calls, run guardrails, route results.
+     *
+     * @param outRetryRefs     mutable list — retry refs appended here for DoWhile wiring
+     * @param outGuardrailRefs mutable list — guardrail refs appended here for DoWhile wiring
+     * @return ordered list of tasks to prepend to the tool_call case
+     */
+    private List<WorkflowTask> buildToolGuardrailGate(
+            String agentName, String llmRef,
+            List<GuardrailConfig> toolGuardrails,
+            List<String> outRetryRefs, List<String[]> outGuardrailRefs) {
+
+        List<WorkflowTask> tasks = new ArrayList<>();
+
+        // 1. Format tool calls into readable text for guardrail evaluation
+        String formatRef = agentName + "_format_tool_calls";
+        WorkflowTask formatTask = new WorkflowTask();
+        formatTask.setTaskReferenceName(formatRef);
+        formatTask.setType("INLINE");
+
+        Map<String, Object> formatInputs = new LinkedHashMap<>();
+        formatInputs.put("evaluatorType", "graaljs");
+        formatInputs.put("expression", JavaScriptBuilder.formatToolCallsScript());
+        formatInputs.put("tool_calls", "${" + llmRef + ".output.toolCalls}");
+        formatTask.setInputParameters(formatInputs);
+        tasks.add(formatTask);
+
+        // 2. Compile guardrail tasks
+        String contentRef = "${" + formatRef + ".output.result.formatted}";
+        GuardrailCompiler gc = new GuardrailCompiler();
+        List<GuardrailCompiler.GuardrailTaskResult> guardrailResults =
+                gc.compileToolGuardrailTasks(toolGuardrails, agentName, contentRef);
+
+        // 3. Build routing for each guardrail
+        for (int idx = 0; idx < guardrailResults.size(); idx++) {
+            GuardrailCompiler.GuardrailTaskResult gr = guardrailResults.get(idx);
+            String suffix = guardrailResults.size() > 1 ? "_tg_" + idx : "_tg";
+            GuardrailCompiler.GuardrailRoutingResult routing = gc.compileGuardrailRouting(
+                    toolGuardrails.get(idx), gr.getRefName(), contentRef,
+                    agentName, suffix, gr.isInline());
+            tasks.addAll(gr.getTasks());
+            tasks.add(routing.getSwitchTask());
+            outGuardrailRefs.add(new String[]{gr.getRefName(), String.valueOf(gr.isInline())});
+            outRetryRefs.add(routing.getRetryRef());
+        }
+
+        logger.debug("Built tool guardrail gate for agent '{}' with {} guardrails",
+                agentName, toolGuardrails.size());
+        return tasks;
     }
 
     /**

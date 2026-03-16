@@ -102,7 +102,7 @@ _tool_approval_flags = {}
 _tool_task_names = {}
 
 # Maximum consecutive failures before disabling a tool
-_CIRCUIT_BREAKER_THRESHOLD = 3
+_CIRCUIT_BREAKER_THRESHOLD = 10
 
 # Current execution context for ToolContext injection
 _current_context = {}

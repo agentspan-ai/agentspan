@@ -496,7 +496,7 @@ class TestCodeExecutorBase:
 
     @patch("subprocess.run")
     def test_as_tool_output_formatting_stdout(self, mock_run):
-        """as_tool() formats output with STDOUT section."""
+        """as_tool() returns structured dict with status/stdout/stderr."""
         mock_run.return_value = MagicMock(
             stdout="hello world",
             stderr="",
@@ -505,13 +505,13 @@ class TestCodeExecutorBase:
         executor = LocalCodeExecutor(language="python")
         tool_fn = executor.as_tool()
         result = tool_fn(code="print('hello world')")
-        assert "STDOUT:" in result
-        assert "hello world" in result
-        assert "Exit code: 0" in result
+        assert result["status"] == "success"
+        assert result["stdout"] == "hello world"
+        assert result["stderr"] == ""
 
     @patch("subprocess.run")
     def test_as_tool_output_formatting_stderr(self, mock_run):
-        """as_tool() formats output with STDERR section."""
+        """as_tool() returns error dict on non-zero exit code."""
         mock_run.return_value = MagicMock(
             stdout="",
             stderr="error occurred",
@@ -520,18 +520,28 @@ class TestCodeExecutorBase:
         executor = LocalCodeExecutor(language="python")
         tool_fn = executor.as_tool()
         result = tool_fn(code="bad code")
-        assert "STDERR:" in result
-        assert "error occurred" in result
-        assert "Exit code: 1" in result
+        assert result["status"] == "error"
+        assert "error occurred" in result["stderr"]
+        assert "Exit code: 1" in result["stderr"]
 
     @patch("subprocess.run")
     def test_as_tool_output_formatting_timeout(self, mock_run):
-        """as_tool() formats output with timeout notice."""
+        """as_tool() returns error dict on timeout."""
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="python", timeout=5)
         executor = LocalCodeExecutor(language="python", timeout=5)
         tool_fn = executor.as_tool()
         result = tool_fn(code="import time; time.sleep(999)")
-        assert "TIMED OUT" in result
+        assert result["status"] == "error"
+        assert "TIMED OUT" in result["stderr"]
+
+    def test_as_tool_empty_code_returns_dict(self):
+        """as_tool() returns structured dict for empty code."""
+        executor = LocalCodeExecutor(language="python")
+        tool_fn = executor.as_tool()
+        result = tool_fn(code="")
+        assert result["status"] == "success"
+        assert "No code provided" in result["stdout"]
+        assert result["stderr"] == ""
 
 
 class TestJupyterCodeExecutor:
