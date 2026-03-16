@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 import threading
 import time
@@ -193,6 +194,7 @@ class AgentRuntime:
         server_url: Optional[str] = None,
         api_key: Optional[str] = None,
         api_secret: Optional[str] = None,
+        native: Optional[bool] = None,
         config: Optional[Any] = None,
     ) -> None:
         from agentspan.agents.runtime.config import AgentConfig
@@ -205,7 +207,26 @@ class AgentRuntime:
             overrides["auth_key"] = api_key
         if api_secret is not None:
             overrides["auth_secret"] = api_secret
+        if native is not None:
+            overrides["native"] = native
         self._config = base.model_copy(update=overrides)
+
+        # Native mode — bypass server/Conductor entirely
+        if self._config.native:
+            # Inject OPENAI_API_KEY into env so framework SDKs can find it
+            if self._config.openai_api_key and "OPENAI_API_KEY" not in os.environ:
+                os.environ["OPENAI_API_KEY"] = self._config.openai_api_key
+
+            self._compiled_workflows: Dict[str, Any] = {}
+            self._workers_started = False
+            self._registered_tool_names: set = set()
+            self._shutdown_lock = threading.Lock()
+            self._is_shutdown = False
+            self._worker_manager = None
+            self._http = None
+            logger.info("AgentRuntime initialized (native mode)")
+            return
+
         # Auto-start the server if it targets localhost and is not responding.
         if self._config.auto_start_server:
             from agentspan.agents.runtime.server import ensure_server_running
@@ -1459,6 +1480,18 @@ class AgentRuntime:
         # Check for foreign framework agent
         from agentspan.agents.frameworks.serializer import detect_framework
         framework = detect_framework(agent)
+
+        # Native mode — run via framework SDK directly
+        if self._config.native:
+            if framework is None:
+                raise ValueError("native=True requires a framework agent (e.g. OpenAI)")
+            if framework != "openai":
+                raise ValueError(
+                    f"Native mode only supports OpenAI agents, got {framework!r}"
+                )
+            from agentspan.agents.runtime.native import run_openai_native
+            return run_openai_native(agent, str(prompt))
+
         if framework is not None:
             return self._run_framework(
                 agent, framework, prompt,
@@ -2064,6 +2097,8 @@ class AgentRuntime:
         Returns:
             An :class:`AgentHandle`.
         """
+        if self._config.native:
+            raise NotImplementedError("start() not supported in native mode")
         # Check for foreign framework agent
         from agentspan.agents.frameworks.serializer import detect_framework
         framework = detect_framework(agent)
@@ -2128,6 +2163,8 @@ class AgentRuntime:
         Returns:
             An :class:`AgentStream`.
         """
+        if self._config.native:
+            raise NotImplementedError("stream() not supported in native mode")
         if handle is not None:
             event_iter = self._stream_workflow(handle.workflow_id)
             return AgentStream(handle=handle, event_iterator=event_iter)
@@ -2375,6 +2412,18 @@ class AgentRuntime:
         # Foreign framework check
         from agentspan.agents.frameworks.serializer import detect_framework
         framework = detect_framework(agent)
+
+        # Native mode — run via framework SDK directly
+        if self._config.native:
+            if framework is None:
+                raise ValueError("native=True requires a framework agent (e.g. OpenAI)")
+            if framework != "openai":
+                raise ValueError(
+                    f"Native mode only supports OpenAI agents, got {framework!r}"
+                )
+            from agentspan.agents.runtime.native import run_openai_native_async
+            return await run_openai_native_async(agent, str(prompt))
+
         if framework is not None:
             return await self._run_framework_async(
                 agent, framework, prompt,
@@ -2835,7 +2884,7 @@ class AgentRuntime:
             if self._is_shutdown:
                 return
             logger.info("Shutting down AgentRuntime")
-            if self._workers_started:
+            if self._workers_started and self._worker_manager is not None:
                 self._worker_manager.stop()
                 self._workers_started = False
             self._is_shutdown = True
@@ -2846,10 +2895,11 @@ class AgentRuntime:
             if self._is_shutdown:
                 return
             logger.info("Shutting down AgentRuntime (async)")
-            if self._workers_started:
+            if self._workers_started and self._worker_manager is not None:
                 self._worker_manager.stop()
                 self._workers_started = False
-            await self._http.close()
+            if self._http is not None:
+                await self._http.close()
             self._is_shutdown = True
 
     # ── Status / interaction ────────────────────────────────────────

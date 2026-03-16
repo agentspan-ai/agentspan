@@ -99,6 +99,14 @@ class AgentConfig(BaseSettings):
         default=True,
         validation_alias="AGENTSPAN_STREAMING_ENABLED",
     )
+    native: bool = Field(
+        default=False,
+        validation_alias="AGENTSPAN_NATIVE",
+    )
+    openai_api_key: Optional[str] = Field(
+        default=None,
+        validation_alias="OPENAI_API_KEY",
+    )
 
     @property
     def api_key(self) -> Optional[str]:
