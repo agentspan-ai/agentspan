@@ -10,15 +10,7 @@ The agents are defined using standard ADK classes — the Conductor runtime auto
 pip install google-adk agentspan-sdk
 ```
 
-Configure via `.env` file in the project root (recommended):
-
-```dotenv
-AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini
-AGENTSPAN_SERVER_URL=http://localhost:8080/api
-GOOGLE_GEMINI_API_KEY=your-key  # or configure via Conductor server
-```
-
-Or export environment variables directly:
+Export environment variables:
 
 ```bash
 export AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini

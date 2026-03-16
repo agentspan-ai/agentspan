@@ -3,14 +3,11 @@
 
 """Shared settings for all examples.
 
-Set ``AGENTSPAN_LLM_MODEL`` in a ``.env`` file (recommended) or as an environment
-variable to override the default model used by all examples::
+Set ``AGENTSPAN_LLM_MODEL`` as an environment variable to override the
+default model used by all examples::
 
-    # .env
-    AGENTSPAN_LLM_MODEL=anthropic/claude-sonnet-4-20250514
-
-    # or set in environment
-    AGENTSPAN_LLM_MODEL=google_gemini/gemini-2.0-flash
+    export AGENTSPAN_LLM_MODEL=anthropic/claude-sonnet-4-20250514
+    export AGENTSPAN_LLM_MODEL=google_gemini/gemini-2.0-flash
 
 If unset, defaults to ``openai/gpt-4o-mini``.
 
@@ -18,33 +15,21 @@ If unset, defaults to ``openai/gpt-4o-mini``.
 (e.g., cheap triage vs capable specialist). Defaults to ``openai/gpt-4o``.
 """
 
-from pathlib import Path
-
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+import os
+from dataclasses import dataclass
 
 
-def _find_dotenv() -> str:
-    """Walk up from CWD to find .env."""
-    d = Path.cwd().resolve()
-    while d != d.parent:
-        if (d / ".env").is_file():
-            return str(d / ".env")
-        d = d.parent
-    return ""
+@dataclass
+class Settings:
+    llm_model: str = "openai/gpt-4o-mini"
+    secondary_llm_model: str = "openai/gpt-4o"
+
+    @classmethod
+    def from_env(cls) -> "Settings":
+        return cls(
+            llm_model=os.environ.get("AGENTSPAN_LLM_MODEL", "openai/gpt-4o-mini"),
+            secondary_llm_model=os.environ.get("AGENTSPAN_SECONDARY_LLM_MODEL", "openai/gpt-4o"),
+        )
 
 
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=_find_dotenv(),
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
-
-    llm_model: str = Field(default="openai/gpt-4o-mini", validation_alias="AGENTSPAN_LLM_MODEL")
-    secondary_llm_model: str = Field(
-        default="openai/gpt-4o", validation_alias="AGENTSPAN_SECONDARY_LLM_MODEL"
-    )
-
-
-settings = Settings()
+settings = Settings.from_env()

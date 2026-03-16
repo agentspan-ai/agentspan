@@ -1,13 +1,11 @@
-"""Locate the nearest .env file by walking up from CWD."""
-
-from pathlib import Path
+"""Optional dotenv loader for the validation module."""
 
 
-def find_dotenv() -> str:
-    """Walk up from CWD to find .env. Returns path string for pydantic-settings."""
-    d = Path.cwd().resolve()
-    while d != d.parent:
-        if (d / ".env").is_file():
-            return str(d / ".env")
-        d = d.parent
-    return ""
+def load_env():
+    """Load .env if python-dotenv is available, otherwise no-op."""
+    try:
+        from dotenv import find_dotenv, load_dotenv
+
+        load_dotenv(find_dotenv())
+    except ImportError:
+        pass

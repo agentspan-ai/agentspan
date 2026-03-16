@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+from dataclasses import asdict
 from pathlib import Path
 
 from .models import ExampleResult
@@ -45,7 +46,10 @@ def write_json_results(json_path: Path, all_results: list[ExampleResult]):
             "models": {},
         }
         for provider, r in er.results.items():
-            entry["models"][provider] = r.model_dump(exclude={"stdout", "stderr"})
+            d = asdict(r)
+            d.pop("stdout", None)
+            d.pop("stderr", None)
+            entry["models"][provider] = d
         json_data.append(entry)
     json_path.write_text(json.dumps(json_data, indent=2))
 

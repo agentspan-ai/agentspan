@@ -15,9 +15,9 @@ so the LLM retries automatically on guardrail failure.
 Requirements:
     - Conductor server with LLM support
     - pip install litellm (for the guardrail LLM call)
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
-    - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini in .env or environment
-    - OPENAI_API_KEY=sk-... in .env or environment
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
+    - OPENAI_API_KEY=sk-... as environment variable
 """
 
 from agentspan.agents import Agent, AgentRuntime, LLMGuardrail, OnFail, Position

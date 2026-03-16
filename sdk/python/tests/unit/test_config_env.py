@@ -3,7 +3,7 @@
 
 """Tests for AgentConfig environment variable loading.
 
-Verifies that AGENTSPAN_* env vars are loaded correctly.
+Verifies that AGENTSPAN_* env vars are loaded correctly via from_env().
 """
 
 from __future__ import annotations
@@ -13,34 +13,57 @@ from unittest import mock
 
 import pytest
 
-from agentspan.agents.runtime.config import AgentConfig, _env
+from agentspan.agents.runtime.config import AgentConfig, _env, _env_bool, _env_int
 
 
 class TestEnvHelper:
     """Tests for the _env() helper function."""
 
-    def test_reads_agentspan_var(self):
+    def test_reads_var(self):
         with mock.patch.dict(os.environ, {"AGENTSPAN_FOO": "bar"}, clear=False):
-            assert _env("AGENTSPAN_FOO", "AGENTSPAN_FOO") == "bar"
+            assert _env("AGENTSPAN_FOO") == "bar"
 
-    def test_falls_back_to_conductor_var(self):
-        env = {"AGENTSPAN_FOO": "legacy"}
-        with mock.patch.dict(os.environ, env, clear=False):
-            os.environ.pop("AGENTSPAN_FOO", None)
-            assert _env("AGENTSPAN_FOO", "AGENTSPAN_FOO") == "legacy"
-
-    def test_agentspan_takes_precedence(self):
-        env = {"AGENTSPAN_FOO": "new", "AGENTSPAN_FOO": "old"}
-        with mock.patch.dict(os.environ, env, clear=False):
-            assert _env("AGENTSPAN_FOO", "AGENTSPAN_FOO") == "new"
-
-    def test_returns_default_when_neither_set(self):
+    def test_returns_default_when_not_set(self):
         with mock.patch.dict(os.environ, {}, clear=True):
-            assert _env("AGENTSPAN_FOO", "AGENTSPAN_FOO", "default") == "default"
+            assert _env("AGENTSPAN_FOO", "default") == "default"
 
     def test_returns_none_when_no_default(self):
         with mock.patch.dict(os.environ, {}, clear=True):
-            assert _env("AGENTSPAN_FOO", "AGENTSPAN_FOO") is None
+            assert _env("AGENTSPAN_FOO") is None
+
+
+class TestEnvBool:
+    """Tests for _env_bool() helper."""
+
+    def test_true_values(self):
+        for val in ("true", "True", "TRUE", "1", "yes"):
+            with mock.patch.dict(os.environ, {"FLAG": val}, clear=True):
+                assert _env_bool("FLAG") is True, f"Failed for {val!r}"
+
+    def test_false_values(self):
+        for val in ("false", "False", "0", "no"):
+            with mock.patch.dict(os.environ, {"FLAG": val}, clear=True):
+                assert _env_bool("FLAG") is False, f"Failed for {val!r}"
+
+    def test_default_true(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            assert _env_bool("FLAG", True) is True
+
+    def test_default_false(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            assert _env_bool("FLAG", False) is False
+
+
+class TestEnvInt:
+    """Tests for _env_int() helper."""
+
+    def test_reads_int(self):
+        with mock.patch.dict(os.environ, {"NUM": "42"}, clear=True):
+            assert _env_int("NUM") == 42
+
+    def test_default(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            assert _env_int("NUM", 7) == 7
 
 
 class TestAgentConfigFromEnv:
@@ -51,21 +74,6 @@ class TestAgentConfigFromEnv:
         with mock.patch.dict(os.environ, env, clear=True):
             config = AgentConfig.from_env()
             assert config.server_url == "http://myhost:9090/api"
-
-    def test_falls_back_to_conductor_server_url(self):
-        env = {"AGENTSPAN_SERVER_URL": "http://legacy:7001/api"}
-        with mock.patch.dict(os.environ, env, clear=True):
-            config = AgentConfig.from_env()
-            assert config.server_url == "http://legacy:7001/api"
-
-    def test_agentspan_url_takes_precedence(self):
-        env = {
-            "AGENTSPAN_SERVER_URL": "http://new:8080/api",
-            "AGENTSPAN_SERVER_URL": "http://old:7001/api",
-        }
-        with mock.patch.dict(os.environ, env, clear=True):
-            config = AgentConfig.from_env()
-            assert config.server_url == "http://new:8080/api"
 
     def test_defaults_to_localhost_when_nothing_set(self):
         with mock.patch.dict(os.environ, {}, clear=True):
@@ -78,13 +86,6 @@ class TestAgentConfigFromEnv:
             config = AgentConfig.from_env()
             assert config.auth_key == "mykey"
             assert config.auth_secret == "mysecret"
-
-    def test_falls_back_to_conductor_auth(self):
-        env = {"AGENTSPAN_AUTH_KEY": "oldkey", "AGENTSPAN_AUTH_SECRET": "oldsecret"}
-        with mock.patch.dict(os.environ, env, clear=True):
-            config = AgentConfig.from_env()
-            assert config.auth_key == "oldkey"
-            assert config.auth_secret == "oldsecret"
 
     def test_auto_start_server_defaults_true(self):
         with mock.patch.dict(os.environ, {}, clear=True):
@@ -120,6 +121,11 @@ class TestAgentConfigFromEnv:
             assert config.default_timeout_seconds == 120
             assert config.llm_retry_count == 5
             assert config.worker_thread_count == 4
+
+    def test_direct_construction(self):
+        config = AgentConfig(server_url="http://test:9090/api", native=True)
+        assert config.server_url == "http://test:9090/api"
+        assert config.native is True
 
 
 class TestServerAutoStart:

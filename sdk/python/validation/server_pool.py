@@ -8,15 +8,14 @@ import signal
 import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
 from pathlib import Path
-
-from pydantic import BaseModel, ConfigDict
 
 from .runner import check_server_health
 
 
-class ServerInstance(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+@dataclass
+class ServerInstance:
     port: int
     url: str  # http://localhost:{port}/api
     model_name: str  # "openai", "anthropic", "adk"

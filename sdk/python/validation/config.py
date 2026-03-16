@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import os
+from dataclasses import dataclass
 from pathlib import Path
 
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from ._env import load_env
 
-from ._env import find_dotenv
+load_env()
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 EXAMPLES_DIR = SCRIPT_DIR.parent / "examples"
@@ -83,24 +84,33 @@ def build_csv_columns(
 # ── Settings ─────────────────────────────────────────────────────────────
 
 
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=find_dotenv(),
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
-
+@dataclass
+class Settings:
     # API keys (for model availability detection)
-    openai_api_key: str = Field(default="", validation_alias="OPENAI_API_KEY")
-    anthropic_api_key: str = Field(default="", validation_alias="ANTHROPIC_API_KEY")
-    google_api_key: str = Field(default="", validation_alias="GOOGLE_API_KEY")
+    openai_api_key: str = ""
+    anthropic_api_key: str = ""
+    google_api_key: str = ""
 
     # Judge
-    judge_model: str = Field(default="gpt-4o-mini", validation_alias="JUDGE_LLM_MODEL")
-    judge_max_output_chars: int = Field(default=3000, validation_alias="JUDGE_MAX_OUTPUT_CHARS")
-    max_judge_calls: int = Field(default=0, validation_alias="MAX_JUDGE_CALLS")  # 0 = unlimited
-    judge_rate_limit: float = Field(default=0.5, validation_alias="JUDGE_RATE_LIMIT")
-    baseline_model: str = Field(default="openai", validation_alias="BASELINE_MODEL")
+    judge_model: str = "gpt-4o-mini"
+    judge_max_output_chars: int = 3000
+    max_judge_calls: int = 0  # 0 = unlimited
+    judge_rate_limit: float = 0.5
+    baseline_model: str = "openai"
+
+    @classmethod
+    def from_env(cls) -> Settings:
+        """Create Settings by reading env vars (dotenv loaded at module level)."""
+        return cls(
+            openai_api_key=os.environ.get("OPENAI_API_KEY", ""),
+            anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", ""),
+            google_api_key=os.environ.get("GOOGLE_API_KEY", ""),
+            judge_model=os.environ.get("JUDGE_LLM_MODEL", "gpt-4o-mini"),
+            judge_max_output_chars=int(os.environ.get("JUDGE_MAX_OUTPUT_CHARS", "3000")),
+            max_judge_calls=int(os.environ.get("MAX_JUDGE_CALLS", "0")),
+            judge_rate_limit=float(os.environ.get("JUDGE_RATE_LIMIT", "0.5")),
+            baseline_model=os.environ.get("BASELINE_MODEL", "openai"),
+        )
 
     def get_active_models(self) -> dict[str, str]:
         """Return subset of MODELS where the required API key is set."""

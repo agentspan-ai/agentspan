@@ -199,7 +199,9 @@ class AgentRuntime:
     ) -> None:
         from agentspan.agents.runtime.config import AgentConfig
 
-        base = config if config is not None else AgentConfig()
+        from dataclasses import replace
+
+        base = config if config is not None else AgentConfig.from_env()
         overrides: dict = {}
         if server_url is not None:
             overrides["server_url"] = server_url
@@ -209,14 +211,10 @@ class AgentRuntime:
             overrides["auth_secret"] = api_secret
         if native is not None:
             overrides["native"] = native
-        self._config = base.model_copy(update=overrides)
+        self._config = replace(base, **overrides) if overrides else base
 
         # Native mode — bypass server/Conductor entirely
         if self._config.native:
-            # Inject OPENAI_API_KEY into env so framework SDKs can find it
-            if self._config.openai_api_key and "OPENAI_API_KEY" not in os.environ:
-                os.environ["OPENAI_API_KEY"] = self._config.openai_api_key
-
             self._compiled_workflows: Dict[str, Any] = {}
             self._workers_started = False
             self._registered_tool_names: set = set()

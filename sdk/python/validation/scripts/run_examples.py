@@ -93,7 +93,7 @@ def main():
         list_groups()
         return
 
-    settings = Settings()
+    settings = Settings.from_env()
     start_time = time.monotonic()
 
     # Determine active models

@@ -131,7 +131,7 @@ flowchart TD
 - `--resume` skips already-completed examples
 - `--retry-failed` re-runs only examples with ERROR/TIMEOUT/FAILED status
 
-The `AGENTSPAN_LLM_MODEL` env var is set per-subprocess, overriding whatever the example's `settings.py` would normally read from the nearest `.env` (found via `find_dotenv()`). In parallel mode, `AGENTSPAN_SERVER_URL` is also overridden per-subprocess to point at the provider's dedicated server.
+The `AGENTSPAN_LLM_MODEL` env var is set per-subprocess, overriding whatever the example's `settings.py` would normally read from `os.environ`. In parallel mode, `AGENTSPAN_SERVER_URL` is also overridden per-subprocess to point at the provider's dedicated server.
 
 ## Example Discovery
 

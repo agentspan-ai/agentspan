@@ -14,9 +14,9 @@ Two modes:
 Requirements:
     - pip install openai
     - Conductor server with LLM support
-    - OPENAI_API_KEY=sk-... in .env or environment
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
-    - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini in .env or environment
+    - OPENAI_API_KEY=sk-... as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
 from agentspan.agents import AgentRuntime

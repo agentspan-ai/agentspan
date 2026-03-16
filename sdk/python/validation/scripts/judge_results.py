@@ -32,7 +32,7 @@ from validation.reporting import _format_duration, find_latest_csv
 
 
 def main():
-    settings = Settings()
+    settings = Settings.from_env()
 
     parser = argparse.ArgumentParser(description="Judge validation results with LLM")
     parser.add_argument("--csv", type=str, help="Path to validation CSV (default: latest)")

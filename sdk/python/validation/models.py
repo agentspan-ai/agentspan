@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from pydantic import BaseModel
 
-
-class Example(BaseModel):
+@dataclass
+class Example:
     name: str  # "openai/01_basic_agent" or "01_basic_agent"
     path: Path  # absolute path to .py
     cwd: Path  # working directory for subprocess
@@ -16,7 +16,8 @@ class Example(BaseModel):
 _CSV_EXCLUDE = {"stdout", "stderr", "output_text"}
 
 
-class RunResult(BaseModel):
+@dataclass
+class RunResult:
     exit_code: int = -1
     status: str = "ERROR"
     duration_s: float = 0.0
@@ -33,12 +34,13 @@ class RunResult(BaseModel):
     stderr: str = ""
 
     def to_csv_dict(self, prefix: str) -> dict[str, object]:
-        return {f"{prefix}_{k}": v for k, v in self.model_dump().items() if k not in _CSV_EXCLUDE}
+        return {f"{prefix}_{k}": v for k, v in asdict(self).items() if k not in _CSV_EXCLUDE}
 
 
-class ExampleResult(BaseModel):
-    example: Example
-    results: dict[str, RunResult] = {}
+@dataclass
+class ExampleResult:
+    example: Example = None  # type: ignore[assignment]
+    results: dict[str, RunResult] = field(default_factory=dict)
     match: str = ""
     confidence: str = ""
     notes: str = ""

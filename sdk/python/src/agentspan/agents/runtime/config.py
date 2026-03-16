@@ -1,30 +1,51 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Configuration — load settings from environment variables and ``.env`` files.
+"""Configuration — load settings from environment variables.
 
-Uses ``pydantic-settings`` :class:`BaseSettings` so values are automatically
-read from env vars and an optional ``.env`` file in the working directory.
+Uses ``dataclasses`` with a ``from_env()`` classmethod for env var loading.
+Constructor kwargs allow direct overrides (useful for tests).
 
 Usage::
 
-    config = AgentConfig()                     # auto-loads from env / .env
-    config = AgentConfig(server_url="http://custom:8080/api")  # explicit override
+    config = AgentConfig.from_env()                          # load from env
+    config = AgentConfig(server_url="http://custom:8080/api")  # explicit
 """
 
 from __future__ import annotations
 
+import os
+from dataclasses import dataclass
 from typing import Optional
 
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+
+def _env(var: str, default=None):
+    """Read an environment variable, returning *default* if unset."""
+    return os.environ.get(var, default)
 
 
-class AgentConfig(BaseSettings):
+def _env_bool(var: str, default: bool = False) -> bool:
+    """Read a boolean environment variable (true/1/yes → True)."""
+    val = os.environ.get(var)
+    if val is None:
+        return default
+    return val.lower() in ("true", "1", "yes")
+
+
+def _env_int(var: str, default: int = 0) -> int:
+    """Read an integer environment variable."""
+    val = os.environ.get(var)
+    if val is None:
+        return default
+    return int(val)
+
+
+@dataclass
+class AgentConfig:
     """Configuration for the agents runtime.
 
-    Values are loaded from environment variables (and an optional ``.env``
-    file) with sensible defaults. Simply instantiate with ``AgentConfig()``.
+    Values are loaded from environment variables via ``from_env()``.
+    Direct construction with kwargs is supported for tests and explicit config.
 
     Attributes:
         server_url: Agentspan server API URL.
@@ -44,69 +65,38 @@ class AgentConfig(BaseSettings):
             (e.g. ``OPENAI_API_KEY``).
     """
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-        populate_by_name=True,
-    )
+    server_url: str = "http://localhost:8080/api"
+    auth_key: Optional[str] = None
+    auth_secret: Optional[str] = None
+    default_timeout_seconds: int = 0
+    llm_retry_count: int = 3
+    worker_poll_interval_ms: int = 100
+    worker_thread_count: int = 1
+    auto_start_workers: bool = True
+    auto_start_server: bool = True
+    daemon_workers: bool = True
+    auto_register_integrations: bool = False
+    streaming_enabled: bool = True
+    native: bool = False
 
-    server_url: str = Field(
-        default="http://localhost:8080/api",
-        validation_alias="AGENTSPAN_SERVER_URL",
-    )
-    auth_key: Optional[str] = Field(
-        default=None,
-        validation_alias="AGENTSPAN_AUTH_KEY",
-    )
-    auth_secret: Optional[str] = Field(
-        default=None,
-        validation_alias="AGENTSPAN_AUTH_SECRET",
-    )
-    default_timeout_seconds: int = Field(
-        default=0,
-        validation_alias="AGENTSPAN_AGENT_TIMEOUT",
-    )
-    llm_retry_count: int = Field(
-        default=3,
-        validation_alias="AGENTSPAN_LLM_RETRY_COUNT",
-    )
-    worker_poll_interval_ms: int = Field(
-        default=100,
-        validation_alias="AGENTSPAN_WORKER_POLL_INTERVAL",
-    )
-    worker_thread_count: int = Field(
-        default=1,
-        validation_alias="AGENTSPAN_WORKER_THREADS",
-    )
-    auto_start_workers: bool = Field(
-        default=True,
-        validation_alias="AGENTSPAN_AUTO_START_WORKERS",
-    )
-    auto_start_server: bool = Field(
-        default=True,
-        validation_alias="AGENTSPAN_AUTO_START_SERVER",
-    )
-    daemon_workers: bool = Field(
-        default=True,
-        validation_alias="AGENTSPAN_DAEMON_WORKERS",
-    )
-    auto_register_integrations: bool = Field(
-        default=False,
-        validation_alias="AGENTSPAN_INTEGRATIONS_AUTO_REGISTER",
-    )
-    streaming_enabled: bool = Field(
-        default=True,
-        validation_alias="AGENTSPAN_STREAMING_ENABLED",
-    )
-    native: bool = Field(
-        default=False,
-        validation_alias="AGENTSPAN_NATIVE",
-    )
-    openai_api_key: Optional[str] = Field(
-        default=None,
-        validation_alias="OPENAI_API_KEY",
-    )
+    @classmethod
+    def from_env(cls) -> AgentConfig:
+        """Create an ``AgentConfig`` by reading ``AGENTSPAN_*`` env vars."""
+        return cls(
+            server_url=_env("AGENTSPAN_SERVER_URL", "http://localhost:8080/api"),
+            auth_key=_env("AGENTSPAN_AUTH_KEY"),
+            auth_secret=_env("AGENTSPAN_AUTH_SECRET"),
+            default_timeout_seconds=_env_int("AGENTSPAN_AGENT_TIMEOUT", 0),
+            llm_retry_count=_env_int("AGENTSPAN_LLM_RETRY_COUNT", 3),
+            worker_poll_interval_ms=_env_int("AGENTSPAN_WORKER_POLL_INTERVAL", 100),
+            worker_thread_count=_env_int("AGENTSPAN_WORKER_THREADS", 1),
+            auto_start_workers=_env_bool("AGENTSPAN_AUTO_START_WORKERS", True),
+            auto_start_server=_env_bool("AGENTSPAN_AUTO_START_SERVER", True),
+            daemon_workers=_env_bool("AGENTSPAN_DAEMON_WORKERS", True),
+            auto_register_integrations=_env_bool("AGENTSPAN_INTEGRATIONS_AUTO_REGISTER", False),
+            streaming_enabled=_env_bool("AGENTSPAN_STREAMING_ENABLED", True),
+            native=_env_bool("AGENTSPAN_NATIVE", False),
+        )
 
     @property
     def api_key(self) -> Optional[str]:

@@ -3,6 +3,7 @@
 __pycache__/
 sdk/python/.coverage
 sdk/python/.env
+sdk/python/validation/.env
 server/agent-runtime.db
 server/.gradle/
 build/

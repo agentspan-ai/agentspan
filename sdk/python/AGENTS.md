@@ -1050,6 +1050,10 @@ The SDK reads configuration from environment variables:
 ```python
 from agentspan.agents.runtime import AgentConfig, AgentRuntime
 
+# Load from AGENTSPAN_* env vars
+config = AgentConfig.from_env()
+
+# Or construct directly (kwargs override defaults)
 config = AgentConfig(
     server_url="http://localhost:8080/api",
     default_timeout_seconds=600,

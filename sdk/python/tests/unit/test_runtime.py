@@ -263,25 +263,23 @@ class TestAgentRuntimeInit:
 
 
 class TestAgentConfig:
-    """Test AgentConfig BaseSettings loads from env."""
+    """Test AgentConfig dataclass loads from env via from_env()."""
 
     def test_defaults(self):
         from agentspan.agents.runtime.config import AgentConfig
-        from unittest.mock import patch
 
-        with patch.dict("os.environ", {}, clear=True):
-            config = AgentConfig()
-            assert config.server_url == "http://localhost:8080/api"
-            assert config.default_timeout_seconds == 0
-            assert config.llm_retry_count == 3
-            assert config.worker_poll_interval_ms == 100
+        config = AgentConfig()
+        assert config.server_url == "http://localhost:8080/api"
+        assert config.default_timeout_seconds == 0
+        assert config.llm_retry_count == 3
+        assert config.worker_poll_interval_ms == 100
 
     def test_env_override(self):
         from agentspan.agents.runtime.config import AgentConfig
         from unittest.mock import patch
 
         with patch.dict("os.environ", {"AGENTSPAN_SERVER_URL": "http://custom:9090/api"}, clear=True):
-            config = AgentConfig()
+            config = AgentConfig.from_env()
             assert config.server_url == "http://custom:9090/api"
 
     def test_custom_timeout(self):

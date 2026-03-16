@@ -372,14 +372,14 @@ class TestAgentConfigAutoRegister:
         from agentspan.agents.runtime.config import AgentConfig
 
         with patch.dict("os.environ", {"AGENTSPAN_INTEGRATIONS_AUTO_REGISTER": "true"}):
-            config = AgentConfig()
+            config = AgentConfig.from_env()
             assert config.auto_register_integrations is True
 
     def test_false_by_default(self):
         from agentspan.agents.runtime.config import AgentConfig
 
         with patch.dict("os.environ", {}, clear=True):
-            config = AgentConfig()
+            config = AgentConfig.from_env()
             assert config.auto_register_integrations is False
 
     def test_various_truthy_values(self):
@@ -387,5 +387,5 @@ class TestAgentConfigAutoRegister:
 
         for val in ("true", "True", "TRUE", "1", "yes"):
             with patch.dict("os.environ", {"AGENTSPAN_INTEGRATIONS_AUTO_REGISTER": val}):
-                config = AgentConfig()
+                config = AgentConfig.from_env()
                 assert config.auto_register_integrations is True, f"Failed for {val!r}"

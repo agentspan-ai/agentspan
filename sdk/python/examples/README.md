@@ -6,22 +6,13 @@ Runnable examples demonstrating every feature of the Conductor Agents SDK.
 
 ### 1. Configure your environment
 
-Create a `.env` file in the project root (recommended):
-
-```dotenv
-AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini
-AGENTSPAN_SERVER_URL=http://localhost:8080/api
-#AGENTSPAN_AUTH_KEY=<key> # if authentication is enabled
-#AGENTSPAN_AUTH_SECRET=<secret> # if authentication is enabled..
-```
-
-Or export environment variables directly:
+Export environment variables:
 
 ```bash
 export AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini
 export AGENTSPAN_SERVER_URL=http://localhost:8080/api
-#export AGENTSPAN_AUTH_KEY=<key> # if authentication is enabled
-#export AGENTSPAN_AUTH_SECRET=<secret> # if authentication is enabled..
+# export AGENTSPAN_AUTH_KEY=<key>     # if authentication is enabled
+# export AGENTSPAN_AUTH_SECRET=<secret>
 ```
 
 #### 1.1. Choose a model

@@ -43,7 +43,7 @@ pip install agentspan-sdk
 
 ### Configure
 
-Copy `.env.example` to `.env` and edit, or export env vars directly:
+Export environment variables:
 
 ```bash
 export AGENTSPAN_SERVER_URL=http://localhost:8080/api

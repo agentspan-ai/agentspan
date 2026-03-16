@@ -12,7 +12,6 @@ requires-python = ">=3.9"
 dependencies = [
     "conductor-python>=1.3.5-rc1",
     "httpx>=0.24",
-    "pydantic-settings>=2.0",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -49,6 +48,7 @@ validation = [
     "litellm>=1.0",
     "rich>=13.0",
     "jinja2>=3.1",
+    "python-dotenv>=1.0",
 ]
 
 [project.entry-points."pytest11"]

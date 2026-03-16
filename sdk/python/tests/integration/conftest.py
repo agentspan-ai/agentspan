@@ -26,7 +26,7 @@ def runtime():
     SSE streaming is enabled by default. Set AGENTSPAN_STREAMING_ENABLED=false
     to disable it explicitly.
     """
-    config = AgentConfig()
+    config = AgentConfig.from_env()
     with AgentRuntime(config=config) as rt:
         yield rt
 

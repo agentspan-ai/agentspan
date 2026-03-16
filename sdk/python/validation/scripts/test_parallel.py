@@ -47,7 +47,7 @@ def _check(name: str, condition: bool, detail: str = ""):
 
 def _setup_env():
     """Load API keys from Settings into os.environ for subprocesses."""
-    settings = Settings()
+    settings = Settings.from_env()
     if settings.openai_api_key:
         os.environ.setdefault("OPENAI_API_KEY", settings.openai_api_key)
     if settings.anthropic_api_key:
@@ -169,7 +169,7 @@ def test_list_groups():
 
 def test_only_model():
     """8. Only model: -j --only openai"""
-    settings = Settings()
+    settings = Settings.from_env()
     if not settings.openai_api_key:
         print("  SKIP: test_only_model (no OPENAI_API_KEY)")
         return
