@@ -16,7 +16,7 @@ retries = 0            # retry count on failure
 server_url = "http://localhost:8080/api"
 
 [judge]
-baseline_run = "openai-server"   # run name to use as comparison baseline
+baseline_run = "openai-native"   # run name to use as comparison baseline
 model = "gpt-4o-mini"           # LLM model for judging
 max_output_chars = 3000          # truncate outputs before judging
 rate_limit = 0.5                 # seconds between judge calls
@@ -25,13 +25,17 @@ max_calls = 0                    # 0 = unlimited
 # ── Runs ─────────────────────────────────────────────────────────────────
 
 [runs.openai-server]
-group = "SMOKE_TEST"
+group = "OPENAI_EXAMPLES"
 model = "openai/gpt-4o"
 
 [runs.openai-native]
-group = "SMOKE_TEST"
+group = "OPENAI_EXAMPLES"
 model = "openai/gpt-4o"
 native = true
+
+[runs.openai-smoke]
+group = "SMOKE_TEST"
+model = "openai/gpt-4o"
 
 [runs.anthropic-server]
 group = "SMOKE_TEST"
