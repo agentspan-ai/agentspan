@@ -12,6 +12,7 @@ from .config import Settings
 from .judge import JudgeState, judge_comparison, judge_individual
 from .parsing import AGENT_OUTPUT_RE, extract_prompt
 from .persistence import compute_output_hash
+from .report_html import generate_cross_html_report
 from .toml_config import JudgeConfig
 
 
@@ -183,6 +184,20 @@ def judge_across_runs(
 
     elapsed = time.monotonic() - start_time
 
+    # Save cache
+    prev_judge_path.write_text(json.dumps(prev_judge, indent=2))
+
+    # Build meta
+    meta = {
+        "judge_duration_s": round(elapsed, 1),
+        "judge_model": settings.judge_model,
+        "judge_calls": state.call_count,
+        "cache_hits": state.cache_hits,
+        "baseline_run": baseline_name,
+        "runs": run_names,
+    }
+    (judge_dir / "meta.json").write_text(json.dumps(meta, indent=2))
+
     # Write results
     if judge_rows:
         # Build columns dynamically from rows
@@ -205,23 +220,43 @@ def judge_across_runs(
             writer.writeheader()
             writer.writerows(judge_rows)
 
-        # Write report
+        # Write markdown report
         report_path = judge_dir / "report.md"
         _write_judge_report(report_path, judge_rows, run_names, baseline_name, elapsed)
 
-    # Save cache
-    prev_judge_path.write_text(json.dumps(prev_judge, indent=2))
+        # Load raw outputs for HTML report
+        raw_outputs: dict[str, dict[str, str]] = {}
+        for row in judge_rows:
+            example = row["example"]
+            raw_outputs[example] = {}
+            for rn in run_names:
+                ex_data = run_examples.get(rn, {}).get(example)
+                if ex_data and ex_data.get("status") == "COMPLETED":
+                    raw_outputs[example][rn] = _load_single_output(
+                        run_dirs[rn] / "outputs", example
+                    )
 
-    # Meta
-    meta = {
-        "judge_duration_s": round(elapsed, 1),
-        "judge_model": settings.judge_model,
-        "judge_calls": state.call_count,
-        "cache_hits": state.cache_hits,
-        "baseline_run": baseline_name,
-        "runs": run_names,
-    }
-    (judge_dir / "meta.json").write_text(json.dumps(meta, indent=2))
+        # Load per-run metadata
+        run_meta_data: dict[str, dict] = {}
+        for rn, rd in run_dirs.items():
+            run_meta_path = rd / "meta.json"
+            if run_meta_path.exists():
+                try:
+                    run_meta_data[rn] = json.loads(run_meta_path.read_text())
+                except (json.JSONDecodeError, OSError):
+                    pass
+
+        # Write HTML report
+        html_path = judge_dir / "report.html"
+        generate_cross_html_report(
+            judge_rows,
+            html_path,
+            run_names=run_names,
+            baseline=baseline_name,
+            raw_outputs=raw_outputs,
+            meta=meta,
+            run_meta=run_meta_data,
+        )
 
     print()
     print(
