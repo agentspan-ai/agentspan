@@ -37,13 +37,20 @@ class JudgeConfig:
 
 
 @dataclass
+class DisplayConfig:
+    max_example_rows: int = 40
+
+
+@dataclass
 class MultiRunConfig:
     runs: dict[str, RunConfig] = field(default_factory=dict)
     judge: JudgeConfig = field(default_factory=JudgeConfig)
+    display: DisplayConfig = field(default_factory=DisplayConfig)
 
 
 _RUN_FIELDS = {f.name for f in RunConfig.__dataclass_fields__.values()}
 _JUDGE_FIELDS = {f.name for f in JudgeConfig.__dataclass_fields__.values()}
+_DISPLAY_FIELDS = {f.name for f in DisplayConfig.__dataclass_fields__.values()}
 
 
 def load_toml_config(path: Path) -> MultiRunConfig:
@@ -55,8 +62,10 @@ def load_toml_config(path: Path) -> MultiRunConfig:
     judge_raw = raw.get("judge", {})
     runs_raw = raw.get("runs", {})
 
+    display_raw = raw.get("display", {})
+
     # Warn on unknown top-level keys
-    known_top = {"defaults", "judge", "runs"}
+    known_top = {"defaults", "judge", "runs", "display"}
     for k in raw:
         if k not in known_top:
             warnings.warn(f"Unknown top-level key in config: '{k}'")
@@ -71,8 +80,14 @@ def load_toml_config(path: Path) -> MultiRunConfig:
         if k not in _JUDGE_FIELDS:
             warnings.warn(f"Unknown key in [judge]: '{k}'")
 
-    # Build JudgeConfig
+    # Warn on unknown display keys
+    for k in display_raw:
+        if k not in _DISPLAY_FIELDS:
+            warnings.warn(f"Unknown key in [display]: '{k}'")
+
+    # Build JudgeConfig + DisplayConfig
     judge = JudgeConfig(**{k: v for k, v in judge_raw.items() if k in _JUDGE_FIELDS})
+    display = DisplayConfig(**{k: v for k, v in display_raw.items() if k in _DISPLAY_FIELDS})
 
     # Build RunConfigs — merge defaults into each run
     if not runs_raw:
@@ -90,7 +105,7 @@ def load_toml_config(path: Path) -> MultiRunConfig:
         merged["name"] = run_name
         runs[run_name] = RunConfig(**{k: v for k, v in merged.items() if k in _RUN_FIELDS})
 
-    config = MultiRunConfig(runs=runs, judge=judge)
+    config = MultiRunConfig(runs=runs, judge=judge, display=display)
 
     # Validate baseline_run
     if judge.baseline_run and judge.baseline_run not in runs:

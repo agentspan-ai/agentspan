@@ -20,7 +20,7 @@ class MultiRunProgress:
     2. Example matrix — per-example status across all runs with duration
     """
 
-    def __init__(self, runs: list[RunConfig]):
+    def __init__(self, runs: list[RunConfig], max_example_rows: int = 40):
         from rich.console import Console
         from rich.live import Live
 
@@ -48,7 +48,7 @@ class MultiRunProgress:
         # Track start times
         self._start_time = time.monotonic()
 
-        self._max_example_rows = 20
+        self._max_example_rows = max_example_rows
 
         self._live = Live(
             self._build_display(),

@@ -67,7 +67,7 @@ def run_all(
 
     # Try rich live progress, fall back to plain print
     try:
-        progress = MultiRunProgress(runs)
+        progress = MultiRunProgress(runs, max_example_rows=config.display.max_example_rows)
         use_rich = True
     except ImportError:
         progress = None

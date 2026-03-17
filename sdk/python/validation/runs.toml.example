@@ -22,6 +22,9 @@ max_output_chars = 3000          # truncate outputs before judging
 rate_limit = 0.5                 # seconds between judge calls
 max_calls = 0                    # 0 = unlimited
 
+[display]
+max_example_rows = 40       # max example rows shown in live progress (default: 40)
+
 # ── Runs ─────────────────────────────────────────────────────────────────
 
 [runs.openai-server]
