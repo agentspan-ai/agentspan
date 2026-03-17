@@ -18,7 +18,7 @@ uv sync --extra validation
 ## Quick Start
 
 ```bash
-# 1. Run all examples (× 3 models)
+# 1. Run all examples (× 3 models) — legacy mode
 make validate
 
 # 2. Judge the results
@@ -27,6 +27,32 @@ make validate-judge
 # 3. Or do both in sequence
 make validate-all
 ```
+
+## Multi-Run Mode (TOML Config)
+
+Define named runs in a TOML file — one run per model, concurrent execution, cross-run judging.
+
+```bash
+# Copy and edit the example config
+cp validation/runs.toml.example validation/runs.toml
+
+# Run all configured runs
+python3 -m validation.scripts.run_examples --config validation/runs.toml
+
+# Run specific runs
+python3 -m validation.scripts.run_examples --config validation/runs.toml --run openai-native
+
+# Preview without executing
+python3 -m validation.scripts.run_examples --config validation/runs.toml --dry-run
+
+# Run + judge in one command
+python3 -m validation.scripts.run_examples --config validation/runs.toml --judge
+
+# Cross-run judge on existing results
+python3 -m validation.scripts.judge_results --run-dir validation/output/run_*/
+```
+
+See `validation/runs.toml.example` for full config reference.
 
 ## Run Specific Examples
 
@@ -99,14 +125,26 @@ Each run creates `validation/output/run_{timestamp}_{id}/` containing:
 ```
 python3 -m validation.scripts.run_examples [prefixes...] [options]
 
-Positional:
-  prefixes              Example prefix filters (e.g., 01 03)
+TOML mode:
+  --config PATH         Path to TOML multi-run config
+  --run NAMES           Comma-separated run names (TOML mode)
+  --judge               Run cross-run judge after execution (TOML mode)
 
-Options:
+Shared:
+  --output-dir DIR      Output directory (default: validation/output/)
+  --dry-run             Show plan without executing
+  --resume [RUN_DIR]    Resume, skipping completed examples
+  --retry-failed [DIR]  Re-run only failed examples
+  --list-groups         List available groups and exit
+
+Legacy mode (no --config):
+  prefixes              Example prefix filters (e.g., 01 03)
   --timeout SECONDS     Per-example timeout (default: 300, env: EXAMPLE_TIMEOUT)
   --retries N           Retry on failure (default: 0)
-  --output-dir DIR      Output directory (default: validation/output/)
   --group NAME          Run only examples in named group from groups.py
+  -j, --parallel        Parallel mode with dedicated servers
+  --only PROVIDER       Run only this provider
+  --native              Run via framework SDK, no server
 ```
 
 ### judge_results.py
@@ -116,6 +154,7 @@ python3 -m validation.scripts.judge_results [options]
 
 Options:
   --csv PATH            Path to validation CSV (default: latest in output dir)
+  --run-dir PATH        Multi-run parent directory for cross-run judging
   --output-dir DIR      Output directory (default: validation/output/)
   --judge-model MODEL   Override judge model (default: from config/env)
   --skip-judged         Skip providers that already have judge scores
@@ -149,21 +188,32 @@ Options:
 validation/
 ├── _env.py              # find_dotenv() helper
 ├── config.py            # constants, model IDs, CSV schemas, pricing, Settings
+├── toml_config.py       # TOML multi-run config parser
+├── orchestrator.py      # multi-run orchestrator (concurrent named runs)
+├── cross_judge.py       # cross-run judge (compare outputs across runs)
 ├── groups.py            # example groups, HITL stdin mappings
-├── models.py            # Example, RunResult models
+├── models.py            # Example, RunResult, SingleResult models
 ├── parsing.py           # stdout parsing, prompt extraction, raw output loading
 ├── discovery.py         # example discovery, dependency checking
 ├── runner.py            # execution, health check, match computation
+├── execution.py         # single-model + legacy multi-model execution
 ├── judge.py             # LLM judge calls, baseline comparison, confidence
 ├── reporting.py         # markdown report generation, CSV lookup
 ├── report_html.py       # interactive HTML report (Jinja2)
 ├── analysis.py          # cost estimation, regression detection
 ├── persistence.py       # last-run persistence, output hash caching
+├── output.py            # file writing (CSV, outputs, reports)
+├── display.py           # terminal display helpers
+├── server_pool.py       # dedicated servers for parallel execution
+├── runs.toml.example    # annotated TOML config template
 ├── templates/
 │   └── report.html.j2   # HTML report template
+├── native/
+│   ├── shim.py          # monkey-patch for native execution
+│   └── openai_runner.py # OpenAI native runner
 ├── scripts/
-│   ├── run_examples.py  # CLI: Phase 1 (execution)
-│   └── judge_results.py # CLI: Phase 2 (judging)
+│   ├── run_examples.py  # CLI: execution (TOML + legacy modes)
+│   └── judge_results.py # CLI: judging (single-run + cross-run)
 ├── README.md            # this file
 └── DESIGN.md            # architecture and internals
 ```

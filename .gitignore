@@ -21,3 +21,4 @@ agentspan_sdk.egg-info/
 /sdk/python/src/agentspan.egg-info/
 cli/main
 sdk/python/validation/output/
+sdk/python/validation/runs.toml

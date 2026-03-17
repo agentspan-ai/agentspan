@@ -47,10 +47,42 @@ def main():
         action="store_true",
         help="Skip providers that already have judge scores",
     )
+    parser.add_argument(
+        "--run-dir",
+        type=str,
+        default=None,
+        help="Multi-run parent directory for cross-run judging",
+    )
     args = parser.parse_args()
 
     if args.judge_model:
         settings.judge_model = args.judge_model
+
+    # Cross-run judging mode
+    if args.run_dir:
+        from validation.cross_judge import judge_across_runs
+        from validation.toml_config import JudgeConfig
+
+        run_dir = Path(args.run_dir)
+        if not run_dir.exists():
+            print(f"ERROR: Run directory not found: {run_dir}", file=sys.stderr)
+            sys.exit(1)
+
+        # Load config.toml from run dir if exists, else use defaults
+        config_path = run_dir / "config.toml"
+        if config_path.exists():
+            from validation.toml_config import load_toml_config
+
+            config = load_toml_config(config_path)
+            judge_config = config.judge
+        else:
+            judge_config = JudgeConfig(model=settings.judge_model)
+
+        if args.judge_model:
+            judge_config.model = args.judge_model
+
+        judge_across_runs(run_dir, judge_config, settings)
+        return
 
     start_time = time.monotonic()
 

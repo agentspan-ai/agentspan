@@ -7,18 +7,34 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from .models import ExampleResult
+from .models import ExampleResult, RunResult
 from .parsing import load_raw_output
 from .report_html import generate_html_report
 from .reporting import generate_report
 
 
 def write_outputs(outputs_dir: Path, example_name: str, results: dict):
+    """Write raw output files for multi-model results (legacy)."""
     safe_name = example_name.replace("/", "_")
     for model_name, r in results.items():
         out_file = outputs_dir / f"{safe_name}_{model_name}.txt"
         with open(out_file, "w") as f:
             f.write(f"=== STDOUT ===\n{r.stdout}\n\n=== STDERR ===\n{r.stderr}\n")
+
+
+def write_single_output(outputs_dir: Path, example_name: str, result: RunResult) -> None:
+    """Write raw output file for single-model result (no provider suffix)."""
+    safe_name = example_name.replace("/", "_")
+    out_file = outputs_dir / f"{safe_name}.txt"
+    with open(out_file, "w") as f:
+        f.write(f"=== STDOUT ===\n{result.stdout}\n\n=== STDERR ===\n{result.stderr}\n")
+
+
+def build_single_row(example_name: str, result: RunResult) -> dict:
+    """Build flat CSV row for single-model result."""
+    row = {"example": example_name}
+    row.update(result.to_csv_dict(""))
+    return row
 
 
 def write_csv_row(csv_path: Path, columns: list[str], row: dict):

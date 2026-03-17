@@ -118,7 +118,7 @@ GROUPS: dict[str, list[str]] = {
         "openai/04_handoffs",
         "adk/01_basic_agent",
         "adk/03_structured_output",
-        "adk/26_safety_guardrails"
+        "adk/26_safety_guardrails",
     ],
 }
 

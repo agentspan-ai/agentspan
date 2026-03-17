@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Run SDK examples with all configured models, capture outputs.
+"""Run SDK examples — TOML multi-run mode or legacy single-command mode.
 
-Requires: uv sync --extra validation
+TOML mode (new):
+    python3 -m validation.scripts.run_examples --config runs.toml
+    python3 -m validation.scripts.run_examples --config runs.toml --run openai-native
+    python3 -m validation.scripts.run_examples --config runs.toml --dry-run
+    python3 -m validation.scripts.run_examples --config runs.toml --judge
 
-Usage:
+Legacy mode (no --config):
     python3 -m validation.scripts.run_examples              # all examples (sequential)
     python3 -m validation.scripts.run_examples -j           # parallel mode
     python3 -m validation.scripts.run_examples --group=SMOKE_TEST
-    python3 -m validation.scripts.run_examples -j --only openai --group=SMOKE_TEST
-    python3 -m validation.scripts.run_examples --dry-run -j
+    python3 -m validation.scripts.run_examples --only openai --group=SMOKE_TEST
     python3 -m validation.scripts.run_examples --resume
-    python3 -m validation.scripts.run_examples --retry-failed
     python3 -m validation.scripts.run_examples --list-groups
-
-Groups are defined in validation/groups.py
 """
 
 from __future__ import annotations
@@ -49,6 +49,30 @@ from validation.runner import check_server_health
 def main():
     parser = argparse.ArgumentParser(description="Run SDK examples with all configured models")
     parser.add_argument("prefixes", nargs="*", help="Example prefix filters (e.g. 01 03)")
+
+    # TOML mode args
+    parser.add_argument("--config", type=str, default=None, help="Path to TOML multi-run config")
+    parser.add_argument(
+        "--run", type=str, default=None, help="Comma-separated run names to execute (TOML mode)"
+    )
+    parser.add_argument(
+        "--judge", action="store_true", help="Run cross-run judge after execution (TOML mode)"
+    )
+
+    # Shared args
+    parser.add_argument(
+        "--output-dir", type=str, default=str(SCRIPT_DIR / "output"), help="Output directory"
+    )
+    parser.add_argument("--dry-run", action="store_true", help="Show plan without executing")
+    parser.add_argument("--list-groups", action="store_true", help="List available groups and exit")
+    parser.add_argument(
+        "--resume", nargs="?", const="", default=None, help="Resume, skipping completed examples"
+    )
+    parser.add_argument(
+        "--retry-failed", nargs="?", const="", default=None, help="Re-run only failed examples"
+    )
+
+    # Legacy mode args
     parser.add_argument(
         "--timeout",
         type=int,
@@ -56,9 +80,6 @@ def main():
         help="Per-example timeout in seconds (default: 300)",
     )
     parser.add_argument("--retries", type=int, default=0, help="Retries on failure (default: 0)")
-    parser.add_argument(
-        "--output-dir", type=str, default=str(SCRIPT_DIR / "output"), help="Output directory"
-    )
     parser.add_argument(
         "--group", type=str, default=None, help="Run only examples in named group from groups.py"
     )
@@ -72,22 +93,14 @@ def main():
     parser.add_argument(
         "--max-workers", type=int, default=8, help="Max concurrent examples (default: 8)"
     )
-    parser.add_argument("--dry-run", action="store_true", help="Show plan without executing")
     parser.add_argument(
         "--only", type=str, default=None, help="Run only this provider (e.g. openai)"
     )
-    parser.add_argument("--list-groups", action="store_true", help="List available groups and exit")
     parser.add_argument(
         "--native", action="store_true", help="Run via framework SDK directly (no Conductor server)"
     )
     parser.add_argument(
         "--format", type=str, choices=["csv", "json"], default="csv", help="Output format"
-    )
-    parser.add_argument(
-        "--resume", nargs="?", const="", default=None, help="Resume, skipping completed examples"
-    )
-    parser.add_argument(
-        "--retry-failed", nargs="?", const="", default=None, help="Re-run only failed examples"
     )
 
     args = parser.parse_args()
@@ -96,6 +109,74 @@ def main():
         list_groups()
         return
 
+    # Route to TOML mode or legacy mode
+    if args.config:
+        _run_toml_mode(args)
+    else:
+        _run_legacy_mode(args)
+
+
+def _run_toml_mode(args):
+    """TOML multi-run mode."""
+    from validation.orchestrator import run_all
+    from validation.toml_config import load_toml_config, resolve_runs
+
+    config_path = Path(args.config)
+    if not config_path.exists():
+        print(f"ERROR: Config file not found: {config_path}", file=sys.stderr)
+        sys.exit(1)
+
+    config = load_toml_config(config_path)
+    selected = args.run.split(",") if args.run else None
+    runs = resolve_runs(config, selected)
+
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.dry_run:
+        print("=" * 50)
+        print(" DRY RUN — no examples will be executed")
+        print("=" * 50)
+        print(f"\n  Config: {config_path}")
+        print(f"  Runs ({len(runs)}):")
+        for r in runs:
+            mode = "native" if r.native else "server"
+            group_label = f" group={r.group}" if r.group else ""
+            examples = discover_examples([], r.group)
+            print(f"    {r.name}: {r.model} ({mode}){group_label} [{len(examples)} examples]")
+            if r.secondary_model:
+                print(f"      secondary: {r.secondary_model}")
+            print(f"      timeout={r.timeout}s workers={r.max_workers} retries={r.retries}")
+
+        if config.judge.baseline_run:
+            print(f"\n  Judge baseline: {config.judge.baseline_run}")
+            print(f"  Judge model: {config.judge.model}")
+        print(f"\n  Output: {output_dir}")
+        return
+
+    # Banner
+    print("=" * 50)
+    print(f" Multi-Run Validation: {len(runs)} runs")
+    for r in runs:
+        mode = "native" if r.native else "server"
+        group_label = f" ({r.group})" if r.group else ""
+        print(f"   {r.name}: {r.model} [{mode}]{group_label}")
+    print(f" Output: {output_dir}")
+    print("=" * 50)
+    print()
+
+    run_all(
+        config=config,
+        runs=runs,
+        output_dir=output_dir,
+        resume=args.resume is not None,
+        retry_failed=args.retry_failed is not None,
+        judge_after=args.judge,
+    )
+
+
+def _run_legacy_mode(args):
+    """Legacy single-command mode (no TOML config)."""
     settings = Settings.from_env()
     start_time = time.monotonic()
 
@@ -182,7 +263,9 @@ def main():
         print("=" * 50)
         print(" DRY RUN — no examples will be executed")
         print("=" * 50)
-        print(f"\n  Mode: {'native' if args.native else ('parallel' if args.parallel else 'sequential')}")
+        print(
+            f"\n  Mode: {'native' if args.native else ('parallel' if args.parallel else 'sequential')}"
+        )
         print(f"  Models ({len(active_models)}):")
         if args.parallel:
             port = args.base_port

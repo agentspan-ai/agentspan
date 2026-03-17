@@ -8,7 +8,7 @@ import signal
 import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from .runner import check_server_health

@@ -10,7 +10,7 @@ import threading
 from pathlib import Path
 
 from .config import SCRIPT_DIR
-from .models import ExampleResult
+from .models import ExampleResult, SingleResult
 
 OUTPUT_DIR = SCRIPT_DIR / "output"
 LAST_RUN_SYMLINK = OUTPUT_DIR / ".last_run.json"
@@ -102,6 +102,54 @@ def update_last_run_judge(
     entry = examples.setdefault(example_name, {})
     entry["judge_scores"] = judge_scores
     entry["output_hashes"] = output_hashes
+
+
+def update_last_run_single(
+    last_run: dict, example_name: str, result: SingleResult, lock: threading.Lock
+) -> None:
+    """Thread-safe update for single-model run."""
+    with lock:
+        examples = last_run.setdefault("examples", {})
+        entry = examples.get(example_name, {})
+        entry["max_duration_s"] = result.result.duration_s
+        entry["status"] = result.result.status
+        entry["duration_s"] = result.result.duration_s
+
+        history = entry.get("history", [])
+        history.append(result.result.status)
+        entry["history"] = history[-10:]
+
+        examples[example_name] = entry
+
+    save_last_run(last_run, lock)
+
+
+def completed_examples_single(run_dir: Path) -> set[str]:
+    """Return completed example names for single-model run (no provider suffix)."""
+    outputs_dir = run_dir / "outputs"
+    if not outputs_dir.exists():
+        return set()
+    completed = set()
+    csv_path = run_dir / "results.csv"
+    if csv_path.exists():
+        with open(csv_path) as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                name = row.get("example", "")
+                safe_name = name.replace("/", "_")
+                if (outputs_dir / f"{safe_name}.txt").exists():
+                    completed.add(name)
+    return completed
+
+
+def failed_examples_single(last_run: dict) -> set[str]:
+    """Return failed examples for single-model run."""
+    failed = set()
+    for name, entry in last_run.get("examples", {}).items():
+        status = entry.get("status", "")
+        if status in ("ERROR", "TIMEOUT", "FAILED"):
+            failed.add(name)
+    return failed
 
 
 def sort_slowest_first(examples, last_run: dict):

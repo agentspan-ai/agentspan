@@ -310,3 +310,72 @@ validation/output/
 ```
 
 Directory format: `run_{YYYY-MM-DD}_{HH-MM-SS}_{run_id}/` where run_id = first 4 chars of UUID4.
+
+## Multi-Run Mode (TOML Config)
+
+A TOML config file defines multiple named runs, each targeting one model. Runs execute concurrently via the orchestrator, with cross-run judging comparing outputs against a baseline.
+
+### Config Structure
+
+```toml
+[defaults]
+timeout = 300
+parallel = true
+
+[judge]
+baseline_run = "openai-server"
+model = "gpt-4o-mini"
+
+[runs.openai-server]
+model = "openai/gpt-4o"
+group = "SMOKE_TEST"
+
+[runs.openai-native]
+model = "openai/gpt-4o"
+native = true
+group = "SMOKE_TEST"
+```
+
+### Orchestration Flow
+
+```
+load_toml_config() → resolve_runs() → run_all()
+                                          │
+                                  ┌───────┼───────┐
+                                  ▼       ▼       ▼
+                             run_single  run_single  run_single
+                             (sub-dir)   (sub-dir)   (sub-dir)
+                                  │       │       │
+                                  └───────┼───────┘
+                                          ▼
+                                  judge_across_runs()
+                                   (judge/ sub-dir)
+```
+
+Each `run_single()`:
+1. Discovers examples for the run's group
+2. Starts ServerPool if not native
+3. Calls `run_examples()` — single model, concurrent examples
+4. Writes `results.csv`, `outputs/`, `meta.json`, `last_run.json` into run sub-dir
+
+### Multi-Run Output Structure
+
+```
+validation/output/run_{timestamp}_{id}/
+├── meta.json                    ← parent metadata
+├── openai-server/               ← run sub-dir
+│   ├── results.csv              ← single-model CSV (flat columns)
+│   ├── meta.json
+│   ├── last_run.json
+│   └── outputs/
+│       ├── 01_basic_agent.txt   ← no provider suffix
+│       └── ...
+├── openai-native/
+│   ├── results.csv
+│   └── outputs/...
+└── judge/                       ← cross-run judge results
+    ├── results.csv              ← per-run scores + baseline comparison
+    ├── report.md
+    ├── meta.json
+    └── last_run.json            ← hash cache for re-judging
+```

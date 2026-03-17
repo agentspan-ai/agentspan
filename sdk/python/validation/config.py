@@ -62,6 +62,21 @@ EXECUTION_CSV_COLUMNS = (
     + ["match", "confidence", "notes"]
 )
 
+SINGLE_RUN_CSV_COLUMNS = [
+    "example",
+    "status",
+    "exit_code",
+    "duration_s",
+    "workflow_id",
+    "tool_calls",
+    "tokens_total",
+    "tokens_prompt",
+    "tokens_completion",
+    "output_length",
+    "has_error",
+    "error_summary",
+]
+
 
 def build_csv_columns(
     models: dict[str, str],

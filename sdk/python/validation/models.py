@@ -34,7 +34,17 @@ class RunResult:
     stderr: str = ""
 
     def to_csv_dict(self, prefix: str) -> dict[str, object]:
-        return {f"{prefix}_{k}": v for k, v in asdict(self).items() if k not in _CSV_EXCLUDE}
+        if prefix:
+            return {f"{prefix}_{k}": v for k, v in asdict(self).items() if k not in _CSV_EXCLUDE}
+        return {k: v for k, v in asdict(self).items() if k not in _CSV_EXCLUDE}
+
+
+@dataclass
+class SingleResult:
+    """Result of running one example with one model (single-run mode)."""
+
+    example: Example = None  # type: ignore[assignment]
+    result: RunResult = None  # type: ignore[assignment]
 
 
 @dataclass

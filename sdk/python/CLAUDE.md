@@ -28,6 +28,18 @@
   - `uv run python3 -m validation.scripts.run_examples --group=SMOKE_TEST --native --only openai`
   - Shim: `uv run python3 -m validation.native.shim <example_script.py>`
 
+### Multi-Run TOML Config
+
+Single TOML file defines named runs (one model each), executed concurrently with cross-run judging.
+
+- Config: `validation/runs.toml` (gitignored), example: `validation/runs.toml.example`
+- Run all: `uv run python3 -m validation.scripts.run_examples --config runs.toml`
+- Run subset: `--run openai-native,openai-server`
+- Dry-run: `--config runs.toml --dry-run`
+- With judge: `--config runs.toml --judge`
+- Cross-run judge only: `uv run python3 -m validation.scripts.judge_results --run-dir <parent_dir>`
+- Output structure: `output/run_*/` parent with sub-dirs per run + `judge/` for cross-run results
+
 ### Judge Config
 
 | Variable | Default | Purpose |

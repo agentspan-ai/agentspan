@@ -45,11 +45,14 @@ def run_example(
     retries: int,
     server_url: str | None = None,
     native: bool = False,
+    secondary_model: str | None = None,
 ) -> RunResult:
     env = os.environ.copy()
     env["AGENTSPAN_LLM_MODEL"] = model_id
     if server_url:
         env["AGENTSPAN_SERVER_URL"] = server_url
+    if secondary_model:
+        env["AGENTSPAN_SECONDARY_LLM_MODEL"] = secondary_model
 
     base_name = example.name.split("/")[-1]
     from .groups import HITL_STDIN
