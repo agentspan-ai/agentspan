@@ -1,0 +1,31 @@
+{
+  "name": "@agentspan/sdk",
+  "version": "0.1.0",
+  "description": "JavaScript SDK for Agentspan — define and run agents on Conductor",
+  "main": "src/index.js",
+  "types": "types/index.d.ts",
+  "exports": {
+    ".": "./src/index.js",
+    "./decorators": "./decorators/dist/index.js"
+  },
+  "scripts": {
+    "build:decorators": "tsc -p decorators/tsconfig.json",
+    "example:weather": "node examples/weather.js",
+    "example:weather-stream": "node examples/weather-stream.js",
+    "example:weather-decorators": "npx ts-node --project decorators/tsconfig.json examples/weather-decorators.ts"
+  },
+  "keywords": ["agentspan", "conductor", "ai", "agents", "llm"],
+  "license": "MIT",
+  "dependencies": {
+    "@io-orkes/conductor-javascript": "^3.0.2",
+    "dotenv": "^16.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
