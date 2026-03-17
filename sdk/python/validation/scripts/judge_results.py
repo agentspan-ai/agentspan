@@ -3,8 +3,9 @@
 scores each run individually (1-5), compares against baseline.
 
 Usage:
+    python3 -m validation.scripts.judge_results                              # latest run
     python3 -m validation.scripts.judge_results --run-dir path/to/run_*/
-    python3 -m validation.scripts.judge_results --run-dir path/to/run_*/ --judge-model gpt-4o
+    python3 -m validation.scripts.judge_results --judge-model gpt-4o
 """
 
 from __future__ import annotations
@@ -13,7 +14,19 @@ import argparse
 import sys
 from pathlib import Path
 
-from validation.config import Settings
+from validation.config import SCRIPT_DIR, Settings
+
+
+def _resolve_latest(output_dir: Path) -> Path | None:
+    """Resolve the latest run directory via symlink or glob."""
+    latest = output_dir / "latest"
+    if latest.is_symlink() or latest.exists():
+        resolved = latest.resolve()
+        if resolved.is_dir():
+            return resolved
+    # Fallback: newest run_* dir
+    dirs = sorted(output_dir.glob("run_*"), key=lambda d: d.name)
+    return dirs[-1] if dirs else None
 
 
 def main():
@@ -23,8 +36,14 @@ def main():
     parser.add_argument(
         "--run-dir",
         type=str,
-        required=True,
-        help="Multi-run parent directory containing per-run sub-dirs",
+        default=None,
+        help="Multi-run parent directory (default: latest run)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=str(SCRIPT_DIR / "output"),
+        help="Output directory to find latest run (default: validation/output)",
     )
     parser.add_argument(
         "--judge-model", type=str, default=None, help="Override judge model (default: from config)"
@@ -41,7 +60,15 @@ def main():
     from validation.cross_judge import judge_across_runs
     from validation.toml_config import JudgeConfig
 
-    run_dir = Path(args.run_dir)
+    if args.run_dir:
+        run_dir = Path(args.run_dir)
+    else:
+        run_dir = _resolve_latest(Path(args.output_dir))
+        if not run_dir:
+            print("ERROR: No runs found. Run examples first or pass --run-dir.", file=sys.stderr)
+            sys.exit(1)
+        print(f"  Using latest run: {run_dir}")
+
     if not run_dir.exists():
         print(f"ERROR: Run directory not found: {run_dir}", file=sys.stderr)
         sys.exit(1)
