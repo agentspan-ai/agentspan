@@ -16,10 +16,8 @@
 
 ## Validation Module
 
-- Install deps: `uv sync --extra validation` (includes `python-dotenv` for `.env` loading)
-- If `python-dotenv` is installed, validation scripts auto-load `.env` files. Otherwise, export env vars directly.
-- Config: `Settings.from_env()` pattern — see `validation/config.py`
-- Env template: `validation/.env.example`
+- Install deps: `uv sync --extra validation`
+- Config: `Settings.from_env()` reads env vars — see `validation/config.py`
 - Groups defined in `validation/groups.py` — use `--group=NAME` to filter in TOML config.
 - Native mode (no server): set `native = true` in TOML run config
 - Shim: `uv run python3 -m validation.native.shim <example_script.py>`

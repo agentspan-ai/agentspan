@@ -48,7 +48,6 @@ validation = [
     "litellm>=1.0",
     "rich>=13.0",
     "jinja2>=3.1",
-    "python-dotenv>=1.0",
 ]
 
 [project.entry-points."pytest11"]

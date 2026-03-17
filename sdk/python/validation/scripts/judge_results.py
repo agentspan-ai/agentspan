@@ -54,7 +54,7 @@ def main():
         settings.judge_model = args.judge_model
 
     if not settings.openai_api_key:
-        print("ERROR: OPENAI_API_KEY not set. Export it or add to .env", file=sys.stderr)
+        print("ERROR: OPENAI_API_KEY not set.", file=sys.stderr)
         sys.exit(1)
 
     from validation.cross_judge import judge_across_runs

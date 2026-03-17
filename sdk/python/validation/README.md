@@ -6,7 +6,7 @@ Runs SDK examples against configured models via TOML config. One run = one model
 
 - Python 3.11+
 - Conductor server running (for server-mode runs)
-- For judging: `OPENAI_API_KEY` in env or `.env`
+- For judging: `OPENAI_API_KEY` env var
 
 ## Install
 
@@ -129,7 +129,6 @@ Each run creates `validation/output/run_{timestamp}_{id}/` containing:
 
 ```
 validation/
-├── _env.py              # find_dotenv() helper
 ├── config.py            # constants, CSV schema, Settings
 ├── toml_config.py       # TOML multi-run config parser
 ├── orchestrator.py      # multi-run orchestrator

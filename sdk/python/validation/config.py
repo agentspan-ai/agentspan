@@ -6,10 +6,6 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from ._env import load_env
-
-load_env()
-
 SCRIPT_DIR = Path(__file__).resolve().parent
 EXAMPLES_DIR = SCRIPT_DIR.parent / "examples"
 
@@ -62,7 +58,7 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> Settings:
-        """Create Settings by reading env vars (dotenv loaded at module level)."""
+        """Create Settings by reading env vars."""
         return cls(
             openai_api_key=os.environ.get("OPENAI_API_KEY", ""),
             anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", ""),
