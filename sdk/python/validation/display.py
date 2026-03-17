@@ -39,8 +39,8 @@ class MultiRunProgress:
 
         # Per-example × run state: {example_name: {run_name: (status, duration)}}
         self._example_results: dict[str, dict[str, tuple[str, float]]] = {}
-        # Track which examples are currently running: {run_name: set(example_name)}
-        self._running: dict[str, set[str]] = {r.name: set() for r in runs}
+        # Track which examples are currently running: {run_name: {example_name: start_time}}
+        self._running: dict[str, dict[str, float]] = {r.name: {} for r in runs}
         # All known examples in order
         self._all_examples: list[str] = []
         self._example_set: set[str] = set()
@@ -124,8 +124,9 @@ class MultiRunProgress:
                         cells.append(Text(f"✗ {dur:.0f}s", style="yellow"))
                     else:
                         cells.append(Text(f"✗ {status[:5]}", style="red"))
-                elif ex_name in self._running.get(rn, set()):
-                    cells.append(Text("⟳ running", style="cyan"))
+                elif ex_name in self._running.get(rn, {}):
+                    elapsed = time.monotonic() - self._running[rn][ex_name]
+                    cells.append(Text(f"⟳ {elapsed:.0f}s", style="cyan"))
                 else:
                     cells.append(Text("·", style="dim"))
             ex_table.add_row(*cells)
@@ -154,7 +155,7 @@ class MultiRunProgress:
             if example_name not in self._example_set:
                 self._example_set.add(example_name)
                 self._all_examples.append(example_name)
-            self._running.setdefault(run_name, set()).add(example_name)
+            self._running.setdefault(run_name, {})[example_name] = time.monotonic()
             self._live.update(self._build_display())
 
     def update(self, run_name: str, example_name: str, status: str, duration: float):
@@ -171,14 +172,14 @@ class MultiRunProgress:
                 self._example_set.add(example_name)
                 self._all_examples.append(example_name)
             self._example_results.setdefault(example_name, {})[run_name] = (status, duration)
-            self._running.get(run_name, set()).discard(example_name)
+            self._running.get(run_name, {}).pop(example_name, None)
 
             self._live.update(self._build_display())
 
     def mark_finished(self, run_name: str):
         with self._lock:
             self._finished[run_name] = True
-            self._running[run_name] = set()
+            self._running[run_name] = {}
             self._live.update(self._build_display())
 
     def log(self, message: str):
