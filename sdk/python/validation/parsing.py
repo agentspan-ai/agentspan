@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 from .config import EXAMPLES_DIR
 from .models import RunResult
@@ -98,16 +97,3 @@ def extract_prompt(example_name: str) -> str:
     if m:
         return m.group(1)
     return "unknown prompt"
-
-
-def load_raw_output(outputs_dir: Path, example_name: str, model: str) -> str:
-    safe_name = example_name.replace("/", "_")
-    path = outputs_dir / f"{safe_name}_{model}.txt"
-    if not path.exists():
-        return ""
-    text = path.read_text()
-    m = re.search(r"=== STDOUT ===\n(.*?)(?:\n\n=== STDERR ===|\Z)", text, re.DOTALL)
-    stdout = m.group(1).strip() if m else text
-
-    output_match = AGENT_OUTPUT_RE.search(stdout)
-    return output_match.group(1).strip() if output_match else stdout[:2000]

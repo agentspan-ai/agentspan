@@ -2,158 +2,82 @@
 
 ## Architecture
 
-Two decoupled scripts separate execution from evaluation.
+TOML config defines named runs (one model each). Runs execute concurrently via the orchestrator. Cross-run judge compares outputs against a baseline.
 
 ### Data Flow
 
-```mermaid
-flowchart LR
-    subgraph Inputs
-        EX["examples/*.py<br/>examples/openai/*.py<br/>examples/adk/*.py"]
-        ENV_MODEL["AGENTSPAN_LLM_MODEL<br/>(set per subprocess)"]
-        SERVER["Conductor Server<br/>(handles LLM calls)"]
-    end
-
-    subgraph "Process 1: run_examples.py"
-        DISC[Discover examples] --> FILTER[Filter by --group]
-        FILTER --> RUN["Run each example<br/>× N models in parallel"]
-        RUN --> PARSE[Parse stdout/stderr]
-        PARSE --> WRITE_CSV[Write execution CSV]
-        PARSE --> WRITE_RAW[Write raw outputs]
-    end
-
-    subgraph "validation/output/run_*/"
-        CSV["results.csv"]
-        RAW["outputs/<br/>*_openai.txt<br/>*_anthropic.txt<br/>*_adk.txt"]
-        REPORT["report.md"]
-    end
-
-    subgraph "Process 2: judge_results.py"
-        READ_CSV[Read CSV + raw outputs] --> EXTRACT[Extract prompts<br/>from example source]
-        EXTRACT --> CACHE{"Output hash<br/>changed?"}
-        CACHE -->|"Yes"| JUDGE_IND["Individual judge<br/>(score each completed model 1-5)"]
-        CACHE -->|"No"| REUSE["Reuse cached score"]
-        JUDGE_IND --> BASELINE["Baseline comparison<br/>(non-baseline vs baseline)"]
-        REUSE --> BASELINE
-        BASELINE --> CONFIDENCE[Compute confidence]
-        CONFIDENCE --> UPDATE["Update CSV + reports<br/>(md + html)"]
-        UPDATE --> REGRESS["Regression detection"]
-    end
-
-    EX --> DISC
-    ENV_MODEL --> RUN
-    SERVER --> RUN
-    WRITE_CSV --> CSV
-    WRITE_RAW --> RAW
-    CSV --> READ_CSV
-    RAW --> READ_CSV
-    UPDATE --> CSV
-    UPDATE --> REPORT
+```
+runs.toml → load_toml_config() → resolve_runs() → run_all()
+                                                       │
+                                              ThreadPoolExecutor
+                                               ┌───────┼───────┐
+                                               ▼       ▼       ▼
+                                          run_single  run_single  run_single
+                                          (sub-dir)   (sub-dir)   (sub-dir)
+                                               │       │       │
+                                               └───────┼───────┘
+                                                       ▼
+                                               judge_across_runs()
+                                                (judge/ sub-dir)
 ```
 
-**Why two scripts?**
-- Re-run judge without re-running expensive examples
-- Try different judge models/prompts without re-executing
-- Process 1 needs no API key — server handles LLM calls
-- Debug judge independently
+### Config Structure
 
-## Execution Modes
+```toml
+[defaults]
+timeout = 300
+parallel = true
+max_workers = 8
 
-Two modes: **sequential** (default) and **parallel** (`-j`). Both use ThreadPoolExecutor to run models concurrently per example; parallel mode additionally runs multiple examples concurrently with dedicated servers.
+[judge]
+baseline_run = "openai-server"
+model = "gpt-4o-mini"
 
-### Sequential (default)
+[runs.openai-server]
+model = "openai/gpt-4o"
+group = "SMOKE_TEST"
 
-Single shared server. Examples run one at a time; models within each example run concurrently.
-
-```
-for each example:
-    ┌──────────────────────────────────────────┐
-    │ ThreadPoolExecutor(max_workers=len(MODELS))│
-    │                                          │
-    │  Thread 1: run with openai/gpt-4o        │
-    │  Thread 2: run with anthropic/claude-...  │
-    │  Thread 3: run with google_gemini/gemini  │
-    │                                          │
-    │  All hit the same server on :8080        │
-    └────────────┬─────────────────────────────┘
-                 │
-                 ▼
-    Parse stdout → extract workflow_id, tool_calls, tokens, output
-    Detect errors → "workflow FAILED", tracebacks, non-zero exit
-    Compute match (PASS/FAIL/PARTIAL) + preliminary confidence
-    Write CSV row + raw output files
+[runs.openai-native]
+model = "openai/gpt-4o"
+native = true
+group = "SMOKE_TEST"
 ```
 
-### Parallel (`-j`)
+`[defaults]` values merge into every `[runs.*]` (run-level overrides win).
 
-One dedicated Conductor server per provider. Examples run concurrently (up to `--max-workers`, default 8). Each provider's subprocess hits its own server, avoiding contention.
+## Execution
 
-```mermaid
-flowchart TD
-    subgraph "ServerPool (one per provider)"
-        S1["Server :8080<br/>openai"]
-        S2["Server :8081<br/>anthropic"]
-        S3["Server :8082<br/>adk"]
-    end
+Each `run_single()`:
+1. Discovers examples for the run's group
+2. Starts ServerPool if not native
+3. Calls `run_examples()` — single model, concurrent examples via ThreadPoolExecutor
+4. Writes `results.csv`, `outputs/`, `meta.json`, `last_run.json` into run sub-dir
 
-    subgraph "ThreadPoolExecutor(max_workers=8)"
-        E1["Example 01"] --> |"openai subprocess"| S1
-        E1 --> |"anthropic subprocess"| S2
-        E1 --> |"adk subprocess"| S3
-        E2["Example 02"] --> S1
-        E2 --> S2
-        E2 --> S3
-        EN["Example N"] --> S1
-        EN --> S2
-        EN --> S3
-    end
+`run_example()` runs each example as a subprocess:
+- Sets `AGENTSPAN_LLM_MODEL` and optionally `AGENTSPAN_SERVER_URL`
+- Native mode: `python -m validation.native.shim <script>` (monkey-patches AgentRuntime)
+- Server mode: `python <script>` (hits Conductor server)
+- Parses stdout/stderr via `parse_output()` → `RunResult`
 
-    E1 --> WRITE1["Write CSV row + outputs"]
-    E2 --> WRITE2["Write CSV row + outputs"]
-    EN --> WRITEN["Write CSV row + outputs"]
-```
+### Concurrency
 
-**ServerPool lifecycle:**
-1. Assigns ports starting from `--base-port` (default 8080)
-2. Reuses existing agentspan servers on assigned ports (health check)
-3. Starts new servers in parallel via `agentspan server start -p PORT`
-4. Waits up to 60s for each server health check
-5. On shutdown: graceful `agentspan server stop`, then force-kill by port PID
-
-**Concurrency controls:**
-- `--max-workers N` — max concurrent examples (default 8)
-- Each example still runs all models concurrently within its thread
-- CSV writes and `.last_run.json` updates are thread-safe (locks + atomic file replace)
+- Runs execute concurrently (one ThreadPoolExecutor per orchestrator)
+- Within each run, examples execute concurrently (`max_workers` from config)
+- CSV writes and `last_run.json` updates are thread-safe (locks + atomic file replace)
 - SIGINT triggers graceful abort — partial results are written before exit
 
-**Scheduling:**
-- Examples sorted slowest-first (from `.last_run.json` history) for better load balancing
-- `--resume` skips already-completed examples
-- `--retry-failed` re-runs only examples with ERROR/TIMEOUT/FAILED status
+### Scheduling
 
-The `AGENTSPAN_LLM_MODEL` env var is set per-subprocess, overriding whatever the example's `settings.py` would normally read from `os.environ`. In parallel mode, `AGENTSPAN_SERVER_URL` is also overridden per-subprocess to point at the provider's dedicated server.
+- Examples sorted slowest-first (from `last_run.json` history) for better load balancing
+- `--resume` skips already-completed examples (checks output files)
+- `--retry-failed` re-runs only examples with ERROR/TIMEOUT/FAILED status
 
 ## Example Discovery
 
-```mermaid
-flowchart TD
-    SCAN["Scan examples/<br/>+ examples/openai/<br/>+ examples/adk/"] --> GROUP{"--group flag?"}
-    GROUP -->|Yes| FILTER_GROUP["Filter to group stems<br/>(from groups.py)"]
-    GROUP -->|No| ALL["All examples"]
-
-    FILTER_GROUP --> PREFIX{"Matches prefix filter?"}
-    ALL --> PREFIX
-
-    PREFIX -->|Yes| DEP{"Subdir dep<br/>available?"}
-    PREFIX -->|No filter| DEP
-    PREFIX -->|No match| EXCLUDED["Excluded by filter"]
-
-    DEP -->|"Yes / main dir"| RUN["Run"]
-    DEP -->|"No (skip silently)"| SKIPPED["Skipped"]
-
-    style EXCLUDED fill:#ffe
-    style SKIPPED fill:#ffe
-    style RUN fill:#efe
+```
+Scan examples/ + examples/openai/ + examples/adk/
+  → Filter by group (from groups.py)
+  → Skip subdirs where dependency unavailable
 ```
 
 ### HITL stdin map
@@ -187,11 +111,11 @@ Extracts from stdout (produced by `AgentResult.print_result()`):
 | Non-zero exit code | FAILED |
 | Other error detected | ERROR |
 
-## LLM Judge
+## Cross-Run Judge
 
 ### Individual Scoring
 
-One judge call per completed model — scores each output against the original prompt on a 1-5 scale:
+One judge call per completed run per example — scores output against original prompt on a 1-5 scale:
 
 | Score | Meaning |
 |-------|---------|
@@ -201,41 +125,21 @@ One judge call per completed model — scores each output against the original p
 | 4 | Good, addresses the task well |
 | 5 | Excellent, fully addresses the task |
 
-Models that did not complete (FAILED, TIMEOUT, ERROR) are skipped by the judge.
-
 ### Baseline Comparison
 
-After individual scoring, each non-baseline provider is compared against the baseline (default: `openai`). The judge evaluates task-correctness, not surface similarity:
+After individual scoring, each non-baseline run is compared against the baseline run. The judge evaluates task-correctness, not surface similarity:
 
 | Score | Meaning |
 |-------|---------|
 | 5 | Both correctly address the task, candidate equally valid |
 | 4 | Candidate addresses task well, minor completeness differences |
-| 3 | Candidate partially addresses task, misses key elements baseline covered |
+| 3 | Candidate partially addresses task, misses key elements |
 | 2 | Candidate attempts task but significant parts wrong |
 | 1 | Candidate fails the task or irrelevant |
 
-Different-but-valid outputs score high.
-
-### Guardrails
-
-| Setting | Default | Purpose |
-|---------|---------|---------|
-| `JUDGE_MAX_OUTPUT_CHARS` | 3000 | Truncate outputs before sending to judge |
-| `MAX_JUDGE_CALLS` | 0 (unlimited) | Budget cap on total judge API calls |
-| `JUDGE_RATE_LIMIT` | 0.5s | Delay between judge calls |
-
-Response validation: scores clamped to 1-5, malformed JSON triggers warning.
-
-Uses `response_format={"type": "json_object"}` for structured output.
-
 ### Output Hash Caching
 
-On each judge run, output text is hashed (SHA-256). If the output hash matches the previous run and a score exists, the cached score is reused — saving API costs on re-runs.
-
-### Regression Detection
-
-Compares current judge scores to previous `last_run.json`. Score drops > 1 point are flagged as warnings.
+On each judge run, output text is hashed (SHA-256). If the output hash matches the previous run and a score exists, the cached score is reused.
 
 ### Prompt extraction
 
@@ -245,120 +149,7 @@ Parses each example's source to find the prompt:
 runtime.run(agent, "Say hello and tell me a fun fact")  →  extracted
 ```
 
-### Cost Analysis
-
-Token counts from execution CSV are multiplied by `MODEL_PRICING` (per 1K tokens). Estimated cost is stored in `meta.json` and shown in the HTML report.
-
-## Confidence Levels
-
-Confidence measures **execution reliability**, not output quality:
-
-| Level | Criteria |
-|-------|----------|
-| **HIGH** | All COMPLETED, all judge scores >= 4 |
-| **MEDIUM** | All COMPLETED, but a score is 3 or tool_calls differ |
-| **LOW** | Some failed/timed out, any score <= 2, or any baseline_score <= 2 |
-| **N/A** | All failed or skipped |
-
-### Confidence Decision Matrix
-
-```mermaid
-flowchart TD
-    START["All models ran"] --> ALL_COMPLETE{"All COMPLETED?"}
-
-    ALL_COMPLETE -->|"None completed"| NA["N/A"]
-    ALL_COMPLETE -->|"Some failed/timed out"| LOW1["LOW"]
-    ALL_COMPLETE -->|"All completed"| JUDGE["Run judge scoring"]
-
-    JUDGE --> SCORE_CHECK{"Any judge<br/>score <= 2?"}
-    SCORE_CHECK -->|Yes| LOW2["LOW<br/>(poor output quality)"]
-    SCORE_CHECK -->|No| HIGH_CHECK{"All scores >= 4?"}
-
-    HIGH_CHECK -->|No| MEDIUM1["MEDIUM<br/>(a score is 3)"]
-    HIGH_CHECK -->|Yes| TOOLS{"tool_calls match<br/>across providers?"}
-
-    TOOLS -->|No| MEDIUM2["MEDIUM<br/>(different tool usage)"]
-    TOOLS -->|Yes| HIGH["HIGH"]
-
-    style NA fill:#eee
-    style LOW1 fill:#fee
-    style LOW2 fill:#fee
-    style MEDIUM1 fill:#ffe
-    style MEDIUM2 fill:#ffe
-    style HIGH fill:#efe
-```
-
 ## Output Files
-
-All output goes to `validation/output/` (gitignored). Each run gets its own directory:
-
-```
-validation/output/
-├── .last_run.json          ← judge scores, output hashes, history
-├── latest → run_*/         ← symlink to newest run
-├── run_2026-03-12_12-29-35_d766/
-│   ├── results.csv
-│   ├── report.md           ← added by judge_results.py
-│   ├── report.html         ← interactive dashboard
-│   ├── meta.json           ← timing, costs, regressions
-│   └── outputs/
-│       ├── 01_basic_agent_openai.txt
-│       ├── 01_basic_agent_anthropic.txt
-│       ├── 01_basic_agent_adk.txt
-│       └── ...
-└── ...
-```
-
-Directory format: `run_{YYYY-MM-DD}_{HH-MM-SS}_{run_id}/` where run_id = first 4 chars of UUID4.
-
-## Multi-Run Mode (TOML Config)
-
-A TOML config file defines multiple named runs, each targeting one model. Runs execute concurrently via the orchestrator, with cross-run judging comparing outputs against a baseline.
-
-### Config Structure
-
-```toml
-[defaults]
-timeout = 300
-parallel = true
-
-[judge]
-baseline_run = "openai-server"
-model = "gpt-4o-mini"
-
-[runs.openai-server]
-model = "openai/gpt-4o"
-group = "SMOKE_TEST"
-
-[runs.openai-native]
-model = "openai/gpt-4o"
-native = true
-group = "SMOKE_TEST"
-```
-
-### Orchestration Flow
-
-```
-load_toml_config() → resolve_runs() → run_all()
-                                          │
-                                  ┌───────┼───────┐
-                                  ▼       ▼       ▼
-                             run_single  run_single  run_single
-                             (sub-dir)   (sub-dir)   (sub-dir)
-                                  │       │       │
-                                  └───────┼───────┘
-                                          ▼
-                                  judge_across_runs()
-                                   (judge/ sub-dir)
-```
-
-Each `run_single()`:
-1. Discovers examples for the run's group
-2. Starts ServerPool if not native
-3. Calls `run_examples()` — single model, concurrent examples
-4. Writes `results.csv`, `outputs/`, `meta.json`, `last_run.json` into run sub-dir
-
-### Multi-Run Output Structure
 
 ```
 validation/output/run_{timestamp}_{id}/
@@ -368,7 +159,7 @@ validation/output/run_{timestamp}_{id}/
 │   ├── meta.json
 │   ├── last_run.json
 │   └── outputs/
-│       ├── 01_basic_agent.txt   ← no provider suffix
+│       ├── 01_basic_agent.txt
 │       └── ...
 ├── openai-native/
 │   ├── results.csv
@@ -376,6 +167,7 @@ validation/output/run_{timestamp}_{id}/
 └── judge/                       ← cross-run judge results
     ├── results.csv              ← per-run scores + baseline comparison
     ├── report.md
+    ├── report.html              ← interactive dashboard
     ├── meta.json
     └── last_run.json            ← hash cache for re-judging
 ```

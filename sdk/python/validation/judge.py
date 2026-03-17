@@ -4,21 +4,10 @@ from __future__ import annotations
 
 import json
 import sys
-import time
 import warnings
 from dataclasses import dataclass
-from pathlib import Path
 
-from .config import MODELS, Settings
-from .parsing import extract_prompt, load_raw_output
-from .persistence import compute_output_hash, update_last_run_judge
-
-
-def _safe_int(val: object) -> int:
-    try:
-        return int(val)
-    except (TypeError, ValueError):
-        return 0
+from .config import Settings
 
 
 def _validate_judge_response(result: dict) -> tuple[int, str]:
@@ -114,141 +103,7 @@ Respond with ONLY a JSON object: {{"score": N, "reason": "brief explanation"}}""
 
 @dataclass
 class JudgeState:
-    """Mutable state tracked across judge_row() calls."""
+    """Mutable state tracked across judge calls."""
 
     call_count: int = 0
     cache_hits: int = 0
-
-
-def judge_row(
-    row: dict,
-    settings: Settings,
-    outputs_dir: Path,
-    providers: dict[str, str],
-    prev_last_run: dict,
-    last_run: dict,
-    state: JudgeState,
-    baseline: str | None = None,
-    skip_judged: bool = False,
-) -> list[str]:
-    """Score one CSV row: individual + baseline. Returns display parts list."""
-    example = row["example"]
-    max_calls = settings.max_judge_calls
-    rate_limit = settings.judge_rate_limit
-
-    statuses = {p: row.get(f"{p}_status", "") for p in providers}
-    completed = {p for p, s in statuses.items() if s == "COMPLETED"}
-
-    if not completed:
-        row["confidence"] = compute_confidence(row, providers)
-        return [f"SKIP ({' '.join(f'{p}={s}' for p, s in statuses.items())})"]
-
-    prompt = extract_prompt(example)
-
-    prev_entry = prev_last_run.get("examples", {}).get(example, {})
-    prev_hashes = prev_entry.get("output_hashes", {})
-    prev_scores = prev_entry.get("judge_scores", {})
-
-    score_parts: list[str] = []
-    current_hashes: dict[str, str] = {}
-    current_scores: dict[str, int] = {}
-
-    for provider in providers:
-        if provider not in completed:
-            score_parts.append(f"{provider}=SKIP")
-            continue
-
-        output = load_raw_output(outputs_dir, example, provider)
-        output_hash = compute_output_hash(output)
-        current_hashes[provider] = output_hash
-
-        # Skip if already judged
-        if skip_judged and row.get(f"{provider}_judge_score"):
-            current_scores[provider] = int(row[f"{provider}_judge_score"])
-            score_parts.append(f"{provider}={row[f'{provider}_judge_score']}/5*")
-            continue
-
-        # Output hash cache
-        if (
-            prev_hashes.get(provider) == output_hash
-            and prev_scores.get(provider)
-            and not skip_judged
-        ):
-            cached_score = int(prev_scores[provider])
-            row[f"{provider}_judge_score"] = cached_score
-            row[f"{provider}_judge_reason"] = "cached (output unchanged)"
-            current_scores[provider] = cached_score
-            score_parts.append(f"{provider}={cached_score}/5$")
-            state.cache_hits += 1
-            continue
-
-        if max_calls > 0 and state.call_count >= max_calls:
-            score_parts.append(f"{provider}=BUDGET")
-            continue
-
-        if state.call_count > 0 and rate_limit > 0:
-            time.sleep(rate_limit)
-
-        score, reason = judge_individual(settings, prompt, output)
-        row[f"{provider}_judge_score"] = score
-        row[f"{provider}_judge_reason"] = reason
-        current_scores[provider] = score
-        score_parts.append(f"{provider}={score}/5")
-        state.call_count += 1
-
-    # Baseline comparison
-    if baseline and baseline in completed:
-        baseline_output = load_raw_output(outputs_dir, example, baseline)
-        for provider in providers:
-            if provider == baseline or provider not in completed:
-                continue
-            if skip_judged and row.get(f"{provider}_baseline_score"):
-                continue
-            if max_calls > 0 and state.call_count >= max_calls:
-                break
-            if state.call_count > 0 and rate_limit > 0:
-                time.sleep(rate_limit)
-
-            candidate_output = load_raw_output(outputs_dir, example, provider)
-            bscore, breason = judge_comparison(settings, prompt, baseline_output, candidate_output)
-            row[f"{provider}_baseline_score"] = bscore
-            row[f"{provider}_baseline_reason"] = breason
-            score_parts.append(f"{provider}_vs_{baseline}={bscore}/5")
-            state.call_count += 1
-
-    row["confidence"] = compute_confidence(row, providers)
-    update_last_run_judge(last_run, example, current_scores, current_hashes)
-    score_parts.append(f"[{row['confidence']}]")
-    return score_parts
-
-
-def compute_confidence(row: dict, models: dict[str, str] | None = None) -> str:
-    providers = models or MODELS
-    statuses = {p: row.get(f"{p}_status", "") for p in providers}
-    completed = [p for p, s in statuses.items() if s == "COMPLETED"]
-
-    if not completed:
-        return "N/A"
-    if len(completed) < len(providers):
-        return "LOW"
-
-    scores = {p: _safe_int(row.get(f"{p}_judge_score")) for p in providers}
-    if any(s <= 2 for s in scores.values()):
-        return "LOW"
-
-    # Baseline scores — any <= 2 means LOW
-    baseline_scores = [
-        _safe_int(row.get(f"{p}_baseline_score"))
-        for p in providers
-        if row.get(f"{p}_baseline_score")
-    ]
-    if any(s <= 2 for s in baseline_scores):
-        return "LOW"
-
-    if all(s >= 4 for s in scores.values()):
-        tool_counts = {p: _safe_int(row.get(f"{p}_tool_calls")) for p in providers}
-        if len(set(tool_counts.values())) > 1:
-            return "MEDIUM"
-        return "HIGH"
-
-    return "MEDIUM"

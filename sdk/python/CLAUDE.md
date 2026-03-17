@@ -20,17 +20,13 @@
 - If `python-dotenv` is installed, validation scripts auto-load `.env` files. Otherwise, export env vars directly.
 - Config: `Settings.from_env()` pattern — see `validation/config.py`
 - Env template: `validation/.env.example`
-- Run examples: `uv run python3 -m validation.scripts.run_examples`
-- Run judge: `uv run python3 -m validation.scripts.judge_results`
-- Groups defined in `validation/groups.py` — use `--group=NAME` to filter.
-- Quick smoke test: `--group=SMOKE_TEST`
-- Native mode (no server): `--native` — runs via framework SDK directly, bypasses Conductor
-  - `uv run python3 -m validation.scripts.run_examples --group=SMOKE_TEST --native --only openai`
-  - Shim: `uv run python3 -m validation.native.shim <example_script.py>`
+- Groups defined in `validation/groups.py` — use `--group=NAME` to filter in TOML config.
+- Native mode (no server): set `native = true` in TOML run config
+- Shim: `uv run python3 -m validation.native.shim <example_script.py>`
 
-### Multi-Run TOML Config
+### TOML Config (required)
 
-Single TOML file defines named runs (one model each), executed concurrently with cross-run judging.
+All validation runs require a TOML config file. One run = one model, executed concurrently.
 
 - Config: `validation/runs.toml` (gitignored), example: `validation/runs.toml.example`
 - Run all: `uv run python3 -m validation.scripts.run_examples --config runs.toml`
@@ -38,9 +34,11 @@ Single TOML file defines named runs (one model each), executed concurrently with
 - Dry-run: `--config runs.toml --dry-run`
 - With judge: `--config runs.toml --judge`
 - Cross-run judge only: `uv run python3 -m validation.scripts.judge_results --run-dir <parent_dir>`
-- Output structure: `output/run_*/` parent with sub-dirs per run + `judge/` for cross-run results
+- Output: `output/run_*/` parent with sub-dirs per run + `judge/` for cross-run results + `report.html`
 
 ### Judge Config
+
+Configured in `[judge]` section of TOML config, or via env vars:
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
@@ -48,16 +46,10 @@ Single TOML file defines named runs (one model each), executed concurrently with
 | `JUDGE_MAX_OUTPUT_CHARS` | 3000 | Truncate outputs before judging |
 | `MAX_JUDGE_CALLS` | 0 (unlimited) | Budget cap on judge API calls |
 | `JUDGE_RATE_LIMIT` | 0.5 | Seconds between judge calls |
-| `BASELINE_MODEL` | openai | Baseline provider for comparison |
-
-### Judge CLI Flags
-
-- `--judge-model MODEL` — override judge model
-- `--skip-judged` — skip providers with existing scores
 
 ### Output
 
-- `report.html` — interactive dashboard with filters, sorting, score distribution, cost breakdown, baseline comparison, regression markers
+- `judge/report.html` — cross-run interactive dashboard with score heatmap, side-by-side outputs, filters, dark mode
 
 ## Reference
 

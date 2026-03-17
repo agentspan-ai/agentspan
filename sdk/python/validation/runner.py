@@ -6,9 +6,8 @@ import os
 import subprocess
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from .config import MODELS, SCRIPT_DIR
+from .config import SCRIPT_DIR
 from .models import Example, RunResult
 from .parsing import parse_output
 
@@ -93,61 +92,3 @@ def run_example(
             return result
 
     return result
-
-
-def run_example_all(
-    example: Example,
-    timeout: int,
-    retries: int,
-    models: dict[str, str] | None = None,
-    server_urls: dict[str, str] | None = None,
-    native: bool = False,
-) -> dict[str, RunResult]:
-    active_models = models or MODELS
-    results = {}
-    with ThreadPoolExecutor(max_workers=len(active_models)) as pool:
-        futures = {
-            pool.submit(
-                run_example,
-                example,
-                name,
-                model_id,
-                timeout,
-                retries,
-                server_url=(server_urls or {}).get(name),
-                native=native,
-            ): name
-            for name, model_id in active_models.items()
-        }
-        for future in as_completed(futures):
-            name = futures[future]
-            results[name] = future.result()
-    return results
-
-
-def compute_match(results: dict[str, RunResult]) -> tuple[str, str, str]:
-    notes_parts = []
-    completed = {k for k, r in results.items() if r.status == "COMPLETED"}
-    failed = {k: r for k, r in results.items() if r.status != "COMPLETED"}
-
-    if len(completed) == len(results):
-        match = "PASS"
-        tool_counts = {k: r.tool_calls for k, r in results.items()}
-        if len(set(tool_counts.values())) > 1:
-            notes_parts.append(
-                "tool_calls differ: " + " ".join(f"{k}={v}" for k, v in tool_counts.items())
-            )
-            confidence = "MEDIUM"
-        else:
-            confidence = "HIGH"
-    elif len(completed) == 0:
-        match = "FAIL"
-        confidence = "N/A"
-        notes_parts.append("all failed: " + " ".join(f"{k}={r.status}" for k, r in failed.items()))
-    else:
-        match = "PARTIAL"
-        confidence = "LOW"
-        for k, r in failed.items():
-            notes_parts.append(f"{k} {r.status}")
-
-    return match, confidence, "; ".join(notes_parts)

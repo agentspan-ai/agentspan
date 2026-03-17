@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 
@@ -45,12 +45,3 @@ class SingleResult:
 
     example: Example = None  # type: ignore[assignment]
     result: RunResult = None  # type: ignore[assignment]
-
-
-@dataclass
-class ExampleResult:
-    example: Example = None  # type: ignore[assignment]
-    results: dict[str, RunResult] = field(default_factory=dict)
-    match: str = ""
-    confidence: str = ""
-    notes: str = ""
