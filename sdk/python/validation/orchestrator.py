@@ -209,7 +209,7 @@ def _run_single(
     # Set total in progress display
     total = len(examples)
     if progress:
-        progress.set_total(run_cfg.name, total)
+        progress.set_total(run_cfg.name, total, [ex.name for ex in examples])
 
     # Server health check
     server_url = None
@@ -248,7 +248,11 @@ def _run_single(
     last_run["run_dir"] = str(run_dir)
     start_time = time.monotonic()
 
-    # Progress callback
+    # Progress callbacks
+    def on_start(example):
+        if progress:
+            progress.mark_running(run_cfg.name, example.name)
+
     def on_complete(sr):
         write_single_output(outputs_dir, sr.example.name, sr.result)
         write_csv_row(csv_path, columns, build_single_row(sr.example.name, sr.result))
@@ -278,6 +282,7 @@ def _run_single(
             secondary_model=run_cfg.secondary_model,
             abort_event=abort_event,
             on_complete=on_complete,
+            on_start=on_start,
         )
     finally:
         if pool:

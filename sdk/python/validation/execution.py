@@ -22,6 +22,7 @@ def run_examples(
     secondary_model: str | None,
     abort_event: threading.Event,
     on_complete: Callable[[SingleResult], None] | None = None,
+    on_start: Callable[[Example], None] | None = None,
 ) -> list[SingleResult]:
     """Run examples against a single model. max_workers=1 for sequential."""
     all_results: list[SingleResult] = []
@@ -30,6 +31,8 @@ def run_examples(
     def _run_one(example: Example) -> SingleResult | None:
         if abort_event.is_set():
             return None
+        if on_start:
+            on_start(example)
         result = run_example(
             example,
             model_name,
