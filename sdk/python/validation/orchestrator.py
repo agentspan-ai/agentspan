@@ -14,7 +14,7 @@ from pathlib import Path
 
 from .config import SINGLE_RUN_CSV_COLUMNS, Settings
 from .discovery import discover_examples
-from .display import print_multi_run_summary, print_single_run_summary
+from .display import MultiRunProgress, compute_run_summary, print_multi_run_summary
 from .execution import run_examples
 from .output import build_single_row, update_latest_symlink, write_csv_row, write_single_output
 from .persistence import (
@@ -43,7 +43,6 @@ def run_all(
     parent_dir = output_dir / f"run_{timestamp}_{run_id}"
     parent_dir.mkdir(parents=True, exist_ok=True)
 
-    # Copy config into parent dir
     meta = {
         "timestamp": now.isoformat(),
         "runs": {r.name: {"model": r.model, "native": r.native, "group": r.group} for r in runs},
@@ -54,7 +53,6 @@ def run_all(
     original_handler = signal.getsignal(signal.SIGINT)
 
     def _handle_sigint(sig, frame):
-        print("\n  Aborting all runs... writing partial results.")
         abort_event.set()
 
     signal.signal(signal.SIGINT, _handle_sigint)
@@ -67,14 +65,23 @@ def run_all(
             port_assignments[r.name] = next_port
             next_port += 1
 
+    # Try rich live progress, fall back to plain print
+    try:
+        progress = MultiRunProgress(runs)
+        use_rich = True
+    except ImportError:
+        progress = None
+        use_rich = False
+
     run_summaries: list[dict] = []
     summaries_lock = threading.Lock()
-
     start_time = time.monotonic()
 
     try:
+        if use_rich:
+            progress.start()
+
         if len(runs) == 1:
-            # Single run — no ThreadPoolExecutor overhead
             summary = _run_single(
                 runs[0],
                 parent_dir,
@@ -82,6 +89,7 @@ def run_all(
                 port_assignments.get(runs[0].name),
                 resume,
                 retry_failed,
+                progress,
             )
             if summary:
                 run_summaries.append(summary)
@@ -96,6 +104,7 @@ def run_all(
                         port_assignments.get(r.name),
                         resume,
                         retry_failed,
+                        progress,
                     ): r
                     for r in runs
                 }
@@ -106,6 +115,8 @@ def run_all(
                             run_summaries.append(summary)
     finally:
         signal.signal(signal.SIGINT, original_handler)
+        if use_rich:
+            progress.stop()
 
     elapsed = time.monotonic() - start_time
     meta["total_duration_s"] = round(elapsed, 1)
@@ -116,9 +127,9 @@ def run_all(
 
     update_latest_symlink(output_dir, parent_dir)
 
-    # Combined summary
+    # Final summary
     print()
-    if len(run_summaries) > 1:
+    if run_summaries:
         print_multi_run_summary(run_summaries)
 
     print()
@@ -144,6 +155,7 @@ def _run_single(
     port: int | None,
     resume: bool,
     retry_failed: bool,
+    progress: MultiRunProgress | None,
 ) -> dict | None:
     """Execute a single run in its own sub-directory. Returns summary dict."""
     run_dir = parent_dir / run_cfg.name
@@ -151,17 +163,19 @@ def _run_single(
     outputs_dir.mkdir(parents=True, exist_ok=True)
     csv_path = run_dir / "results.csv"
 
-    # Determine model_name from model string (provider prefix)
     model_id = run_cfg.model
     model_name = model_id.split("/")[0] if "/" in model_id else model_id
 
     # Discover examples
     examples = discover_examples([], run_cfg.group)
     if not examples:
-        print(
-            f"  [{run_cfg.name}] No examples found"
-            + (f" for group {run_cfg.group}" if run_cfg.group else "")
+        msg = f"[{run_cfg.name}] No examples found" + (
+            f" for group {run_cfg.group}" if run_cfg.group else ""
         )
+        if progress:
+            progress.log(f"  {msg}")
+        else:
+            print(f"  {msg}")
         return None
 
     # Load last run for sorting
@@ -177,17 +191,12 @@ def _run_single(
     last_run_lock = threading.Lock()
     examples = sort_slowest_first(examples, last_run)
 
-    # Resume: skip completed
+    # Resume
     if resume:
         done = completed_examples_single(run_dir)
         if done:
-            before = len(examples)
             examples = [ex for ex in examples if ex.name not in done]
-            print(
-                f"  [{run_cfg.name}] Resuming: {before - len(examples)} done, {len(examples)} remaining"
-            )
             if not examples:
-                print(f"  [{run_cfg.name}] All completed.")
                 return None
 
     # Retry-failed
@@ -195,11 +204,14 @@ def _run_single(
         fails = failed_examples_single(last_run)
         examples = [ex for ex in examples if ex.name in fails]
         if not examples:
-            print(f"  [{run_cfg.name}] No failed examples to retry.")
             return None
-        print(f"  [{run_cfg.name}] Retrying {len(examples)} failed")
 
-    # Server health check for non-native runs
+    # Set total in progress display
+    total = len(examples)
+    if progress:
+        progress.set_total(run_cfg.name, total)
+
+    # Server health check
     server_url = None
     pool = None
     if not run_cfg.native:
@@ -209,7 +221,6 @@ def _run_single(
             server_url = run_cfg.server_url
 
         if not check_server_health(server_url):
-            # Try to start a server on the assigned port
             try:
                 from .server_pool import ServerPool
 
@@ -218,18 +229,14 @@ def _run_single(
                 urls = pool.get_server_urls()
                 server_url = urls.get(model_name, server_url)
             except Exception as e:
-                print(f"  [{run_cfg.name}] Server start failed: {e}")
+                msg = f"[{run_cfg.name}] Server start failed: {e}"
+                if progress:
+                    progress.log(f"  {msg}")
+                else:
+                    print(f"  {msg}")
                 if pool:
                     pool.shutdown()
                 return None
-
-    # Banner
-    mode = "native" if run_cfg.native else "server"
-    group_label = f" group={run_cfg.group}" if run_cfg.group else ""
-    workers_label = f" workers={run_cfg.max_workers}" if run_cfg.max_workers > 1 else ""
-    print(
-        f"  [{run_cfg.name}] {len(examples)} examples | {model_id} | {mode}{group_label}{workers_label}"
-    )
 
     # CSV header
     columns = SINGLE_RUN_CSV_COLUMNS
@@ -242,11 +249,7 @@ def _run_single(
     start_time = time.monotonic()
 
     # Progress callback
-    completed_count = [0]
-    total = len(examples)
-
     def on_complete(sr):
-        completed_count[0] += 1
         write_single_output(outputs_dir, sr.example.name, sr.result)
         write_csv_row(csv_path, columns, build_single_row(sr.example.name, sr.result))
 
@@ -254,10 +257,13 @@ def _run_single(
 
         update_last_run_single(last_run, sr.example.name, sr, last_run_lock)
 
-        status = "✓" if sr.result.status == "COMPLETED" else f"✗({sr.result.status})"
-        print(
-            f"    [{run_cfg.name}] [{completed_count[0]}/{total}] {sr.example.name:<40s} {status} [{sr.result.duration_s:.1f}s]"
-        )
+        if progress:
+            progress.update(run_cfg.name, sr.example.name, sr.result.status, sr.result.duration_s)
+        else:
+            status = "✓" if sr.result.status == "COMPLETED" else f"✗({sr.result.status})"
+            print(
+                f"    [{run_cfg.name}] {sr.example.name:<40s} {status} [{sr.result.duration_s:.1f}s]"
+            )
 
     try:
         results = run_examples(
@@ -279,6 +285,9 @@ def _run_single(
 
     elapsed = time.monotonic() - start_time
 
+    if progress:
+        progress.mark_finished(run_cfg.name)
+
     # Save run metadata
     run_meta = {
         "run_name": run_cfg.name,
@@ -287,13 +296,12 @@ def _run_single(
         "group": run_cfg.group,
         "duration_s": round(elapsed, 1),
         "examples_total": total,
-        "examples_completed": completed_count[0],
+        "examples_completed": sum(1 for sr in results if sr.result.status == "COMPLETED"),
     }
     run_meta_path = run_dir / "meta.json"
     run_meta_path.write_text(json.dumps(run_meta, indent=2))
 
     save_last_run(last_run, last_run_lock)
 
-    summary = print_single_run_summary(results, run_cfg.name)
-    summary["model"] = model_id
+    summary = compute_run_summary(results, run_cfg.name, model_id)
     return summary
