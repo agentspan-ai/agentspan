@@ -18,8 +18,8 @@ Architecture:
 
 Requirements:
     - Conductor server with OpenAI integration configured
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
-    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
 from agentspan.agents import Agent, AgentRuntime, audio_tool, image_tool, video_tool

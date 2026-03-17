@@ -9,7 +9,7 @@ Skip with: pytest -m "not integration"
 Requirements:
     - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
     - LLM provider configured (OpenAI by default)
-    - Optionally: export AGENT_LLM_MODEL=openai/gpt-4o-mini
+    - Optionally: export AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini
 """
 
 import re
@@ -41,7 +41,7 @@ DEFAULT_MODEL = "openai/gpt-4o-mini"
 
 def _model() -> str:
     import os
-    return os.environ.get("AGENT_LLM_MODEL", DEFAULT_MODEL)
+    return os.environ.get("AGENTSPAN_LLM_MODEL", DEFAULT_MODEL)
 
 
 # ── Data-Driven Validation ──────────────────────────────────────────────

@@ -3,12 +3,13 @@
 __pycache__/
 sdk/python/.coverage
 sdk/python/.env
+sdk/python/validation/.env
 server/agent-runtime.db
 server/.gradle/
 build/
 bin/
-/sdk/python/src/*.egg-info
-dist/
+/sdk/python/src/conductor_agents.egg-info
+/sdk/python/src/conductor_agents_sdk.egg-info
 server/agent-runtime.db-wal
 cli/aspan
 .db-shm
@@ -17,4 +18,7 @@ cli/aspan
 *.db-shm
 *.db-wal
 agentspan_sdk.egg-info/
+/sdk/python/src/agentspan.egg-info/
 cli/main
+sdk/python/validation/output/
+sdk/python/validation/runs.toml

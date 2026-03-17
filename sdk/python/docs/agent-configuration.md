@@ -669,8 +669,8 @@ config = AgentConfig(
     llm_retry_count=3,
 )
 
-# Or just instantiate (auto-loads from env / .env):
-config = AgentConfig()
+# Or load from AGENTSPAN_* env vars:
+config = AgentConfig.from_env()
 ```
 
 | Field | Type | Default | Env Variable | Description |

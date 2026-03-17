@@ -1,43 +1,55 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Configuration — load settings from environment variables and ``.env`` files.
+"""Configuration — load settings from environment variables.
 
-Uses ``pydantic-settings`` :class:`BaseSettings` so values are automatically
-read from env vars and an optional ``.env`` file in the working directory.
+Uses ``dataclasses`` with a ``from_env()`` classmethod for env var loading.
+Constructor kwargs allow direct overrides (useful for tests).
 
 Usage::
 
-    config = AgentConfig()                     # auto-loads from env / .env
-    config = AgentConfig(server_url="http://custom:8080/api")  # explicit override
+    config = AgentConfig.from_env()                          # load from env
+    config = AgentConfig(server_url="http://custom:8080/api")  # explicit
 """
 
 from __future__ import annotations
 
 import logging
 import os
+from dataclasses import dataclass
 from typing import Optional
 
-from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+
+def _env(var: str, default=None):
+    """Read an environment variable, returning *default* if unset."""
+    return os.environ.get(var, default)
+
 
 logger = logging.getLogger("agentspan.agents.config")
 
 
-def _env(agentspan_var: str, fallback_var: str, default: Optional[str] = None) -> Optional[str]:
-    """Read an env var with optional fallback name.
+def _env_bool(var: str, default: bool = False) -> bool:
+    """Read a boolean environment variable (true/1/yes → True)."""
+    val = os.environ.get(var)
+    if val is None or val.strip() == "":
+        return default
+    return val.lower() in ("true", "1", "yes")
 
-    Tries *agentspan_var* first, then *fallback_var*, returning *default*
-    if neither is set.
-    """
-    return os.environ.get(agentspan_var, os.environ.get(fallback_var, default))
+
+def _env_int(var: str, default: int = 0) -> int:
+    """Read an integer environment variable."""
+    val = os.environ.get(var)
+    if val is None or val.strip() == "":
+        return default
+    return int(val)
 
 
-class AgentConfig(BaseSettings):
+@dataclass
+class AgentConfig:
     """Configuration for the agents runtime.
 
-    Values are loaded from environment variables (and an optional ``.env``
-    file) with sensible defaults. Simply instantiate with ``AgentConfig()``.
+    Values are loaded from environment variables via ``from_env()``.
+    Direct construction with kwargs is supported for tests and explicit config.
 
     Attributes:
         server_url: Agentspan server API URL.
@@ -54,98 +66,55 @@ class AgentConfig(BaseSettings):
             integrations and register models on the Conductor server before
             executing agents.  Reads API keys from provider-specific env vars
             (e.g. ``OPENAI_API_KEY``).
+        log_level: Logging level for the agentspan logger.
     """
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-        populate_by_name=True,
-    )
+    server_url: str = "http://localhost:8080/api"
+    auth_key: Optional[str] = None
+    auth_secret: Optional[str] = None
+    llm_retry_count: int = 3
+    worker_poll_interval_ms: int = 100
+    worker_thread_count: int = 1
+    auto_start_workers: bool = True
+    auto_start_server: bool = True
+    daemon_workers: bool = True
+    auto_register_integrations: bool = False
+    streaming_enabled: bool = True
+    log_level: str = "INFO"
 
-    @field_validator(
-        "llm_retry_count",
-        "worker_poll_interval_ms",
-        "worker_thread_count",
-        "auto_start_workers",
-        "auto_start_server",
-        "daemon_workers",
-        "auto_register_integrations",
-        "streaming_enabled",
-        "log_level",
-        mode="before",
-    )
+    def __post_init__(self):
+        """Normalise server_url: auto-append /api if missing."""
+        if self.server_url:
+            stripped = self.server_url.rstrip("/")
+            if not stripped.endswith("/api"):
+                logger.info(
+                    "server_url %r does not end with '/api' — appending automatically.",
+                    self.server_url,
+                )
+                self.server_url = stripped + "/api"
+            else:
+                self.server_url = stripped
+
     @classmethod
-    def _empty_str_to_default(cls, v, info):
-        """Treat empty-string env vars as unset so the field default is used."""
-        if isinstance(v, str) and v.strip() == "":
-            return cls.model_fields[info.field_name].default
-        return v
-
-    @field_validator("server_url", mode="after")
-    @classmethod
-    def _normalise_server_url(cls, v: str) -> str:
-        """Auto-append ``/api`` if the URL is missing the path suffix.
-
-        ``configure(server_url="http://localhost:8080")`` is a common mistake
-        that otherwise produces a cryptic 404/500 from the server.
-        """
-        if not v:
-            return v
-        stripped = v.rstrip("/")
-        if not stripped.endswith("/api"):
-            logger.info("server_url %r does not end with '/api' — appending automatically.", v)
-            return stripped + "/api"
-        return stripped
-
-    server_url: str = Field(
-        default="http://localhost:8080/api",
-        validation_alias="AGENTSPAN_SERVER_URL",
-    )
-    auth_key: Optional[str] = Field(
-        default=None,
-        validation_alias="AGENTSPAN_AUTH_KEY",
-    )
-    auth_secret: Optional[str] = Field(
-        default=None,
-        validation_alias="AGENTSPAN_AUTH_SECRET",
-    )
-    llm_retry_count: int = Field(
-        default=3,
-        validation_alias="AGENTSPAN_LLM_RETRY_COUNT",
-    )
-    worker_poll_interval_ms: int = Field(
-        default=100,
-        validation_alias="AGENTSPAN_WORKER_POLL_INTERVAL",
-    )
-    worker_thread_count: int = Field(
-        default=1,
-        validation_alias="AGENTSPAN_WORKER_THREADS",
-    )
-    auto_start_workers: bool = Field(
-        default=True,
-        validation_alias="AGENTSPAN_AUTO_START_WORKERS",
-    )
-    auto_start_server: bool = Field(
-        default=True,
-        validation_alias="AGENTSPAN_AUTO_START_SERVER",
-    )
-    daemon_workers: bool = Field(
-        default=True,
-        validation_alias="AGENTSPAN_DAEMON_WORKERS",
-    )
-    auto_register_integrations: bool = Field(
-        default=False,
-        validation_alias="AGENTSPAN_INTEGRATIONS_AUTO_REGISTER",
-    )
-    streaming_enabled: bool = Field(
-        default=True,
-        validation_alias="AGENTSPAN_STREAMING_ENABLED",
-    )
-    log_level: str = Field(
-        default="INFO",
-        validation_alias="AGENTSPAN_LOG_LEVEL",
-    )
+    def from_env(cls) -> AgentConfig:
+        """Create an ``AgentConfig`` by reading ``AGENTSPAN_*`` env vars."""
+        log_level = _env("AGENTSPAN_LOG_LEVEL", "INFO")
+        if isinstance(log_level, str) and log_level.strip() == "":
+            log_level = "INFO"
+        return cls(
+            server_url=_env("AGENTSPAN_SERVER_URL", "http://localhost:8080/api"),
+            auth_key=_env("AGENTSPAN_AUTH_KEY"),
+            auth_secret=_env("AGENTSPAN_AUTH_SECRET"),
+            llm_retry_count=_env_int("AGENTSPAN_LLM_RETRY_COUNT", 3),
+            worker_poll_interval_ms=_env_int("AGENTSPAN_WORKER_POLL_INTERVAL", 100),
+            worker_thread_count=_env_int("AGENTSPAN_WORKER_THREADS", 1),
+            auto_start_workers=_env_bool("AGENTSPAN_AUTO_START_WORKERS", True),
+            auto_start_server=_env_bool("AGENTSPAN_AUTO_START_SERVER", True),
+            daemon_workers=_env_bool("AGENTSPAN_DAEMON_WORKERS", True),
+            auto_register_integrations=_env_bool("AGENTSPAN_INTEGRATIONS_AUTO_REGISTER", False),
+            streaming_enabled=_env_bool("AGENTSPAN_STREAMING_ENABLED", True),
+            log_level=log_level,
+        )
 
     @property
     def api_key(self) -> Optional[str]:
@@ -156,16 +125,6 @@ class AgentConfig(BaseSettings):
     def api_secret(self) -> Optional[str]:
         """Alias for :attr:`auth_secret` (industry-standard naming)."""
         return self.auth_secret
-
-    @classmethod
-    def from_env(cls) -> "AgentConfig":
-        """Create a config instance from environment variables.
-
-        This is equivalent to ``AgentConfig()`` — pydantic-settings reads env
-        vars automatically — but provides an explicit factory method that makes
-        the intent clearer in calling code.
-        """
-        return cls()
 
     def to_conductor_configuration(self) -> "Configuration":
         """Convert to a ``conductor-python`` :class:`Configuration` object."""
