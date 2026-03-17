@@ -1,0 +1,58 @@
+# Multi-run validation configuration
+#
+# Each [runs.*] section defines a named run. One run = one model.
+# [defaults] values are merged into every run (run-level overrides win).
+#
+# Usage:
+#   python3 -m validation.scripts.run_examples --config runs.toml
+#   python3 -m validation.scripts.run_examples --config runs.toml --run openai-native
+#   python3 -m validation.scripts.run_examples --config runs.toml --dry-run
+
+[defaults]
+timeout = 300          # per-example timeout (seconds)
+parallel = true        # run examples within this run concurrently
+max_workers = 8        # max concurrent examples per run
+retries = 0            # retry count on failure
+server_url = "http://localhost:8080/api"
+
+[judge]
+baseline_run = "openai-native"   # run name to use as comparison baseline
+model = "gpt-4o-mini"           # LLM model for judging
+max_output_chars = 3000          # truncate outputs before judging
+rate_limit = 0.5                 # seconds between judge calls
+max_calls = 0                    # 0 = unlimited
+
+[display]
+max_example_rows = 40       # max example rows shown in live progress (default: 40)
+
+# ── Runs ─────────────────────────────────────────────────────────────────
+
+[runs.openai-server]
+group = "OPENAI_EXAMPLES"
+model = "openai/gpt-4o"
+
+[runs.openai-native]
+group = "OPENAI_EXAMPLES"
+model = "openai/gpt-4o"
+native = true
+
+[runs.openai-smoke]
+group = "SMOKE_TEST"
+model = "openai/gpt-4o"
+
+[runs.anthropic-server]
+group = "SMOKE_TEST"
+model = "anthropic/claude-sonnet-4-20250514"
+
+# ── Run Config Reference ─────────────────────────────────────────────────
+#
+# name            (auto-set from section key)
+# group           Example group from groups.py (null = all examples)
+# model           "provider/model-name" (default: "openai/gpt-4o")
+# secondary_model Optional secondary model env var
+# native          Run via framework SDK, bypass Conductor (default: false)
+# parallel        Run examples concurrently within this run (default: true)
+# max_workers     Max concurrent examples (default: 8)
+# timeout         Per-example timeout in seconds (default: 300)
+# retries         Retry count on failure (default: 0)
+# server_url      Conductor server URL (default: "http://localhost:8080/api")
