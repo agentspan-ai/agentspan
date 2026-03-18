@@ -15,7 +15,7 @@ class TestWorkerManagerInit:
         config = MagicMock()
         wm = WorkerManager(configuration=config)
         assert wm._poll_interval_ms == 100
-        assert wm._thread_count == 1
+        assert wm._thread_count == 10
         assert wm._daemon is True
         assert wm._task_handler is None
 
