@@ -6,10 +6,36 @@
 import { useState } from "react";
 import { Box, Paper, Typography, IconButton } from "@mui/material";
 import { X as CloseIcon } from "@phosphor-icons/react";
-import { Tab, Tabs, ReactJson } from "components";
+import { Tab, Tabs } from "components";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AgentEvent, AgentRunData, AgentStatus, EventType } from "./types";
+
+// ─── Simple JSON viewer (replaces Monaco for inline display) ─────────────────
+
+function JsonView({ src }: { src: unknown }) {
+  return (
+    <Box
+      component="pre"
+      sx={{
+        m: 0,
+        p: 1.5,
+        fontSize: "0.78rem",
+        lineHeight: 1.6,
+        fontFamily: "monospace",
+        whiteSpace: "pre-wrap",
+        wordBreak: "break-word",
+        color: "text.primary",
+        backgroundColor: "#f8f9fa",
+        borderRadius: 1,
+        overflowY: "auto",
+        maxHeight: 400,
+      }}
+    >
+      {JSON.stringify(src, null, 2)}
+    </Box>
+  );
+}
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -151,21 +177,11 @@ function SmartOutputPanel({
               {unwrapped as string}
             </Typography>
           ) : (
-            <ReactJson
-              src={unwrapped as object}
-              overflowY="auto"
-              overflowX="hidden"
-              editorHeight="300px"
-            />
+            <JsonView src={unwrapped} />
           )
         ) : (
           /* JSON tab — always shows raw full value */
-          <ReactJson
-            src={raw as object}
-            overflowY="auto"
-            overflowX="hidden"
-            editorHeight="300px"
-          />
+          <JsonView src={raw} />
         )}
       </Box>
     </Box>
@@ -217,12 +233,7 @@ function InputSection({ input }: { input: unknown }) {
       <SectionLabel accent="#9e9e9e">Input</SectionLabel>
       <Box sx={{ p: 1.5 }}>
         {typeof input === "object" && input !== null ? (
-          <ReactJson
-            src={input as object}
-            overflowY="auto"
-            overflowX="hidden"
-            editorHeight="200px"
-          />
+          <JsonView src={input} />
         ) : (
           <Typography
             component="pre"
