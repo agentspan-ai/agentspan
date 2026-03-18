@@ -118,7 +118,7 @@ export function toolsFrom(instance: object): Array<(input: unknown) => Promise<u
     const method = (proto as Record<string, unknown>)[key];
     if (typeof method !== 'function') continue;
 
-    const toolDef = (method as Record<string, unknown>)[TOOL_DEF_KEY] as ToolDef | undefined;
+    const toolDef = (method as unknown as Record<string, unknown>)[TOOL_DEF_KEY] as ToolDef | undefined;
     if (!toolDef) continue;
 
     // Bind to instance so `this` works inside the method
