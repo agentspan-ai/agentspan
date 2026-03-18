@@ -56,6 +56,20 @@ def _default_task_def(name: str) -> Any:
     return td
 
 
+# Thread count for system-level async workers (guardrails, handoff checks, etc.).
+# User-defined tool workers keep the per-worker default from @worker_task.
+_SYSTEM_WORKER_THREADS = 10
+
+
+async def _call_user_fn(fn, *args, **kwargs):
+    """Call a user-provided function, awaiting if it's async."""
+    import asyncio
+    import inspect
+    if inspect.iscoroutinefunction(fn):
+        return await fn(*args, **kwargs)
+    return await asyncio.to_thread(fn, *args, **kwargs)
+
+
 def _normalize_handoff_target(task_ref: str) -> str:
     """Extract the actual agent name from a Conductor sub-workflow reference.
 
@@ -533,20 +547,66 @@ class AgentRuntime:
             worker_names = self._collect_worker_names(agent)
             new_workers = worker_names - self._registered_tool_names
             if new_workers:
-                if self._workers_started:
-                    logger.info(
-                        "New workers detected (%s), restarting workers",
-                        ", ".join(sorted(new_workers)),
-                    )
-                    self._worker_manager.stop()
-                    self._workers_started = False
+                logger.info(
+                    "New workers detected (%s), starting workers",
+                    ", ".join(sorted(new_workers)),
+                )
                 self._registered_tool_names.update(worker_names)
             if not self._workers_started:
                 logger.debug("Starting workers for agent '%s'", agent.name)
                 self._worker_manager.start()
                 self._workers_started = True
+            elif new_workers:
+                # Inject new workers into the running TaskHandler without
+                # stopping existing ones.  This avoids the fork() deadlock
+                # window caused by a full stop/restart cycle.
+                self._worker_manager.start()
 
         return wf
+
+    def prepare(self, agent: Any) -> None:
+        """Pre-register workers for an agent without starting workflows.
+
+        Call this for every agent *before* the first :meth:`start` when you
+        know all agents up-front (e.g. a test matrix).  This ensures all
+        workers are in the global ``_decorated_functions`` registry when the
+        ``TaskHandler`` is created, so every worker gets a process in the
+        initial batch — avoiding incremental ``fork()`` calls that deadlock
+        on macOS.
+
+        .. code-block:: python
+
+            # Register all agents first
+            for agent in agents:
+                runtime.prepare(agent)
+
+            # Then start workflows — all workers poll from the start
+            for agent, prompt in work:
+                handle = runtime.start(agent, prompt)
+        """
+        from agentspan.agents.frameworks.serializer import detect_framework
+
+        if isinstance(agent, str):
+            return  # nothing to prepare for run-by-name
+
+        framework = detect_framework(agent)
+        if framework is not None:
+            return  # framework agents are handled in _start_framework
+
+        # Auto-register integrations if enabled
+        if self._config.auto_register_integrations:
+            self._ensure_models_for_agent(agent)
+
+        # Associate prompt templates with the agent's model (if any)
+        self._associate_templates_with_models(agent)
+
+        # Register worker functions locally (tools, guardrails, etc.)
+        self._register_workers(agent)
+
+        # Track worker names so _prepare_workers doesn't re-log them
+        if self._has_worker_tools(agent):
+            worker_names = self._collect_worker_names(agent)
+            self._registered_tool_names.update(worker_names)
 
     def _prepare_workers(self, agent: Agent) -> None:
         """Register and start workers without compiling.
@@ -570,18 +630,20 @@ class AgentRuntime:
             worker_names = self._collect_worker_names(agent)
             new_workers = worker_names - self._registered_tool_names
             if new_workers:
-                if self._workers_started:
-                    logger.info(
-                        "New workers detected (%s), restarting workers",
-                        ", ".join(sorted(new_workers)),
-                    )
-                    self._worker_manager.stop()
-                    self._workers_started = False
+                logger.info(
+                    "New workers detected (%s), starting workers",
+                    ", ".join(sorted(new_workers)),
+                )
                 self._registered_tool_names.update(worker_names)
             if not self._workers_started:
                 logger.debug("Starting workers for agent '%s'", agent.name)
                 self._worker_manager.start()
                 self._workers_started = True
+            elif new_workers:
+                # Inject new workers into the running TaskHandler without
+                # stopping existing ones.  This avoids the fork() deadlock
+                # window caused by a full stop/restart cycle.
+                self._worker_manager.start()
 
     def _collect_worker_names(self, agent: Agent) -> set:
         """Collect all worker task names from an agent tree.
@@ -803,7 +865,7 @@ class AgentRuntime:
             })
 
         def make_combined(specs):
-            def combined_guardrail_worker(content: object = None, iteration: int = 0) -> object:
+            async def combined_guardrail_worker(content: object = None, iteration: int = 0) -> object:
                 if content is None:
                     content_str = ""
                 elif isinstance(content, str):
@@ -816,7 +878,7 @@ class AgentRuntime:
                         content_str = str(content)
                 for spec in specs:
                     try:
-                        result = spec["func"](content_str)
+                        result = await _call_user_fn(spec["func"], content_str)
                         if not result.passed:
                             on_fail = spec["on_fail"]
                             fixed_output = getattr(result, "fixed_output", None)
@@ -862,6 +924,7 @@ class AgentRuntime:
             task_def=_default_task_def(task_name),
             register_task_def=True,
             overwrite_task_def=True,
+            thread_count=_SYSTEM_WORKER_THREADS,
         )(worker_fn)
 
     def _register_single_guardrail_worker(self, guardrail) -> None:
@@ -878,7 +941,7 @@ class AgentRuntime:
         max_retries = guardrail.max_retries
         g_name = guardrail.name
 
-        def guardrail_worker(content: object = None, iteration: int = 0) -> object:
+        async def guardrail_worker(content: object = None, iteration: int = 0) -> object:
             if content is None:
                 content_str = ""
             elif isinstance(content, str):
@@ -890,7 +953,7 @@ class AgentRuntime:
                 except (TypeError, ValueError):
                     content_str = str(content)
             try:
-                result = func(content_str)
+                result = await _call_user_fn(func, content_str)
                 if not result.passed:
                     effective_on_fail = on_fail
                     fixed_output = getattr(result, "fixed_output", None)
@@ -934,6 +997,7 @@ class AgentRuntime:
             task_def=_default_task_def(task_name),
             register_task_def=True,
             overwrite_task_def=True,
+            thread_count=_SYSTEM_WORKER_THREADS,
         )(guardrail_worker)
 
     def _register_stop_when_worker(self, agent_name: str, stop_when_fn) -> None:
@@ -942,10 +1006,10 @@ class AgentRuntime:
 
         task_name = f"{agent_name}_stop_when"
 
-        def stop_when_worker(result: str = "", iteration: int = 0) -> object:
+        async def stop_when_worker(result: str = "", iteration: int = 0) -> object:
             context = {"result": result, "messages": [], "iteration": iteration}
             try:
-                should_stop = stop_when_fn(context)
+                should_stop = await _call_user_fn(stop_when_fn, context)
                 return {"should_continue": not should_stop}
             except Exception as e:
                 logger.error("stop_when evaluation failed: %s", e)
@@ -957,6 +1021,7 @@ class AgentRuntime:
             task_def=_default_task_def(task_name),
             register_task_def=True,
             overwrite_task_def=True,
+            thread_count=_SYSTEM_WORKER_THREADS,
         )(stop_when_worker)
 
     def _register_gate_worker(self, agent_name: str, gate_fn) -> None:
@@ -965,10 +1030,10 @@ class AgentRuntime:
 
         task_name = f"{agent_name}_gate"
 
-        def gate_worker(result: str = "") -> object:
+        async def gate_worker(result: str = "") -> object:
             try:
                 output = {"result": result}
-                should_continue = gate_fn(output)
+                should_continue = await _call_user_fn(gate_fn, output)
                 return {"decision": "continue" if should_continue else "stop"}
             except Exception as e:
                 logger.error("Gate evaluation failed: %s", e)
@@ -980,6 +1045,7 @@ class AgentRuntime:
             task_def=_default_task_def(task_name),
             register_task_def=True,
             overwrite_task_def=True,
+            thread_count=_SYSTEM_WORKER_THREADS,
         )(gate_worker)
 
     def _register_callback_worker(self, agent_name: str, position: str, callback_fn) -> None:
@@ -988,14 +1054,14 @@ class AgentRuntime:
 
         task_name = f"{agent_name}_{position}"
 
-        def callback_worker(messages: object = None, llm_result: str = None) -> object:
+        async def callback_worker(messages: object = None, llm_result: str = None) -> object:
             try:
                 kwargs = {}
                 if messages is not None:
                     kwargs["messages"] = messages
                 if llm_result is not None:
                     kwargs["llm_result"] = llm_result
-                result = callback_fn(**kwargs)
+                result = await _call_user_fn(callback_fn, **kwargs)
                 return result if isinstance(result, dict) else {}
             except Exception as e:
                 logger.error("Callback %s failed: %s", task_name, e)
@@ -1007,6 +1073,7 @@ class AgentRuntime:
             task_def=_default_task_def(task_name),
             register_task_def=True,
             overwrite_task_def=True,
+            thread_count=_SYSTEM_WORKER_THREADS,
         )(callback_worker)
 
     def _register_termination_worker(self, agent_name: str, termination_cond) -> None:
@@ -1015,10 +1082,10 @@ class AgentRuntime:
 
         task_name = f"{agent_name}_termination"
 
-        def termination_worker(result: str = "", iteration: int = 0) -> object:
+        async def termination_worker(result: str = "", iteration: int = 0) -> object:
             context = {"result": result, "messages": [], "iteration": iteration}
             try:
-                outcome = termination_cond.should_terminate(context)
+                outcome = await _call_user_fn(termination_cond.should_terminate, context)
                 return {"should_continue": not outcome.should_terminate, "reason": outcome.reason}
             except Exception as e:
                 logger.error("termination condition evaluation failed: %s", e)
@@ -1030,6 +1097,7 @@ class AgentRuntime:
             task_def=_default_task_def(task_name),
             register_task_def=True,
             overwrite_task_def=True,
+            thread_count=_SYSTEM_WORKER_THREADS,
         )(termination_worker)
 
     def _register_check_transfer_worker(self, agent_name: str) -> None:
@@ -1038,7 +1106,7 @@ class AgentRuntime:
 
         task_name = f"{agent_name}_check_transfer"
 
-        def check_transfer_worker(tool_calls: object = None, _unused: str = "") -> object:
+        async def check_transfer_worker(tool_calls: object = None, _unused: str = "") -> object:
             for tc in (tool_calls or []):
                 name = tc.get("name", "")
                 if name.startswith("transfer_to_"):
@@ -1051,6 +1119,7 @@ class AgentRuntime:
             task_def=_default_task_def(task_name),
             register_task_def=True,
             overwrite_task_def=True,
+            thread_count=_SYSTEM_WORKER_THREADS,
         )(check_transfer_worker)
 
     def _register_router_worker(self, agent: Agent) -> None:
@@ -1061,9 +1130,9 @@ class AgentRuntime:
         router_fn = agent.router
         agent_names = [a.name for a in agent.agents]
 
-        def router_worker(prompt: str = "") -> object:
+        async def router_worker(prompt: str = "") -> object:
             try:
-                result = router_fn(prompt)
+                result = await _call_user_fn(router_fn, prompt)
                 return {"selected_agent": str(result)}
             except Exception as e:
                 logger.error("Router function failed: %s", e)
@@ -1075,6 +1144,7 @@ class AgentRuntime:
             task_def=_default_task_def(task_name),
             register_task_def=True,
             overwrite_task_def=True,
+            thread_count=_SYSTEM_WORKER_THREADS,
         )(router_worker)
 
     def _register_handoff_worker(self, agent: Agent) -> None:
@@ -1112,7 +1182,7 @@ class AgentRuntime:
             source_name = idx_to_name.get(source_idx, "")
             return target_name in allowed.get(source_name, [])
 
-        def handoff_check_worker(
+        async def handoff_check_worker(
             result: str = "",
             active_agent: str = "0",
             conversation: str = "",
@@ -1163,6 +1233,7 @@ class AgentRuntime:
             task_def=_default_task_def(task_name),
             register_task_def=True,
             overwrite_task_def=True,
+            thread_count=_SYSTEM_WORKER_THREADS,
         )(handoff_check_worker)
 
     def _register_swarm_transfer_workers(self, agent: Agent) -> None:
@@ -1202,7 +1273,7 @@ class AgentRuntime:
 
                 def make_worker(tn, target, unreachable):
                     if unreachable:
-                        def transfer_worker() -> str:
+                        async def transfer_worker() -> str:
                             return (
                                 f"ERROR: transfer_to_{target} is not available. "
                                 f"Use a different transfer tool, or if you are "
@@ -1211,7 +1282,7 @@ class AgentRuntime:
                             )
                         transfer_worker.__annotations__ = {"return": str}
                     else:
-                        def transfer_worker() -> object:
+                        async def transfer_worker() -> object:
                             return {}
                         transfer_worker.__annotations__ = {"return": object}
                     worker_task(
@@ -1219,6 +1290,7 @@ class AgentRuntime:
                         task_def=_default_task_def(tn),
                         register_task_def=True,
                         overwrite_task_def=True,
+                        thread_count=_SYSTEM_WORKER_THREADS,
                     )(transfer_worker)
                 make_worker(tool_name, peer_name, is_unreachable)
 
@@ -1229,7 +1301,7 @@ class AgentRuntime:
         task_name = f"{agent.name}_process_selection"
         name_to_idx = {sub.name: str(i) for i, sub in enumerate(agent.agents)}
 
-        def process_selection_worker(human_output: object = None) -> object:
+        async def process_selection_worker(human_output: object = None) -> object:
             if human_output is None:
                 return {"selected": "0"}
             if isinstance(human_output, dict):
@@ -1245,6 +1317,7 @@ class AgentRuntime:
             task_def=_default_task_def(task_name),
             register_task_def=True,
             overwrite_task_def=True,
+            thread_count=_SYSTEM_WORKER_THREADS,
         )(process_selection_worker)
 
     # ── Prompt template resolution ─────────────────────────────────
@@ -1677,23 +1750,24 @@ class AgentRuntime:
             )
 
         # Register local Python worker functions for each agent
+        has_new = False
         for agent in all_agents:
             self._register_workers(agent)
             worker_names = self._collect_worker_names(agent)
             new_workers = worker_names - self._registered_tool_names
             if new_workers:
-                if self._workers_started:
-                    logger.info(
-                        "New workers detected (%s), restarting workers",
-                        ", ".join(sorted(new_workers)),
-                    )
-                    self._worker_manager.stop()
-                    self._workers_started = False
+                logger.info(
+                    "New workers detected (%s), starting workers",
+                    ", ".join(sorted(new_workers)),
+                )
                 self._registered_tool_names.update(worker_names)
+                has_new = True
 
         if not self._workers_started:
             self._worker_manager.start()
             self._workers_started = True
+        elif has_new:
+            self._worker_manager.start()
 
         logger.info(
             "Serving %d worker(s) for %d agent(s). Press Ctrl+C to stop.",
@@ -2265,18 +2339,17 @@ class AgentRuntime:
             new_names = {w.name for w in workers}
             new_workers = new_names - self._registered_tool_names
             if new_workers:
-                if self._workers_started:
-                    logger.info(
-                        "New framework workers detected (%s), restarting workers",
-                        ", ".join(sorted(new_workers)),
-                    )
-                    self._worker_manager.stop()
-                    self._workers_started = False
+                logger.info(
+                    "New framework workers detected (%s), starting workers",
+                    ", ".join(sorted(new_workers)),
+                )
                 self._registered_tool_names.update(new_names)
             if not self._workers_started:
                 logger.debug("Starting workers for framework agent")
                 self._worker_manager.start()
                 self._workers_started = True
+            elif new_workers:
+                self._worker_manager.start()
 
     def _run_framework_with_events(
         self,

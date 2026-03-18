@@ -46,7 +46,7 @@ class WorkerManager:
         self,
         configuration: "Configuration",
         poll_interval_ms: int = 100,
-        thread_count: int = 1,
+        thread_count: int = 10,
         daemon: bool = True,
     ) -> None:
         self._configuration = configuration
@@ -134,7 +134,7 @@ class WorkerManager:
                     "poll_interval": record["poll_interval"],
                     "domain": domain,
                     "worker_id": record["worker_id"],
-                    "thread_count": record.get("thread_count", 1),
+                    "thread_count": record.get("thread_count", 10),
                     "register_task_def": record.get("register_task_def", False),
                     "poll_timeout": record.get("poll_timeout", 100),
                     "lease_extend_enabled": record.get("lease_extend_enabled", True),
@@ -170,6 +170,12 @@ class WorkerManager:
             new_proc.start()
             th.workers.append(worker)
             existing.add(task_def_name)
+            # Extend the monitor's per-worker restart tracking arrays so that
+            # the monitor can restart this process if it deadlocks after fork().
+            if hasattr(th, "_restart_counts"):
+                th._restart_counts.append(0)
+            if hasattr(th, "_next_restart_at"):
+                th._next_restart_at.append(0.0)
             logger.info("Started late-registered worker '%s'", task_def_name)
 
     def _register_logger_cleanup(self) -> None:
