@@ -30,16 +30,15 @@ parallel = true
 max_workers = 8
 
 [judge]
-baseline_run = "openai-server"
+baseline_run = "openai"
 model = "gpt-4o-mini"
 
-[runs.openai-server]
+[runs.openai]
 model = "openai/gpt-4o"
 group = "SMOKE_TEST"
 
-[runs.openai-native]
-model = "openai/gpt-4o"
-native = true
+[runs.anthropic]
+model = "anthropic/claude-sonnet-4-20250514"
 group = "SMOKE_TEST"
 ```
 
@@ -49,26 +48,25 @@ group = "SMOKE_TEST"
 
 Each `run_single()`:
 1. Discovers examples for the run's group
-2. Starts ServerPool if not native
+2. Starts ServerPool
 3. Calls `run_examples()` — single model, concurrent examples via ThreadPoolExecutor
-4. Writes `results.csv`, `outputs/`, `meta.json`, `last_run.json` into run sub-dir
+4. Writes `results.csv`, `outputs/`, `meta.json`, `report.json` into run sub-dir
 
 `run_example()` runs each example as a subprocess:
 - Sets `AGENTSPAN_LLM_MODEL` and optionally `AGENTSPAN_SERVER_URL`
-- Native mode: `python -m validation.native.shim <script>` (monkey-patches AgentRuntime)
-- Server mode: `python <script>` (hits Conductor server)
+- Server: `python <script>` (hits Agentspan server)
 - Parses stdout/stderr via `parse_output()` → `RunResult`
 
 ### Concurrency
 
 - Runs execute concurrently (one ThreadPoolExecutor per orchestrator)
 - Within each run, examples execute concurrently (`max_workers` from config)
-- CSV writes and `last_run.json` updates are thread-safe (locks + atomic file replace)
+- CSV writes and `report.json` updates are thread-safe (locks + atomic file replace)
 - SIGINT triggers graceful abort — partial results are written before exit
 
 ### Scheduling
 
-- Examples sorted slowest-first (from `last_run.json` history) for better load balancing
+- Examples sorted slowest-first (from `report.json` history) for better load balancing
 - `--resume` skips already-completed examples (checks output files)
 - `--retry-failed` re-runs only examples with ERROR/TIMEOUT/FAILED status
 
@@ -154,14 +152,14 @@ runtime.run(agent, "Say hello and tell me a fun fact")  →  extracted
 ```
 validation/output/run_{timestamp}_{id}/
 ├── meta.json                    ← parent metadata
-├── openai-server/               ← run sub-dir
+├── openai/               ← run sub-dir
 │   ├── results.csv              ← single-model CSV (flat columns)
 │   ├── meta.json
-│   ├── last_run.json
+│   ├── report.json
 │   └── outputs/
 │       ├── 01_basic_agent.txt
 │       └── ...
-├── openai-native/
+├── anthropic/
 │   ├── results.csv
 │   └── outputs/...
 └── judge/                       ← cross-run judge results
@@ -169,5 +167,5 @@ validation/output/run_{timestamp}_{id}/
     ├── report.md
     ├── report.html              ← interactive dashboard
     ├── meta.json
-    └── last_run.json            ← hash cache for re-judging
+    └── report.json            ← hash cache for re-judging
 ```

@@ -5,7 +5,7 @@ Runs SDK examples against configured models via TOML config. One run = one model
 ## Prerequisites
 
 - Python 3.11+
-- Conductor server running (for server-mode runs)
+- Agentspan server running
 - For judging: `OPENAI_API_KEY` env var
 
 ## Install
@@ -27,7 +27,7 @@ python3 -m validation.scripts.run_examples --config validation/runs.toml
 python3 -m validation.scripts.run_examples --config validation/runs.toml --dry-run
 
 # Run specific runs
-python3 -m validation.scripts.run_examples --config validation/runs.toml --run openai-native
+python3 -m validation.scripts.run_examples --config validation/runs.toml --run openai
 
 # Run + judge in one command
 python3 -m validation.scripts.run_examples --config validation/runs.toml --judge
@@ -46,17 +46,16 @@ timeout = 300
 parallel = true
 max_workers = 8
 
-[judge]          # cross-run judge settings
-baseline_run = "openai-server"
+[judge]          # judge settings
+baseline_run = "openai"
 model = "gpt-4o-mini"
 
-[runs.openai-server]
+[runs.openai]
 model = "openai/gpt-4o"
 group = "SMOKE_TEST"
 
-[runs.openai-native]
-model = "openai/gpt-4o"
-native = true
+[runs.anthropic]
+model = "anthropic/claude-sonnet-4-20250514"
 group = "SMOKE_TEST"
 ```
 
@@ -122,42 +121,10 @@ Each run creates `validation/output/run_{timestamp}_{id}/` containing:
 | `OPENAI_API_KEY` | judge | — | Judge API calls |
 | `JUDGE_LLM_MODEL` | judge | `gpt-4o-mini` | Judge model |
 | `JUDGE_MAX_OUTPUT_CHARS` | judge | 3000 | Truncate before judging |
-| `MAX_JUDGE_CALLS` | judge | 0 (unlimited) | Budget cap |
+| `JUDGE_MAX_TOKENS` | judge | 300 | Max tokens for judge response |
+| `JUDGE_MAX_CALLS` | judge | 0 (unlimited) | Budget cap |
 | `JUDGE_RATE_LIMIT` | judge | 0.5 | Seconds between calls |
 
-## Module Structure
-
-```
-validation/
-├── config.py            # constants, CSV schema, Settings
-├── toml_config.py       # TOML multi-run config parser
-├── orchestrator.py      # multi-run orchestrator
-├── cross_judge.py       # cross-run judge + baseline comparison
-├── groups.py            # example groups, HITL stdin mappings
-├── models.py            # Example, RunResult, SingleResult
-├── parsing.py           # stdout parsing, prompt extraction
-├── discovery.py         # example discovery, dependency checking
-├── runner.py            # single example execution, health check
-├── execution.py         # concurrent example execution
-├── judge.py             # LLM judge calls (individual + comparison)
-├── reporting.py         # report helpers
-├── report_html.py       # cross-run HTML report (Jinja2)
-├── persistence.py       # last-run persistence, hash caching
-├── output.py            # file writing (CSV, outputs, symlinks)
-├── display.py           # terminal display helpers
-├── server_pool.py       # dedicated servers for parallel execution
-├── runs.toml.example    # annotated TOML config template
-├── templates/
-│   └── cross_report.html.j2  # cross-run HTML report template
-├── native/
-│   ├── shim.py          # monkey-patch for native execution
-│   └── openai_runner.py # OpenAI native runner
-├── scripts/
-│   ├── run_examples.py  # CLI: execution
-│   └── judge_results.py # CLI: cross-run judging
-├── README.md            # this file
-└── DESIGN.md            # architecture and internals
-```
 
 ## Wishlist
 

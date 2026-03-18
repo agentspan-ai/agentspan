@@ -7,9 +7,9 @@ import subprocess
 import sys
 import time
 
-from .config import SCRIPT_DIR
-from .models import Example, RunResult
-from .parsing import parse_output
+from ..config import SCRIPT_DIR
+from ..models import Example, RunResult
+from ..parsing import parse_output
 
 _PROJECT_ROOT = str(SCRIPT_DIR.parent)
 
@@ -54,7 +54,7 @@ def run_example(
         env["AGENTSPAN_SECONDARY_LLM_MODEL"] = secondary_model
 
     base_name = example.name.split("/")[-1]
-    from .groups import HITL_STDIN
+    from ..groups import HITL_STDIN
 
     stdin_data = None
     for prefix, response in HITL_STDIN.items():

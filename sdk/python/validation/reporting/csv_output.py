@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-from .models import RunResult
+from ..models import RunResult
 
 
 def write_single_output(outputs_dir: Path, example_name: str, result: RunResult) -> None:

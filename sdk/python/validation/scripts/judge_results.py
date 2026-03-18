@@ -57,7 +57,7 @@ def main():
         print("ERROR: OPENAI_API_KEY not set.", file=sys.stderr)
         sys.exit(1)
 
-    from validation.cross_judge import judge_across_runs
+    from validation.judge import judge_across_runs
     from validation.toml_config import JudgeConfig
 
     if args.run_dir:

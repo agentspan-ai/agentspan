@@ -164,7 +164,9 @@ class TestServerUrlNormalisation:
         assert config.server_url == "https://play.orkes.io/api"
 
     def test_from_env_auto_appends(self):
-        with mock.patch.dict(os.environ, {"AGENTSPAN_SERVER_URL": "http://myhost:9090"}, clear=True):
+        with mock.patch.dict(
+            os.environ, {"AGENTSPAN_SERVER_URL": "http://myhost:9090"}, clear=True
+        ):
             config = AgentConfig.from_env()
             assert config.server_url == "http://myhost:9090/api"
 
@@ -239,8 +241,13 @@ class TestServerAutoStart:
 
     @mock.patch("agentspan.agents.runtime.server.time")
     @mock.patch("agentspan.agents.runtime.server.subprocess")
-    @mock.patch("agentspan.agents.runtime.server._find_or_install_cli", return_value="/usr/local/bin/agentspan")
-    @mock.patch("agentspan.agents.runtime.server._is_server_ready", side_effect=[False, False, True])
+    @mock.patch(
+        "agentspan.agents.runtime.server._find_or_install_cli",
+        return_value="/usr/local/bin/agentspan",
+    )
+    @mock.patch(
+        "agentspan.agents.runtime.server._is_server_ready", side_effect=[False, False, True]
+    )
     def test_ensure_server_running_starts_server(
         self, mock_ready, mock_find_cli, mock_subprocess, mock_time
     ):
@@ -253,8 +260,8 @@ class TestServerAutoStart:
 
         mock_subprocess.run.assert_called_once_with(
             ["/usr/local/bin/agentspan", "server", "start"],
-            stdout=mock.ANY,
-            stderr=mock.ANY,
+            capture_output=True,
+            text=True,
         )
 
 
@@ -293,6 +300,7 @@ class TestLogLevelConfig:
         with mock.patch("conductor.client.orkes_clients.OrkesClients"):
             with mock.patch("agentspan.agents.runtime.worker_manager.WorkerManager"):
                 from agentspan.agents.runtime.runtime import AgentRuntime
+
                 rt = AgentRuntime(config=config)
 
         assert logging.getLogger("agentspan").level == logging.WARNING

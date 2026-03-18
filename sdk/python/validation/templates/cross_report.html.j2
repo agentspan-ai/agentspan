@@ -24,9 +24,9 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
 .container { max-width: 1400px; margin: 0 auto; padding: 1rem; }
-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem; }
+header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.5rem; }
 header h1 { font-size: 1.5rem; }
-.controls { display: flex; gap: 0.5rem; align-items: center; }
+.controls { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
 button, select, input[type="text"] { font-size: 0.85rem; padding: 0.35rem 0.7rem; border: 1px solid var(--border); border-radius: 4px; background: var(--bg2); color: var(--text); cursor: pointer; }
 button:hover { background: var(--bg3); }
 
@@ -45,10 +45,11 @@ button:hover { background: var(--bg3); }
 
 /* Run info cards */
 .run-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
-.run-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 1rem; box-shadow: var(--card-shadow); }
-.run-card .run-name { font-weight: 700; font-size: 0.95rem; margin-bottom: 0.25rem; }
+.run-card { background: var(--bg2); border: 1px solid var(--border); border-left: 3px solid transparent; border-radius: 8px; padding: 0.75rem 1rem; box-shadow: var(--card-shadow); }
+.run-card .run-name { font-weight: 700; font-size: 0.95rem; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.3rem; }
 .run-card .run-detail { font-size: 0.8rem; color: var(--text2); }
-.run-card.baseline { border-left: 3px solid var(--accent); }
+.run-card.baseline { border-left: 4px solid var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--bg2)); }
+.baseline-chip { font-size: 0.65rem; background: var(--accent); color: #fff; padding: 0.1rem 0.4rem; border-radius: 8px; margin-left: 0.3rem; }
 
 /* Score distribution */
 .chart-section { margin-bottom: 2rem; }
@@ -61,15 +62,27 @@ button:hover { background: var(--bg3); }
 .bar { height: 18px; border-radius: 3px; background: var(--accent); min-width: 2px; transition: width 0.3s; }
 .bar-count { font-size: 0.8rem; color: var(--text3); }
 
+/* Divergent callout */
+.divergent-section { background: var(--bg2); border: 1px solid var(--border); border-left: 4px solid var(--partial); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1.5rem; }
+.divergent-section h3 { font-size: 0.95rem; color: var(--partial); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem; }
+.divergent-list { list-style: none; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.divergent-list li { display: flex; align-items: center; gap: 0.3rem; }
+.divergent-list a { font-size: 0.8rem; color: var(--accent); text-decoration: none; }
+.divergent-list a:hover { text-decoration: underline; }
+.div-score-badge { font-size: 0.65rem; padding: 0.1rem 0.35rem; border-radius: 4px; font-weight: 600; }
+
 /* Heatmap table */
+.table-section-title { font-size: 1.1rem; margin-bottom: 0.75rem; }
 .table-wrap { overflow-x: auto; margin-bottom: 2rem; }
 table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 th, td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
-th { background: var(--bg2); cursor: pointer; user-select: none; white-space: nowrap; position: sticky; top: 0; }
+th { background: var(--bg2); cursor: pointer; user-select: none; white-space: nowrap; position: sticky; top: 0; z-index: 2; }
 th:hover { background: var(--bg3); }
 th .sort-arrow { margin-left: 0.3rem; opacity: 0.3; }
 th.sorted .sort-arrow { opacity: 1; }
 tr:hover { background: var(--bg2); }
+.col-baseline { border-left: 2px solid var(--accent) !important; border-right: 2px solid var(--accent) !important; background: color-mix(in srgb, var(--accent) 8%, transparent) !important; }
+th.col-baseline { color: var(--accent); font-weight: 700; }
 
 /* Score cells */
 .score-cell { text-align: center; font-weight: 600; }
@@ -85,12 +98,13 @@ tr:hover { background: var(--bg2); }
 [data-theme="dark"] .score-2 { background: #3b3025; color: #ff922b; }
 [data-theme="dark"] .score-1 { background: #3b2b2b; color: #ff6b6b; }
 
-/* Average row */
+/* Average row — sticky */
+tfoot { position: sticky; bottom: 0; z-index: 1; }
 tr.avg-row { font-weight: 700; border-top: 2px solid var(--border); }
 tr.avg-row td { background: var(--bg2); }
 
 /* Detail cards */
-.details h2 { font-size: 1.1rem; margin-bottom: 0.75rem; }
+.details h2 { font-size: 1.1rem; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; }
 .detail-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 0.75rem; box-shadow: var(--card-shadow); }
 .detail-header { padding: 0.75rem 1rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
 .detail-header:hover { background: var(--bg3); border-radius: 8px; }
@@ -103,6 +117,9 @@ tr.avg-row td { background: var(--bg2); }
 .detail-body { display: none; padding: 0 1rem 1rem; }
 .detail-card.open .detail-body { display: block; }
 
+/* Reason callout */
+.reason-callout { border-left: 3px solid var(--border); padding: 0.4rem 0.75rem; background: var(--bg3); border-radius: 0 4px 4px 0; font-size: 0.82rem; color: var(--text2); margin: 0.25rem 0; }
+
 /* Side-by-side outputs */
 .outputs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem; margin-top: 0.75rem; }
 .output-panel { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem; }
@@ -113,10 +130,16 @@ tr.avg-row td { background: var(--bg2); }
 .score-badge-mid { background: var(--partial-bg); color: var(--partial); }
 .score-badge-low { background: var(--fail-bg); color: var(--fail); }
 .meta-row { font-size: 0.8rem; color: var(--text2); margin-bottom: 0.25rem; }
+.copy-btn { font-size: 0.7rem; padding: 0.1rem 0.4rem; border-radius: 4px; border: 1px solid var(--border); background: var(--bg2); cursor: pointer; color: var(--text3); }
+.copy-btn:hover { background: var(--bg3); color: var(--text); }
 
 /* Baseline comparison section in details */
 .baseline-section { margin-top: 0.75rem; padding-top: 0.5rem; border-top: 1px solid var(--border); }
 .baseline-section h4 { font-size: 0.85rem; margin-bottom: 0.5rem; color: var(--text2); }
+
+/* Back to top */
+#backToTop { position: fixed; bottom: 1.5rem; right: 1.5rem; display: none; padding: 0.5rem 0.75rem; background: var(--accent); color: #fff; border: none; border-radius: 20px; cursor: pointer; font-size: 0.8rem; box-shadow: 0 2px 8px rgba(0,0,0,0.2); opacity: 0; transition: opacity 0.3s; z-index: 100; }
+#backToTop.visible { display: block; opacity: 1; }
 
 /* Print */
 @media print {
@@ -138,8 +161,10 @@ tr.avg-row td { background: var(--bg2); }
         <option value="low">Any score &le;2</option>
         <option value="high">All scores &ge;4</option>
       </select>
+      <button onclick="resetFilters()">Reset Filters</button>
+      <button id="expandAllBtn" onclick="toggleExpandAll()">Expand All</button>
       <button onclick="exportCSV()">Export CSV</button>
-      <button onclick="toggleTheme()">Toggle Dark</button>
+      <button id="themeBtn" onclick="toggleTheme()">Dark Mode</button>
     </div>
   </header>
 
@@ -149,6 +174,7 @@ tr.avg-row td { background: var(--bg2); }
     {% if meta.judge_duration_s %}<span>Judge: {{ "%.0f"|format(meta.judge_duration_s) }}s</span>{% endif %}
     {% if meta.judge_model %}<span>Model: {{ meta.judge_model }}</span>{% endif %}
     {% if meta.judge_calls is defined %}<span>Calls: {{ meta.judge_calls }}{% if meta.cache_hits %} ({{ meta.cache_hits }} cached){% endif %}</span>{% endif %}
+    {% if meta.input_tokens or meta.output_tokens %}<span>Tokens: {{ meta.input_tokens | format_number }} in / {{ meta.output_tokens | format_number }} out</span>{% endif %}
     {% if baseline %}<span>Baseline: {{ baseline }}</span>{% endif %}
     <span>Generated: {{ generated_at }}</span>
   </div>
@@ -158,10 +184,12 @@ tr.avg-row td { background: var(--bg2); }
   <div class="run-cards">
     {% for rn in runs %}
     <div class="run-card{% if rn == baseline %} baseline{% endif %}">
-      <div class="run-name">{{ rn }}{% if rn == baseline %} (baseline){% endif %}</div>
+      <div class="run-name">
+        {{ rn }}{% if rn == baseline %}<span class="baseline-chip">baseline</span>{% endif %}
+      </div>
       {% if run_meta.get(rn) %}
       <div class="run-detail">{{ run_meta[rn].get('model', '') }}</div>
-      <div class="run-detail">{{ 'native' if run_meta[rn].get('native') else 'server' }}{% if run_meta[rn].get('group') %} &middot; {{ run_meta[rn]['group'] }}{% endif %}</div>
+      <div class="run-detail">{{ 'native' if run_meta[rn].get('native') else 'server' }}{% if run_meta[rn].get('group') %} &middot; {{ run_meta[rn]['group'] }}{% endif %}{% if run_meta[rn].get('duration_s') %} &middot; {{ "%.0f"|format(run_meta[rn]['duration_s']) }}s{% endif %}</div>
       {% endif %}
     </div>
     {% endfor %}
@@ -191,7 +219,7 @@ tr.avg-row td { background: var(--bg2); }
         {% set max_count = score_dist_max.get(rn, 1) %}
         <div class="bar-row">
           <span class="bar-label">{{ score }}</span>
-          <div class="bar" style="width: {{ (count / max_count * 120)|int }}px"></div>
+          <div class="bar" style="width: calc({{ (count / max_count * 100)|int }}%); max-width: 200px"></div>
           <span class="bar-count">{{ count }}</span>
         </div>
         {% endfor %}
@@ -200,22 +228,44 @@ tr.avg-row td { background: var(--bg2); }
     </div>
   </div>
 
-  <!-- Heatmap table -->
+  <!-- Divergent examples -->
+  {% set divergent_rows = [] %}
+  {% for row in rows %}
+    {% set scores = [] %}
+    {% for rn in runs %}{% if row.get(rn ~ '_score') %}{% set _ = scores.append(row[rn ~ '_score']|int) %}{% endif %}{% endfor %}
+    {% if scores|length > 1 and (scores|max - scores|min) >= 2 %}{% set _ = divergent_rows.append(row) %}{% endif %}
+  {% endfor %}
+  {% if divergent_rows %}
+  <div class="divergent-section">
+    <h3>&#9888; Divergent Examples ({{ divergent_rows|length }})
+      <button onclick="expandDivergent()" style="font-size:0.75rem; padding:0.15rem 0.5rem;">Expand Divergent</button>
+    </h3>
+    <ul class="divergent-list">
+      {% for row in divergent_rows %}
+      <li>
+        <a href="#{{ row.example|replace('/', '_') }}">{{ row.example }}</a>
+        {% for rn in runs %}
+        {% set s = row.get(rn ~ '_score', '') %}
+        {% if s %}
+        <span class="div-score-badge {% if s|int >= 4 %}score-5{% elif s|int >= 3 %}score-3{% else %}score-1{% endif %}">{{ s }}</span>
+        {% endif %}
+        {% endfor %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <!-- Run Scores table -->
+  <h2 class="table-section-title">Run Scores</h2>
   <div class="table-wrap">
     <table id="resultsTable">
       <thead>
         <tr>
           <th onclick="sortTable(0)">Example <span class="sort-arrow">&#9650;</span></th>
           {% for rn in runs %}
-          <th onclick="sortTable({{ loop.index }})" style="text-align:center">{{ rn }} <span class="sort-arrow">&#9650;</span></th>
+          <th onclick="sortTable({{ loop.index }})" style="text-align:center"{% if rn == baseline %} class="col-baseline"{% endif %}>{{ rn }}{% if rn == baseline %} <span class="baseline-chip">b</span>{% endif %} <span class="sort-arrow">&#9650;</span></th>
           {% endfor %}
-          {% if baseline %}
-          {% for rn in runs %}
-          {% if rn != baseline %}
-          <th onclick="sortTable({{ runs|length + loop.index0 + 1 }})" style="text-align:center">vs {{ baseline|truncate(10, True, '..') }} <span class="sort-arrow">&#9650;</span></th>
-          {% endif %}
-          {% endfor %}
-          {% endif %}
         </tr>
       </thead>
       <tbody>
@@ -230,23 +280,11 @@ tr.avg-row td { background: var(--bg2); }
           {% for rn in runs %}
           {% set s = row.get(rn ~ '_score', '') %}
           {% if s %}
-          <td class="score-cell score-{{ s }}">{{ s }}/5</td>
+          <td class="score-cell score-{{ s }}{% if rn == baseline %} col-baseline{% endif %}">{{ s }}/5</td>
           {% else %}
-          <td class="score-cell score-skip">-</td>
+          <td class="score-cell score-skip{% if rn == baseline %} col-baseline{% endif %}">-</td>
           {% endif %}
           {% endfor %}
-          {% if baseline %}
-          {% for rn in runs %}
-          {% if rn != baseline %}
-          {% set bs = row.get(rn ~ '_vs_' ~ baseline, '') %}
-          {% if bs %}
-          <td class="score-cell score-{{ bs }}">{{ bs }}/5</td>
-          {% else %}
-          <td class="score-cell score-skip">-</td>
-          {% endif %}
-          {% endif %}
-          {% endfor %}
-          {% endif %}
         </tr>
         {% endfor %}
       </tbody>
@@ -254,19 +292,55 @@ tr.avg-row td { background: var(--bg2); }
         <tr class="avg-row">
           <td><strong>Average</strong></td>
           {% for rn in runs %}
-          <td class="score-cell">{{ "%.1f"|format(avg_scores.get(rn, 0)) }}</td>
+          <td class="score-cell{% if rn == baseline %} col-baseline{% endif %}">{{ "%.1f"|format(avg_scores.get(rn, 0)) }}</td>
           {% endfor %}
-          {% if baseline %}
-          {% for rn in runs %}
-          {% if rn != baseline %}
-          <td class="score-cell">{{ "%.1f"|format(avg_baseline_scores.get(rn, 0)) }}</td>
-          {% endif %}
-          {% endfor %}
-          {% endif %}
         </tr>
       </tfoot>
     </table>
   </div>
+
+  <!-- vs-Baseline table -->
+  {% if baseline %}
+  {% set non_baseline = runs | reject("equalto", baseline) | list %}
+  {% if non_baseline %}
+  <h2 class="table-section-title">vs {{ baseline }}</h2>
+  <div class="table-wrap">
+    <table id="vsBaselineTable">
+      <thead>
+        <tr>
+          <th onclick="sortVsTable(0)">Example <span class="sort-arrow">&#9650;</span></th>
+          {% for rn in non_baseline %}
+          <th onclick="sortVsTable({{ loop.index }})" style="text-align:center">{{ rn }} <span class="sort-arrow">&#9650;</span></th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr data-example="{{ row.example }}">
+          <td><a href="#{{ row.example|replace('/', '_') }}">{{ row.example }}</a></td>
+          {% for rn in non_baseline %}
+          {% set bs = row.get(rn ~ '_vs_' ~ baseline, '') %}
+          {% if bs %}
+          <td class="score-cell score-{{ bs }}">{{ bs }}/5</td>
+          {% else %}
+          <td class="score-cell score-skip">-</td>
+          {% endif %}
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr class="avg-row">
+          <td><strong>Average</strong></td>
+          {% for rn in non_baseline %}
+          <td class="score-cell">{{ "%.1f"|format(avg_baseline_scores.get(rn, 0)) }}</td>
+          {% endfor %}
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  {% endif %}
+  {% endif %}
 
   <!-- Detail cards with side-by-side outputs -->
   <div class="details">
@@ -289,7 +363,7 @@ tr.avg-row td { background: var(--bg2); }
         {% for rn in runs %}
         {% set s = row.get(rn ~ '_score', '') %}
         {% if s and row.get(rn ~ '_reason') %}
-        <div class="meta-row"><strong>{{ rn }}:</strong> {{ s }}/5 &mdash; {{ row[rn ~ '_reason'] }}</div>
+        <div class="reason-callout"><strong>{{ rn }}:</strong> {{ s }}/5 &mdash; {{ row[rn ~ '_reason'] }}</div>
         {% endif %}
         {% endfor %}
 
@@ -300,7 +374,7 @@ tr.avg-row td { background: var(--bg2); }
           {% if rn != baseline %}
           {% set bs = row.get(rn ~ '_vs_' ~ baseline, '') %}
           {% if bs %}
-          <div class="meta-row"><strong>{{ rn }}:</strong> {{ bs }}/5{% if row.get(rn ~ '_vs_' ~ baseline ~ '_reason') %} &mdash; {{ row[rn ~ '_vs_' ~ baseline ~ '_reason'] }}{% endif %}</div>
+          <div class="reason-callout"><strong>{{ rn }}:</strong> {{ bs }}/5{% if row.get(rn ~ '_vs_' ~ baseline ~ '_reason') %} &mdash; {{ row[rn ~ '_vs_' ~ baseline ~ '_reason'] }}{% endif %}</div>
           {% endif %}
           {% endif %}
           {% endfor %}
@@ -312,11 +386,13 @@ tr.avg-row td { background: var(--bg2); }
           {% if raw_outputs.get(row.example, {}).get(rn) %}
           <div class="output-panel">
             <h4>
-              {{ rn }}
+              <span>{{ rn }}
               {% set s = row.get(rn ~ '_score', '') %}
               {% if s %}
               <span class="score-badge {% if s|int >= 4 %}score-badge-high{% elif s|int >= 3 %}score-badge-mid{% else %}score-badge-low{% endif %}">{{ s }}/5</span>
               {% endif %}
+              </span>
+              <button class="copy-btn" onclick="copyOutput(this)">Copy</button>
             </h4>
             <pre>{{ raw_outputs[row.example][rn] }}</pre>
           </div>
@@ -329,39 +405,60 @@ tr.avg-row td { background: var(--bg2); }
   </div>
 </div>
 
+<button id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">&#8593; Top</button>
+
 <script>
 // Theme
 function toggleTheme() {
-  const t = document.documentElement.getAttribute('data-theme') === 'dark' ? '' : 'dark';
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const t = isDark ? '' : 'dark';
   document.documentElement.setAttribute('data-theme', t);
   localStorage.setItem('theme', t);
+  document.getElementById('themeBtn').textContent = isDark ? 'Dark Mode' : 'Light Mode';
 }
-(function() { const t = localStorage.getItem('theme'); if (t) document.documentElement.setAttribute('data-theme', t); })();
+(function() {
+  const t = localStorage.getItem('theme');
+  if (t) {
+    document.documentElement.setAttribute('data-theme', t);
+    if (t === 'dark') document.getElementById('themeBtn').textContent = 'Light Mode';
+  }
+})();
 
 // Filter
 function filterAll() {
   const q = document.getElementById('search').value.toLowerCase();
   const sf = document.getElementById('scoreFilter').value;
+  const visibility = {};
   document.querySelectorAll('#resultsTable tbody tr').forEach(tr => {
     let show = !q || tr.dataset.example.toLowerCase().includes(q);
     if (show && sf === 'divergent') show = parseInt(tr.dataset.spread) >= 2;
     else if (show && sf === 'low') show = parseInt(tr.dataset.min) <= 2 && parseInt(tr.dataset.min) > 0;
     else if (show && sf === 'high') show = parseInt(tr.dataset.min) >= 4;
     tr.style.display = show ? '' : 'none';
+    visibility[tr.dataset.example] = show;
+  });
+  // Sync vs-baseline table
+  document.querySelectorAll('#vsBaselineTable tbody tr').forEach(tr => {
+    tr.style.display = visibility[tr.dataset.example] !== false ? '' : 'none';
   });
   document.querySelectorAll('.detail-card').forEach(card => {
-    const tableRow = document.querySelector(`#resultsTable tbody tr[data-example="${card.dataset.example}"]`);
-    card.style.display = tableRow && tableRow.style.display !== 'none' ? '' : 'none';
+    card.style.display = visibility[card.dataset.example] !== false ? '' : 'none';
   });
 }
 
-// Sort
-let sortCol = -1, sortAsc = true;
-function sortTable(col) {
-  const table = document.getElementById('resultsTable');
+function resetFilters() {
+  document.getElementById('search').value = '';
+  document.getElementById('scoreFilter').value = '';
+  filterAll();
+}
+
+// Sort helper
+function _sortTableById(tableId, col, state) {
+  const table = document.getElementById(tableId);
+  if (!table) return;
   const tbody = table.tBodies[0];
   const rows = Array.from(tbody.rows);
-  if (sortCol === col) { sortAsc = !sortAsc; } else { sortCol = col; sortAsc = true; }
+  if (state.col === col) { state.asc = !state.asc; } else { state.col = col; state.asc = true; }
   table.querySelectorAll('th').forEach(th => th.classList.remove('sorted'));
   table.querySelectorAll('th')[col].classList.add('sorted');
   rows.sort((a, b) => {
@@ -369,10 +466,45 @@ function sortTable(col) {
     if (va === '-') va = '-1';
     if (vb === '-') vb = '-1';
     const na = parseFloat(va), nb = parseFloat(vb);
-    if (!isNaN(na) && !isNaN(nb)) return sortAsc ? na - nb : nb - na;
-    return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+    if (!isNaN(na) && !isNaN(nb)) return state.asc ? na - nb : nb - na;
+    return state.asc ? va.localeCompare(vb) : vb.localeCompare(va);
   });
   rows.forEach(r => tbody.appendChild(r));
+}
+const _s1 = {col: -1, asc: true}, _s2 = {col: -1, asc: true};
+function sortTable(col) { _sortTableById('resultsTable', col, _s1); }
+function sortVsTable(col) { _sortTableById('vsBaselineTable', col, _s2); }
+
+// Expand all / collapse all
+let allExpanded = false;
+function toggleExpandAll() {
+  allExpanded = !allExpanded;
+  document.querySelectorAll('.detail-card').forEach(card => {
+    if (card.style.display !== 'none') {
+      card.classList.toggle('open', allExpanded);
+    }
+  });
+  document.getElementById('expandAllBtn').textContent = allExpanded ? 'Collapse All' : 'Expand All';
+}
+
+// Expand divergent only
+function expandDivergent() {
+  document.querySelectorAll('.detail-card').forEach(card => {
+    const tr = document.querySelector(`#resultsTable tbody tr[data-example="${card.dataset.example}"]`);
+    if (tr && parseInt(tr.dataset.spread) >= 2) {
+      card.classList.add('open');
+    }
+  });
+}
+
+// Copy output
+function copyOutput(btn) {
+  const pre = btn.closest('.output-panel').querySelector('pre');
+  navigator.clipboard.writeText(pre.textContent).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  });
 }
 
 // Export CSV
@@ -398,6 +530,16 @@ function exportCSV() {
     if (el && el.classList.contains('detail-card')) el.classList.add('open');
   }
 })();
+
+// Back to top
+window.addEventListener('scroll', () => {
+  const btn = document.getElementById('backToTop');
+  if (window.scrollY > 300) {
+    btn.classList.add('visible');
+  } else {
+    btn.classList.remove('visible');
+  }
+});
 </script>
 </body>
 </html>

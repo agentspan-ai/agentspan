@@ -15,16 +15,20 @@ from pathlib import Path
 from .config import SINGLE_RUN_CSV_COLUMNS, Settings
 from .discovery import discover_examples
 from .display import MultiRunProgress, compute_run_summary, print_multi_run_summary
-from .execution import run_examples
-from .output import build_single_row, update_latest_symlink, write_csv_row, write_single_output
+from .execution import check_server_health, run_examples
 from .persistence import (
     completed_examples_single,
     failed_examples_single,
     save_last_run,
     sort_slowest_first,
 )
-from .reporting import _format_duration
-from .runner import check_server_health
+from .reporting import (
+    _format_duration,
+    build_single_row,
+    update_latest_symlink,
+    write_csv_row,
+    write_single_output,
+)
 from .toml_config import MultiRunConfig, RunConfig
 
 
@@ -140,7 +144,7 @@ def run_all(
 
     # Judge
     if judge_after and not abort_event.is_set():
-        from .cross_judge import judge_across_runs
+        from .judge import judge_across_runs
 
         settings = Settings.from_env()
         judge_across_runs(parent_dir, config.judge, settings)
@@ -179,7 +183,7 @@ def _run_single(
         return None
 
     # Load last run for sorting
-    last_run_path = run_dir / "last_run.json"
+    last_run_path = run_dir / "report.json"
     if last_run_path.exists():
         try:
             last_run = json.loads(last_run_path.read_text())
@@ -222,7 +226,7 @@ def _run_single(
 
         if not check_server_health(server_url):
             try:
-                from .server_pool import ServerPool
+                from .execution import ServerPool
 
                 pool = ServerPool(base_port=port or 8080)
                 pool.start({model_name: model_id}, log_dir=run_dir / "logs")

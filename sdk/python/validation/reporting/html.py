@@ -39,6 +39,7 @@ def generate_cross_html_report(
         loader=PackageLoader("validation", "templates"),
         autoescape=False,
     )
+    env.filters["format_number"] = lambda n: f"{int(n):,}" if n else "0"
     template = env.get_template("cross_report.html.j2")
 
     total_examples = len(rows)

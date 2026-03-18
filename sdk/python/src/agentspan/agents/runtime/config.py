@@ -132,7 +132,10 @@ class AgentConfig:
 
         config = Configuration(server_api_url=self.server_url)
         if self.auth_key:
-            from conductor.client.configuration.settings.authentication_settings import AuthenticationSettings
+            from conductor.client.configuration.settings.authentication_settings import (
+                AuthenticationSettings,
+            )
+
             config.authentication_settings = AuthenticationSettings(
                 key_id=self.auth_key,
                 key_secret=self.auth_secret or "",

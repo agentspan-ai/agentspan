@@ -5,7 +5,7 @@
 #
 # Usage:
 #   python3 -m validation.scripts.run_examples --config runs.toml
-#   python3 -m validation.scripts.run_examples --config runs.toml --run openai-native
+#   python3 -m validation.scripts.run_examples --config runs.toml --run openai-smoke-test
 #   python3 -m validation.scripts.run_examples --config runs.toml --dry-run
 
 [defaults]
@@ -16,9 +16,10 @@ retries = 0            # retry count on failure
 server_url = "http://localhost:8080/api"
 
 [judge]
-baseline_run = "openai-native"   # run name to use as comparison baseline
+baseline_run = "openai"   # run name to use as comparison baseline
 model = "gpt-4o-mini"           # LLM model for judging
 max_output_chars = 3000          # truncate outputs before judging
+max_tokens = 300                 # max tokens for judge response
 rate_limit = 0.5                 # seconds between judge calls
 max_calls = 0                    # 0 = unlimited
 
@@ -27,20 +28,19 @@ max_example_rows = 40       # max example rows shown in live progress (default: 
 
 # ── Runs ─────────────────────────────────────────────────────────────────
 
-[runs.openai-server]
+[runs.openai]
 group = "OPENAI_EXAMPLES"
 model = "openai/gpt-4o"
 
-[runs.openai-native]
+[runs.anthropic]
 group = "OPENAI_EXAMPLES"
-model = "openai/gpt-4o"
-native = true
+model = "anthropic/claude-sonnet-4-20250514"
 
-[runs.openai-smoke]
+[runs.openai-smoke-test]
 group = "SMOKE_TEST"
 model = "openai/gpt-4o"
 
-[runs.anthropic-server]
+[runs.anthropic-smoke-test]
 group = "SMOKE_TEST"
 model = "anthropic/claude-sonnet-4-20250514"
 
@@ -50,7 +50,6 @@ model = "anthropic/claude-sonnet-4-20250514"
 # group           Example group from groups.py (null = all examples)
 # model           "provider/model-name" (default: "openai/gpt-4o")
 # secondary_model Optional secondary model env var
-# native          Run via framework SDK, bypass Conductor (default: false)
 # parallel        Run examples concurrently within this run (default: true)
 # max_workers     Max concurrent examples (default: 8)
 # timeout         Per-example timeout in seconds (default: 300)

@@ -53,7 +53,8 @@ class Settings:
     # Judge
     judge_model: str = "gpt-4o-mini"
     judge_max_output_chars: int = 3000
-    max_judge_calls: int = 0  # 0 = unlimited
+    judge_max_tokens: int = 300
+    judge_max_calls: int = 0  # 0 = unlimited
     judge_rate_limit: float = 0.5
 
     @classmethod
@@ -65,6 +66,7 @@ class Settings:
             google_api_key=os.environ.get("GOOGLE_API_KEY", ""),
             judge_model=os.environ.get("JUDGE_LLM_MODEL", "gpt-4o-mini"),
             judge_max_output_chars=int(os.environ.get("JUDGE_MAX_OUTPUT_CHARS", "3000")),
-            max_judge_calls=int(os.environ.get("MAX_JUDGE_CALLS", "0")),
+            judge_max_tokens=int(os.environ.get("JUDGE_MAX_TOKENS", "300")),
+            judge_max_calls=int(os.environ.get("JUDGE_MAX_CALLS", "0")),
             judge_rate_limit=float(os.environ.get("JUDGE_RATE_LIMIT", "0.5")),
         )

@@ -32,6 +32,7 @@ class JudgeConfig:
     baseline_run: str | None = None
     model: str = "gpt-4o-mini"
     max_output_chars: int = 3000
+    max_tokens: int = 300
     rate_limit: float = 0.5
     max_calls: int = 0
 

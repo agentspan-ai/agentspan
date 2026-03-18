@@ -6,7 +6,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
 
-from .models import Example, SingleResult
+from ..models import Example, SingleResult
 from .runner import run_example
 
 

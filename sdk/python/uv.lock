@@ -44,7 +44,7 @@ validation = [
 
 [package.metadata]
 requires-dist = [
-    { name = "conductor-python", specifier = ">=1.3.5rc1" },
+    { name = "conductor-python", specifier = ">=1.3.5" },
     { name = "google-adk", marker = "extra == 'validation'", specifier = ">=1.18.0" },
     { name = "httpx", specifier = ">=0.24" },
     { name = "jinja2", marker = "extra == 'validation'", specifier = ">=3.1" },
@@ -611,7 +611,7 @@ wheels = [
 
 [[package]]
 name = "conductor-python"
-version = "1.3.5rc1"
+version = "1.3.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "astor" },
@@ -627,9 +627,9 @@ dependencies = [
     { name = "six" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b3/2e/1a252b2401f4444810397da363cee0d1f41bacb423b8cf66417d0f85db7a/conductor_python-1.3.5rc1.tar.gz", hash = "sha256:2c52e48e11c2761a9bf81d43ce306ef8b04c3771a97747af4eec2052e8217f03", size = 242061, upload-time = "2026-03-10T15:38:16.328Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8a/45/e8dad9f5171d180090809015ab0d3cbd4c111a7200845bcf5680b3ddd9d8/conductor_python-1.3.6.tar.gz", hash = "sha256:67bb3621ba2513751f7a918661f32be6e10d428e064c117d5bd1722c7bbafd99", size = 241986, upload-time = "2026-03-17T16:16:39.908Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/29/41/46545a5826b1a363254fbc48b981780c1cc3cce3aa1a83f07659bac22090/conductor_python-1.3.5rc1-py3-none-any.whl", hash = "sha256:e4b9eb1e0ac7cde245a62631f9922dc3f29c502c000f95a3d71903272ffcd674", size = 391831, upload-time = "2026-03-10T15:38:17.707Z" },
+    { url = "https://files.pythonhosted.org/packages/64/62/353ce370b910acbc40434acf2ff95333cb21df3054787053025b4aa07c32/conductor_python-1.3.6-py3-none-any.whl", hash = "sha256:e6a238a1448c3a0284a27226182babafe3c155f2d4107997795cb538b6a1a2dd", size = 391810, upload-time = "2026-03-17T16:16:41.146Z" },
 ]
 
 [[package]]

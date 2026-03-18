@@ -1,4 +1,4 @@
-"""Last-run persistence: last_run.json load/save, sorting, resume/retry."""
+"""Run persistence: report.json load/save, sorting, resume/retry."""
 
 from __future__ import annotations
 
@@ -13,28 +13,28 @@ from .config import SCRIPT_DIR
 from .models import SingleResult
 
 OUTPUT_DIR = SCRIPT_DIR / "output"
-LAST_RUN_SYMLINK = OUTPUT_DIR / ".last_run.json"
 
 
 def load_last_run() -> dict:
-    """Load last_run.json via the symlink (or direct path)."""
-    if LAST_RUN_SYMLINK.exists():
+    """Load report.json from the latest run via output/latest symlink."""
+    latest = OUTPUT_DIR / "latest" / "report.json"
+    if latest.exists():
         try:
-            return json.loads(LAST_RUN_SYMLINK.read_text())
+            return json.loads(latest.read_text())
         except (json.JSONDecodeError, OSError):
             pass
     return {}
 
 
 def save_last_run(data: dict, lock: threading.Lock | None = None) -> None:
-    """Write last_run.json into run_dir, symlink output/.last_run.json to it."""
+    """Write report.json into run_dir atomically."""
     run_dir = data.get("run_dir")
     if run_dir:
-        target = Path(run_dir) / "last_run.json"
+        target = Path(run_dir) / "report.json"
         target.parent.mkdir(parents=True, exist_ok=True)
     else:
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        target = OUTPUT_DIR / ".last_run.json"
+        target = OUTPUT_DIR / "report.json"
 
     tmp = target.with_suffix(".json.tmp")
     content = json.dumps(data, indent=2)
@@ -42,13 +42,6 @@ def save_last_run(data: dict, lock: threading.Lock | None = None) -> None:
     def _write():
         tmp.write_text(content)
         os.replace(tmp, target)
-        if run_dir and target != LAST_RUN_SYMLINK:
-            try:
-                if LAST_RUN_SYMLINK.is_symlink() or LAST_RUN_SYMLINK.exists():
-                    LAST_RUN_SYMLINK.unlink()
-                LAST_RUN_SYMLINK.symlink_to(target.resolve())
-            except OSError:
-                pass
 
     if lock:
         with lock:

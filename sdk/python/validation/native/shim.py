@@ -1,12 +1,3 @@
-"""Monkey-patch shim: run example scripts in native mode (no Conductor).
-
-Usage::
-
-    python -m validation.native.shim <example_script.py>
-
-Patches AgentRuntime so examples run unchanged via the framework's own SDK.
-"""
-
 from __future__ import annotations
 
 import os
