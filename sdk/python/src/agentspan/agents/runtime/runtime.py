@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 import threading
 import time
@@ -201,7 +202,9 @@ class AgentRuntime:
     ) -> None:
         from agentspan.agents.runtime.config import AgentConfig
 
-        base = config if config is not None else AgentConfig()
+        from dataclasses import replace
+
+        base = config if config is not None else AgentConfig.from_env()
         overrides: dict = {}
         if server_url is not None:
             overrides["server_url"] = server_url
@@ -209,7 +212,8 @@ class AgentRuntime:
             overrides["auth_key"] = api_key
         if api_secret is not None:
             overrides["auth_secret"] = api_secret
-        self._config = base.model_copy(update=overrides)
+        self._config = replace(base, **overrides) if overrides else base
+
         # Auto-start the server if it targets localhost and is not responding.
         if self._config.auto_start_server:
             from agentspan.agents.runtime.server import ensure_server_running
@@ -1811,6 +1815,7 @@ class AgentRuntime:
         # Check for foreign framework agent
         from agentspan.agents.frameworks.serializer import detect_framework
         framework = detect_framework(agent)
+
         if framework is not None:
             return self._run_framework(
                 agent, framework, prompt,
@@ -2995,6 +3000,7 @@ class AgentRuntime:
         # Foreign framework check
         from agentspan.agents.frameworks.serializer import detect_framework
         framework = detect_framework(agent)
+
         if framework is not None:
             return await self._run_framework_async(
                 agent, framework, prompt,
@@ -3507,7 +3513,7 @@ class AgentRuntime:
             if self._is_shutdown:
                 return
             logger.info("Shutting down AgentRuntime")
-            if self._workers_started:
+            if self._workers_started and self._worker_manager is not None:
                 self._worker_manager.stop()
                 self._workers_started = False
             self._is_shutdown = True
@@ -3518,10 +3524,11 @@ class AgentRuntime:
             if self._is_shutdown:
                 return
             logger.info("Shutting down AgentRuntime (async)")
-            if self._workers_started:
+            if self._workers_started and self._worker_manager is not None:
                 self._worker_manager.stop()
                 self._workers_started = False
-            await self._http.close()
+            if self._http is not None:
+                await self._http.close()
             self._is_shutdown = True
 
     # ── Status / interaction ────────────────────────────────────────

@@ -15,8 +15,8 @@ Same functions, two execution modes.
 Requirements:
     Part 1 (standalone): none — no server, no LLM, no workers.
     Part 2 (as workers): Conductor server
-        - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
-    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
+        - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
 import re
@@ -173,7 +173,7 @@ def run_as_workers():
 
     # Start polling — TaskHandler discovers all @worker_task functions
     from agentspan.agents.runtime.config import AgentConfig
-    config = Configuration(server_api_url=AgentConfig().server_url)
+    config = Configuration(server_api_url=AgentConfig.from_env().server_url)
     handler = TaskHandler(
         workers=[],
         configuration=config,

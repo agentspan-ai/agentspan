@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cross-Run Report</title>
+<style>
+:root {
+  --bg: #ffffff; --bg2: #f8f9fa; --bg3: #e9ecef;
+  --text: #212529; --text2: #495057; --text3: #868e96;
+  --border: #dee2e6; --accent: #228be6; --accent2: #1971c2;
+  --pass: #2b8a3e; --pass-bg: #d3f9d8; --fail: #c92a2a; --fail-bg: #ffe3e3;
+  --partial: #e67700; --partial-bg: #fff3bf; --skip: #868e96; --skip-bg: #f1f3f5;
+  --card-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+[data-theme="dark"] {
+  --bg: #1a1b1e; --bg2: #25262b; --bg3: #2c2e33;
+  --text: #c1c2c5; --text2: #909296; --text3: #5c5f66;
+  --border: #373a40; --accent: #4dabf7; --accent2: #74c0fc;
+  --pass: #51cf66; --pass-bg: #2b3b2e; --fail: #ff6b6b; --fail-bg: #3b2b2b;
+  --partial: #ffd43b; --partial-bg: #3b3528; --skip: #868e96; --skip-bg: #2c2e33;
+  --card-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+.container { max-width: 1400px; margin: 0 auto; padding: 1rem; }
+header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.5rem; }
+header h1 { font-size: 1.5rem; }
+.controls { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+button, select, input[type="text"] { font-size: 0.85rem; padding: 0.35rem 0.7rem; border: 1px solid var(--border); border-radius: 4px; background: var(--bg2); color: var(--text); cursor: pointer; }
+button:hover { background: var(--bg3); }
+
+/* Summary cards */
+.summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
+.card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; text-align: center; box-shadow: var(--card-shadow); }
+.card .value { font-size: 1.8rem; font-weight: 700; }
+.card .label { font-size: 0.8rem; color: var(--text2); text-transform: uppercase; }
+.card .sublabel { font-size: 0.7rem; color: var(--text3); margin-top: 0.15rem; }
+.card.pass .value { color: var(--pass); }
+.card.fail .value { color: var(--fail); }
+
+/* Meta */
+.meta-section { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; font-size: 0.85rem; color: var(--text2); }
+.meta-section span { display: flex; align-items: center; gap: 0.3rem; }
+
+/* Run info cards */
+.run-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
+.run-card { background: var(--bg2); border: 1px solid var(--border); border-left: 3px solid transparent; border-radius: 8px; padding: 0.75rem 1rem; box-shadow: var(--card-shadow); }
+.run-card .run-name { font-weight: 700; font-size: 0.95rem; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.3rem; }
+.run-card .run-detail { font-size: 0.8rem; color: var(--text2); }
+.run-card.baseline { border-left: 4px solid var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--bg2)); }
+.baseline-chip { font-size: 0.65rem; background: var(--accent); color: #fff; padding: 0.1rem 0.4rem; border-radius: 8px; margin-left: 0.3rem; }
+
+/* Score distribution */
+.chart-section { margin-bottom: 2rem; }
+.chart-section h2 { font-size: 1.1rem; margin-bottom: 0.75rem; }
+.bar-chart { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+.run-chart { flex: 1; min-width: 180px; }
+.run-chart h3 { font-size: 0.9rem; margin-bottom: 0.5rem; color: var(--text2); }
+.bar-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; }
+.bar-label { width: 1.5rem; text-align: right; font-size: 0.8rem; color: var(--text2); }
+.bar { height: 18px; border-radius: 3px; background: var(--accent); min-width: 2px; transition: width 0.3s; }
+.bar-count { font-size: 0.8rem; color: var(--text3); }
+
+/* Divergent callout */
+.divergent-section { background: var(--bg2); border: 1px solid var(--border); border-left: 4px solid var(--partial); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1.5rem; }
+.divergent-section h3 { font-size: 0.95rem; color: var(--partial); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem; }
+.divergent-list { list-style: none; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.divergent-list li { display: flex; align-items: center; gap: 0.3rem; }
+.divergent-list a { font-size: 0.8rem; color: var(--accent); text-decoration: none; }
+.divergent-list a:hover { text-decoration: underline; }
+.div-score-badge { font-size: 0.65rem; padding: 0.1rem 0.35rem; border-radius: 4px; font-weight: 600; }
+
+/* Heatmap table */
+.table-section-title { font-size: 1.1rem; margin-bottom: 0.75rem; }
+.table-wrap { overflow-x: auto; margin-bottom: 2rem; }
+table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+th, td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+th { background: var(--bg2); cursor: pointer; user-select: none; white-space: nowrap; position: sticky; top: 0; z-index: 2; }
+th:hover { background: var(--bg3); }
+th .sort-arrow { margin-left: 0.3rem; opacity: 0.3; }
+th.sorted .sort-arrow { opacity: 1; }
+tr:hover { background: var(--bg2); }
+.col-baseline { border-left: 2px solid var(--accent) !important; border-right: 2px solid var(--accent) !important; background: color-mix(in srgb, var(--accent) 8%, transparent) !important; }
+th.col-baseline { color: var(--accent); font-weight: 700; }
+
+/* Score cells */
+.score-cell { text-align: center; font-weight: 600; }
+.score-5 { background: #d3f9d8; color: #2b8a3e; }
+.score-4 { background: #e6fcf5; color: #087f5b; }
+.score-3 { background: #fff3bf; color: #e67700; }
+.score-2 { background: #ffe8cc; color: #d9480f; }
+.score-1 { background: #ffe3e3; color: #c92a2a; }
+.score-skip { color: var(--skip); font-weight: 400; }
+[data-theme="dark"] .score-5 { background: #2b3b2e; color: #51cf66; }
+[data-theme="dark"] .score-4 { background: #233830; color: #38d9a9; }
+[data-theme="dark"] .score-3 { background: #3b3528; color: #ffd43b; }
+[data-theme="dark"] .score-2 { background: #3b3025; color: #ff922b; }
+[data-theme="dark"] .score-1 { background: #3b2b2b; color: #ff6b6b; }
+
+/* Average row — sticky */
+tfoot { position: sticky; bottom: 0; z-index: 1; }
+tr.avg-row { font-weight: 700; border-top: 2px solid var(--border); }
+tr.avg-row td { background: var(--bg2); }
+
+/* Detail cards */
+.details h2 { font-size: 1.1rem; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; }
+.detail-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 0.75rem; box-shadow: var(--card-shadow); }
+.detail-header { padding: 0.75rem 1rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+.detail-header:hover { background: var(--bg3); border-radius: 8px; }
+.detail-header .example-name { font-weight: 600; }
+.detail-header .badges { display: flex; gap: 0.4rem; align-items: center; }
+.badge { font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 10px; font-weight: 600; }
+.badge-score { background: var(--bg3); }
+.chevron { transition: transform 0.2s; font-size: 0.8rem; color: var(--text3); }
+.detail-card.open .chevron { transform: rotate(90deg); }
+.detail-body { display: none; padding: 0 1rem 1rem; }
+.detail-card.open .detail-body { display: block; }
+
+/* Reason callout */
+.reason-callout { border-left: 3px solid var(--border); padding: 0.4rem 0.75rem; background: var(--bg3); border-radius: 0 4px 4px 0; font-size: 0.82rem; color: var(--text2); margin: 0.25rem 0; }
+
+/* Side-by-side outputs */
+.outputs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem; margin-top: 0.75rem; }
+.output-panel { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem; }
+.output-panel h4 { font-size: 0.85rem; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center; }
+.output-panel pre { font-size: 0.78rem; white-space: pre-wrap; word-break: break-word; max-height: 400px; overflow-y: auto; color: var(--text2); background: var(--bg3); padding: 0.5rem; border-radius: 4px; }
+.score-badge { font-size: 0.75rem; padding: 0.1rem 0.4rem; border-radius: 4px; }
+.score-badge-high { background: var(--pass-bg); color: var(--pass); }
+.score-badge-mid { background: var(--partial-bg); color: var(--partial); }
+.score-badge-low { background: var(--fail-bg); color: var(--fail); }
+.meta-row { font-size: 0.8rem; color: var(--text2); margin-bottom: 0.25rem; }
+.copy-btn { font-size: 0.7rem; padding: 0.1rem 0.4rem; border-radius: 4px; border: 1px solid var(--border); background: var(--bg2); cursor: pointer; color: var(--text3); }
+.copy-btn:hover { background: var(--bg3); color: var(--text); }
+.wf-link { color: var(--accent); text-decoration: none; font-family: monospace; font-size: 0.78rem; }
+.wf-link:hover { text-decoration: underline; }
+
+/* Baseline comparison section in details */
+.baseline-section { margin-top: 0.75rem; padding-top: 0.5rem; border-top: 1px solid var(--border); }
+.baseline-section h4 { font-size: 0.85rem; margin-bottom: 0.5rem; color: var(--text2); }
+
+/* Back to top */
+#backToTop { position: fixed; bottom: 1.5rem; right: 1.5rem; display: none; padding: 0.5rem 0.75rem; background: var(--accent); color: #fff; border: none; border-radius: 20px; cursor: pointer; font-size: 0.8rem; box-shadow: 0 2px 8px rgba(0,0,0,0.2); opacity: 0; transition: opacity 0.3s; z-index: 100; }
+#backToTop.visible { display: block; opacity: 1; }
+
+/* Print */
+@media print {
+  .controls { display: none; }
+  .detail-body { display: block !important; }
+  body { font-size: 10pt; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Cross-Run Report</h1>
+    <div class="controls">
+      <input type="text" id="search" placeholder="Search examples..." oninput="filterAll()">
+      <select id="scoreFilter" onchange="filterAll()">
+        <option value="">All scores</option>
+        <option value="divergent">Divergent (spread &ge;2)</option>
+        <option value="low">Any score &le;2</option>
+        <option value="high">All scores &ge;4</option>
+      </select>
+      <button onclick="resetFilters()">Reset Filters</button>
+      <button id="expandAllBtn" onclick="toggleExpandAll()">Expand All</button>
+      <button onclick="exportCSV()">Export CSV</button>
+      <button id="themeBtn" onclick="toggleTheme()">Dark Mode</button>
+    </div>
+  </header>
+
+  <!-- Meta -->
+  {% if meta %}
+  <div class="meta-section">
+    {% if meta.judge_duration_s %}<span>Judge: {{ "%.0f"|format(meta.judge_duration_s) }}s</span>{% endif %}
+    {% if meta.judge_model %}<span>Model: {{ meta.judge_model }}</span>{% endif %}
+    {% if meta.judge_calls is defined %}<span>Calls: {{ meta.judge_calls }}{% if meta.cache_hits %} ({{ meta.cache_hits }} cached){% endif %}</span>{% endif %}
+    {% if meta.input_tokens or meta.output_tokens %}<span>Tokens: {{ meta.input_tokens | format_number }} in / {{ meta.output_tokens | format_number }} out</span>{% endif %}
+    {% if baseline %}<span>Baseline: {{ baseline }}</span>{% endif %}
+    <span>Generated: {{ generated_at }}</span>
+  </div>
+  {% endif %}
+
+  <!-- Run info cards -->
+  <div class="run-cards">
+    {% for rn in runs %}
+    <div class="run-card{% if rn == baseline %} baseline{% endif %}">
+      <div class="run-name">
+        {{ rn }}{% if rn == baseline %}<span class="baseline-chip">baseline</span>{% endif %}
+      </div>
+      {% if run_meta.get(rn) %}
+      <div class="run-detail">{{ run_meta[rn].get('model', '') }}</div>
+      <div class="run-detail">{{ 'native' if run_meta[rn].get('native') else 'server' }}{% if run_meta[rn].get('group') %} &middot; {{ run_meta[rn]['group'] }}{% endif %}{% if run_meta[rn].get('duration_s') %} &middot; {{ "%.0f"|format(run_meta[rn]['duration_s']) }}s{% endif %}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Per-run summary cards -->
+  <div class="summary">
+    <div class="card"><div class="value">{{ total_examples }}</div><div class="label">Examples</div></div>
+    {% for rn in runs %}
+    <div class="card{% if avg_scores.get(rn, 0) >= 4 %} pass{% elif avg_scores.get(rn, 0) < 3 %} fail{% endif %}">
+      <div class="value">{{ "%.1f"|format(avg_scores.get(rn, 0)) }}</div>
+      <div class="label">{{ rn }}</div>
+      <div class="sublabel">avg score &middot; {{ completed_counts.get(rn, 0) }}/{{ total_examples }} completed</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Score distribution chart -->
+  <div class="chart-section">
+    <h2>Score Distribution</h2>
+    <div class="bar-chart">
+      {% for rn in runs %}
+      <div class="run-chart">
+        <h3>{{ rn }}</h3>
+        {% for score in range(5, 0, -1) %}
+        {% set count = score_dist.get(rn, {}).get(score, 0) %}
+        {% set max_count = score_dist_max.get(rn, 1) %}
+        <div class="bar-row">
+          <span class="bar-label">{{ score }}</span>
+          <div class="bar" style="width: calc({{ (count / max_count * 100)|int }}%); max-width: 200px"></div>
+          <span class="bar-count">{{ count }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Divergent examples -->
+  {% set divergent_rows = [] %}
+  {% for row in rows %}
+    {% set scores = [] %}
+    {% for rn in runs %}{% if row.get(rn ~ '_score') %}{% set _ = scores.append(row[rn ~ '_score']|int) %}{% endif %}{% endfor %}
+    {% if scores|length > 1 and (scores|max - scores|min) >= 2 %}{% set _ = divergent_rows.append(row) %}{% endif %}
+  {% endfor %}
+  {% if divergent_rows %}
+  <div class="divergent-section">
+    <h3>&#9888; Divergent Examples ({{ divergent_rows|length }})
+      <button onclick="expandDivergent()" style="font-size:0.75rem; padding:0.15rem 0.5rem;">Expand Divergent</button>
+    </h3>
+    <ul class="divergent-list">
+      {% for row in divergent_rows %}
+      <li>
+        <a href="#{{ row.example|replace('/', '_') }}">{{ row.example }}</a>
+        {% for rn in runs %}
+        {% set s = row.get(rn ~ '_score', '') %}
+        {% if s %}
+        <span class="div-score-badge {% if s|int >= 4 %}score-5{% elif s|int >= 3 %}score-3{% else %}score-1{% endif %}">{{ s }}</span>
+        {% endif %}
+        {% endfor %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <!-- Run Scores table -->
+  <h2 class="table-section-title">Run Scores</h2>
+  <div class="table-wrap">
+    <table id="resultsTable">
+      <thead>
+        <tr>
+          <th onclick="sortTable(0)">Example <span class="sort-arrow">&#9650;</span></th>
+          {% for rn in runs %}
+          <th onclick="sortTable({{ loop.index }})" style="text-align:center"{% if rn == baseline %} class="col-baseline"{% endif %}>{{ rn }}{% if rn == baseline %} <span class="baseline-chip">b</span>{% endif %} <span class="sort-arrow">&#9650;</span></th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        {% set scores = [] %}
+        {% for rn in runs %}{% if row.get(rn ~ '_score') %}{% set _ = scores.append(row[rn ~ '_score']|int) %}{% endif %}{% endfor %}
+        {% set min_score = scores|min if scores else 0 %}
+        {% set max_score = scores|max if scores else 0 %}
+        {% set spread = max_score - min_score %}
+        <tr data-example="{{ row.example }}" data-spread="{{ spread }}" data-min="{{ min_score }}" data-max="{{ max_score }}">
+          <td><a href="#{{ row.example|replace('/', '_') }}">{{ row.example }}</a></td>
+          {% for rn in runs %}
+          {% set s = row.get(rn ~ '_score', '') %}
+          {% if s %}
+          <td class="score-cell score-{{ s }}{% if rn == baseline %} col-baseline{% endif %}">{{ s }}/5</td>
+          {% else %}
+          <td class="score-cell score-skip{% if rn == baseline %} col-baseline{% endif %}">-</td>
+          {% endif %}
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr class="avg-row">
+          <td><strong>Average</strong></td>
+          {% for rn in runs %}
+          <td class="score-cell{% if rn == baseline %} col-baseline{% endif %}">{{ "%.1f"|format(avg_scores.get(rn, 0)) }}</td>
+          {% endfor %}
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <!-- vs-Baseline table -->
+  {% if baseline %}
+  {% set non_baseline = runs | reject("equalto", baseline) | list %}
+  {% if non_baseline %}
+  <h2 class="table-section-title">vs {{ baseline }}</h2>
+  <div class="table-wrap">
+    <table id="vsBaselineTable">
+      <thead>
+        <tr>
+          <th onclick="sortVsTable(0)">Example <span class="sort-arrow">&#9650;</span></th>
+          {% for rn in non_baseline %}
+          <th onclick="sortVsTable({{ loop.index }})" style="text-align:center">{{ rn }} <span class="sort-arrow">&#9650;</span></th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr data-example="{{ row.example }}">
+          <td><a href="#{{ row.example|replace('/', '_') }}">{{ row.example }}</a></td>
+          {% for rn in non_baseline %}
+          {% set bs = row.get(rn ~ '_vs_' ~ baseline, '') %}
+          {% if bs %}
+          <td class="score-cell score-{{ bs }}">{{ bs }}/5</td>
+          {% else %}
+          <td class="score-cell score-skip">-</td>
+          {% endif %}
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr class="avg-row">
+          <td><strong>Average</strong></td>
+          {% for rn in non_baseline %}
+          <td class="score-cell">{{ "%.1f"|format(avg_baseline_scores.get(rn, 0)) }}</td>
+          {% endfor %}
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  {% endif %}
+  {% endif %}
+
+  <!-- Detail cards with side-by-side outputs -->
+  <div class="details">
+    <h2>Details</h2>
+    {% for row in rows %}
+    <div class="detail-card" id="{{ row.example|replace('/', '_') }}" data-example="{{ row.example }}">
+      <div class="detail-header" onclick="this.parentElement.classList.toggle('open')">
+        <span class="example-name">{{ row.example }}</span>
+        <div class="badges">
+          {% for rn in runs %}
+          {% set s = row.get(rn ~ '_score', '') %}
+          {% if s %}
+          <span class="badge badge-score">{{ rn }}: {{ s }}/5</span>
+          {% endif %}
+          {% endfor %}
+          <span class="chevron">&#9654;</span>
+        </div>
+      </div>
+      <div class="detail-body">
+        {% for rn in runs %}
+        {% set s = row.get(rn ~ '_score', '') %}
+        {% if s and row.get(rn ~ '_reason') %}
+        <div class="reason-callout"><strong>{{ rn }}:</strong> {{ s }}/5 &mdash; {{ row[rn ~ '_reason'] }}</div>
+        {% endif %}
+        {% endfor %}
+
+        {% if baseline %}
+        <div class="baseline-section">
+          <h4>vs {{ baseline }}</h4>
+          {% for rn in runs %}
+          {% if rn != baseline %}
+          {% set bs = row.get(rn ~ '_vs_' ~ baseline, '') %}
+          {% if bs %}
+          <div class="reason-callout"><strong>{{ rn }}:</strong> {{ bs }}/5{% if row.get(rn ~ '_vs_' ~ baseline ~ '_reason') %} &mdash; {{ row[rn ~ '_vs_' ~ baseline ~ '_reason'] }}{% endif %}</div>
+          {% endif %}
+          {% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="outputs-grid">
+          {% for rn in runs %}
+          {% if raw_outputs.get(row.example, {}).get(rn) %}
+          <div class="output-panel">
+            <h4>
+              <span>{{ rn }}
+              {% set s = row.get(rn ~ '_score', '') %}
+              {% if s %}
+              <span class="score-badge {% if s|int >= 4 %}score-badge-high{% elif s|int >= 3 %}score-badge-mid{% else %}score-badge-low{% endif %}">{{ s }}/5</span>
+              {% endif %}
+              </span>
+              <button class="copy-btn" onclick="copyOutput(this)">Copy</button>
+            </h4>
+            {% set wf_id = workflow_ids.get(row.example, {}).get(rn, '') %}
+            {% if wf_id %}
+            <div class="meta-row">
+              Workflow: {% if conductor_base %}<a href="{{ conductor_base }}/execution/{{ wf_id }}" target="_blank" class="wf-link">{{ wf_id }}</a>{% else %}{{ wf_id }}{% endif %}
+            </div>
+            {% endif %}
+            <pre>{{ raw_outputs[row.example][rn] }}</pre>
+          </div>
+          {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<button id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">&#8593; Top</button>
+
+<script>
+// Theme
+function toggleTheme() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const t = isDark ? '' : 'dark';
+  document.documentElement.setAttribute('data-theme', t);
+  localStorage.setItem('theme', t);
+  document.getElementById('themeBtn').textContent = isDark ? 'Dark Mode' : 'Light Mode';
+}
+(function() {
+  const t = localStorage.getItem('theme');
+  if (t) {
+    document.documentElement.setAttribute('data-theme', t);
+    if (t === 'dark') document.getElementById('themeBtn').textContent = 'Light Mode';
+  }
+})();
+
+// Filter
+function filterAll() {
+  const q = document.getElementById('search').value.toLowerCase();
+  const sf = document.getElementById('scoreFilter').value;
+  const visibility = {};
+  document.querySelectorAll('#resultsTable tbody tr').forEach(tr => {
+    let show = !q || tr.dataset.example.toLowerCase().includes(q);
+    if (show && sf === 'divergent') show = parseInt(tr.dataset.spread) >= 2;
+    else if (show && sf === 'low') show = parseInt(tr.dataset.min) <= 2 && parseInt(tr.dataset.min) > 0;
+    else if (show && sf === 'high') show = parseInt(tr.dataset.min) >= 4;
+    tr.style.display = show ? '' : 'none';
+    visibility[tr.dataset.example] = show;
+  });
+  // Sync vs-baseline table
+  document.querySelectorAll('#vsBaselineTable tbody tr').forEach(tr => {
+    tr.style.display = visibility[tr.dataset.example] !== false ? '' : 'none';
+  });
+  document.querySelectorAll('.detail-card').forEach(card => {
+    card.style.display = visibility[card.dataset.example] !== false ? '' : 'none';
+  });
+}
+
+function resetFilters() {
+  document.getElementById('search').value = '';
+  document.getElementById('scoreFilter').value = '';
+  filterAll();
+}
+
+// Sort helper
+function _sortTableById(tableId, col, state) {
+  const table = document.getElementById(tableId);
+  if (!table) return;
+  const tbody = table.tBodies[0];
+  const rows = Array.from(tbody.rows);
+  if (state.col === col) { state.asc = !state.asc; } else { state.col = col; state.asc = true; }
+  table.querySelectorAll('th').forEach(th => th.classList.remove('sorted'));
+  table.querySelectorAll('th')[col].classList.add('sorted');
+  rows.sort((a, b) => {
+    let va = a.cells[col].textContent.trim().replace('/5', ''), vb = b.cells[col].textContent.trim().replace('/5', '');
+    if (va === '-') va = '-1';
+    if (vb === '-') vb = '-1';
+    const na = parseFloat(va), nb = parseFloat(vb);
+    if (!isNaN(na) && !isNaN(nb)) return state.asc ? na - nb : nb - na;
+    return state.asc ? va.localeCompare(vb) : vb.localeCompare(va);
+  });
+  rows.forEach(r => tbody.appendChild(r));
+}
+const _s1 = {col: -1, asc: true}, _s2 = {col: -1, asc: true};
+function sortTable(col) { _sortTableById('resultsTable', col, _s1); }
+function sortVsTable(col) { _sortTableById('vsBaselineTable', col, _s2); }
+
+// Expand all / collapse all
+let allExpanded = false;
+function toggleExpandAll() {
+  allExpanded = !allExpanded;
+  document.querySelectorAll('.detail-card').forEach(card => {
+    if (card.style.display !== 'none') {
+      card.classList.toggle('open', allExpanded);
+    }
+  });
+  document.getElementById('expandAllBtn').textContent = allExpanded ? 'Collapse All' : 'Expand All';
+}
+
+// Expand divergent only
+function expandDivergent() {
+  document.querySelectorAll('.detail-card').forEach(card => {
+    const tr = document.querySelector(`#resultsTable tbody tr[data-example="${card.dataset.example}"]`);
+    if (tr && parseInt(tr.dataset.spread) >= 2) {
+      card.classList.add('open');
+    }
+  });
+}
+
+// Copy output
+function copyOutput(btn) {
+  const pre = btn.closest('.output-panel').querySelector('pre');
+  navigator.clipboard.writeText(pre.textContent).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  });
+}
+
+// Export CSV
+function exportCSV() {
+  const table = document.getElementById('resultsTable');
+  const visible = Array.from(table.tBodies[0].rows).filter(r => r.style.display !== 'none');
+  const headers = Array.from(table.tHead.rows[0].cells).map(c => c.textContent.replace(/[▲▼]/g, '').trim());
+  let csv = headers.join(',') + '\n';
+  visible.forEach(r => {
+    csv += Array.from(r.cells).map(c => '"' + c.textContent.trim().replace(/"/g, '""') + '"').join(',') + '\n';
+  });
+  const blob = new Blob([csv], {type: 'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'cross_run_results.csv';
+  a.click();
+}
+
+// Open card from anchor
+(function() {
+  if (location.hash) {
+    const el = document.querySelector(location.hash);
+    if (el && el.classList.contains('detail-card')) el.classList.add('open');
+  }
+})();
+
+// Back to top
+window.addEventListener('scroll', () => {
+  const btn = document.getElementById('backToTop');
+  if (window.scrollY > 300) {
+    btn.classList.add('visible');
+  } else {
+    btn.classList.remove('visible');
+  }
+});
+</script>
+</body>
+</html>

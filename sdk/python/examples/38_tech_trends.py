@@ -27,7 +27,7 @@ Architecture:
         generate_pdf           — Conductor GENERATE_PDF task (markdown → PDF)
 
 Run:
-    Add to .env or environment:
+    Export as environment variables:
         AGENTSPAN_SERVER_URL=https://developer.orkescloud.com/api
         AGENTSPAN_AUTH_KEY=<key>
         AGENTSPAN_AUTH_SECRET=<secret>

@@ -49,9 +49,9 @@ from agentspan.agents import AgentRuntime
 from agentspan.agents.runtime.config import AgentConfig
 
 # ---------------------------------------------------------------------------
-# Server config — loaded from .env / environment via pydantic-settings
+# Server config — loaded from environment variables
 # ---------------------------------------------------------------------------
-_cfg = AgentConfig()
+_cfg = AgentConfig.from_env()
 
 
 # ---------------------------------------------------------------------------

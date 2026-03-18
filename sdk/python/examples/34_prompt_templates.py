@@ -15,8 +15,8 @@ PromptTemplate supports:
 Requirements:
     - Conductor server with LLM support
     - Prompt templates created on the server (see setup below)
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
-    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
 from agentspan.agents import Agent, AgentRuntime, PromptTemplate, tool

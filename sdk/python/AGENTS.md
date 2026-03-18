@@ -1050,6 +1050,10 @@ The SDK reads configuration from environment variables:
 ```python
 from agentspan.agents.runtime import AgentConfig, AgentRuntime
 
+# Load from AGENTSPAN_* env vars
+config = AgentConfig.from_env()
+
+# Or construct directly (kwargs override defaults)
 config = AgentConfig(
     server_url="http://localhost:8080/api",
     default_timeout_seconds=600,
@@ -1181,7 +1185,7 @@ End-to-end streaming tests validate the complete SSE event stream for all agent 
 - Running Conductor server with streaming support
 - `export AGENTSPAN_SERVER_URL=http://localhost:8080/api`
 - LLM provider configured (OpenAI by default)
-- Optionally: `export AGENT_LLM_MODEL=openai/gpt-4o-mini` (default)
+- Optionally: `export AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini` (default)
 
 **Running:**
 

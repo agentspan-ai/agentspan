@@ -18,8 +18,8 @@ Architecture:
 Requirements:
     - pip install google-adk
     - Conductor server with AgentTool support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
-    - AGENT_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_LLM_MODEL=google_gemini/gemini-2.0-flash as environment variable
 """
 
 from google.adk.agents import Agent

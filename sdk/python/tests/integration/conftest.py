@@ -20,7 +20,7 @@ import requests
 from agentspan.agents import AgentRuntime
 from agentspan.agents.runtime.config import AgentConfig
 
-DEFAULT_MODEL = os.environ.get("AGENT_LLM_MODEL", "openai/gpt-4o-mini")
+DEFAULT_MODEL = os.environ.get("AGENTSPAN_LLM_MODEL", "openai/gpt-4o-mini")
 _SERVER_URL = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:8080/api")
 
 
@@ -167,7 +167,7 @@ def runtime():
     watchdog detects tasks that sit unpolled for >30 s and SIGKILLs the
     responsible worker process so the TaskHandler monitor can restart it.
     """
-    config = AgentConfig()
+    config = AgentConfig.from_env()
     with AgentRuntime(config=config) as rt:
         watchdog = _WorkerWatchdog(rt)
         watchdog.start()
@@ -179,5 +179,5 @@ def runtime():
 
 @pytest.fixture
 def model():
-    """LLM model string, overridable via AGENT_LLM_MODEL env var."""
+    """LLM model string, overridable via AGENTSPAN_LLM_MODEL env var."""
     return DEFAULT_MODEL
