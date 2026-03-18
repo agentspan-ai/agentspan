@@ -47,6 +47,16 @@ public class AgentController {
     }
 
     /**
+     * Compile and register an agent workflow + task definitions without starting execution.
+     * This is a CI/CD operation — the workflow is registered on the server and can be
+     * triggered later via {@code /start} or by name through the Conductor API.
+     */
+    @PostMapping("/deploy")
+    public StartResponse deployAgent(@RequestBody StartRequest request) {
+        return agentService.deploy(request);
+    }
+
+    /**
      * Compile, register, and start an agent workflow execution.
      * Returns the workflow ID and name for tracking.
      */

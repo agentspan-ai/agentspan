@@ -74,6 +74,42 @@ public class AgentService {
     }
 
     /**
+     * Compile and register workflow + task definitions without starting execution.
+     * This is a CI/CD operation — pushes the workflow to the server for later execution.
+     */
+    public StartResponse deploy(StartRequest request) {
+        AgentConfig config = resolveConfig(request);
+        log.info("Deploying agent: {}", config.getName());
+
+        // 0. Pre-register child workflows for agent_tool types
+        registerAgentToolWorkflows(config);
+
+        // 1. Compile
+        WorkflowDef def = agentCompiler.compile(config);
+
+        // 1b. Stamp SDK metadata on the workflow definition
+        String sdk = request.getFramework() != null ? request.getFramework() : "conductor";
+        Map<String, Object> metadata = def.getMetadata() != null
+                ? new LinkedHashMap<>(def.getMetadata()) : new LinkedHashMap<>();
+        metadata.put("agent_sdk", sdk);
+        def.setMetadata(metadata);
+
+        // 2. Register workflow definition (upsert)
+        metadataDAO.updateWorkflowDef(def);
+
+        // 3. Register task definitions for worker tools
+        registerTaskDefinitions(config);
+
+        // Validate provider (warn only, don't terminate)
+        validateModelProvider(config).ifPresent(err ->
+            log.warn("Provider not configured for agent '{}': {}", config.getName(), err));
+
+        return StartResponse.builder()
+            .workflowName(def.getName())
+            .build();
+    }
+
+    /**
      * Compile, register workflow + task definitions, and start execution.
      * Supports both native AgentConfig and framework-specific raw configs.
      */
@@ -440,42 +476,42 @@ public class AgentService {
      */
     @SuppressWarnings("unchecked")
     private void registerAgentToolWorkflows(AgentConfig config) {
-        if (config.getTools() == null) return;
+        if (config.getTools() != null) {
+            for (ToolConfig tool : config.getTools()) {
+                if (!"agent_tool".equals(tool.getToolType()) || tool.getConfig() == null) {
+                    continue;
+                }
 
-        for (ToolConfig tool : config.getTools()) {
-            if (!"agent_tool".equals(tool.getToolType()) || tool.getConfig() == null) {
-                continue;
+                Object agentConfigObj = tool.getConfig().get("agentConfig");
+                if (agentConfigObj == null) continue;
+
+                // Convert the AgentConfig (or LinkedHashMap from Jackson) to AgentConfig
+                AgentConfig childConfig;
+                if (agentConfigObj instanceof AgentConfig) {
+                    childConfig = (AgentConfig) agentConfigObj;
+                } else if (agentConfigObj instanceof Map) {
+                    childConfig = MAPPER.convertValue(agentConfigObj, AgentConfig.class);
+                } else {
+                    log.warn("Unexpected agentConfig type for tool '{}': {}",
+                            tool.getName(), agentConfigObj.getClass());
+                    continue;
+                }
+
+                // Recursively register any nested agent_tool workflows
+                registerAgentToolWorkflows(childConfig);
+
+                // Compile and register the child agent workflow
+                WorkflowDef childDef = agentCompiler.compile(childConfig);
+                metadataDAO.updateWorkflowDef(childDef);
+                log.info("Registered agent_tool child workflow: {} for tool '{}'",
+                        childDef.getName(), tool.getName());
+
+                // Register task definitions for the child's worker tools
+                registerTaskDefinitions(childConfig);
+
+                // Store the workflow name back so the enrichment script can reference it
+                tool.getConfig().put("workflowName", childDef.getName());
             }
-
-            Object agentConfigObj = tool.getConfig().get("agentConfig");
-            if (agentConfigObj == null) continue;
-
-            // Convert the AgentConfig (or LinkedHashMap from Jackson) to AgentConfig
-            AgentConfig childConfig;
-            if (agentConfigObj instanceof AgentConfig) {
-                childConfig = (AgentConfig) agentConfigObj;
-            } else if (agentConfigObj instanceof Map) {
-                childConfig = MAPPER.convertValue(agentConfigObj, AgentConfig.class);
-            } else {
-                log.warn("Unexpected agentConfig type for tool '{}': {}",
-                        tool.getName(), agentConfigObj.getClass());
-                continue;
-            }
-
-            // Recursively register any nested agent_tool workflows
-            registerAgentToolWorkflows(childConfig);
-
-            // Compile and register the child agent workflow
-            WorkflowDef childDef = agentCompiler.compile(childConfig);
-            metadataDAO.updateWorkflowDef(childDef);
-            log.info("Registered agent_tool child workflow: {} for tool '{}'",
-                    childDef.getName(), tool.getName());
-
-            // Register task definitions for the child's worker tools
-            registerTaskDefinitions(childConfig);
-
-            // Store the workflow name back so the enrichment script can reference it
-            tool.getConfig().put("workflowName", childDef.getName());
         }
 
         // Also recurse into sub-agents (they might have agent_tool tools too)
@@ -618,6 +654,7 @@ public class AgentService {
         taskDef.setRetryLogic(TaskDef.RetryLogic.LINEAR_BACKOFF);
         taskDef.setTimeoutSeconds(120);
         taskDef.setResponseTimeoutSeconds(120);
+        taskDef.setTimeoutPolicy(TaskDef.TimeoutPolicy.RETRY);
 
         try {
             TaskDef existing = metadataDAO.getTaskDef(taskName);

@@ -157,10 +157,14 @@ public class AgentCompiler {
         addGuardrailInputs(loopInputs, guardrailRefs);
         WorkflowTask loop = buildDoWhile(loopRef, termCondition, loopTasks, loopInputs);
 
-        wf.setTasks(List.of(loop));
+        // Post-loop: resolve output (guardrail fix or human edit may override LLM output)
+        String resolveRef = config.getName() + "_resolve_output";
+        WorkflowTask resolveTask = buildResolveOutputTask(resolveRef, llmRef);
+
+        wf.setTasks(List.of(loop, resolveTask));
         wf.setOutputParameters(Map.of(
-            "result", ref(llmRef + ".output.result"),
-            "finishReason", ref(llmRef + ".output.finishReason")
+            "result", ref(resolveRef + ".output.result.result"),
+            "finishReason", ref(resolveRef + ".output.result.finishReason")
         ));
         applyTimeout(wf, config);
         return wf;
@@ -409,14 +413,26 @@ public class AgentCompiler {
             allTasks.add(buildCallbackTask(afterAgent, config.getName(), llmRef));
         }
 
-        wf.setTasks(allTasks);
+        // Post-loop: resolve output (guardrail fix or human edit may override LLM output)
+        List<GuardrailConfig> outGuardrails = getOutputGuardrails(config);
+        if (!outGuardrails.isEmpty()) {
+            String resolveRef = config.getName() + "_resolve_output";
+            allTasks.add(buildResolveOutputTask(resolveRef, llmRef));
 
-        Map<String, Object> outputParams = new LinkedHashMap<>();
-        outputParams.put("result", ref(llmRef + ".output.result"));
-        outputParams.put("finishReason", ref(llmRef + ".output.finishReason"));
-        // Include rejection info if present
-        outputParams.put("rejectionReason", "${workflow.variables.rejectionReason}");
-        wf.setOutputParameters(outputParams);
+            Map<String, Object> outputParams = new LinkedHashMap<>();
+            outputParams.put("result", ref(resolveRef + ".output.result.result"));
+            outputParams.put("finishReason", ref(resolveRef + ".output.result.finishReason"));
+            outputParams.put("rejectionReason", "${workflow.variables.rejectionReason}");
+            wf.setOutputParameters(outputParams);
+        } else {
+            Map<String, Object> outputParams = new LinkedHashMap<>();
+            outputParams.put("result", ref(llmRef + ".output.result"));
+            outputParams.put("finishReason", ref(llmRef + ".output.finishReason"));
+            outputParams.put("rejectionReason", "${workflow.variables.rejectionReason}");
+            wf.setOutputParameters(outputParams);
+        }
+
+        wf.setTasks(allTasks);
         applyTimeout(wf, config);
         return wf;
     }
@@ -846,6 +862,27 @@ public class AgentCompiler {
         }
     }
 
+    /**
+     * Build a post-loop InlineTask that resolves the final output.
+     * Checks workflow variables for guardrail fix or human edit overrides.
+     */
+    WorkflowTask buildResolveOutputTask(String resolveRef, String llmRef) {
+        WorkflowTask task = new WorkflowTask();
+        task.setType("INLINE");
+        task.setTaskReferenceName(resolveRef);
+
+        Map<String, Object> inputs = new LinkedHashMap<>();
+        inputs.put("evaluatorType", "graaljs");
+        inputs.put("expression", JavaScriptBuilder.resolveOutputScript());
+        inputs.put("llm_result", ref(llmRef + ".output.result"));
+        inputs.put("finish_reason", ref(llmRef + ".output.finishReason"));
+        inputs.put("fixed_output", "${workflow.variables._fixed_output}");
+        inputs.put("edited_output", "${workflow.variables._human_edited_output}");
+        task.setInputParameters(inputs);
+
+        return task;
+    }
+
     List<GuardrailConfig> getOutputGuardrails(AgentConfig config) {
         if (config.getGuardrails() == null) return List.of();
         return config.getGuardrails().stream()
@@ -905,6 +942,11 @@ public class AgentCompiler {
         if (timeout > 0) {
             wf.setTimeoutSeconds((long) timeout);
             wf.setTimeoutPolicy(WorkflowDef.TimeoutPolicy.TIME_OUT_WF);
+        } else {
+            // Explicitly clear the base workflow timeout (60s from createBaseWorkflow)
+            // so that timeout_seconds=0 means "no timeout"
+            wf.setTimeoutSeconds(0L);
+            wf.setTimeoutPolicy(null);
         }
     }
 

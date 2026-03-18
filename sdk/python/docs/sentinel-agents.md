@@ -6,7 +6,48 @@
 **Date**: March 2026
 
 ---
-
+<!-- TOC -->
+* [Sentinel Agents: Always-On, Event-Driven, Omnipresent AI Agents](#sentinel-agents--always-on-event-driven-omnipresent-ai-agents)
+  * [1. Problem Statement](#1-problem-statement)
+  * [2. Landscape Analysis](#2-landscape-analysis)
+    * [2.1 AutoGen v0.4 (AG2)](#21-autogen-v04--ag2-)
+    * [2.2 CrewAI](#22-crewai)
+    * [2.3 LangGraph Platform](#23-langgraph-platform)
+    * [2.4 OmniDaemon (Research Pattern)](#24-omnidaemon--research-pattern-)
+    * [2.5 Microsoft Sentinel (Security)](#25-microsoft-sentinel--security-)
+    * [2.6 Summary: The Gap](#26-summary--the-gap)
+  * [3. Conceptual Model](#3-conceptual-model)
+    * [3.1 The Sentinel Agent](#31-the-sentinel-agent)
+    * [3.2 The Activation Layer](#32-the-activation-layer)
+    * [3.3 Trigger Types](#33-trigger-types)
+      * [Schedule](#schedule)
+      * [Event Trigger](#event-trigger)
+      * [Webhook Trigger](#webhook-trigger)
+      * [File Watch](#file-watch)
+      * [Stream Watch](#stream-watch)
+    * [3.4 Prompt Templating](#34-prompt-templating)
+  * [4. Deployment Architecture](#4-deployment-architecture)
+    * [4.1 Server-Side Triggers (Schedule, Event, Webhook)](#41-server-side-triggers--schedule-event-webhook-)
+    * [4.2 Local Source Watchers (FileWatch, StreamWatch)](#42-local-source-watchers--filewatch-streamwatch-)
+    * [4.3 How You Install and Run This](#43-how-you-install-and-run-this)
+    * [4.4 Multi-Instance / HA Deployment](#44-multi-instance--ha-deployment)
+  * [5. Lifecycle Management](#5-lifecycle-management)
+    * [5.1 Deployment Handle](#51-deployment-handle)
+    * [5.2 Observability](#52-observability)
+  * [6. Concrete Examples](#6-concrete-examples)
+    * [6.1 Log Sentinel](#61-log-sentinel)
+    * [6.2 PR Review Sentinel](#62-pr-review-sentinel)
+    * [6.3 Incident Responder](#63-incident-responder)
+    * [6.4 Omnipresent Ops Agent](#64-omnipresent-ops-agent)
+  * [7. Execution Plan](#7-execution-plan)
+    * [Phase 1: Foundation (Schedule + Deploy/Undeploy)](#phase-1--foundation--schedule--deployundeploy-)
+    * [Phase 2: Event & Webhook Triggers](#phase-2--event--webhook-triggers)
+    * [Phase 3: Local File Watching](#phase-3--local-file-watching)
+    * [Phase 4: Stream Watching](#phase-4--stream-watching)
+    * [Phase 5: CLI & Observability](#phase-5--cli--observability)
+    * [Phase 6: Advanced Patterns](#phase-6--advanced-patterns)
+  * [8. Open Design Questions](#8-open-design-questions)
+<!-- TOC -->
 ## 1. Problem Statement
 
 Today's agentic frameworks are **request-response**: a human types a prompt, the agent runs, returns a result. But real-world automation needs agents that are **always watching**:

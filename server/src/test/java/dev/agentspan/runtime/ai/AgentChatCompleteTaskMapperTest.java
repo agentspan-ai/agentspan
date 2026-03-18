@@ -372,8 +372,8 @@ class AgentChatCompleteTaskMapperTest {
     @Test
     void testEstimateTokenCount_messagesOnly() {
         ChatCompletion cc = new ChatCompletion();
-        // 400 chars / 4 = 100 tokens
-        cc.getMessages().add(new ChatMessage(ChatMessage.Role.assistant, "x".repeat(400)));
+        // 350 chars / 3.5 = 100 tokens
+        cc.getMessages().add(new ChatMessage(ChatMessage.Role.assistant, "x".repeat(350)));
 
         int estimate = mapper.estimateTokenCount(cc);
         assertThat(estimate).isEqualTo(100);
@@ -382,8 +382,8 @@ class AgentChatCompleteTaskMapperTest {
     @Test
     void testEstimateTokenCount_withInstructions() {
         ChatCompletion cc = new ChatCompletion();
-        cc.setInstructions("y".repeat(200)); // 200 chars = 50 tokens
-        cc.getMessages().add(new ChatMessage(ChatMessage.Role.assistant, "x".repeat(400))); // 100 tokens
+        cc.setInstructions("y".repeat(175)); // 175 chars / 3.5 = 50 tokens
+        cc.getMessages().add(new ChatMessage(ChatMessage.Role.assistant, "x".repeat(350))); // 100 tokens
 
         int estimate = mapper.estimateTokenCount(cc);
         assertThat(estimate).isEqualTo(150);
@@ -398,25 +398,40 @@ class AgentChatCompleteTaskMapperTest {
     @Test
     void testShouldCondenseProactively_belowThreshold() {
         ChatCompletion cc = new ChatCompletion();
-        cc.getMessages().add(new ChatMessage(ChatMessage.Role.assistant, "x".repeat(400))); // ~100 tokens
-        // 128K context window, 75% threshold = 96K. 100 tokens << 96K
-        assertThat(mapper.shouldCondenseProactively(cc, 128_000)).isFalse();
+        cc.getMessages().add(new ChatMessage(ChatMessage.Role.assistant, "x".repeat(400))); // ~114 tokens at 3.5 c/t
+        // 128K context window, 0 maxTokens, 75% threshold = 96K. 114 tokens << 96K
+        assertThat(mapper.shouldCondenseProactively(cc, 128_000, 0)).isFalse();
     }
 
     @Test
     void testShouldCondenseProactively_aboveThreshold() {
         ChatCompletion cc = new ChatCompletion();
-        // 500K chars / 4 = 125K tokens. 75% of 128K = 96K. 125K > 96K → should condense
+        // 500K chars / 3.5 = ~142K tokens. 75% of 128K = 96K. 142K > 96K → should condense
         cc.getMessages().add(new ChatMessage(ChatMessage.Role.assistant, "x".repeat(500_000)));
-        assertThat(mapper.shouldCondenseProactively(cc, 128_000)).isTrue();
+        assertThat(mapper.shouldCondenseProactively(cc, 128_000, 0)).isTrue();
     }
 
     @Test
     void testShouldCondenseProactively_exactlyAtThreshold() {
         ChatCompletion cc = new ChatCompletion();
-        // 75% of 128K = 96K tokens. 96K * 4 = 384K chars. At threshold → should NOT condense
-        cc.getMessages().add(new ChatMessage(ChatMessage.Role.assistant, "x".repeat(384_000)));
-        assertThat(mapper.shouldCondenseProactively(cc, 128_000)).isFalse();
+        // 75% of 128K = 96K tokens. 96K * 3.5 = 336K chars. At threshold → should NOT condense
+        cc.getMessages().add(new ChatMessage(ChatMessage.Role.assistant, "x".repeat(336_000)));
+        assertThat(mapper.shouldCondenseProactively(cc, 128_000, 0)).isFalse();
+    }
+
+    @Test
+    void testShouldCondenseProactively_accountsForMaxTokens() {
+        ChatCompletion cc = new ChatCompletion();
+        // 200K chars / 3.5 = ~57K tokens. Input budget = 200K - 60K = 140K. 75% of 140K = 105K.
+        // 57K < 105K → should NOT condense
+        cc.getMessages().add(new ChatMessage(ChatMessage.Role.assistant, "x".repeat(200_000)));
+        assertThat(mapper.shouldCondenseProactively(cc, 200_000, 60_000)).isFalse();
+
+        // 600K chars / 3.5 = ~171K tokens. Input budget = 200K - 60K = 140K. 75% of 140K = 105K.
+        // 171K > 105K → should condense
+        ChatCompletion cc2 = new ChatCompletion();
+        cc2.getMessages().add(new ChatMessage(ChatMessage.Role.assistant, "x".repeat(600_000)));
+        assertThat(mapper.shouldCondenseProactively(cc2, 200_000, 60_000)).isTrue();
     }
 
     // Use reflection to test private methods

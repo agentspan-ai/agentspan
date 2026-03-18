@@ -71,7 +71,7 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
     private static final int SUMMARY_TEXT_LIMIT = 200;
     private static final int TOOL_OUTPUT_SUMMARY_LIMIT = 150;
     private static final double PROACTIVE_CONDENSATION_THRESHOLD = 0.75;
-    private static final double CHARS_PER_TOKEN = 4.0;
+    private static final double CHARS_PER_TOKEN = 3.5;
 
     enum ExchangeType { TOOL_EXCHANGE, ASSISTANT_TEXT, USER_MESSAGE, OTHER }
     record Exchange(List<ChatMessage> messages, ExchangeType type) {}
@@ -344,7 +344,9 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
             String model = (String) task.getInputData().get("model");
             OptionalInt contextWindow = modelContextWindows.getContextWindow(model);
             if (contextWindow.isPresent()) {
-                proactive = shouldCondenseProactively(chatCompletion, contextWindow.getAsInt());
+                Object maxTokensObj = task.getInputData().get("maxTokens");
+                int maxTokens = maxTokensObj instanceof Number ? ((Number) maxTokensObj).intValue() : 0;
+                proactive = shouldCondenseProactively(chatCompletion, contextWindow.getAsInt(), maxTokens);
             }
         }
         if (!reactive && !proactive) {
@@ -385,13 +387,16 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
 
     /**
      * Check if the estimated token count exceeds the proactive condensation threshold.
+     * The available input budget is {@code contextWindow - maxTokens} (the API rejects
+     * requests where {@code inputTokens + maxTokens > contextWindow}).
      */
-    boolean shouldCondenseProactively(ChatCompletion chatCompletion, int contextWindow) {
+    boolean shouldCondenseProactively(ChatCompletion chatCompletion, int contextWindow, int maxTokens) {
         int estimatedTokens = estimateTokenCount(chatCompletion);
-        int threshold = (int) (contextWindow * PROACTIVE_CONDENSATION_THRESHOLD);
+        int inputBudget = contextWindow - Math.max(maxTokens, 0);
+        int threshold = (int) (inputBudget * PROACTIVE_CONDENSATION_THRESHOLD);
         if (estimatedTokens > threshold) {
-            log.info("Proactive condensation: estimated {} tokens > {} threshold ({}% of {} context window)",
-                    estimatedTokens, threshold, (int) (PROACTIVE_CONDENSATION_THRESHOLD * 100), contextWindow);
+            log.info("Proactive condensation: estimated {} tokens > {} threshold ({}% of {} input budget, contextWindow={}, maxTokens={})",
+                    estimatedTokens, threshold, (int) (PROACTIVE_CONDENSATION_THRESHOLD * 100), inputBudget, contextWindow, maxTokens);
             return true;
         }
         return false;

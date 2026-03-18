@@ -30,6 +30,7 @@ from agentspan.agents.result import (
     AgentStatus,
     AgentStream,
     AsyncAgentStream,
+    DeploymentInfo,
     EventType,
     FinishReason,
     Status,
@@ -51,6 +52,7 @@ def _default_task_def(name: str) -> Any:
     td.retry_delay_seconds = 2
     td.timeout_seconds = 120
     td.response_timeout_seconds = 120
+    td.timeout_policy = "RETRY"
     return td
 
 
@@ -593,7 +595,7 @@ class AgentRuntime:
 
         names: set = set()
 
-        # Tools
+        # Tools (and tool-level guardrails)
         for t in agent.tools:
             try:
                 td = get_tool_def(t)
@@ -603,6 +605,12 @@ class AgentRuntime:
                     nested_agent = td.config["agent"]
                     if not getattr(nested_agent, 'external', False):
                         names.update(self._collect_worker_names(nested_agent))
+                # Tool-level guardrails
+                for g in td.guardrails:
+                    if (not g.external
+                            and not isinstance(g, (RegexGuardrail, LLMGuardrail))
+                            and g.func is not None):
+                        names.add(g.name)
             except TypeError:
                 continue
 
@@ -666,18 +674,27 @@ class AgentRuntime:
         from agentspan.agents.runtime.tool_registry import ToolRegistry
         from agentspan.agents.guardrail import LLMGuardrail, RegexGuardrail
 
-        # 1. Tools
+        # 1. Tools (and tool-level guardrails)
         if agent.tools:
             tc = ToolRegistry()
             tc.register_tool_workers(agent.tools, agent.name)
-            # Recurse into agent_tool nested agents
             for t in agent.tools:
                 from agentspan.agents.tool import get_tool_def
                 td = get_tool_def(t)
+                # Recurse into agent_tool nested agents
                 if td.tool_type == "agent_tool" and td.config and "agent" in td.config:
                     nested_agent = td.config["agent"]
                     if not getattr(nested_agent, 'external', False):
                         self._register_workers(nested_agent)
+                # Register tool-level guardrail workers
+                tool_guardrails = [
+                    g for g in td.guardrails
+                    if not g.external
+                    and not isinstance(g, (RegexGuardrail, LLMGuardrail))
+                    and g.func is not None
+                ]
+                for g in tool_guardrails:
+                    self._register_single_guardrail_worker(g)
 
         # 2. Custom guardrails (not Regex/LLM/external)
         custom_guardrails = [
@@ -802,13 +819,16 @@ class AgentRuntime:
                         result = spec["func"](content_str)
                         if not result.passed:
                             on_fail = spec["on_fail"]
+                            fixed_output = getattr(result, "fixed_output", None)
                             if on_fail == "retry" and iteration >= spec["max_retries"]:
+                                on_fail = "raise"
+                            if on_fail == "fix" and fixed_output is None:
                                 on_fail = "raise"
                             return {
                                 "passed": False,
                                 "message": result.message,
                                 "on_fail": on_fail,
-                                "fixed_output": getattr(result, "fixed_output", None),
+                                "fixed_output": fixed_output,
                                 "guardrail_name": spec["name"],
                                 "should_continue": on_fail == "retry",
                             }
@@ -873,13 +893,16 @@ class AgentRuntime:
                 result = func(content_str)
                 if not result.passed:
                     effective_on_fail = on_fail
+                    fixed_output = getattr(result, "fixed_output", None)
                     if effective_on_fail == "retry" and iteration >= max_retries:
+                        effective_on_fail = "raise"
+                    if effective_on_fail == "fix" and fixed_output is None:
                         effective_on_fail = "raise"
                     return {
                         "passed": False,
                         "message": result.message,
                         "on_fail": effective_on_fail,
-                        "fixed_output": getattr(result, "fixed_output", None),
+                        "fixed_output": fixed_output,
                         "guardrail_name": g_name,
                         "should_continue": effective_on_fail == "retry",
                     }
@@ -1509,6 +1532,189 @@ class AgentRuntime:
         wf = self._compile_agent(agent)
         return wf.to_workflow_def()
 
+    # ── Deploy (CI/CD) ─────────────────────────────────────────────
+
+    def deploy(
+        self,
+        *agents: Any,
+        packages: Optional[List[str]] = None,
+    ) -> List[DeploymentInfo]:
+        """Compile and register agents on the server without executing them.
+
+        This is a CI/CD operation: it pushes the workflow definitions and
+        task definitions to the server.  It does NOT register local workers
+        or start any processes.  Use :meth:`serve` separately for the runtime.
+
+        Args:
+            *agents: Agent objects to deploy (native or foreign framework).
+            packages: Python packages to scan for Agent instances.
+
+        Returns:
+            List of :class:`DeploymentInfo`, one per deployed agent.
+        """
+        from agentspan.agents.runtime.discovery import discover_agents
+
+        all_agents = list(agents)
+        if packages:
+            all_agents.extend(discover_agents(packages))
+
+        if not all_agents:
+            raise ValueError("deploy() requires at least one agent.")
+
+        results = []
+        for agent in all_agents:
+            from agentspan.agents.frameworks.serializer import detect_framework
+            framework = detect_framework(agent)
+
+            workflow_name = self._deploy_via_server(agent, framework=framework)
+            agent_name = agent.name if hasattr(agent, "name") else workflow_name
+            results.append(DeploymentInfo(workflow_name=workflow_name, agent_name=agent_name))
+            logger.info("Deployed agent '%s' as workflow '%s'", agent_name, workflow_name)
+
+        return results
+
+    async def deploy_async(
+        self,
+        *agents: Any,
+        packages: Optional[List[str]] = None,
+    ) -> List[DeploymentInfo]:
+        """Async version of :meth:`deploy`."""
+        from agentspan.agents.runtime.discovery import discover_agents
+
+        all_agents = list(agents)
+        if packages:
+            all_agents.extend(discover_agents(packages))
+
+        if not all_agents:
+            raise ValueError("deploy() requires at least one agent.")
+
+        results = []
+        for agent in all_agents:
+            from agentspan.agents.frameworks.serializer import detect_framework
+            framework = detect_framework(agent)
+
+            workflow_name = await self._deploy_via_server_async(agent, framework=framework)
+            agent_name = agent.name if hasattr(agent, "name") else workflow_name
+            results.append(DeploymentInfo(workflow_name=workflow_name, agent_name=agent_name))
+            logger.info("Deployed agent '%s' as workflow '%s'", agent_name, workflow_name)
+
+        return results
+
+    def _deploy_via_server(self, agent: Any, *, framework: Optional[str] = None) -> str:
+        """Deploy agent via /api/agent/deploy.  Returns workflow name."""
+        import requests as req_lib
+
+        if framework:
+            from agentspan.agents.frameworks.serializer import serialize_agent
+            raw_config, _ = serialize_agent(agent)
+            payload = {
+                "framework": framework,
+                "rawConfig": raw_config,
+            }
+        else:
+            from agentspan.agents.config_serializer import AgentConfigSerializer
+            serializer = AgentConfigSerializer()
+            payload = {"agentConfig": serializer.serialize(agent)}
+
+        url = self._agent_api_url("/deploy")
+        resp = req_lib.post(url, json=payload, headers=self._agent_api_headers(), timeout=30)
+        try:
+            resp.raise_for_status()
+        except req_lib.exceptions.HTTPError as exc:
+            _raise_api_error(exc, url=url)
+        return resp.json()["workflowName"]
+
+    async def _deploy_via_server_async(self, agent: Any, *, framework: Optional[str] = None) -> str:
+        """Async version of :meth:`_deploy_via_server`."""
+        if framework:
+            from agentspan.agents.frameworks.serializer import serialize_agent
+            raw_config, _ = serialize_agent(agent)
+            payload = {
+                "framework": framework,
+                "rawConfig": raw_config,
+            }
+        else:
+            from agentspan.agents.config_serializer import AgentConfigSerializer
+            serializer = AgentConfigSerializer()
+            payload = {"agentConfig": serializer.serialize(agent)}
+
+        data = await self._http.deploy_agent(payload)
+        return data["workflowName"]
+
+    # ── Serve (runtime worker service) ─────────────────────────────
+
+    def serve(
+        self,
+        *agents: Any,
+        packages: Optional[List[str]] = None,
+        blocking: bool = True,
+    ) -> None:
+        """Register workers and keep them polling until interrupted.
+
+        This is a runtime operation: it registers the Python tool functions
+        (tools, custom guardrails, callbacks, handoff checks, etc.) as
+        Conductor workers and starts polling for tasks.
+
+        Args:
+            *agents: Agents whose workers should be served.
+            packages: Python packages/modules to scan for Agent instances.
+                Recursively imports the package and discovers all module-level
+                Agent objects (e.g. ``packages=["myapp.agents"]``).
+            blocking: If ``True`` (default), blocks until Ctrl+C / SIGTERM.
+
+        At least one agent must be provided (directly or via packages).
+        """
+        from agentspan.agents.runtime.discovery import discover_agents
+
+        all_agents = list(agents)
+        if packages:
+            all_agents.extend(discover_agents(packages))
+
+        if not all_agents:
+            raise ValueError(
+                "serve() requires at least one Agent -- pass agents directly "
+                "or use packages= to auto-discover them."
+            )
+
+        # Register local Python worker functions for each agent
+        for agent in all_agents:
+            self._register_workers(agent)
+            worker_names = self._collect_worker_names(agent)
+            new_workers = worker_names - self._registered_tool_names
+            if new_workers:
+                if self._workers_started:
+                    logger.info(
+                        "New workers detected (%s), restarting workers",
+                        ", ".join(sorted(new_workers)),
+                    )
+                    self._worker_manager.stop()
+                    self._workers_started = False
+                self._registered_tool_names.update(worker_names)
+
+        if not self._workers_started:
+            self._worker_manager.start()
+            self._workers_started = True
+
+        logger.info(
+            "Serving %d worker(s) for %d agent(s). Press Ctrl+C to stop.",
+            len(self._registered_tool_names),
+            len(all_agents),
+        )
+
+        if blocking:
+            import signal
+
+            stop = threading.Event()
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                signal.signal(sig, lambda *_: stop.set())
+            try:
+                stop.wait()
+            except KeyboardInterrupt:
+                pass
+            finally:
+                logger.info("Shutting down...")
+                self.shutdown()
+
     # ── Input guardrail pre-flight ─────────────────────────────────
 
     def _check_input_guardrails(self, agent: Agent, prompt: str) -> str:
@@ -1559,8 +1765,9 @@ class AgentRuntime:
     def run(
         self,
         agent: Any,
-        prompt: "Union[str, Any]",
+        prompt: "Union[str, Any]" = None,
         *,
+        version: Optional[int] = None,
         media: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
@@ -1570,15 +1777,17 @@ class AgentRuntime:
     ) -> AgentResult:
         """Execute an agent synchronously and return the result.
 
-        Accepts native :class:`Agent` objects as well as foreign framework
-        agents (e.g. OpenAI Agent SDK, Google ADK).  Foreign agents are
-        auto-detected, serialized generically, and normalized server-side.
+        Accepts native :class:`Agent` objects, foreign framework agents
+        (e.g. OpenAI Agent SDK, Google ADK), or a **workflow name string**
+        to run a pre-deployed agent by name.
 
         Args:
-            agent: The agent to execute — a native :class:`Agent` or a
-                foreign framework agent object.
+            agent: The agent to execute — a native :class:`Agent`, a
+                foreign framework agent object, or a ``str`` workflow name
+                for a pre-deployed agent.
             prompt: The user's input message — a string or a
                 :class:`PromptTemplate` referencing a server-side template.
+            version: Workflow version (only used when *agent* is a string).
             media: Optional list of media URLs (images, video, audio) to
                 include with the prompt.  Each URL is passed as part of
                 the user message to vision-capable models.
@@ -1594,6 +1803,15 @@ class AgentRuntime:
         Returns:
             An :class:`AgentResult`.
         """
+        # Run by name — pre-deployed workflow
+        if isinstance(agent, str):
+            return self._run_by_name(
+                agent, prompt, version=version,
+                media=media, session_id=session_id,
+                idempotency_key=idempotency_key,
+                on_event=on_event, timeout=timeout, **kwargs,
+            )
+
         # Check for foreign framework agent
         from agentspan.agents.frameworks.serializer import detect_framework
         framework = detect_framework(agent)
@@ -1687,6 +1905,204 @@ class AgentRuntime:
             token_usage=token_usage,
             sub_results=self._extract_sub_results(output),
         )
+
+    # ── Run-by-name (pre-deployed workflows) ─────────────────────────
+
+    def _run_by_name(
+        self,
+        name: str,
+        prompt: str,
+        *,
+        version: Optional[int] = None,
+        media: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        on_event: Optional[Any] = None,
+        timeout: Optional[int] = None,
+        **kwargs: Any,
+    ) -> AgentResult:
+        """Execute a pre-registered workflow by name."""
+        from conductor.client.http.models import StartWorkflowRequest
+
+        req = StartWorkflowRequest()
+        req.name = name
+        req.version = version
+        req.input = {
+            "prompt": prompt,
+            "media": media or [],
+            "session_id": session_id or "",
+            **kwargs,
+        }
+        if idempotency_key:
+            req.correlation_id = idempotency_key
+
+        workflow_id = self._workflow_client.start_workflow(req)
+        correlation_id = str(uuid.uuid4())
+        logger.info("Executing '%s' by name (workflow_id=%s)", name, workflow_id)
+
+        # If on_event requested, stream events
+        if on_event is not None:
+            handle = AgentHandle(workflow_id=workflow_id, runtime=self, correlation_id=correlation_id)
+            agent_stream = AgentStream(handle=handle, event_iterator=self._stream_workflow(workflow_id))
+            for event in agent_stream:
+                on_event(event)
+            return agent_stream.get_result()
+
+        # Poll until complete
+        status = self._poll_status_until_complete(workflow_id, timeout=timeout)
+        output = self._normalize_output(status.output, status.status, status.reason)
+
+        tool_calls: List[Dict[str, Any]] = []
+        messages: List[Dict[str, Any]] = []
+        token_usage: Optional[TokenUsage] = None
+        try:
+            wf = self._workflow_client.get_workflow(workflow_id=workflow_id, include_tasks=True)
+            tool_calls = self._extract_tool_calls(wf)
+            messages = self._extract_messages(wf)
+            token_usage = self._extract_token_usage(wf)
+        except Exception as exc:
+            logger.debug("Could not fetch workflow details: %s", exc)
+
+        return AgentResult(
+            output=output,
+            workflow_id=workflow_id,
+            correlation_id=correlation_id,
+            status=status.status,
+            finish_reason=self._derive_finish_reason(status.status, status.output),
+            error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
+            tool_calls=tool_calls,
+            messages=messages,
+            token_usage=token_usage,
+        )
+
+    def _start_by_name(
+        self,
+        name: str,
+        prompt: str,
+        *,
+        version: Optional[int] = None,
+        media: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        **kwargs: Any,
+    ) -> AgentHandle:
+        """Start a pre-registered workflow by name (fire-and-forget)."""
+        from conductor.client.http.models import StartWorkflowRequest
+
+        req = StartWorkflowRequest()
+        req.name = name
+        req.version = version
+        req.input = {
+            "prompt": prompt,
+            "media": media or [],
+            "session_id": session_id or "",
+            **kwargs,
+        }
+        if idempotency_key:
+            req.correlation_id = idempotency_key
+
+        workflow_id = self._workflow_client.start_workflow(req)
+        correlation_id = str(uuid.uuid4())
+        logger.info("Started '%s' by name (workflow_id=%s)", name, workflow_id)
+        return AgentHandle(workflow_id=workflow_id, runtime=self, correlation_id=correlation_id)
+
+    async def _run_by_name_async(
+        self,
+        name: str,
+        prompt: str,
+        *,
+        version: Optional[int] = None,
+        media: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        on_event: Optional[Any] = None,
+        timeout: Optional[int] = None,
+        **kwargs: Any,
+    ) -> AgentResult:
+        """Async version of :meth:`_run_by_name`."""
+        from conductor.client.http.models import StartWorkflowRequest
+
+        req = StartWorkflowRequest()
+        req.name = name
+        req.version = version
+        req.input = {
+            "prompt": prompt,
+            "media": media or [],
+            "session_id": session_id or "",
+            **kwargs,
+        }
+        if idempotency_key:
+            req.correlation_id = idempotency_key
+
+        loop = asyncio.get_event_loop()
+        workflow_id = await loop.run_in_executor(
+            None, lambda: self._workflow_client.start_workflow(req),
+        )
+        correlation_id = str(uuid.uuid4())
+        logger.info("Executing '%s' by name async (workflow_id=%s)", name, workflow_id)
+
+        status = await self._poll_status_until_complete_async(workflow_id, timeout=timeout)
+        output = self._normalize_output(status.output, status.status, status.reason)
+
+        tool_calls: List[Dict[str, Any]] = []
+        messages: List[Dict[str, Any]] = []
+        token_usage: Optional[TokenUsage] = None
+        try:
+            wf = await loop.run_in_executor(
+                None,
+                lambda: self._workflow_client.get_workflow(workflow_id=workflow_id, include_tasks=True),
+            )
+            tool_calls = self._extract_tool_calls(wf)
+            messages = self._extract_messages(wf)
+            token_usage = self._extract_token_usage(wf)
+        except Exception as exc:
+            logger.debug("Could not fetch workflow details: %s", exc)
+
+        return AgentResult(
+            output=output,
+            workflow_id=workflow_id,
+            correlation_id=correlation_id,
+            status=status.status,
+            finish_reason=self._derive_finish_reason(status.status, status.output),
+            error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
+            tool_calls=tool_calls,
+            messages=messages,
+            token_usage=token_usage,
+        )
+
+    async def _start_by_name_async(
+        self,
+        name: str,
+        prompt: str,
+        *,
+        version: Optional[int] = None,
+        media: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        **kwargs: Any,
+    ) -> AgentHandle:
+        """Async version of :meth:`_start_by_name`."""
+        from conductor.client.http.models import StartWorkflowRequest
+
+        req = StartWorkflowRequest()
+        req.name = name
+        req.version = version
+        req.input = {
+            "prompt": prompt,
+            "media": media or [],
+            "session_id": session_id or "",
+            **kwargs,
+        }
+        if idempotency_key:
+            req.correlation_id = idempotency_key
+
+        loop = asyncio.get_event_loop()
+        workflow_id = await loop.run_in_executor(
+            None, lambda: self._workflow_client.start_workflow(req),
+        )
+        correlation_id = str(uuid.uuid4())
+        logger.info("Started '%s' by name async (workflow_id=%s)", name, workflow_id)
+        return AgentHandle(workflow_id=workflow_id, runtime=self, correlation_id=correlation_id)
 
     # ── Foreign framework support ────────────────────────────────────
 
@@ -2226,8 +2642,9 @@ class AgentRuntime:
     def start(
         self,
         agent: Any,
-        prompt: "Union[str, Any]",
+        prompt: "Union[str, Any]" = None,
         *,
+        version: Optional[int] = None,
         media: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
@@ -2235,14 +2652,14 @@ class AgentRuntime:
     ) -> AgentHandle:
         """Start an agent asynchronously and return a handle.
 
-        Accepts native :class:`Agent` objects as well as foreign framework
-        agents (e.g. OpenAI Agent SDK, Google ADK).
+        Accepts native :class:`Agent` objects, foreign framework agents
+        (e.g. OpenAI Agent SDK, Google ADK), or a **workflow name string**.
 
         Args:
-            agent: The agent to execute — a native :class:`Agent` or a
-                foreign framework agent object.
-            prompt: The user's input message — a string or a
-                :class:`PromptTemplate` referencing a server-side template.
+            agent: The agent to execute — a native :class:`Agent`, a
+                foreign framework agent object, or a ``str`` workflow name.
+            prompt: The user's input message.
+            version: Workflow version (only used when *agent* is a string).
             media: Optional list of media URLs (images, video, audio).
             session_id: Optional session ID.
             idempotency_key: Optional idempotency key.
@@ -2251,6 +2668,14 @@ class AgentRuntime:
         Returns:
             An :class:`AgentHandle`.
         """
+        # Run by name
+        if isinstance(agent, str):
+            return self._start_by_name(
+                agent, prompt, version=version,
+                media=media, session_id=session_id,
+                idempotency_key=idempotency_key, **kwargs,
+            )
+
         # Check for foreign framework agent
         from agentspan.agents.frameworks.serializer import detect_framework
         framework = detect_framework(agent)
@@ -2272,10 +2697,12 @@ class AgentRuntime:
         correlation_id = str(uuid.uuid4())
 
         # Start via the agent runtime server API
+        effective_timeout = agent.timeout_seconds if agent.timeout_seconds > 0 else None
         workflow_id = self._start_via_server(
             agent, resolved_prompt,
             media=media, session_id=session_id,
             idempotency_key=idempotency_key,
+            timeout=effective_timeout,
         )
 
         return AgentHandle(workflow_id=workflow_id, runtime=self, correlation_id=correlation_id)
@@ -2287,6 +2714,7 @@ class AgentRuntime:
         agent: Optional[Any] = None,
         prompt: "Optional[Union[str, Any]]" = None,
         *,
+        version: Optional[int] = None,
         handle: Optional[AgentHandle] = None,
         media: Optional[List[str]] = None,
         session_id: Optional[str] = None,
@@ -2294,19 +2722,23 @@ class AgentRuntime:
     ) -> AgentStream:
         """Execute an agent and stream events as they occur.
 
-        Can be called in two ways:
+        Can be called in three ways:
 
         1. **New workflow:** ``stream(agent, prompt)`` — starts a new
            workflow and streams events from it.
         2. **Existing workflow:** ``stream(handle=handle)`` — streams
            events from an already-running workflow.
+        3. **By name:** ``stream("workflow_name", prompt)`` — starts a
+           pre-deployed workflow by name.
 
         Returns an :class:`AgentStream` — iterable (yields events), with
         HITL convenience methods and access to the final :class:`AgentResult`.
 
         Args:
             agent: The agent to execute (required unless *handle* is given).
+                Can be a ``str`` workflow name for pre-deployed agents.
             prompt: The user's input message (required unless *handle* is given).
+            version: Workflow version (only used when *agent* is a string).
             handle: An existing :class:`AgentHandle` to stream from.
             media: Optional list of media URLs (images, video, audio).
             session_id: Optional session ID.
@@ -2322,7 +2754,7 @@ class AgentRuntime:
         if agent is None or prompt is None:
             raise ValueError("Either (agent, prompt) or handle= must be provided")
 
-        handle = self.start(agent, prompt, media=media, session_id=session_id, **kwargs)
+        handle = self.start(agent, prompt, version=version, media=media, session_id=session_id, **kwargs)
         event_iter = self._stream_workflow(handle.workflow_id)
         return AgentStream(handle=handle, event_iterator=event_iter)
 
@@ -2383,14 +2815,6 @@ class AgentRuntime:
                         output_data = getattr(task, "output_data", {}) or {}
 
                         # Built-in Conductor task types (not tool workers)
-                        _BUILTIN_TYPES = {
-                            "DO_WHILE", "LLM_CHAT_COMPLETE", "SWITCH", "INLINE",
-                            "FORK", "JOIN", "SUB_WORKFLOW", "HUMAN", "TERMINATE",
-                            "SET_VARIABLE", "WAIT", "HTTP", "EVENT", "LAMBDA",
-                            "FORK_JOIN", "FORK_JOIN_DYNAMIC", "EXCLUSIVE_JOIN",
-                            "SIMPLE",
-                        }
-
                         # LLM task -> THINKING
                         if "LLM_CHAT_COMPLETE" in task_type:
                             yield AgentEvent(
@@ -2418,8 +2842,8 @@ class AgentRuntime:
 
                         # Worker/tool task -> TOOL_CALL + TOOL_RESULT (server compile)
                         # Server-compiled workflows use the tool function name as
-                        # the task type (e.g. "get_weather") with a call-ID ref.
-                        elif task_type not in _BUILTIN_TYPES and task_status == "COMPLETED":
+                        # the task type (e.g. "get_weather") with a "call_" ref.
+                        elif task_ref.startswith("call_") and task_type not in self._SYSTEM_TASK_TYPES and task_status == "COMPLETED":
                             fn_name = task_type.lower()
                             yield AgentEvent(
                                 type=EventType.TOOL_CALL,
@@ -2536,8 +2960,9 @@ class AgentRuntime:
     async def run_async(
         self,
         agent: Any,
-        prompt: "Union[str, Any]",
+        prompt: "Union[str, Any]" = None,
         *,
+        version: Optional[int] = None,
         media: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
@@ -2547,12 +2972,13 @@ class AgentRuntime:
     ) -> AgentResult:
         """Execute an agent asynchronously (async-first implementation).
 
-        This is the real async implementation. The sync :meth:`run` method
-        delegates to this via :meth:`_run_sync`.
+        Accepts native agents, foreign framework agents, or a workflow
+        name string for pre-deployed agents.
 
         Args:
-            agent: The agent to execute.
+            agent: The agent to execute, or a ``str`` workflow name.
             prompt: The user's input message.
+            version: Workflow version (only used when *agent* is a string).
             media: Optional list of media URLs (images, video, audio).
             session_id: Optional session ID.
             idempotency_key: Optional idempotency key.
@@ -2562,6 +2988,15 @@ class AgentRuntime:
         Returns:
             An :class:`AgentResult`.
         """
+        # Run by name
+        if isinstance(agent, str):
+            return await self._run_by_name_async(
+                agent, prompt, version=version,
+                media=media, session_id=session_id,
+                idempotency_key=idempotency_key,
+                on_event=on_event, timeout=timeout, **kwargs,
+            )
+
         # Foreign framework check
         from agentspan.agents.frameworks.serializer import detect_framework
         framework = detect_framework(agent)
@@ -2661,8 +3096,9 @@ class AgentRuntime:
     async def start_async(
         self,
         agent: Any,
-        prompt: "Union[str, Any]",
+        prompt: "Union[str, Any]" = None,
         *,
+        version: Optional[int] = None,
         media: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
@@ -2671,8 +3107,9 @@ class AgentRuntime:
         """Start an agent asynchronously and return a handle (async version).
 
         Args:
-            agent: The agent to execute.
+            agent: The agent to execute, or a ``str`` workflow name.
             prompt: The user's input message.
+            version: Workflow version (only used when *agent* is a string).
             media: Optional list of media URLs.
             session_id: Optional session ID.
             idempotency_key: Optional idempotency key.
@@ -2681,6 +3118,14 @@ class AgentRuntime:
         Returns:
             An :class:`AgentHandle`.
         """
+        # Run by name
+        if isinstance(agent, str):
+            return await self._start_by_name_async(
+                agent, prompt, version=version,
+                media=media, session_id=session_id,
+                idempotency_key=idempotency_key, **kwargs,
+            )
+
         from agentspan.agents.frameworks.serializer import detect_framework
         framework = detect_framework(agent)
         if framework is not None:
@@ -2696,10 +3141,12 @@ class AgentRuntime:
 
         correlation_id = str(uuid.uuid4())
 
+        effective_timeout = agent.timeout_seconds if agent.timeout_seconds > 0 else None
         workflow_id = await self._start_via_server_async(
             agent, resolved_prompt,
             media=media, session_id=session_id,
             idempotency_key=idempotency_key,
+            timeout=effective_timeout,
         )
 
         return AgentHandle(workflow_id=workflow_id, runtime=self, correlation_id=correlation_id)
@@ -2709,6 +3156,7 @@ class AgentRuntime:
         agent: Optional[Any] = None,
         prompt: "Optional[Union[str, Any]]" = None,
         *,
+        version: Optional[int] = None,
         handle: Optional[AgentHandle] = None,
         media: Optional[List[str]] = None,
         session_id: Optional[str] = None,
@@ -2716,17 +3164,19 @@ class AgentRuntime:
     ) -> AsyncAgentStream:
         """Execute an agent and stream events asynchronously.
 
-        Can be called in two ways:
+        Can be called in three ways:
 
         1. ``await stream_async(agent, prompt)`` — starts a new workflow.
         2. ``await stream_async(handle=handle)`` — streams from existing workflow.
+        3. ``await stream_async("workflow_name", prompt)`` — starts by name.
 
         Returns an :class:`AsyncAgentStream` — async-iterable that yields
         :class:`AgentEvent` objects.
 
         Args:
-            agent: The agent to execute (required unless *handle* is given).
+            agent: The agent to execute, or a ``str`` workflow name.
             prompt: The user's input message (required unless *handle* is given).
+            version: Workflow version (only used when *agent* is a string).
             handle: An existing :class:`AgentHandle` to stream from.
             media: Optional list of media URLs.
             session_id: Optional session ID.
@@ -2741,7 +3191,7 @@ class AgentRuntime:
         if agent is None or prompt is None:
             raise ValueError("Either (agent, prompt) or handle= must be provided")
 
-        handle = await self.start_async(agent, prompt, media=media, session_id=session_id, **kwargs)
+        handle = await self.start_async(agent, prompt, version=version, media=media, session_id=session_id, **kwargs)
         return AsyncAgentStream(handle=handle, runtime=self)
 
     async def _stream_workflow_async(self, workflow_id: str) -> AsyncIterator[AgentEvent]:
@@ -2810,14 +3260,6 @@ class AgentRuntime:
                         task_status = str(getattr(task, "status", "")).upper()
                         output_data = getattr(task, "output_data", {}) or {}
 
-                        _BUILTIN_TYPES = {
-                            "DO_WHILE", "LLM_CHAT_COMPLETE", "SWITCH", "INLINE",
-                            "FORK", "JOIN", "SUB_WORKFLOW", "HUMAN", "TERMINATE",
-                            "SET_VARIABLE", "WAIT", "HTTP", "EVENT", "LAMBDA",
-                            "FORK_JOIN", "FORK_JOIN_DYNAMIC", "EXCLUSIVE_JOIN",
-                            "SIMPLE",
-                        }
-
                         if "LLM_CHAT_COMPLETE" in task_type:
                             yield AgentEvent(
                                 type=EventType.THINKING,
@@ -2839,7 +3281,7 @@ class AgentRuntime:
                                     result=output_data.get("result"),
                                     workflow_id=workflow_id,
                                 )
-                        elif task_type not in _BUILTIN_TYPES and task_status == "COMPLETED":
+                        elif task_ref.startswith("call_") and task_type not in self._SYSTEM_TASK_TYPES and task_status == "COMPLETED":
                             fn_name = task_type.lower()
                             yield AgentEvent(
                                 type=EventType.TOOL_CALL,
@@ -3430,21 +3872,47 @@ class AgentRuntime:
             return workflow_run.variables.get("messages", [])
         return []
 
+    # System task types that are never user-defined tool calls
+    _SYSTEM_TASK_TYPES = frozenset({
+        "LLM_CHAT_COMPLETE", "SWITCH", "DO_WHILE", "INLINE", "SET_VARIABLE",
+        "FORK", "FORK_JOIN_DYNAMIC", "JOIN", "SUB_WORKFLOW", "HUMAN",
+        "TERMINATE", "HTTP", "CALL_MCP_TOOL", "LIST_MCP_TOOLS",
+        "WAIT", "EVENT", "DECISION",
+    })
+
     def _extract_tool_calls(self, workflow_run: Any) -> List[Dict[str, Any]]:
-        """Extract tool call history from workflow tasks."""
+        """Extract tool call history from workflow tasks.
+
+        Tool tasks are identified by their reference task name starting with
+        ``call_`` (the pattern the compiler uses for all tool invocations).
+        """
         tool_calls: List[Dict[str, Any]] = []
-        if hasattr(workflow_run, "tasks") and workflow_run.tasks:
-            for task in workflow_run.tasks:
-                if hasattr(task, "task_type") and "tool" in str(
-                    getattr(task, "task_type", "")
-                ).lower():
-                    tool_calls.append(
-                        {
-                            "name": getattr(task, "reference_task_name", ""),
-                            "input": getattr(task, "input_data", {}),
-                            "output": getattr(task, "output_data", {}),
-                        }
-                    )
+        if not (hasattr(workflow_run, "tasks") and workflow_run.tasks):
+            return tool_calls
+
+        for task in workflow_run.tasks:
+            task_type = str(getattr(task, "task_type", "")).upper()
+            ref = str(getattr(task, "reference_task_name", ""))
+
+            # Skip known system tasks
+            if task_type in self._SYSTEM_TASK_TYPES:
+                continue
+
+            # Tool invocation refs follow the pattern call_<hash>__<turn>
+            if not ref.startswith("call_"):
+                continue
+
+            input_data = dict(getattr(task, "input_data", {}) or {})
+            # Strip internal Conductor keys from the displayed args
+            for k in ("_agent_state", "method", "__humanTaskDefinition"):
+                input_data.pop(k, None)
+
+            tool_calls.append({
+                "name": task_type.lower(),
+                "args": input_data,
+                "result": getattr(task, "output_data", {}),
+            })
+
         return tool_calls
 
     def _extract_token_usage(self, workflow_run: Any) -> Optional[TokenUsage]:

@@ -97,10 +97,13 @@ class AgentCompilerTest {
 
         WorkflowDef wf = compiler.compile(config);
 
-        // Should wrap in DoWhile
-        assertThat(wf.getTasks()).hasSize(1);
+        // Should wrap in DoWhile + resolve_output
+        assertThat(wf.getTasks()).hasSize(2);
         WorkflowTask loop = wf.getTasks().get(0);
         assertThat(loop.getType()).isEqualTo("DO_WHILE");
+        WorkflowTask resolve = wf.getTasks().get(1);
+        assertThat(resolve.getType()).isEqualTo("INLINE");
+        assertThat(resolve.getTaskReferenceName()).isEqualTo("guarded_agent_resolve_output");
 
         // Loop should have LLM + guardrail + guardrail_route
         assertThat(loop.getLoopOver().size()).isGreaterThanOrEqualTo(3);

@@ -71,7 +71,7 @@ async def test_get_result():
     result = await stream.get_result()
 
     assert isinstance(result, AgentResult)
-    assert result.output == "final"
+    assert result.output == {"result": "final"}
     assert result.status == "COMPLETED"
     assert len(result.tool_calls) == 1
     assert result.tool_calls[0]["name"] == "fn"
@@ -90,7 +90,7 @@ async def test_get_result_after_iteration():
         pass
 
     result = await stream.get_result()
-    assert result.output == "done"
+    assert result.output == {"result": "done"}
 
 
 @pytest.mark.asyncio
@@ -103,7 +103,7 @@ async def test_error_result():
     stream = _make_stream(events)
     result = await stream.get_result()
     assert result.status == "FAILED"
-    assert result.output == "something broke"
+    assert result.output == {"error": "something broke", "status": "FAILED"}
 
 
 @pytest.mark.asyncio

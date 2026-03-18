@@ -678,8 +678,8 @@ class TestExtractToolCalls:
 
     def test_extracts_tool_tasks(self, runtime):
         task = MagicMock()
-        task.task_type = "tool_execution"
-        task.reference_task_name = "get_weather"
+        task.task_type = "get_weather"
+        task.reference_task_name = "call_abc123__0"
         task.input_data = {"city": "NYC"}
         task.output_data = {"temp": 72}
         wf_run = MockWorkflowRun(tasks=[task])
@@ -687,7 +687,7 @@ class TestExtractToolCalls:
         calls = runtime._extract_tool_calls(wf_run)
         assert len(calls) == 1
         assert calls[0]["name"] == "get_weather"
-        assert calls[0]["input"] == {"city": "NYC"}
+        assert calls[0]["args"] == {"city": "NYC"}
 
     def test_empty_tasks(self, runtime):
         wf_run = MockWorkflowRun(tasks=[])
@@ -1087,8 +1087,8 @@ class TestRunPopulatesToolCalls:
 
         # Mock workflow with tool tasks
         tool_task = MagicMock()
-        tool_task.task_type = "tool_execution"
-        tool_task.reference_task_name = "get_weather"
+        tool_task.task_type = "get_weather"
+        tool_task.reference_task_name = "call_abc123__0"
         tool_task.input_data = {"city": "NYC"}
         tool_task.output_data = {"temp": 72}
 

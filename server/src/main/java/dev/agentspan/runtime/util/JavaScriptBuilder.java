@@ -63,7 +63,9 @@ public class JavaScriptBuilder {
             "    return {passed: true, message: '', on_fail: 'pass'," +
             "            fixed_output: null, guardrail_name: '', should_continue: false};" +
             "  }" +
-            "  var actual_fail = (on_fail === 'retry' && iteration >= max_retries) ? 'raise' : on_fail;" +
+            "  var actual_fail = on_fail;" +
+            "  if (on_fail === 'retry' && iteration >= max_retries) actual_fail = 'raise';" +
+            "  if (on_fail === 'fix') actual_fail = 'raise';" +
             "  return {passed: false, message: message, on_fail: actual_fail," +
             "          fixed_output: null, guardrail_name: guardrail_name," +
             "          should_continue: actual_fail === 'retry'};"
@@ -87,7 +89,9 @@ public class JavaScriptBuilder {
             "    return {passed: true, message: '', on_fail: 'pass'," +
             "            fixed_output: null, guardrail_name: '', should_continue: false};" +
             "  }" +
-            "  var actual_fail = (on_fail_mode === 'retry' && iteration >= max_retries) ? 'raise' : on_fail_mode;" +
+            "  var actual_fail = on_fail_mode;" +
+            "  if (on_fail_mode === 'retry' && iteration >= max_retries) actual_fail = 'raise';" +
+            "  if (on_fail_mode === 'fix') actual_fail = 'raise';" +
             "  return {passed: false, message: data.reason || data.message || 'LLM guardrail failed'," +
             "          on_fail: actual_fail, fixed_output: null," +
             "          guardrail_name: guardrail_name, should_continue: actual_fail === 'retry'};"
@@ -106,8 +110,11 @@ public class JavaScriptBuilder {
             "  var lines = [];" +
             "  for (var i = 0; i < tcs.length; i++) {" +
             "    var tc = tcs[i];" +
+            "    var args = tc.inputParameters || tc.input || {};" +
+            "    var cleaned = {};" +
+            "    for (var k in args) { if (k !== 'method') cleaned[k] = args[k]; }" +
             "    lines.push('Tool: ' + tc.name);" +
-            "    lines.push('Arguments: ' + JSON.stringify(tc.input || {}));" +
+            "    lines.push('Arguments: ' + JSON.stringify(cleaned));" +
             "    lines.push('---');" +
             "  }" +
             "  return {formatted: lines.join('\\n'), count: tcs.length};"
@@ -130,6 +137,25 @@ public class JavaScriptBuilder {
      */
     public static String guardrailFixScript() {
         return "(function() { return {result: $.fixed_output}; })()";
+    }
+
+    /**
+     * Build the output resolution JavaScript.
+     * Checks if a guardrail fix or human edit stored a replacement output
+     * in workflow variables, and uses it instead of the raw LLM output.
+     */
+    public static String resolveOutputScript() {
+        return iife(
+            "  var fixed = $.fixed_output;" +
+            "  var edited = $.edited_output;" +
+            "  if (edited != null && edited !== '' && edited !== 'null') {" +
+            "    return {result: edited, finishReason: 'STOP'};" +
+            "  } else if (fixed != null && fixed !== '' && fixed !== 'null') {" +
+            "    return {result: fixed, finishReason: 'STOP'};" +
+            "  } else {" +
+            "    return {result: $.llm_result, finishReason: $.finish_reason};" +
+            "  }"
+        );
     }
 
     /**

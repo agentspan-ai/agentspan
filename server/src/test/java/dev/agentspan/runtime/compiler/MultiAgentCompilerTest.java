@@ -850,8 +850,8 @@ class MultiAgentCompilerTest {
 
         WorkflowDef wf = compiler.compile(config);
 
-        // SUB_WORKFLOW(fetcher) + coerce + INLINE(gate) + SWITCH(gate_switch)
-        assertThat(wf.getTasks()).hasSize(4);
+        // SUB_WORKFLOW(fetcher) + coerce + INLINE(gate) + SWITCH(gate_switch) + output_selector
+        assertThat(wf.getTasks()).hasSize(5);
         assertThat(wf.getTasks().get(0).getType()).isEqualTo("SUB_WORKFLOW");
         assertThat(wf.getTasks().get(0).getTaskReferenceName()).contains("fetcher");
         assertThat(wf.getTasks().get(1).getType()).isEqualTo("INLINE"); // coerce
@@ -859,6 +859,8 @@ class MultiAgentCompilerTest {
         assertThat(wf.getTasks().get(2).getTaskReferenceName()).isEqualTo("pipeline_gate_0");
         assertThat(wf.getTasks().get(3).getType()).isEqualTo("SWITCH");
         assertThat(wf.getTasks().get(3).getTaskReferenceName()).isEqualTo("pipeline_gate_switch_0");
+        assertThat(wf.getTasks().get(4).getType()).isEqualTo("INLINE"); // output_selector
+        assertThat(wf.getTasks().get(4).getTaskReferenceName()).isEqualTo("pipeline_output_selector");
 
         // SWITCH should have "continue" case with remaining stages
         WorkflowTask switchTask = wf.getTasks().get(3);
@@ -916,11 +918,12 @@ class MultiAgentCompilerTest {
 
         WorkflowDef wf = compiler.compile(config);
 
-        // SUB_WORKFLOW + coerce + SIMPLE(gate) + SWITCH
-        assertThat(wf.getTasks()).hasSize(4);
+        // SUB_WORKFLOW + coerce + SIMPLE(gate) + SWITCH + output_selector
+        assertThat(wf.getTasks()).hasSize(5);
         assertThat(wf.getTasks().get(2).getType()).isEqualTo("SIMPLE");
         assertThat(wf.getTasks().get(2).getName()).isEqualTo("fetcher_gate");
         assertThat(wf.getTasks().get(3).getType()).isEqualTo("SWITCH");
+        assertThat(wf.getTasks().get(4).getType()).isEqualTo("INLINE"); // output_selector
     }
 
     @Test
@@ -949,9 +952,10 @@ class MultiAgentCompilerTest {
 
         WorkflowDef wf = compiler.compile(config);
 
-        // Top level: SUB_WORKFLOW(a) + coerce + gate_0 + SWITCH_0
-        assertThat(wf.getTasks()).hasSize(4);
+        // Top level: SUB_WORKFLOW(a) + coerce + gate_0 + SWITCH_0 + output_selector
+        assertThat(wf.getTasks()).hasSize(5);
         assertThat(wf.getTasks().get(3).getType()).isEqualTo("SWITCH");
+        assertThat(wf.getTasks().get(4).getType()).isEqualTo("INLINE"); // output_selector
 
         // Inside SWITCH_0's "continue" case: SUB_WORKFLOW(b) + coerce + gate_1 + SWITCH_1
         List<WorkflowTask> continueCase0 = wf.getTasks().get(3).getDecisionCases().get("continue");

@@ -36,6 +36,7 @@ from agentspan.agents.result import (
     AgentResult,
     AgentStream,
     AsyncAgentStream,
+    DeploymentInfo,
 )
 
 logger = logging.getLogger("agentspan.agents.run")
@@ -132,6 +133,60 @@ def shutdown() -> None:
         shutdown()  # explicit cleanup
     """
     _shutdown_default_runtime()
+
+
+# ── Deploy & Serve ──────────────────────────────────────────────────────
+
+
+def deploy(
+    *agents: Any,
+    packages: Optional[List[str]] = None,
+    runtime: Optional[Any] = None,
+) -> List[DeploymentInfo]:
+    """Compile and register agents on the server without executing them.
+
+    This is a CI/CD operation.  See :meth:`AgentRuntime.deploy`.
+
+    Args:
+        *agents: Agent objects to deploy.
+        packages: Python packages to scan for Agent instances.
+        runtime: Optional custom :class:`AgentRuntime`.
+
+    Returns:
+        List of :class:`DeploymentInfo`, one per deployed agent.
+    """
+    rt = runtime or _get_default_runtime()
+    return rt.deploy(*agents, packages=packages)
+
+
+async def deploy_async(
+    *agents: Any,
+    packages: Optional[List[str]] = None,
+    runtime: Optional[Any] = None,
+) -> List[DeploymentInfo]:
+    """Async version of :func:`deploy`."""
+    rt = runtime or _get_default_runtime()
+    return await rt.deploy_async(*agents, packages=packages)
+
+
+def serve(
+    *agents: Any,
+    packages: Optional[List[str]] = None,
+    blocking: bool = True,
+    runtime: Optional[Any] = None,
+) -> None:
+    """Register workers and keep them polling until interrupted.
+
+    This is a runtime operation.  See :meth:`AgentRuntime.serve`.
+
+    Args:
+        *agents: Agents whose workers should be served.
+        packages: Python packages to scan for Agent instances.
+        blocking: If ``True`` (default), blocks until Ctrl+C / SIGTERM.
+        runtime: Optional custom :class:`AgentRuntime`.
+    """
+    rt = runtime or _get_default_runtime()
+    rt.serve(*agents, packages=packages, blocking=blocking)
 
 
 # ── Sync convenience functions ───────────────────────────────────────────

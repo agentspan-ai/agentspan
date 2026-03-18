@@ -102,7 +102,7 @@ with AgentRuntime() as runtime:
             # In a real app, a human would review in the Conductor UI.
             # Here we auto-approve for the demo.
             print("Auto-approving for demo...")
-            runtime.approve(handle.workflow_id)
+            runtime.reject(handle.workflow_id, "bad idea")
             print("Approved! Resuming workflow...\n")
 
         if status.is_complete:

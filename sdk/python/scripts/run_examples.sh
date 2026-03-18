@@ -133,7 +133,9 @@ for example in "${EXAMPLES[@]}"; do
     done
 
     if [[ -n "$STDIN_RESPONSE" ]]; then
-        RUN_CMD="printf '%s\n' $STDIN_RESPONSE | timeout $TIMEOUT python3 $example"
+        # Use `yes` to provide unlimited identical responses — handles
+        # cases where the LLM calls an approval tool multiple times.
+        RUN_CMD="yes '$STDIN_RESPONSE' | timeout $TIMEOUT python3 $example"
     else
         RUN_CMD="timeout $TIMEOUT python3 $example"
     fi

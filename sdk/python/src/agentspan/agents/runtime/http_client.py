@@ -77,6 +77,17 @@ class AgentHttpClient:
             _raise_api_error(exc, url=url)
         return resp.json()
 
+    async def deploy_agent(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """POST /agent/deploy — deploy agent (compile + register, no execution)."""
+        client = await self._get_client()
+        url = self._url("/deploy")
+        resp = await client.post(url, json=payload)
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            _raise_api_error(exc, url=url)
+        return resp.json()
+
     async def compile_agent(self, config_json: Dict[str, Any]) -> Dict[str, Any]:
         """POST /agent/compile — compile agent config to workflow def."""
         client = await self._get_client()

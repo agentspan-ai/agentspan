@@ -48,9 +48,12 @@ from agentspan.agents.runtime.mcp_discovery import clear_discovery_cache
 # Execution API
 from agentspan.agents.run import (
     configure,
+    deploy,
+    deploy_async,
     plan,
     run,
     run_async,
+    serve,
     shutdown,
     start,
     start_async,
@@ -70,11 +73,15 @@ from agentspan.agents.result import (
     AgentStatus,
     AgentStream,
     AsyncAgentStream,
+    DeploymentInfo,
     EventType,
     FinishReason,
     Status,
     TokenUsage,
 )
+
+# Agent discovery
+from agentspan.agents.runtime.discovery import discover_agents
 
 # Guardrails
 from agentspan.agents.guardrail import (
@@ -158,9 +165,12 @@ __all__ = [
     "clear_discovery_cache",
     # Convenience execution (uses a singleton AgentRuntime)
     "configure",
+    "deploy",
+    "deploy_async",
     "plan",
     "run",
     "run_async",
+    "serve",
     "shutdown",
     "start",
     "start_async",
@@ -168,6 +178,7 @@ __all__ = [
     "stream_async",
     # Results
     "AgentResult",
+    "DeploymentInfo",
     "AgentHandle",
     "AgentStatus",
     "AgentStream",
@@ -218,6 +229,8 @@ __all__ = [
     "AgentspanError",
     "AgentAPIError",
     "AgentNotFoundError",
+    # Agent discovery
+    "discover_agents",
     # Tracing
     "is_tracing_enabled",
 ]

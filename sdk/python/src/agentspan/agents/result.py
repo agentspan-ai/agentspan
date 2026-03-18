@@ -17,6 +17,21 @@ from typing import Any, AsyncIterator, Callable, Dict, Iterator, List, Optional
 # ── Status & FinishReason enums ────────────────────────────────────────
 
 
+@dataclass
+class DeploymentInfo:
+    """Result of deploying an agent to the server.
+
+    Returned by :meth:`AgentRuntime.deploy` for each deployed agent.
+
+    Attributes:
+        workflow_name: The Conductor workflow name registered on the server.
+        agent_name: The agent's name (from :attr:`Agent.name`).
+    """
+
+    workflow_name: str
+    agent_name: str
+
+
 class Status(str, Enum):
     """Terminal status of an agent workflow execution.
 

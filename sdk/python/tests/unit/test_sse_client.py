@@ -46,7 +46,7 @@ class MockSSEHandler(BaseHTTPRequestHandler):
     """HTTP handler that serves scripted SSE events."""
 
     def do_GET(self):
-        if not self.path.startswith("/agent/stream/"):
+        if "/agent/stream/" not in self.path:
             self.send_error(404)
             return
 

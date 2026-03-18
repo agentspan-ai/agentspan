@@ -181,3 +181,72 @@ class TestConfigure:
         assert mod._default_runtime is None
         assert mod._default_config is not None
         assert mod._default_config.auto_start_server is False
+
+
+class TestDeployFunction:
+    """Test the top-level deploy() function."""
+
+    def test_deploy_delegates_to_runtime(self):
+        from agentspan.agents.run import deploy
+        from agentspan.agents.result import DeploymentInfo
+
+        mock_runtime = MagicMock()
+        mock_runtime.deploy.return_value = [
+            DeploymentInfo(workflow_name="wf", agent_name="a")
+        ]
+        agent = Agent(name="a", model="openai/gpt-4o")
+        result = deploy(agent, runtime=mock_runtime)
+        mock_runtime.deploy.assert_called_once_with(agent, packages=None)
+        assert len(result) == 1
+
+    def test_deploy_multiple_agents(self):
+        from agentspan.agents.run import deploy
+
+        mock_runtime = MagicMock()
+        mock_runtime.deploy.return_value = []
+        a1 = Agent(name="a1", model="openai/gpt-4o")
+        a2 = Agent(name="a2", model="openai/gpt-4o")
+        deploy(a1, a2, runtime=mock_runtime)
+        mock_runtime.deploy.assert_called_once_with(a1, a2, packages=None)
+
+    def test_deploy_with_packages(self):
+        from agentspan.agents.run import deploy
+
+        mock_runtime = MagicMock()
+        mock_runtime.deploy.return_value = []
+        deploy(packages=["myapp"], runtime=mock_runtime)
+        mock_runtime.deploy.assert_called_once_with(packages=["myapp"])
+
+
+class TestServeFunction:
+    """Test the top-level serve() function."""
+
+    def test_serve_delegates_to_runtime(self):
+        from agentspan.agents.run import serve
+
+        mock_runtime = MagicMock()
+        agent = Agent(name="a", model="openai/gpt-4o")
+        serve(agent, runtime=mock_runtime)
+        mock_runtime.serve.assert_called_once_with(
+            agent, packages=None, blocking=True
+        )
+
+    def test_serve_multiple_agents(self):
+        from agentspan.agents.run import serve
+
+        mock_runtime = MagicMock()
+        a1 = Agent(name="a1", model="openai/gpt-4o")
+        a2 = Agent(name="a2", model="openai/gpt-4o")
+        serve(a1, a2, runtime=mock_runtime)
+        mock_runtime.serve.assert_called_once_with(
+            a1, a2, packages=None, blocking=True
+        )
+
+    def test_serve_with_packages(self):
+        from agentspan.agents.run import serve
+
+        mock_runtime = MagicMock()
+        serve(packages=["myapp.agents"], blocking=False, runtime=mock_runtime)
+        mock_runtime.serve.assert_called_once_with(
+            packages=["myapp.agents"], blocking=False
+        )

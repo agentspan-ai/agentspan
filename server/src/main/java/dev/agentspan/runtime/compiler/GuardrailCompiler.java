@@ -343,7 +343,7 @@ public class GuardrailCompiler {
 
         decisionCases.put("raise", List.of(terminateTask));
 
-        // --- "fix" case: InlineTask that passes through fixed_output ---
+        // --- "fix" case: InlineTask that passes through fixed_output + SET_VARIABLE to store it ---
         WorkflowTask fixTask = new WorkflowTask();
         fixTask.setTaskReferenceName(agentName + "_guardrail_fix" + s);
         fixTask.setType("INLINE");
@@ -354,7 +354,15 @@ public class GuardrailCompiler {
         fixInputs.put("fixed_output", "${" + outPath + ".fixed_output}");
         fixTask.setInputParameters(fixInputs);
 
-        decisionCases.put("fix", List.of(fixTask));
+        // Store fixed output in workflow variable so post-loop output resolution can use it
+        WorkflowTask fixSetVar = new WorkflowTask();
+        fixSetVar.setType("SET_VARIABLE");
+        fixSetVar.setTaskReferenceName(agentName + "_guardrail_fix_set" + s);
+        Map<String, Object> fixSetVarInputs = new LinkedHashMap<>();
+        fixSetVarInputs.put("_fixed_output", "${" + outPath + ".fixed_output}");
+        fixSetVar.setInputParameters(fixSetVarInputs);
+
+        decisionCases.put("fix", List.of(fixTask, fixSetVar));
 
         // --- "human" case: HumanTask + validate + normalize + process + inner switch ---
         if ("human".equals(guard.getOnFail())) {
