@@ -151,7 +151,7 @@ def _push_event_nonblocking(
     auth_key: str,
     auth_secret: str,
 ) -> None:
-    """Fire-and-forget HTTP POST to /api/agent/events/{workflowId}."""
+    """Fire-and-forget HTTP POST to {server_url}/agent/events/{workflowId}."""
 
     def _do_push():
         try:
