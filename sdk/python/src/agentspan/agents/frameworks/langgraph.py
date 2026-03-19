@@ -236,7 +236,7 @@ def _push_event_nonblocking(
         try:
             import requests
 
-            url = f"{server_url}/api/agent/events/{workflow_id}"
+            url = f"{server_url}/agent/events/{workflow_id}"
             headers = {}
             if auth_key:
                 headers["X-Auth-Key"] = auth_key

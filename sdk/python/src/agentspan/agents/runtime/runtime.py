@@ -2373,6 +2373,11 @@ class AgentRuntime:
         if framework in ("langgraph", "langchain"):
             # Build the actual pre-wrapped worker function with server connection info
             # (func was None from serialize_langgraph/serialize_langchain — fill it now)
+            if not workers:
+                raise RuntimeError(
+                    f"Framework serializer returned no workers for '{framework}' agent — "
+                    "cannot register passthrough worker."
+                )
             worker = workers[0]
             worker.func = self._build_passthrough_func(agent_obj, framework, worker.name)
             self._register_passthrough_worker(worker)
@@ -2504,8 +2509,8 @@ class AgentRuntime:
     def _build_passthrough_func(self, agent_obj: Any, framework: str, name: str) -> Any:
         """Build the pre-wrapped tool_worker function for a passthrough worker."""
         server_url = self._config.server_url
-        auth_key = self._config.key_id or ""
-        auth_secret = self._config.key_secret or ""
+        auth_key = self._config.auth_key or ""
+        auth_secret = self._config.auth_secret or ""
 
         if framework == "langgraph":
             from agentspan.agents.frameworks.langgraph import make_langgraph_worker
@@ -3793,6 +3798,11 @@ class AgentRuntime:
         if framework in ("langgraph", "langchain"):
             # Build the actual pre-wrapped worker function with server connection info
             # (func was None from serialize_langgraph/serialize_langchain — fill it now)
+            if not workers:
+                raise RuntimeError(
+                    f"Framework serializer returned no workers for '{framework}' agent — "
+                    "cannot register passthrough worker."
+                )
             worker = workers[0]
             worker.func = self._build_passthrough_func(agent_obj, framework, worker.name)
             self._register_passthrough_worker(worker)
