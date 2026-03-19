@@ -42,5 +42,6 @@ class LangGraphNormalizerTest {
 
         assertThat(config.getName()).isEqualTo("langgraph_agent");
         assertThat(config.getTools().get(0).getName()).isEqualTo("langgraph_agent");
+        assertThat(config.getMetadata()).containsEntry("_framework_passthrough", true);
     }
 }
