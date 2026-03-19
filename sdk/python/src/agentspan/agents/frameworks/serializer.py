@@ -87,6 +87,19 @@ def serialize_agent(agent_obj: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
     Returns:
         A tuple of (json_dict, extracted_workers).
     """
+    # LangGraph/LangChain: short-circuit to framework-specific serializer
+    # Note: func=None in returned WorkerInfo — filled by _build_passthrough_func()
+    # in runtime._start_framework() before calling _register_passthrough_worker().
+    framework = detect_framework(agent_obj)
+    if framework == "langgraph":
+        from agentspan.agents.frameworks.langgraph import serialize_langgraph
+
+        return serialize_langgraph(agent_obj)
+    if framework == "langchain":
+        from agentspan.agents.frameworks.langchain import serialize_langchain
+
+        return serialize_langchain(agent_obj)
+
     workers: List[WorkerInfo] = []
     seen: Set[int] = set()  # Prevent infinite recursion on circular refs
 
