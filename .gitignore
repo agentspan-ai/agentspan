@@ -24,3 +24,4 @@ sdk/python/validation/output/
 sdk/python/validation/runs.toml
 node_modules/
 .worktrees
+/ui/dist
