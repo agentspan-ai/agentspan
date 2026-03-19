@@ -21,6 +21,7 @@ import org.conductoross.conductor.ai.models.ToolCall;
 import org.conductoross.conductor.ai.tasks.mapper.AIModelTaskMapper;
 import org.conductoross.conductor.config.AIIntegrationEnabledCondition;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Primary;
 import org.springframework.core.Ordered;
@@ -67,20 +68,27 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
     private static final Set<String> TOOL_TASK_TYPES =
             Set.of(TASK_TYPE_HTTP, TASK_TYPE_SIMPLE, "MCP", "CALL_MCP_TOOL");
 
-    private static final int RECENT_EXCHANGES_TO_KEEP = 5;
     private static final int SUMMARY_TEXT_LIMIT = 200;
     private static final int TOOL_OUTPUT_SUMMARY_LIMIT = 150;
-    private static final double PROACTIVE_CONDENSATION_THRESHOLD = 0.75;
     private static final double CHARS_PER_TOKEN = 3.5;
 
     enum ExchangeType { TOOL_EXCHANGE, ASSISTANT_TEXT, USER_MESSAGE, OTHER }
     record Exchange(List<ChatMessage> messages, ExchangeType type) {}
+
+    @Value("${agentspan.context-condensation.recent-exchanges:5}")
+    private int recentExchangesToKeep;
 
     @Autowired(required = false)
     private ModelContextWindows modelContextWindows;
 
     public AgentChatCompleteTaskMapper() {
         super(ChatCompletion.NAME);
+        this.recentExchangesToKeep = 5; // default; overridden by @Value in Spring context
+    }
+
+    /** Package-private for testing — {@code @Value} is not injected outside of Spring. */
+    void setRecentExchangesToKeep(int n) {
+        this.recentExchangesToKeep = n;
     }
 
     @Override
@@ -339,16 +347,23 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
      */
     private void condenseIfNeeded(ChatCompletion chatCompletion, TaskModel task, WorkflowModel workflow) {
         boolean reactive = previousIterationHitTokenLimit(task, workflow);
-        boolean proactive = false;
-        if (!reactive && modelContextWindows != null) {
+
+        // Always resolve context window so we can warn after condensation even on reactive triggers
+        int contextWindow = 0;
+        int maxTokens = 0;
+        if (modelContextWindows != null) {
             String model = (String) task.getInputData().get("model");
-            OptionalInt contextWindow = modelContextWindows.getContextWindow(model);
-            if (contextWindow.isPresent()) {
+            OptionalInt contextWindowOpt = modelContextWindows.getContextWindow(model);
+            if (contextWindowOpt.isPresent()) {
+                contextWindow = contextWindowOpt.getAsInt();
                 Object maxTokensObj = task.getInputData().get("maxTokens");
-                int maxTokens = maxTokensObj instanceof Number ? ((Number) maxTokensObj).intValue() : 0;
-                proactive = shouldCondenseProactively(chatCompletion, contextWindow.getAsInt(), maxTokens);
+                maxTokens = maxTokensObj instanceof Number ? ((Number) maxTokensObj).intValue() : 0;
             }
         }
+
+        boolean proactive = !reactive && contextWindow > 0
+                && shouldCondenseProactively(chatCompletion, contextWindow, maxTokens);
+
         if (!reactive && !proactive) {
             return;
         }
@@ -380,9 +395,20 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         messages.addAll(initial);
         messages.addAll(condensed);
 
-        String trigger = reactive ? "token limit hit" : "proactive (approaching context window)";
+        String trigger = reactive ? "token limit hit" : "proactive (exceeds context window)";
         log.info("Condensed conversation from {} to {} messages (triggered by {})",
                 initial.size() + history.size(), messages.size(), trigger);
+
+        // Warn if still over budget after condensation — nothing more we can do at this point
+        if (contextWindow > 0) {
+            int inputBudget = contextWindow - Math.max(maxTokens, 0);
+            int afterTokens = estimateTokenCount(chatCompletion);
+            if (afterTokens > inputBudget) {
+                log.warn("Context still exceeds budget after condensation: ~{} tokens estimated vs {} input budget "
+                        + "(contextWindow={}, maxTokens={}). Model may truncate or reject the request.",
+                        afterTokens, inputBudget, contextWindow, maxTokens);
+            }
+        }
     }
 
     /**
@@ -393,10 +419,9 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
     boolean shouldCondenseProactively(ChatCompletion chatCompletion, int contextWindow, int maxTokens) {
         int estimatedTokens = estimateTokenCount(chatCompletion);
         int inputBudget = contextWindow - Math.max(maxTokens, 0);
-        int threshold = (int) (inputBudget * PROACTIVE_CONDENSATION_THRESHOLD);
-        if (estimatedTokens > threshold) {
-            log.info("Proactive condensation: estimated {} tokens > {} threshold ({}% of {} input budget, contextWindow={}, maxTokens={})",
-                    estimatedTokens, threshold, (int) (PROACTIVE_CONDENSATION_THRESHOLD * 100), inputBudget, contextWindow, maxTokens);
+        if (estimatedTokens > inputBudget) {
+            log.info("Proactive condensation: estimated {} tokens exceeds {} input budget (contextWindow={}, maxTokens={})",
+                    estimatedTokens, inputBudget, contextWindow, maxTokens);
             return true;
         }
         return false;
@@ -427,9 +452,13 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
             }
         }
 
-        // Tool definitions
+        // Tool definitions — JSON-serialize for accurate size (toString() gives Java repr, not JSON)
         if (chatCompletion.getTools() != null) {
-            totalChars += chatCompletion.getTools().toString().length();
+            try {
+                totalChars += objectMapper.writeValueAsString(chatCompletion.getTools()).length();
+            } catch (Exception e) {
+                totalChars += chatCompletion.getTools().toString().length();
+            }
         }
 
         // Instructions / system prompt
@@ -470,7 +499,7 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
     List<ChatMessage> condenseHistory(List<ChatMessage> history) {
         List<Exchange> exchanges = groupExchanges(history);
 
-        int keepCount = Math.min(RECENT_EXCHANGES_TO_KEEP, exchanges.size());
+        int keepCount = Math.min(recentExchangesToKeep, exchanges.size());
         int condenseBoundary = exchanges.size() - keepCount;
 
         if (condenseBoundary <= 0) {

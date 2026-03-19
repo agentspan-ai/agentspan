@@ -163,6 +163,9 @@ GROUPS: dict[str, list[str]] = {
         "langgraph/38_state_machine",
         "langgraph/39_tool_call_chain",
         "langgraph/40_agent_as_tool",
+        "langgraph/41_react_agent_basic",
+        "langgraph/42_react_agent_system_prompt",
+        "langgraph/43_react_agent_multi_model",
     ],
     "LANGCHAIN_EXAMPLES": [
         "langchain/01_hello_world",
@@ -195,9 +198,26 @@ GROUPS: dict[str, list[str]] = {
         "langgraph/01_hello_world",
         "langgraph/02_react_with_tools",
         "langgraph/07_system_prompt",
+        "langgraph/41_react_agent_basic",
+        "langgraph/42_react_agent_system_prompt",
         "langchain/01_hello_world",
         "langchain/02_react_with_tools",
         "langchain/08_multi_tool_agent",
+    ],
+    # create_react_agent examples — agentspan vs native comparison
+    # Examples 41 + 42 use OpenAI; 43 uses Anthropic and is in LANGGRAPH_EXAMPLES
+    "CONTEXT_STRESS_TEST": [
+        "68_context_condensation",
+        "langgraph/44_context_condensation",
+    ],
+    "REACT_AGENT_EXAMPLES": [
+        "langgraph/41_react_agent_basic",
+        "langgraph/42_react_agent_system_prompt",
+    ],
+    "REACT_AGENT_ALL": [
+        "langgraph/41_react_agent_basic",
+        "langgraph/42_react_agent_system_prompt",
+        "langgraph/43_react_agent_multi_model",
     ],
 }
 

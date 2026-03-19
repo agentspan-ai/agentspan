@@ -16,7 +16,7 @@ cp validation/runs.toml.example validation/runs.toml
 # 3. Run smoke test (7 examples, ~2 min)
 uv run python3 -m validation.scripts.run_examples \
   --config validation/runs.toml \
-  --run openai-smoke-test
+  --run smoke-test-openai-agentspan
 ```
 
 That's it. Results in `validation/output/run_*/`.
@@ -39,44 +39,57 @@ That's it. Results in `validation/output/run_*/`.
 
 ```bash
 # OpenAI (7 examples)
-uv run python3 -m validation.scripts.run_examples --config validation/runs.toml --run openai-smoke-test
+uv run python3 -m validation.scripts.run_examples --config validation/runs.toml --run smoke-test-openai-agentspan
 
 # Anthropic Claude
-uv run python3 -m validation.scripts.run_examples --config validation/runs.toml --run anthropic-smoke-test
+uv run python3 -m validation.scripts.run_examples --config validation/runs.toml --run smoke-test-anthropic-agentspan
 
 # Claude Sonnet 4.6
-uv run python3 -m validation.scripts.run_examples --config validation/runs.toml --run claude-sonnet-4-6-smoke-test
+uv run python3 -m validation.scripts.run_examples --config validation/runs.toml --run smoke-test-claude-sonnet-4-6-agentspan
 
 # All three + judge comparison
 uv run python3 -m validation.scripts.run_examples --config validation/runs.toml \
-  --run openai-smoke-test,anthropic-smoke-test,claude-sonnet-4-6-smoke-test --judge
+  --run smoke-test-openai-agentspan,smoke-test-anthropic-agentspan,smoke-test-claude-sonnet-4-6-agentspan --judge
 ```
 
 ### Full OpenAI example suite (10 examples)
 
 ```bash
-# Single model
-uv run python3 -m validation.scripts.run_examples --config validation/runs.toml --run openai
-
-# Model comparison with judge
+# Native vs agentspan
 uv run python3 -m validation.scripts.run_examples --config validation/runs.toml \
-  --run openai,anthropic,claude-sonnet-4-6,gpt-5-4 --judge
+  --run openai-native,openai-agentspan --judge
+
+# Multi-model comparison
+uv run python3 -m validation.scripts.run_examples --config validation/runs.toml \
+  --run openai-agentspan,anthropic-agentspan,claude-sonnet-4-6-agentspan,gpt-5-4-agentspan --judge
+```
+
+### create_react_agent (agentspan vs native)
+
+```bash
+# 2 OpenAI examples — agentspan vs native, judged
+uv run python3 -m validation.scripts.run_examples --config validation/runs.toml \
+  --run react-agent-agentspan,react-agent-native --judge
+
+# All 3 examples including the Anthropic one
+uv run python3 -m validation.scripts.run_examples --config validation/runs.toml \
+  --run react-agent-all-agentspan,react-agent-all-native --judge
 ```
 
 ### LangGraph / LangChain
 
 ```bash
-# Quick smoke test (6 examples) — agentspan + native, judged
+# Quick smoke test (8 examples incl. react-agent) — agentspan + native, judged
 uv run python3 -m validation.scripts.run_examples --config validation/runs.toml \
-  --run lc-smoke-test,lc-smoke-test-native --judge
+  --run lc-smoke-test-agentspan,lc-smoke-test-native --judge
 
-# Full LangGraph (40 examples)
+# Full LangGraph (43 examples)
 uv run python3 -m validation.scripts.run_examples --config validation/runs.toml \
-  --run langgraph,langgraph-native --judge
+  --run langgraph-agentspan,langgraph-native --judge
 
 # Full LangChain (25 examples)
 uv run python3 -m validation.scripts.run_examples --config validation/runs.toml \
-  --run langchain,langchain-native --judge
+  --run langchain-agentspan,langchain-native --judge
 ```
 
 ### ADK (Google Gemini)
@@ -88,14 +101,14 @@ uv run python3 -m validation.scripts.run_examples --config validation/runs.toml 
 
 # Full ADK suite (32 examples)
 uv run python3 -m validation.scripts.run_examples --config validation/runs.toml \
-  --run adk,adk-agentspan --judge
+  --run adk-native,adk-agentspan --judge
 ```
 
 ### Preview without running
 
 ```bash
 uv run python3 -m validation.scripts.run_examples --config validation/runs.toml \
-  --run openai-smoke-test --dry-run
+  --run smoke-test-openai-agentspan --dry-run
 ```
 
 ### Judge existing results
@@ -110,26 +123,30 @@ uv run python3 -m validation.scripts.judge_results --run-dir validation/output/r
 
 | Run | Group | Model | Mode |
 |-----|-------|-------|------|
-| `openai` | OPENAI_EXAMPLES (10) | gpt-4o | Agentspan |
-| `agentspan` | OPENAI_EXAMPLES (10) | gpt-4o | Agentspan |
-| `anthropic` | OPENAI_EXAMPLES (10) | claude-sonnet-4-20250514 | Agentspan |
-| `claude-sonnet-4-6` | OPENAI_EXAMPLES (10) | claude-sonnet-4-6 | Agentspan |
-| `gpt-5-4` | OPENAI_EXAMPLES (10) | gpt-5.4 | Agentspan |
-| `openai-smoke-test` | SMOKE_TEST (7) | gpt-4o | Agentspan |
-| `anthropic-smoke-test` | SMOKE_TEST (7) | claude-sonnet-4-20250514 | Agentspan |
-| `claude-sonnet-4-6-smoke-test` | SMOKE_TEST (7) | claude-sonnet-4-6 | Agentspan |
+| `openai-native` | OPENAI_EXAMPLES (10) | gpt-4o | Native |
+| `openai-agentspan` | OPENAI_EXAMPLES (10) | gpt-4o | Agentspan |
+| `anthropic-agentspan` | OPENAI_EXAMPLES (10) | claude-sonnet-4-20250514 | Agentspan |
+| `claude-sonnet-4-6-agentspan` | OPENAI_EXAMPLES (10) | claude-sonnet-4-6 | Agentspan |
+| `gpt-5-4-agentspan` | OPENAI_EXAMPLES (10) | gpt-5.4 | Agentspan |
+| `smoke-test-openai-agentspan` | SMOKE_TEST (7) | gpt-4o | Agentspan |
+| `smoke-test-anthropic-agentspan` | SMOKE_TEST (7) | claude-sonnet-4-20250514 | Agentspan |
+| `smoke-test-claude-sonnet-4-6-agentspan` | SMOKE_TEST (7) | claude-sonnet-4-6 | Agentspan |
 | `adk-hello-native` | ADK_HELLO (1) | gemini-2.5-flash | Native |
 | `adk-hello-agentspan` | ADK_HELLO (1) | gemini-2.5-flash | Agentspan |
-| `adk` | ADK_EXAMPLES (32) | gemini-2.5-flash | Native |
+| `adk-native` | ADK_EXAMPLES (32) | gemini-2.5-flash | Native |
 | `adk-agentspan` | ADK_EXAMPLES (32) | gemini-2.5-flash | Agentspan |
-| `langgraph` | LANGGRAPH_EXAMPLES (40) | gpt-4o-mini | Agentspan |
-| `langgraph-native` | LANGGRAPH_EXAMPLES (40) | gpt-4o-mini | Native |
-| `langchain` | LANGCHAIN_EXAMPLES (25) | gpt-4o-mini | Agentspan |
+| `langgraph-agentspan` | LANGGRAPH_EXAMPLES (43) | gpt-4o-mini | Agentspan |
+| `langgraph-native` | LANGGRAPH_EXAMPLES (43) | gpt-4o-mini | Native |
+| `langchain-agentspan` | LANGCHAIN_EXAMPLES (25) | gpt-4o-mini | Agentspan |
 | `langchain-native` | LANGCHAIN_EXAMPLES (25) | gpt-4o-mini | Native |
-| `lc-smoke-test` | LC_SMOKE_TEST (6) | gpt-4o-mini | Agentspan |
-| `lc-smoke-test-native` | LC_SMOKE_TEST (6) | gpt-4o-mini | Native |
-| `lc-claude-sonnet-4-6` | LC_SMOKE_TEST (6) | claude-sonnet-4-6 | Agentspan |
-| `lc-claude-sonnet-4-6-native` | LC_SMOKE_TEST (6) | claude-sonnet-4-6 | Native |
+| `lc-smoke-test-agentspan` | LC_SMOKE_TEST (8) | gpt-4o-mini | Agentspan |
+| `lc-smoke-test-native` | LC_SMOKE_TEST (8) | gpt-4o-mini | Native |
+| `lc-claude-sonnet-4-6-agentspan` | LC_SMOKE_TEST (8) | claude-sonnet-4-6 | Agentspan |
+| `lc-claude-sonnet-4-6-native` | LC_SMOKE_TEST (8) | claude-sonnet-4-6 | Native |
+| `react-agent-agentspan` | REACT_AGENT_EXAMPLES (2) | gpt-4o-mini | Agentspan |
+| `react-agent-native` | REACT_AGENT_EXAMPLES (2) | gpt-4o-mini | Native |
+| `react-agent-all-agentspan` | REACT_AGENT_ALL (3) | gpt-4o-mini | Agentspan |
+| `react-agent-all-native` | REACT_AGENT_ALL (3) | gpt-4o-mini | Native |
 
 **Agentspan** = runs through Conductor orchestration. **Native** = runs directly via SDK, bypasses Conductor. Pair them with `--judge` to compare.
 
@@ -143,9 +160,11 @@ uv run python3 -m validation.scripts.judge_results --run-dir validation/output/r
 | `OPENAI_EXAMPLES` | 10 | Full OpenAI Agents SDK suite |
 | `ADK_HELLO` | 1 | Single hello-world for ADK debugging |
 | `ADK_EXAMPLES` | 32 | Full Google ADK suite |
-| `LC_SMOKE_TEST` | 6 | 3 LangGraph + 3 LangChain basics |
-| `LANGGRAPH_EXAMPLES` | 40 | Full LangGraph suite |
+| `LC_SMOKE_TEST` | 8 | 5 LangGraph + 3 LangChain basics (incl. react-agent examples) |
+| `LANGGRAPH_EXAMPLES` | 43 | Full LangGraph suite (incl. create_react_agent examples) |
 | `LANGCHAIN_EXAMPLES` | 25 | Full LangChain suite |
+| `REACT_AGENT_EXAMPLES` | 2 | create_react_agent: basic + system prompt (OpenAI) |
+| `REACT_AGENT_ALL` | 3 | create_react_agent: basic + system prompt + multi-model (Anthropic) |
 | `PASSING_EXAMPLES` | 37 | Stable ADK-style examples |
 | `SLOW_EXAMPLES` | 4 | >2 min each (08, 13, 23, 31) |
 | `HITL_EXAMPLES` | 4 | Require stdin input (02, 09, 09b, 09c) |

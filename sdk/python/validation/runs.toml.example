@@ -1,11 +1,12 @@
 # Multi-run validation configuration
 #
 # Each [runs.*] section defines a named run. One run = one model.
+# Naming convention: <suite>-<model>-agentspan | <suite>-<model>-native
 # [defaults] values are merged into every run (run-level overrides win).
 #
 # Usage:
 #   python3 -m validation.scripts.run_examples --config runs.toml
-#   python3 -m validation.scripts.run_examples --config runs.toml --run openai-smoke-test
+#   python3 -m validation.scripts.run_examples --config runs.toml --run smoke-test-openai-agentspan
 #   python3 -m validation.scripts.run_examples --config runs.toml --dry-run
 
 [defaults]
@@ -16,8 +17,8 @@ retries = 0            # retry count on failure
 server_url = "http://localhost:8080/api"
 
 [judge]
-baseline_run = "openai"   # run name to use as comparison baseline
-model = "gpt-4o-mini"           # LLM model for judging
+baseline_run = "openai-native"   # run name to use as comparison baseline
+model = "gpt-4o-mini"            # LLM model for judging
 max_output_chars = 3000          # truncate outputs before judging
 max_tokens = 300                 # max tokens for judge response
 rate_limit = 0.5                 # seconds between judge calls
@@ -26,27 +27,34 @@ max_calls = 0                    # 0 = unlimited
 [display]
 max_example_rows = 40       # max example rows shown in live progress (default: 40)
 
-# ── Runs ─────────────────────────────────────────────────────────────────
+# ── OpenAI Agents SDK ─────────────────────────────────────────────────────
 
-[runs.openai]
+[runs.openai-native]
+group = "OPENAI_EXAMPLES"
+model = "openai/gpt-4o"
+native = true
+
+[runs.openai-agentspan]
 group = "OPENAI_EXAMPLES"
 model = "openai/gpt-4o"
 
-[runs.anthropic]
+[runs.anthropic-agentspan]
 group = "OPENAI_EXAMPLES"
 model = "anthropic/claude-sonnet-4-20250514"
 
-[runs.openai-smoke-test]
+# ── Smoke tests ───────────────────────────────────────────────────────────
+
+[runs.smoke-test-openai-agentspan]
 group = "SMOKE_TEST"
 model = "openai/gpt-4o"
 
-[runs.anthropic-smoke-test]
+[runs.smoke-test-anthropic-agentspan]
 group = "SMOKE_TEST"
 model = "anthropic/claude-sonnet-4-20250514"
 
 # ── LangGraph / LangChain runs ────────────────────────────────────────────
 
-[runs.langgraph]
+[runs.langgraph-agentspan]
 group = "LANGGRAPH_EXAMPLES"
 model = "openai/gpt-4o-mini"
 
@@ -55,7 +63,7 @@ group = "LANGGRAPH_EXAMPLES"
 model = "openai/gpt-4o-mini"
 native = true
 
-[runs.langchain]
+[runs.langchain-agentspan]
 group = "LANGCHAIN_EXAMPLES"
 model = "openai/gpt-4o-mini"
 
@@ -64,12 +72,23 @@ group = "LANGCHAIN_EXAMPLES"
 model = "openai/gpt-4o-mini"
 native = true
 
-[runs.lc-smoke-test]
+[runs.lc-smoke-test-agentspan]
 group = "LC_SMOKE_TEST"
 model = "openai/gpt-4o-mini"
 
 [runs.lc-smoke-test-native]
 group = "LC_SMOKE_TEST"
+model = "openai/gpt-4o-mini"
+native = true
+
+# ── create_react_agent ────────────────────────────────────────────────────
+
+[runs.react-agent-agentspan]
+group = "REACT_AGENT_EXAMPLES"
+model = "openai/gpt-4o-mini"
+
+[runs.react-agent-native]
+group = "REACT_AGENT_EXAMPLES"
 model = "openai/gpt-4o-mini"
 native = true
 

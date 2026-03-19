@@ -8,6 +8,7 @@ package dev.agentspan.runtime.ai;
 import org.conductoross.conductor.ai.models.ChatCompletion;
 import org.conductoross.conductor.ai.models.ChatMessage;
 import org.conductoross.conductor.ai.models.ToolCall;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
@@ -23,11 +24,18 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.*;
 
 /**
- * Tests for the SUB_WORKFLOW result extraction logic in AgentChatCompleteTaskMapper.
+ * Tests for AgentChatCompleteTaskMapper.
  */
 class AgentChatCompleteTaskMapperTest {
 
     private final AgentChatCompleteTaskMapper mapper = new AgentChatCompleteTaskMapper();
+
+    @BeforeEach
+    void setUp() {
+        // @Value("${...}") is not injected outside of Spring; the constructor already sets 5,
+        // but be explicit so tests are self-documenting.
+        mapper.setRecentExchangesToKeep(5);
+    }
 
     @Test
     void testExtractSubWorkflowResult_extractsResultField() throws Exception {
@@ -406,32 +414,135 @@ class AgentChatCompleteTaskMapperTest {
     @Test
     void testShouldCondenseProactively_aboveThreshold() {
         ChatCompletion cc = new ChatCompletion();
-        // 500K chars / 3.5 = ~142K tokens. 75% of 128K = 96K. 142K > 96K → should condense
+        // 500K chars / 3.5 = ~142K tokens. Input budget = 128K. 142K > 128K → should condense
         cc.getMessages().add(new ChatMessage(ChatMessage.Role.assistant, "x".repeat(500_000)));
         assertThat(mapper.shouldCondenseProactively(cc, 128_000, 0)).isTrue();
     }
 
     @Test
-    void testShouldCondenseProactively_exactlyAtThreshold() {
+    void testShouldCondenseProactively_exactlyAtBudget() {
         ChatCompletion cc = new ChatCompletion();
-        // 75% of 128K = 96K tokens. 96K * 3.5 = 336K chars. At threshold → should NOT condense
-        cc.getMessages().add(new ChatMessage(ChatMessage.Role.assistant, "x".repeat(336_000)));
+        // 128K tokens * 3.5 chars/token = 448K chars. Exactly at budget → should NOT condense (strict >)
+        cc.getMessages().add(new ChatMessage(ChatMessage.Role.assistant, "x".repeat(448_000)));
         assertThat(mapper.shouldCondenseProactively(cc, 128_000, 0)).isFalse();
+
+        // One token over budget → should condense
+        ChatCompletion cc2 = new ChatCompletion();
+        cc2.getMessages().add(new ChatMessage(ChatMessage.Role.assistant, "x".repeat(448_004))); // +4 chars = +1 token
+        assertThat(mapper.shouldCondenseProactively(cc2, 128_000, 0)).isTrue();
     }
 
     @Test
     void testShouldCondenseProactively_accountsForMaxTokens() {
         ChatCompletion cc = new ChatCompletion();
-        // 200K chars / 3.5 = ~57K tokens. Input budget = 200K - 60K = 140K. 75% of 140K = 105K.
-        // 57K < 105K → should NOT condense
+        // 200K chars / 3.5 = ~57K tokens. Input budget = 200K - 60K = 140K.
+        // 57K < 140K → should NOT condense
         cc.getMessages().add(new ChatMessage(ChatMessage.Role.assistant, "x".repeat(200_000)));
         assertThat(mapper.shouldCondenseProactively(cc, 200_000, 60_000)).isFalse();
 
-        // 600K chars / 3.5 = ~171K tokens. Input budget = 200K - 60K = 140K. 75% of 140K = 105K.
-        // 171K > 105K → should condense
+        // 600K chars / 3.5 = ~171K tokens. Input budget = 200K - 60K = 140K.
+        // 171K > 140K → should condense
         ChatCompletion cc2 = new ChatCompletion();
         cc2.getMessages().add(new ChatMessage(ChatMessage.Role.assistant, "x".repeat(600_000)));
         assertThat(mapper.shouldCondenseProactively(cc2, 200_000, 60_000)).isTrue();
+    }
+
+    // ── Multi-round condensation tests ───────────────────────────────
+
+    /**
+     * Verifies that condensation can be applied three times in succession.
+     *
+     * Simulates the server-side loop:
+     *   1. Agent accumulates many exchanges → condensation 1 fires
+     *   2. Agent continues, accumulates more → condensation 2 fires
+     *   3. Agent continues again → condensation 3 fires
+     *
+     * Each round: feed condensed output + 10 new messages back into condenseHistory().
+     */
+    @Test
+    void testCondensation_threeCycles() {
+        // ── Round 1: 12 exchanges ──────────────────────────────────────────────
+        List<ChatMessage> history1 = buildToolExchanges(12);
+        List<ChatMessage> after1 = mapper.condenseHistory(history1);
+
+        // 1 summary + 5 recent exchanges (2 msgs each) = 11
+        assertThat(after1.get(0).getMessage()).contains("[Earlier conversation condensed]");
+        assertThat(after1.get(0).getMessage()).contains("7 tool exchange(s)"); // 12 - 5 condensed
+        int sizeAfter1 = after1.size();
+        assertThat(sizeAfter1).isLessThan(history1.size());
+
+        // ── Round 2: condensed output + 10 new exchanges ──────────────────────
+        List<ChatMessage> history2 = new ArrayList<>(after1);
+        history2.addAll(buildToolExchanges(10));
+        List<ChatMessage> after2 = mapper.condenseHistory(history2);
+
+        assertThat(after2.get(0).getMessage()).contains("[Earlier conversation condensed]");
+        assertThat(after2.size()).isLessThan(history2.size());
+
+        // ── Round 3: condensed output + 10 more new exchanges ─────────────────
+        List<ChatMessage> history3 = new ArrayList<>(after2);
+        history3.addAll(buildToolExchanges(10));
+        List<ChatMessage> after3 = mapper.condenseHistory(history3);
+
+        assertThat(after3.get(0).getMessage()).contains("[Earlier conversation condensed]");
+        assertThat(after3.size()).isLessThan(history3.size());
+        // Three consecutive condensation cycles must always converge to ≤ keepRecent exchanges + summary
+        assertThat(after3.size()).isLessThanOrEqualTo(1 + 5 * 2); // summary + 5 tool exchanges (2 msgs each)
+    }
+
+    @Test
+    void testCondensation_recentExchangesConfigurable() {
+        // Reconfigure to keep only 2 exchanges instead of 5
+        mapper.setRecentExchangesToKeep(2);
+
+        List<ChatMessage> history = buildToolExchanges(10); // 10 exchanges
+        List<ChatMessage> result = mapper.condenseHistory(history);
+
+        // Should keep: 1 summary + 2 recent exchanges (2 msgs each) = 5
+        assertThat(result.get(0).getMessage()).contains("[Earlier conversation condensed]");
+        assertThat(result.get(0).getMessage()).contains("8 tool exchange(s)"); // 10 - 2 condensed
+        assertThat(result.size()).isEqualTo(5); // 1 summary + 2 * 2
+    }
+
+    @Test
+    void testCondensation_stillOverBudgetAfterCondensation() {
+        // Even after condensing to 5 recent exchanges, a tiny context window
+        // may still be over budget. shouldCondenseProactively returns true for both
+        // the large and the condensed version — the post-condensation warning path.
+        ChatCompletion large = new ChatCompletion();
+        large.getMessages().addAll(buildToolExchanges(30)); // very large history
+
+        // Extremely small context window — 200 tokens
+        assertThat(mapper.shouldCondenseProactively(large, 200, 0)).isTrue();
+
+        // Even after condensation, the 5 kept exchanges would still exceed 200 tokens
+        List<ChatMessage> condensed = mapper.condenseHistory(large.getMessages());
+        ChatCompletion afterCondensation = new ChatCompletion();
+        afterCondensation.getMessages().addAll(condensed);
+        assertThat(mapper.shouldCondenseProactively(afterCondensation, 200, 0)).isTrue();
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────
+
+    /**
+     * Build {@code n} tool exchanges (tool_call + tool_result message pairs),
+     * each with a ~300-char tool output to simulate realistic context growth.
+     */
+    private List<ChatMessage> buildToolExchanges(int n) {
+        List<ChatMessage> messages = new ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            ChatMessage toolCallMsg = new ChatMessage();
+            toolCallMsg.setRole(ChatMessage.Role.tool_call);
+            toolCallMsg.setToolCalls(List.of(
+                    ToolCall.builder().name("search").taskReferenceName("search_" + i).build()
+            ));
+            messages.add(toolCallMsg);
+
+            String output = "Search result for query " + i + ": " + "x".repeat(280); // ~300 chars total
+            messages.add(new ChatMessage(ChatMessage.Role.tool,
+                    ToolCall.builder().name("search").output(Map.of("result", output)).build()));
+        }
+        return messages;
     }
 
     // Use reflection to test private methods
