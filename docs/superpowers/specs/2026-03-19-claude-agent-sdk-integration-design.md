@@ -161,15 +161,20 @@ def make_claude_worker(agent_config, session_client, event_client, conductor_cli
             return {}
 
         async def subagent_start_hook(input_data, tool_use_id, context):
+            # Fires for native SDK subagents (Tier 1 passthrough, or Tier 2 when
+            # conductor_subagents=False). The SDK provides agent_id and agent_type.
+            # No subWorkflowId is available here — this is an in-process subagent.
             await event_client.push(workflow_id, "subagent_start", {
                 "agentId": input_data.get("agent_id"),
                 "agentType": input_data.get("agent_type"),
+                "subWorkflowId": None,  # native subagent; no Conductor workflow
             })
             return {}
 
         async def subagent_stop_hook(input_data, tool_use_id, context):
             await event_client.push(workflow_id, "subagent_stop", {
                 "agentId": input_data.get("agent_id"),
+                "subWorkflowId": None,
             })
             return {}
 
@@ -181,6 +186,11 @@ def make_claude_worker(agent_config, session_client, event_client, conductor_cli
         }
 
         if agent_config.get("conductor_subagents") and conductor_client:
+            # Tier 2: intercept Agent tool and route to Conductor.
+            # When conductor_subagents=True, the SubagentStart/SubagentStop hooks above
+            # will NOT fire for Agent-tool invocations (they are denied before spawning).
+            # subagent_start/subagent_stop events for Conductor-routed subagents are
+            # pushed by make_subagent_hook below with the actual subWorkflowId populated.
             subagent_hook = make_subagent_hook(conductor_client, event_client, workflow_id, cwd, agent_config)
             hooks["PreToolUse"].append(HookMatcher(matcher="Agent", hooks=[subagent_hook]))
 
@@ -193,6 +203,7 @@ def make_claude_worker(agent_config, session_client, event_client, conductor_cli
                     allowed_tools=agent_config.get("allowed_tools", []),
                     max_turns=agent_config.get("max_turns", 100),
                     resume=session_id,
+                    system_prompt=agent_config.get("system_prompt"),  # None → SDK uses default
                     hooks=hooks,
                 ),
             ):
@@ -480,6 +491,17 @@ class AgentspanTransport(Transport):
         pass  # nothing to connect to
 
     async def write(self, data: str) -> None:
+        """
+        Called by the SDK to send a message to the transport.
+
+        Lifecycle: the SDK calls write() once with the initial user prompt, then
+        reads messages until the result sentinel. For a single query() invocation,
+        write() is called exactly once. AgentspanTransport is NOT reusable across
+        multiple query() calls — create a new instance per query.
+
+        Other message types (e.g., SDK system initialization) are intentionally
+        ignored; only "user" messages trigger the agentic loop.
+        """
         msg = json.loads(data)
         if msg["type"] == "user":
             # New user prompt received — start the agentic loop
@@ -487,6 +509,15 @@ class AgentspanTransport(Transport):
             await self._run_turn()
 
     def read_messages(self) -> AsyncIterator[dict]:
+        """
+        Returns an async generator that yields messages until the sentinel.
+
+        read_messages() is a plain synchronous method (not async def) that returns
+        an AsyncIterator. This is consistent with the Transport ABC. Calling
+        self._drain_queue() returns the async generator object synchronously;
+        the SDK iterates it with `async for`. Verified: Transport ABC declares
+        read_messages() as `def`, not `async def`.
+        """
         return self._drain_queue()
 
     def _get_tool_schemas(self) -> list:
@@ -494,18 +525,33 @@ class AgentspanTransport(Transport):
         allowed = set(self._agent_config.get("allowed_tools", []))
         return [schema for name, schema in _TOOL_SCHEMAS.items() if name in allowed]
 
+    # Models that support adaptive thinking (Anthropic API parameter)
+    _ADAPTIVE_THINKING_MODELS = {"claude-opus-4-6", "claude-sonnet-4-6"}
+
     async def _run_turn(self) -> None:
         while True:
             # LLM call via Anthropic Messages API
-            # thinking: {"type": "adaptive"} requires claude-opus-4-6 or claude-sonnet-4-6
             model = self._agent_config.get("model", "claude-opus-4-6")
-            response = await self._client.messages.create(
-                model=model,
-                max_tokens=self._agent_config.get("max_tokens", 8192),
-                messages=self._conversation,
-                tools=self._get_tool_schemas(),
-                thinking={"type": "adaptive"},  # Opus 4.6 / Sonnet 4.6 only; omit for older models
+
+            # thinking: {"type": "adaptive"} is only valid for Opus/Sonnet 4.6.
+            # For other models, omit the parameter entirely.
+            thinking_param = (
+                {"thinking": {"type": "adaptive"}}
+                if model in self._ADAPTIVE_THINKING_MODELS
+                else {}
             )
+
+            create_kwargs = {
+                "model": model,
+                "max_tokens": self._agent_config.get("max_tokens", 8192),
+                "messages": self._conversation,
+                "tools": self._get_tool_schemas(),
+                **thinking_param,
+            }
+            if self._agent_config.get("system_prompt"):
+                create_kwargs["system"] = self._agent_config["system_prompt"]
+
+            response = await self._client.messages.create(**create_kwargs)
             self._turn_count += 1
 
             # Serialize content blocks for the stream-json protocol.
@@ -908,11 +954,11 @@ The existing `_fw_` prefix check on `taskReferenceName` already suppresses spuri
 `AgentService.pushFrameworkEvent()` currently handles: `thinking`, `tool_call`, `tool_result`, `context_condensed`. The `subagent_start` and `subagent_stop` events pushed by Claude workers and the Transport will be **silently dropped** unless this method is extended.
 
 **Required changes to `AgentService.java`:**
-1. Add `case "subagent_start":` → `AgentSSEEvent.subagentStart(workflowId, payload.get("subWorkflowId"), payload.get("prompt"))`
-2. Add `case "subagent_stop":` → `AgentSSEEvent.subagentStop(workflowId, payload.get("subWorkflowId"), payload.get("result"))`
+1. Add `case "subagent_start":` handler that extracts `subWorkflowId` (Tier 2 / Tier 3) or `agentId` (Tier 1 native subagent) — use whichever is non-null for the display identifier. Call `AgentSSEEvent.subagentStart(workflowId, identifier, payload.get("prompt"))`.
+2. Add `case "subagent_stop":` handler — same identifier extraction. Call `AgentSSEEvent.subagentStop(workflowId, identifier, payload.get("result"))`.
 
 **Required changes to `AgentSSEEvent.java` (or equivalent factory class):**
-Add factory methods `subagentStart(...)` and `subagentStop(...)` returning the appropriate SSE event objects.
+Add factory methods `subagentStart(String workflowId, String subagentIdentifier, String prompt)` and `subagentStop(String workflowId, String subagentIdentifier, String result)` returning the appropriate SSE event objects.
 
 Wire `AgentSessionService` dependency for session CRUD and cleanup on workflow deletion events.
 
@@ -924,15 +970,21 @@ Events pushed by the worker (Tier 1/2) or Transport (Tier 3) to `POST /api/agent
 
 **Event payload field names match what `AgentService.pushFrameworkEvent()` reads:** `toolName`, `args`, `result`, `subWorkflowId` (not `tool`, `input`, `output`, `sub_workflow_id`).
 
-| SDK event / Transport moment | Agentspan SSE event | Payload |
+**There are two sources of subagent events with different payloads:**
+
+| Source | SSE event | Payload |
 |---|---|---|
-| `PreToolUse` fires for any tool | `tool_call` | `{toolName, args}` |
+| `PreToolUse` fires for any non-Agent tool | `tool_call` | `{toolName, args}` |
 | `PostToolUse` fires for any tool | `tool_result` | `{toolName, result}` |
-| `SubagentStart` / start of subagent workflow | `subagent_start` | `{subWorkflowId, prompt}` |
-| `SubagentStop` / completion of subagent workflow | `subagent_stop` | `{subWorkflowId, result}` |
+| SDK `SubagentStart` hook (Tier 1 / native subagent) | `subagent_start` | `{agentId, agentType, subWorkflowId: null}` |
+| SDK `SubagentStop` hook (Tier 1 / native subagent) | `subagent_stop` | `{agentId, subWorkflowId: null}` |
+| Tier 2 `make_subagent_hook` (Conductor-routed subagent) | `subagent_start` | `{subWorkflowId, prompt, agentId: null}` |
+| Tier 2 `make_subagent_hook` (Conductor-routed subagent) | `subagent_stop` | `{subWorkflowId, result, agentId: null}` |
 | Conductor workflow → COMPLETED | `done` (fired by existing `AgentEventListener`, same as all agents) | — |
 
-Tier 3 pushes the same events directly from `AgentspanTransport` (since SDK hooks don't fire when Transport replaces the CLI).
+`AgentService.pushFrameworkEvent()` must handle both payload shapes for `subagent_start`/`subagent_stop`: use `subWorkflowId` when non-null, fall back to `agentId` for display.
+
+Tier 3 pushes the same events directly from `AgentspanTransport` (since SDK hooks don't fire when Transport replaces the CLI). Tier 3 subagent events always use the Conductor-routed shape (with `subWorkflowId`).
 
 ---
 
@@ -963,7 +1015,7 @@ Tier 3 pushes the same events directly from `AgentspanTransport` (since SDK hook
 | `frameworks/claude_builtin_workers.py` | **New** — 8 built-in tool workers (`claude_builtin_*`), single-file, `AgentRuntime.start()` entrypoint |
 | `frameworks/serializer.py` | **Modified** — add `ClaudeCodeAgent` to `detect_framework()` and `serialize_agent()` dispatch |
 | `frameworks/__init__.py` | **Modified** — export `ClaudeCodeAgent` |
-| `runtime/runtime.py` | **Modified** — add `_register_passthrough_worker()` branch for claude framework |
+| `runtime/runtime.py` | **Modified** — two changes: (1) in `_start_framework()` and `_start_framework_async()`, extend the existing `if framework in ("langgraph", "langchain"):` guard to also include `"claude"` so it calls `_register_passthrough_worker()` instead of `_register_framework_workers()`; (2) in `_build_passthrough_func()`, add `elif framework == "claude":` branch that calls `make_claude_worker(agent_config, session_client, event_client, conductor_client)` |
 
 ### Java Server (`server/src/main/java/dev/agentspan/runtime/`)
 
@@ -997,7 +1049,7 @@ Tier 3 pushes the same events directly from `AgentspanTransport` (since SDK hook
 
 8. **Session file path encoding**: The exact URL-encoding scheme used by the Claude CLI must be verified empirically before the session restore feature ships. A mismatch causes silent session loss (treated as fresh start). The glob-based `find_session_file()` mitigates read-side risk but the write-side (restore to worker) requires correct path derivation.
 
-9. **Adaptive thinking model requirement**: `thinking: {"type": "adaptive"}` in `AgentspanTransport` requires `claude-opus-4-6` or `claude-sonnet-4-6`. If the user configures an older model, omit the `thinking` parameter or use `{"type": "enabled", "budget_tokens": N}` instead. The implementation should guard on model version.
+9. **Adaptive thinking model requirement**: `thinking: {"type": "adaptive"}` requires `claude-opus-4-6` or `claude-sonnet-4-6`. `AgentspanTransport._run_turn()` guards on `_ADAPTIVE_THINKING_MODELS` and omits the parameter for other models. If a user configures an older model, thinking is silently disabled.
 
 ---
 
