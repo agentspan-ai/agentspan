@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import csv
 import hashlib
 import json
 import os
@@ -13,17 +12,6 @@ from .config import SCRIPT_DIR
 from .models import SingleResult
 
 OUTPUT_DIR = SCRIPT_DIR / "output"
-
-
-def load_last_run() -> dict:
-    """Load report.json from the latest run via output/latest symlink."""
-    latest = OUTPUT_DIR / "latest" / "report.json"
-    if latest.exists():
-        try:
-            return json.loads(latest.read_text())
-        except (json.JSONDecodeError, OSError):
-            pass
-    return {}
 
 
 def save_last_run(data: dict, lock: threading.Lock | None = None) -> None:
@@ -76,21 +64,17 @@ def update_last_run_single(
 
 
 def completed_examples_single(run_dir: Path) -> set[str]:
-    """Return completed example names (no provider suffix)."""
-    outputs_dir = run_dir / "outputs"
-    if not outputs_dir.exists():
+    """Return completed example names from run_results.json."""
+    json_path = run_dir / "run_results.json"
+    if not json_path.exists():
         return set()
-    completed = set()
-    csv_path = run_dir / "results.csv"
-    if csv_path.exists():
-        with open(csv_path) as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                name = row.get("example", "")
-                safe_name = name.replace("/", "_")
-                if (outputs_dir / f"{safe_name}.txt").exists():
-                    completed.add(name)
-    return completed
+    try:
+        data = json.loads(json_path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return set()
+    return {
+        name for name, ex in data.get("examples", {}).items() if ex.get("status") == "COMPLETED"
+    }
 
 
 def failed_examples_single(last_run: dict) -> set[str]:

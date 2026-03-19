@@ -2,30 +2,15 @@
 
 from __future__ import annotations
 
-import csv
 import json
-import re
 import time
 from pathlib import Path
 
 from ..config import Settings
-from ..parsing import AGENT_OUTPUT_RE, extract_prompt
+from ..parsing import extract_prompt
 from ..persistence import compute_output_hash
 from ..toml_config import JudgeConfig
 from .llm import JudgeState, judge_comparison, judge_individual
-
-
-def _load_single_output(outputs_dir: Path, example_name: str) -> str:
-    """Load raw output from single-model output file (no provider suffix)."""
-    safe_name = example_name.replace("/", "_")
-    path = outputs_dir / f"{safe_name}.txt"
-    if not path.exists():
-        return ""
-    text = path.read_text()
-    m = re.search(r"=== STDOUT ===\n(.*?)(?:\n\n=== STDERR ===|\Z)", text, re.DOTALL)
-    stdout = m.group(1).strip() if m else text
-    output_match = AGENT_OUTPUT_RE.search(stdout)
-    return output_match.group(1).strip() if output_match else stdout[:2000]
 
 
 def judge_across_runs(
@@ -41,10 +26,10 @@ def judge_across_runs(
     settings.judge_rate_limit = judge_config.rate_limit
     settings.judge_max_calls = judge_config.max_calls
 
-    # Discover runs
+    # Discover runs (require run_results.json)
     run_dirs: dict[str, Path] = {}
     for d in sorted(parent_dir.iterdir()):
-        if d.is_dir() and (d / "results.csv").exists():
+        if d.is_dir() and (d / "run_results.json").exists():
             run_dirs[d.name] = d
 
     if len(run_dirs) < 1:
@@ -57,13 +42,11 @@ def judge_across_runs(
     if baseline_name and baseline_name not in run_dirs:
         baseline_name = None
 
-    # Load examples per run
+    # Load examples per run from run_results.json
     run_examples: dict[str, dict[str, dict]] = {}
     for name, rd in run_dirs.items():
-        csv_path = rd / "results.csv"
-        with open(csv_path) as f:
-            rows = list(csv.DictReader(f))
-        run_examples[name] = {row["example"]: row for row in rows}
+        data = json.loads((rd / "run_results.json").read_text())
+        run_examples[name] = data.get("examples", {})
 
     all_example_names = sorted({name for examples in run_examples.values() for name in examples})
 
@@ -71,8 +54,8 @@ def judge_across_runs(
     judge_dir = parent_dir / "judge"
     judge_dir.mkdir(exist_ok=True)
 
-    # Load previous judge data for caching
-    prev_judge_path = judge_dir / "report.json"
+    # Load previous judge data for caching (judge_results.json)
+    prev_judge_path = judge_dir / "judge_results.json"
     prev_judge: dict = {}
     if prev_judge_path.exists():
         try:
@@ -124,8 +107,19 @@ def judge_across_runs(
 
     elapsed = time.monotonic() - start_time
 
-    # Save cache
-    prev_judge_path.write_text(json.dumps(prev_judge, indent=2))
+    # Build judge_results.json (output + cache)
+    judge_results = {
+        "baseline_run": baseline_name,
+        "runs": run_names,
+        "judge_model": settings.judge_model,
+        "judge_duration_s": round(elapsed, 1),
+        "judge_calls": state.call_count,
+        "cache_hits": state.cache_hits,
+        "input_tokens": state.input_tokens,
+        "output_tokens": state.output_tokens,
+        "examples": prev_judge.get("examples", {}),
+    }
+    prev_judge_path.write_text(json.dumps(judge_results, indent=2))
 
     # Build meta
     meta = {
@@ -140,7 +134,7 @@ def judge_across_runs(
     }
     (judge_dir / "meta.json").write_text(json.dumps(meta, indent=2))
 
-    # Write results
+    # Write reports
     if judge_rows:
         from .reports import _write_outputs
 
@@ -162,7 +156,7 @@ def judge_across_runs(
         )
         if state.input_tokens or state.output_tokens:
             print(f"  Tokens: {state.input_tokens:,} in / {state.output_tokens:,} out")
-        print(f"  Results: {judge_dir / 'results.csv'}")
+        print(f"  Results: {judge_dir / 'judge_results.json'}")
 
 
 def _judge_example(
@@ -181,10 +175,10 @@ def _judge_example(
     row: dict = {"example": example_name}
 
     prev_entry = prev_judge.get("examples", {}).get(example_name, {})
-    prev_hashes = prev_entry.get("output_hashes", {})
-    prev_scores = prev_entry.get("judge_scores", {})
+    prev_runs = prev_entry.get("runs", {})
     current_hashes: dict[str, str] = {}
     current_scores: dict[str, int] = {}
+    current_reasons: dict[str, str] = {}
 
     for run_name in run_names:
         ex_data = run_examples.get(run_name, {}).get(example_name)
@@ -193,17 +187,19 @@ def _judge_example(
             row[f"{run_name}_reason"] = ""
             continue
 
-        outputs_dir = run_dirs[run_name] / "outputs"
-        output = _load_single_output(outputs_dir, example_name)
+        output = ex_data.get("output_text", "")
         output_hash = compute_output_hash(output)
         current_hashes[run_name] = output_hash
 
         # Cache check
-        if prev_hashes.get(run_name) == output_hash and prev_scores.get(run_name):
-            cached_score = int(prev_scores[run_name])
-            row[f"{run_name}_score"] = cached_score
-            row[f"{run_name}_reason"] = "cached"
-            current_scores[run_name] = cached_score
+        prev_run = prev_runs.get(run_name, {})
+        if prev_run.get("output_hash") == output_hash and prev_run.get("score"):
+            score = int(prev_run["score"])
+            reason = prev_run.get("reason", "cached")
+            row[f"{run_name}_score"] = score
+            row[f"{run_name}_reason"] = reason
+            current_scores[run_name] = score
+            current_reasons[run_name] = reason
             state.cache_hits += 1
             continue
 
@@ -217,13 +213,14 @@ def _judge_example(
         row[f"{run_name}_score"] = score
         row[f"{run_name}_reason"] = reason
         current_scores[run_name] = score
+        current_reasons[run_name] = reason
         state.call_count += 1
 
     # Baseline comparison
     if baseline_name and baseline_name in run_examples:
         baseline_data = run_examples[baseline_name].get(example_name)
         if baseline_data and baseline_data.get("status") == "COMPLETED":
-            baseline_output = _load_single_output(run_dirs[baseline_name] / "outputs", example_name)
+            baseline_output = run_examples[baseline_name][example_name].get("output_text", "")
             for run_name in run_names:
                 if run_name == baseline_name:
                     continue
@@ -235,7 +232,7 @@ def _judge_example(
                 if state.call_count > 0 and judge_config.rate_limit > 0:
                     time.sleep(judge_config.rate_limit)
 
-                candidate_output = _load_single_output(run_dirs[run_name] / "outputs", example_name)
+                candidate_output = run_examples[run_name][example_name].get("output_text", "")
                 bscore, breason = judge_comparison(
                     settings, prompt, baseline_output, candidate_output, state=state
                 )
@@ -243,9 +240,19 @@ def _judge_example(
                 row[f"{run_name}_vs_{baseline_name}_reason"] = breason
                 state.call_count += 1
 
-    prev_judge.setdefault("examples", {})[example_name] = {
-        "output_hashes": current_hashes,
-        "judge_scores": current_scores,
-    }
+    # Update cache in new format
+    example_entry = prev_judge.setdefault("examples", {}).setdefault(example_name, {})
+    example_entry["prompt"] = prompt
+    runs_entry = example_entry.setdefault("runs", {})
+    for run_name in current_hashes:
+        run_entry = runs_entry.setdefault(run_name, {})
+        run_entry["output_hash"] = current_hashes[run_name]
+        run_entry["score"] = current_scores.get(run_name, 0)
+        run_entry["reason"] = current_reasons.get(run_name, "")
+        if baseline_name and run_name != baseline_name:
+            vs_key = f"{run_name}_vs_{baseline_name}"
+            if vs_key in row:
+                run_entry["vs_baseline_score"] = row[vs_key]
+                run_entry["vs_baseline_reason"] = row.get(f"{vs_key}_reason", "")
 
     return row

@@ -1,42 +1,21 @@
-"""Judge report writing: CSV, markdown, HTML."""
+"""Judge report writing: markdown, HTML."""
 
 from __future__ import annotations
 
-import csv
 import json
 from pathlib import Path
 
-from ..reporting import generate_cross_html_report
-from .cross import _load_single_output
+from ..reporting import generate_judge_html_report
 
 
 def _write_outputs(
     judge_dir, judge_rows, run_names, baseline_name, run_examples, run_dirs, meta, elapsed
 ):
-    """Write CSV, markdown, and HTML reports."""
-    columns = ["example"]
-    for run_name in run_names:
-        columns.extend([f"{run_name}_score", f"{run_name}_reason"])
-    if baseline_name:
-        for run_name in run_names:
-            if run_name != baseline_name:
-                columns.extend(
-                    [
-                        f"{run_name}_vs_{baseline_name}",
-                        f"{run_name}_vs_{baseline_name}_reason",
-                    ]
-                )
-
-    csv_path = judge_dir / "results.csv"
-    with open(csv_path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=columns, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(judge_rows)
-
+    """Write markdown and HTML reports."""
     report_path = judge_dir / "report.md"
     _write_judge_report(report_path, judge_rows, run_names, baseline_name, elapsed)
 
-    # Load raw outputs for HTML
+    # Collect raw outputs from run_results.json data
     raw_outputs: dict[str, dict[str, str]] = {}
     for row in judge_rows:
         example = row["example"]
@@ -44,7 +23,7 @@ def _write_outputs(
         for rn in run_names:
             ex_data = run_examples.get(rn, {}).get(example)
             if ex_data and ex_data.get("status") == "COMPLETED":
-                raw_outputs[example][rn] = _load_single_output(run_dirs[rn] / "outputs", example)
+                raw_outputs[example][rn] = ex_data.get("output_text", "")
 
     # Load per-run metadata
     run_meta_data: dict[str, dict] = {}
@@ -57,7 +36,7 @@ def _write_outputs(
                 pass
 
     html_path = judge_dir / "report.html"
-    generate_cross_html_report(
+    generate_judge_html_report(
         judge_rows,
         html_path,
         run_names=run_names,
