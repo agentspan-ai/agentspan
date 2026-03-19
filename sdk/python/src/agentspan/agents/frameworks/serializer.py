@@ -14,7 +14,8 @@ from __future__ import annotations
 import enum
 import inspect
 import logging
-from dataclasses import dataclass, fields as dc_fields, is_dataclass
+from dataclasses import dataclass, is_dataclass
+from dataclasses import fields as dc_fields
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger("agentspan.agents.frameworks")
@@ -25,22 +26,34 @@ logger = logging.getLogger("agentspan.agents.frameworks")
 # Maps module name prefixes to framework identifiers.
 # Adding a new framework = adding one line here.
 _FRAMEWORK_DETECTION: Dict[str, str] = {
-    "agents": "openai",            # openai-agents package
-    "google.adk": "google_adk",    # google-adk package
+    "agents": "openai",  # openai-agents package
+    "google.adk": "google_adk",  # google-adk package
 }
 
 
 def detect_framework(agent_obj: Any) -> Optional[str]:
-    """Detect the agent framework from the object's module.
+    """Detect the agent framework from the object's type name and module.
 
-    Returns the framework identifier (e.g. ``"openai"``, ``"google_adk"``)
-    or ``None`` if the object is a native Conductor Agent.
+    Returns the framework identifier (e.g. ``"openai"``, ``"google_adk"``,
+    ``"langgraph"``, ``"langchain"``) or ``None`` for native Conductor Agents.
     """
     # Native Agent — no normalization needed
     from agentspan.agents.agent import Agent
+
     if isinstance(agent_obj, Agent):
         return None
 
+    # Precise type-name check for LangGraph (avoid fragile module prefix matching
+    # since langgraph uses internal Pregel/CompiledStateGraph class names)
+    type_name = type(agent_obj).__name__
+    if type_name in ("CompiledStateGraph", "Pregel", "CompiledGraph"):
+        return "langgraph"
+
+    # LangChain AgentExecutor
+    if type_name == "AgentExecutor":
+        return "langchain"
+
+    # Existing module-prefix fallback for openai and google_adk
     module = type(agent_obj).__module__ or ""
     for prefix, framework_id in _FRAMEWORK_DETECTION.items():
         if module == prefix or module.startswith(prefix + "."):
@@ -50,9 +63,11 @@ def detect_framework(agent_obj: Any) -> Optional[str]:
 
 # ── Worker info ──────────────────────────────────────────────────────
 
+
 @dataclass
 class WorkerInfo:
     """Extracted callable info for Conductor worker registration."""
+
     name: str
     description: str
     input_schema: Dict[str, Any]
@@ -60,6 +75,7 @@ class WorkerInfo:
 
 
 # ── Generic serializer ───────────────────────────────────────────────
+
 
 def serialize_agent(agent_obj: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
     """Generic deep serialization of any agent object.
@@ -71,6 +87,19 @@ def serialize_agent(agent_obj: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
     Returns:
         A tuple of (json_dict, extracted_workers).
     """
+    # LangGraph/LangChain: short-circuit to framework-specific serializer
+    # Note: func=None in returned WorkerInfo — filled by _build_passthrough_func()
+    # in runtime._start_framework() before calling _register_passthrough_worker().
+    framework = detect_framework(agent_obj)
+    if framework == "langgraph":
+        from agentspan.agents.frameworks.langgraph import serialize_langgraph
+
+        return serialize_langgraph(agent_obj)
+    if framework == "langchain":
+        from agentspan.agents.frameworks.langchain import serialize_langchain
+
+        return serialize_langchain(agent_obj)
+
     workers: List[WorkerInfo] = []
     seen: Set[int] = set()  # Prevent infinite recursion on circular refs
 
@@ -149,7 +178,11 @@ def serialize_agent(agent_obj: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
                     pass
 
             # Pydantic v1 (instance, not class)
-            if hasattr(obj, "dict") and hasattr(type(obj), "__fields__") and not isinstance(obj, type):
+            if (
+                hasattr(obj, "dict")
+                and hasattr(type(obj), "__fields__")
+                and not isinstance(obj, type)
+            ):
                 try:
                     return _serialize(obj.dict())
                 except (ValueError, RecursionError):

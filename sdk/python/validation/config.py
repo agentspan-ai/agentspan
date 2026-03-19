@@ -12,8 +12,10 @@ EXAMPLES_DIR = SCRIPT_DIR.parent / "examples"
 # ── Example subdirectories ───────────────────────────────────────────────
 
 SUBDIRS = {
-    "openai": "agents",  # import name to check dep
+    "openai": "agents",       # import name to check dep
     "adk": "google.adk",
+    "langgraph": "langgraph",
+    "langchain": "langchain",
 }
 
 # ── Pricing (per 1K tokens) ─────────────────────────────────────────────

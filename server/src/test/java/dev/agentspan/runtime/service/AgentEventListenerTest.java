@@ -479,4 +479,26 @@ class AgentEventListenerTest {
         verify(streamRegistry).send(eq("wf-1"), captor.capture());
         assertThat(captor.getValue().getTarget()).isEqualTo("assistant");
     }
+
+    @Test
+    void onTaskCompleted_fwPrefixedTaskDoesNotEmitToolEvent() {
+        TaskModel task = makeTask("wf-fw", "SIMPLE", "_fw_task");
+
+        listener.onTaskCompleted(task);
+
+        // No tool_call or tool_result events should be sent for _fw_ tasks
+        verify(streamRegistry, never()).send(any(), any());
+    }
+
+    @Test
+    void onTaskCompleted_regularSimpleTaskEmitsToolResult() {
+        TaskModel task = makeTask("wf-tool", "SIMPLE", "search_tool");
+
+        listener.onTaskCompleted(task);
+
+        // A regular SIMPLE task SHOULD emit both tool_call and tool_result events
+        ArgumentCaptor<AgentSSEEvent> captor = ArgumentCaptor.forClass(AgentSSEEvent.class);
+        verify(streamRegistry, times(2)).send(eq("wf-tool"), captor.capture());
+        assertThat(captor.getAllValues().get(1).getType()).isEqualTo("tool_result");
+    }
 }

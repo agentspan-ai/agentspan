@@ -100,6 +100,17 @@ public class AgentController {
     }
 
     /**
+     * Receive an SSE event pushed by a framework worker (LangGraph/LangChain).
+     * Always returns 200 — unknown workflowIds are silently dropped.
+     */
+    @PostMapping("/events/{workflowId}")
+    public void pushFrameworkEvent(
+            @PathVariable String workflowId,
+            @RequestBody Map<String, Object> event) {
+        agentService.pushFrameworkEvent(workflowId, event);
+    }
+
+    /**
      * List all registered agents (workflow defs with agent_sdk metadata).
      */
     @GetMapping("/list")
@@ -122,14 +133,14 @@ public class AgentController {
         return agentService.searchAgentExecutions(start, size, sort, freeText, status, agentName, sessionId);
     }
 
-    @GetMapping("/get/{name}")
+    @GetMapping("/{name}")
     public Map<String, Object> getAgentDef(
             @PathVariable String name,
             @RequestParam(required = false) Integer version) {
         return agentService.getAgentDef(name, version);
     }
 
-    @DeleteMapping("/delete/{name}")
+    @DeleteMapping("/{name}")
     public void deleteAgent(
             @PathVariable String name,
             @RequestParam(required = false) Integer version) {
@@ -160,7 +171,7 @@ public class AgentController {
      * output data (including token counts), and sub-workflow IDs for
      * recursive traversal into sub-agents.</p>
      */
-    @GetMapping("/{id}")
+    @GetMapping("/execution/{id}")
     public AgentRun getWorkflow(@PathVariable String id) {
         return agentService.getWorkflow(id);
     }

@@ -34,7 +34,7 @@ const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 2.5;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type Kind = "start" | "llm" | "tool" | "handoff" | "subagent" | "output" | "error" | "next";
+type Kind = "start" | "llm" | "tool" | "handoff" | "subagent" | "output" | "error" | "next" | "group";
 
 const KIND_TYPE: Record<Kind, TaskType> = {
   start:    TaskType.SUB_WORKFLOW,
@@ -75,6 +75,13 @@ interface DiagramNodeData {
   event?: AgentEvent;
   subAgentRun?: AgentRunData;
   nextTurn?: number;
+  /** For group nodes */
+  groupType?: "agents" | "tools";
+  groupAgents?: AgentRunData[];
+  groupEvents?: AgentEvent[];
+  groupCompleted?: number;
+  groupFailed?: number;
+  groupRunning?: number;
 }
 
 // ─── CardLabel-matching type badge (same CSS as CardLabel.jsx) ─────────────────
@@ -102,8 +109,13 @@ function NodeStatusBadge({ status }: { status: TaskStatus }) {
   const half = size / 2;
   if (status === TaskStatus.IN_PROGRESS) {
     return (
-      <div style={{ position: "absolute", top: -half, right: -half, width: size, height: size, zIndex: 1 }}>
-        <CircularProgress size={size} />
+      <div style={{
+        position: "absolute", top: -half, right: -half,
+        width: size, height: size, zIndex: 1,
+        borderRadius: "50%", backgroundColor: "#fff8f0",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <CircularProgress size={size} sx={{ color: "#f59e0b" }} />
       </div>
     );
   }
@@ -155,7 +167,59 @@ function NodeCard({ data, width, height, selected, onSelect, onDrillIn }: {
     );
   }
 
+  // ── Stacked group node (parallel agents / tool calls) ────────────────────────
+  if (data.kind === "group") {
+    const isAgent = data.groupType === "agents";
+    const type = isAgent ? TaskType.SUB_WORKFLOW : TaskType.SIMPLE;
+    const variant = getCardVariant(type, data.ts, selected) as any;
+    const borderColor: string = (variant.border as string | undefined)
+      ?.match(/solid\s+(.+)$/)?.[1] ?? "#DDDDDD";
+    const total = (data.groupAgents?.length ?? 0) || (data.groupEvents?.length ?? 0);
+    const failed = data.groupFailed ?? 0;
+    const running = data.groupRunning ?? 0;
+    const completed = data.groupCompleted ?? 0;
+
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); onSelect(); }}
+        style={{ width, height, position: "relative", cursor: "pointer" }}
+      >
+        {/* Back cards — extend slightly beyond boundary for stacking illusion */}
+        <div style={{ position: "absolute", top: 14, left: 14, width: "100%", height: "100%", borderRadius: 10, background: "#d0d0d0", border: `2px solid ${borderColor}`, opacity: 0.6 }} />
+        <div style={{ position: "absolute", top: 7, left: 7, width: "100%", height: "100%", borderRadius: 10, background: "#ebebeb", border: `2px solid ${borderColor}`, opacity: 0.85 }} />
+        {/* Front card */}
+        <div style={{
+          position: "relative", width: "100%", height: "100%",
+          borderRadius: 10, cursor: "pointer", transition: "box-shadow 250ms",
+          ...variant, background: "#fff", border: `2.5px solid ${borderColor}`,
+        }}>
+          <div style={{ position: "relative", padding: "16px 20px", width: "100%", height: "100%", borderRadius: 10, boxSizing: "border-box", color: "#111" }}>
+            <NodeStatusBadge status={data.ts} />
+            <div style={{ display: "flex", width: "100%", position: "relative" }}>
+              <CardIcon type={type} integrationType={undefined} />
+              <div style={{ flexGrow: 1, overflow: "hidden" }}>
+                <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{data.label}</div>
+                <div style={{ color: "#888", fontSize: "0.72rem", marginTop: 2 }}>
+                  {total} {isAgent ? "agents" : "calls"}
+                  {completed > 0 && ` · ${completed} ✓`}
+                  {failed > 0 && ` · ${failed} ✗`}
+                  {running > 0 && ` · ${running} ⟳`}
+                </div>
+              </div>
+              <TypeBadge label="PARALLEL" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const type = KIND_TYPE[data.kind];
+
+  // Extract border color from getCardVariant, then reapply at half thickness
+  const variant = getCardVariant(type, data.ts, selected) as any;
+  const borderColor: string = (variant.border as string | undefined)
+    ?.match(/solid\s+(.+)$/)?.[1] ?? "transparent";
 
   // ── All other nodes: unified white TaskCard style ─────────────────────────────
   return (
@@ -167,8 +231,9 @@ function NodeCard({ data, width, height, selected, onSelect, onDrillIn }: {
         cursor: "pointer",
         transition: "box-shadow 250ms",
         transitionDelay: "40ms",
-        ...getCardVariant(type, data.ts, selected) as any,
-        background: "#fff",  // all nodes white regardless of TaskType
+        ...variant,
+        background: "#fff",
+        border: `1.5px solid ${borderColor}`,
       }}
     >
       <div style={{
@@ -241,7 +306,9 @@ const DiagramNode = (nodeProps: any) => {
 };
 
 // ─── Build diagram nodes/edges ────────────────────────────────────────────────
-const W = 220, H = 80;
+const W = 264, H = 80;
+// Max individual nodes shown per "group" (tools or sub-agents) before collapsing
+const MAX_INLINE = 8;
 
 function buildDiagram(agentRun: AgentRunData, activeTurnNum: number) {
   const nodes: NodeData<DiagramNodeData>[] = [];
@@ -268,55 +335,105 @@ function buildDiagram(agentRun: AgentRunData, activeTurnNum: number) {
   if (agentRun.status === AgentStatus.COMPLETED) done.add("start");
 
   if (turn) {
+    // Group consecutive TOOL_CALL events so large parallel batches collapse into one node
+    type Grp = AgentEvent | { type: "__toolGroup"; events: AgentEvent[] };
+    const groups: Grp[] = [];
+    let toolBatch: AgentEvent[] = [];
+    const flushBatch = () => {
+      if (toolBatch.length === 0) return;
+      groups.push(toolBatch.length === 1 ? toolBatch[0] : { type: "__toolGroup", events: toolBatch });
+      toolBatch = [];
+    };
     for (const ev of turn.events) {
-      switch (ev.type) {
-        case EventType.THINKING: {
-          const tok = ev.tokens;
-          push(ev.id, {
-            kind: "llm", label: "LLM",
-            sublabel: ev.toolName,
-            meta: tok ? `${formatTokens(tok.promptTokens)}↑  ${formatTokens(tok.completionTokens)}↓` : undefined,
-            ts: ev.success === false ? TaskStatus.FAILED : TaskStatus.COMPLETED, event: ev,
-          }); break;
-        }
-        case EventType.TOOL_CALL: {
+      if (ev.type === EventType.TOOL_CALL) { toolBatch.push(ev); }
+      else { flushBatch(); groups.push(ev); }
+    }
+    flushBatch();
+
+    for (const grp of groups) {
+      if ("type" in grp && grp.type === "__toolGroup") {
+        const batch = (grp as any).events as AgentEvent[];
+        if (batch.length === 1) {
+          // Single tool call — individual node
+          const ev = batch[0];
           const out = ev.result ? JSON.stringify(ev.result).replace(/[{}"]/g, "").slice(0, 55) : undefined;
           push(ev.id, {
             kind: "tool", label: ev.toolName ?? "tool",
             sublabel: out, meta: ev.durationMs ? formatDuration(ev.durationMs) : undefined,
-            ts: ev.success === false ? TaskStatus.FAILED : TaskStatus.COMPLETED, event: ev,
-          }); break;
+            ts: ev.success === false ? TaskStatus.FAILED : ev.success === undefined ? TaskStatus.IN_PROGRESS : TaskStatus.COMPLETED,
+            event: ev,
+          });
+        } else {
+          // Multiple parallel tool calls → stacked group node
+          const completed = batch.filter(e => e.success === true).length;
+          const failed    = batch.filter(e => e.success === false).length;
+          const running   = batch.filter(e => e.success === undefined).length;
+          const ts = failed > 0 ? TaskStatus.FAILED : running > 0 ? TaskStatus.IN_PROGRESS : TaskStatus.COMPLETED;
+          push(`toolgroup-${turn.turnNumber}`, {
+            kind: "group",
+            label: batch[0].toolName ?? "tool calls",
+            groupType: "tools", groupEvents: batch,
+            groupCompleted: completed, groupFailed: failed, groupRunning: running,
+            ts,
+          });
         }
-        case EventType.HANDOFF:
-          push(ev.id, {
-            kind: "handoff", label: ev.targetAgent ?? ev.summary.replace(/^→\s*/, ""),
-            ts: TaskStatus.COMPLETED, event: ev,
-          }); break;
-        case EventType.DONE: {
-          const txt = typeof ev.detail === "string" ? ev.detail : undefined;
-          push(ev.id, {
-            kind: "output", label: "output",
-            sublabel: txt?.slice(0, 70) + (txt && txt.length > 70 ? "…" : ""),
-            ts: TaskStatus.COMPLETED, event: ev,
-          }); break;
+      } else {
+        const ev = grp as AgentEvent;
+        switch (ev.type) {
+          case EventType.THINKING: {
+            const tok = ev.tokens;
+            push(ev.id, {
+              kind: "llm", label: "LLM",
+              sublabel: ev.toolName,
+              meta: tok ? `${formatTokens(tok.promptTokens)}↑  ${formatTokens(tok.completionTokens)}↓` : undefined,
+              ts: ev.success === false ? TaskStatus.FAILED : ev.success === undefined ? TaskStatus.IN_PROGRESS : TaskStatus.COMPLETED,
+              event: ev,
+            }); break;
+          }
+          case EventType.HANDOFF:
+            push(ev.id, {
+              kind: "handoff", label: ev.targetAgent ?? ev.summary.replace(/^→\s*/, ""),
+              ts: TaskStatus.COMPLETED, event: ev,
+            }); break;
+          case EventType.DONE: {
+            const txt = typeof ev.detail === "string" ? ev.detail : undefined;
+            push(ev.id, {
+              kind: "output", label: "output",
+              sublabel: txt?.slice(0, 70) + (txt && txt.length > 70 ? "…" : ""),
+              ts: TaskStatus.COMPLETED, event: ev,
+            }); break;
+          }
+          case EventType.ERROR:
+            push(ev.id, {
+              kind: "error", label: "error", sublabel: ev.summary,
+              ts: TaskStatus.FAILED, event: ev,
+            }); break;
+          default: break;
         }
-        case EventType.ERROR:
-          push(ev.id, {
-            kind: "error", label: "error", sublabel: ev.summary,
-            ts: TaskStatus.FAILED, event: ev,
-          }); break;
-        default: break;
       }
     }
-    for (const sub of turn.subAgents) {
-      const id = `sub-${sub.id}`;
-      const h = H;
-      push(id, {
+
+    // Sub-agents: single node if one, stacked group node if many
+    if (turn.subAgents.length === 1) {
+      const sub = turn.subAgents[0];
+      push(`sub-${sub.id}`, {
         kind: "subagent", label: sub.agentName,
         meta: sub.model,
         sublabel: sub.output?.slice(0, 55) ?? sub.failureReason?.slice(0, 55),
         ts: toTS(sub.status), subAgentRun: sub,
-      }, h);
+      });
+    } else if (turn.subAgents.length > 1) {
+      const completed = turn.subAgents.filter(s => s.status === AgentStatus.COMPLETED).length;
+      const failed    = turn.subAgents.filter(s => s.status === AgentStatus.FAILED).length;
+      const running   = turn.subAgents.length - completed - failed;
+      const ts = failed > 0 ? TaskStatus.FAILED : running > 0 ? TaskStatus.IN_PROGRESS : TaskStatus.COMPLETED;
+      push(`subgroup-${turn.turnNumber}`, {
+        kind: "group",
+        label: turn.subAgents[0].agentName,
+        groupType: "agents", groupAgents: turn.subAgents,
+        groupCompleted: completed, groupFailed: failed, groupRunning: running,
+        ts,
+      });
     }
   }
 
@@ -513,6 +630,17 @@ export function AgentExecutionDiagram({ agentRun, activeTurn, onSelectTurn, sele
       onNodeSelect(id, { kind: "start", label: nd.label, status, subAgentRun: agentRun });
       return;
     }
+    if (nd.kind === "group") {
+      onNodeSelect(id, {
+        kind: "group",
+        label: nd.label,
+        status,
+        groupType: nd.groupType,
+        groupAgents: nd.groupAgents,
+        groupEvents: nd.groupEvents,
+      });
+      return;
+    }
     onNodeSelect(id, { kind: nd.kind as any, label: nd.label, status, event: nd.event, subAgentRun: nd.subAgentRun });
   }, [nodes, selectedId, onSelectTurn, onNodeSelect, agentRun]);
 
@@ -545,12 +673,12 @@ export function AgentExecutionDiagram({ agentRun, activeTurn, onSelectTurn, sele
           backgroundColor: "#fff",
           backgroundImage: "url('/diagramDotBg.svg')",
         }}>
-          <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+          <Box sx={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 3 }}>
             {/* Skeleton nodes */}
             {[0, 1, 2].map((i) => (
               <Box key={i} sx={{
-                width: 220,
-                height: i === 0 ? 56 : 80,
+                width: i === 0 ? 56 : 220,
+                height: 80,
                 borderRadius: 1,
                 backgroundColor: "#f3f3f3",
                 border: "1px solid #DDDDDD",
@@ -599,7 +727,7 @@ export function AgentExecutionDiagram({ agentRun, activeTurn, onSelectTurn, sele
           maxWidth={5000}
           maxHeight={4000}
           onLayoutChange={handleLayoutChange}
-          direction="DOWN"
+          direction="RIGHT"
           layoutOptions={{
             "org.eclipse.elk.spacing.nodeNode": "18",
             "elk.layered.spacing.nodeNodeBetweenLayers": "24",
