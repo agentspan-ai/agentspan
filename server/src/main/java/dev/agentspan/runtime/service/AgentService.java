@@ -437,7 +437,11 @@ public class AgentService {
             def = metadataDAO.getLatestWorkflowDef(name)
                     .orElseThrow(() -> new IllegalArgumentException("Agent not found: " + name));
         }
-        return MAPPER.convertValue(def, Map.class);
+        Map<String, Object> metadata = def.getMetadata();
+        if (metadata != null && metadata.get("agentDef") instanceof Map) {
+            return (Map<String, Object>) metadata.get("agentDef");
+        }
+        throw new IllegalArgumentException("No agent definition found for: " + name);
     }
 
     public void deleteAgent(String name, Integer version) {
@@ -735,6 +739,34 @@ public class AgentService {
         }
 
         return result;
+    }
+
+    // ── Framework event push ─────────────────────────────────────────
+
+    /**
+     * Translate a framework event map (from Python worker HTTP push) to an
+     * AgentSSEEvent and fan it out to all registered SSE emitters.
+     * Silently ignored if no clients are connected.
+     */
+    public void pushFrameworkEvent(String workflowId, Map<String, Object> event) {
+        String type = event.getOrDefault("type", "").toString();
+        AgentSSEEvent sseEvent = switch (type) {
+            case "thinking" -> AgentSSEEvent.thinking(workflowId,
+                event.getOrDefault("content", "").toString());
+            case "tool_call" -> AgentSSEEvent.toolCall(workflowId,
+                event.getOrDefault("toolName", "").toString(),
+                event.get("args"));
+            case "tool_result" -> AgentSSEEvent.toolResult(workflowId,
+                event.getOrDefault("toolName", "").toString(),
+                event.getOrDefault("result", ""));
+            default -> {
+                log.debug("Unknown framework event type '{}' for workflow {}", type, workflowId);
+                yield null;
+            }
+        };
+        if (sseEvent != null) {
+            streamRegistry.send(workflowId, sseEvent);
+        }
     }
 
     // ── Task registration ────────────────────────────────────────────
