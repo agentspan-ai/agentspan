@@ -105,8 +105,7 @@ class TestMakeLanggraphWorker:
             worker_fn(task)
 
         # graph.stream must have been called with configurable.thread_id = "sess-42"
-        call_kwargs = graph.stream.call_args
-        config_arg = call_kwargs[0][1] if len(call_kwargs[0]) > 1 else call_kwargs[1].get("config")
+        config_arg = graph.stream.call_args.args[1]
         assert config_arg["configurable"]["thread_id"] == "sess-42"
 
     def test_worker_returns_failed_on_exception(self):
@@ -169,3 +168,18 @@ class TestMakeLanggraphWorker:
         input_arg = graph.stream.call_args[0][0]
         assert "messages" in input_arg
         assert isinstance(input_arg["messages"][0], HumanMessage)
+
+    def test_worker_passes_correct_stream_mode(self):
+        from agentspan.agents.frameworks.langgraph import make_langgraph_worker
+
+        graph = _make_fake_graph()
+        task = _make_task()
+
+        with patch("agentspan.agents.frameworks.langgraph._push_event_nonblocking"):
+            worker_fn = make_langgraph_worker(
+                graph, "test_graph", "http://localhost:8080", "key", "secret"
+            )
+            worker_fn(task)
+
+        stream_kwargs = graph.stream.call_args[1]
+        assert stream_kwargs["stream_mode"] == ["updates", "values"]

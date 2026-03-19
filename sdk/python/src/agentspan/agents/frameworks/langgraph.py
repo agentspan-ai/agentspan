@@ -213,7 +213,7 @@ def _extract_output(final_state: Optional[Dict[str, Any]]) -> str:
             if content and not tool_calls:
                 return str(content)
     # No messages key — serialize the whole state
-    if not messages:
+    if "messages" not in final_state:
         import json
 
         try:
