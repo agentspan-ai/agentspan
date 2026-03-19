@@ -217,6 +217,10 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
     private boolean isToolTask(TaskModel task) {
         String taskType = task.getTaskType();
         if (taskType == null) return false;
+        // Skip framework passthrough wrapper tasks — they emit their own fine-grained events
+        if (task.getReferenceTaskName() != null && task.getReferenceTaskName().startsWith("_fw_")) {
+            return false;
+        }
         // System task types that are NOT tool invocations
         switch (taskType) {
             case "LLM_CHAT_COMPLETE":

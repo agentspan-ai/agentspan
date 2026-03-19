@@ -44,6 +44,35 @@ model = "openai/gpt-4o"
 group = "SMOKE_TEST"
 model = "anthropic/claude-sonnet-4-20250514"
 
+# ── LangGraph / LangChain runs ────────────────────────────────────────────
+
+[runs.langgraph]
+group = "LANGGRAPH_EXAMPLES"
+model = "openai/gpt-4o-mini"
+
+[runs.langgraph-native]
+group = "LANGGRAPH_EXAMPLES"
+model = "openai/gpt-4o-mini"
+native = true
+
+[runs.langchain]
+group = "LANGCHAIN_EXAMPLES"
+model = "openai/gpt-4o-mini"
+
+[runs.langchain-native]
+group = "LANGCHAIN_EXAMPLES"
+model = "openai/gpt-4o-mini"
+native = true
+
+[runs.lc-smoke-test]
+group = "LC_SMOKE_TEST"
+model = "openai/gpt-4o-mini"
+
+[runs.lc-smoke-test-native]
+group = "LC_SMOKE_TEST"
+model = "openai/gpt-4o-mini"
+native = true
+
 # ── Run Config Reference ─────────────────────────────────────────────────
 #
 # name            (auto-set from section key)

@@ -15,6 +15,10 @@ def _patch_runtime():
         run_adk_native,
         run_adk_native_stream,
     )
+    from validation.native.langgraph_runner import (
+        run_langchain_native,
+        run_langgraph_native,
+    )
     from validation.native.openai_runner import (
         run_openai_native,
         run_openai_native_async,
@@ -26,16 +30,25 @@ def _patch_runtime():
 
     def _run_native(self, agent, prompt="", **kwargs):
         fw = detect_framework(agent)
+        session_id = kwargs.get("session_id")
         if fw == "openai":
             return run_openai_native(agent, str(prompt))
         if fw == "google_adk":
             return run_adk_native(agent, str(prompt))
+        if fw == "langgraph":
+            return run_langgraph_native(agent, str(prompt), session_id=session_id)
+        if fw == "langchain":
+            return run_langchain_native(agent, str(prompt), session_id=session_id)
         raise ValueError(f"Native mode unsupported for framework: {fw!r}")
 
     async def _run_native_async(self, agent, prompt="", **kwargs):
         fw = detect_framework(agent)
         if fw == "openai":
             return await run_openai_native_async(agent, str(prompt))
+        if fw == "langgraph":
+            return run_langgraph_native(agent, str(prompt), session_id=kwargs.get("session_id"))
+        if fw == "langchain":
+            return run_langchain_native(agent, str(prompt), session_id=kwargs.get("session_id"))
         raise ValueError(f"Native mode unsupported for framework: {fw!r}")
 
     def _stream_native(self, agent, prompt="", **kwargs):

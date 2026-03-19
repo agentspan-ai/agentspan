@@ -175,10 +175,10 @@ class AgentRuntime {
     }
   }
 
-  /** Fetch workflow with full task list from GET /api/agent/{id}. */
+  /** Fetch workflow with full task list from GET /api/agent/execution/{id}. */
   async _fetchAgentWorkflow(workflowId) {
     try {
-      const url = `${this._config.serverUrl}/agent/${workflowId}`;
+      const url = `${this._config.serverUrl}/agent/execution/${workflowId}`;
       const resp = await fetch(url, { headers: this._headers });
       if (!resp.ok) return null;
       return resp.json();

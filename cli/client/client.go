@@ -149,7 +149,7 @@ func (c *Client) ListAgents() ([]AgentSummary, error) {
 
 // GetAgent returns the workflow definition for a named agent
 func (c *Client) GetAgent(name string, version *int) (map[string]interface{}, error) {
-	path := "/api/agent/get/" + url.PathEscape(name)
+	path := "/api/agent/" + url.PathEscape(name)
 	if version != nil {
 		path += fmt.Sprintf("?version=%d", *version)
 	}
@@ -167,7 +167,7 @@ func (c *Client) GetAgent(name string, version *int) (map[string]interface{}, er
 
 // DeleteAgent removes an agent workflow definition
 func (c *Client) DeleteAgent(name string, version *int) error {
-	path := "/api/agent/delete/" + url.PathEscape(name)
+	path := "/api/agent/" + url.PathEscape(name)
 	if version != nil {
 		path += fmt.Sprintf("?version=%d", *version)
 	}
