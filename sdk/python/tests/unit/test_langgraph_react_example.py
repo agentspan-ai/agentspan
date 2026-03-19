@@ -50,7 +50,6 @@ class TestLangGraphReActDetection:
 
         # Patch the graph's stream to return controlled output
         final_ai_msg = AIMessage(content="The capital is Paris.", tool_calls=[])
-        final_ai_msg.type = "ai"
 
         stream_chunks = [
             ("updates", {"agent": {"messages": [final_ai_msg]}}),
@@ -81,7 +80,6 @@ class TestLangGraphReActDetection:
         from agentspan.agents.frameworks.langgraph import make_langgraph_worker
 
         final_msg = AIMessage(content="Done.", tool_calls=[])
-        final_msg.type = "ai"
         stream_chunks = [
             ("updates", {"agent": {"messages": [final_msg]}}),
             ("values", {"messages": [final_msg]}),
