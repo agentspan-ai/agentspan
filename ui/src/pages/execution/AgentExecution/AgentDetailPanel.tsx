@@ -121,33 +121,52 @@ function SummaryRow({ label, value }: { label: string; value: React.ReactNode })
   return (
     <Box sx={{
       display: "flex", alignItems: "flex-start",
-      px: 3, py: 1.5,
-      borderBottom: "1px solid rgba(0,0,0,0.1)",
+      px: 2, py: 1,
+      borderBottom: "1px solid #e5e7eb",
       gap: 2,
     }}>
-      <Typography sx={{ opacity: 0.7, fontSize: "0.875rem", minWidth: 140, flexShrink: 0 }}>
+      <Typography sx={{ color: "#6b7280", fontSize: "0.875rem", minWidth: 148, flexShrink: 0, lineHeight: 1.7 }}>
         {label}
       </Typography>
-      <Box sx={{ fontSize: "0.875rem", color: "text.primary", wordBreak: "break-word" }}>
+      <Box sx={{ fontSize: "0.875rem", color: "#111827", wordBreak: "break-word", lineHeight: 1.7 }}>
         {value}
       </Box>
     </Box>
   );
 }
 
-// ─── Status text (plain colored text, no pill) ────────────────────────────────
-
-function StatusBadgeInline({ status }: { status: AgentStatus }) {
-  const color =
-    status === AgentStatus.COMPLETED ? "#40BA56" :
-    status === AgentStatus.FAILED    ? "#DD2222" :
-    status === AgentStatus.RUNNING   ? "#f59e0b" : "#9e9e9e";
-  const label =
-    status === AgentStatus.COMPLETED ? "Completed" :
-    status === AgentStatus.FAILED    ? "Failed"    :
-    status === AgentStatus.RUNNING   ? "Running"   : "Waiting";
-  return <span style={{ color, fontWeight: 600, fontSize: "0.875rem" }}>{label}</span>;
+function SummaryTable({ children }: { children: React.ReactNode }) {
+  return (
+    <Box sx={{ border: "1px solid #e5e7eb", borderRadius: 1, overflow: "hidden", mx: 2, my: 1.5 }}>
+      {children}
+    </Box>
+  );
 }
+
+// ─── Status pill chip (matches Conductor's status badge) ──────────────────────
+
+function StatusChip({ status }: { status: AgentStatus }) {
+  const cfg = {
+    [AgentStatus.COMPLETED]: { bg: "#d4edda", color: "#155724", label: "COMPLETED" },
+    [AgentStatus.FAILED]:    { bg: "#f8d7da", color: "#721c24", label: "FAILED"    },
+    [AgentStatus.RUNNING]:   { bg: "#fff3cd", color: "#856404", label: "RUNNING"   },
+    [AgentStatus.WAITING]:   { bg: "#fff3cd", color: "#856404", label: "WAITING"   },
+  }[status] ?? { bg: "#e9ecef", color: "#495057", label: status.toUpperCase() };
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center",
+      backgroundColor: cfg.bg, color: cfg.color,
+      fontSize: "0.75rem", fontWeight: 600,
+      padding: "2px 10px", borderRadius: 20,
+      letterSpacing: "0.02em",
+    }}>
+      {cfg.label}
+    </span>
+  );
+}
+
+// Keep old name as alias for backward compat within this file
+const StatusBadgeInline = StatusChip;
 
 // ─── Agent definition section ─────────────────────────────────────────────────
 
@@ -335,7 +354,7 @@ function GroupDetailPanel({ node, onDrillIn }: { node: DetailNodeData; onDrillIn
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {/* Stat bar */}
-      <Box sx={{ px: 3, py: 1, display: "flex", alignItems: "center", gap: 2, borderBottom: "1px solid rgba(0,0,0,0.08)", flexShrink: 0 }}>
+      <Box sx={{ px: 2, py: 1, display: "flex", alignItems: "center", gap: 2, borderBottom: "1px solid #e5e7eb", flexShrink: 0 }}>
         <Typography sx={{ fontSize: "0.75rem", color: "text.secondary" }}>{count} {isAgents ? "agents" : "calls"}</Typography>
         {completed > 0 && <Typography sx={{ fontSize: "0.75rem", color: "#40BA56", fontWeight: 600 }}>{completed} ✓</Typography>}
         {failed    > 0 && <Typography sx={{ fontSize: "0.75rem", color: "#DD2222", fontWeight: 600 }}>{failed} ✗</Typography>}
@@ -343,7 +362,7 @@ function GroupDetailPanel({ node, onDrillIn }: { node: DetailNodeData; onDrillIn
       </Box>
 
       {/* Run selector */}
-      <Box sx={{ px: 3, py: 1.25, borderBottom: "1px solid rgba(0,0,0,0.08)", flexShrink: 0 }}>
+      <Box sx={{ px: 2, py: 1.25, borderBottom: "1px solid #e5e7eb", flexShrink: 0 }}>
         <RunBar count={count} statuses={statuses} selected={selectedIdx} onSelect={setSelectedIdx} labels={labels} />
       </Box>
 
@@ -351,17 +370,19 @@ function GroupDetailPanel({ node, onDrillIn }: { node: DetailNodeData; onDrillIn
       <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", scrollbarWidth: "none", "&::-webkit-scrollbar": { display: "none" } }}>
         {selAgent && (
           <Box>
-            <SummaryRow label="Agent" value={selAgent.agentName} />
-            {selAgent.model && <SummaryRow label="Model" value={selAgent.model} />}
-            <SummaryRow label="Status" value={<StatusBadgeInline status={selAgent.status} />} />
-            {selAgent.totalDurationMs > 0 && <SummaryRow label="Duration" value={formatDuration(selAgent.totalDurationMs)} />}
-            {(selAgent.totalTokens.promptTokens + selAgent.totalTokens.completionTokens) > 0 && (
-              <SummaryRow label="Total tokens" value={formatTokens(selAgent.totalTokens.promptTokens + selAgent.totalTokens.completionTokens)} />
-            )}
-            {selAgent.finishReason && <SummaryRow label="Finish reason" value={selAgent.finishReason} />}
-            {selAgent.failureReason && <SummaryRow label="Failure reason" value={<span style={{ color: "#DD2222" }}>{selAgent.failureReason}</span>} />}
+            <SummaryTable>
+              <SummaryRow label="Agent" value={selAgent.agentName} />
+              {selAgent.model && <SummaryRow label="Model" value={selAgent.model} />}
+              <SummaryRow label="Status" value={<StatusBadgeInline status={selAgent.status} />} />
+              {selAgent.totalDurationMs > 0 && <SummaryRow label="Duration" value={formatDuration(selAgent.totalDurationMs)} />}
+              {(selAgent.totalTokens.promptTokens + selAgent.totalTokens.completionTokens) > 0 && (
+                <SummaryRow label="Total tokens" value={formatTokens(selAgent.totalTokens.promptTokens + selAgent.totalTokens.completionTokens)} />
+              )}
+              {selAgent.finishReason && <SummaryRow label="Finish reason" value={selAgent.finishReason.toUpperCase()} />}
+              {selAgent.failureReason && <SummaryRow label="Failure reason" value={<span style={{ color: "#DC2626" }}>{selAgent.failureReason}</span>} />}
+            </SummaryTable>
             {onDrillIn && (
-              <Box sx={{ px: 3, py: 1.5 }}>
+              <Box sx={{ px: 2, py: 1 }}>
                 <Box
                   onClick={() => onDrillIn(selAgent)}
                   sx={{
@@ -379,27 +400,30 @@ function GroupDetailPanel({ node, onDrillIn }: { node: DetailNodeData; onDrillIn
         )}
         {selEvent && (
           <Box>
-            <SummaryRow label="Tool" value={selEvent.toolName ?? "tool"} />
-            <SummaryRow label="Status" value={<StatusBadgeInline status={statuses[selectedIdx]} />} />
-            {selEvent.durationMs ? <SummaryRow label="Duration" value={formatDuration(selEvent.durationMs)} /> : null}
-            {selEvent.taskMeta?.workerId && <SummaryRow label="Worker" value={selEvent.taskMeta.workerId} />}
-            {selEvent.taskMeta?.reasonForIncompletion && (
-              <SummaryRow label="Failure" value={<span style={{ color: "#DD2222" }}>{selEvent.taskMeta.reasonForIncompletion}</span>} />
-            )}
+            <SummaryTable>
+              <SummaryRow label="Tool" value={selEvent.toolName ?? "tool"} />
+              <SummaryRow label="Status" value={<StatusBadgeInline status={statuses[selectedIdx]} />} />
+              {selEvent.durationMs ? <SummaryRow label="Duration" value={formatDuration(selEvent.durationMs)} /> : null}
+              {selEvent.taskMeta?.workerId && <SummaryRow label="Worker" value={selEvent.taskMeta.workerId} />}
+              {selEvent.taskMeta?.reasonForIncompletion && (
+                <SummaryRow label="Failure" value={<span style={{ color: "#DC2626" }}>{selEvent.taskMeta.reasonForIncompletion}</span>} />
+              )}
+            </SummaryTable>
             {selEvent.toolArgs != null && (
+              <SummaryTable>
               <SummaryRow label="Input" value={
-                <Box sx={{ height: 180, border: "1px solid rgba(0,0,0,0.08)", borderRadius: 1, overflow: "hidden" }}>
+                <Box sx={{ height: 180, border: "1px solid #e5e7eb", borderRadius: 1, overflow: "hidden" }}>
                   <JsonView src={selEvent.toolArgs} />
                 </Box>
               } />
-            )}
-            {selEvent.result != null && (
-              <SummaryRow label="Output" value={
-                <Box sx={{ height: 180, border: "1px solid rgba(0,0,0,0.08)", borderRadius: 1, overflow: "hidden" }}>
-                  <JsonView src={selEvent.result} />
-                </Box>
-              } />
-            )}
+              {selEvent.result != null && (
+                <SummaryRow label="Output" value={
+                  <Box sx={{ height: 180, border: "1px solid #e5e7eb", borderRadius: 1, overflow: "hidden" }}>
+                    <JsonView src={selEvent.result} />
+                  </Box>
+                } />
+              )}
+            </SummaryTable>
           </Box>
         )}
       </Box>
@@ -419,35 +443,29 @@ function SummaryContent({ node, onDrillIn }: { node: DetailNodeData; onDrillIn?:
     const ct = run.totalTokens.completionTokens;
     return (
       <Box>
-        <SummaryRow label="Agent" value={run.agentName} />
-        {run.model && <SummaryRow label="Model" value={run.model} />}
-        <SummaryRow label="Status" value={<StatusBadgeInline status={run.status} />} />
-        {run.totalDurationMs > 0 && <SummaryRow label="Duration" value={formatDuration(run.totalDurationMs)} />}
-        {(pt + ct) > 0 && <SummaryRow label="Total tokens" value={formatTokens(pt + ct)} />}
-        {pt > 0 && <SummaryRow label="Prompt tokens" value={formatTokens(pt)} />}
-        {ct > 0 && <SummaryRow label="Completion tokens" value={formatTokens(ct)} />}
-        {run.finishReason && <SummaryRow label="Finish reason" value={run.finishReason} />}
+        <SummaryTable>
+          <SummaryRow label="Agent" value={run.agentName} />
+          {run.model && <SummaryRow label="Model" value={run.model} />}
+          <SummaryRow label="Status" value={<StatusBadgeInline status={run.status} />} />
+          {run.totalDurationMs > 0 && <SummaryRow label="Duration" value={formatDuration(run.totalDurationMs)} />}
+          {(pt + ct) > 0 && <SummaryRow label="Total tokens" value={formatTokens(pt + ct)} />}
+          {pt > 0 && <SummaryRow label="Prompt tokens" value={formatTokens(pt)} />}
+          {ct > 0 && <SummaryRow label="Completion tokens" value={formatTokens(ct)} />}
+          {run.finishReason && <SummaryRow label="Finish reason" value={run.finishReason.toUpperCase()} />}
+        </SummaryTable>
         {onDrillIn && (
-          <Box sx={{ px: 3, py: 1.5 }}>
+          <Box sx={{ px: 2, py: 1 }}>
             <Box
               onClick={() => onDrillIn(run)}
               sx={{
                 display: "inline-flex", alignItems: "center", gap: 0.75,
-                px: 1.5, py: 0.75,
-                borderRadius: 1,
-                border: "1px solid",
-                borderColor: "divider",
-                cursor: "pointer",
-                fontSize: "0.8rem",
-                fontWeight: 500,
-                color: "#fff",
-                backgroundColor: "#4969e4",
-                transition: "all 0.15s",
-                "&:hover": { backgroundColor: "#3858d6", borderColor: "#3858d6" },
+                px: 1.5, py: 0.75, borderRadius: 1, cursor: "pointer",
+                fontSize: "0.8rem", fontWeight: 500, color: "#fff",
+                backgroundColor: "#4969e4", transition: "all 0.15s",
+                "&:hover": { backgroundColor: "#3858d6" },
               }}
             >
-              View full execution
-              <ArrowRight size={14} />
+              View full execution <ArrowRight size={14} />
             </Box>
           </Box>
         )}
@@ -460,13 +478,15 @@ function SummaryContent({ node, onDrillIn }: { node: DetailNodeData; onDrillIn?:
     const tok = ev?.tokens;
     return (
       <Box>
-        <SummaryRow label="Kind" value="LLM Call" />
-        <SummaryRow label="Status" value={<StatusBadgeInline status={node.status} />} />
-        {ev?.toolName && <SummaryRow label="Model" value={ev.toolName} />}
-        {tok && (tok.promptTokens + tok.completionTokens) > 0 && <SummaryRow label="Total tokens" value={formatTokens(tok.promptTokens + tok.completionTokens)} />}
-        {tok && tok.promptTokens > 0 && <SummaryRow label="Prompt tokens" value={formatTokens(tok.promptTokens)} />}
-        {tok && tok.completionTokens > 0 && <SummaryRow label="Completion tokens" value={formatTokens(tok.completionTokens)} />}
-        {ev?.durationMs && <SummaryRow label="Duration" value={formatDuration(ev.durationMs)} />}
+        <SummaryTable>
+          <SummaryRow label="Kind" value="LLM Call" />
+          <SummaryRow label="Status" value={<StatusBadgeInline status={node.status} />} />
+          {ev?.toolName && <SummaryRow label="Model" value={ev.toolName} />}
+          {tok && (tok.promptTokens + tok.completionTokens) > 0 && <SummaryRow label="Total tokens" value={formatTokens(tok.promptTokens + tok.completionTokens)} />}
+          {tok && tok.promptTokens > 0 && <SummaryRow label="Prompt tokens" value={formatTokens(tok.promptTokens)} />}
+          {tok && tok.completionTokens > 0 && <SummaryRow label="Completion tokens" value={formatTokens(tok.completionTokens)} />}
+          {ev?.durationMs && <SummaryRow label="Duration" value={formatDuration(ev.durationMs)} />}
+        </SummaryTable>
       </Box>
     );
   }
@@ -477,22 +497,21 @@ function SummaryContent({ node, onDrillIn }: { node: DetailNodeData; onDrillIn?:
       ts ? new Date(ts).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", fractionalSecondDigits: 3 }) : undefined;
     return (
       <Box>
-        <SummaryRow label="Tool" value={ev?.toolName ?? node.label} />
-        {meta?.taskType && <SummaryRow label="Task type" value={meta.taskType} />}
-        {meta?.referenceTaskName && <SummaryRow label="Reference name" value={meta.referenceTaskName} />}
-        <SummaryRow label="Status" value={<StatusBadgeInline status={node.status} />} />
-        {ev?.durationMs ? <SummaryRow label="Duration" value={formatDuration(ev.durationMs)} /> : null}
-        {fmt(meta?.scheduledTime) && <SummaryRow label="Scheduled" value={fmt(meta?.scheduledTime)!} />}
-        {fmt(meta?.startTime) && <SummaryRow label="Start time" value={fmt(meta?.startTime)!} />}
-        {fmt(meta?.endTime) && <SummaryRow label="End time" value={fmt(meta?.endTime)!} />}
-        {meta?.workerId && <SummaryRow label="Worker" value={meta.workerId} />}
-        {meta?.retryCount != null && meta.retryCount > 0 && <SummaryRow label="Retries" value={String(meta.retryCount)} />}
-        {meta?.reasonForIncompletion && (
-          <SummaryRow
-            label="Failure reason"
-            value={<span style={{ color: "#DD2222" }}>{meta.reasonForIncompletion}</span>}
-          />
-        )}
+        <SummaryTable>
+          <SummaryRow label="Tool" value={ev?.toolName ?? node.label} />
+          {meta?.taskType && <SummaryRow label="Task type" value={meta.taskType} />}
+          {meta?.referenceTaskName && <SummaryRow label="Reference name" value={meta.referenceTaskName} />}
+          <SummaryRow label="Status" value={<StatusBadgeInline status={node.status} />} />
+          {ev?.durationMs ? <SummaryRow label="Duration" value={formatDuration(ev.durationMs)} /> : null}
+          {fmt(meta?.scheduledTime) && <SummaryRow label="Scheduled" value={fmt(meta?.scheduledTime)!} />}
+          {fmt(meta?.startTime) && <SummaryRow label="Start time" value={fmt(meta?.startTime)!} />}
+          {fmt(meta?.endTime) && <SummaryRow label="End time" value={fmt(meta?.endTime)!} />}
+          {meta?.workerId && <SummaryRow label="Worker" value={meta.workerId} />}
+          {meta?.retryCount != null && meta.retryCount > 0 && <SummaryRow label="Retries" value={String(meta.retryCount)} />}
+          {meta?.reasonForIncompletion && (
+            <SummaryRow label="Failure reason" value={<span style={{ color: "#DC2626" }}>{meta.reasonForIncompletion}</span>} />
+          )}
+        </SummaryTable>
       </Box>
     );
   }
@@ -500,8 +519,10 @@ function SummaryContent({ node, onDrillIn }: { node: DetailNodeData; onDrillIn?:
   if (node.kind === "handoff") {
     return (
       <Box>
-        <SummaryRow label="Target agent" value={ev?.targetAgent ?? node.label} />
-        <SummaryRow label="Status" value={<StatusBadgeInline status={node.status} />} />
+        <SummaryTable>
+          <SummaryRow label="Target agent" value={ev?.targetAgent ?? node.label} />
+          <SummaryRow label="Status" value={<StatusBadgeInline status={node.status} />} />
+        </SummaryTable>
       </Box>
     );
   }
@@ -512,34 +533,28 @@ function SummaryContent({ node, onDrillIn }: { node: DetailNodeData; onDrillIn?:
     const ct = run.totalTokens.completionTokens;
     return (
       <Box>
-        <SummaryRow label="Agent" value={run.agentName} />
-        {run.model && <SummaryRow label="Model" value={run.model} />}
-        <SummaryRow label="Status" value={<StatusBadgeInline status={run.status} />} />
-        {run.totalDurationMs > 0 && <SummaryRow label="Duration" value={formatDuration(run.totalDurationMs)} />}
-        {(pt + ct) > 0 && <SummaryRow label="Total tokens" value={formatTokens(pt + ct)} />}
-        {pt > 0 && <SummaryRow label="Prompt tokens" value={formatTokens(pt)} />}
-        {ct > 0 && <SummaryRow label="Completion tokens" value={formatTokens(ct)} />}
+        <SummaryTable>
+          <SummaryRow label="Agent" value={run.agentName} />
+          {run.model && <SummaryRow label="Model" value={run.model} />}
+          <SummaryRow label="Status" value={<StatusBadgeInline status={run.status} />} />
+          {run.totalDurationMs > 0 && <SummaryRow label="Duration" value={formatDuration(run.totalDurationMs)} />}
+          {(pt + ct) > 0 && <SummaryRow label="Total tokens" value={formatTokens(pt + ct)} />}
+          {pt > 0 && <SummaryRow label="Prompt tokens" value={formatTokens(pt)} />}
+          {ct > 0 && <SummaryRow label="Completion tokens" value={formatTokens(ct)} />}
+        </SummaryTable>
         {onDrillIn && (
-          <Box sx={{ px: 3, py: 1.5 }}>
+          <Box sx={{ px: 2, py: 1 }}>
             <Box
               onClick={() => onDrillIn(run)}
               sx={{
                 display: "inline-flex", alignItems: "center", gap: 0.75,
-                px: 1.5, py: 0.75,
-                borderRadius: 1,
-                border: "1px solid",
-                borderColor: "divider",
-                cursor: "pointer",
-                fontSize: "0.8rem",
-                fontWeight: 500,
-                color: "#fff",
-                backgroundColor: "#4969e4",
-                transition: "all 0.15s",
-                "&:hover": { backgroundColor: "#3858d6", borderColor: "#3858d6" },
+                px: 1.5, py: 0.75, borderRadius: 1, cursor: "pointer",
+                fontSize: "0.8rem", fontWeight: 500, color: "#fff",
+                backgroundColor: "#4969e4", transition: "all 0.15s",
+                "&:hover": { backgroundColor: "#3858d6" },
               }}
             >
-              View full execution
-              <ArrowRight size={14} />
+              View full execution <ArrowRight size={14} />
             </Box>
           </Box>
         )}
@@ -551,9 +566,11 @@ function SummaryContent({ node, onDrillIn }: { node: DetailNodeData; onDrillIn?:
   // output / error / fallback
   return (
     <Box>
-      <SummaryRow label="Kind" value={node.kind} />
-      <SummaryRow label="Status" value={<StatusBadgeInline status={node.status} />} />
-      {ev?.summary && <SummaryRow label="Summary" value={ev.summary} />}
+      <SummaryTable>
+        <SummaryRow label="Kind" value={node.kind} />
+        <SummaryRow label="Status" value={<StatusBadgeInline status={node.status} />} />
+        {ev?.summary && <SummaryRow label="Summary" value={ev.summary} />}
+      </SummaryTable>
     </Box>
   );
 }
@@ -614,6 +631,14 @@ const KIND_DISPLAY: Record<DetailNodeData["kind"], string> = {
 
 export function AgentDetailPanel({ node, onClose, onDrillIn }: AgentDetailPanelProps) {
   const [tab, setTab] = useState(SUMMARY_TAB);
+  // Must be declared before any early returns to satisfy the Rules of Hooks
+  const prevNodeId = useRef(node.label + node.kind);
+
+  // Reset tab to summary when the non-group node changes
+  if (node.kind !== "group" && prevNodeId.current !== node.label + node.kind) {
+    prevNodeId.current = node.label + node.kind;
+    setTab(SUMMARY_TAB);
+  }
 
   // Group nodes get their own dedicated layout (no tabs)
   if (node.kind === "group") {
@@ -622,14 +647,17 @@ export function AgentDetailPanel({ node, onClose, onDrillIn }: AgentDetailPanelP
         <Box sx={{ px: 2.5, pt: 2, pb: 1.5, borderBottom: "1px solid", borderColor: "divider", flexShrink: 0 }}>
           <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography sx={{ fontSize: "0.65rem", fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", color: "text.disabled", lineHeight: 1, mb: 0.5 }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 0.5 }}>
+                <Typography sx={{ fontWeight: 700, fontSize: "1rem", lineHeight: 1.3, color: "text.primary", wordBreak: "break-word" }}>
+                  {node.label}
+                </Typography>
+                <StatusChip status={node.status} />
+              </Box>
+              <Typography sx={{ fontSize: "0.7rem", color: "text.disabled", letterSpacing: "0.04em", textTransform: "uppercase" }}>
                 {node.groupType === "agents" ? "Parallel Agents" : "Parallel Tool Calls"}
               </Typography>
-              <Typography sx={{ fontWeight: 700, fontSize: "1rem", lineHeight: 1.2, color: "text.primary", wordBreak: "break-word" }}>
-                {node.label}
-              </Typography>
             </Box>
-            <IconButton size="small" onClick={onClose} sx={{ width: 26, height: 26, color: "text.disabled", flexShrink: 0, "&:hover": { color: "text.primary" } }}>
+            <IconButton size="small" onClick={onClose} sx={{ width: 26, height: 26, color: "text.disabled", flexShrink: 0, mt: 0.25, "&:hover": { color: "text.primary" } }}>
               <CloseIcon size={14} />
             </IconButton>
           </Box>
@@ -639,13 +667,6 @@ export function AgentDetailPanel({ node, onClose, onDrillIn }: AgentDetailPanelP
         </Box>
       </Paper>
     );
-  }
-
-  // Reset to summary whenever a different node is opened
-  const prevNodeId = useRef(node.label + node.kind);
-  if (prevNodeId.current !== node.label + node.kind) {
-    prevNodeId.current = node.label + node.kind;
-    setTab(SUMMARY_TAB);
   }
 
   const inputValue  = resolveInput(node);
@@ -672,22 +693,21 @@ export function AgentDetailPanel({ node, onClose, onDrillIn }: AgentDetailPanelP
       }}>
         <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography sx={{
-              fontSize: "0.65rem", fontWeight: 500, letterSpacing: "0.06em",
-              textTransform: "uppercase", color: "text.disabled", lineHeight: 1, mb: 0.5,
-            }}>
+            {/* Name + status badge inline */}
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 0.5 }}>
+              <Typography sx={{ fontWeight: 700, fontSize: "1rem", lineHeight: 1.3, color: "text.primary", wordBreak: "break-word" }}>
+                {node.label}
+              </Typography>
+              <StatusChip status={node.status} />
+            </Box>
+            {/* Kind label below */}
+            <Typography sx={{ fontSize: "0.7rem", color: "text.disabled", letterSpacing: "0.04em", textTransform: "uppercase" }}>
               {KIND_DISPLAY[node.kind]}
-            </Typography>
-            <Typography sx={{
-              fontWeight: 700, fontSize: "1rem", lineHeight: 1.2,
-              color: "text.primary", wordBreak: "break-word",
-            }}>
-              {node.label}
             </Typography>
           </Box>
           <IconButton
             size="small" onClick={onClose}
-            sx={{ width: 26, height: 26, color: "text.disabled", flexShrink: 0, "&:hover": { color: "text.primary" } }}
+            sx={{ width: 26, height: 26, color: "text.disabled", flexShrink: 0, mt: 0.25, "&:hover": { color: "text.primary" } }}
           >
             <CloseIcon size={14} />
           </IconButton>

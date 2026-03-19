@@ -67,6 +67,17 @@ def _coerce_value(value, annotation):
             pass
         return value
 
+    # dict/list → str: json.dumps
+    # Conductor delivers AI_MODEL tool arguments as already-parsed objects.
+    # Tools that expect a JSON string and call json.loads() internally will
+    # fail with "the JSON object must be str, bytes or bytearray, not dict"
+    # unless we re-serialise here.
+    if isinstance(value, (dict, list)) and target is str:
+        try:
+            return json.dumps(value)
+        except (TypeError, ValueError):
+            return str(value)
+
     # String → int/float/bool
     if isinstance(value, str):
         if annotation is int:
