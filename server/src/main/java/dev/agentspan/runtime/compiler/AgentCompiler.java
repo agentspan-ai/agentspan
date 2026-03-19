@@ -40,6 +40,12 @@ public class AgentCompiler {
      * Main entry point: compile an AgentConfig into a WorkflowDef.
      */
     public WorkflowDef compile(AgentConfig config) {
+        // Passthrough check MUST be first — passthrough configs have null model.
+        // Any other branch would crash on null model.
+        if (isFrameworkPassthrough(config)) {
+            return compileFrameworkPassthrough(config);
+        }
+
         if (config.isExternal()) {
             throw new IllegalArgumentException(
                 "Cannot compile external agent '" + config.getName() + "' directly. " +
@@ -1252,5 +1258,39 @@ public class AgentCompiler {
 
     public void setLlmRetryCount(int llmRetryCount) {
         this.llmRetryCount = llmRetryCount;
+    }
+
+    private boolean isFrameworkPassthrough(AgentConfig config) {
+        return config.getMetadata() != null
+            && Boolean.TRUE.equals(config.getMetadata().get("_framework_passthrough"));
+    }
+
+    private WorkflowDef compileFrameworkPassthrough(AgentConfig config) {
+        log.debug("Compiling framework passthrough workflow: {}", config.getName());
+
+        String workerName = config.getTools().get(0).getName();
+
+        WorkflowTask fwTask = new WorkflowTask();
+        fwTask.setType("SIMPLE");
+        fwTask.setName(workerName);
+        fwTask.setTaskReferenceName("_fw_task");
+        fwTask.setInputParameters(new LinkedHashMap<>(Map.of(
+            "prompt",     "${workflow.input.prompt}",
+            "session_id", "${workflow.input.session_id}",
+            "media",      "${workflow.input.media}"
+        )));
+
+        WorkflowDef wf = new WorkflowDef();
+        wf.setName(config.getName());
+        wf.setVersion(1);
+        wf.setInputParameters(new ArrayList<>(WORKFLOW_INPUTS));
+        wf.setTasks(List.of(fwTask));
+        wf.setOutputParameters(Map.of("result", "${_fw_task.output.result}"));
+
+        Map<String, Object> metadata = config.getMetadata() != null
+            ? new LinkedHashMap<>(config.getMetadata()) : new LinkedHashMap<>();
+        wf.setMetadata(metadata);
+
+        return wf;
     }
 }

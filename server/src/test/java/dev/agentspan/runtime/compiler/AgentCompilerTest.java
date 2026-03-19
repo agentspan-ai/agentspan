@@ -444,4 +444,48 @@ class AgentCompilerTest {
             .filter(t -> "researcher".equals(t.get("name"))).findFirst().orElseThrow();
         assertThat(agentToolSpec.get("type")).isEqualTo("SUB_WORKFLOW");
     }
+
+    @Test
+    void testCompileFrameworkPassthrough() {
+        // Build a passthrough AgentConfig as produced by LangGraphNormalizer
+        dev.agentspan.runtime.model.ToolConfig worker = dev.agentspan.runtime.model.ToolConfig.builder()
+            .name("my_graph")
+            .toolType("worker")
+            .build();
+
+        AgentConfig config = AgentConfig.builder()
+            .name("my_graph")
+            .metadata(Map.of("_framework_passthrough", true))
+            .tools(List.of(worker))
+            .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        assertThat(wf.getName()).isEqualTo("my_graph");
+        assertThat(wf.getTasks()).hasSize(1);
+        WorkflowTask task = wf.getTasks().get(0);
+        assertThat(task.getType()).isEqualTo("SIMPLE");
+        assertThat(task.getName()).isEqualTo("my_graph");
+        assertThat(task.getTaskReferenceName()).isEqualTo("_fw_task");
+        // prompt/session_id/media must be wired from workflow input
+        assertThat(task.getInputParameters().get("prompt")).isEqualTo("${workflow.input.prompt}");
+        assertThat(task.getInputParameters().get("session_id")).isEqualTo("${workflow.input.session_id}");
+        // Output must reference the _fw_task
+        assertThat(wf.getOutputParameters().get("result")).isEqualTo("${_fw_task.output.result}");
+    }
+
+    @Test
+    void testPassthroughGuardPreventsCrashOnNullModel() {
+        // Passthrough configs have no model — this must NOT throw.
+        // Without the passthrough guard, compile() falls through to compileSimple()
+        // which calls ModelParser.parse(null) and throws NullPointerException.
+        AgentConfig config = AgentConfig.builder()
+            .name("my_graph")
+            .metadata(Map.of("_framework_passthrough", true))
+            .tools(List.of(dev.agentspan.runtime.model.ToolConfig.builder()
+                .name("my_graph").toolType("worker").build()))
+            .build();
+
+        assertThatNoException().isThrownBy(() -> compiler.compile(config));
+    }
 }
