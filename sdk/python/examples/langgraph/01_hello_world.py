@@ -1,0 +1,29 @@
+# Copyright (c) 2025 Agentspan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
+"""Hello World — simplest LangGraph agent with no tools.
+
+Demonstrates:
+    - Using create_agent from agentspan.agents.langchain (returns CompiledStateGraph)
+    - Running a graph with AgentRuntime
+    - Printing the result
+
+Requirements:
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - OPENAI_API_KEY for ChatOpenAI
+"""
+
+from langchain_openai import ChatOpenAI
+from agentspan.agents.langchain import create_agent  # modern API, returns CompiledStateGraph
+from agentspan.agents import AgentRuntime
+
+llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+
+# create_agent with no tools — pure LLM chat, detected as langgraph by Agentspan
+graph = create_agent(llm, tools=[], name="hello_world_agent")
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(graph, "Say hello and tell me a fun fact about Python programming.")
+        print(f"Status: {result.status}")
+        result.print_result()

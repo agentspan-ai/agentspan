@@ -2304,8 +2304,15 @@ class AgentRuntime:
             len(workers),
         )
 
-        # Register extracted tool callables as Conductor workers
-        self._register_framework_workers(workers)
+        # Register workers.
+        # Passthrough path: single worker with func=None (whole graph runs in one task).
+        # Full extraction path: individual tool workers with real callables (like OpenAI/ADK).
+        if workers and workers[0].func is None:
+            worker = workers[0]
+            worker.func = self._build_passthrough_func(agent_obj, framework, worker.name)
+            self._register_passthrough_worker(worker)
+        else:
+            self._register_framework_workers(workers)
 
         correlation_id = str(uuid.uuid4())
         resolved_prompt = str(prompt)
@@ -3712,7 +3719,12 @@ class AgentRuntime:
             len(workers),
         )
 
-        self._register_framework_workers(workers)
+        if workers and workers[0].func is None:
+            worker = workers[0]
+            worker.func = self._build_passthrough_func(agent_obj, framework, worker.name)
+            self._register_passthrough_worker(worker)
+        else:
+            self._register_framework_workers(workers)
 
         correlation_id = str(uuid.uuid4())
         resolved_prompt = str(prompt)

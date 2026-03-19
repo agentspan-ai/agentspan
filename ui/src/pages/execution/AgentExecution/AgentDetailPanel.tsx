@@ -3,7 +3,7 @@
  * Tabs: Summary | Input | Output | JSON
  */
 import { useState, useRef } from "react";
-import { Box, Paper, Typography, IconButton } from "@mui/material";
+import { Box, Paper, Typography, IconButton, Select, MenuItem } from "@mui/material";
 import { X as CloseIcon, ArrowRight } from "@phosphor-icons/react";
 import { Tab, Tabs } from "components";
 import Editor from "@monaco-editor/react";
@@ -15,11 +15,15 @@ import { formatTokens, formatDuration } from "./agentExecutionUtils";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface DetailNodeData {
-  kind: "llm" | "tool" | "handoff" | "subagent" | "output" | "error" | "start";
+  kind: "llm" | "tool" | "handoff" | "subagent" | "output" | "error" | "start" | "group";
   label: string;
   status: AgentStatus;
   event?: AgentEvent;
   subAgentRun?: AgentRunData;
+  /** For group kind */
+  groupType?: "agents" | "tools";
+  groupAgents?: AgentRunData[];
+  groupEvents?: AgentEvent[];
 }
 
 // ─── Tab keys ────────────────────────────────────────────────────────────────
@@ -101,7 +105,13 @@ function ContentView({ value, label }: { value: unknown; label?: string }) {
       </Box>
     );
   }
-  return <JsonView src={value} />;
+  // Object: wrap Monaco in fixed-height container (height="100%" requires flex parent,
+  // which only the JSON tab provides — Input/Output tabs use block layout).
+  return (
+    <Box sx={{ height: 400, border: "1px solid rgba(0,0,0,0.08)", borderRadius: 1, overflow: "hidden" }}>
+      <JsonView src={value} />
+    </Box>
+  );
 }
 
 // ─── Summary key-value row (matches Conductor's KeyValueTable style) ──────────
@@ -200,6 +210,203 @@ function AgentDefSection({ agentDef }: { agentDef: Record<string, unknown> }) {
   );
 }
 
+// ─── Parallel run selector ────────────────────────────────────────────────────
+
+type WindowItem = { type: "chip"; idx: number } | { type: "gap"; from: number; to: number };
+
+function buildWindow(total: number, sel: number): WindowItem[] {
+  if (total <= 9) return Array.from({ length: total }, (_, i) => ({ type: "chip" as const, idx: i }));
+  const visible = new Set(
+    [0, 1, total - 2, total - 1,
+     Math.max(0, sel - 2), Math.max(0, sel - 1), sel,
+     Math.min(total - 1, sel + 1), Math.min(total - 1, sel + 2)]
+    .filter(i => i >= 0 && i < total)
+  );
+  const sorted = Array.from(visible).sort((a, b) => a - b);
+  const result: WindowItem[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    if (i > 0 && sorted[i] > sorted[i - 1] + 1)
+      result.push({ type: "gap", from: sorted[i - 1] + 1, to: sorted[i] - 1 });
+    result.push({ type: "chip", idx: sorted[i] });
+  }
+  return result;
+}
+
+interface RunBarProps {
+  count: number;
+  statuses: AgentStatus[];
+  selected: number;
+  onSelect: (i: number) => void;
+  labels: string[];
+}
+
+function RunBar({ count, statuses, selected, onSelect, labels }: RunBarProps) {
+  const items = buildWindow(count, selected);
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 0.25, flexWrap: "wrap" }}>
+      {items.map((item, i) => {
+        if (item.type === "chip") {
+          const { idx } = item;
+          const st = statuses[idx];
+          const color = st === AgentStatus.FAILED ? "#DD2222" : st === AgentStatus.RUNNING ? "#f59e0b" : "#40BA56";
+          const active = idx === selected;
+          return (
+            <Box
+              key={idx}
+              component="button"
+              onClick={() => onSelect(idx)}
+              sx={{
+                appearance: "none", fontFamily: "inherit", cursor: "pointer",
+                minWidth: 32, height: 24, px: 0.5,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                backgroundColor: active ? color : "#fff",
+                color: active ? "#fff" : "#858585",
+                border: `1px solid ${active ? color : "#DDDDDD"}`,
+                borderRadius: "3px",
+                fontSize: "0.65rem", fontWeight: active ? 700 : 500,
+                transition: "all 0.1s", outline: "none",
+                "&:hover": { borderColor: color, color: active ? "#fff" : color, backgroundColor: active ? color : `${color}12` },
+              }}
+            >
+              {idx + 1}
+            </Box>
+          );
+        }
+        // Gap → dropdown listing all runs in the gap
+        const { from, to } = item;
+        const gapItems = Array.from({ length: to - from + 1 }, (_, k) => from + k);
+        return (
+          <Select
+            key={`gap-${from}`}
+            value=""
+            displayEmpty
+            renderValue={() => "···"}
+            onChange={(e) => onSelect(Number(e.target.value))}
+            size="small"
+            variant="outlined"
+            sx={{
+              height: 24, minWidth: 36,
+              "& .MuiSelect-select": { py: 0, px: 0.75, fontSize: "0.65rem", display: "flex", alignItems: "center", justifyContent: "center", color: "#858585" },
+              "& .MuiOutlinedInput-notchedOutline": { borderColor: "#DDDDDD" },
+              "& .MuiSelect-icon": { display: "none" },
+            }}
+          >
+            {gapItems.map(idx => {
+              const st = statuses[idx];
+              const dot = st === AgentStatus.FAILED ? "#DD2222" : st === AgentStatus.RUNNING ? "#f59e0b" : "#40BA56";
+              return (
+                <MenuItem key={idx} value={idx} sx={{ fontSize: "0.75rem", gap: 1 }}>
+                  <Box sx={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: dot, flexShrink: 0 }} />
+                  {labels[idx] ?? `Run ${idx + 1}`}
+                </MenuItem>
+              );
+            })}
+          </Select>
+        );
+      })}
+    </Box>
+  );
+}
+
+// ─── Group detail panel (parallel agents / tool calls) ────────────────────────
+
+function GroupDetailPanel({ node, onDrillIn }: { node: DetailNodeData; onDrillIn?: (run: AgentRunData) => void }) {
+  const [selectedIdx, setSelectedIdx] = useState(0);
+  const isAgents = node.groupType === "agents";
+  const agents = node.groupAgents ?? [];
+  const events = node.groupEvents ?? [];
+  const count = isAgents ? agents.length : events.length;
+
+  const statuses: AgentStatus[] = isAgents
+    ? agents.map(a => a.status)
+    : events.map(e => e.success === true ? AgentStatus.COMPLETED : e.success === false ? AgentStatus.FAILED : AgentStatus.RUNNING);
+
+  const labels: string[] = isAgents
+    ? agents.map((a, i) => `${a.agentName} #${i + 1}`)
+    : events.map((e, i) => `${e.toolName ?? "tool"} #${i + 1}`);
+
+  const completed = statuses.filter(s => s === AgentStatus.COMPLETED).length;
+  const failed    = statuses.filter(s => s === AgentStatus.FAILED).length;
+  const running   = count - completed - failed;
+
+  const selAgent = isAgents ? agents[selectedIdx] : undefined;
+  const selEvent = !isAgents ? events[selectedIdx] : undefined;
+
+  return (
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      {/* Stat bar */}
+      <Box sx={{ px: 3, py: 1, display: "flex", alignItems: "center", gap: 2, borderBottom: "1px solid rgba(0,0,0,0.08)", flexShrink: 0 }}>
+        <Typography sx={{ fontSize: "0.75rem", color: "text.secondary" }}>{count} {isAgents ? "agents" : "calls"}</Typography>
+        {completed > 0 && <Typography sx={{ fontSize: "0.75rem", color: "#40BA56", fontWeight: 600 }}>{completed} ✓</Typography>}
+        {failed    > 0 && <Typography sx={{ fontSize: "0.75rem", color: "#DD2222", fontWeight: 600 }}>{failed} ✗</Typography>}
+        {running   > 0 && <Typography sx={{ fontSize: "0.75rem", color: "#f59e0b", fontWeight: 600 }}>{running} ⟳</Typography>}
+      </Box>
+
+      {/* Run selector */}
+      <Box sx={{ px: 3, py: 1.25, borderBottom: "1px solid rgba(0,0,0,0.08)", flexShrink: 0 }}>
+        <RunBar count={count} statuses={statuses} selected={selectedIdx} onSelect={setSelectedIdx} labels={labels} />
+      </Box>
+
+      {/* Selected run detail */}
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", scrollbarWidth: "none", "&::-webkit-scrollbar": { display: "none" } }}>
+        {selAgent && (
+          <Box>
+            <SummaryRow label="Agent" value={selAgent.agentName} />
+            {selAgent.model && <SummaryRow label="Model" value={selAgent.model} />}
+            <SummaryRow label="Status" value={<StatusBadgeInline status={selAgent.status} />} />
+            {selAgent.totalDurationMs > 0 && <SummaryRow label="Duration" value={formatDuration(selAgent.totalDurationMs)} />}
+            {(selAgent.totalTokens.promptTokens + selAgent.totalTokens.completionTokens) > 0 && (
+              <SummaryRow label="Total tokens" value={formatTokens(selAgent.totalTokens.promptTokens + selAgent.totalTokens.completionTokens)} />
+            )}
+            {selAgent.finishReason && <SummaryRow label="Finish reason" value={selAgent.finishReason} />}
+            {selAgent.failureReason && <SummaryRow label="Failure reason" value={<span style={{ color: "#DD2222" }}>{selAgent.failureReason}</span>} />}
+            {onDrillIn && (
+              <Box sx={{ px: 3, py: 1.5 }}>
+                <Box
+                  onClick={() => onDrillIn(selAgent)}
+                  sx={{
+                    display: "inline-flex", alignItems: "center", gap: 0.75,
+                    px: 1.5, py: 0.75, borderRadius: 1, cursor: "pointer",
+                    fontSize: "0.8rem", fontWeight: 500, color: "#fff",
+                    backgroundColor: "#4969e4", "&:hover": { backgroundColor: "#3858d6" },
+                  }}
+                >
+                  View full execution <ArrowRight size={14} />
+                </Box>
+              </Box>
+            )}
+          </Box>
+        )}
+        {selEvent && (
+          <Box>
+            <SummaryRow label="Tool" value={selEvent.toolName ?? "tool"} />
+            <SummaryRow label="Status" value={<StatusBadgeInline status={statuses[selectedIdx]} />} />
+            {selEvent.durationMs ? <SummaryRow label="Duration" value={formatDuration(selEvent.durationMs)} /> : null}
+            {selEvent.taskMeta?.workerId && <SummaryRow label="Worker" value={selEvent.taskMeta.workerId} />}
+            {selEvent.taskMeta?.reasonForIncompletion && (
+              <SummaryRow label="Failure" value={<span style={{ color: "#DD2222" }}>{selEvent.taskMeta.reasonForIncompletion}</span>} />
+            )}
+            {selEvent.toolArgs != null && (
+              <SummaryRow label="Input" value={
+                <Box sx={{ height: 180, border: "1px solid rgba(0,0,0,0.08)", borderRadius: 1, overflow: "hidden" }}>
+                  <JsonView src={selEvent.toolArgs} />
+                </Box>
+              } />
+            )}
+            {selEvent.result != null && (
+              <SummaryRow label="Output" value={
+                <Box sx={{ height: 180, border: "1px solid rgba(0,0,0,0.08)", borderRadius: 1, overflow: "hidden" }}>
+                  <JsonView src={selEvent.result} />
+                </Box>
+              } />
+            )}
+          </Box>
+        )}
+      </Box>
+    </Box>
+  );
+}
+
 // ─── Summary tab content per node kind ──────────────────────────────────────
 
 function SummaryContent({ node, onDrillIn }: { node: DetailNodeData; onDrillIn?: (run: AgentRunData) => void }) {
@@ -265,11 +472,27 @@ function SummaryContent({ node, onDrillIn }: { node: DetailNodeData; onDrillIn?:
   }
 
   if (node.kind === "tool") {
+    const meta = ev?.taskMeta;
+    const fmt = (ts?: number) =>
+      ts ? new Date(ts).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", fractionalSecondDigits: 3 }) : undefined;
     return (
       <Box>
         <SummaryRow label="Tool" value={ev?.toolName ?? node.label} />
+        {meta?.taskType && <SummaryRow label="Task type" value={meta.taskType} />}
+        {meta?.referenceTaskName && <SummaryRow label="Reference name" value={meta.referenceTaskName} />}
         <SummaryRow label="Status" value={<StatusBadgeInline status={node.status} />} />
-        {ev?.durationMs && <SummaryRow label="Duration" value={formatDuration(ev.durationMs)} />}
+        {ev?.durationMs ? <SummaryRow label="Duration" value={formatDuration(ev.durationMs)} /> : null}
+        {fmt(meta?.scheduledTime) && <SummaryRow label="Scheduled" value={fmt(meta?.scheduledTime)!} />}
+        {fmt(meta?.startTime) && <SummaryRow label="Start time" value={fmt(meta?.startTime)!} />}
+        {fmt(meta?.endTime) && <SummaryRow label="End time" value={fmt(meta?.endTime)!} />}
+        {meta?.workerId && <SummaryRow label="Worker" value={meta.workerId} />}
+        {meta?.retryCount != null && meta.retryCount > 0 && <SummaryRow label="Retries" value={String(meta.retryCount)} />}
+        {meta?.reasonForIncompletion && (
+          <SummaryRow
+            label="Failure reason"
+            value={<span style={{ color: "#DD2222" }}>{meta.reasonForIncompletion}</span>}
+          />
+        )}
       </Box>
     );
   }
@@ -342,7 +565,8 @@ function resolveInput(node: DetailNodeData): unknown {
   if (node.kind === "subagent" && node.subAgentRun) return node.subAgentRun.input;
   const detail = node.event?.detail as any;
   if (detail && typeof detail === "object" && "input" in detail) return detail.input;
-  if (node.event?.type === EventType.TOOL_CALL) return (node.event.detail as any)?.input;
+  // Fallback: toolArgs is always the raw input for TOOL_CALL events
+  if (node.event?.toolArgs != null) return node.event.toolArgs;
   return null;
 }
 
@@ -352,6 +576,8 @@ function resolveOutput(node: DetailNodeData): unknown {
   const detail = node.event?.detail as any;
   if (detail && typeof detail === "object" && "output" in detail) return detail.output;
   if (node.event?.type === EventType.DONE) return detail;
+  // Fallback: result field carries tool output
+  if (node.event?.result != null) return node.event.result;
   return null;
 }
 
@@ -383,10 +609,37 @@ const KIND_DISPLAY: Record<DetailNodeData["kind"], string> = {
   handoff:  "Handoff",
   output:   "Output",
   error:    "Error",
+  group:    "Parallel Group",
 };
 
 export function AgentDetailPanel({ node, onClose, onDrillIn }: AgentDetailPanelProps) {
   const [tab, setTab] = useState(SUMMARY_TAB);
+
+  // Group nodes get their own dedicated layout (no tabs)
+  if (node.kind === "group") {
+    return (
+      <Paper square elevation={0} sx={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden", borderLeft: "1px solid", borderColor: "divider", backgroundColor: "#fff" }}>
+        <Box sx={{ px: 2.5, pt: 2, pb: 1.5, borderBottom: "1px solid", borderColor: "divider", flexShrink: 0 }}>
+          <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography sx={{ fontSize: "0.65rem", fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", color: "text.disabled", lineHeight: 1, mb: 0.5 }}>
+                {node.groupType === "agents" ? "Parallel Agents" : "Parallel Tool Calls"}
+              </Typography>
+              <Typography sx={{ fontWeight: 700, fontSize: "1rem", lineHeight: 1.2, color: "text.primary", wordBreak: "break-word" }}>
+                {node.label}
+              </Typography>
+            </Box>
+            <IconButton size="small" onClick={onClose} sx={{ width: 26, height: 26, color: "text.disabled", flexShrink: 0, "&:hover": { color: "text.primary" } }}>
+              <CloseIcon size={14} />
+            </IconButton>
+          </Box>
+        </Box>
+        <Box sx={{ flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+          <GroupDetailPanel node={node} onDrillIn={onDrillIn} />
+        </Box>
+      </Paper>
+    );
+  }
 
   // Reset to summary whenever a different node is opened
   const prevNodeId = useRef(node.label + node.kind);
@@ -425,15 +678,12 @@ export function AgentDetailPanel({ node, onClose, onDrillIn }: AgentDetailPanelP
             }}>
               {KIND_DISPLAY[node.kind]}
             </Typography>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-              <Typography sx={{
-                fontWeight: 700, fontSize: "1rem", lineHeight: 1.2,
-                color: "text.primary", wordBreak: "break-word",
-              }}>
-                {node.label}
-              </Typography>
-              <StatusBadgeInline status={node.status} />
-            </Box>
+            <Typography sx={{
+              fontWeight: 700, fontSize: "1rem", lineHeight: 1.2,
+              color: "text.primary", wordBreak: "break-word",
+            }}>
+              {node.label}
+            </Typography>
           </Box>
           <IconButton
             size="small" onClick={onClose}

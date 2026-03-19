@@ -90,3 +90,11 @@ ignore = ["E501"]
 python_version = "3.9"
 ignore_missing_imports = true
 no_strict_optional = true
+
+[dependency-groups]
+dev = [
+    "langchain>=0.3.28",
+    "langchain-core>=0.3.83",
+    "langchain-openai>=0.3.35",
+    "langgraph>=0.6.11",
+]
