@@ -1,7 +1,7 @@
 # Claude Agent SDK Integration for Agentspan
 
 **Date:** 2026-03-19
-**Status:** Draft
+**Status:** Draft (v2 — reviewer issues resolved)
 
 ## Summary
 
@@ -21,7 +21,7 @@ The Claude Agent SDK is categorically different:
 - Tools (`Bash`, `Read`, `Write`, `Edit`, `Glob`, `Grep`, `WebSearch`, `WebFetch`) run on **localhost** — the same machine as the worker
 - Sessions persist as JSONL conversation history files on the local filesystem at `~/.claude/projects/<encoded-cwd>/<session-id>.jsonl`
 
-The SDK's hook system (`PreToolUse`, `PostToolUse`, etc.) can observe and block tool calls via the control protocol, but **cannot inject custom tool results for built-in tools** — the CLI always executes and returns results itself. Replacing tool results requires either a custom `Transport` implementation (Option C) or an MCP shim (excluded here due to tool-naming concerns).
+The SDK's hook system (`PreToolUse`, `PostToolUse`, etc.) can observe and block tool calls via the control protocol, but **cannot inject custom tool results for built-in tools** — the CLI always executes and returns results itself. Replacing tool results requires either a custom `Transport` implementation (Tier 3) or an MCP shim (excluded here due to tool-naming concerns).
 
 ---
 
@@ -84,72 +84,128 @@ Sessions are stored on the Agentspan server, keyed by `workflowInstanceId`. This
 
 | Moment | Worker action |
 |---|---|
-| Task start | `GET /api/agent-sessions/{workflowId}` — restore JSONL to `~/.claude/projects/...`, pass `session_id` to `query()` |
+| Task start | `GET /api/agent-sessions/{workflowId}` — restore JSONL to local path, pass `session_id` to `query()` |
 | After every tool call (PostToolUse hook) | `POST /api/agent-sessions/{workflowId}` — upload current JSONL content |
-| Task complete | Final `POST` (session already checkpointed, this is a no-op or final confirmation) |
+| Task complete | No-op (already checkpointed after last tool) |
 | Task retry (worker crash) | New worker: `GET` retrieves last checkpoint, resumes seamlessly |
 
-The JSONL path is derived from `session_id` and `cwd`:
-```
-~/.claude/projects/<cwd-with-non-alphanum-replaced-by-dash>/<session-id>.jsonl
+**Session file location:**
+
+The Claude CLI stores sessions at `~/.claude/projects/<encoded-cwd>/<session-id>.jsonl`. Rather than replicating the CLI's exact path-encoding algorithm (which is subject to change), the worker locates the file using the session ID as a glob:
+
+```python
+import glob, os
+
+def find_session_file(session_id: str) -> str | None:
+    """Locate the CLI session JSONL by session ID — avoids encoding algorithm dependency."""
+    pattern = os.path.expanduser(f"~/.claude/projects/**/{session_id}.jsonl")
+    matches = glob.glob(pattern, recursive=True)
+    return matches[0] if matches else None
+
+def write_session_file(session_id: str, cwd: str, jsonl_content: str) -> str:
+    """
+    Write restored JSONL to the expected path.
+    The path is derived by glob-searching for the session_id after the first run,
+    or by inspecting the CLI source for the encoding algorithm.
+
+    Empirical verification required: run the SDK once, observe the path created
+    under ~/.claude/projects/, and confirm the encoding scheme before shipping.
+    The known format is: ~/.claude/projects/<url-percent-encoded-absolute-cwd>/<session-id>.jsonl
+    """
+    # Verify encoding against actual CLI behavior before deploying
+    import urllib.parse
+    encoded_cwd = urllib.parse.quote(os.path.abspath(cwd), safe='')
+    path = os.path.expanduser(f"~/.claude/projects/{encoded_cwd}/{session_id}.jsonl")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w') as f:
+        f.write(jsonl_content)
+    return path
 ```
 
-The worker writes this path after `GET` and reads it for `POST` checkpoints.
+**Important:** The exact encoding scheme (`urllib.parse.quote` vs. a custom scheme) must be verified empirically against the CLI before the session restore feature ships. If encoding mismatches, the session file will be written to a path the CLI does not read, causing silent session loss. The glob-based `find_session_file()` is used for reading (after the CLI has already created the path) and avoids this dependency.
 
 **No session found** (first run or session expired): `query()` starts fresh, `SystemMessage(subtype="init")` emits the new `session_id`, which is included in the first checkpoint.
 
 ### Hook Infrastructure
 
-All hooks are registered as async Python callbacks. They share closure over `workflow_id`, `session_id` (populated after `SystemMessage(init)`), `cwd`, and the HTTP client.
+All hooks are registered as async Python callbacks. They share closure over `workflow_id`, `session_id_ref` (populated after `SystemMessage(init)`), `cwd`, and the HTTP client.
+
+**Event field names must match what `AgentService.pushFrameworkEvent()` reads on the Java side:** `toolName`, `args`, `result` (not `tool`, `input`, `output`).
 
 ```python
 # sdk/python/src/agentspan/agents/frameworks/claude.py (simplified)
+import asyncio
+from claude_agent_sdk import query, ClaudeAgentOptions, HookMatcher, SystemMessage, ResultMessage
 
-def make_claude_worker(agent_config, session_client, event_client):
-    session_id_ref = {"value": None}
+def make_claude_worker(agent_config, session_client, event_client, conductor_client=None):
 
-    async def pre_tool_hook(input_data, tool_use_id, context):
-        await event_client.push(workflow_id, "tool_call", {
-            "tool": input_data["tool_name"],
-            "input": input_data["tool_input"],
-        })
-        return {}
-
-    async def post_tool_hook(input_data, tool_use_id, context):
-        await event_client.push(workflow_id, "tool_result", {
-            "tool": input_data["tool_name"],
-            "output": input_data.get("tool_response"),
-        })
-        await session_client.checkpoint(workflow_id, session_id_ref["value"], cwd)
-        return {}
-
-    # ... SubagentStart, SubagentStop hooks similarly
-
-    def worker(task: Task) -> TaskResult:
+    def worker(task):
         workflow_id = task.workflow_instance_id
         prompt = task.input_data["prompt"]
         cwd = task.input_data.get("cwd", ".")
-        session_id = session_client.restore(workflow_id, cwd)
+        session_id_ref = {"value": None}
+
+        async def pre_tool_hook(input_data, tool_use_id, context):
+            await event_client.push(workflow_id, "tool_call", {
+                "toolName": input_data["tool_name"],
+                "args": input_data["tool_input"],
+            })
+            return {}
+
+        async def post_tool_hook(input_data, tool_use_id, context):
+            await event_client.push(workflow_id, "tool_result", {
+                "toolName": input_data["tool_name"],
+                "result": input_data.get("tool_response"),
+            })
+            await session_client.checkpoint(workflow_id, session_id_ref["value"], cwd)
+            return {}
+
+        async def subagent_start_hook(input_data, tool_use_id, context):
+            await event_client.push(workflow_id, "subagent_start", {
+                "agentId": input_data.get("agent_id"),
+                "agentType": input_data.get("agent_type"),
+            })
+            return {}
+
+        async def subagent_stop_hook(input_data, tool_use_id, context):
+            await event_client.push(workflow_id, "subagent_stop", {
+                "agentId": input_data.get("agent_id"),
+            })
+            return {}
+
+        hooks = {
+            "PreToolUse":   [HookMatcher(matcher=".*", hooks=[pre_tool_hook])],
+            "PostToolUse":  [HookMatcher(matcher=".*", hooks=[post_tool_hook])],
+            "SubagentStart":[HookMatcher(matcher=".*", hooks=[subagent_start_hook])],
+            "SubagentStop": [HookMatcher(matcher=".*", hooks=[subagent_stop_hook])],
+        }
+
+        if agent_config.get("conductor_subagents") and conductor_client:
+            subagent_hook = make_subagent_hook(conductor_client, event_client, workflow_id, cwd, agent_config)
+            hooks["PreToolUse"].append(HookMatcher(matcher="Agent", hooks=[subagent_hook]))
 
         async def run():
-            async for msg in query(prompt=prompt, options=ClaudeAgentOptions(
-                cwd=cwd,
-                allowed_tools=agent_config.get("allowed_tools", []),
-                max_turns=agent_config.get("max_turns", 100),
-                resume=session_id,
-                hooks={
-                    "PreToolUse":   [HookMatcher(matcher=".*", hooks=[pre_tool_hook])],
-                    "PostToolUse":  [HookMatcher(matcher=".*", hooks=[post_tool_hook])],
-                    "SubagentStart":[HookMatcher(matcher=".*", hooks=[subagent_start_hook])],
-                    "SubagentStop": [HookMatcher(matcher=".*", hooks=[subagent_stop_hook])],
-                },
-            )):
+            session_id = session_client.restore(workflow_id, cwd)
+            async for msg in query(
+                prompt=prompt,
+                options=ClaudeAgentOptions(
+                    cwd=cwd,
+                    allowed_tools=agent_config.get("allowed_tools", []),
+                    max_turns=agent_config.get("max_turns", 100),
+                    resume=session_id,
+                    hooks=hooks,
+                ),
+            ):
                 if isinstance(msg, SystemMessage) and msg.subtype == "init":
-                    session_id_ref["value"] = msg.data["session_id"]
+                    session_id_ref["value"] = msg.session_id
                 if isinstance(msg, ResultMessage):
                     return msg.result
+            return None
 
-        result = anyio.run(run)
+        # asyncio.run() always creates a new event loop.
+        # Conductor workers run in dedicated threads with no existing event loop — this is safe.
+        result = asyncio.run(run())
+        from agentspan.agents import TaskResult, COMPLETED
         return TaskResult(status=COMPLETED, output_data={"result": result})
 
     return worker
@@ -170,7 +226,12 @@ The hook:
 4. Returns the result in the denial reason
 
 ```python
-def make_subagent_hook(conductor_client, workflow_id, cwd, agent_config):
+def make_subagent_hook(conductor_client, event_client, workflow_id, cwd, agent_config):
+    """
+    Note: event_client must be passed explicitly — it is not captured from outer scope.
+    This function is used both when building Tier 1/2 hooks in make_claude_worker()
+    and standalone for testing.
+    """
     async def subagent_hook(input_data, tool_use_id, context):
         if input_data["tool_name"] != "Agent":
             return {}
@@ -186,14 +247,14 @@ def make_subagent_hook(conductor_client, workflow_id, cwd, agent_config):
         )
 
         await event_client.push(workflow_id, "subagent_start", {
-            "sub_workflow_id": sub_workflow_id,
+            "subWorkflowId": sub_workflow_id,
             "prompt": tool_input.get("prompt", ""),
         })
 
         result = await conductor_client.poll_until_done(sub_workflow_id)
 
         await event_client.push(workflow_id, "subagent_stop", {
-            "sub_workflow_id": sub_workflow_id,
+            "subWorkflowId": sub_workflow_id,
             "result": result,
         })
 
@@ -270,10 +331,12 @@ The Transport synthesizes these message types for the SDK:
   {"type": "tool_result", "tool_use_id": "tu_abc123", "content": "result text", "is_error": false}
 ]}, "parent_tool_use_id": null}
 
-// Final result
-{"type": "result", "subtype": "success", "result": "...", "session_id": "...",
+// Final result — session_id is the workflow_id (Tier 3 has no CLI-assigned session ID)
+{"type": "result", "subtype": "success", "result": "...", "session_id": "<workflow_id>",
  "duration_ms": 12345, "num_turns": 5, "is_error": false}
 ```
+
+**Note on `session_id` in result message:** In Tier 3, the CLI subprocess is replaced entirely by `AgentspanTransport`. There is no CLI-assigned session ID. The workflow ID is used as a stable, unique identifier in its place. Session persistence is handled by the Transport directly (not by the CLI), so this does not affect correctness.
 
 ### Conversation State
 
@@ -284,16 +347,134 @@ The Transport synthesizes these message types for the SDK:
 ```python
 # sdk/python/src/agentspan/agents/frameworks/claude_transport.py
 
+import asyncio, json, anthropic
+from claude_agent_sdk import Transport
+from typing import AsyncIterator
+
+_DRAIN_SENTINEL = object()  # signals _drain_queue to stop iteration
+
+# Tool schemas for the Anthropic Messages API (Tier 3 — Transport makes LLM calls directly)
+_TOOL_SCHEMAS = {
+    "Bash": {
+        "name": "Bash",
+        "description": "Execute shell commands",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "command": {"type": "string", "description": "Shell command to run"},
+                "timeout": {"type": "integer", "description": "Timeout in seconds", "default": 30},
+            },
+            "required": ["command"],
+        },
+    },
+    "Read": {
+        "name": "Read",
+        "description": "Read a file",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "file_path": {"type": "string"},
+                "offset": {"type": "integer"},
+                "limit": {"type": "integer"},
+            },
+            "required": ["file_path"],
+        },
+    },
+    "Write": {
+        "name": "Write",
+        "description": "Write content to a file",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "file_path": {"type": "string"},
+                "content": {"type": "string"},
+            },
+            "required": ["file_path", "content"],
+        },
+    },
+    "Edit": {
+        "name": "Edit",
+        "description": "Edit a file by replacing text",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "file_path": {"type": "string"},
+                "old_string": {"type": "string"},
+                "new_string": {"type": "string"},
+                "replace_all": {"type": "boolean", "default": False},
+            },
+            "required": ["file_path", "old_string", "new_string"],
+        },
+    },
+    "Glob": {
+        "name": "Glob",
+        "description": "Find files by glob pattern",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "pattern": {"type": "string"},
+                "path": {"type": "string", "default": "."},
+            },
+            "required": ["pattern"],
+        },
+    },
+    "Grep": {
+        "name": "Grep",
+        "description": "Search file contents by regex pattern",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "pattern": {"type": "string"},
+                "path": {"type": "string", "default": "."},
+                "glob_pattern": {"type": "string"},
+            },
+            "required": ["pattern"],
+        },
+    },
+    "WebSearch": {
+        "name": "WebSearch",
+        "description": "Search the web",
+        "input_schema": {
+            "type": "object",
+            "properties": {"query": {"type": "string"}},
+            "required": ["query"],
+        },
+    },
+    "WebFetch": {
+        "name": "WebFetch",
+        "description": "Fetch a web page",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string"},
+                "prompt": {"type": "string"},
+            },
+            "required": ["url"],
+        },
+    },
+    "Agent": {
+        "name": "Agent",
+        "description": "Spawn a subagent to handle a subtask",
+        "input_schema": {
+            "type": "object",
+            "properties": {"prompt": {"type": "string"}},
+            "required": ["prompt"],
+        },
+    },
+}
+
+
 class AgentspanTransport(Transport):
     def __init__(self, agent_config, conductor_client, event_client, workflow_id, cwd):
-        self._queue = asyncio.Queue()
-        self._conversation = []
+        self._queue: asyncio.Queue = asyncio.Queue()
+        self._conversation: list = []
         self._agent_config = agent_config
         self._conductor = conductor_client
         self._events = event_client
         self._workflow_id = workflow_id
         self._cwd = cwd
         self._client = anthropic.AsyncAnthropic()
+        self._turn_count = 0
 
     async def connect(self) -> None:
         pass  # nothing to connect to
@@ -308,24 +489,36 @@ class AgentspanTransport(Transport):
     def read_messages(self) -> AsyncIterator[dict]:
         return self._drain_queue()
 
+    def _get_tool_schemas(self) -> list:
+        """Return Anthropic tool schemas for allowed_tools."""
+        allowed = set(self._agent_config.get("allowed_tools", []))
+        return [schema for name, schema in _TOOL_SCHEMAS.items() if name in allowed]
+
     async def _run_turn(self) -> None:
         while True:
-            # LLM call
+            # LLM call via Anthropic Messages API
+            # thinking: {"type": "adaptive"} requires claude-opus-4-6 or claude-sonnet-4-6
+            model = self._agent_config.get("model", "claude-opus-4-6")
             response = await self._client.messages.create(
-                model=self._agent_config.get("model", "claude-opus-4-6"),
+                model=model,
                 max_tokens=self._agent_config.get("max_tokens", 8192),
                 messages=self._conversation,
                 tools=self._get_tool_schemas(),
-                thinking={"type": "adaptive"},
+                thinking={"type": "adaptive"},  # Opus 4.6 / Sonnet 4.6 only; omit for older models
             )
+            self._turn_count += 1
+
+            # Serialize content blocks for the stream-json protocol.
+            # Anthropic SDK objects must be converted to dicts before JSON serialization.
+            content_dicts = [block.model_dump() for block in response.content]
 
             # Emit assistant message to SDK
             await self._queue.put({
                 "type": "assistant",
-                "message": {"role": "assistant", "content": response.content},
+                "message": {"role": "assistant", "content": content_dicts},
                 "parent_tool_use_id": None,
             })
-            self._conversation.append({"role": "assistant", "content": response.content})
+            self._conversation.append({"role": "assistant", "content": content_dicts})
 
             if response.stop_reason != "tool_use":
                 break  # done
@@ -335,11 +528,13 @@ class AgentspanTransport(Transport):
             for block in response.content:
                 if block.type == "tool_use":
                     await self._events.push(self._workflow_id, "tool_call", {
-                        "tool": block.name, "input": block.input
+                        "toolName": block.name,
+                        "args": block.input,
                     })
                     result = await self._execute_tool(block.name, block.input)
                     await self._events.push(self._workflow_id, "tool_result", {
-                        "tool": block.name, "output": result
+                        "toolName": block.name,
+                        "result": result,
                     })
                     tool_results.append({
                         "type": "tool_result",
@@ -356,37 +551,44 @@ class AgentspanTransport(Transport):
             })
             self._conversation.append(tool_message)
 
-        # Emit final result
+        # Emit final result, then sentinel to terminate _drain_queue
         final_text = next(
             (b.text for b in response.content if b.type == "text"), ""
         )
         await self._queue.put({
-            "type": "result", "subtype": "success",
-            "result": final_text, "session_id": self._workflow_id,
-            "is_error": False, "num_turns": len(self._conversation) // 2,
+            "type": "result",
+            "subtype": "success",
+            "result": final_text,
+            # In Tier 3, no CLI-assigned session ID exists; workflow_id is used as
+            # a stable unique identifier. Session state is managed by the Transport.
+            "session_id": self._workflow_id,
+            "is_error": False,
+            "num_turns": self._turn_count,
             "duration_ms": 0,
         })
+        # Sentinel tells _drain_queue to stop — without it, read_messages() blocks forever
+        await self._queue.put(_DRAIN_SENTINEL)
 
-    async def _execute_tool(self, name: str, input: dict) -> str:
+    async def _execute_tool(self, name: str, tool_input: dict) -> str:
         if name == "Agent":
-            return await self._run_subagent(input)
+            return await self._run_subagent(tool_input)
         # All other tools → Conductor SIMPLE task
         task_name = f"claude_builtin_{name.lower()}"
         result = await self._conductor.run_task(task_name, {
-            **input, "cwd": self._cwd
+            **tool_input, "cwd": self._cwd
         })
         return result.get("output", "")
 
-    async def _run_subagent(self, input: dict) -> str:
+    async def _run_subagent(self, tool_input: dict) -> str:
         sub_workflow_id = await self._conductor.start_workflow(
             "claude_agent_workflow",
-            {"prompt": input.get("prompt", ""), "cwd": self._cwd}
+            {"prompt": tool_input.get("prompt", ""), "cwd": self._cwd}
         )
         await self._events.push(self._workflow_id, "subagent_start",
-                                {"sub_workflow_id": sub_workflow_id})
+                                {"subWorkflowId": sub_workflow_id})
         result = await self._conductor.poll_until_done(sub_workflow_id)
         await self._events.push(self._workflow_id, "subagent_stop",
-                                {"sub_workflow_id": sub_workflow_id, "result": result})
+                                {"subWorkflowId": sub_workflow_id, "result": result})
         return result
 
     async def close(self) -> None:
@@ -399,8 +601,12 @@ class AgentspanTransport(Transport):
         pass
 
     async def _drain_queue(self):
+        """Yield items from the queue until the sentinel is received."""
         while True:
-            yield await self._queue.get()
+            item = await self._queue.get()
+            if item is _DRAIN_SENTINEL:
+                return  # terminates the async generator; query() sees StopAsyncIteration
+            yield item
 ```
 
 ---
@@ -409,79 +615,121 @@ class AgentspanTransport(Transport):
 
 Used only when `agentspan_routing=True`. All workers live in a single file and are started together. Each receives `cwd` from the task input (passed by `AgentspanTransport`).
 
+**Security note:** File path operations use `.resolve()` and check that the result stays within `cwd` to prevent path traversal. `claude_builtin_bash` uses `shell=True` and must only be deployed in controlled environments (see Limitations).
+
 ```python
 # sdk/python/src/agentspan/agents/frameworks/claude_builtin_workers.py
 
-import subprocess, pathlib, glob as glob_module, re, json, anyio
+import subprocess, pathlib, glob as glob_module, re, json, os
 import anthropic
 from agentspan.agents import tool, AgentRuntime
 
+
+def _safe_path(cwd: str, file_path: str) -> pathlib.Path:
+    """Resolve file_path within cwd, raising ValueError on traversal attempts."""
+    base = pathlib.Path(cwd).resolve()
+    resolved = (base / file_path).resolve()
+    if not str(resolved).startswith(str(base) + os.sep) and resolved != base:
+        raise ValueError(f"Path '{file_path}' escapes working directory")
+    return resolved
+
+
 @tool
 def claude_builtin_bash(command: str, timeout: int = 30, cwd: str = ".") -> dict:
-    result = subprocess.run(
-        command, shell=True, capture_output=True,
-        text=True, timeout=timeout, cwd=cwd
-    )
-    output = result.stdout
-    if result.stderr:
-        output += f"\n[stderr]: {result.stderr}"
-    return {"output": output, "exit_code": result.returncode}
+    """
+    SECURITY: Runs with shell=True. Deploy only in controlled environments
+    with pre-vetted agent prompts. Consider Docker sandboxing for production.
+    """
+    try:
+        result = subprocess.run(
+            command, shell=True, capture_output=True,
+            text=True, timeout=timeout, cwd=cwd
+        )
+        output = result.stdout
+        if result.stderr:
+            output += f"\n[stderr]: {result.stderr}"
+        return {"output": output, "exit_code": result.returncode}
+    except subprocess.TimeoutExpired:
+        return {"output": f"Command timed out after {timeout}s", "exit_code": 124}
+
 
 @tool
 def claude_builtin_read(file_path: str, offset: int = 0, limit: int = None, cwd: str = ".") -> dict:
-    path = pathlib.Path(cwd) / file_path
-    lines = path.read_text().splitlines(keepends=True)
-    if offset:
-        lines = lines[offset:]
-    if limit:
-        lines = lines[:limit]
-    return {"output": "".join(lines), "total_lines": len(lines)}
+    try:
+        path = _safe_path(cwd, file_path)
+        lines = path.read_text().splitlines(keepends=True)
+        if offset:
+            lines = lines[offset:]
+        if limit:
+            lines = lines[:limit]
+        return {"output": "".join(lines), "total_lines": len(lines)}
+    except ValueError as e:
+        return {"output": str(e), "exit_code": 1}
+    except FileNotFoundError:
+        return {"output": f"File not found: {file_path}", "exit_code": 1}
+
 
 @tool
 def claude_builtin_write(file_path: str, content: str, cwd: str = ".") -> dict:
-    path = pathlib.Path(cwd) / file_path
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content)
-    return {"output": f"Wrote {len(content)} bytes to {file_path}"}
+    try:
+        path = _safe_path(cwd, file_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+        return {"output": f"Wrote {len(content)} bytes to {file_path}"}
+    except ValueError as e:
+        return {"output": str(e), "exit_code": 1}
+
 
 @tool
 def claude_builtin_edit(file_path: str, old_string: str, new_string: str,
                          replace_all: bool = False, cwd: str = ".") -> dict:
-    path = pathlib.Path(cwd) / file_path
-    content = path.read_text()
-    count = content.count(old_string)
-    if count == 0:
-        return {"output": f"Error: string not found in {file_path}", "exit_code": 1}
-    if count > 1 and not replace_all:
-        return {"output": f"Error: string appears {count} times; use replace_all=True", "exit_code": 1}
-    path.write_text(content.replace(old_string, new_string, None if replace_all else 1))
-    return {"output": f"Replaced {count if replace_all else 1} occurrence(s)"}
+    try:
+        path = _safe_path(cwd, file_path)
+        content = path.read_text()
+        count = content.count(old_string)
+        if count == 0:
+            return {"output": f"Error: string not found in {file_path}", "exit_code": 1}
+        if count > 1 and not replace_all:
+            return {"output": f"Error: string appears {count} times; use replace_all=True", "exit_code": 1}
+        path.write_text(content.replace(old_string, new_string, None if replace_all else 1))
+        return {"output": f"Replaced {count if replace_all else 1} occurrence(s)"}
+    except ValueError as e:
+        return {"output": str(e), "exit_code": 1}
+
 
 @tool
 def claude_builtin_glob(pattern: str, path: str = ".", cwd: str = ".") -> dict:
-    base = pathlib.Path(cwd) / path
-    matches = [str(p) for p in base.glob(pattern)]
-    return {"output": "\n".join(sorted(matches)), "count": len(matches)}
+    try:
+        base = _safe_path(cwd, path)
+        matches = [str(p) for p in base.glob(pattern)]
+        return {"output": "\n".join(sorted(matches)), "count": len(matches)}
+    except ValueError as e:
+        return {"output": str(e), "exit_code": 1}
+
 
 @tool
 def claude_builtin_grep(pattern: str, path: str = ".", glob_pattern: str = None,
                          cwd: str = ".") -> dict:
-    base = pathlib.Path(cwd) / path
-    file_glob = glob_pattern or "**/*"
-    results = []
-    for f in base.glob(file_glob):
-        if not f.is_file():
-            continue
-        try:
-            for i, line in enumerate(f.read_text().splitlines(), 1):
-                if re.search(pattern, line):
-                    results.append(f"{f}:{i}: {line}")
-        except (UnicodeDecodeError, PermissionError):
-            pass
-    return {"output": "\n".join(results), "count": len(results)}
+    try:
+        base = _safe_path(cwd, path)
+        file_glob = glob_pattern or "**/*"
+        results = []
+        for f in base.glob(file_glob):
+            if not f.is_file():
+                continue
+            try:
+                for i, line in enumerate(f.read_text().splitlines(), 1):
+                    if re.search(pattern, line):
+                        results.append(f"{f}:{i}: {line}")
+            except (UnicodeDecodeError, PermissionError):
+                pass
+        return {"output": "\n".join(results), "count": len(results)}
+    except ValueError as e:
+        return {"output": str(e), "exit_code": 1}
+
 
 @tool
-def claude_builtin_web_search(query: str) -> dict:
+def claude_builtin_websearch(query: str) -> dict:
     """Search the web using Claude's server-side web search tool."""
     client = anthropic.Anthropic()
     response = client.messages.create(
@@ -493,8 +741,9 @@ def claude_builtin_web_search(query: str) -> dict:
     text = next((b.text for b in response.content if b.type == "text"), "")
     return {"output": text}
 
+
 @tool
-def claude_builtin_web_fetch(url: str, prompt: str = None) -> dict:
+def claude_builtin_webfetch(url: str, prompt: str = None) -> dict:
     """Fetch and summarize a web page using Claude's server-side web fetch tool."""
     client = anthropic.Anthropic()
     content = f"Fetch {url}"
@@ -509,12 +758,13 @@ def claude_builtin_web_fetch(url: str, prompt: str = None) -> dict:
     text = next((b.text for b in response.content if b.type == "text"), "")
     return {"output": text}
 
+
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         runtime.start()
 ```
 
-**Tool naming convention:** `claude_builtin_{tool_name_lowercase}` to avoid collisions with user-defined tools. `AgentspanTransport._execute_tool()` constructs the Conductor task name using the same convention.
+**Tool naming convention:** The transport uses `claude_builtin_{tool_name_lower}` to construct the Conductor task name. Note: `WebSearch` → `claude_builtin_websearch`, `WebFetch` → `claude_builtin_webfetch` (no underscore in the function name, since the SDK uses single-word tool names).
 
 ---
 
@@ -611,6 +861,13 @@ DELETE /api/agent-sessions/{workflowId}
 
 Session records are stored in a new `AgentSession` entity in the existing database (one row per workflowId). `jsonlContent` is stored as a TEXT column (CLOB for large sessions). Cleanup is triggered when the parent workflow is deleted or archived.
 
+### Modified: `AgentCompiler.java` — Add `cwd` to WORKFLOW_INPUTS
+
+`WORKFLOW_INPUTS` currently contains `["prompt", "session_id", "media"]`. `cwd` must be added so that `compileFrameworkPassthrough()` maps it to the Conductor workflow input and the Python worker can read it from `task.input_data.get("cwd")`.
+
+**File to change:** `server/src/main/java/dev/agentspan/runtime/compiler/AgentCompiler.java`
+**Change:** Add `"cwd"` to the `WORKFLOW_INPUTS` list and ensure `compileFrameworkPassthrough()` includes it in the workflow input mapping. Without this, the worker always receives `cwd = "."` regardless of what the user specified.
+
 ### New: `ClaudeAgentNormalizer.java`
 
 Normalizes `ClaudeCodeAgent` rawConfig → passthrough `AgentConfig`. Identical pattern to `LangGraphNormalizer`.
@@ -638,31 +895,42 @@ AgentConfig {
 }
 ```
 
-### Modified: `AgentCompiler.java`
+### Modified: `AgentCompiler.java` — `isFrameworkPassthrough()` Check
 
-No changes needed. Existing `isFrameworkPassthrough()` check handles Claude agents because `_framework_passthrough: true` is set in metadata. The passthrough guard already runs before any model-dependent branching.
+No additional changes needed. Existing `isFrameworkPassthrough()` check handles Claude agents because `_framework_passthrough: true` is set in metadata. The passthrough guard already runs before any model-dependent branching.
 
 ### Modified: `AgentEventListener.java`
 
 The existing `_fw_` prefix check on `taskReferenceName` already suppresses spurious tool events for passthrough workers. Claude agents use the same `_fw_claude_` prefix convention.
 
-### Modified: `AgentService.java`
+### Modified: `AgentService.java` — Add `subagent_start` and `subagent_stop` Event Types
 
-Add `AgentSessionService` dependency for session CRUD. Wire session cleanup to workflow deletion events.
+`AgentService.pushFrameworkEvent()` currently handles: `thinking`, `tool_call`, `tool_result`, `context_condensed`. The `subagent_start` and `subagent_stop` events pushed by Claude workers and the Transport will be **silently dropped** unless this method is extended.
+
+**Required changes to `AgentService.java`:**
+1. Add `case "subagent_start":` → `AgentSSEEvent.subagentStart(workflowId, payload.get("subWorkflowId"), payload.get("prompt"))`
+2. Add `case "subagent_stop":` → `AgentSSEEvent.subagentStop(workflowId, payload.get("subWorkflowId"), payload.get("result"))`
+
+**Required changes to `AgentSSEEvent.java` (or equivalent factory class):**
+Add factory methods `subagentStart(...)` and `subagentStop(...)` returning the appropriate SSE event objects.
+
+Wire `AgentSessionService` dependency for session CRUD and cleanup on workflow deletion events.
 
 ---
 
 ## SSE Event Mapping
 
-Events pushed by the worker (Tier 1/2) or Transport (Tier 3) to `POST /api/agent/events/{workflowId}`:
+Events pushed by the worker (Tier 1/2) or Transport (Tier 3) to `POST /api/agent/events/{workflowId}`.
 
-| SDK event / Transport moment | Agentspan SSE event |
-|---|---|
-| `PreToolUse` fires for any tool | `tool_call(workflowId, toolName, input)` |
-| `PostToolUse` fires for any tool | `tool_result(workflowId, toolName, output)` |
-| `SubagentStart` / start of subagent workflow | `subagent_start(workflowId, subWorkflowId, prompt)` |
-| `SubagentStop` / completion of subagent workflow | `subagent_stop(workflowId, subWorkflowId, result)` |
-| Conductor workflow → COMPLETED | `done` (fired by existing `AgentEventListener`, same as all agents) |
+**Event payload field names match what `AgentService.pushFrameworkEvent()` reads:** `toolName`, `args`, `result`, `subWorkflowId` (not `tool`, `input`, `output`, `sub_workflow_id`).
+
+| SDK event / Transport moment | Agentspan SSE event | Payload |
+|---|---|---|
+| `PreToolUse` fires for any tool | `tool_call` | `{toolName, args}` |
+| `PostToolUse` fires for any tool | `tool_result` | `{toolName, result}` |
+| `SubagentStart` / start of subagent workflow | `subagent_start` | `{subWorkflowId, prompt}` |
+| `SubagentStop` / completion of subagent workflow | `subagent_stop` | `{subWorkflowId, result}` |
+| Conductor workflow → COMPLETED | `done` (fired by existing `AgentEventListener`, same as all agents) | — |
 
 Tier 3 pushes the same events directly from `AgentspanTransport` (since SDK hooks don't fire when Transport replaces the CLI).
 
@@ -680,6 +948,7 @@ Tier 3 pushes the same events directly from `AgentspanTransport` (since SDK hook
 | Session JSONL parse error on restore | Skip restore (start fresh); log warning |
 | `max_turns` exceeded | `ResultMessage.stop_reason = "max_turns"`; return partial result as COMPLETED |
 | SDK subprocess crash (Tier 1/2) | Worker returns `FAILED`; Conductor retries; session restores from checkpoint |
+| Session file path mismatch (encoding) | `find_session_file()` returns None; treated as no-session (fresh start); logs warning |
 
 ---
 
@@ -704,7 +973,9 @@ Tier 3 pushes the same events directly from `AgentspanTransport` (since SDK hook
 | `controller/AgentController.java` | **Modified** — add `GET/POST/DELETE /api/agent-sessions/{workflowId}` |
 | `service/AgentSessionService.java` | **New** — CRUD for session JSONL storage |
 | `model/AgentSession.java` | **New** — JPA entity for session storage |
-| `service/AgentService.java` | **Modified** — wire `AgentSessionService` for cleanup |
+| `service/AgentService.java` | **Modified** — add `subagent_start`/`subagent_stop` event handlers; wire `AgentSessionService` for cleanup |
+| `compiler/AgentCompiler.java` | **Modified** — add `"cwd"` to `WORKFLOW_INPUTS`; include in passthrough workflow input mapping |
+| `event/AgentSSEEvent.java` | **Modified** — add `subagentStart()` and `subagentStop()` factory methods |
 
 ---
 
@@ -721,6 +992,12 @@ Tier 3 pushes the same events directly from `AgentspanTransport` (since SDK hook
 5. **No TypeScript SDK support**: This design covers the Python SDK only. TypeScript support is a follow-up.
 
 6. **`web_search` and `web_fetch` cost**: Both workers make separate Anthropic API calls. In Tier 3, this means a Claude agent using web search incurs two model calls per web search (one from the Transport's LLM turn, one from the worker). Acceptable for now.
+
+7. **`claude_builtin_bash` security**: The bash worker runs commands with `shell=True`, which allows shell injection if an untrusted agent controls command construction. Deploy only in controlled environments with pre-vetted prompts. Consider Docker or similar sandboxing for production workloads.
+
+8. **Session file path encoding**: The exact URL-encoding scheme used by the Claude CLI must be verified empirically before the session restore feature ships. A mismatch causes silent session loss (treated as fresh start). The glob-based `find_session_file()` mitigates read-side risk but the write-side (restore to worker) requires correct path derivation.
+
+9. **Adaptive thinking model requirement**: `thinking: {"type": "adaptive"}` in `AgentspanTransport` requires `claude-opus-4-6` or `claude-sonnet-4-6`. If the user configures an older model, omit the `thinking` parameter or use `{"type": "enabled", "budget_tokens": N}` instead. The implementation should guard on model version.
 
 ---
 
