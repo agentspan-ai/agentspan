@@ -69,6 +69,16 @@ public class AgentService {
         }
         log.info("Compiling agent: {}", config.getName());
         WorkflowDef def = agentCompiler.compile(config);
+
+        // Stamp agentDef into the compiled WorkflowDef so it is persisted when
+        // the SDK passes the def inline to Conductor's start_workflow.
+        String sdk = request.getFramework() != null ? request.getFramework() : "conductor";
+        Map<String, Object> metadata = def.getMetadata() != null
+                ? new LinkedHashMap<>(def.getMetadata()) : new LinkedHashMap<>();
+        metadata.put("agent_sdk", sdk);
+        stampAgentDef(metadata, request);
+        def.setMetadata(metadata);
+
         Map<String, Object> defMap = MAPPER.convertValue(def, Map.class);
         return CompileResponse.builder().workflowDef(defMap).build();
     }
@@ -92,6 +102,7 @@ public class AgentService {
         Map<String, Object> metadata = def.getMetadata() != null
                 ? new LinkedHashMap<>(def.getMetadata()) : new LinkedHashMap<>();
         metadata.put("agent_sdk", sdk);
+        stampAgentDef(metadata, request);
         def.setMetadata(metadata);
 
         // 2. Register workflow definition (upsert)
@@ -135,6 +146,7 @@ public class AgentService {
         Map<String, Object> metadata = def.getMetadata() != null
                 ? new LinkedHashMap<>(def.getMetadata()) : new LinkedHashMap<>();
         metadata.put("agent_sdk", sdk);
+        stampAgentDef(metadata, request);
         def.setMetadata(metadata);
 
         // 2. Register workflow definition (upsert)
@@ -332,6 +344,87 @@ public class AgentService {
                 .output(workflow.getOutput())
                 .currentTask(currentTask)
                 .build();
+    }
+
+    /**
+     * Get a workflow execution with its full task list and token usage.
+     *
+     * <p>Exposed via {@code GET /api/agent/{id}}.  Returns workflow metadata,
+     * all tasks (for SDK recursive token collection via {@code subWorkflowId}),
+     * and pre-computed token usage for LLM tasks in this workflow only.</p>
+     */
+    public AgentRun getWorkflow(String workflowId) {
+        Workflow workflow = executionService.getExecutionStatus(workflowId, true);
+
+        int promptTokens = 0, completionTokens = 0, totalTokens = 0;
+        boolean hasTokens = false;
+
+        List<AgentRun.TaskDetail> tasks = new java.util.ArrayList<>();
+        for (Task task : workflow.getTasks()) {
+            AgentRun.TaskDetail.TaskDetailBuilder tb = AgentRun.TaskDetail.builder()
+                    .taskType(task.getTaskType())
+                    .referenceTaskName(task.getReferenceTaskName())
+                    .status(task.getStatus().name())
+                    .subWorkflowId(task.getSubWorkflowId())
+                    .outputData(task.getOutputData());
+            tasks.add(tb.build());
+
+            if ("LLM_CHAT_COMPLETE".equalsIgnoreCase(task.getTaskType())) {
+                java.util.Map<String, Object> out = task.getOutputData();
+                if (out != null) {
+                    promptTokens     += toInt(out.get("promptTokens"));
+                    completionTokens += toInt(out.get("completionTokens"));
+                    totalTokens      += toInt(out.get("tokenUsed"));
+                    hasTokens = true;
+                }
+            }
+        }
+
+        AgentRun.TokenUsage tokenUsage = hasTokens
+                ? AgentRun.TokenUsage.builder()
+                        .promptTokens(promptTokens)
+                        .completionTokens(completionTokens)
+                        .totalTokens(totalTokens == 0 ? promptTokens + completionTokens : totalTokens)
+                        .build()
+                : null;
+
+        return AgentRun.builder()
+                .workflowId(workflowId)
+                .agentName(workflow.getWorkflowName())
+                .version(workflow.getWorkflowVersion())
+                .status(workflow.getStatus().name())
+                .startTime(workflow.getStartTime())
+                .endTime(workflow.getEndTime())
+                .input(workflow.getInput())
+                .output(workflow.getOutput())
+                .tokenUsage(tokenUsage)
+                .tasks(tasks)
+                .build();
+    }
+
+    /**
+     * Write the agent definition into workflow metadata so it can be inspected
+     * later without re-running the agent.  Stores the raw serialized config
+     * sent by the SDK — tools and guardrails are already reduced to name
+     * references by the SDK serializer, so no function objects are present.
+     */
+    private void stampAgentDef(Map<String, Object> metadata, StartRequest request) {
+        Map<String, Object> agentDef = request.getRawConfig() != null
+                ? request.getRawConfig()
+                : (request.getAgentConfig() != null
+                        ? MAPPER.convertValue(request.getAgentConfig(), Map.class)
+                        : null);
+        if (agentDef != null) {
+            metadata.put("agentDef", agentDef);
+        }
+    }
+
+    private static int toInt(Object value) {
+        if (value instanceof Number) return ((Number) value).intValue();
+        if (value instanceof String) {
+            try { return Integer.parseInt((String) value); } catch (NumberFormatException ignored) {}
+        }
+        return 0;
     }
 
     @SuppressWarnings("unchecked")

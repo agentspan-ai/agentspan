@@ -7,6 +7,7 @@ package dev.agentspan.runtime.controller;
 
 import dev.agentspan.runtime.model.AgentExecutionDetail;
 import dev.agentspan.runtime.model.AgentSummary;
+import dev.agentspan.runtime.model.AgentRun;
 import dev.agentspan.runtime.model.CompileResponse;
 import dev.agentspan.runtime.model.StartRequest;
 import dev.agentspan.runtime.model.StartResponse;
@@ -150,5 +151,17 @@ public class AgentController {
     @GetMapping("/{workflowId}/status")
     public Map<String, Object> getAgentStatus(@PathVariable String workflowId) {
         return agentService.getStatus(workflowId);
+    }
+
+    /**
+     * Get a workflow execution with its full task list.
+     *
+     * <p>Used by the SDK for token usage collection — returns task types,
+     * output data (including token counts), and sub-workflow IDs for
+     * recursive traversal into sub-agents.</p>
+     */
+    @GetMapping("/{id}")
+    public AgentRun getWorkflow(@PathVariable String id) {
+        return agentService.getWorkflow(id);
     }
 }

@@ -91,6 +91,8 @@ function makeAgentResult({ workflowId, output, status, messages, toolCalls, fini
           `(${u.promptTokens || u.prompt_tokens || 0} prompt, ` +
           `${u.completionTokens || u.completion_tokens || 0} completion)`
         );
+      } else {
+        console.log('Tokens: \u2014');
       }
       if (result.finishReason) console.log(`Finish reason: ${result.finishReason}`);
       console.log(`Workflow ID: ${result.workflowId}\n`);

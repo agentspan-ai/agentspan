@@ -178,6 +178,8 @@ class AgentResult:
                 f"({self.token_usage.prompt_tokens} prompt, "
                 f"{self.token_usage.completion_tokens} completion)"
             )
+        else:
+            print("Tokens: —")
         if self.finish_reason:
             print(f"Finish reason: {self.finish_reason}")
         if self.workflow_id:

@@ -68,39 +68,45 @@ class WorkerManager:
         registered workers.  On subsequent calls, starts processes for any
         workers registered *after* the initial startup (e.g. workers added
         by agents compiled after the first ``start()`` call).
+
+        Thread-safe: concurrent calls are serialized so only one TaskHandler
+        is ever created and ``_start_new_workers`` is never called in parallel
+        (which would cause the ``task_runner_processes[-1]`` index to return
+        the wrong process, leaving some workers unstarted with pollCount=0).
         """
         from conductor.client.automator.task_handler import TaskHandler
 
-        if self._task_handler is None:
-            logger.info("Starting worker processes (poll_interval=%dms, threads=%d, daemon=%s)",
-                         self._poll_interval_ms, self._thread_count, self._daemon)
-            self._task_handler = TaskHandler(
-                workers=[],
-                configuration=self._configuration,
-                scan_for_annotated_workers=True,
-                monitor_processes=False,
-            )
+        with self._lock:
+            if self._task_handler is None:
+                logger.info("Starting worker processes (poll_interval=%dms, threads=%d, daemon=%s)",
+                             self._poll_interval_ms, self._thread_count, self._daemon)
+                self._task_handler = TaskHandler(
+                    workers=[],
+                    configuration=self._configuration,
+                    scan_for_annotated_workers=True,
+                    monitor_processes=False,
+                )
 
-            # Set worker processes to daemon BEFORE starting them.
-            # Daemon processes are killed automatically when the main process
-            # exits, preventing the process hang after run() completes.
-            if self._daemon:
-                for proc in self._task_handler.task_runner_processes:
-                    proc.daemon = True
-                if self._task_handler.metrics_provider_process is not None:
-                    self._task_handler.metrics_provider_process.daemon = True
+                # Set worker processes to daemon BEFORE starting them.
+                # Daemon processes are killed automatically when the main process
+                # exits, preventing the process hang after run() completes.
+                if self._daemon:
+                    for proc in self._task_handler.task_runner_processes:
+                        proc.daemon = True
+                    if self._task_handler.metrics_provider_process is not None:
+                        self._task_handler.metrics_provider_process.daemon = True
 
-            # The logger process was already started in TaskHandler.__init__()
-            # (cannot set daemon after start). Register an atexit handler to
-            # send the sentinel None to the log queue so it exits cleanly
-            # before multiprocessing's _exit_function tries to join it.
-            self._register_logger_cleanup()
+                # The logger process was already started in TaskHandler.__init__()
+                # (cannot set daemon after start). Register an atexit handler to
+                # send the sentinel None to the log queue so it exits cleanly
+                # before multiprocessing's _exit_function tries to join it.
+                self._register_logger_cleanup()
 
-            self._task_handler.start_processes()
-        else:
-            # TaskHandler already running — start processes for any newly
-            # registered workers that don't yet have a process.
-            self._start_new_workers()
+                self._task_handler.start_processes()
+            else:
+                # TaskHandler already running — start processes for any newly
+                # registered workers that don't yet have a process.
+                self._start_new_workers()
 
     def _start_new_workers(self) -> None:
         """Start processes for workers registered after the initial startup.

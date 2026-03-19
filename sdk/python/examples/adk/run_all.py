@@ -69,6 +69,7 @@ class ExampleResult:
     failures: List[str] = field(default_factory=list)
     error: str = ""
     duration_s: float = 0.0
+    filename: str = ""  # e.g. "09_multi_tool_agent.py" — set by _run_example_tracked
 
 
 @dataclass
@@ -83,6 +84,7 @@ class _RunState:
     duration_s: float = 0.0
     start_time: float = 0.0
     error: str = ""
+    workflow_ids: List[str] = field(default_factory=list)  # all workflow IDs started by this example
 
 
 _SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
@@ -2122,47 +2124,71 @@ EXAMPLES = [
 
 
 def print_report(results: List[ExampleResult]) -> None:
-    """Print a detailed post-run report."""
-    passed = sum(1 for r in results if r.passed)
-    failed = sum(1 for r in results if not r.passed and not r.error)
-    errored = sum(1 for r in results if r.error)
+    """Print a post-run report: brief per-example status + focused failure section."""
+    passed = [r for r in results if r.passed]
+    not_passed = [r for r in results if not r.passed]
 
     _console.print()
-    _console.rule("[bold white]GOOGLE ADK EXAMPLES — DETAILED REPORT[/bold white]")
+    _console.rule("[bold white]GOOGLE ADK EXAMPLES — RESULTS[/bold white]")
 
+    # ── Brief per-example status ────────────────────────────────────────────
     for r in results:
         if r.passed:
-            icon, style = "✓ PASS", "bold green"
+            icon, style = "✓", "bold green"
         elif r.error:
-            icon, style = "✗ ERROR", "bold red"
+            icon, style = "✗", "bold red"
         else:
-            icon, style = "✗ FAIL", "bold yellow"
+            icon, style = "✗", "bold yellow"
+        label = r.filename or r.name
+        _console.print(f"  [{style}]{icon}[/{style}]  {label:<35} [dim]{r.status or '—':12}[/dim] {r.duration_s:.1f}s")
 
-        _console.print(f"\n  [{style}]{icon}[/{style}]  [bold]{r.name}[/bold]  [dim]({r.duration_s:.1f}s)[/dim]")
-        _console.print(f"         workflow:  [dim]{r.workflow_id or '—'}[/dim]")
-        _console.print(f"         wf status: [dim]{r.status or '—'}[/dim]")
-
-        for c in r.checks:
-            _console.print(f"           [green]+[/green] {c}")
-        for f in r.failures:
-            _console.print(f"           [yellow]-[/yellow] {f}")
-        if r.error:
-            _console.print(f"           [red]![/red] {r.error}")
-
+    # ── Summary line ────────────────────────────────────────────────────────
     _console.rule()
     summary = Text("  SUMMARY:  ", style="bold")
-    summary.append(f"{passed} passed", style="bold green")
+    summary.append(f"{len(passed)} passed", style="bold green")
     summary.append("  /  ")
-    summary.append(f"{failed} failed", style="bold yellow")
-    summary.append("  /  ")
-    summary.append(f"{errored} errors", style="bold red")
+    summary.append(f"{len(not_passed)} failed", style="bold yellow" if not_passed else "dim")
     summary.append(f"   (out of {len(results)})", style="dim")
     _console.print(summary)
+
+    # ── Failures detail ─────────────────────────────────────────────────────
+    if not_passed:
+        _console.print()
+        _console.rule("[bold red]FAILURES[/bold red]")
+        for r in not_passed:
+            label = r.filename or r.name
+            if r.error:
+                kind = "ERROR"
+                kind_style = "bold red"
+            elif r.status == "TIMEOUT":
+                kind = "TIMEOUT"
+                kind_style = "bold yellow"
+            else:
+                kind = "FAIL"
+                kind_style = "bold yellow"
+
+            _console.print(f"\n  [{kind_style}]{kind}[/{kind_style}]  [bold]{label}[/bold]")
+
+            # Workflow ID(s)
+            wf = r.workflow_id or "—"
+            _console.print(f"    [dim]workflow:[/dim]  {wf}")
+
+            # Why it failed
+            if r.error:
+                _console.print(f"    [dim]reason:  [/dim]  [red]{r.error}[/red]")
+            for f in r.failures:
+                _console.print(f"    [dim]         [/dim]  [yellow]- {f}[/yellow]")
+            if not r.error and not r.failures:
+                _console.print(f"    [dim]reason:  [/dim]  [yellow]{r.status or 'unknown'}[/yellow]")
+
+        _console.print()
+        _console.rule()
+
     _console.print()
 
 
 MAX_WORKERS = 8
-EXAMPLE_TIMEOUT_S = 60  # per-example wall-clock timeout
+EXAMPLE_TIMEOUT_S = 120  # per-example wall-clock timeout
 
 # Statuses that mean the workflow finished (one way or another)
 _TERMINAL_WF_STATUSES = {"COMPLETED", "FAILED", "TERMINATED", "TIMED_OUT"}
@@ -2171,68 +2197,102 @@ _TERMINAL_WF_STATUSES = {"COMPLETED", "FAILED", "TERMINATED", "TIMED_OUT"}
 class _TimedRuntime:
     """Thin proxy injecting per-call timeout into runtime.run() and tracking workflow IDs."""
 
-    def __init__(self, runtime: AgentRuntime, timeout_s: int) -> None:
+    def __init__(self, runtime: AgentRuntime, timeout_s: int, state: _RunState) -> None:
         self._rt = runtime
         self._timeout = timeout_s
+        self._state = state
         self.workflow_ids: List[str] = []
+
+    def _track(self, workflow_id: str) -> None:
+        if workflow_id and workflow_id not in self.workflow_ids:
+            self.workflow_ids.append(workflow_id)
+            self._state.workflow_ids.append(workflow_id)
 
     def run(self, agent: Any, prompt: Any = "", **kwargs: Any) -> Any:
         kwargs.setdefault("timeout", self._timeout)
         result = self._rt.run(agent, prompt, **kwargs)
         if result.workflow_id:
-            self.workflow_ids.append(result.workflow_id)
+            self._track(result.workflow_id)
         return result
 
     def stream(self, agent: Any, prompt: Any = "", **kwargs: Any) -> Any:
-        return self._rt.stream(agent, prompt, **kwargs)
+        stream_obj = self._rt.stream(agent, prompt, **kwargs)
+        # Capture the workflow ID as soon as the stream is created so the
+        # main-loop timeout handler can cancel it if needed.
+        handle = getattr(stream_obj, "handle", None)
+        if handle and getattr(handle, "workflow_id", None):
+            self._track(handle.workflow_id)
+            self._state.workflow_id = handle.workflow_id
+        return stream_obj
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._rt, name)
+
+
+def _cancel_workflows(runtime: AgentRuntime, workflow_ids: List[str], reason: str) -> None:
+    """Best-effort cancellation of all workflows started by an example."""
+    for wf_id in workflow_ids:
+        try:
+            runtime.cancel(wf_id, reason=reason)
+        except Exception:
+            pass
+
+
+def _fn_to_filename(fn) -> str:
+    """Convert a function like ex09_multi_tool_agent → '09_multi_tool_agent.py'."""
+    name = fn.__name__
+    # strip leading 'ex' prefix added by run_all naming convention
+    if name.startswith("ex"):
+        name = name[2:]
+    return f"{name}.py"
 
 
 def _run_example_tracked(fn, runtime: AgentRuntime, state: _RunState) -> ExampleResult:
     """Run one example and update the shared _RunState for live display."""
     state.status = "RUNNING"
     state.start_time = time.time()
-    proxy = _TimedRuntime(runtime, EXAMPLE_TIMEOUT_S)
+    filename = _fn_to_filename(fn)
+    proxy = _TimedRuntime(runtime, EXAMPLE_TIMEOUT_S, state)
     try:
         r = fn(proxy)
+        r.filename = filename
         r.duration_s = time.time() - state.start_time
         state.duration_s = r.duration_s
-        state.workflow_id = r.workflow_id
+        state.workflow_id = r.workflow_id or state.workflow_id
 
-        # Detect poll timeout: runtime.run() returned with a non-terminal status
-        if r.status not in _TERMINAL_WF_STATUSES:
+        # Detect poll timeout: runtime.run() returned with a non-terminal status.
+        # r.status may be comma-separated for multi-workflow examples (e.g. ex05
+        # sets r.status = "COMPLETED, COMPLETED"), so check each part individually.
+        _result_statuses = [s.strip() for s in r.status.split(",")]
+        if any(s not in _TERMINAL_WF_STATUSES for s in _result_statuses):
             state.wf_status = "TIMEOUT"
             state.status = "FAIL"
             state.error = f"timed out after {EXAMPLE_TIMEOUT_S}s (server status: {r.status})"
-            for wf_id in proxy.workflow_ids:
-                try:
-                    runtime.cancel(wf_id, reason=f"run_all: timeout after {EXAMPLE_TIMEOUT_S}s")
-                except Exception:
-                    pass
+            _cancel_workflows(runtime, proxy.workflow_ids, f"run_all: timeout after {EXAMPLE_TIMEOUT_S}s")
             return ExampleResult(
                 name=state.display_name,
+                filename=filename,
                 workflow_id=r.workflow_id,
                 status="TIMEOUT",
                 error=state.error,
                 duration_s=state.duration_s,
             )
 
-        state.wf_status = r.status
+        # Use the "worst" individual status for the display (FAILED > COMPLETED).
+        state.wf_status = next(
+            (s for s in _result_statuses if s != "COMPLETED"),
+            "COMPLETED",
+        )
         state.status = "PASS" if r.passed else "FAIL"
         return r
     except Exception as e:
         state.duration_s = time.time() - state.start_time
         state.status = "ERROR"
         state.error = f"{type(e).__name__}: {e}"
-        for wf_id in proxy.workflow_ids:
-            try:
-                runtime.cancel(wf_id, reason="run_all: example exception")
-            except Exception:
-                pass
+        _cancel_workflows(runtime, proxy.workflow_ids, "run_all: example exception")
         return ExampleResult(
             name=fn.__name__,
+            filename=filename,
             error=state.error,
             duration_s=state.duration_s,
         )
@@ -2350,6 +2410,42 @@ def main() -> int:
                 }
                 pending = set(futures.keys())
                 while pending:
+                    # Enforce wall-clock timeout per example.  Python threads
+                    # cannot be killed, but we cancel the Conductor workflow so
+                    # the server stops working, mark the example as timed out,
+                    # and drop it from the pending set so we don't wait forever.
+                    now = time.time()
+                    timed_out: set = set()
+                    for fut in list(pending):
+                        fn = futures[fut]
+                        s = state_by_fn[fn.__name__]
+                        if (
+                            s.status == "RUNNING"
+                            and s.start_time > 0
+                            and (now - s.start_time) > EXAMPLE_TIMEOUT_S
+                        ):
+                            s.status = "FAIL"
+                            s.wf_status = "TIMEOUT"
+                            s.duration_s = now - s.start_time
+                            s.error = f"wall-clock timeout after {EXAMPLE_TIMEOUT_S}s"
+                            _cancel_workflows(
+                                runtime, s.workflow_ids,
+                                f"run_all: wall-clock timeout after {EXAMPLE_TIMEOUT_S}s",
+                            )
+                            result_map[fn.__name__] = ExampleResult(
+                                name=s.display_name,
+                                filename=_fn_to_filename(fn),
+                                workflow_id=s.workflow_id,
+                                status="TIMEOUT",
+                                error=s.error,
+                                duration_s=s.duration_s,
+                            )
+                            timed_out.add(fut)
+                    pending -= timed_out
+
+                    if not pending:
+                        break
+
                     done, pending = concurrent.futures.wait(
                         pending, timeout=0.1,
                         return_when=concurrent.futures.FIRST_COMPLETED,

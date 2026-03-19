@@ -272,6 +272,7 @@ class AgentRuntime:
         self._compiled_workflows: Dict[str, Any] = {}
         self._workers_started = False
         self._registered_tool_names: set = set()
+        self._worker_start_lock = threading.Lock()
         self._shutdown_lock = threading.Lock()
         self._is_shutdown = False
         self._integration_client_instance: Optional[Any] = None
@@ -544,23 +545,24 @@ class AgentRuntime:
         # Start workers if any agent has tools.  If workers are already running
         # but new tools were registered, restart to pick them up.
         if self._config.auto_start_workers and self._has_worker_tools(agent):
-            worker_names = self._collect_worker_names(agent)
-            new_workers = worker_names - self._registered_tool_names
-            if new_workers:
-                logger.info(
-                    "New workers detected (%s), starting workers",
-                    ", ".join(sorted(new_workers)),
-                )
-                self._registered_tool_names.update(worker_names)
-            if not self._workers_started:
-                logger.debug("Starting workers for agent '%s'", agent.name)
-                self._worker_manager.start()
-                self._workers_started = True
-            elif new_workers:
-                # Inject new workers into the running TaskHandler without
-                # stopping existing ones.  This avoids the fork() deadlock
-                # window caused by a full stop/restart cycle.
-                self._worker_manager.start()
+            with self._worker_start_lock:
+                worker_names = self._collect_worker_names(agent)
+                new_workers = worker_names - self._registered_tool_names
+                if new_workers:
+                    logger.info(
+                        "New workers detected (%s), starting workers",
+                        ", ".join(sorted(new_workers)),
+                    )
+                    self._registered_tool_names.update(worker_names)
+                if not self._workers_started:
+                    logger.debug("Starting workers for agent '%s'", agent.name)
+                    self._worker_manager.start()
+                    self._workers_started = True
+                elif new_workers:
+                    # Inject new workers into the running TaskHandler without
+                    # stopping existing ones.  This avoids the fork() deadlock
+                    # window caused by a full stop/restart cycle.
+                    self._worker_manager.start()
 
         return wf
 
@@ -645,23 +647,24 @@ class AgentRuntime:
 
         # Start worker polling if needed
         if self._config.auto_start_workers and self._has_worker_tools(agent):
-            worker_names = self._collect_worker_names(agent)
-            new_workers = worker_names - self._registered_tool_names
-            if new_workers:
-                logger.info(
-                    "New workers detected (%s), starting workers",
-                    ", ".join(sorted(new_workers)),
-                )
-                self._registered_tool_names.update(worker_names)
-            if not self._workers_started:
-                logger.debug("Starting workers for agent '%s'", agent.name)
-                self._worker_manager.start()
-                self._workers_started = True
-            elif new_workers:
-                # Inject new workers into the running TaskHandler without
-                # stopping existing ones.  This avoids the fork() deadlock
-                # window caused by a full stop/restart cycle.
-                self._worker_manager.start()
+            with self._worker_start_lock:
+                worker_names = self._collect_worker_names(agent)
+                new_workers = worker_names - self._registered_tool_names
+                if new_workers:
+                    logger.info(
+                        "New workers detected (%s), starting workers",
+                        ", ".join(sorted(new_workers)),
+                    )
+                    self._registered_tool_names.update(worker_names)
+                if not self._workers_started:
+                    logger.debug("Starting workers for agent '%s'", agent.name)
+                    self._worker_manager.start()
+                    self._workers_started = True
+                elif new_workers:
+                    # Inject new workers into the running TaskHandler without
+                    # stopping existing ones.  This avoids the fork() deadlock
+                    # window caused by a full stop/restart cycle.
+                    self._worker_manager.start()
 
     def _collect_worker_names(self, agent: Agent) -> set:
         """Collect all worker task names from an agent tree.
@@ -1980,7 +1983,7 @@ class AgentRuntime:
             )
             tool_calls = self._extract_tool_calls(wf)
             messages = self._extract_messages(wf)
-            token_usage = self._extract_token_usage(wf)
+            token_usage = self._extract_token_usage(workflow_id)
         except Exception as exc:
             logger.debug("Could not fetch workflow details for %s: %s", workflow_id, exc)
 
@@ -2051,7 +2054,7 @@ class AgentRuntime:
             wf = self._workflow_client.get_workflow(workflow_id=workflow_id, include_tasks=True)
             tool_calls = self._extract_tool_calls(wf)
             messages = self._extract_messages(wf)
-            token_usage = self._extract_token_usage(wf)
+            token_usage = self._extract_token_usage(workflow_id)
         except Exception as exc:
             logger.debug("Could not fetch workflow details: %s", exc)
 
@@ -2146,7 +2149,7 @@ class AgentRuntime:
             )
             tool_calls = self._extract_tool_calls(wf)
             messages = self._extract_messages(wf)
-            token_usage = self._extract_token_usage(wf)
+            token_usage = self._extract_token_usage(workflow_id)
         except Exception as exc:
             logger.debug("Could not fetch workflow details: %s", exc)
 
@@ -2257,6 +2260,7 @@ class AgentRuntime:
 
         output = self._normalize_output(output, raw_status, status.reason)
         logger.info("Framework agent '%s' completed (workflow_id=%s)", agent_name, workflow_id)
+        token_usage = self._extract_token_usage(workflow_id)
         return AgentResult(
             output=output,
             workflow_id=workflow_id,
@@ -2264,6 +2268,7 @@ class AgentRuntime:
             status=raw_status,
             finish_reason=self._derive_finish_reason(raw_status, status.output),
             error=status.reason if raw_status in ("FAILED", "TERMINATED") else None,
+            token_usage=token_usage,
             sub_results=self._extract_sub_results(output),
         )
 
@@ -2352,22 +2357,25 @@ class AgentRuntime:
             )(wrapper)
             logger.debug("Registered framework worker '%s'", w.name)
 
-        # Start worker polling if needed
+        # Start worker polling if needed — guarded by a lock so that concurrent
+        # calls from run_all.py's thread pool don't race on _workers_started /
+        # _registered_tool_names and leave some workers unstarted (pollCount=0).
         if self._config.auto_start_workers:
-            new_names = {w.name for w in workers}
-            new_workers = new_names - self._registered_tool_names
-            if new_workers:
-                logger.info(
-                    "New framework workers detected (%s), starting workers",
-                    ", ".join(sorted(new_workers)),
-                )
-                self._registered_tool_names.update(new_names)
-            if not self._workers_started:
-                logger.debug("Starting workers for framework agent")
-                self._worker_manager.start()
-                self._workers_started = True
-            elif new_workers:
-                self._worker_manager.start()
+            with self._worker_start_lock:
+                new_names = {w.name for w in workers}
+                new_workers = new_names - self._registered_tool_names
+                if new_workers:
+                    logger.info(
+                        "New framework workers detected (%s), starting workers",
+                        ", ".join(sorted(new_workers)),
+                    )
+                    self._registered_tool_names.update(new_names)
+                if not self._workers_started:
+                    logger.debug("Starting workers for framework agent")
+                    self._worker_manager.start()
+                    self._workers_started = True
+                elif new_workers:
+                    self._worker_manager.start()
 
     def _run_framework_with_events(
         self,
@@ -2385,6 +2393,7 @@ class AgentRuntime:
 
         status = self._poll_status_until_complete(workflow_id, timeout=timeout)
         output = self._normalize_output(status.output, status.status, status.reason)
+        token_usage = self._extract_token_usage(workflow_id)
         return AgentResult(
             output=output,
             workflow_id=workflow_id,
@@ -2392,6 +2401,7 @@ class AgentRuntime:
             status=status.status,
             finish_reason=self._derive_finish_reason(status.status, status.output),
             error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
+            token_usage=token_usage,
             events=events,
             sub_results=self._extract_sub_results(output),
         )
@@ -2490,6 +2500,7 @@ class AgentRuntime:
                     )
 
         output = self._normalize_output(output, status.status, status.reason)
+        token_usage = self._extract_token_usage(handle.workflow_id)
         return AgentResult(
             output=output,
             workflow_id=handle.workflow_id,
@@ -2497,6 +2508,7 @@ class AgentRuntime:
             status=status.status,
             finish_reason=self._derive_finish_reason(status.status, status.output),
             error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
+            token_usage=token_usage,
             events=captured_events,
             tool_calls=tool_calls,
             sub_results=self._extract_sub_results(output),
@@ -2547,6 +2559,7 @@ class AgentRuntime:
                     )
 
         output = self._normalize_output(output, status.status, status.reason)
+        token_usage = self._extract_token_usage(handle.workflow_id)
         return AgentResult(
             output=output,
             workflow_id=handle.workflow_id,
@@ -2554,6 +2567,7 @@ class AgentRuntime:
             status=status.status,
             finish_reason=self._derive_finish_reason(status.status, status.output),
             error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
+            token_usage=token_usage,
             events=captured_events,
             tool_calls=tool_calls,
             sub_results=self._extract_sub_results(output),
@@ -3166,7 +3180,7 @@ class AgentRuntime:
             )
             tool_calls = self._extract_tool_calls(wf)
             messages = self._extract_messages(wf)
-            token_usage = self._extract_token_usage(wf)
+            token_usage = self._extract_token_usage(workflow_id)
         except Exception as exc:
             logger.debug("Could not fetch workflow details for %s: %s", workflow_id, exc)
 
@@ -3526,6 +3540,7 @@ class AgentRuntime:
             if not has_output and status.reason and status.status in ("FAILED", "TERMINATED"):
                 output = status.reason
             output = self._normalize_output(output, status.status, status.reason)
+            token_usage = self._extract_token_usage(workflow_id)
             return AgentResult(
                 output=output,
                 workflow_id=workflow_id,
@@ -3533,6 +3548,7 @@ class AgentRuntime:
                 status=status.status,
                 finish_reason=self._derive_finish_reason(status.status, status.output),
                 error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
+                token_usage=token_usage,
                 events=captured_events,
                 sub_results=self._extract_sub_results(output),
             )
@@ -3552,6 +3568,7 @@ class AgentRuntime:
 
         output = self._normalize_output(output, raw_status, status.reason)
         logger.info("Framework agent '%s' completed (workflow_id=%s)", agent_name, workflow_id)
+        token_usage = self._extract_token_usage(workflow_id)
         return AgentResult(
             output=output,
             workflow_id=workflow_id,
@@ -3559,6 +3576,7 @@ class AgentRuntime:
             status=raw_status,
             finish_reason=self._derive_finish_reason(raw_status, status.output),
             error=status.reason if raw_status in ("FAILED", "TERMINATED") else None,
+            token_usage=token_usage,
             sub_results=self._extract_sub_results(output),
         )
 
@@ -4006,45 +4024,80 @@ class AgentRuntime:
 
         return tool_calls
 
-    def _extract_token_usage(self, workflow_run: Any) -> Optional[TokenUsage]:
-        """Extract aggregated token usage from all LLM tasks in the workflow.
-
-        Scans workflow tasks for ``LLM_CHAT_COMPLETE`` tasks and sums up
-        their ``tokenUsed`` output fields (``prompt_tokens``,
-        ``completion_tokens``, ``total_tokens``).
-        """
-        if not hasattr(workflow_run, "tasks") or not workflow_run.tasks:
+    def _fetch_agent_workflow(self, workflow_id: str) -> Optional[dict]:
+        """Fetch a workflow with its full task list from GET /api/agent/{id}."""
+        import requests
+        try:
+            url = self._agent_api_url(f"/{workflow_id}")
+            resp = requests.get(url, headers=self._agent_api_headers(), timeout=10)
+            resp.raise_for_status()
+            return resp.json()
+        except Exception:
             return None
+
+    def _extract_token_usage(self, workflow_id: str) -> Optional[TokenUsage]:
+        """Extract aggregated token usage from the full workflow tree.
+
+        Calls GET /api/agent/{id} to fetch tasks, then recursively traverses
+        sub-workflows (sub-agents) via their subWorkflowId to aggregate tokens
+        from every LLM_CHAT_COMPLETE task in the tree.
+        """
+        if not workflow_id:
+            return None
+        prompt, completion, total, found = self._collect_tokens_by_id(workflow_id, set())
+        if not found:
+            return None
+        if total == 0 and (prompt > 0 or completion > 0):
+            total = prompt + completion
+        return TokenUsage(
+            prompt_tokens=prompt,
+            completion_tokens=completion,
+            total_tokens=total,
+        )
+
+    def _collect_tokens_by_id(self, workflow_id: str, visited: set) -> tuple:
+        """Recursively collect token counts via GET /api/agent/{id}.
+
+        Returns ``(prompt, completion, total, found_any)`` tuple.
+        The server pre-computes ``tokenUsage`` for each workflow level; this
+        method reads that field and recurses into SUB_WORKFLOW tasks so the
+        full agent tree is covered.
+        """
+        if workflow_id in visited:
+            return 0, 0, 0, False
+        visited.add(workflow_id)
+
+        data = self._fetch_agent_workflow(workflow_id)
+        if not data:
+            return 0, 0, 0, False
 
         total_prompt = 0
         total_completion = 0
         total_total = 0
         found_any = False
 
-        for task in workflow_run.tasks:
-            task_type = str(getattr(task, "task_type", "")).upper()
-            if "LLM_CHAT_COMPLETE" not in task_type:
-                continue
+        # Use server-computed token usage for this workflow level
+        token_usage = data.get("tokenUsage")
+        if token_usage:
+            p = int(token_usage.get("promptTokens", 0))
+            c = int(token_usage.get("completionTokens", 0))
+            t = int(token_usage.get("totalTokens", 0))
+            if p or c or t:
+                found_any = True
+                total_prompt += p
+                total_completion += c
+                total_total += t
 
-            output = getattr(task, "output_data", {}) or {}
-            usage = output.get("tokenUsed", output.get("token_usage", {}))
-            if not isinstance(usage, dict):
-                continue
+        # Recurse into sub-agent workflows
+        for task in data.get("tasks", []):
+            if "SUB_WORKFLOW" in str(task.get("taskType", "")).upper():
+                sub_id = task.get("subWorkflowId")
+                if sub_id and sub_id not in visited:
+                    p, c, t, f = self._collect_tokens_by_id(sub_id, visited)
+                    if f:
+                        found_any = True
+                        total_prompt += p
+                        total_completion += c
+                        total_total += t
 
-            found_any = True
-            total_prompt += int(usage.get("prompt_tokens", 0))
-            total_completion += int(usage.get("completion_tokens", 0))
-            total_total += int(usage.get("total_tokens", 0))
-
-        if not found_any:
-            return None
-
-        # If total_tokens wasn't provided, compute it
-        if total_total == 0 and (total_prompt > 0 or total_completion > 0):
-            total_total = total_prompt + total_completion
-
-        return TokenUsage(
-            prompt_tokens=total_prompt,
-            completion_tokens=total_completion,
-            total_tokens=total_total,
-        )
+        return total_prompt, total_completion, total_total, found_any

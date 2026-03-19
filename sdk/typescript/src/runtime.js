@@ -169,9 +169,68 @@ class AgentRuntime {
       const data = await this._getStatus(workflowId);
       const status = (data.status || '').toUpperCase();
       if (TERMINAL_STATUSES.has(status)) {
-        return this._toResult(workflowId, data);
+        const tokenUsage = await this._collectTokens(workflowId, new Set());
+        return this._toResult(workflowId, { ...data, tokenUsage });
       }
     }
+  }
+
+  /** Fetch workflow with full task list from GET /api/agent/{id}. */
+  async _fetchAgentWorkflow(workflowId) {
+    try {
+      const url = `${this._config.serverUrl}/agent/${workflowId}`;
+      const resp = await fetch(url, { headers: this._headers });
+      if (!resp.ok) return null;
+      return resp.json();
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Recursively collect token usage from a workflow and all sub-workflows.
+   * Uses server-computed tokenUsage from AgentRun; recurses into SUB_WORKFLOW
+   * tasks to cover the full sub-agent tree.
+   * Returns { promptTokens, completionTokens, totalTokens } or null if none found.
+   */
+  async _collectTokens(workflowId, visited) {
+    if (visited.has(workflowId)) return null;
+    visited.add(workflowId);
+
+    const data = await this._fetchAgentWorkflow(workflowId);
+    if (!data) return null;
+
+    let promptTokens = 0, completionTokens = 0, totalTokens = 0, found = false;
+
+    // Use server-computed token usage for this workflow level
+    if (data.tokenUsage) {
+      const { promptTokens: p = 0, completionTokens: c = 0, totalTokens: t = 0 } = data.tokenUsage;
+      if (p || c || t) {
+        found = true;
+        promptTokens += p;
+        completionTokens += c;
+        totalTokens += t;
+      }
+    }
+
+    // Recurse into sub-agent workflows
+    for (const task of (data.tasks || [])) {
+      if ((task.taskType || '').toUpperCase().includes('SUB_WORKFLOW')) {
+        const subId = task.subWorkflowId;
+        if (subId && !visited.has(subId)) {
+          const sub = await this._collectTokens(subId, visited);
+          if (sub) {
+            found = true;
+            promptTokens += sub.promptTokens;
+            completionTokens += sub.completionTokens;
+            totalTokens += sub.totalTokens;
+          }
+        }
+      }
+    }
+
+    if (!found) return null;
+    return { promptTokens, completionTokens, totalTokens };
   }
 
   async _getStatus(workflowId) {

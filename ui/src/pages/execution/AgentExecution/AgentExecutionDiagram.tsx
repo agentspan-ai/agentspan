@@ -1,28 +1,41 @@
 /**
- * AgentExecutionDiagram — Reaflow box diagram, same visual language as Conductor.
- * Uses the same CardStatusBadge + getCardVariant components as the Debug View.
- * Turn-filtered: shows one turn at a time with next-turn terminator circle.
+ * AgentExecutionDiagram — same visual language as Conductor Debug View.
+ *
+ * Pan/zoom architecture matches PanAndZoomWrapper exactly:
+ *   - Canvas: pannable={false}, zoomable={false}  (no built-in scroll)
+ *   - Outer viewport div: overflow:hidden, captures gestures via @use-gesture
+ *   - Inner transform div: CSS translate+scale for unrestricted panning
+ *   - Layout sizing: track ELK result dimensions in state, give Canvas container
+ *     explicit pixel size so reaflow's useDimensions can measure correctly.
  */
-import { Canvas, Edge, Node, NodeData, EdgeData } from "reaflow";
-import { Box } from "@mui/material";
+import { useRef, useCallback, useEffect, useMemo, useState } from "react";
+import { Box, CircularProgress } from "@mui/material";
+import { useDrag, usePinch, useWheel } from "@use-gesture/react";
+import { ZoomControlsButton } from "shared/ZoomControlsButton";
+import HomeIcon from "components/flow/components/graphs/PanAndZoomWrapper/icons/Home";
+import MinusIcon from "components/flow/components/graphs/PanAndZoomWrapper/icons/Minus";
+import PlusIcon from "components/flow/components/graphs/PanAndZoomWrapper/icons/Plus";
+import FitToFrame from "shared/icons/FitToFrame";
+import { colors } from "theme/tokens/variables";
+import { Canvas, CanvasPosition, Edge, Node, NodeData, EdgeData } from "reaflow";
 import { getCardVariant } from "components/flow/components/shapes/styles";
-import CardStatusBadge from "components/flow/components/shapes/TaskCard/CardStatusBadge";
-import { ArrowRight } from "@phosphor-icons/react";
+import { ArrowRight, Check, Prohibit } from "@phosphor-icons/react";
+import CardIcon from "components/flow/components/shapes/TaskCard/CardIcon";
 import { TaskStatus, TaskType } from "types";
 import { AgentEvent, AgentRunData, AgentStatus, EventType } from "./types";
 import { DetailNodeData } from "./AgentDetailPanel";
 import { formatTokens, formatDuration } from "./agentExecutionUtils";
 import "components/flow/ReaflowOverrides.scss";
 
-// ─── Tokens ───────────────────────────────────────────────────────────────────
-const G = "#40BA56";
-const R = "#DD2222";
+// ─── Constants ────────────────────────────────────────────────────────────────
+const EDGE_DEFAULT   = "#757575";
+const EDGE_COMPLETED = "#40BA56";
+const MIN_ZOOM = 0.1;
+const MAX_ZOOM = 2.5;
 
+// ─── Types ────────────────────────────────────────────────────────────────────
 type Kind = "start" | "llm" | "tool" | "handoff" | "subagent" | "output" | "error" | "next";
 
-// Maps agent kind → TaskType for Conductor card styling
-// Operator types (SUB_WORKFLOW, SET_VARIABLE) get dark-teal background
-// System types (SIMPLE, LLM_CHAT_COMPLETE) get white background
 const KIND_TYPE: Record<Kind, TaskType> = {
   start:    TaskType.SUB_WORKFLOW,
   subagent: TaskType.SUB_WORKFLOW,
@@ -30,7 +43,7 @@ const KIND_TYPE: Record<Kind, TaskType> = {
   llm:      TaskType.LLM_CHAT_COMPLETE,
   tool:     TaskType.SIMPLE,
   output:   TaskType.SIMPLE,
-  error:    TaskType.SIMPLE,
+  error:    TaskType.TERMINATE,    // X icon
   next:     TaskType.SIMPLE,
 };
 
@@ -45,10 +58,7 @@ const KIND_LABEL: Record<Kind, string> = {
   next:     "",
 };
 
-// Operator kinds use dark background → white text
-const OPERATOR_KINDS = new Set<Kind>(["start", "subagent", "handoff"]);
 
-// ─── AgentStatus → TaskStatus ─────────────────────────────────────────────────
 function toTS(s?: AgentStatus): TaskStatus {
   if (s === AgentStatus.FAILED)  return TaskStatus.FAILED;
   if (s === AgentStatus.RUNNING) return TaskStatus.IN_PROGRESS;
@@ -56,7 +66,6 @@ function toTS(s?: AgentStatus): TaskStatus {
   return TaskStatus.COMPLETED;
 }
 
-// ─── Node data ────────────────────────────────────────────────────────────────
 interface DiagramNodeData {
   kind: Kind;
   label: string;
@@ -68,7 +77,55 @@ interface DiagramNodeData {
   nextTurn?: number;
 }
 
-// ─── Node card ────────────────────────────────────────────────────────────────
+// ─── CardLabel-matching type badge (same CSS as CardLabel.jsx) ─────────────────
+function TypeBadge({ label }: { label: string }) {
+  if (!label) return null;
+  return (
+    <div style={{
+      position: "absolute", top: "0px", right: "0px",
+      height: "fit-content",
+      padding: "4px 8px",
+      fontSize: "0.8em",
+      background: "#dddddd",
+      color: "black",
+      borderRadius: "5px",
+      marginLeft: "8px",
+    }}>
+      {label}
+    </div>
+  );
+}
+
+// ─── Small status badge (20×20 instead of CardStatusBadge's 30×30) ──────────
+function NodeStatusBadge({ status }: { status: TaskStatus }) {
+  const size = 20;
+  const half = size / 2;
+  if (status === TaskStatus.IN_PROGRESS) {
+    return (
+      <div style={{ position: "absolute", top: -half, right: -half, width: size, height: size, zIndex: 1 }}>
+        <CircularProgress size={size} />
+      </div>
+    );
+  }
+  if (status !== TaskStatus.COMPLETED && status !== TaskStatus.FAILED) return null;
+  const bg = status === TaskStatus.COMPLETED ? "#40BA56" : "#DD2222";
+  return (
+    <div style={{
+      position: "absolute", top: -half, right: -half,
+      width: size, height: size, borderRadius: "50%",
+      backgroundColor: bg, display: "flex",
+      alignItems: "center", justifyContent: "center",
+      boxShadow: "0 0 4px rgba(0,0,0,0.4)", zIndex: 1,
+    }}>
+      {status === TaskStatus.COMPLETED
+        ? <Check size={11} color="white" weight="bold" />
+        : <Prohibit size={11} color="white" />
+      }
+    </div>
+  );
+}
+
+// ─── Node card — all nodes use white TaskCard styling ─────────────────────────
 function NodeCard({ data, width, height, selected, onSelect, onDrillIn }: {
   data: DiagramNodeData;
   width: number; height: number;
@@ -76,7 +133,7 @@ function NodeCard({ data, width, height, selected, onSelect, onDrillIn }: {
   onSelect: () => void;
   onDrillIn?: (r: AgentRunData) => void;
 }) {
-  // Next-turn: small dashed circle (same as before)
+  // ── "Next turn" node ─────────────────────────────────────────────────────────
   if (data.kind === "next") {
     return (
       <div
@@ -84,100 +141,75 @@ function NodeCard({ data, width, height, selected, onSelect, onDrillIn }: {
         style={{ width, height, display: "flex", alignItems: "center", justifyContent: "center" }}
       >
         <div style={{
-          width: 48, height: 48, borderRadius: "50%",
-          border: "1.5px dashed #94a3b8",
-          backgroundColor: "#f8fafc",
+          width: 44, height: 44, borderRadius: "50%",
+          border: "1.5px dashed #b3b3b3",
+          backgroundColor: "#f3f3f3",
           display: "flex", flexDirection: "column",
           alignItems: "center", justifyContent: "center",
           cursor: "pointer",
         }}>
-          <span style={{ fontSize: "0.52rem", color: "#94a3b8", lineHeight: 1, textTransform: "uppercase", letterSpacing: "0.05em" }}>Turn</span>
-          <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "#475569", lineHeight: 1.15 }}>{data.nextTurn}</span>
+          <span style={{ fontSize: "0.5rem", color: "#b3b3b3", lineHeight: 1, textTransform: "uppercase", letterSpacing: "0.06em" }}>Turn</span>
+          <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "#535353", lineHeight: 1.2 }}>{data.nextTurn}</span>
         </div>
       </div>
     );
   }
 
   const type = KIND_TYPE[data.kind];
-  const isOperator = OPERATOR_KINDS.has(data.kind);
-  const textColor = isOperator ? "white" : (data.ts === TaskStatus.FAILED ? R : "#111111");
-  const subColor  = isOperator ? "rgba(255,255,255,0.6)" : "#AAAAAA";
 
-  const base = getCardVariant(type, data.ts, selected) as any;
-  const cardStyle: React.CSSProperties = {
-    ...base,
-    width, height,
-    borderRadius: 10,
-    cursor: "pointer",
-    transition: "box-shadow 250ms",
-    transitionDelay: "40ms",
-    border: selected ? "1px solid #3388DD" : "1px solid transparent",
-  };
-
+  // ── All other nodes: unified white TaskCard style ─────────────────────────────
   return (
-    <div onClick={(e) => { e.stopPropagation(); onSelect(); }} style={cardStyle}>
+    <div
+      onClick={(e) => { e.stopPropagation(); onSelect(); }}
+      style={{
+        width: "100%", height: "100%",
+        borderRadius: "10px",
+        cursor: "pointer",
+        transition: "box-shadow 250ms",
+        transitionDelay: "40ms",
+        ...getCardVariant(type, data.ts, selected) as any,
+        background: "#fff",  // all nodes white regardless of TaskType
+      }}
+    >
       <div style={{
         position: "relative",
-        padding: "14px 16px",
+        padding: "20px",
         width: "100%", height: "100%",
-        borderRadius: 10,
+        borderRadius: "10px",
         boxSizing: "border-box",
+        color: "#111111",
       }}>
-        <CardStatusBadge status={data.ts} />
+        <NodeStatusBadge status={data.ts} />
 
-        {/* Kind chip — matches CardLabel exactly: #dddddd bg, black text for system tasks; muted white for operators */}
-        <div style={{
-          position: "absolute", top: 0, right: 0,
-          padding: "4px 8px",
-          fontSize: "0.8em",
-          background: isOperator ? "rgba(255,255,255,0.15)" : "#dddddd",
-          color: isOperator ? "rgba(255,255,255,0.8)" : "black",
-          borderRadius: "5px",
-        }}>
-          {KIND_LABEL[data.kind]}
+        <div style={{ display: "flex", width: "100%", position: "relative" }}>
+          <CardIcon type={type} integrationType={undefined} />
+          <div style={{ flexGrow: 1, overflow: "hidden" }}>
+            <div style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {data.label}
+            </div>
+            {(data.sublabel || data.meta) && (
+              <div style={{ color: "#AAAAAA", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {data.sublabel ?? data.meta}
+              </div>
+            )}
+          </div>
+          <TypeBadge label={KIND_LABEL[data.kind]} />
         </div>
 
-        {/* Main label — inherits Lexend from MUI theme */}
-        <div style={{
-          fontWeight: 600, fontSize: "0.875rem", lineHeight: 1.3,
-          color: textColor,
-          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          display: "block",
-        }}>
-          {data.label}
-        </div>
-
-        {/* Secondary line (model / token counts / reference) */}
-        {data.meta && (
-          <div style={{ fontSize: "0.75rem", color: subColor, lineHeight: 1.3, marginTop: 2 }}>
-            {data.meta}
-          </div>
-        )}
-
-        {/* Sublabel (input snippet / output snippet) */}
-        {data.sublabel && (
-          <div style={{
-            fontSize: "0.75rem", color: subColor,
-            lineHeight: 1.3, marginTop: 1,
-            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          }}>
-            {data.sublabel}
-          </div>
-        )}
-
-        {/* Sub-agent drill-in */}
+        {/* "View execution" drill-in for sub-agents */}
         {data.kind === "subagent" && data.subAgentRun && (
           <div
             onClick={(e) => { e.stopPropagation(); onDrillIn?.(data.subAgentRun!); }}
             style={{
-              display: "inline-flex", alignItems: "center", gap: 2,
-              marginTop: 5, padding: "2px 7px",
-              borderRadius: 3, backgroundColor: "rgba(255,255,255,0.18)",
-              cursor: "pointer", width: "fit-content",
-              fontSize: "0.75rem", fontWeight: 600, color: "rgba(255,255,255,0.9)",
+              marginTop: 6,
+              display: "inline-flex", alignItems: "center", gap: 4,
+              padding: "3px 10px",
+              borderRadius: "5px", backgroundColor: "#4969e4",
+              cursor: "pointer",
+              fontSize: "0.78em", color: "white",
             }}
           >
-            View execution <ArrowRight size={9} />
+            View execution <ArrowRight size={10} />
           </div>
         )}
       </div>
@@ -187,7 +219,7 @@ function NodeCard({ data, width, height, selected, onSelect, onDrillIn }: {
 
 // ─── Reaflow node wrapper ─────────────────────────────────────────────────────
 const DiagramNode = (nodeProps: any) => {
-  const { selectedId, onSelect, properties } = nodeProps;
+  const { selectedId, onSelect, onDrillIn, properties } = nodeProps;
   const data: DiagramNodeData = properties?.data;
   return (
     <Node {...nodeProps} onClick={() => null} label={<></>} style={{ stroke: "none", fill: "none" }}>
@@ -199,7 +231,7 @@ const DiagramNode = (nodeProps: any) => {
               width={ev.width} height={ev.height}
               selected={selectedId === properties?.id}
               onSelect={() => onSelect(properties?.id)}
-              onDrillIn={data?.subAgentRun ? (r) => onSelect(`sub-${r.id}`) : undefined}
+              onDrillIn={onDrillIn}
             />
           </foreignObject>
         </g>
@@ -209,7 +241,7 @@ const DiagramNode = (nodeProps: any) => {
 };
 
 // ─── Build diagram nodes/edges ────────────────────────────────────────────────
-const W = 260, H = 76, HS = 56, HSUB = 100;
+const W = 220, H = 80;
 
 function buildDiagram(agentRun: AgentRunData, activeTurnNum: number) {
   const nodes: NodeData<DiagramNodeData>[] = [];
@@ -228,7 +260,7 @@ function buildDiagram(agentRun: AgentRunData, activeTurnNum: number) {
   const turn = allTurns.find(t => t.turnNumber === activeTurnNum) ?? allTurns[0];
   const nextTurn = allTurns.find(t => t.turnNumber > (turn?.turnNumber ?? 0));
 
-  nodes.push({ id: "start", width: W, height: HS, data: {
+  nodes.push({ id: "start", width: W, height: H, data: {
     kind: "start", label: agentRun.agentName,
     sublabel: agentRun.input?.slice(0, 55),
     meta: agentRun.model, ts: toTS(agentRun.status),
@@ -259,7 +291,7 @@ function buildDiagram(agentRun: AgentRunData, activeTurnNum: number) {
           push(ev.id, {
             kind: "handoff", label: ev.targetAgent ?? ev.summary.replace(/^→\s*/, ""),
             ts: TaskStatus.COMPLETED, event: ev,
-          }, HS); break;
+          }); break;
         case EventType.DONE: {
           const txt = typeof ev.detail === "string" ? ev.detail : undefined;
           push(ev.id, {
@@ -272,13 +304,13 @@ function buildDiagram(agentRun: AgentRunData, activeTurnNum: number) {
           push(ev.id, {
             kind: "error", label: "error", sublabel: ev.summary,
             ts: TaskStatus.FAILED, event: ev,
-          }, HS); break;
+          }); break;
         default: break;
       }
     }
     for (const sub of turn.subAgents) {
       const id = `sub-${sub.id}`;
-      const h = sub.model && sub.output ? HSUB : sub.model || sub.output ? H : HS;
+      const h = H;
       push(id, {
         kind: "subagent", label: sub.agentName,
         meta: sub.model,
@@ -300,6 +332,55 @@ function buildDiagram(agentRun: AgentRunData, activeTurnNum: number) {
   return { nodes, edges, done };
 }
 
+// ─── Zoom controls bar (matches PanAndZoomWrapper's ZoomControls visually) ────
+function DiagramControls({ zoom, onReset, onZoomIn, onZoomOut, onFit }: {
+  zoom: number;
+  onReset: () => void;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onFit: () => void;
+}) {
+  const border = `1px solid ${colors.lightGrey}`;
+  const col = colors.greyText;
+  return (
+    <Box sx={{
+      position: "absolute",
+      top: 5, left: 5,
+      borderRadius: "6px",
+      boxShadow: "0px 4px 12px 0px #0000001F",
+      backgroundColor: "#fff",
+      display: "flex",
+      userSelect: "none",
+      zIndex: 100,
+    }}>
+      <ZoomControlsButton onClick={onReset} tooltip="Reset position">
+        <HomeIcon color={col} />
+      </ZoomControlsButton>
+      <ZoomControlsButton style={{ borderLeft: border, borderRight: border, width: 60 }}>
+        {Math.round(zoom * 100)}%
+      </ZoomControlsButton>
+      <ZoomControlsButton onClick={onZoomOut} tooltip="Zoom out">
+        <MinusIcon color={col} />
+      </ZoomControlsButton>
+      <ZoomControlsButton
+        onClick={onZoomIn}
+        disabled={zoom >= MAX_ZOOM}
+        tooltip="Zoom in"
+        style={{ borderLeft: border }}
+      >
+        <PlusIcon color={col} />
+      </ZoomControlsButton>
+      <ZoomControlsButton
+        onClick={onFit}
+        tooltip="Fit to screen"
+        style={{ borderLeft: border, borderTopRightRadius: 5, borderBottomRightRadius: 5 }}
+      >
+        <FitToFrame color={col} />
+      </ZoomControlsButton>
+    </Box>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 interface AgentExecutionDiagramProps {
   agentRun: AgentRunData;
@@ -307,52 +388,233 @@ interface AgentExecutionDiagramProps {
   onSelectTurn: (n: number) => void;
   selectedId: string | null;
   onNodeSelect: (id: string | null, node: DetailNodeData | null) => void;
+  onDrillIn?: (sub: AgentRunData) => void;
 }
 
-export function AgentExecutionDiagram({ agentRun, activeTurn, onSelectTurn, selectedId, onNodeSelect }: AgentExecutionDiagramProps) {
-  const { nodes, edges, done } = buildDiagram(agentRun, activeTurn);
+export function AgentExecutionDiagram({ agentRun, activeTurn, onSelectTurn, selectedId, onNodeSelect, onDrillIn }: AgentExecutionDiagramProps) {
+  // Memoize so ELK only re-runs when turn or agent actually changes (not on pan/zoom state updates)
+  const { nodes, edges, done } = useMemo(
+    () => buildDiagram(agentRun, activeTurn),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [agentRun.id, activeTurn],
+  );
 
-  const handle = (id: string) => {
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const canvasRef   = useRef<any>(null);
+
+  // Pan/zoom state — CSS transform applied to the inner container
+  const [panZoom, setPanZoom] = useState({ x: 40, y: 40, zoom: 1 });
+  // Stable ref so gesture handlers always see latest zoom without stale closure
+  const panZoomRef = useRef(panZoom);
+  panZoomRef.current = panZoom;
+
+  // ELK layout dimensions — needed so reaflow's useDimensions can measure
+  // the Canvas container correctly (debug view does the same via xstate canvasSize).
+  const [layoutSize, setLayoutSize] = useState({ width: 0, height: 0 });
+
+  // Reset pan + layout when the active turn or agent changes
+  useEffect(() => {
+    setPanZoom({ x: 40, y: 40, zoom: 1 });
+    setLayoutSize({ width: 0, height: 0 });
+  }, [agentRun.id, activeTurn]);
+
+  // Called by reaflow after ELK computes layout — capture the layout dimensions
+  const handleLayoutChange = useCallback((result: any) => {
+    if (result?.width > 0 && result?.height > 0) {
+      setLayoutSize({ width: result.width, height: result.height });
+    }
+  }, []);
+
+  // ── Zoom control callbacks ────────────────────────────────────────────────────
+  const handleReset = useCallback(() => {
+    setPanZoom({ x: 40, y: 40, zoom: 1 });
+  }, []);
+
+  const handleZoomIn = useCallback(() => {
+    setPanZoom(prev => ({ ...prev, zoom: Math.min(MAX_ZOOM, prev.zoom * 1.2) }));
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    setPanZoom(prev => ({ ...prev, zoom: Math.max(MIN_ZOOM, prev.zoom / 1.2) }));
+  }, []);
+
+  const handleFitToScreen = useCallback(() => {
+    if (!viewportRef.current || !layoutSize.width) return;
+    const { offsetWidth: vw, offsetHeight: vh } = viewportRef.current;
+    const scaleX = (vw - 80) / layoutSize.width;
+    const scaleY = (vh - 80) / layoutSize.height;
+    const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.min(scaleX, scaleY)));
+    const cx = (vw - layoutSize.width * newZoom) / 2;
+    const cy = (vh - layoutSize.height * newZoom) / 2;
+    setPanZoom({ x: cx, y: cy, zoom: newZoom });
+  }, [layoutSize]);
+
+  // ── Drag-to-pan via @use-gesture (same as PanAndZoomWrapper) ────────────────
+  useDrag(
+    ({ delta, tap }) => {
+      if (tap) return;
+      setPanZoom(prev => ({ ...prev, x: prev.x + delta[0], y: prev.y + delta[1] }));
+    },
+    { target: viewportRef, filterTaps: true, eventOptions: { passive: false } },
+  );
+
+  // ── Scroll-to-pan + Ctrl/Meta-scroll-to-zoom ─────────────────────────────────
+  useWheel(
+    ({ delta, event, metaKey, ctrlKey }) => {
+      event.preventDefault();
+      if (metaKey || ctrlKey) {
+        const rect = viewportRef.current?.getBoundingClientRect();
+        const cx = (event as WheelEvent).clientX - (rect?.left ?? 0);
+        const cy = (event as WheelEvent).clientY - (rect?.top ?? 0);
+        setPanZoom(prev => {
+          const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM,
+            prev.zoom * (1 - (event as WheelEvent).deltaY * 0.001)));
+          const scale = newZoom / prev.zoom;
+          return { x: cx - scale * (cx - prev.x), y: cy - scale * (cy - prev.y), zoom: newZoom };
+        });
+      } else {
+        setPanZoom(prev => ({ ...prev, x: prev.x - delta[0], y: prev.y - delta[1] }));
+      }
+    },
+    { target: viewportRef, eventOptions: { passive: false } },
+  );
+
+  // ── Pinch-to-zoom (trackpad two-finger pinch, same as PanAndZoomWrapper) ─────
+  usePinch(
+    ({ offset: [scale], event, origin: [ox, oy] }) => {
+      event.preventDefault();
+      const rect = viewportRef.current?.getBoundingClientRect();
+      const cx = ox - (rect?.left ?? 0);
+      const cy = oy - (rect?.top ?? 0);
+      const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, scale));
+      setPanZoom(prev => {
+        const factor = newZoom / prev.zoom;
+        return { x: cx - factor * (cx - prev.x), y: cy - factor * (cy - prev.y), zoom: newZoom };
+      });
+    },
+    {
+      scaleBounds: { min: MIN_ZOOM, max: MAX_ZOOM },
+      from: () => [panZoomRef.current.zoom, 0],
+      target: viewportRef,
+      eventOptions: { passive: false },
+    },
+  );
+
+  // ── Node click handler ────────────────────────────────────────────────────────
+  const handle = useCallback((id: string) => {
     const nd = nodes.find(n => n.id === id)?.data;
     if (nd?.kind === "next" && nd.nextTurn) { onSelectTurn(nd.nextTurn); return; }
-    if (id === selectedId || nd?.kind === "start") { onNodeSelect(null, null); return; }
+    if (id === selectedId) { onNodeSelect(null, null); return; }
     if (!nd) { onNodeSelect(null, null); return; }
-    onNodeSelect(id, {
-      kind: nd.kind as any, label: nd.label,
-      status: nd.ts === TaskStatus.COMPLETED ? AgentStatus.COMPLETED
-            : nd.ts === TaskStatus.FAILED    ? AgentStatus.FAILED
-            : AgentStatus.RUNNING,
-      event: nd.event, subAgentRun: nd.subAgentRun,
-    });
-  };
+    const status =
+      nd.ts === TaskStatus.COMPLETED ? AgentStatus.COMPLETED :
+      nd.ts === TaskStatus.FAILED    ? AgentStatus.FAILED    : AgentStatus.RUNNING;
+    if (nd.kind === "start") {
+      onNodeSelect(id, { kind: "start", label: nd.label, status, subAgentRun: agentRun });
+      return;
+    }
+    onNodeSelect(id, { kind: nd.kind as any, label: nd.label, status, event: nd.event, subAgentRun: nd.subAgentRun });
+  }, [nodes, selectedId, onSelectTurn, onNodeSelect, agentRun]);
+
+  const hasLayout = layoutSize.width > 0;
 
   return (
-    <Box sx={{
-      height: "100%",
-      backgroundImage: "url('/diagramDotBg.svg')",
-      backgroundColor: "#fff",
-    }}
+    /* Viewport: overflow:hidden, captures all gestures */
+    <div
+      ref={viewportRef}
+      style={{
+        width: "100%",
+        height: "100%",
+        overflow: "hidden",
+        position: "relative",
+        cursor: "grab",
+        touchAction: "none",
+        backgroundImage: "url('/diagramDotBg.svg')",
+        backgroundColor: "#fff",
+      }}
       onClick={() => onNodeSelect(null, null)}
     >
-      <Canvas
-        nodes={nodes} edges={edges}
-        fit zoomable pannable
-        maxZoom={2.5} minZoom={0.15}
-        direction="DOWN"
-        layoutOptions={{
-          "org.eclipse.elk.spacing.nodeNode": "20",
-          "elk.layered.spacing.nodeNodeBetweenLayers": "28",
-          "org.eclipse.elk.padding": "[top=40,left=80,bottom=40,right=80]",
+      {/* Loading skeleton while ELK computes layout */}
+      {!hasLayout && (
+        <Box sx={{
+          position: "absolute",
+          inset: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: "#fff",
+          backgroundImage: "url('/diagramDotBg.svg')",
+        }}>
+          <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+            {/* Skeleton nodes */}
+            {[0, 1, 2].map((i) => (
+              <Box key={i} sx={{
+                width: 220,
+                height: i === 0 ? 56 : 80,
+                borderRadius: 1,
+                backgroundColor: "#f3f3f3",
+                border: "1px solid #DDDDDD",
+                animation: "shimmer 1.5s ease-in-out infinite",
+                animationDelay: `${i * 0.2}s`,
+                "@keyframes shimmer": {
+                  "0%, 100%": { opacity: 0.6 },
+                  "50%": { opacity: 1 },
+                },
+              }} />
+            ))}
+            {/* Connector lines between skeletons */}
+          </Box>
+        </Box>
+      )}
+      {/* Transform container: CSS translate+scale for unrestricted pan/zoom */}
+      {hasLayout && (
+        <DiagramControls
+          zoom={panZoom.zoom}
+          onReset={handleReset}
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+          onFit={handleFitToScreen}
+        />
+      )}
+      <div
+        style={{
+          position: "absolute",
+          transformOrigin: "top left",
+          transition: "transform .1s",
+          transform: `translateX(${panZoom.x}px) translateY(${panZoom.y}px) scale(${panZoom.zoom})`,
+          // Give the Canvas container explicit pixel dimensions matching the ELK layout.
+          // This is required for reaflow's useDimensions to measure the container correctly
+          // when pannable=false (same technique as debug view's diagram-canvas-container).
+          ...(hasLayout ? { width: layoutSize.width, height: layoutSize.height } : {}),
         }}
-        node={<DiagramNode selectedId={selectedId} onSelect={handle} />}
-        edge={(ed: EdgeData) => (
-          <Edge {...ed} style={{
-            stroke: done.has(ed.from ?? "") ? G : "#cbd5e1",
-            strokeWidth: done.has(ed.from ?? "") ? 1.5 : 1,
-          }} />
-        )}
-      />
-    </Box>
+      >
+        <Canvas
+          ref={canvasRef}
+          nodes={nodes}
+          edges={edges}
+          fit={false}
+          zoomable={false}
+          pannable={false}
+          defaultPosition={CanvasPosition.CENTER}
+          maxWidth={5000}
+          maxHeight={4000}
+          onLayoutChange={handleLayoutChange}
+          direction="DOWN"
+          layoutOptions={{
+            "org.eclipse.elk.spacing.nodeNode": "18",
+            "elk.layered.spacing.nodeNodeBetweenLayers": "24",
+            "org.eclipse.elk.padding": "[top=40,left=60,bottom=40,right=60]",
+          }}
+          node={<DiagramNode selectedId={selectedId} onSelect={handle} onDrillIn={onDrillIn} />}
+          edge={(ed: EdgeData) => (
+            <Edge {...ed} style={{
+              stroke: done.has(ed.from ?? "") ? EDGE_COMPLETED : EDGE_DEFAULT,
+              strokeWidth: done.has(ed.from ?? "") ? 2 : 1,
+            }} />
+          )}
+        />
+      </div>
+    </div>
   );
 }
 
