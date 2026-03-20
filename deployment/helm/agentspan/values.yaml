@@ -93,6 +93,7 @@ postgres:
       memory: 1Gi
   terminationGracePeriodSeconds: 60
   persistence:
+    # true: StatefulSet PVC (durable), false: emptyDir (ephemeral pod storage)
     enabled: true
     accessModes:
       - ReadWriteOnce

@@ -36,5 +36,6 @@ helm template agentspan ./deployment/helm/agentspan --namespace agentspan >/tmp/
 ## Notes
 
 - Use either bundled Postgres (`postgres.enabled=true`) or external Postgres (`externalDatabase.enabled=true`), but not both.
+- Set `postgres.persistence.enabled=false` for ephemeral local dev DB storage (`emptyDir`), or keep `true` for PVC-backed durable storage.
 - For production, prefer `secrets.existingSecret` and disable chart-managed Secret creation.
 - If using persistent Postgres storage, treat password changes as a DB migration/rotation operation.

@@ -68,6 +68,12 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 15
             timeoutSeconds: 5
+      {{- if not .Values.postgres.persistence.enabled }}
+      volumes:
+        - name: postgres-data
+          emptyDir: {}
+      {{- end }}
+  {{- if .Values.postgres.persistence.enabled }}
   volumeClaimTemplates:
     - metadata:
         name: postgres-data
@@ -83,6 +89,7 @@ spec:
         {{- if .Values.postgres.persistence.storageClass }}
         storageClassName: {{ .Values.postgres.persistence.storageClass | quote }}
         {{- end }}
+  {{- end }}
 ---
 apiVersion: v1
 kind: Service
