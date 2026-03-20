@@ -151,16 +151,23 @@ When a workflow starts, the server mints a short-lived execution token from the 
 
 ```
 Token payload:
+  jti:   UUID            (unique token ID — used for revocation deny-list)
   sub:   userId          (credential resolution lookup key)
   wid:   workflowId      (audit trail)
   iat:   issued-at
-  exp:   issued-at + 1h  (short TTL)
+  exp:   issued-at + max(workflow_timeout, 1h)  (see token expiry below)
   scope: "credentials"   (narrow, single purpose)
 
 Signed: HMAC-SHA256 with server master secret
 ```
 
 Conductor propagates `__agentspan_ctx__` to every task automatically. Workers extract it from task variables.
+
+**Token expiry for long-running workflows:** The TTL is set to `max(1h, agent.timeout_seconds)` at mint time. Agents with long timeouts (e.g., `timeout_seconds=6000` as in the coding agent example) receive a proportionally longer token. This avoids credential resolution failures mid-execution without requiring a refresh mechanism.
+
+**Token revocation:** The `jti` claim enables server-side revocation. The server maintains an in-memory deny-list keyed by `jti`, with each entry expiring at the token's `exp` time (so the list is self-pruning). When a workflow is cancelled or terminated, its `jti` is added to the deny-list immediately. All subsequent `/api/credentials/resolve` calls with that token return 401. In OSS the deny-list is in-memory (lost on server restart; bounded risk since tokens expire with the workflow TTL). Enterprise module can persist the deny-list to a durable store.
+
+**Conductor access control:** The `__agentspan_ctx__` variable is embedded in Conductor workflow metadata. Conductor must be deployed as an internal-only service with no external access — agentspan-server is the sole entry point for all external callers. In multi-tenant deployments, workers authenticate to Conductor using a shared service account (not user credentials), and the execution token is the only user-scoped material that travels through the system.
 
 ### Developer Experience
 
@@ -264,14 +271,27 @@ DELETE /api/credentials/bindings/{key}     remove
 POST   /api/credentials/resolve            { token, names: ["GITHUB_TOKEN"] }
 ```
 
-**Partial value format** — consistent with OpenAI, GitHub, AWS:
+The `/api/credentials/resolve` endpoint enforces a per-token rate limit (default: 120 calls/minute, configurable). Additionally, credential names in the resolve request are validated against the names declared by the `@tool` or `Agent` at compile/dispatch time — a token cannot resolve credentials beyond what its workflow declared. This bounds the blast radius of a compromised token.
+
+**Partial value format** — consistent with OpenAI, GitHub, AWS. First 4 + `...` + last 4. Value is never returned after creation.
+
+List response (`GET /api/credentials`):
 ```json
 [
   { "name": "my-github-prod-key",  "partial": "ghp_...k2mn", "updated_at": "2026-03-15" },
   { "name": "openai-prod",         "partial": "sk-...4x9z",  "updated_at": "2026-03-10" }
 ]
 ```
-First 4 + `...` + last 4. Value is never returned after creation.
+
+Single item response (`GET /api/credentials/{name}`):
+```json
+{
+  "name": "my-github-prod-key",
+  "partial": "ghp_...k2mn",
+  "created_at": "2026-03-10T12:00:00Z",
+  "updated_at": "2026-03-15T09:30:00Z"
+}
+```
 
 ### CredentialStoreProvider Interface
 
@@ -296,6 +316,28 @@ agentspan.credentials.store=hashicorp   # enterprise
 agentspan.credentials.strict-mode=false # set true in enterprise for compliance
 ```
 
+#### Master Key Lifecycle (OSS built-in store)
+
+The built-in store encrypts all credential values with AES-256-GCM using a server master key. The master key lifecycle must be explicitly managed:
+
+**Sourcing:**
+- **Production / self-hosted:** Set `AGENTSPAN_MASTER_KEY` env var (base64-encoded 256-bit key). Server refuses to start if absent and `agentspan.credentials.store=built-in`.
+- **Local dev:** If `AGENTSPAN_MASTER_KEY` is unset and the server is running on localhost, a key is auto-generated and persisted to `~/.agentspan/master.key` with a startup warning. This ensures local dev stays frictionless while production requires an explicit decision.
+
+Generate a key:
+```bash
+openssl rand -base64 32
+```
+
+**Rotation:** When the master key changes, existing encrypted values become unreadable. A migration command re-encrypts the store under the new key:
+```bash
+agentspan admin credentials re-encrypt --old-key <prev> --new-key <next>
+```
+
+**Loss:** There is no recovery path if the master key is lost — the encrypted values are permanently inaccessible. Self-hosters must back up the key independently (e.g., in a password manager or a separate secrets store). This is documented prominently in the deployment guide.
+
+Enterprise vault backends (AWS SM, HashiCorp, etc.) delegate key management entirely to the vault — this concern only applies to the OSS built-in store.
+
 ### Resolution Pipeline
 
 Single function used by both the `/api/credentials/resolve` endpoint and the server-side `AIModelProvider` / `VectorDBProvider`:
@@ -304,16 +346,23 @@ Single function used by both the `/api/credentials/resolve` endpoint and the ser
 resolve(userId, logicalKey):
 
   1. Look up binding: userId + logicalKey → store_name
-     └─ no binding found? → use logicalKey as store_name directly (convenience)
+     └─ no binding found? → use logicalKey as store_name directly (convenience shortcut)
+        NOTE: this is intentional silent fallthrough — if a user stores a credential
+        literally named "GITHUB_TOKEN" with no binding, it resolves correctly without
+        an explicit bind step. This is the 80% case. It is not an error.
 
   2. Fetch from store via CredentialStoreProvider
 
   3. Not found in store?
      strict_mode=false → check os.environ[logicalKey] → return if present
-     strict_mode=true  → throw CredentialNotFoundError
+                        (intentional silent fallthrough — enables backward compat
+                         and local dev without any credential store setup)
+     strict_mode=true  → throw CredentialNotFoundError (no silent fallback)
 
   4. Return value
 ```
+
+The three-step fallthrough (binding → store → env var) is intentional and documented. When debugging a credential resolution failure, check all three stages in order.
 
 This pipeline is the single authority for credential resolution across all call paths:
 - Worker tasks via `/api/credentials/resolve`
@@ -384,6 +433,7 @@ class SubprocessIsolator:
                     path = f"{tmp_home}/{value.relative_path}"
                     os.makedirs(os.path.dirname(path), exist_ok=True)
                     Path(path).write_text(value.content)
+                    os.chmod(path, 0o600)                    # owner read/write only
                     env[value.env_var] = path                # file type
 
             return _run_in_subprocess(fn, args, env=env)
@@ -460,7 +510,9 @@ CLI_CREDENTIAL_MAP = {
     "docker":    ["DOCKER_USERNAME", "DOCKER_PASSWORD"],
     "npm":       ["NPM_TOKEN"],
     "cargo":     ["CARGO_REGISTRY_TOKEN"],
-    "terraform": [],    # too provider-specific — always declare explicitly
+    "terraform": None,  # no auto-mapping — raises ConfigurationError at agent definition
+                        # time if no explicit credentials=[...] declared. Fail loud,
+                        # not silently with zero credentials injected.
 }
 ```
 
@@ -470,7 +522,7 @@ CLI_CREDENTIAL_MAP = {
 @dataclass
 class AgentConfig:
     server_url: str              = "http://localhost:8080/api"
-    api_key: str | None          = None    # preferred auth (JWT)
+    api_key: str | None          = None    # Bearer token or static API key (Authorization header)
     auth_key: str | None         = None    # kept for backward compat
     auth_secret: str | None      = None    # kept for backward compat
     worker_poll_interval_ms: int = 100
@@ -515,11 +567,12 @@ agentspan credentials bindings              # logical key → stored name mappin
 
 ### Execution Token
 
-- Scoped to a single workflow execution (workflowId in payload)
-- 1 hour TTL — short enough to limit blast radius
+- Scoped to a single workflow execution (`wid` + `jti` in payload)
+- TTL = `max(1h, workflow timeout)` — prevents expiry mid-execution for long-running agents
 - HMAC-SHA256 signed — server validates on every resolve call
 - Scope claim `"credentials"` — cannot be used for other operations
-- Revoked immediately when a workflow is cancelled or terminated
+- Revocable via `jti` deny-list — added immediately on workflow cancel/terminate
+- Credential names bounded to those declared at compile time — token cannot resolve undeclared secrets
 
 ### Credential Lifecycle
 
@@ -560,9 +613,11 @@ OSS writes to server log. Enterprise module persists to a queryable audit store.
 | Worker process compromised | Execution token only — 1h TTL, narrow scope, not the real credential |
 | Concurrent task credential bleed | Subprocess isolation — parent never holds credentials in `os.environ` |
 | `/proc/PID/environ` readable on Linux | Subprocess exits immediately after task; LLM keys never leave server |
-| Token replay | `workflowId` + `exp` claim — single-workflow-scoped, short-lived |
-| Malicious CLI tool reads temp HOME | Temp dir deleted synchronously after task |
-| Credential exfiltration via tool code | Short TTL limits window; revocation on cancel; full audit trail |
+| Token replay | `jti` deny-list + `exp` + `wid` — revocable, single-workflow-scoped |
+| Malicious CLI tool reads temp HOME | Credential files written `0600`; temp dir deleted synchronously after task |
+| Credential exfiltration via tool code | Token scope bounded to declared names; short TTL; revocation on cancel; audit trail |
+| Excessive resolve calls (DoS / enumeration) | Per-token rate limit (default 120/min); names validated against declared set |
+| Conductor variables readable by external callers | Conductor is internal-only; agentspan-server is sole external entry point |
 
 ---
 
