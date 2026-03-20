@@ -303,6 +303,54 @@ class TestAgentspanTransportExecuteTool:
         assert result == "out"
 
 
+class TestRunSubagentWorkflowName:
+    def test_uses_worker_name_from_config(self):
+        """_run_subagent uses _worker_name from agent_config, not hardcoded value."""
+        conductor = MagicMock()
+        conductor.start_workflow = AsyncMock(return_value="sub-wf-1")
+        conductor.poll_until_done = AsyncMock(return_value="result")
+        events = MagicMock()
+        events.push = AsyncMock()
+
+        transport = _make_transport(
+            agent_config={
+                "_worker_name": "my_custom_workflow",
+                "allowed_tools": [],
+                "model": "claude-opus-4-6",
+            },
+            conductor_client=conductor,
+            event_client=events,
+        )
+
+        asyncio.run(transport._run_subagent({"prompt": "do it"}))
+
+        conductor.start_workflow.assert_called_once_with(
+            "my_custom_workflow",
+            {"prompt": "do it", "cwd": "/tmp"},
+        )
+
+    def test_falls_back_to_default_when_no_worker_name(self):
+        """_run_subagent falls back to 'claude_agent_workflow' if _worker_name absent."""
+        conductor = MagicMock()
+        conductor.start_workflow = AsyncMock(return_value="sub-wf-2")
+        conductor.poll_until_done = AsyncMock(return_value="result")
+        events = MagicMock()
+        events.push = AsyncMock()
+
+        transport = _make_transport(
+            agent_config={"allowed_tools": [], "model": "claude-opus-4-6"},
+            conductor_client=conductor,
+            event_client=events,
+        )
+
+        asyncio.run(transport._run_subagent({"prompt": "do it"}))
+
+        conductor.start_workflow.assert_called_once_with(
+            "claude_agent_workflow",
+            {"prompt": "do it", "cwd": "/tmp"},
+        )
+
+
 class TestAgentspanTransportDrainQueue:
     def test_drain_queue_stops_at_sentinel(self):
         transport = _make_transport()
