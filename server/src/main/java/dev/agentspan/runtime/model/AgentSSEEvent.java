@@ -117,6 +117,20 @@ public class AgentSSEEvent {
         return e;
     }
 
+    public static AgentSSEEvent subagentStart(String workflowId, String subagentIdentifier, String prompt) {
+        AgentSSEEvent e = new AgentSSEEvent("subagent_start", workflowId);
+        e.target = subagentIdentifier;
+        e.content = prompt != null ? prompt : "";
+        return e;
+    }
+
+    public static AgentSSEEvent subagentStop(String workflowId, String subagentIdentifier, String result) {
+        AgentSSEEvent e = new AgentSSEEvent("subagent_stop", workflowId);
+        e.target = subagentIdentifier;
+        e.result = result != null ? result : "";
+        return e;
+    }
+
     // ── Serialization ────────────────────────────────────────────────
 
     public String toJson() {

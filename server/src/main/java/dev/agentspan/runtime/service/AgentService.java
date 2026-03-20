@@ -770,6 +770,14 @@ public class AgentService {
                 event.get("messagesBefore") instanceof Number n ? n.intValue() : 0,
                 event.get("messagesAfter") instanceof Number n ? n.intValue() : 0,
                 event.get("exchangesCondensed") instanceof Number n ? n.intValue() : 0);
+            case "subagent_start" -> AgentSSEEvent.subagentStart(
+                workflowId,
+                extractSubagentIdentifier(event),
+                event.getOrDefault("prompt", "").toString());
+            case "subagent_stop" -> AgentSSEEvent.subagentStop(
+                workflowId,
+                extractSubagentIdentifier(event),
+                event.getOrDefault("result", "").toString());
             default -> {
                 log.debug("Unknown framework event type '{}' for workflow {}", type, workflowId);
                 yield null;
@@ -778,6 +786,16 @@ public class AgentService {
         if (sseEvent != null) {
             streamRegistry.send(workflowId, sseEvent);
         }
+    }
+
+    private String extractSubagentIdentifier(Map<String, Object> event) {
+        // Tier 2/3: subWorkflowId is set; Tier 1 native subagents: agentId is set
+        Object subWorkflowId = event.get("subWorkflowId");
+        if (subWorkflowId != null && !subWorkflowId.toString().isBlank()) {
+            return subWorkflowId.toString();
+        }
+        Object agentId = event.get("agentId");
+        return agentId != null ? agentId.toString() : "unknown";
     }
 
     // ── Task registration ────────────────────────────────────────────
