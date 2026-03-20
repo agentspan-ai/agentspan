@@ -190,6 +190,26 @@ class TestToolDispatch:
         with pytest.raises(RuntimeError, match="FAILED"):
             asyncio.run(server._dispatch_tool("echo_tool", {"message": "x"}))
 
+    def test_tool_without_tool_def_is_skipped(self):
+        """Tool function missing _tool_def attribute is skipped gracefully."""
+        from agentspan.agents.frameworks.claude_mcp_server import AgentspanMcpServer
+
+        def bad_tool(x: str) -> str:
+            return x
+        # No _tool_def attribute
+
+        server = AgentspanMcpServer(
+            tools=[bad_tool],
+            subagent_workflow_name=None,
+            conductor_client=_make_conductor_client(),
+            event_client=_make_event_client(),
+            parent_workflow_id="wf-parent",
+        )
+        config = server.build()
+        # Should not raise, but tool is not registered
+        tool_names = [t.name for t in config["instance"]._tool_manager.list_tools()]
+        assert "bad_tool" not in tool_names
+
 
 # ── Subagent dispatch ─────────────────────────────────────────────────────────
 
@@ -245,6 +265,24 @@ class TestSubagentDispatch:
         )
         with pytest.raises(RuntimeError, match="conductor_subagents"):
             asyncio.run(server._dispatch_subagent("prompt"))
+
+    def test_spawn_subagent_raises_on_conductor_failure(self):
+        """_dispatch_subagent raises RuntimeError when Conductor workflow fails."""
+        conductor = _make_conductor_client()
+        conductor.poll_until_done = AsyncMock(side_effect=RuntimeError("FAILED"))
+        from agentspan.agents.frameworks.claude_mcp_server import AgentspanMcpServer
+
+        server = AgentspanMcpServer(
+            tools=[],
+            subagent_workflow_name="_fw_claude_test",
+            conductor_client=conductor,
+            event_client=_make_event_client(),
+            parent_workflow_id="wf-parent",
+        )
+        server.build()
+
+        with pytest.raises(RuntimeError, match="FAILED"):
+            asyncio.run(server._dispatch_subagent("test prompt"))
 
 
 # ── Event emission ────────────────────────────────────────────────────────────
