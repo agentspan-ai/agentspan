@@ -14,5 +14,6 @@ from agentspan.agents.frameworks.serializer import (
     serialize_agent,
     WorkerInfo,
 )
+from agentspan.agents.frameworks.claude import ClaudeCodeAgent
 
-__all__ = ["detect_framework", "serialize_agent", "WorkerInfo"]
+__all__ = ["detect_framework", "serialize_agent", "WorkerInfo", "ClaudeCodeAgent"]

@@ -43,6 +43,10 @@ def detect_framework(agent_obj: Any) -> Optional[str]:
     if isinstance(agent_obj, Agent):
         return None
 
+    # Precise type-name check for ClaudeCodeAgent
+    if type(agent_obj).__name__ == "ClaudeCodeAgent":
+        return "claude"
+
     # Precise type-name check for LangGraph (avoid fragile module prefix matching
     # since langgraph uses internal Pregel/CompiledStateGraph class names)
     type_name = type(agent_obj).__name__
@@ -99,6 +103,11 @@ def serialize_agent(agent_obj: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
         from agentspan.agents.frameworks.langchain import serialize_langchain
 
         return serialize_langchain(agent_obj)
+
+    if framework == "claude":
+        from agentspan.agents.frameworks.claude import serialize_claude
+
+        return serialize_claude(agent_obj)
 
     workers: List[WorkerInfo] = []
     seen: Set[int] = set()  # Prevent infinite recursion on circular refs

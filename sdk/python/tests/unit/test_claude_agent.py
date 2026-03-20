@@ -77,3 +77,29 @@ class TestSerializeClaude:
         agent = ClaudeCodeAgent(name="test")
         _, workers = serialize_claude(agent)
         assert workers[0].func is None
+
+
+from agentspan.agents.frameworks.serializer import detect_framework, serialize_agent
+
+
+class TestClaudeDetection:
+    def test_detects_claude_agent(self):
+        agent = ClaudeCodeAgent(name="test")
+        assert detect_framework(agent) == "claude"
+
+    def test_other_types_not_detected_as_claude(self):
+        assert detect_framework(object()) != "claude"
+        assert detect_framework("a string") != "claude"
+
+    def test_serialize_agent_dispatches_to_serialize_claude(self):
+        agent = ClaudeCodeAgent(name="dispatch_test")
+        raw_config, workers = serialize_agent(agent)
+        assert raw_config["_worker_name"] == "_fw_claude_dispatch_test"
+        assert len(workers) == 1
+        assert workers[0].func is None
+
+
+class TestClaudeImport:
+    def test_exported_from_frameworks_init(self):
+        from agentspan.agents.frameworks import ClaudeCodeAgent as Imported
+        assert Imported is ClaudeCodeAgent
