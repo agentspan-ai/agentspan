@@ -210,12 +210,12 @@ class _ConductorSubagentClient:
             self._headers["X-Auth-Secret"] = auth_secret
 
     async def start_workflow(self, workflow_name: str, input_data: dict) -> str:
-        """POST /api/workflow/{workflow_name} and return the new workflow instance ID."""
+        """POST /workflow/{workflow_name} and return the new workflow instance ID."""
         import httpx
 
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
-                f"{self._server_url}/api/workflow/{workflow_name}",
+                f"{self._server_url}/workflow/{workflow_name}",
                 json=input_data,
                 headers=self._headers,
             )
@@ -224,7 +224,7 @@ class _ConductorSubagentClient:
             return resp.text.strip().strip('"')
 
     async def poll_until_done(self, workflow_id: str, poll_interval: float = 2.0) -> str:
-        """Poll GET /api/workflow/{workflow_id} until terminal status, return output."""
+        """Poll GET /workflow/{workflow_id} until terminal status, return output."""
         import asyncio
 
         import httpx
@@ -232,7 +232,7 @@ class _ConductorSubagentClient:
         async with httpx.AsyncClient(timeout=30) as client:
             while True:
                 resp = await client.get(
-                    f"{self._server_url}/api/workflow/{workflow_id}",
+                    f"{self._server_url}/workflow/{workflow_id}",
                     headers=self._headers,
                 )
                 resp.raise_for_status()

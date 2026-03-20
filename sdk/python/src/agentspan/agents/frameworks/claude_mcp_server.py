@@ -40,7 +40,15 @@ class AgentspanMcpServer:
     # ── Public API ────────────────────────────────────────────────────────────
 
     def build(self) -> Dict[str, Any]:
-        """Build and return the McpSdkServerConfig dict for ClaudeAgentOptions."""
+        """Build and return the McpSdkServerConfig dict for ClaudeAgentOptions.
+
+        The ``instance`` field is set to the underlying low-level MCP Server
+        (``FastMCP._mcp_server``) because ``claude_agent_sdk`` accesses
+        ``instance.request_handlers`` directly.  In MCP SDK >= 1.2, FastMCP
+        wraps a low-level ``mcp.server.lowlevel.Server`` which owns the
+        ``request_handlers`` dict; exposing the FastMCP wrapper would cause a
+        ``AttributeError`` inside the SDK's ``_handle_sdk_mcp_request`` method.
+        """
         from mcp.server.fastmcp import FastMCP
 
         mcp = FastMCP("agentspan")
@@ -52,6 +60,16 @@ class AgentspanMcpServer:
             self._register_spawn_subagent(mcp)
 
         self._mcp = mcp
+        # The claude_agent_sdk accesses instance.request_handlers directly (from the
+        # low-level MCP Server), but FastMCP wraps that in mcp._mcp_server.
+        # Expose request_handlers on the FastMCP wrapper so the SDK can reach them.
+        if hasattr(mcp, "_mcp_server") and not hasattr(mcp, "request_handlers"):
+            mcp.request_handlers = mcp._mcp_server.request_handlers  # type: ignore[attr-defined]
+        # claude_agent_sdk reads server.version in the MCP initialize response.
+        # FastMCP does not expose version at the top level; patch it so the SDK
+        # gets a valid value and does not silently skip tool discovery.
+        if not hasattr(mcp, "version"):
+            mcp.version = getattr(getattr(mcp, "_mcp_server", None), "version", None) or "1.0.0"  # type: ignore[attr-defined]
         return {"type": "sdk", "name": "agentspan", "instance": mcp}
 
     # ── Internal dispatch (also tested directly) ──────────────────────────────
@@ -127,7 +145,16 @@ class AgentspanMcpServer:
     # ── Private helpers ───────────────────────────────────────────────────────
 
     def _register_tool(self, mcp: Any, tool_fn: Callable) -> None:
-        """Register a @tool function as a FastMCP tool with Conductor dispatch."""
+        """Register a @tool function as a FastMCP tool with Conductor dispatch.
+
+        The wrapper preserves the original function's signature and annotations so
+        FastMCP builds the correct Pydantic argument schema.  Without this, FastMCP
+        would generate a schema with a single ``kwargs`` field (from ``**kwargs``),
+        and Claude would send arguments that don't match the expected schema.
+        """
+        import functools
+        import inspect
+
         td = getattr(tool_fn, "_tool_def", None)
         if td is None:
             logger.warning("Skipping %s: no _tool_def attribute", tool_fn)
@@ -139,9 +166,17 @@ class AgentspanMcpServer:
         # Capture tool_name in closure
         dispatch = self._dispatch_tool
 
+        # Build a wrapper that preserves the original signature so FastMCP can
+        # generate the correct Pydantic argument schema for the tool.
+        orig_sig = inspect.signature(tool_fn)
+        orig_annotations = getattr(tool_fn, "__annotations__", {}).copy()
+
         async def _mcp_wrapper(**kwargs: Any) -> str:
             return await dispatch(tool_name, kwargs)
 
+        # Copy signature and annotations so FastMCP uses the right schema.
+        _mcp_wrapper.__signature__ = orig_sig  # type: ignore[attr-defined]
+        _mcp_wrapper.__annotations__ = {**orig_annotations, "return": str}
         _mcp_wrapper.__name__ = tool_name
         _mcp_wrapper.__doc__ = description
 

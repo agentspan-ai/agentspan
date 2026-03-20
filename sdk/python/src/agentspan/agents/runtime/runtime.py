@@ -2313,17 +2313,35 @@ class AgentRuntime:
         else:
             self._register_framework_workers(workers)
 
+        # For Claude agents, auto-register mcp_tools as Conductor task workers so
+        # start_tool_workflow() dispatches can be picked up by a local worker.
+        if framework == "claude":
+            self._register_claude_mcp_tools(agent_obj)
+
         correlation_id = str(uuid.uuid4())
         resolved_prompt = str(prompt)
 
-        workflow_id = self._start_framework_via_server(
-            framework=framework,
-            raw_config=raw_config,
-            prompt=resolved_prompt,
-            media=media,
-            session_id=session_id,
-            idempotency_key=idempotency_key,
-        )
+        # claude passthrough: Agentspan server /api/agent/start doesn't support
+        # the 'claude' framework yet — start the Conductor workflow directly.
+        if framework == "claude":
+            worker_name = raw_config.get("_worker_name", f"_fw_claude_{agent_name}")
+            workflow_id = self._start_passthrough_workflow_direct(
+                worker_name=worker_name,
+                prompt=resolved_prompt,
+                cwd=raw_config.get("cwd", ""),
+                session_id=session_id or "",
+                media=media,
+                idempotency_key=idempotency_key,
+            )
+        else:
+            workflow_id = self._start_framework_via_server(
+                framework=framework,
+                raw_config=raw_config,
+                prompt=resolved_prompt,
+                media=media,
+                session_id=session_id,
+                idempotency_key=idempotency_key,
+            )
 
         if on_event is not None:
             return self._run_framework_with_events(
@@ -2390,17 +2408,32 @@ class AgentRuntime:
         else:
             self._register_framework_workers(workers)
 
+        # For Claude agents, auto-register mcp_tools as Conductor task workers.
+        if framework == "claude":
+            self._register_claude_mcp_tools(agent_obj)
+
         correlation_id = str(uuid.uuid4())
         resolved_prompt = str(prompt)
 
-        workflow_id = self._start_framework_via_server(
-            framework=framework,
-            raw_config=raw_config,
-            prompt=resolved_prompt,
-            media=media,
-            session_id=session_id,
-            idempotency_key=idempotency_key,
-        )
+        if framework == "claude":
+            worker_name = raw_config.get("_worker_name", f"_fw_claude_{raw_config.get('name', 'agent')}")
+            workflow_id = self._start_passthrough_workflow_direct(
+                worker_name=worker_name,
+                prompt=resolved_prompt,
+                cwd=raw_config.get("cwd", ""),
+                session_id=session_id or "",
+                media=media,
+                idempotency_key=idempotency_key,
+            )
+        else:
+            workflow_id = self._start_framework_via_server(
+                framework=framework,
+                raw_config=raw_config,
+                prompt=resolved_prompt,
+                media=media,
+                session_id=session_id,
+                idempotency_key=idempotency_key,
+            )
 
         return AgentHandle(workflow_id=workflow_id, runtime=self, correlation_id=correlation_id)
 
@@ -2481,6 +2514,82 @@ class AgentRuntime:
                 elif new_workers:
                     self._worker_manager.start()
 
+    def _start_passthrough_workflow_direct(
+        self,
+        worker_name: str,
+        prompt: str,
+        *,
+        cwd: str = "",
+        session_id: str = "",
+        media: Optional[List[str]] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> str:
+        """Register a minimal single-task workflow and start it via Conductor directly.
+
+        Used for claude passthrough workers that the Agentspan server's
+        /api/agent/start does not yet support.
+        """
+        import requests as req_lib
+        from conductor.client.http.models import StartWorkflowRequest
+
+        workflow_def = {
+            "name": worker_name,
+            "version": 1,
+            "description": f"Passthrough workflow for {worker_name}",
+            "schemaVersion": 2,
+            "tasks": [
+                {
+                    "name": worker_name,
+                    "taskReferenceName": f"{worker_name}_ref",
+                    "type": "SIMPLE",
+                    "inputParameters": {
+                        "prompt": "${workflow.input.prompt}",
+                        "cwd": "${workflow.input.cwd}",
+                        "session_id": "${workflow.input.session_id}",
+                    },
+                }
+            ],
+            "outputParameters": {
+                "result": f"${{{worker_name}_ref.output.result}}",
+            },
+            "inputParameters": ["prompt", "cwd", "session_id"],
+            "timeoutSeconds": 0,
+            "timeoutPolicy": "ALERT_ONLY",
+            "restartable": True,
+        }
+
+        # Register (or update) the workflow definition
+        base = self._config.server_url.rstrip("/")
+        headers = self._agent_api_headers()
+        reg_resp = req_lib.put(
+            f"{base}/metadata/workflow",
+            json=[workflow_def],
+            headers=headers,
+            timeout=15,
+        )
+        reg_resp.raise_for_status()
+
+        # Start the workflow
+        req = StartWorkflowRequest()
+        req.name = worker_name
+        req.version = 1
+        req.input = {
+            "prompt": prompt,
+            "cwd": cwd,
+            "session_id": session_id or "",
+            "media": media or [],
+        }
+        if idempotency_key:
+            req.correlation_id = idempotency_key
+
+        workflow_id = self._workflow_client.start_workflow(req)
+        logger.info(
+            "Started claude passthrough workflow '%s' directly (workflow_id=%s)",
+            worker_name,
+            workflow_id,
+        )
+        return workflow_id
+
     def _register_passthrough_worker(self, worker: Any) -> None:
         """Register a pre-wrapped framework passthrough worker (LangGraph/LangChain).
 
@@ -2498,6 +2607,7 @@ class AgentRuntime:
             task_def=_passthrough_task_def(worker.name),
             register_task_def=True,
             overwrite_task_def=True,
+            thread_count=self._config.worker_thread_count,
         )(worker.func)
         logger.debug("Registered passthrough worker '%s'", worker.name)
 
@@ -2511,6 +2621,48 @@ class AgentRuntime:
                     self._worker_manager.start()
                     self._workers_started = True
                 elif is_new:
+                    self._worker_manager.start()
+
+    def _register_claude_mcp_tools(self, agent_obj: Any) -> None:
+        """Register mcp_tools from a ClaudeCodeAgent as Conductor task workers.
+
+        Each @tool function in agent_obj.mcp_tools is registered as a standalone
+        Conductor SIMPLE task worker so that start_tool_workflow() dispatches can
+        be picked up locally.  Already-registered tools are skipped.
+        """
+        mcp_tools = getattr(agent_obj, "mcp_tools", None)
+        if not mcp_tools:
+            return
+
+        from conductor.client.worker.worker_task import worker_task
+
+        from agentspan.agents.runtime._dispatch import make_tool_worker
+
+        for tool_fn in mcp_tools:
+            td = getattr(tool_fn, "_tool_def", None)
+            if td is None:
+                logger.warning("Skipping mcp_tool %s: no _tool_def attribute", tool_fn)
+                continue
+            tool_name = td.name
+            if tool_name in self._registered_tool_names:
+                continue
+            wrapper = make_tool_worker(tool_fn, tool_name)
+            worker_task(
+                task_definition_name=tool_name,
+                task_def=_default_task_def(tool_name),
+                register_task_def=True,
+                overwrite_task_def=True,
+                thread_count=self._config.worker_thread_count,
+            )(wrapper)
+            self._registered_tool_names.add(tool_name)
+            logger.debug("Registered Claude mcp_tool worker '%s'", tool_name)
+
+        if self._config.auto_start_workers and mcp_tools:
+            with self._worker_start_lock:
+                if not self._workers_started:
+                    self._worker_manager.start()
+                    self._workers_started = True
+                else:
                     self._worker_manager.start()
 
     def _build_passthrough_func(self, agent_obj: Any, framework: str, name: str) -> Any:
@@ -3733,14 +3885,30 @@ class AgentRuntime:
         correlation_id = str(uuid.uuid4())
         resolved_prompt = str(prompt)
 
-        workflow_id = await self._start_framework_via_server_async(
-            framework=framework,
-            raw_config=raw_config,
-            prompt=resolved_prompt,
-            media=media,
-            session_id=session_id,
-            idempotency_key=idempotency_key,
-        )
+        if framework == "claude":
+            worker_name = raw_config.get("_worker_name", f"_fw_claude_{agent_name}")
+            import asyncio as _asyncio
+
+            workflow_id = await _asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: self._start_passthrough_workflow_direct(
+                    worker_name=worker_name,
+                    prompt=resolved_prompt,
+                    cwd=raw_config.get("cwd", ""),
+                    session_id=session_id or "",
+                    media=media,
+                    idempotency_key=idempotency_key,
+                ),
+            )
+        else:
+            workflow_id = await self._start_framework_via_server_async(
+                framework=framework,
+                raw_config=raw_config,
+                prompt=resolved_prompt,
+                media=media,
+                session_id=session_id,
+                idempotency_key=idempotency_key,
+            )
 
         if on_event is not None:
             captured_events: List[AgentEvent] = []
@@ -3825,17 +3993,37 @@ class AgentRuntime:
         else:
             self._register_framework_workers(workers)
 
+        # For Claude agents, auto-register mcp_tools as Conductor task workers.
+        if framework == "claude":
+            self._register_claude_mcp_tools(agent_obj)
+
         correlation_id = str(uuid.uuid4())
         resolved_prompt = str(prompt)
 
-        workflow_id = await self._start_framework_via_server_async(
-            framework=framework,
-            raw_config=raw_config,
-            prompt=resolved_prompt,
-            media=media,
-            session_id=session_id,
-            idempotency_key=idempotency_key,
-        )
+        if framework == "claude":
+            worker_name = raw_config.get("_worker_name", f"_fw_claude_{raw_config.get('name', 'agent')}")
+            import asyncio as _asyncio
+
+            workflow_id = await _asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: self._start_passthrough_workflow_direct(
+                    worker_name=worker_name,
+                    prompt=resolved_prompt,
+                    cwd=raw_config.get("cwd", ""),
+                    session_id=session_id or "",
+                    media=media,
+                    idempotency_key=idempotency_key,
+                ),
+            )
+        else:
+            workflow_id = await self._start_framework_via_server_async(
+                framework=framework,
+                raw_config=raw_config,
+                prompt=resolved_prompt,
+                media=media,
+                session_id=session_id,
+                idempotency_key=idempotency_key,
+            )
 
         return AgentHandle(workflow_id=workflow_id, runtime=self, correlation_id=correlation_id)
 
