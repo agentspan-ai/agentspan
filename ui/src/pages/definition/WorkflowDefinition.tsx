@@ -1,4 +1,4 @@
-import { AlertColor, Box } from "@mui/material";
+import { AlertColor, Box, Tab, Tabs } from "@mui/material";
 import { useSelector } from "@xstate/react";
 import { SnackbarMessage } from "components/SnackbarMessage";
 import TwoPanesDivider from "components/TwoPanesDivider";
@@ -7,8 +7,10 @@ import {
   FlowEditContextProvider,
   WorkflowDefinitionEvents,
 } from "pages/definition/state";
+import { AgentDefinitionDiagram } from "pages/execution/AgentDefinitionView";
 import { Helmet } from "react-helmet";
 import { useAuth } from "shared/auth";
+import { useState } from "react";
 import { ActorRef, State } from "xstate";
 import sharedStyles from "../styles";
 import EditorPanel from "./EditorPanel/EditorPanel";
@@ -24,10 +26,18 @@ export default function Workflow() {
     { workflowName, message, definitionActor, leftPanelExpanded },
   ] = useWorkflowDefinition(conductorUser!);
 
-  const graphPanel = <GraphPanel definitionActor={definitionActor} />;
+  const [activeView, setActiveView] = useState<"agentDef" | "conductorWorkflow">("agentDef");
+
+  const agentDef = useSelector(
+    definitionActor,
+    (state: State<DefinitionMachineContext>) =>
+      (state.context?.workflowChanges as any)?.metadata?.agentDef as Record<string, unknown> | undefined,
+  );
+
+  const graphPanel = <GraphPanel definitionActor={definitionActor} readOnly />;
 
   const editorPanel = definitionActor && (
-    <EditorPanel definitionActor={definitionActor} />
+    <EditorPanel definitionActor={definitionActor} readOnly />
   );
 
   const isReady = useSelector(

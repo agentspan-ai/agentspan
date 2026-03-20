@@ -5,6 +5,7 @@
 
 package dev.agentspan.runtime.compiler;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
 import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
 import dev.agentspan.runtime.model.*;
@@ -25,6 +26,7 @@ import java.util.*;
 public class AgentCompiler {
 
     private static final Logger log = LoggerFactory.getLogger(AgentCompiler.class);
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private static final List<String> WORKFLOW_INPUTS = List.of("prompt", "session_id", "media", "cwd");
     private static final Map<String, Object> USER_MESSAGE = Map.of(
@@ -74,11 +76,18 @@ public class AgentCompiler {
             wf = compileWithTools(config);
         }
 
-        // Stamp agent capability tags into workflow metadata
+        // Stamp agent capability tags and agentDef into workflow metadata.
+        // Done here (not only in AgentService) so sub-workflows compiled recursively
+        // also carry their own agentDef — AgentService only stamps the top-level def.
         Set<String> caps = collectCapabilities(config);
         Map<String, Object> metadata = wf.getMetadata() != null
             ? new LinkedHashMap<>(wf.getMetadata()) : new LinkedHashMap<>();
         metadata.put("agent_capabilities", new ArrayList<>(caps));
+        try {
+            metadata.put("agentDef", MAPPER.convertValue(config, Map.class));
+        } catch (Exception e) {
+            log.debug("Could not stamp agentDef for agent '{}': {}", config.getName(), e.getMessage());
+        }
         wf.setMetadata(metadata);
 
         // Ensure every task has a name (Conductor requires it for execution)

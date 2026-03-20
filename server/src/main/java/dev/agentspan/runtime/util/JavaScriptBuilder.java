@@ -162,16 +162,19 @@ public class JavaScriptBuilder {
      * Build the tool call enrichment JavaScript.
      * Injects {@code _agent_state} from {@code $.agentState} into worker (SIMPLE) tasks
      * so that ToolContext.state is available server-side.
+     * Injects {@code _allowed_commands} for CLI (SIMPLE) tasks so that per-agent
+     * command whitelists are enforced even when multiple agents share the same worker.
      */
     public static String enrichToolsScript(String httpConfigJson, String mcpConfigJson,
                                               String mediaConfigJson, String agentToolConfigJson,
-                                              String ragConfigJson) {
+                                              String ragConfigJson, String cliConfigJson) {
         return iife(
             "  var httpCfg = " + httpConfigJson + ";" +
             "  var mcpCfg = " + mcpConfigJson + ";" +
             "  var mediaCfg = " + mediaConfigJson + ";" +
             "  var agentToolCfg = " + agentToolConfigJson + ";" +
             "  var ragCfg = " + ragConfigJson + ";" +
+            "  var cliCfg = " + cliConfigJson + ";" +
             "  var agentState = $.agentState || {};" +
             "  var tcs = $.toolCalls || [];" +
             "  var result = [];" +
@@ -231,7 +234,10 @@ public class JavaScriptBuilder {
             "      for (var k in inp) { merged[k] = inp[k]; }" +
             "      t.inputParameters = merged;" +
             "    }" +
-            "    if (t.type === 'SIMPLE') { t.inputParameters._agent_state = agentState; }" +
+            "    if (t.type === 'SIMPLE') {" +
+            "      t.inputParameters._agent_state = agentState;" +
+            "      if (cliCfg[n]) { t.inputParameters._allowed_commands = cliCfg[n].allowedCommands; }" +
+            "    }" +
             "    result.push(t);" +
             "  }" +
             "  return {dynamicTasks: result};"

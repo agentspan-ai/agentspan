@@ -35,9 +35,10 @@ type ActorRefWithChildren<T extends EventObject> = ActorRef<T> & {
 
 interface EditorPanelProps {
   definitionActor: ActorRef<WorkflowDefinitionEvents>;
+  readOnly?: boolean;
 }
 
-const EditorPanel = ({ definitionActor }: EditorPanelProps) => {
+const EditorPanel = ({ definitionActor, readOnly = false }: EditorPanelProps) => {
   const tabsContainerRef = useRef<HTMLDivElement>(null);
   const [
     {
@@ -420,6 +421,9 @@ const EditorPanel = ({ definitionActor }: EditorPanelProps) => {
           backgroundColor: (theme) => theme.palette.customBackground.form,
         }}
       >
+        {readOnly && (
+          <Box sx={{ position: "absolute", inset: 0, zIndex: 10, pointerEvents: "all", cursor: "default", backgroundColor: "transparent" }} />
+        )}
         <ConfirmationDialogs
           isConfirmReset={isConfirmReset}
           isConfirmDelete={isConfirmDelete}

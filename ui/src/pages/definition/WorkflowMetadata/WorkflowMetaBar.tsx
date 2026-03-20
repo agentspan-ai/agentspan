@@ -38,12 +38,14 @@ interface WorkflowMetaBarProps {
   leftPanelExpanded: boolean; // We should get rid of this move it to xstate
   setLeftPanelExpanded: (t: boolean) => void;
   definitionActor: ActorRef<WorkflowDefinitionEvents>;
+  readOnly?: boolean;
 }
 
 export const WorkflowMetaBar: FunctionComponent<WorkflowMetaBarProps> = ({
   leftPanelExpanded,
   setLeftPanelExpanded,
   definitionActor,
+  readOnly = false,
 }) => {
   const version = useSelector(definitionActor, versionSelector);
   const versions = useSelector(definitionActor, versionsSelector);
@@ -166,8 +168,8 @@ export const WorkflowMetaBar: FunctionComponent<WorkflowMetaBarProps> = ({
                 )}
                 labelOnEmpty="Latest version"
               />
-              {maybeConfirmSaveButtonGroup}
-              {!(definitionActor as any).children?.get(
+              {!readOnly && maybeConfirmSaveButtonGroup}
+              {!readOnly && !(definitionActor as any).children?.get(
                 "saveChangesMachine",
               ) && <HeadActionButtons definitionActor={definitionActor} />}
             </Box>

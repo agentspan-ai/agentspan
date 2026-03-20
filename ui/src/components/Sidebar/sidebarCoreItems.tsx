@@ -133,7 +133,7 @@ export function getCoreSidebarItems(open: boolean): MenuItemType[] {
       items: [
         {
           id: "workflowDefItem",
-          title: "Workflow",
+          title: "Agent",
           icon: null,
           linkTo: WORKFLOW_DEFINITION_URL.BASE,
           activeRoutes: [

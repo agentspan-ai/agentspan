@@ -379,7 +379,7 @@ export default function WorkflowDefinitions() {
   return (
     <>
       <Helmet>
-        <title>Workflow Definitions</title>
+        <title>Agent Definitions</title>
       </Helmet>
 
       {selectedWorkflowWithAction &&
@@ -458,7 +458,7 @@ export default function WorkflowDefinitions() {
       )}
       <SectionHeader
         _deprecate_marginTop={0}
-        title="Workflow Definitions"
+        title="Agent Definitions"
         actions={
           <SectionHeaderActions
             buttons={[

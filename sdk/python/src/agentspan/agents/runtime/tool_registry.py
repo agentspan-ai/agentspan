@@ -63,7 +63,7 @@ class ToolRegistry:
                 logger.info("Tool '%s' registered with approval_required=True", td.name)
 
         for td in tool_defs:
-            if td.func is not None and td.tool_type == "worker":
+            if td.func is not None and td.tool_type in ("worker", "cli"):
                 guardrails = td.guardrails if td.guardrails else None
                 wrapper = make_tool_worker(td.func, td.name, guardrails=guardrails)
                 worker_task(

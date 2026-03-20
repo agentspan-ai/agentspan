@@ -226,9 +226,10 @@ public class ToolCompiler {
         Map<String, Object> mediaConfig = new LinkedHashMap<>();
         Map<String, Object> agentToolConfig = new LinkedHashMap<>();
         Map<String, Object> ragConfig = new LinkedHashMap<>();
+        Map<String, Object> cliConfig = new LinkedHashMap<>();
 
         if (tools != null) {
-            Set<String> serverSideTypes = Set.of("http", "mcp", "agent_tool",
+            Set<String> serverSideTypes = Set.of("http", "mcp", "agent_tool", "cli",
                     "generate_image", "generate_audio", "generate_video", "generate_pdf",
                     "rag_index", "rag_search");
 
@@ -244,6 +245,10 @@ public class ToolCompiler {
 
                 if ("http".equals(toolType)) {
                     httpConfig.put(tool.getName(), cfg);
+                } else if ("cli".equals(toolType)) {
+                    Map<String, Object> cliEntry = new LinkedHashMap<>();
+                    cliEntry.put("allowedCommands", cfg.getOrDefault("allowedCommands", Collections.emptyList()));
+                    cliConfig.put(tool.getName(), cliEntry);
                 } else if ("mcp".equals(toolType)) {
                     Map<String, Object> mcpEntry = new LinkedHashMap<>();
                     mcpEntry.put("mcpServer", cfg.getOrDefault("server_url", ""));
@@ -287,8 +292,9 @@ public class ToolCompiler {
         String mediaJson = JavaScriptBuilder.toJson(mediaConfig);
         String agentToolJson = JavaScriptBuilder.toJson(agentToolConfig);
         String ragJson = JavaScriptBuilder.toJson(ragConfig);
+        String cliJson = JavaScriptBuilder.toJson(cliConfig);
 
-        String script = JavaScriptBuilder.enrichToolsScript(httpJson, mcpJson, mediaJson, agentToolJson, ragJson);
+        String script = JavaScriptBuilder.enrichToolsScript(httpJson, mcpJson, mediaJson, agentToolJson, ragJson, cliJson);
 
         String enrichRef = agentName + "_" + p + "enrich_tools";
 

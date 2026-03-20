@@ -1,11 +1,12 @@
 /**
- * AgentDefinitionView — renders a reaflow block diagram of the agent
- * definition stored in execution.workflowDefinition.metadata.agentDef.
+ * AgentDefinitionView — reaflow block diagram of an agent's definition.
  *
- * Architecture mirrors AgentExecutionDiagram:
- *   - Outer viewport div: overflow:hidden, captures gestures
- *   - Inner transform div: CSS translate+scale
- *   - Canvas: pannable=false, zoomable=false, ELK layout (direction=DOWN)
+ * Layout:
+ *   - Root agent node at top (name, model, strategy, maxTurns)
+ *   - Sub-agents fan out in parallel from root (each as individual node)
+ *   - Tools/guardrails also branch from root
+ *
+ * Architecture mirrors AgentExecutionDiagram (viewport → transform → Canvas).
  */
 import { useRef, useCallback, useMemo, useState } from "react";
 import { Box, Typography } from "@mui/material";
@@ -21,20 +22,37 @@ import { getModelIconPath } from "./AgentExecution/agentExecutionUtils";
 import "components/flow/ReaflowOverrides.scss";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const W = 264, H = 80;
+const W = 264;
+const H = 90;          // slightly taller to fit strategy row
 const MIN_ZOOM = 0.1, MAX_ZOOM = 2.5;
+const MAX_INDIVIDUAL = 8; // show individual nodes up to this count, group beyond
+
+// ─── Strategy colours ─────────────────────────────────────────────────────────
+const STRATEGY_STYLE: Record<string, { bg: string; color: string }> = {
+  random:     { bg: "#fef3c7", color: "#92400e" },
+  handoff:    { bg: "#ede9fe", color: "#6d28d9" },
+  sequential: { bg: "#e0f2fe", color: "#075985" },
+  parallel:   { bg: "#dcfce7", color: "#15803d" },
+  router:     { bg: "#f3f4f6", color: "#374151" },
+  single:     { bg: "#f3f4f6", color: "#374151" },
+};
+function strategyStyle(s?: string) {
+  return STRATEGY_STYLE[s?.toLowerCase() ?? ""] ?? { bg: "#f3f4f6", color: "#374151" };
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface DefNodeData {
-  kind: "agent" | "tool" | "subagent" | "guardrail" | "group";
+  kind: "agent" | "subagent" | "tool" | "guardrail" | "group";
   label: string;
-  sublabel?: string;
-  badge?: string;
+  sublabel?: string;       // model or instructions snippet
+  badge: string;           // type label: AGENT / TOOL / GUARDRAIL / HTTP / MCP / RAG / AGENTS / TOOLS
   badgeColor: string;
   badgeBg: string;
   borderColor: string;
   modelName?: string;
-  count?: number;
+  strategy?: string;       // routing strategy (raw lowercase)
+  maxTurns?: number;
+  count?: number;          // for group nodes
   items?: string[];
 }
 
@@ -63,90 +81,109 @@ function toolCat(t: Record<string, unknown>): "agent" | "tool" | "guardrail" | "
 function NodeCard({ data, width, height }: { data: DefNodeData; width: number; height: number }) {
   const isRoot  = data.kind === "agent";
   const isGroup = data.kind === "group";
+  const ss      = strategyStyle(data.strategy);
 
-  const innerContent = (
+  const cardContent = (
     <div style={{
       position: "relative",
-      padding: "14px 18px",
+      padding: "12px 16px 10px",
       width: "100%", height: "100%",
       borderRadius: 10,
       boxSizing: "border-box",
-      color: "#111111",
+      color: "#111",
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "space-between",
     }}>
-      {/* Type badge */}
-      {data.badge && (
-        <div style={{
-          position: "absolute", top: 0, right: 0,
-          padding: "4px 8px", fontSize: "0.72em", fontWeight: 600, letterSpacing: "0.04em",
-          background: data.badgeBg, color: data.badgeColor,
-          borderRadius: "5px",
-        }}>
-          {data.badge}
-        </div>
-      )}
-
-      <div style={{ display: "flex", width: "100%", alignItems: "flex-start", gap: 8 }}>
-        {/* Model icon (for agent / subagent nodes) */}
+      {/* ── Top row: icon + label + type badge ── */}
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+        {/* Model icon */}
         {data.modelName && (() => {
           const icon = getModelIconPath(data.modelName);
-          return icon
-            ? <img src={icon} style={{ width: 20, height: 20, objectFit: "contain", flexShrink: 0, marginTop: 1 }} alt="" />
-            : null;
+          return icon ? <img src={icon} style={{ width: 18, height: 18, objectFit: "contain", flexShrink: 0, marginTop: 1 }} alt="" /> : null;
         })()}
 
-        <div style={{ flexGrow: 1, overflow: "hidden" }}>
-          {/* Primary label */}
+        <div style={{ flexGrow: 1, overflow: "hidden", minWidth: 0 }}>
+          {/* Label */}
           <div style={{
             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
             fontWeight: isRoot ? 700 : 500,
-            fontSize: "0.875rem",
-            lineHeight: 1.3,
+            fontSize: "0.875rem", lineHeight: 1.25,
           }}>
             {data.label}
           </div>
-
-          {/* Sub-label: model name, instructions snippet, or item count */}
+          {/* Sub-label: model name or instruction snippet */}
           {data.sublabel && (
             <div style={{
-              color: "#AAAAAA", fontSize: "0.775rem",
+              color: "#AAAAAA", fontSize: "0.75rem", lineHeight: 1.25, marginTop: 2,
               overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-              marginTop: 3, lineHeight: 1.3,
             }}>
               {data.sublabel}
             </div>
           )}
+          {/* Group item count */}
           {isGroup && data.count !== undefined && (
-            <div style={{ color: "#888", fontSize: "0.72rem", marginTop: 3 }}>
-              {data.count} {data.badge?.toLowerCase() === "agents" ? "agents" : "tools"}
+            <div style={{ color: "#888", fontSize: "0.72rem", marginTop: 2 }}>
+              {data.count} {data.badge.toLowerCase() === "agents" ? "agents" : "items"}
             </div>
           )}
         </div>
+
+        {/* Type badge */}
+        <div style={{
+          flexShrink: 0,
+          padding: "3px 7px", fontSize: "0.68em", fontWeight: 700, letterSpacing: "0.04em",
+          background: data.badgeBg, color: data.badgeColor,
+          borderRadius: 4, whiteSpace: "nowrap",
+        }}>
+          {data.badge}
+        </div>
       </div>
+
+      {/* ── Bottom row: strategy pill + maxTurns ── */}
+      {(data.strategy || data.maxTurns) && (
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
+          {data.strategy && (
+            <span style={{
+              display: "inline-flex", alignItems: "center",
+              padding: "2px 7px", borderRadius: 20,
+              fontSize: "0.67rem", fontWeight: 700, letterSpacing: "0.04em",
+              textTransform: "uppercase",
+              background: ss.bg, color: ss.color,
+            }}>
+              {data.strategy}
+            </span>
+          )}
+          {data.maxTurns !== undefined && (
+            <span style={{ fontSize: "0.67rem", color: "#9ca3af" }}>
+              {data.maxTurns} turns
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 
-  // Group: stacked card effect (mirrors AgentExecutionDiagram group style)
+  // Group: stacked card effect
   if (isGroup) {
     return (
       <div style={{ width, height, position: "relative" }}>
-        <div style={{ position: "absolute", top: 14, left: 14, width: "100%", height: "100%", borderRadius: 10, background: "#d0d0d0", border: `2px solid ${data.borderColor}`, opacity: 0.6 }} />
-        <div style={{ position: "absolute", top: 7, left: 7, width: "100%", height: "100%", borderRadius: 10, background: "#ebebeb", border: `2px solid ${data.borderColor}`, opacity: 0.85 }} />
+        <div style={{ position: "absolute", top: 14, left: 14, width: "100%", height: "100%", borderRadius: 10, background: "#d0d0d0", border: `2px solid ${data.borderColor}`, opacity: 0.5 }} />
+        <div style={{ position: "absolute", top: 7, left: 7, width: "100%", height: "100%", borderRadius: 10, background: "#ebebeb", border: `2px solid ${data.borderColor}`, opacity: 0.8 }} />
         <div style={{ position: "relative", width: "100%", height: "100%", borderRadius: 10, background: "#fff", border: `2.5px solid ${data.borderColor}` }}>
-          {innerContent}
+          {cardContent}
         </div>
       </div>
     );
   }
 
-  // Single node
   return (
     <div style={{
-      width, height,
-      borderRadius: 10,
+      width, height, borderRadius: 10,
       background: "#fff",
       border: `${isRoot ? "2px" : "1.5px"} solid ${data.borderColor}`,
     }}>
-      {innerContent}
+      {cardContent}
     </div>
   );
 }
@@ -168,33 +205,57 @@ const DiagramNode = (nodeProps: any) => {
   );
 };
 
-// ─── Build nodes + edges from agentDef ───────────────────────────────────────
+// ─── Build diagram from agentDef ─────────────────────────────────────────────
 function buildDefDiagram(agentDef: Record<string, unknown>) {
   const nodes: NodeData<DefNodeData>[] = [];
   const edges: EdgeData[] = [];
 
-  const defModel     = agentDef.model as string | undefined;
-  const agentName    = (agentDef.name as string | undefined) ?? "Agent";
+  const defModel    = agentDef.model as string | undefined;
+  const agentName   = (agentDef.name as string | undefined) ?? "Agent";
+  const strategy    = agentDef.strategy as string | undefined;
+  const maxTurns    = agentDef.maxTurns as number | undefined;
   const instructions = (agentDef.instructions ?? agentDef.description) as string | undefined;
-  const allTools     = (agentDef.tools as Array<Record<string, unknown>> | undefined) ?? [];
-  const guardrailsDef = (agentDef.guardrails as Array<unknown> | undefined) ?? [];
 
-  const agentToolsList  = allTools.filter(t => toolCat(t) === "agent");
-  const regularTools    = allTools.filter(t => toolCat(t) === "tool");
-  const httpTools       = allTools.filter(t => toolCat(t) === "http");
-  const mcpTools        = allTools.filter(t => toolCat(t) === "mcp");
-  const ragTools        = allTools.filter(t => toolCat(t) === "rag");
-  const guardrailTools  = allTools.filter(t => toolCat(t) === "guardrail");
-  const allGuardrails   = [
+  // Sub-agents from the agents[] field (orchestrator pattern)
+  const agentsList = (agentDef.agents as Array<Record<string, unknown>> | undefined) ?? [];
+
+  // Tools/guardrails from the tools[] field
+  const allTools      = (agentDef.tools as Array<Record<string, unknown>> | undefined) ?? [];
+  const agentToolList = allTools.filter(t => toolCat(t) === "agent");
+  const regularTools  = allTools.filter(t => toolCat(t) === "tool");
+  const httpTools     = allTools.filter(t => toolCat(t) === "http");
+  const mcpTools      = allTools.filter(t => toolCat(t) === "mcp");
+  const ragTools      = allTools.filter(t => toolCat(t) === "rag");
+  const guardrailTools = allTools.filter(t => toolCat(t) === "guardrail");
+  const guardrailsDef  = (agentDef.guardrails as Array<unknown> | undefined) ?? [];
+  const allGuardrails  = [
     ...guardrailTools.map(g => getItemName(g)),
     ...(guardrailsDef as unknown[]).map(g => getItemName(g)),
+  ];
+
+  // Merge all sub-agents into a unified list
+  const allSubAgents = [
+    ...agentsList.map(a => ({
+      name:         getItemName(a),
+      model:        a.model as string | undefined,
+      instructions: a.instructions as string | undefined,
+      strategy:     a.strategy as string | undefined,
+      maxTurns:     a.maxTurns as number | undefined,
+    })),
+    ...agentToolList.map(t => ({
+      name:         getItemName(t),
+      model:        ((t.config as any)?.agentConfig?.model ?? t.model) as string | undefined,
+      instructions: ((t.config as any)?.agentConfig?.instructions) as string | undefined,
+      strategy:     t.strategy as string | undefined,
+      maxTurns:     undefined as number | undefined,
+    })),
   ];
 
   const instSnippet = instructions
     ? instructions.slice(0, 55) + (instructions.length > 55 ? "…" : "")
     : undefined;
 
-  // Root agent node
+  // ── Root agent node ──────────────────────────────────────────────────────────
   nodes.push({
     id: "agent", width: W, height: H,
     data: {
@@ -205,90 +266,84 @@ function buildDefDiagram(agentDef: Record<string, unknown>) {
       badgeColor: "#3d5fc0", badgeBg: "#e8eeff",
       borderColor: "#93c5fd",
       modelName: defModel,
+      strategy,
+      maxTurns,
     },
   });
 
-  let prevId = "agent";
-
-  // Helper: add a single node chained from prevId
-  const addNode = (id: string, data: DefNodeData) => {
+  // Helper: add a node branching directly from root
+  const addFromRoot = (id: string, data: DefNodeData) => {
     nodes.push({ id, width: W, height: H, data });
-    edges.push({ id: `${prevId}→${id}`, from: prevId, to: id });
-    prevId = id;
+    edges.push({ id: `agent→${id}`, from: "agent", to: id });
   };
 
-  // Helper: single or group depending on count
-  const addCategory = (
-    items: Array<{ label: string; model?: string }>,
-    singleKind: DefNodeData["kind"],
+  // ── Sub-agents (fan out in parallel from root) ────────────────────────────
+  if (allSubAgents.length > 0 && allSubAgents.length <= MAX_INDIVIDUAL) {
+    for (let i = 0; i < allSubAgents.length; i++) {
+      const sa = allSubAgents[i];
+      const instSub = sa.instructions
+        ? sa.instructions.slice(0, 55) + (sa.instructions.length > 55 ? "…" : "")
+        : undefined;
+      addFromRoot(`subagent-${i}`, {
+        kind: "subagent",
+        label: sa.name,
+        sublabel: instSub ?? sa.model,
+        badge: "AGENT",
+        badgeColor: "#3d5fc0", badgeBg: "#e8eeff",
+        borderColor: "#93c5fd",
+        modelName: sa.model,
+        strategy: sa.strategy,
+        maxTurns: sa.maxTurns,
+      });
+    }
+  } else if (allSubAgents.length > MAX_INDIVIDUAL) {
+    addFromRoot("subagents", {
+      kind: "group",
+      label: allSubAgents.slice(0, 2).map(a => a.name).join(", ") + ", …",
+      count: allSubAgents.length,
+      badge: "AGENTS",
+      badgeColor: "#3d5fc0", badgeBg: "#e8eeff",
+      borderColor: "#93c5fd",
+      items: allSubAgents.map(a => a.name),
+    });
+  }
+
+  // Helper: add single tool node or group from root
+  const addToolCategory = (
+    items: string[], id: string,
     badge: string, badgeColor: string, badgeBg: string, borderColor: string,
-    groupIdPrefix: string,
   ) => {
     if (items.length === 0) return;
     if (items.length === 1) {
-      addNode(`${groupIdPrefix}-0`, {
-        kind: singleKind,
-        label: items[0].label,
-        sublabel: items[0].model,
+      addFromRoot(id + "-0", {
+        kind: "tool", label: items[0],
         badge, badgeColor, badgeBg, borderColor,
-        modelName: items[0].model,
       });
     } else {
-      addNode(groupIdPrefix, {
+      addFromRoot(id, {
         kind: "group",
-        label: items.map(i => i.label).slice(0, 3).join(", ") + (items.length > 3 ? ", …" : ""),
+        label: items.slice(0, 2).join(", ") + (items.length > 2 ? ", …" : ""),
         count: items.length,
         badge, badgeColor, badgeBg, borderColor,
-        items: items.map(i => i.label),
+        items,
       });
     }
   };
 
-  // Sub-agents (agent_tool type)
-  addCategory(
-    agentToolsList.map(t => ({
-      label: getItemName(t),
-      model: ((t.config as any)?.agentConfig?.model ?? t.model) as string | undefined,
-    })),
-    "subagent", "AGENTS", "#3d5fc0", "#e8eeff", "#93c5fd", "subagents",
-  );
-
-  // Regular / worker tools
-  addCategory(
-    regularTools.map(t => ({ label: getItemName(t) })),
-    "tool", "TOOLS", "#0369a1", "#e0f2fe", "#DDDDDD", "tools",
-  );
-
-  // HTTP tools
-  addCategory(
-    httpTools.map(t => ({ label: getItemName(t) })),
-    "tool", "HTTP", "#6b7280", "#f3f4f6", "#DDDDDD", "http-tools",
-  );
-
-  // MCP tools
-  addCategory(
-    mcpTools.map(t => ({ label: getItemName(t) })),
-    "tool", "MCP", "#7c3aed", "#ede9fe", "#c4b5fd", "mcp-tools",
-  );
-
-  // RAG tools
-  addCategory(
-    ragTools.map(t => ({ label: getItemName(t) })),
-    "tool", "RAG", "#0f766e", "#ccfbf1", "#99f6e4", "rag-tools",
-  );
-
-  // Guardrails
-  addCategory(
-    allGuardrails.map(g => ({ label: g })),
-    "guardrail", "GUARDRAILS", "#b45309", "#fef3c7", "#fde68a", "guardrails",
-  );
+  // ── Tools / HTTP / MCP / RAG ─────────────────────────────────────────────
+  addToolCategory(regularTools.map(t => getItemName(t)), "tools",     "TOOLS",     "#0369a1", "#e0f2fe", "#DDDDDD");
+  addToolCategory(httpTools.map(t => getItemName(t)),    "http",      "HTTP",      "#6b7280", "#f3f4f6", "#DDDDDD");
+  addToolCategory(mcpTools.map(t => getItemName(t)),     "mcp",       "MCP",       "#7c3aed", "#ede9fe", "#c4b5fd");
+  addToolCategory(ragTools.map(t => getItemName(t)),     "rag",       "RAG",       "#0f766e", "#ccfbf1", "#99f6e4");
+  addToolCategory(allGuardrails,                         "guardrails","GUARDRAILS","#b45309", "#fef3c7", "#fde68a");
 
   return { nodes, edges };
 }
 
-// ─── Zoom controls (matches AgentExecutionDiagram's DiagramControls) ──────────
+// ─── Zoom controls (mirrors AgentExecutionDiagram's DiagramControls) ──────────
 function ZoomControls({ zoom, onReset, onZoomIn, onZoomOut, onFit }: {
-  zoom: number; onReset: () => void; onZoomIn: () => void; onZoomOut: () => void; onFit: () => void;
+  zoom: number; onReset: () => void; onZoomIn: () => void;
+  onZoomOut: () => void; onFit: () => void;
 }) {
   const border = `1px solid ${colors.lightGrey}`;
   const col    = colors.greyText;
@@ -303,8 +358,8 @@ function ZoomControls({ zoom, onReset, onZoomIn, onZoomOut, onFit }: {
   );
 }
 
-// ─── Diagram canvas with pan / zoom ──────────────────────────────────────────
-function AgentDefinitionDiagram({ agentDef }: { agentDef: Record<string, unknown> }) {
+// ─── Main diagram canvas ──────────────────────────────────────────────────────
+export function AgentDefinitionDiagram({ agentDef }: { agentDef: Record<string, unknown> }) {
   const { nodes, edges } = useMemo(() => buildDefDiagram(agentDef), [agentDef]);
 
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -325,8 +380,9 @@ function AgentDefinitionDiagram({ agentDef }: { agentDef: Record<string, unknown
   const handleFit     = useCallback(() => {
     if (!viewportRef.current || !layoutSize.width) return;
     const { offsetWidth: vw, offsetHeight: vh } = viewportRef.current;
-    const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.min((vw - 80) / layoutSize.width, (vh - 80) / layoutSize.height)));
-    setPanZoom({ x: (vw - layoutSize.width * newZoom) / 2, y: (vh - layoutSize.height * newZoom) / 2, zoom: newZoom });
+    const nz = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM,
+      Math.min((vw - 80) / layoutSize.width, (vh - 80) / layoutSize.height)));
+    setPanZoom({ x: (vw - layoutSize.width * nz) / 2, y: (vh - layoutSize.height * nz) / 2, zoom: nz });
   }, [layoutSize]);
 
   useDrag(
@@ -342,7 +398,7 @@ function AgentDefinitionDiagram({ agentDef }: { agentDef: Record<string, unknown
         const cy = (event as WheelEvent).clientY - (rect?.top ?? 0);
         setPanZoom(p => {
           const nz = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, p.zoom * (1 - (event as WheelEvent).deltaY * 0.001)));
-          const s = nz / p.zoom;
+          const s  = nz / p.zoom;
           return { x: cx - s * (cx - p.x), y: cy - s * (cy - p.y), zoom: nz };
         });
       } else {
@@ -375,13 +431,12 @@ function AgentDefinitionDiagram({ agentDef }: { agentDef: Record<string, unknown
         <Box sx={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "#fff", backgroundImage: "url('/diagramDotBg.svg')" }}>
           <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
             {[0, 1, 2].map(i => (
-              <Box key={i} sx={{ width: i === 0 ? 56 : 220, height: 80, borderRadius: 1, backgroundColor: "#f3f3f3", border: "1px solid #DDDDDD", animation: "shimmer 1.5s ease-in-out infinite", animationDelay: `${i * 0.2}s`, "@keyframes shimmer": { "0%,100%": { opacity: 0.6 }, "50%": { opacity: 1 } } }} />
+              <Box key={i} sx={{ width: i === 0 ? 220 : 180, height: 90, borderRadius: 1, backgroundColor: "#f3f3f3", border: "1px solid #DDDDDD", animation: "shimmer 1.5s ease-in-out infinite", animationDelay: `${i * 0.2}s`, "@keyframes shimmer": { "0%,100%": { opacity: 0.6 }, "50%": { opacity: 1 } } }} />
             ))}
           </Box>
         </Box>
       )}
 
-      {/* Zoom controls */}
       {hasLayout && <ZoomControls zoom={panZoom.zoom} onReset={handleReset} onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} onFit={handleFit} />}
 
       {/* Transform container */}
@@ -399,17 +454,17 @@ function AgentDefinitionDiagram({ agentDef }: { agentDef: Record<string, unknown
           zoomable={false}
           pannable={false}
           defaultPosition={CanvasPosition.CENTER}
-          maxWidth={5000}
-          maxHeight={4000}
+          maxWidth={6000}
+          maxHeight={5000}
           onLayoutChange={handleLayoutChange}
           direction="DOWN"
           layoutOptions={{
-            "org.eclipse.elk.spacing.nodeNode": "18",
-            "elk.layered.spacing.nodeNodeBetweenLayers": "24",
+            "org.eclipse.elk.spacing.nodeNode": "20",
+            "elk.layered.spacing.nodeNodeBetweenLayers": "28",
             "org.eclipse.elk.padding": "[top=60,left=60,bottom=60,right=60]",
           }}
           node={<DiagramNode />}
-          edge={(ed: EdgeData) => <Edge {...ed} style={{ stroke: "#BBBBBB", strokeWidth: 1.5 }} />}
+          edge={(ed: EdgeData) => <Edge {...ed} style={{ stroke: "#CCCCCC", strokeWidth: 1.5 }} />}
         />
       </div>
     </div>

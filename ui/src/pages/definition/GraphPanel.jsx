@@ -12,7 +12,7 @@ import { usePanelChanges } from "pages/definition/state/usePanelChanges";
 import { selectIsOpenedEdge } from "components/flow/state/selectors";
 import AddTaskSidebar from "components/flow/components/RichAddTaskMenu/AddTaskSidebar";
 
-const GraphPanel = ({ definitionActor }) => {
+const GraphPanel = ({ definitionActor, readOnly = false }) => {
   const { leftPanelExpanded, setLeftPanelExpanded } =
     usePanelChanges(definitionActor);
   const localCopyMessage = useSelector(
@@ -104,6 +104,7 @@ const GraphPanel = ({ definitionActor }) => {
                 flowActor={flowActor}
                 leftPanelExpanded={leftPanelExpanded}
                 setLeftPanelExpanded={setLeftPanelExpanded}
+                readOnly={readOnly}
               />
             </Box>
 
@@ -119,6 +120,7 @@ const GraphPanel = ({ definitionActor }) => {
             flowActor={flowActor}
             leftPanelExpanded={leftPanelExpanded}
             setLeftPanelExpanded={setLeftPanelExpanded}
+            readOnly={readOnly}
           />
         ))}
     </Box>

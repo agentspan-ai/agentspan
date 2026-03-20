@@ -39,7 +39,7 @@ def _is_server_ready(server_url: str, timeout: float = 2.0) -> bool:
             base = base[: -len("/api")]
         resp = httpx.get(f"{base}/health", timeout=timeout)
         return resp.status_code < 500
-    except (httpx.ConnectError, httpx.TimeoutException, OSError):
+    except (httpx.ConnectError, httpx.ReadError, httpx.TimeoutException, OSError):
         return False
 
 
