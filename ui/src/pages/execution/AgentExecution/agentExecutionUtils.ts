@@ -725,6 +725,27 @@ export function transformWorkflowExecutionToAgentRun(
           Object.entries(idData).filter(([k]) => k !== "_agent_state"),
         );
 
+        // Detect transfer-check tasks by output shape { is_transfer: bool, transfer_to: string }
+        // These are orchestration-infrastructure tasks (e.g. coder_check_transfer__N), NOT user tools.
+        const isTransferCheck = "is_transfer" in od;
+        if (isTransferCheck) {
+          const isTransfer = od.is_transfer === true;
+          const transferTo = od.transfer_to as string | undefined;
+          if (isTransfer && transferTo) {
+            events.push({
+              id: `${toolTask.taskId}-handoff`,
+              type: EventType.HANDOFF,
+              timestamp: toolTask.endTime ?? 0,
+              summary: `→ ${transferTo}`,
+              targetAgent: transferTo,
+              detail: { transfer_to: transferTo },
+              durationMs: toolDuration,
+            });
+          }
+          // If not transferring, skip entirely — pure infra, not user-visible
+          continue;
+        }
+
         // Detect guardrail tasks by task type name convention
         const isGuardrail = toolName.toLowerCase().includes("guardrail");
         if (isGuardrail) {

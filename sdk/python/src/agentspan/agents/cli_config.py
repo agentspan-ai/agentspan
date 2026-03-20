@@ -92,19 +92,25 @@ def _make_cli_tool(
     working_dir: Optional[str] = None,
     allow_shell: bool = False,
     guardrails: Optional[List[Any]] = None,
+    agent_name: Optional[str] = None,
 ) -> Any:
     """Create a ``@tool``-decorated ``run_command`` function.
 
-    The returned function can be appended to ``Agent.tools`` directly.
+    The task name is scoped to the agent (``{agent_name}_run_command``) so
+    that multiple agents with different ``cli_allowed_commands`` each get
+    their own Conductor worker without collision.
     """
     from agentspan.agents.tool import tool
 
-    @tool(name="run_command")
+    task_name = f"{agent_name}_run_command" if agent_name else "run_command"
+
+    @tool(name=task_name)
     def run_command(
         command: str,
         args: list = [],
         cwd: str = "",
         shell: bool = False,
+        _allowed_commands: list = [],
     ) -> dict:
         """Run a CLI command."""
         if not command or not isinstance(command, str):
@@ -114,8 +120,10 @@ def _make_cli_tool(
                 "stderr": "No command provided.",
             }
 
-        # Validate against whitelist
-        _validate_cli_command(command, allowed_commands)
+        # Use per-task allowed_commands injected by the server when available,
+        # otherwise fall back to the closure-captured list.
+        effective_allowed = _allowed_commands if _allowed_commands else allowed_commands
+        _validate_cli_command(command, effective_allowed)
 
         # Shell gate
         if shell and not allow_shell:
@@ -190,6 +198,8 @@ def _make_cli_tool(
     if not allow_shell:
         desc += " Shell mode is disabled — do not set shell=True."
     run_command._tool_def.description = desc
+    run_command._tool_def.tool_type = "cli"
+    run_command._tool_def.config = {"allowedCommands": list(allowed_commands)}
 
     if guardrails:
         run_command._tool_def.guardrails = list(guardrails)

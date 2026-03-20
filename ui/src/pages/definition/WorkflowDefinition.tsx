@@ -53,6 +53,7 @@ export default function Workflow() {
             definitionActor: definitionActor,
             leftPanelExpanded,
             setLeftPanelExpanded,
+            readOnly: activeView === "conductorWorkflow",
           }}
         />
       )}
@@ -71,60 +72,85 @@ export default function Workflow() {
             height: "100%",
             flex: "1 1 0%",
             position: "relative",
+            display: "flex",
+            flexDirection: "column",
           }}
           data-testid="workflow-definition-container"
         >
-          <Box
-            sx={{
-              height: "100%",
-              width: "100%",
-              overflow: "visible",
-              display: "flex",
-              flexDirection: "column",
-              backgroundColor: "transparent",
-              fontSize: "13px",
-              position: "relative",
-              zIndex: 1,
-            }}
-          >
-            <Box
-              sx={{
-                display: "flex",
-                height: "100%",
-                position: "absolute",
-                overflow: "visible",
-                userSelect: "text",
-                flexDirection: "row",
-                left: "0px",
-                right: "0px",
-              }}
+          {/* View switcher tabs */}
+          <Box sx={{ borderBottom: "1px solid rgba(0,0,0,.12)", backgroundColor: "#fff", flexShrink: 0 }}>
+            <Tabs
+              value={activeView}
+              onChange={(_, v) => setActiveView(v)}
+              sx={{ minHeight: 40, "& .MuiTab-root": { minHeight: 40, fontSize: "0.8125rem", textTransform: "none" } }}
             >
-              {/* {showImportSuccessfulDialog && fetchingWfSuccessful && (
-                <FloatingMuiAlert
-                  title="Congratulations! You've created a workflow!"
-                  message="Edit whatever you want, or not, and take it for a Run!"
-                  onClose={hideExportSuccessModal}
-                />
-              )} */}
-              <PromptIfChanges
-                definitionActor={
-                  definitionActor as ActorRef<WorkflowDefinitionEvents>
-                }
-              />
+              <Tab label="Agent Definition" value="agentDef" />
+              <Tab label="Conductor Workflow" value="conductorWorkflow" />
+            </Tabs>
+          </Box>
 
-              <FlowEditContextProvider
-                workflowDefinitionActor={definitionActor}
-              >
-                {definitionActor?.children.get("flowMachine") && (
-                  <TwoPanesDivider
-                    leftPanelContent={graphPanel}
-                    rightPanelContent={editorPanel}
-                    leftPanelExpanded={leftPanelExpanded}
-                    setLeftPanelExpanded={setLeftPanelExpanded}
-                  />
+          <Box sx={{ flex: 1, position: "relative", overflow: "hidden" }}>
+            {/* Agent Definition view */}
+            {activeView === "agentDef" && (
+              <Box sx={{ height: "100%", width: "100%" }}>
+                {agentDef ? (
+                  <AgentDefinitionDiagram agentDef={agentDef} />
+                ) : (
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "text.secondary", fontSize: "0.875rem" }}>
+                    No agent definition found in workflow metadata
+                  </Box>
                 )}
-              </FlowEditContextProvider>
-            </Box>
+              </Box>
+            )}
+
+            {/* Conductor Workflow view (read-only) */}
+            {activeView === "conductorWorkflow" && (
+              <Box
+                sx={{
+                  height: "100%",
+                  width: "100%",
+                  overflow: "visible",
+                  display: "flex",
+                  flexDirection: "column",
+                  backgroundColor: "transparent",
+                  fontSize: "13px",
+                  position: "absolute",
+                  inset: 0,
+                  zIndex: 1,
+                }}
+              >
+                <Box
+                  sx={{
+                    display: "flex",
+                    height: "100%",
+                    position: "absolute",
+                    overflow: "visible",
+                    userSelect: "text",
+                    flexDirection: "row",
+                    left: "0px",
+                    right: "0px",
+                  }}
+                >
+                  <PromptIfChanges
+                    definitionActor={
+                      definitionActor as ActorRef<WorkflowDefinitionEvents>
+                    }
+                  />
+                  <FlowEditContextProvider
+                    workflowDefinitionActor={definitionActor}
+                  >
+                    {definitionActor?.children.get("flowMachine") && (
+                      <TwoPanesDivider
+                        leftPanelContent={graphPanel}
+                        rightPanelContent={editorPanel}
+                        leftPanelExpanded={leftPanelExpanded}
+                        setLeftPanelExpanded={setLeftPanelExpanded}
+                      />
+                    )}
+                  </FlowEditContextProvider>
+                </Box>
+              </Box>
+            )}
           </Box>
         </Box>
       </Box>
