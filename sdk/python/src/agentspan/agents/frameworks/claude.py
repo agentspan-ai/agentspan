@@ -40,27 +40,23 @@ logger = logging.getLogger(__name__)
 
 @dataclasses.dataclass
 class ClaudeCodeAgent:
-    """A Claude Agent SDK agent that runs as an Agentspan passthrough worker.
-
-    Tiers:
-      - Tier 1 (default): Full session durability + SSE event observability.
-      - Tier 2 (conductor_subagents=True): Claude's internal Agent tool spawns real
-        Conductor SUB_WORKFLOWs instead of in-process subagents.
-      - Tier 3 (agentspan_routing=True): All tool execution routed through Conductor
-        SIMPLE tasks via AgentspanTransport. Implies conductor_subagents=True.
-    """
+    """A Claude Agent SDK agent that runs as an Agentspan passthrough worker."""
 
     name: str = "claude_agent"
     prompt: str = ""
     cwd: str = "."
     allowed_tools: List[str] = dataclasses.field(default_factory=list)
+    disallowed_tools: List[str] = dataclasses.field(default_factory=list)
     max_turns: int = 100
     model: str = "claude-opus-4-6"
     max_tokens: int = 8192
     system_prompt: Optional[str] = None
     conductor_subagents: bool = False
-    agentspan_routing: bool = False
-    subagent_overrides: Dict[str, Any] = dataclasses.field(default_factory=dict)
+    agentspan_routing: bool = False       # Deprecated: use mcp_tools + conductor_subagents
+    mcp_tools: List[Any] = dataclasses.field(default_factory=list)
+    agents: Dict[str, Any] = dataclasses.field(default_factory=dict)
+    permission_mode: Optional[str] = None
+    subagent_overrides: Dict[str, Any] = dataclasses.field(default_factory=dict)  # Deprecated
 
 
 def serialize_claude(agent: ClaudeCodeAgent) -> Tuple[Dict[str, Any], List]:
@@ -76,13 +72,14 @@ def serialize_claude(agent: ClaudeCodeAgent) -> Tuple[Dict[str, Any], List]:
         "_worker_name": worker_name,
         "cwd": agent.cwd,
         "allowed_tools": agent.allowed_tools,
+        "disallowed_tools": agent.disallowed_tools,
         "max_turns": agent.max_turns,
         "model": agent.model,
         "max_tokens": agent.max_tokens,
         "system_prompt": agent.system_prompt,
         "conductor_subagents": agent.conductor_subagents,
         "agentspan_routing": agent.agentspan_routing,
-        "subagent_overrides": agent.subagent_overrides,
+        "permission_mode": agent.permission_mode,
     }
     worker = WorkerInfo(
         name=worker_name,
@@ -405,7 +402,6 @@ def make_claude_worker(
             _ConductorSubagentClient,
             _push_event_nonblocking,
             _restore_session,
-            make_subagent_hook,
             query,
         )
 
@@ -413,25 +409,37 @@ def make_claude_worker(
         prompt = task.input_data.get("prompt", "")
         cwd = task.input_data.get("cwd", ".")
         headers = _make_headers()
+        _is_subagent = task.input_data.get("_is_subagent", False)
 
         restored_session_id = _restore_session(workflow_id, cwd, server_url, headers)
         session_id_ref = {"value": restored_session_id}
 
-        # ── Tier 2/3 clients (only instantiated when needed) ──────────────────
-        use_conductor_subagents = agent_obj.conductor_subagents or agent_obj.agentspan_routing
-        use_agentspan_routing = agent_obj.agentspan_routing
+        # ── Build MCP server if needed ─────────────────────────────────────────
+        mcp_server_config = None
+        needs_mcp = (agent_obj.mcp_tools or agent_obj.conductor_subagents) and not _is_subagent
 
-        conductor_client = None
-        event_client = None
-        if use_conductor_subagents or use_agentspan_routing:
+        if needs_mcp:
+            from agentspan.agents.frameworks.claude_mcp_server import AgentspanMcpServer
+
             conductor_client = _ConductorSubagentClient(server_url, auth_key, auth_secret)
             event_client = _AgentspanEventClient(server_url, auth_key, auth_secret)
 
+            mcp_server = AgentspanMcpServer(
+                tools=agent_obj.mcp_tools,
+                subagent_workflow_name=name if agent_obj.conductor_subagents else None,
+                conductor_client=conductor_client,
+                event_client=event_client,
+                parent_workflow_id=workflow_id,
+            )
+            mcp_server_config = mcp_server.build()
+
+        # ── Observability hooks (always on) ────────────────────────────────────
         async def pre_tool_hook(input_data, tool_use_id, context):
             _push_event_nonblocking(
                 workflow_id,
                 "tool_call",
                 {
+                    "source": "builtin",
                     "toolName": input_data.get("tool_name", ""),
                     "args": input_data.get("tool_input", {}),
                 },
@@ -445,6 +453,7 @@ def make_claude_worker(
                 workflow_id,
                 "tool_result",
                 {
+                    "source": "builtin",
                     "toolName": input_data.get("tool_name", ""),
                     "result": input_data.get("tool_response"),
                 },
@@ -454,68 +463,43 @@ def make_claude_worker(
             _checkpoint_session(workflow_id, session_id_ref["value"], cwd, server_url, headers)
             return {}
 
-        async def subagent_start_hook(input_data, tool_use_id, context):
-            _push_event_nonblocking(
-                workflow_id,
-                "subagent_start",
-                {
-                    "agentId": input_data.get("agent_id"),
-                    "agentType": input_data.get("agent_type"),
-                    "subWorkflowId": None,
-                },
-                server_url,
-                headers,
-            )
-            return {}
-
-        async def subagent_stop_hook(input_data, tool_use_id, context):
-            _push_event_nonblocking(
-                workflow_id,
-                "subagent_stop",
-                {
-                    "agentId": input_data.get("agent_id"),
-                    "subWorkflowId": None,
-                },
-                server_url,
-                headers,
-            )
-            return {}
-
-        # Build PreToolUse matchers — Tier 2 adds conductor subagent interception.
-        # Tier 3 skips the hook because AgentspanTransport handles Agent calls directly.
-        pre_tool_matchers = [HookMatcher(matcher=".*", hooks=[pre_tool_hook])]
-        if use_conductor_subagents and not use_agentspan_routing:
-            subagent_hook = make_subagent_hook(name, workflow_id, conductor_client, event_client)
-            pre_tool_matchers.append(HookMatcher(matcher="Agent", hooks=[subagent_hook]))
-
         hooks = {
-            "PreToolUse": pre_tool_matchers,
+            "PreToolUse": [HookMatcher(matcher=".*", hooks=[pre_tool_hook])],
             "PostToolUse": [HookMatcher(matcher=".*", hooks=[post_tool_hook])],
-            "SubagentStart": [HookMatcher(matcher=".*", hooks=[subagent_start_hook])],
-            "SubagentStop": [HookMatcher(matcher=".*", hooks=[subagent_stop_hook])],
         }
 
         async def run():
             result_text = None
+            options_kwargs: Dict[str, Any] = {}
             query_kwargs: Dict[str, Any] = {}
 
-            if use_agentspan_routing:
-                # Tier 3: replace the CLI subprocess transport with AgentspanTransport.
+            if mcp_server_config is not None:
+                options_kwargs["mcp_servers"] = {"agentspan": mcp_server_config}
+
+            if agent_obj.disallowed_tools:
+                options_kwargs["disallowed_tools"] = agent_obj.disallowed_tools
+
+            if agent_obj.permission_mode:
+                options_kwargs["permission_mode"] = agent_obj.permission_mode
+
+            # Tier 3 backward compat: agentspan_routing passes transport to query()
+            if agent_obj.agentspan_routing and not _is_subagent:
                 from agentspan.agents.frameworks.claude_transport import AgentspanTransport
 
-                agent_config = {
-                    "_worker_name": name,
-                    "cwd": cwd,
-                    "allowed_tools": agent_obj.allowed_tools,
-                    "max_turns": agent_obj.max_turns,
-                    "model": agent_obj.model,
-                    "max_tokens": agent_obj.max_tokens,
-                    "system_prompt": agent_obj.system_prompt,
-                }
+                conductor_client_t3 = _ConductorSubagentClient(server_url, auth_key, auth_secret)
+                event_client_t3 = _AgentspanEventClient(server_url, auth_key, auth_secret)
                 query_kwargs["transport"] = AgentspanTransport(
-                    agent_config=agent_config,
-                    conductor_client=conductor_client,
-                    event_client=event_client,
+                    agent_config={
+                        "_worker_name": name,
+                        "cwd": cwd,
+                        "allowed_tools": agent_obj.allowed_tools,
+                        "max_turns": agent_obj.max_turns,
+                        "model": agent_obj.model,
+                        "max_tokens": agent_obj.max_tokens,
+                        "system_prompt": agent_obj.system_prompt,
+                    },
+                    conductor_client=conductor_client_t3,
+                    event_client=event_client_t3,
                     workflow_id=workflow_id,
                     cwd=cwd,
                 )
@@ -529,6 +513,7 @@ def make_claude_worker(
                     resume=restored_session_id,
                     system_prompt=agent_obj.system_prompt,
                     hooks=hooks,
+                    **options_kwargs,
                 ),
                 **query_kwargs,
             ):

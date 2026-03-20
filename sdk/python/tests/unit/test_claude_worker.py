@@ -20,6 +20,7 @@ from agentspan.agents.runtime.runtime import AgentRuntime
 def _make_task(prompt="hello", cwd=".", workflow_id="wf-123"):
     task = MagicMock()
     task.workflow_instance_id = workflow_id
+    task.task_id = "task-1"
     task.input_data = {"prompt": prompt, "cwd": cwd}
     return task
 
@@ -334,8 +335,10 @@ class TestMakeSubagentHook:
 
 
 class TestTier2ConductorSubagents:
-    def test_pretooluse_has_two_matchers_including_agent(self):
-        """conductor_subagents=True adds Agent-specific matcher to PreToolUse."""
+    def test_conductor_subagents_builds_mcp_server(self):
+        """conductor_subagents=True triggers MCP server construction."""
+        import agentspan.agents.frameworks.claude_mcp_server as mcp_mod
+
         agent = ClaudeCodeAgent(name="t2", conductor_subagents=True)
         worker = make_claude_worker(agent, "_fw_claude_t2", "http://localhost", "k", "s")
 
@@ -353,15 +356,17 @@ class TestTier2ConductorSubagents:
             patch("agentspan.agents.frameworks.claude.query", fake_query),
             patch("agentspan.agents.frameworks.claude._restore_session", return_value=None),
             patch("agentspan.agents.frameworks.claude._checkpoint_session"),
+            patch.object(mcp_mod.AgentspanMcpServer, "build", return_value={"type": "sdk", "name": "agentspan", "instance": MagicMock()}),
         ):
             worker(_make_task())
 
-        assert len(captured_hooks["PreToolUse"]) == 2
-        matchers = [m.matcher for m in captured_hooks["PreToolUse"]]
-        assert "Agent" in matchers
+        # New MCP approach: only one PreToolUse matcher (logging)
+        assert len(captured_hooks["PreToolUse"]) == 1
 
-    def test_no_transport_passed_when_only_tier2(self):
+    def test_no_transport_passed_when_only_conductor_subagents(self):
         """conductor_subagents=True alone does not pass transport= to query()."""
+        import agentspan.agents.frameworks.claude_mcp_server as mcp_mod
+
         agent = ClaudeCodeAgent(name="t2", conductor_subagents=True)
         worker = make_claude_worker(agent, "_fw_claude_t2", "http://localhost", "k", "s")
 
@@ -379,6 +384,7 @@ class TestTier2ConductorSubagents:
             patch("agentspan.agents.frameworks.claude.query", fake_query),
             patch("agentspan.agents.frameworks.claude._restore_session", return_value=None),
             patch("agentspan.agents.frameworks.claude._checkpoint_session"),
+            patch.object(mcp_mod.AgentspanMcpServer, "build", return_value={"type": "sdk", "name": "agentspan", "instance": MagicMock()}),
         ):
             worker(_make_task())
 
@@ -473,3 +479,193 @@ class TestTier3AgentspanRouting:
             worker(_make_task())
 
         assert captured_config["_worker_name"] == "_fw_claude_t3"
+
+
+# ── ClaudeCodeAgent API tests ──────────────────────────────────────────────────
+
+
+class TestClaudeCodeAgentFields:
+    def test_mcp_tools_defaults_to_empty_list(self):
+        """mcp_tools defaults to []."""
+        from agentspan.agents.frameworks.claude import ClaudeCodeAgent
+        agent = ClaudeCodeAgent(name="test")
+        assert agent.mcp_tools == []
+
+    def test_disallowed_tools_defaults_to_empty_list(self):
+        """disallowed_tools defaults to []."""
+        from agentspan.agents.frameworks.claude import ClaudeCodeAgent
+        agent = ClaudeCodeAgent(name="test")
+        assert agent.disallowed_tools == []
+
+    def test_permission_mode_defaults_to_none(self):
+        """permission_mode defaults to None."""
+        from agentspan.agents.frameworks.claude import ClaudeCodeAgent
+        agent = ClaudeCodeAgent(name="test")
+        assert agent.permission_mode is None
+
+    def test_accepts_mcp_tools_list(self):
+        """mcp_tools accepts a list of callables."""
+        from agentspan.agents.frameworks.claude import ClaudeCodeAgent
+
+        def my_tool(): pass
+        my_tool._tool_def = object()
+
+        agent = ClaudeCodeAgent(name="test", mcp_tools=[my_tool])
+        assert agent.mcp_tools == [my_tool]
+
+    def test_conductor_subagents_still_works(self):
+        """conductor_subagents flag still accepted (MCP-based now)."""
+        from agentspan.agents.frameworks.claude import ClaudeCodeAgent
+        agent = ClaudeCodeAgent(name="test", conductor_subagents=True)
+        assert agent.conductor_subagents is True
+
+
+class TestMakeClaudeWorkerMcpWiring:
+    """Tests that make_claude_worker wires AgentspanMcpServer correctly."""
+
+    def _make_task(self, prompt="test", cwd="/tmp", workflow_id="wf-123", is_subagent=False):
+        task = MagicMock()
+        task.workflow_instance_id = workflow_id
+        task.task_id = "task-1"
+        task.input_data = {"prompt": prompt, "cwd": cwd}
+        if is_subagent:
+            task.input_data["_is_subagent"] = True
+        return task
+
+    def _fake_query(self, result="done"):
+        async def _gen(*args, **kwargs):
+            init = MagicMock()
+            init.__class__.__name__ = "SystemMessage"
+            init.subtype = "init"
+            init.data = {"session_id": "sess-abc"}
+            yield init
+
+            rm = MagicMock()
+            rm.__class__.__name__ = "ResultMessage"
+            rm.result = result
+            yield rm
+
+        return _gen
+
+    def test_mcp_server_built_when_mcp_tools_provided(self):
+        """AgentspanMcpServer.build() called when agent has mcp_tools."""
+        from agentspan.agents.frameworks.claude import ClaudeCodeAgent, make_claude_worker
+
+        def dummy_tool(x: str) -> str:
+            """Dummy."""
+            return x
+        td = MagicMock()
+        td.name = "dummy_tool"
+        td.description = "Dummy."
+        td.input_schema = {"type": "object", "properties": {"x": {"type": "string"}}, "required": ["x"]}
+        dummy_tool._tool_def = td
+
+        agent = ClaudeCodeAgent(name="test", mcp_tools=[dummy_tool])
+        worker = make_claude_worker(agent, "_fw_claude_test", "http://localhost:8080/api", "", "")
+
+        with (
+            patch("agentspan.agents.frameworks.claude.query", self._fake_query()),
+            patch("agentspan.agents.frameworks.claude._restore_session", return_value=None),
+            patch("agentspan.agents.frameworks.claude._checkpoint_session"),
+            patch("agentspan.agents.frameworks.claude_mcp_server.AgentspanMcpServer.build") as mock_build,
+        ):
+            mock_build.return_value = {"type": "sdk", "name": "agentspan", "instance": MagicMock()}
+            worker(self._make_task())
+            mock_build.assert_called_once()
+
+    def test_mcp_server_not_built_when_no_mcp_tools_and_no_subagents(self):
+        """No MCP server built for plain Tier 1 agent."""
+        from agentspan.agents.frameworks.claude import ClaudeCodeAgent, make_claude_worker
+
+        agent = ClaudeCodeAgent(name="test")  # no mcp_tools, no conductor_subagents
+        worker = make_claude_worker(agent, "_fw_claude_test", "http://localhost:8080/api", "", "")
+
+        with (
+            patch("agentspan.agents.frameworks.claude.query", self._fake_query()),
+            patch("agentspan.agents.frameworks.claude._restore_session", return_value=None),
+            patch("agentspan.agents.frameworks.claude._checkpoint_session"),
+            patch("agentspan.agents.frameworks.claude_mcp_server.AgentspanMcpServer") as MockServer,
+        ):
+            worker(self._make_task())
+            MockServer.assert_not_called()
+
+    def test_is_subagent_flag_disables_mcp_server(self):
+        """_is_subagent=True in task input prevents MCP server creation."""
+        from agentspan.agents.frameworks.claude import ClaudeCodeAgent, make_claude_worker
+
+        agent = ClaudeCodeAgent(name="test", conductor_subagents=True)
+        worker = make_claude_worker(agent, "_fw_claude_test", "http://localhost:8080/api", "", "")
+
+        with (
+            patch("agentspan.agents.frameworks.claude.query", self._fake_query()),
+            patch("agentspan.agents.frameworks.claude._restore_session", return_value=None),
+            patch("agentspan.agents.frameworks.claude._checkpoint_session"),
+            patch("agentspan.agents.frameworks.claude_mcp_server.AgentspanMcpServer") as MockServer,
+        ):
+            worker(self._make_task(is_subagent=True))
+            MockServer.assert_not_called()
+
+    def test_conductor_subagents_true_passes_workflow_name_to_mcp_server(self):
+        """conductor_subagents=True passes subagent_workflow_name to server."""
+        from agentspan.agents.frameworks.claude import ClaudeCodeAgent, make_claude_worker
+        import agentspan.agents.frameworks.claude_mcp_server as mcp_mod
+
+        agent = ClaudeCodeAgent(name="myagent", conductor_subagents=True)
+        worker = make_claude_worker(agent, "_fw_claude_myagent", "http://localhost:8080/api", "", "")
+
+        init_calls = []
+        orig_init = mcp_mod.AgentspanMcpServer.__init__
+
+        def capturing_init(self_inner, **kwargs):
+            init_calls.append(kwargs)
+            orig_init(self_inner, **kwargs)
+
+        with (
+            patch("agentspan.agents.frameworks.claude.query", self._fake_query()),
+            patch("agentspan.agents.frameworks.claude._restore_session", return_value=None),
+            patch("agentspan.agents.frameworks.claude._checkpoint_session"),
+            patch.object(mcp_mod.AgentspanMcpServer, "__init__", capturing_init),
+            patch.object(mcp_mod.AgentspanMcpServer, "build", return_value={"type": "sdk", "name": "agentspan", "instance": MagicMock()}),
+        ):
+            worker(self._make_task())
+
+        assert len(init_calls) == 1
+        assert init_calls[0]["subagent_workflow_name"] == "_fw_claude_myagent"
+
+    def test_mcp_servers_in_options_when_mcp_needed(self):
+        """mcp_servers kwarg passed to ClaudeAgentOptions when MCP server built."""
+        from agentspan.agents.frameworks.claude import ClaudeCodeAgent, make_claude_worker
+
+        agent = ClaudeCodeAgent(name="test", conductor_subagents=True)
+        worker = make_claude_worker(agent, "_fw_claude_test", "http://localhost:8080/api", "", "")
+
+        captured_options = {}
+
+        async def fake_query(prompt, options, **kwargs):
+            captured_options["options"] = options
+            init = MagicMock()
+            init.__class__.__name__ = "SystemMessage"
+            init.subtype = "init"
+            init.data = {"session_id": "sess-abc"}
+            yield init
+            rm = MagicMock()
+            rm.__class__.__name__ = "ResultMessage"
+            rm.result = "done"
+            yield rm
+
+        import agentspan.agents.frameworks.claude_mcp_server as mcp_mod
+
+        with (
+            patch("agentspan.agents.frameworks.claude.query", fake_query),
+            patch("agentspan.agents.frameworks.claude._restore_session", return_value=None),
+            patch("agentspan.agents.frameworks.claude._checkpoint_session"),
+            patch.object(mcp_mod.AgentspanMcpServer, "build", return_value={"type": "sdk", "name": "agentspan", "instance": MagicMock()}),
+        ):
+            task = MagicMock()
+            task.workflow_instance_id = "wf-test"
+            task.task_id = "t-1"
+            task.input_data = {"prompt": "hello", "cwd": "/tmp"}
+            worker(task)
+
+        assert hasattr(captured_options["options"], "mcp_servers")
+        assert "agentspan" in captured_options["options"].mcp_servers

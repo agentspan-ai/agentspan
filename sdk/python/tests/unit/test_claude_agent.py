@@ -70,7 +70,8 @@ class TestSerializeClaude:
         assert raw_config["agentspan_routing"] is False
         assert raw_config["max_tokens"] == 8192  # default since not overridden
         assert raw_config["system_prompt"] is None  # default
-        assert raw_config["subagent_overrides"] == {}  # default
+        assert raw_config["permission_mode"] is None  # default
+        assert raw_config["disallowed_tools"] == []  # default
 
     def test_worker_func_is_none(self):
         """serialize_claude returns func=None — filled by _build_passthrough_func."""
