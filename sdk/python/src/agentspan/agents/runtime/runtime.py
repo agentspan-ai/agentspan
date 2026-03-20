@@ -2377,7 +2377,7 @@ class AgentRuntime:
 
         raw_config, workers = serialize_agent(agent_obj)
 
-        if framework in ("langgraph", "langchain"):
+        if framework in ("langgraph", "langchain", "claude"):
             # Build the actual pre-wrapped worker function with server connection info
             # (func was None from serialize_langgraph/serialize_langchain — fill it now)
             if not workers:
@@ -2527,6 +2527,10 @@ class AgentRuntime:
             from agentspan.agents.frameworks.langchain import make_langchain_worker
 
             return make_langchain_worker(agent_obj, name, server_url, auth_key, auth_secret)
+        elif framework == "claude":
+            from agentspan.agents.frameworks.claude import make_claude_worker
+
+            return make_claude_worker(agent_obj, name, server_url, auth_key, auth_secret)
         raise ValueError(f"Unknown passthrough framework: {framework}")
 
     def _run_framework_with_events(
@@ -3807,7 +3811,7 @@ class AgentRuntime:
 
         raw_config, workers = serialize_agent(agent_obj)
 
-        if framework in ("langgraph", "langchain"):
+        if framework in ("langgraph", "langchain", "claude"):
             # Build the actual pre-wrapped worker function with server connection info
             # (func was None from serialize_langgraph/serialize_langchain — fill it now)
             if not workers:
