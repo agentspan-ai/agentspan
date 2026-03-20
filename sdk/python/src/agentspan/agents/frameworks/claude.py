@@ -198,6 +198,128 @@ def _push_event_nonblocking(
     _push_executor.submit(_post)
 
 
+# ── Tier 2/3 helper clients ─────────────────────────────────────────────────
+
+
+class _ConductorSubagentClient:
+    """Async Conductor HTTP client for starting and polling SUB_WORKFLOWs (Tier 2 & 3)."""
+
+    def __init__(self, server_url: str, auth_key: str, auth_secret: str) -> None:
+        self._server_url = server_url.rstrip("/")
+        self._headers: Dict[str, str] = {"Content-Type": "application/json"}
+        if auth_key:
+            self._headers["X-Auth-Key"] = auth_key
+        if auth_secret:
+            self._headers["X-Auth-Secret"] = auth_secret
+
+    async def start_workflow(self, workflow_name: str, input_data: dict) -> str:
+        """POST /api/workflow/{workflow_name} and return the new workflow instance ID."""
+        import httpx
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                f"{self._server_url}/api/workflow/{workflow_name}",
+                json=input_data,
+                headers=self._headers,
+            )
+            resp.raise_for_status()
+            # Conductor returns a plain UUID string (possibly JSON-quoted)
+            return resp.text.strip().strip('"')
+
+    async def poll_until_done(self, workflow_id: str, poll_interval: float = 2.0) -> str:
+        """Poll GET /api/workflow/{workflow_id} until terminal status, return output."""
+        import asyncio
+
+        import httpx
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            while True:
+                resp = await client.get(
+                    f"{self._server_url}/api/workflow/{workflow_id}",
+                    headers=self._headers,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                status = data.get("status")
+                if status == "COMPLETED":
+                    return data.get("output", {}).get("result", "")
+                if status in ("FAILED", "TIMED_OUT", "TERMINATED"):
+                    raise RuntimeError(f"Subworkflow {workflow_id} ended with status {status}")
+                await asyncio.sleep(poll_interval)
+
+
+class _AgentspanEventClient:
+    """Async HTTP client for pushing SSE events to the Agentspan server (Tier 2 & 3)."""
+
+    def __init__(self, server_url: str, auth_key: str, auth_secret: str) -> None:
+        self._server_url = server_url.rstrip("/")
+        self._headers: Dict[str, str] = {"Content-Type": "application/json"}
+        if auth_key:
+            self._headers["X-Auth-Key"] = auth_key
+        if auth_secret:
+            self._headers["X-Auth-Secret"] = auth_secret
+
+    async def push(self, workflow_id: str, event_type: str, payload: dict) -> None:
+        """Fire-and-forget POST to /api/agent/events/{workflowId}."""
+        import httpx
+
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                await client.post(
+                    f"{self._server_url}/api/agent/events/{workflow_id}",
+                    json={"type": event_type, **payload},
+                    headers=self._headers,
+                )
+        except Exception as exc:
+            logger.debug("Async event push failed for %s/%s: %s", workflow_id, event_type, exc)
+
+
+# ── Tier 2 subagent hook ────────────────────────────────────────────────────
+
+
+def make_subagent_hook(
+    workflow_name: str,
+    workflow_id: str,
+    conductor: "_ConductorSubagentClient",
+    events: "_AgentspanEventClient",
+):
+    """Create a PreToolUse hook that intercepts Agent tool calls for Tier 2.
+
+    Instead of running an in-process subagent, starts a real Conductor
+    SUB_WORKFLOW with the same workflow definition, polls for completion,
+    and returns the result via a hook denial so Claude sees it as the
+    Agent tool's output.
+    """
+
+    async def hook(input_data, tool_use_id, context):
+        if input_data.get("tool_name") != "Agent":
+            return {}  # pass through all non-Agent tools
+
+        prompt = input_data.get("tool_input", {}).get("prompt", "")
+        try:
+            sub_id = await conductor.start_workflow(workflow_name, {"prompt": prompt})
+            await events.push(workflow_id, "subagent_start", {"subWorkflowId": sub_id})
+            result = await conductor.poll_until_done(sub_id)
+            await events.push(
+                workflow_id,
+                "subagent_stop",
+                {"subWorkflowId": sub_id, "result": result},
+            )
+        except Exception as exc:
+            logger.error("Tier 2 subagent workflow failed: %s", exc)
+            result = f"Subagent failed: {exc}"
+
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": result,
+            }
+        }
+
+    return hook
+
+
 # ── Worker factory ─────────────────────────────────────────────────────────────
 
 
@@ -234,9 +356,12 @@ def make_claude_worker(
         from agentspan.agents.frameworks.claude import (
             ClaudeAgentOptions,
             HookMatcher,
+            _AgentspanEventClient,
             _checkpoint_session,
+            _ConductorSubagentClient,
             _push_event_nonblocking,
             _restore_session,
+            make_subagent_hook,
             query,
         )
 
@@ -247,6 +372,16 @@ def make_claude_worker(
 
         restored_session_id = _restore_session(workflow_id, cwd, server_url, headers)
         session_id_ref = {"value": restored_session_id}
+
+        # ── Tier 2/3 clients (only instantiated when needed) ──────────────────
+        use_conductor_subagents = agent_obj.conductor_subagents or agent_obj.agentspan_routing
+        use_agentspan_routing = agent_obj.agentspan_routing
+
+        conductor_client = None
+        event_client = None
+        if use_conductor_subagents or use_agentspan_routing:
+            conductor_client = _ConductorSubagentClient(server_url, auth_key, auth_secret)
+            event_client = _AgentspanEventClient(server_url, auth_key, auth_secret)
 
         async def pre_tool_hook(input_data, tool_use_id, context):
             _push_event_nonblocking(
@@ -302,8 +437,15 @@ def make_claude_worker(
             )
             return {}
 
+        # Build PreToolUse matchers — Tier 2 adds conductor subagent interception.
+        # Tier 3 skips the hook because AgentspanTransport handles Agent calls directly.
+        pre_tool_matchers = [HookMatcher(matcher=".*", hooks=[pre_tool_hook])]
+        if use_conductor_subagents and not use_agentspan_routing:
+            subagent_hook = make_subagent_hook(name, workflow_id, conductor_client, event_client)
+            pre_tool_matchers.append(HookMatcher(matcher="Agent", hooks=[subagent_hook]))
+
         hooks = {
-            "PreToolUse": [HookMatcher(matcher=".*", hooks=[pre_tool_hook])],
+            "PreToolUse": pre_tool_matchers,
             "PostToolUse": [HookMatcher(matcher=".*", hooks=[post_tool_hook])],
             "SubagentStart": [HookMatcher(matcher=".*", hooks=[subagent_start_hook])],
             "SubagentStop": [HookMatcher(matcher=".*", hooks=[subagent_stop_hook])],
@@ -311,6 +453,29 @@ def make_claude_worker(
 
         async def run():
             result_text = None
+            query_kwargs: Dict[str, Any] = {}
+
+            if use_agentspan_routing:
+                # Tier 3: replace the CLI subprocess transport with AgentspanTransport.
+                from agentspan.agents.frameworks.claude_transport import AgentspanTransport
+
+                agent_config = {
+                    "_worker_name": name,
+                    "cwd": cwd,
+                    "allowed_tools": agent_obj.allowed_tools,
+                    "max_turns": agent_obj.max_turns,
+                    "model": agent_obj.model,
+                    "max_tokens": agent_obj.max_tokens,
+                    "system_prompt": agent_obj.system_prompt,
+                }
+                query_kwargs["transport"] = AgentspanTransport(
+                    agent_config=agent_config,
+                    conductor_client=conductor_client,
+                    event_client=event_client,
+                    workflow_id=workflow_id,
+                    cwd=cwd,
+                )
+
             async for msg in query(
                 prompt=prompt,
                 options=ClaudeAgentOptions(
@@ -321,9 +486,10 @@ def make_claude_worker(
                     system_prompt=agent_obj.system_prompt,
                     hooks=hooks,
                 ),
+                **query_kwargs,
             ):
                 if _is_system_init(msg):
-                    session_id_ref["value"] = msg.session_id
+                    session_id_ref["value"] = msg.data.get("session_id")
                 elif _is_result(msg):
                     result_text = msg.result
             return result_text

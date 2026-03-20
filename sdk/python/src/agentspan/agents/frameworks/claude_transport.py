@@ -298,8 +298,9 @@ class AgentspanTransport(Transport):
         return result.get("output", "")
 
     async def _run_subagent(self, tool_input: dict) -> str:
+        workflow_name = self._agent_config.get("_worker_name", "claude_agent_workflow")
         sub_workflow_id = await self._conductor.start_workflow(
-            "claude_agent_workflow",
+            workflow_name,
             {"prompt": tool_input.get("prompt", ""), "cwd": self._cwd},
         )
         await self._events.push(
