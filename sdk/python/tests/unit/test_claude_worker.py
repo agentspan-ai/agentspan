@@ -9,10 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from agentspan.agents.frameworks.claude import (
     ClaudeCodeAgent,
-    _AgentspanEventClient,
-    _ConductorSubagentClient,
     make_claude_worker,
-    make_subagent_hook,
 )
 from agentspan.agents.runtime.runtime import AgentRuntime
 
@@ -187,304 +184,6 @@ class TestRuntimePassthroughDispatch:
         assert callable(func)
 
 
-# ── Tier 2/3 helper client tests ───────────────────────────────────────────────
-
-
-def _mock_httpx_cm(mock_client):
-    """Return a mock that acts as `async with httpx.AsyncClient(...) as client:`."""
-    cm = MagicMock()
-    cm.__aenter__ = AsyncMock(return_value=mock_client)
-    cm.__aexit__ = AsyncMock(return_value=False)
-    return MagicMock(return_value=cm)
-
-
-class TestConductorSubagentClient:
-    def test_start_workflow_posts_to_correct_url_and_returns_id(self):
-        conductor = _ConductorSubagentClient("http://server:8080", "k", "s")
-
-        mock_resp = MagicMock()
-        mock_resp.text = '"wf-abc-123"'
-        mock_resp.raise_for_status = MagicMock()
-        mock_http = AsyncMock()
-        mock_http.post = AsyncMock(return_value=mock_resp)
-
-        with patch("httpx.AsyncClient", _mock_httpx_cm(mock_http)):
-            result = asyncio.run(conductor.start_workflow("my_wf", {"prompt": "go"}))
-
-        mock_http.post.assert_called_once()
-        url = mock_http.post.call_args[0][0]
-        assert "my_wf" in url
-        assert result == "wf-abc-123"  # JSON-quotes stripped
-
-    def test_poll_until_done_returns_output_on_completed(self):
-        conductor = _ConductorSubagentClient("http://server:8080", "k", "s")
-
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {"status": "COMPLETED", "output": {"result": "done!"}}
-        mock_resp.raise_for_status = MagicMock()
-        mock_http = AsyncMock()
-        mock_http.get = AsyncMock(return_value=mock_resp)
-
-        with patch("httpx.AsyncClient", _mock_httpx_cm(mock_http)):
-            result = asyncio.run(conductor.poll_until_done("wf-abc"))
-
-        assert result == "done!"
-
-    def test_poll_until_done_raises_on_failed_status(self):
-        import pytest
-
-        conductor = _ConductorSubagentClient("http://server:8080", "k", "s")
-
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {"status": "FAILED"}
-        mock_resp.raise_for_status = MagicMock()
-        mock_http = AsyncMock()
-        mock_http.get = AsyncMock(return_value=mock_resp)
-
-        with patch("httpx.AsyncClient", _mock_httpx_cm(mock_http)):
-            with pytest.raises(RuntimeError, match="FAILED"):
-                asyncio.run(conductor.poll_until_done("wf-abc"))
-
-
-class TestAgentspanEventClient:
-    def test_push_posts_to_correct_url_with_payload(self):
-        events = _AgentspanEventClient("http://server:8080", "k", "s")
-
-        mock_http = AsyncMock()
-        mock_http.post = AsyncMock()
-
-        with patch("httpx.AsyncClient", _mock_httpx_cm(mock_http)):
-            asyncio.run(events.push("wf-123", "tool_call", {"toolName": "Bash"}))
-
-        mock_http.post.assert_called_once()
-        url = mock_http.post.call_args[0][0]
-        body = mock_http.post.call_args[1]["json"]
-        assert "wf-123" in url
-        assert body["type"] == "tool_call"
-        assert body["toolName"] == "Bash"
-
-    def test_push_silently_swallows_exceptions(self):
-        events = _AgentspanEventClient("http://server:8080", "k", "s")
-
-        bad_cm = MagicMock()
-        bad_cm.__aenter__ = AsyncMock(side_effect=Exception("network error"))
-        bad_cm.__aexit__ = AsyncMock(return_value=False)
-
-        with patch("httpx.AsyncClient", MagicMock(return_value=bad_cm)):
-            asyncio.run(events.push("wf-123", "tool_call", {}))  # must not raise
-
-
-# ── Tier 2 subagent hook tests ─────────────────────────────────────────────────
-
-
-class TestMakeSubagentHook:
-    def test_non_agent_tool_passes_through(self):
-        conductor = AsyncMock()
-        events = AsyncMock()
-        hook = make_subagent_hook("my_wf", "wf-1", conductor, events)
-
-        result = asyncio.run(hook({"tool_name": "Read"}, "tu-1", {}))
-
-        assert result == {}
-        conductor.start_workflow.assert_not_called()
-
-    def test_agent_tool_starts_workflow_and_returns_deny(self):
-        conductor = AsyncMock()
-        conductor.start_workflow = AsyncMock(return_value="sub-wf-001")
-        conductor.poll_until_done = AsyncMock(return_value="subagent result")
-        events = AsyncMock()
-        events.push = AsyncMock()
-
-        hook = make_subagent_hook("my_wf", "wf-1", conductor, events)
-        result = asyncio.run(
-            hook({"tool_name": "Agent", "tool_input": {"prompt": "do something"}}, "tu-2", {})
-        )
-
-        conductor.start_workflow.assert_called_once_with("my_wf", {"prompt": "do something", "_is_subagent": True})
-        conductor.poll_until_done.assert_called_once_with("sub-wf-001")
-        assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
-        assert result["hookSpecificOutput"]["permissionDecisionReason"] == "subagent result"
-
-    def test_agent_tool_pushes_subagent_start_and_stop_events(self):
-        conductor = AsyncMock()
-        conductor.start_workflow = AsyncMock(return_value="sub-wf-001")
-        conductor.poll_until_done = AsyncMock(return_value="done")
-        events = AsyncMock()
-        events.push = AsyncMock()
-
-        hook = make_subagent_hook("my_wf", "wf-1", conductor, events)
-        asyncio.run(hook({"tool_name": "Agent", "tool_input": {"prompt": "do it"}}, "tu-3", {}))
-
-        push_calls = events.push.call_args_list
-        event_types = [call.args[1] for call in push_calls]
-        assert "subagent_start" in event_types
-        assert "subagent_stop" in event_types
-
-    def test_agent_tool_handles_conductor_exception_gracefully(self):
-        conductor = AsyncMock()
-        conductor.start_workflow = AsyncMock(side_effect=RuntimeError("conductor down"))
-        events = AsyncMock()
-
-        hook = make_subagent_hook("my_wf", "wf-1", conductor, events)
-        result = asyncio.run(
-            hook({"tool_name": "Agent", "tool_input": {"prompt": "fail"}}, "tu-4", {})
-        )
-
-        # Must return deny with error message, not raise
-        assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
-        assert "conductor down" in result["hookSpecificOutput"]["permissionDecisionReason"]
-
-
-# ── Tier 2 worker integration tests ───────────────────────────────────────────
-
-
-class TestTier2ConductorSubagents:
-    def test_conductor_subagents_builds_mcp_server(self):
-        """conductor_subagents=True triggers MCP server construction."""
-        import agentspan.agents.frameworks.claude_mcp_server as mcp_mod
-
-        agent = ClaudeCodeAgent(name="t2", conductor_subagents=True)
-        worker = make_claude_worker(agent, "_fw_claude_t2", "http://localhost", "k", "s")
-
-        captured_hooks = {}
-
-        async def fake_query(prompt, options, **kwargs):
-            captured_hooks.update(options.hooks)
-            yield MagicMock(subtype="init", session_id="s1")
-            result = MagicMock()
-            result.__class__.__name__ = "ResultMessage"
-            result.result = "done"
-            yield result
-
-        with (
-            patch("agentspan.agents.frameworks.claude.query", fake_query),
-            patch("agentspan.agents.frameworks.claude._restore_session", return_value=None),
-            patch("agentspan.agents.frameworks.claude._checkpoint_session"),
-            patch.object(mcp_mod.AgentspanMcpServer, "build", return_value={"type": "sdk", "name": "agentspan", "instance": MagicMock()}),
-        ):
-            worker(_make_task())
-
-        # New MCP approach: only one PreToolUse matcher (logging)
-        assert len(captured_hooks["PreToolUse"]) == 1
-
-    def test_no_transport_passed_when_only_conductor_subagents(self):
-        """conductor_subagents=True alone does not pass transport= to query()."""
-        import agentspan.agents.frameworks.claude_mcp_server as mcp_mod
-
-        agent = ClaudeCodeAgent(name="t2", conductor_subagents=True)
-        worker = make_claude_worker(agent, "_fw_claude_t2", "http://localhost", "k", "s")
-
-        captured_kwargs = {}
-
-        async def fake_query(prompt, options, **kwargs):
-            captured_kwargs.update(kwargs)
-            yield MagicMock(subtype="init", session_id="s1")
-            result = MagicMock()
-            result.__class__.__name__ = "ResultMessage"
-            result.result = "done"
-            yield result
-
-        with (
-            patch("agentspan.agents.frameworks.claude.query", fake_query),
-            patch("agentspan.agents.frameworks.claude._restore_session", return_value=None),
-            patch("agentspan.agents.frameworks.claude._checkpoint_session"),
-            patch.object(mcp_mod.AgentspanMcpServer, "build", return_value={"type": "sdk", "name": "agentspan", "instance": MagicMock()}),
-        ):
-            worker(_make_task())
-
-        assert "transport" not in captured_kwargs
-
-
-# ── Tier 3 worker integration tests ───────────────────────────────────────────
-
-
-class TestTier3AgentspanRouting:
-    def test_transport_passed_to_query(self):
-        """agentspan_routing=True passes AgentspanTransport as transport= to query()."""
-        agent = ClaudeCodeAgent(name="t3", agentspan_routing=True)
-        worker = make_claude_worker(agent, "_fw_claude_t3", "http://localhost", "k", "s")
-
-        captured_kwargs = {}
-        mock_transport = MagicMock()
-
-        async def fake_query(prompt, options, **kwargs):
-            captured_kwargs.update(kwargs)
-            yield MagicMock(subtype="init", session_id="s1")
-            result = MagicMock()
-            result.__class__.__name__ = "ResultMessage"
-            result.result = "done"
-            yield result
-
-        with (
-            patch("agentspan.agents.frameworks.claude.query", fake_query),
-            patch("agentspan.agents.frameworks.claude._restore_session", return_value=None),
-            patch("agentspan.agents.frameworks.claude._checkpoint_session"),
-            patch(
-                "agentspan.agents.frameworks.claude_transport.AgentspanTransport",
-                return_value=mock_transport,
-            ),
-        ):
-            worker(_make_task())
-
-        assert captured_kwargs.get("transport") is mock_transport
-
-    def test_only_one_pretooluse_matcher_no_agent_hook(self):
-        """agentspan_routing=True: transport handles Agent tool, so no extra hook."""
-        agent = ClaudeCodeAgent(name="t3", agentspan_routing=True)
-        worker = make_claude_worker(agent, "_fw_claude_t3", "http://localhost", "k", "s")
-
-        captured_hooks = {}
-
-        async def fake_query(prompt, options, **kwargs):
-            captured_hooks.update(options.hooks)
-            yield MagicMock(subtype="init", session_id="s1")
-            result = MagicMock()
-            result.__class__.__name__ = "ResultMessage"
-            result.result = "done"
-            yield result
-
-        with (
-            patch("agentspan.agents.frameworks.claude.query", fake_query),
-            patch("agentspan.agents.frameworks.claude._restore_session", return_value=None),
-            patch("agentspan.agents.frameworks.claude._checkpoint_session"),
-            patch("agentspan.agents.frameworks.claude_transport.AgentspanTransport"),
-        ):
-            worker(_make_task())
-
-        assert len(captured_hooks["PreToolUse"]) == 1
-
-    def test_transport_receives_worker_name_as_workflow_name(self):
-        """AgentspanTransport is constructed with _worker_name=name."""
-        agent = ClaudeCodeAgent(name="t3", agentspan_routing=True)
-        worker = make_claude_worker(agent, "_fw_claude_t3", "http://localhost", "k", "s")
-
-        captured_config = {}
-
-        def fake_transport(agent_config, **kwargs):
-            captured_config.update(agent_config)
-            return MagicMock()
-
-        async def fake_query(prompt, options, **kwargs):
-            yield MagicMock(subtype="init", session_id="s1")
-            result = MagicMock()
-            result.__class__.__name__ = "ResultMessage"
-            result.result = "done"
-            yield result
-
-        with (
-            patch("agentspan.agents.frameworks.claude.query", fake_query),
-            patch("agentspan.agents.frameworks.claude._restore_session", return_value=None),
-            patch("agentspan.agents.frameworks.claude._checkpoint_session"),
-            patch(
-                "agentspan.agents.frameworks.claude_transport.AgentspanTransport",
-                side_effect=fake_transport,
-            ),
-        ):
-            worker(_make_task())
-
-        assert captured_config["_worker_name"] == "_fw_claude_t3"
-
-
 # ── ClaudeCodeAgent API tests ──────────────────────────────────────────────────
 
 
@@ -492,18 +191,21 @@ class TestClaudeCodeAgentFields:
     def test_mcp_tools_defaults_to_empty_list(self):
         """mcp_tools defaults to []."""
         from agentspan.agents.frameworks.claude import ClaudeCodeAgent
+
         agent = ClaudeCodeAgent(name="test")
         assert agent.mcp_tools == []
 
     def test_disallowed_tools_defaults_to_empty_list(self):
         """disallowed_tools defaults to []."""
         from agentspan.agents.frameworks.claude import ClaudeCodeAgent
+
         agent = ClaudeCodeAgent(name="test")
         assert agent.disallowed_tools == []
 
     def test_permission_mode_defaults_to_none(self):
         """permission_mode defaults to None."""
         from agentspan.agents.frameworks.claude import ClaudeCodeAgent
+
         agent = ClaudeCodeAgent(name="test")
         assert agent.permission_mode is None
 
@@ -511,17 +213,13 @@ class TestClaudeCodeAgentFields:
         """mcp_tools accepts a list of callables."""
         from agentspan.agents.frameworks.claude import ClaudeCodeAgent
 
-        def my_tool(): pass
+        def my_tool():
+            pass
+
         my_tool._tool_def = object()
 
         agent = ClaudeCodeAgent(name="test", mcp_tools=[my_tool])
         assert agent.mcp_tools == [my_tool]
-
-    def test_conductor_subagents_still_works(self):
-        """conductor_subagents flag still accepted (MCP-based now)."""
-        from agentspan.agents.frameworks.claude import ClaudeCodeAgent
-        agent = ClaudeCodeAgent(name="test", conductor_subagents=True)
-        assert agent.conductor_subagents is True
 
 
 class TestMakeClaudeWorkerMcpWiring:
@@ -558,10 +256,15 @@ class TestMakeClaudeWorkerMcpWiring:
         def dummy_tool(x: str) -> str:
             """Dummy."""
             return x
+
         td = MagicMock()
         td.name = "dummy_tool"
         td.description = "Dummy."
-        td.input_schema = {"type": "object", "properties": {"x": {"type": "string"}}, "required": ["x"]}
+        td.input_schema = {
+            "type": "object",
+            "properties": {"x": {"type": "string"}},
+            "required": ["x"],
+        }
         dummy_tool._tool_def = td
 
         agent = ClaudeCodeAgent(name="test", mcp_tools=[dummy_tool])
@@ -571,7 +274,9 @@ class TestMakeClaudeWorkerMcpWiring:
             patch("agentspan.agents.frameworks.claude.query", self._fake_query()),
             patch("agentspan.agents.frameworks.claude._restore_session", return_value=None),
             patch("agentspan.agents.frameworks.claude._checkpoint_session"),
-            patch("agentspan.agents.frameworks.claude_mcp_server.AgentspanMcpServer.build") as mock_build,
+            patch(
+                "agentspan.agents.frameworks.claude_mcp_server.AgentspanMcpServer.build"
+            ) as mock_build,
         ):
             mock_build.return_value = {"type": "sdk", "name": "agentspan", "instance": MagicMock()}
             worker(self._make_task())
@@ -611,7 +316,6 @@ class TestMakeClaudeWorkerMcpWiring:
 
     def test_mcp_tool_executes_locally(self):
         """_mcp_wrapper calls tool_fn directly via asyncio.to_thread, not Conductor."""
-        import asyncio
         import agentspan.agents.frameworks.claude_mcp_server as mcp_mod
 
         call_log = []
@@ -651,6 +355,7 @@ class TestMakeClaudeWorkerMcpWiring:
         def dummy_tool(x: str) -> str:
             """Dummy."""
             return x
+
         td = MagicMock()
         td.name = "dummy_tool"
         td.description = "Dummy."
@@ -679,7 +384,11 @@ class TestMakeClaudeWorkerMcpWiring:
             patch("agentspan.agents.frameworks.claude.query", fake_query),
             patch("agentspan.agents.frameworks.claude._restore_session", return_value=None),
             patch("agentspan.agents.frameworks.claude._checkpoint_session"),
-            patch.object(mcp_mod.AgentspanMcpServer, "build", return_value={"type": "sdk", "name": "agentspan", "instance": MagicMock()}),
+            patch.object(
+                mcp_mod.AgentspanMcpServer,
+                "build",
+                return_value={"type": "sdk", "name": "agentspan", "instance": MagicMock()},
+            ),
         ):
             task = MagicMock()
             task.workflow_instance_id = "wf-test"
@@ -748,9 +457,9 @@ class TestDagHooks:
 
         mock_dag.inject_task.assert_called_once()
         call_args = mock_dag.inject_task.call_args
-        assert call_args[0][0] == "wf-dag-1"   # workflow_id
-        assert call_args[0][1] == "Bash"         # task_def_name
-        assert call_args[0][2] == "tu-001"        # reference_name
+        assert call_args[0][0] == "wf-dag-1"  # workflow_id
+        assert call_args[0][1] == "Bash"  # task_def_name
+        assert call_args[0][2] == "tu-001"  # reference_name
         assert call_args[0][3] == {"command": "ls"}  # input_data
 
     def test_post_tool_use_completes_task(self):
@@ -810,8 +519,8 @@ class TestDagHooks:
 
         mock_dag.complete_task.assert_called_once()
         call_args = mock_dag.complete_task.call_args[0]
-        assert call_args[0] == "wf-dag-1"   # workflow_id
-        assert call_args[1] == "cond-t-1"    # task_id (from inject_task)
+        assert call_args[0] == "wf-dag-1"  # workflow_id
+        assert call_args[1] == "cond-t-1"  # task_id (from inject_task)
         assert call_args[2] == {"result": "file.txt"}
 
     def test_post_tool_use_failure_fails_task(self):
@@ -830,25 +539,33 @@ class TestDagHooks:
             pre_hook = hooks["PreToolUse"][0].hooks[0]
             failure_hook = hooks["PostToolUseFailure"][0].hooks[0]
 
-            await pre_hook({
-                "hook_event_name": "PreToolUse",
-                "tool_name": "Bash",
-                "tool_input": {"command": "boom"},
-                "session_id": "sess-001",
-                "transcript_path": "/tmp/sess.jsonl",
-                "cwd": ".",
-            }, "tu-fail", {})
+            await pre_hook(
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Bash",
+                    "tool_input": {"command": "boom"},
+                    "session_id": "sess-001",
+                    "transcript_path": "/tmp/sess.jsonl",
+                    "cwd": ".",
+                },
+                "tu-fail",
+                {},
+            )
 
-            await failure_hook({
-                "hook_event_name": "PostToolUseFailure",
-                "tool_name": "Bash",
-                "tool_input": {"command": "boom"},
-                "tool_use_id": "tu-fail",
-                "error": "exit code 1",
-                "session_id": "sess-001",
-                "transcript_path": "/tmp/sess.jsonl",
-                "cwd": ".",
-            }, "tu-fail", {})
+            await failure_hook(
+                {
+                    "hook_event_name": "PostToolUseFailure",
+                    "tool_name": "Bash",
+                    "tool_input": {"command": "boom"},
+                    "tool_use_id": "tu-fail",
+                    "error": "exit code 1",
+                    "session_id": "sess-001",
+                    "transcript_path": "/tmp/sess.jsonl",
+                    "cwd": ".",
+                },
+                "tu-fail",
+                {},
+            )
 
             init = MagicMock()
             init.__class__.__name__ = "SystemMessage"
@@ -889,14 +606,18 @@ class TestDagHooks:
             hooks = options.hooks or {}
             pre_hook = hooks["PreToolUse"][0].hooks[0]
 
-            await pre_hook({
-                "hook_event_name": "PreToolUse",
-                "tool_name": "Agent",
-                "tool_input": {"prompt": "do something"},
-                "session_id": "sess-001",
-                "transcript_path": "/tmp/sess.jsonl",
-                "cwd": ".",
-            }, "tu-agent-1", {})
+            await pre_hook(
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Agent",
+                    "tool_input": {"prompt": "do something"},
+                    "session_id": "sess-001",
+                    "transcript_path": "/tmp/sess.jsonl",
+                    "cwd": ".",
+                },
+                "tu-agent-1",
+                {},
+            )
 
             init = MagicMock()
             init.__class__.__name__ = "SystemMessage"
@@ -945,23 +666,31 @@ class TestDagHooks:
             stop_hook = hooks["SubagentStop"][0].hooks[0]
 
             # Subagent spawns via Agent tool
-            await pre_hook({
-                "hook_event_name": "PreToolUse",
-                "tool_name": "Agent",
-                "tool_input": {"prompt": "do something"},
-                "session_id": "sess-001",
-                "transcript_path": "/tmp/sess.jsonl",
-                "cwd": ".",
-            }, "tu-agent-sub", {})
+            await pre_hook(
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Agent",
+                    "tool_input": {"prompt": "do something"},
+                    "session_id": "sess-001",
+                    "transcript_path": "/tmp/sess.jsonl",
+                    "cwd": ".",
+                },
+                "tu-agent-sub",
+                {},
+            )
 
             # SubagentStop fires with same tool_use_id
-            await stop_hook({
-                "hook_event_name": "SubagentStop",
-                "stop_hook_active": False,
-                "session_id": "sess-sub-001",
-                "transcript_path": "/tmp/sub-sess.jsonl",
-                "cwd": ".",
-            }, "tu-agent-sub", {})
+            await stop_hook(
+                {
+                    "hook_event_name": "SubagentStop",
+                    "stop_hook_active": False,
+                    "session_id": "sess-sub-001",
+                    "transcript_path": "/tmp/sub-sess.jsonl",
+                    "cwd": ".",
+                },
+                "tu-agent-sub",
+                {},
+            )
 
             init = MagicMock()
             init.__class__.__name__ = "SystemMessage"
@@ -978,14 +707,17 @@ class TestDagHooks:
             patch("agentspan.agents.frameworks.claude._restore_session", return_value=None),
             patch("agentspan.agents.frameworks.claude._checkpoint_session"),
             patch("agentspan.agents.frameworks.claude._AgentDagClient", return_value=mock_dag),
-            patch("agentspan.agents.frameworks.claude._read_last_result_from_transcript", return_value="subagent result"),
+            patch(
+                "agentspan.agents.frameworks.claude._read_last_result_from_transcript",
+                return_value="subagent result",
+            ),
         ):
             worker(_make_dag_task())
 
         # complete_task should be called for the sub-workflow task
         mock_dag.complete_task.assert_called_once()
         call_args = mock_dag.complete_task.call_args[0]
-        assert call_args[0] == "wf-dag-1"   # correct workflow
+        assert call_args[0] == "wf-dag-1"  # correct workflow
         assert call_args[1] == "sub-task-1"
         assert call_args[2] == {"result": "subagent result"}
 
@@ -1003,14 +735,18 @@ class TestDagHooks:
             hooks = options.hooks or {}
             pre_hook = hooks["PreToolUse"][0].hooks[0]
 
-            await pre_hook({
-                "hook_event_name": "PreToolUse",
-                "tool_name": "Bash",
-                "tool_input": {"command": "ls"},
-                "session_id": "sess-001",
-                "transcript_path": "/tmp/sess.jsonl",
-                "cwd": ".",
-            }, "tu-001", {})
+            await pre_hook(
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Bash",
+                    "tool_input": {"command": "ls"},
+                    "session_id": "sess-001",
+                    "transcript_path": "/tmp/sess.jsonl",
+                    "cwd": ".",
+                },
+                "tu-001",
+                {},
+            )
 
             init = MagicMock()
             init.__class__.__name__ = "SystemMessage"
@@ -1049,13 +785,21 @@ class TestDagHooks:
             pre_hook = hooks["PreToolUse"][0].hooks[0]
             post_hook = hooks["PostToolUse"][0].hooks[0]
 
-            await pre_hook({
-                "tool_name": "Bash",
-                "tool_input": {"command": "ls"},
-            }, "tu-post-99", {})
-            await post_hook({
-                "tool_response": "file.txt",
-            }, "tu-post-99", {})
+            await pre_hook(
+                {
+                    "tool_name": "Bash",
+                    "tool_input": {"command": "ls"},
+                },
+                "tu-post-99",
+                {},
+            )
+            await post_hook(
+                {
+                    "tool_response": "file.txt",
+                },
+                "tu-post-99",
+                {},
+            )
 
             init = MagicMock()
             init.__class__.__name__ = "SystemMessage"
