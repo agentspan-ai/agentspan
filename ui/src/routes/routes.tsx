@@ -13,6 +13,7 @@
  * - Event monitor
  * - API reference
  * - Tags dashboard
+ * - Credentials management
  *
  * Enterprise routes (registered via plugins):
  * - Auth (login, callbacks, RBAC pages)
