@@ -103,6 +103,67 @@ def _coerce_value(value, annotation):
     return value
 
 
+# Lazily created credential fetcher — initialized from AgentConfig on first use
+_credential_fetcher = None
+
+
+def _get_credential_fetcher():
+    """Return the module-level WorkerCredentialFetcher, creating it on first call.
+
+    The fetcher is initialized from AgentConfig.from_env() so it picks up
+    AGENTSPAN_SERVER_URL, AGENTSPAN_API_KEY, AGENTSPAN_CREDENTIAL_STRICT_MODE.
+    """
+    global _credential_fetcher
+    if _credential_fetcher is None:
+        from agentspan.agents.runtime.config import AgentConfig
+        from agentspan.agents.runtime.credentials.fetcher import WorkerCredentialFetcher
+
+        config = AgentConfig.from_env()
+        _credential_fetcher = WorkerCredentialFetcher(
+            server_url=config.server_url,
+            strict_mode=config.credential_strict_mode,
+            api_key=config.api_key or config.auth_key,
+        )
+    return _credential_fetcher
+
+
+def _extract_execution_token(task) -> None:
+    """Extract __agentspan_ctx__ execution token from a Conductor task.
+
+    Checks task.input_data first (most common), then task.workflow_input.
+    Returns None if not present.
+    """
+    # input_data is the primary source (set by Conductor enrichment scripts)
+    token = (task.input_data or {}).get("__agentspan_ctx__")
+    if token:
+        return token
+    # Fallback: check workflow_input (set at workflow start)
+    token = (getattr(task, "workflow_input", None) or {}).get("__agentspan_ctx__")
+    return token or None
+
+
+def _get_credential_names_from_tool(tool_func) -> list:
+    """Extract credential names from a @tool-decorated function's ToolDef.
+
+    Returns empty list if the function has no _tool_def attribute.
+    """
+    tool_def = getattr(tool_func, "_tool_def", None)
+    if tool_def is None:
+        return []
+    return list(getattr(tool_def, "credentials", []))
+
+
+def _is_isolated(tool_func) -> bool:
+    """Return the isolated flag from a @tool-decorated function's ToolDef.
+
+    Defaults to True (safe default) if no ToolDef is present.
+    """
+    tool_def = getattr(tool_func, "_tool_def", None)
+    if tool_def is None:
+        return True
+    return getattr(tool_def, "isolated", True)
+
+
 # Module-level registry: task_name -> {tool_name: tool_func}
 _tool_registry = {}
 
@@ -267,6 +328,14 @@ def make_tool_worker(tool_func, tool_name, guardrails=None):
             # Extract server-side agent state (injected by enrichment script)
             agent_state = task.input_data.pop("_agent_state", None) or {}
 
+            # ── Credential fetching ───────────────────────────────────────
+            credential_names = _get_credential_names_from_tool(tool_func)
+            resolved_credentials = {}
+            if credential_names:
+                token = _extract_execution_token(task)
+                fetcher = _get_credential_fetcher()
+                resolved_credentials = fetcher.fetch(token, credential_names)
+
             # Map task input to function kwargs
             sig = inspect.signature(tool_func)
             fn_kwargs = {}
@@ -282,9 +351,54 @@ def make_tool_worker(tool_func, tool_name, guardrails=None):
                 else:
                     fn_kwargs[param_name] = None
 
-            result = _execute(
-                fn_kwargs, wf_id=task.workflow_instance_id or "", agent_state=agent_state
-            )
+            # ── Execution routing: isolated vs non-isolated ───────────────
+            if credential_names and _is_isolated(tool_func):
+                # Isolated path: run in subprocess with credentials injected
+                from agentspan.agents.runtime.credentials.isolator import SubprocessIsolator
+                from agentspan.agents.runtime.credentials.types import CredentialFile
+
+                tool_def_credentials = _get_credential_names_from_tool(tool_func)
+                isolator_creds = {}
+                for cred_spec in tool_def_credentials:
+                    if isinstance(cred_spec, str):
+                        if cred_spec in resolved_credentials:
+                            isolator_creds[cred_spec] = resolved_credentials[cred_spec]
+                    elif isinstance(cred_spec, CredentialFile):
+                        content = resolved_credentials.get(cred_spec.env_var, "")
+                        isolator_creds[cred_spec.env_var] = CredentialFile(
+                            env_var=cred_spec.env_var,
+                            relative_path=cred_spec.relative_path,
+                            content=content,
+                        )
+
+                isolator = SubprocessIsolator()
+
+                def _subprocess_wrapper(**kwargs):
+                    return _execute(kwargs, wf_id="", agent_state=agent_state)
+
+                result = isolator.run(
+                    _subprocess_wrapper,
+                    args=(),
+                    kwargs=fn_kwargs,
+                    credentials=isolator_creds,
+                )
+            else:
+                # Non-isolated path (or no credentials): set context var, run directly
+                from agentspan.agents.runtime.credentials.accessor import (
+                    clear_credential_context,
+                    set_credential_context,
+                )
+                if resolved_credentials:
+                    set_credential_context(resolved_credentials)
+                try:
+                    result = _execute(
+                        fn_kwargs,
+                        wf_id=task.workflow_instance_id or "",
+                        agent_state=agent_state,
+                    )
+                finally:
+                    if resolved_credentials:
+                        clear_credential_context()
 
             if isinstance(result, dict):
                 task_result.output_data = result
