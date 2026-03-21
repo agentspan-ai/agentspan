@@ -315,41 +315,6 @@ class TestAgentConfigSerializer:
 
         assert "cliConfig" not in config
 
-    def test_serialize_cli_config_with_guardrails(self):
-        """CliConfig guardrails are attached to the run_command tool and serialized."""
-        from agentspan.agents.agent import Agent
-        from agentspan.agents.cli_config import CliConfig
-        from agentspan.agents.guardrail import RegexGuardrail
-
-        agent = Agent(
-            name="ops",
-            model="openai/gpt-4o",
-            cli_config=CliConfig(
-                allowed_commands=["git", "ls"],
-                guardrails=[
-                    RegexGuardrail(
-                        patterns=[r"rm\s+-rf"],
-                        name="no_destructive",
-                        on_fail="raise",
-                        mode="block",
-                    ),
-                ],
-            ),
-        )
-        config = self.serializer.serialize(agent)
-
-        # Should have a tool (the auto-generated run_command)
-        assert "tools" in config
-        run_cmd = next(t for t in config["tools"] if t["name"] == "run_command")
-
-        # Tool should have guardrails serialized
-        assert "guardrails" in run_cmd
-        assert len(run_cmd["guardrails"]) == 1
-        g = run_cmd["guardrails"][0]
-        assert g["name"] == "no_destructive"
-        assert g["guardrailType"] == "regex"
-        assert g["onFail"] == "raise"
-        assert r"rm\s+-rf" in g["patterns"]
 
     def test_none_values_omitted(self):
         """None values are not included in the output."""

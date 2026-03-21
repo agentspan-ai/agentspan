@@ -2376,14 +2376,7 @@ class AgentRuntime:
 
         raw_config, workers = serialize_agent(agent_obj)
 
-        if framework in ("langgraph", "langchain"):
-            # Build the actual pre-wrapped worker function with server connection info
-            # (func was None from serialize_langgraph/serialize_langchain — fill it now)
-            if not workers:
-                raise RuntimeError(
-                    f"Framework serializer returned no workers for '{framework}' agent — "
-                    "cannot register passthrough worker."
-                )
+        if workers and workers[0].func is None:
             worker = workers[0]
             worker.func = self._build_passthrough_func(agent_obj, framework, worker.name)
             self._register_passthrough_worker(worker)
@@ -3808,14 +3801,7 @@ class AgentRuntime:
 
         raw_config, workers = serialize_agent(agent_obj)
 
-        if framework in ("langgraph", "langchain"):
-            # Build the actual pre-wrapped worker function with server connection info
-            # (func was None from serialize_langgraph/serialize_langchain — fill it now)
-            if not workers:
-                raise RuntimeError(
-                    f"Framework serializer returned no workers for '{framework}' agent — "
-                    "cannot register passthrough worker."
-                )
+        if workers and workers[0].func is None:
             worker = workers[0]
             worker.func = self._build_passthrough_func(agent_obj, framework, worker.name)
             self._register_passthrough_worker(worker)

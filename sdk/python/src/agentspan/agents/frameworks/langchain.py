@@ -2,13 +2,13 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""LangChain AgentExecutor passthrough worker support."""
+"""LangChain AgentExecutor worker support — full extraction and passthrough."""
 
 from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from langchain_core.callbacks import BaseCallbackHandler
 
@@ -21,10 +21,28 @@ _DEFAULT_NAME = "langchain_agent"
 
 
 def serialize_langchain(executor: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
-    """Serialize a LangChain AgentExecutor into (raw_config, [WorkerInfo])."""
-    name = getattr(executor, "name", None) or _DEFAULT_NAME
-    raw_config = {"name": name, "_worker_name": name}
+    """Serialize a LangChain AgentExecutor into (raw_config, [WorkerInfo]).
 
+    Tries full extraction (model + tools) first, falls back to passthrough.
+    """
+    name = getattr(executor, "name", None) or _DEFAULT_NAME
+
+    model_str = _extract_model_from_executor(executor)
+    tools = getattr(executor, "tools", []) or []
+
+    if model_str and tools:
+        logger.info(
+            "LangChain '%s': full extraction — model=%s, %d tools",
+            name,
+            model_str,
+            len(tools),
+        )
+        from agentspan.agents.frameworks.langgraph import _serialize_full_extraction
+
+        return _serialize_full_extraction(name, model_str, tools)
+
+    logger.info("LangChain '%s': passthrough (model=%s, tools=%d)", name, model_str, len(tools))
+    raw_config: Dict[str, Any] = {"name": name, "_worker_name": name}
     worker = WorkerInfo(
         name=name,
         description=f"LangChain passthrough worker for {name}",
@@ -35,9 +53,32 @@ def serialize_langchain(executor: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]
                 "session_id": {"type": "string"},
             },
         },
-        func=None,  # placeholder — replaced at registration time
+        func=None,
     )
     return raw_config, [worker]
+
+
+def _extract_model_from_executor(executor: Any) -> Optional[str]:
+    """Try to extract 'provider/model' from an AgentExecutor's LLM."""
+    from agentspan.agents.frameworks.langgraph import _try_get_model_string
+
+    # Try common paths to the LLM
+    for path in (
+        ("agent", "llm"),
+        ("agent", "llm_chain", "llm"),
+        ("agent", "runnable", "first"),
+        ("llm",),
+    ):
+        obj = executor
+        for attr in path:
+            obj = getattr(obj, attr, None)
+            if obj is None:
+                break
+        if obj is not None:
+            result = _try_get_model_string(obj)
+            if result:
+                return result
+    return None
 
 
 def make_langchain_worker(

@@ -54,7 +54,7 @@ class TestDeploy:
         rt = _make_runtime()
         discovered = Agent(name="discovered", model="openai/gpt-4o")
         with patch(
-            "agentspan.agents.runtime.runtime.discover_agents",
+            "agentspan.agents.runtime.discovery.discover_agents",
             return_value=[discovered],
         ):
             with patch.object(rt, "_deploy_via_server", return_value="disc_wf"):
@@ -67,7 +67,7 @@ class TestDeploy:
         explicit = Agent(name="explicit", model="openai/gpt-4o")
         discovered = Agent(name="discovered", model="openai/gpt-4o")
         with patch(
-            "agentspan.agents.runtime.runtime.discover_agents",
+            "agentspan.agents.runtime.discovery.discover_agents",
             return_value=[discovered],
         ):
             with patch.object(
@@ -116,7 +116,7 @@ class TestServe:
         rt = _make_runtime()
         discovered = Agent(name="disc", model="openai/gpt-4o")
         with patch(
-            "agentspan.agents.runtime.runtime.discover_agents",
+            "agentspan.agents.runtime.discovery.discover_agents",
             return_value=[discovered],
         ):
             with patch.object(rt, "_register_workers"):

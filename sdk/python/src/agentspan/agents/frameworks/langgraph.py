@@ -2,15 +2,21 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""LangGraph passthrough worker support.
+"""LangGraph worker support — full extraction and passthrough.
 
 Provides:
 - serialize_langgraph(graph) -> (raw_config, [WorkerInfo])
 - make_langgraph_worker(graph, name, server_url, auth_key, auth_secret) -> tool_worker
+
+Full extraction: when the graph's LLM model and tools can be identified, the
+serializer returns them so the server compiles a proper multi-task workflow
+(AI_MODEL + SIMPLE per tool).  Falls back to passthrough (single SIMPLE task)
+when extraction is not possible.
 """
 
 from __future__ import annotations
 
+import inspect
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional, Tuple
@@ -28,14 +34,27 @@ _DEFAULT_NAME = "langgraph_agent"
 def serialize_langgraph(graph: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
     """Serialize a CompiledStateGraph into (raw_config, [WorkerInfo]).
 
-    The WorkerInfo contains a pre-wrapped tool_worker — it does NOT go through
-    make_tool_worker to avoid double-wrapping.
+    Tries full extraction first (model + tools → proper workflow).
+    Falls back to passthrough (single SIMPLE task) when extraction fails.
     """
     name = getattr(graph, "name", None) or _DEFAULT_NAME
-    raw_config = {"name": name, "_worker_name": name}
 
-    # server_url/auth will be injected at registration time via closure
-    # For serialization we only need the name
+    # Try full extraction: find model and tools in the compiled graph
+    model_str = _find_model_in_graph(graph)
+    tool_objs = _find_tools_in_graph(graph)
+
+    if model_str and tool_objs:
+        logger.info(
+            "LangGraph '%s': full extraction — model=%s, %d tools",
+            name,
+            model_str,
+            len(tool_objs),
+        )
+        return _serialize_full_extraction(name, model_str, tool_objs)
+
+    # Passthrough: entire graph runs in a single SIMPLE task
+    logger.info("LangGraph '%s': passthrough (model=%s, tools=%d)", name, model_str, len(tool_objs))
+    raw_config: Dict[str, Any] = {"name": name, "_worker_name": name}
     worker = WorkerInfo(
         name=name,
         description=f"LangGraph passthrough worker for {name}",
@@ -49,6 +68,184 @@ def serialize_langgraph(graph: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
         func=None,  # placeholder — replaced at registration time
     )
     return raw_config, [worker]
+
+
+def _serialize_full_extraction(
+    name: str, model_str: str, tool_objs: List[Any]
+) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
+    """Build raw_config with model+tools and WorkerInfo per tool."""
+    raw_config: Dict[str, Any] = {"name": name, "model": model_str}
+    tool_dicts: List[Dict[str, Any]] = []
+    workers: List[WorkerInfo] = []
+
+    for tool_obj in tool_objs:
+        tool_name = getattr(tool_obj, "name", "") or ""
+        description = getattr(tool_obj, "description", "") or ""
+        schema = _get_tool_schema(tool_obj)
+
+        tool_dicts.append(
+            {"_worker_ref": tool_name, "description": description, "parameters": schema}
+        )
+
+        func = _get_tool_callable(tool_obj)
+        if func is not None:
+            workers.append(
+                WorkerInfo(
+                    name=tool_name,
+                    description=description.strip().split("\n")[0] if description else "",
+                    input_schema=schema,
+                    func=func,
+                )
+            )
+
+    raw_config["tools"] = tool_dicts
+    return raw_config, workers
+
+
+# ── Graph introspection helpers ──────────────────────────────────────
+
+
+def _find_tools_in_graph(graph: Any) -> List[Any]:
+    """Find tool objects from a ToolNode inside the compiled graph."""
+    nodes = getattr(graph, "nodes", None)
+    if not nodes or not isinstance(nodes, dict):
+        return []
+    for node in nodes.values():
+        tools = _search_for_tools(node, depth=3)
+        if tools:
+            return tools
+    return []
+
+
+def _search_for_tools(obj: Any, depth: int = 3) -> List[Any]:
+    if depth <= 0:
+        return []
+    tools_by_name = getattr(obj, "tools_by_name", None)
+    if tools_by_name and isinstance(tools_by_name, dict):
+        return list(tools_by_name.values())
+    for attr in ("bound", "runnable", "func"):
+        child = getattr(obj, attr, None)
+        if child is not None and child is not obj:
+            result = _search_for_tools(child, depth - 1)
+            if result:
+                return result
+    return []
+
+
+def _find_model_in_graph(graph: Any) -> Optional[str]:
+    """Find the LLM model string ('provider/model') from graph nodes."""
+    nodes = getattr(graph, "nodes", None)
+    if not nodes or not isinstance(nodes, dict):
+        return None
+    for node in nodes.values():
+        model = _search_for_model(node, depth=5)
+        if model:
+            return model
+    return None
+
+
+def _search_for_model(obj: Any, depth: int = 5) -> Optional[str]:
+    if depth <= 0:
+        return None
+    result = _try_get_model_string(obj)
+    if result:
+        return result
+    for attr in ("bound", "first", "last", "runnable", "func"):
+        child = getattr(obj, attr, None)
+        if child is not None and child is not obj:
+            found = _search_for_model(child, depth - 1)
+            if found:
+                return found
+    middle = getattr(obj, "middle", None)
+    if isinstance(middle, list):
+        for child in middle:
+            found = _search_for_model(child, depth - 1)
+            if found:
+                return found
+    steps = getattr(obj, "steps", None)
+    if isinstance(steps, dict):
+        for child in steps.values():
+            found = _search_for_model(child, depth - 1)
+            if found:
+                return found
+    # Search inside closures of callable objects (LangGraph wraps the LLM in closures)
+    func_obj = getattr(obj, "func", None) or getattr(obj, "afunc", None)
+    if func_obj is not None and hasattr(func_obj, "__closure__") and func_obj.__closure__:
+        for cell in func_obj.__closure__:
+            try:
+                val = cell.cell_contents
+            except ValueError:
+                continue
+            if val is obj or val is func_obj:
+                continue
+            found = _search_for_model(val, depth - 1)
+            if found:
+                return found
+    return None
+
+
+def _try_get_model_string(obj: Any) -> Optional[str]:
+    """Extract 'provider/model' from an LLM-like object."""
+    cls_name = type(obj).__name__
+    model_name = getattr(obj, "model_name", None) or getattr(obj, "model", None)
+    if not model_name or not isinstance(model_name, str):
+        return None
+    if model_name.startswith("<") or model_name.startswith("(") or len(model_name) > 100:
+        return None
+    if "/" in model_name:
+        return model_name
+    provider = _infer_provider(cls_name, model_name)
+    return f"{provider}/{model_name}" if provider else model_name
+
+
+def _infer_provider(cls_name: str, model_name: str) -> Optional[str]:
+    if "OpenAI" in cls_name or "openai" in cls_name:
+        return "openai"
+    if "Anthropic" in cls_name or "anthropic" in cls_name:
+        return "anthropic"
+    if "Google" in cls_name or "google" in cls_name:
+        return "google"
+    if "Bedrock" in cls_name:
+        return "bedrock"
+    if model_name.startswith("gpt-") or model_name.startswith(("o1", "o3", "o4")):
+        return "openai"
+    if "claude" in model_name:
+        return "anthropic"
+    if "gemini" in model_name:
+        return "google"
+    return None
+
+
+def _get_tool_schema(tool_obj: Any) -> Dict[str, Any]:
+    """Extract JSON schema from a LangChain BaseTool."""
+    if hasattr(tool_obj, "args_schema") and tool_obj.args_schema is not None:
+        try:
+            return tool_obj.args_schema.model_json_schema()
+        except Exception:
+            pass
+    if hasattr(tool_obj, "get_input_schema"):
+        try:
+            return tool_obj.get_input_schema().model_json_schema()
+        except Exception:
+            pass
+    return {"type": "object", "properties": {}}
+
+
+def _get_tool_callable(tool_obj: Any) -> Any:
+    """Get the underlying callable from a LangChain tool."""
+    func = getattr(tool_obj, "func", None)
+    if func and callable(func):
+        return func
+    run = getattr(tool_obj, "_run", None)
+    if run and callable(run):
+        return run
+    if callable(tool_obj):
+        try:
+            inspect.signature(tool_obj)
+            return tool_obj
+        except (ValueError, TypeError):
+            pass
+    return None
 
 
 def make_langgraph_worker(
