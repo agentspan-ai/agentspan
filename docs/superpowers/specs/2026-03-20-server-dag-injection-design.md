@@ -61,7 +61,9 @@ public InjectTaskResponse injectTask(String workflowId, InjectTaskRequest req)
 3. `executionDAO.createTasks(List.of(task))`
 4. Return `InjectTaskResponse(taskId)`
 
-The task is linked to the workflow via `workflowInstanceId`. `executionService.getExecutionStatus(workflowId, true)` will include it when the UI loads the execution.
+The task is linked to the workflow via `workflowInstanceId`. `executionService.getExecutionStatus(workflowId, true)` loads tasks from the `task` table indexed by `workflowInstanceId` — the injected task appears in the response without needing to update the in-memory `WorkflowModel`.
+
+**Concurrency note:** `seq` is derived from `workflow.getTasks().size() + 1` at the time of the call. Under concurrent hook invocations, two calls could assign the same `seq`. This is safe — Conductor's SQLite/Postgres task storage does not enforce `seq` uniqueness as a constraint. Duplicate `seq` values on display-only tasks are cosmetically harmless.
 
 When the SDK later calls native `POST /api/task` to complete/fail the task: Conductor marks the task COMPLETED/FAILED and runs `decide()`. Since the main Claude worker task (`_fw_claude_*`) is still `IN_PROGRESS`, the workflow stays `RUNNING` — no disruption to the agent.
 
@@ -83,7 +85,7 @@ public CreateTrackingWorkflowResponse createTrackingWorkflow(CreateTrackingWorkf
    - `input = req.getInput()`
    - `createTime = System.currentTimeMillis()`
    - `workflowName = req.getWorkflowName()`  (via `workflow.getWorkflowName()` getter)
-3. `executionDAO.createWorkflow(workflow)`
+3. `executionDAO.createWorkflow(workflow)` — errors propagate as HTTP 500 via Spring's default error handling; no custom `ResponseStatusException` needed
 4. Return `CreateTrackingWorkflowResponse(workflowId)`
 
 **Known limitation:** Tracking workflows stay `RUNNING` permanently — they are never auto-completed. They appear in the execution list with their injected tasks visible. Completing tracking workflows is deferred to a future enhancement.
@@ -100,6 +102,8 @@ public InjectTaskResponse injectTask(
     return agentDagService.injectTask(workflowId, req);
 }
 
+// Note: Spring MVC resolves static segments before dynamic ones,
+// so POST /api/agent/workflow does not conflict with GET /api/agent/{name}.
 @PostMapping("/workflow")
 public CreateTrackingWorkflowResponse createTrackingWorkflow(
         @RequestBody CreateTrackingWorkflowRequest req) {
