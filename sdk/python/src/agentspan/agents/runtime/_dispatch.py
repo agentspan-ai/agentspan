@@ -388,6 +388,7 @@ def make_tool_worker(tool_func, tool_name, guardrails=None):
                     clear_credential_context,
                     set_credential_context,
                 )
+
                 if resolved_credentials:
                     set_credential_context(resolved_credentials)
                 try:

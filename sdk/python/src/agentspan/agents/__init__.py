@@ -49,16 +49,6 @@ from agentspan.agents.code_executor import (
     ServerlessCodeExecutor,
 )
 
-# Credential management
-from agentspan.agents.runtime.credentials.accessor import get_credential
-from agentspan.agents.runtime.credentials.types import (
-    CredentialAuthError,
-    CredentialFile,
-    CredentialNotFoundError,
-    CredentialRateLimitError,
-    CredentialServiceError,
-)
-
 # Exceptions
 from agentspan.agents.exceptions import AgentAPIError, AgentNotFoundError, AgentspanError
 
@@ -116,6 +106,16 @@ from agentspan.agents.run import (
 
 # Runtime (for context manager and advanced usage)
 from agentspan.agents.runtime.config import AgentConfig
+
+# Credential management
+from agentspan.agents.runtime.credentials.accessor import get_credential
+from agentspan.agents.runtime.credentials.types import (
+    CredentialAuthError,
+    CredentialFile,
+    CredentialNotFoundError,
+    CredentialRateLimitError,
+    CredentialServiceError,
+)
 
 # Agent discovery
 from agentspan.agents.runtime.discovery import discover_agents

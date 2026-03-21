@@ -122,7 +122,7 @@ class AgentConfig:
         """Alias for :attr:`auth_secret` (industry-standard naming)."""
         return self.auth_secret
 
-    def to_conductor_configuration(self) -> "Configuration":
+    def to_conductor_configuration(self) -> "Configuration":  # noqa: F821
         """Convert to a ``conductor-python`` :class:`Configuration` object."""
         from conductor.client.configuration.configuration import Configuration
 
@@ -133,6 +133,7 @@ class AgentConfig:
             from conductor.client.configuration.settings.authentication_settings import (
                 AuthenticationSettings,
             )
+
             config.authentication_settings = AuthenticationSettings(
                 key_id=effective_key,
                 key_secret=self.auth_secret or "",

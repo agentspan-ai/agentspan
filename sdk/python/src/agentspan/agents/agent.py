@@ -474,7 +474,8 @@ class Agent:
         elif self.cli_config and self.cli_config.allowed_commands:
             # Check for terraform (None entry) before auto-mapping
             null_mapped = [
-                cmd for cmd in self.cli_config.allowed_commands
+                cmd
+                for cmd in self.cli_config.allowed_commands
                 if CLI_CREDENTIAL_MAP.get(cmd) is None and cmd in CLI_CREDENTIAL_MAP
             ]
             if null_mapped:

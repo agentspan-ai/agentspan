@@ -29,8 +29,8 @@ from agentspan.agents.runtime.credentials.types import CredentialNotFoundError
 
 # Thread-local (via contextvars) credential map set by the worker framework.
 # Value is None when no context has been established.
-_credential_context: contextvars.ContextVar[Optional[Dict[str, str]]] = (
-    contextvars.ContextVar("_credential_context", default=None)
+_credential_context: contextvars.ContextVar[Optional[Dict[str, str]]] = contextvars.ContextVar(
+    "_credential_context", default=None
 )
 
 

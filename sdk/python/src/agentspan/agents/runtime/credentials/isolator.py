@@ -140,6 +140,4 @@ class SubprocessIsolator:
                 return value
             raise value
 
-        raise RuntimeError(
-            f"Subprocess exited with code {proc.exitcode} and produced no result"
-        )
+        raise RuntimeError(f"Subprocess exited with code {proc.exitcode} and produced no result")
