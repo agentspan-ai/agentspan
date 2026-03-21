@@ -6,11 +6,11 @@
 package dev.agentspan.runtime.service;
 
 import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
+import com.netflix.conductor.core.exception.NotFoundException;
 import com.netflix.conductor.dao.ExecutionDAO;
 import com.netflix.conductor.model.TaskModel;
 import com.netflix.conductor.model.WorkflowModel;
 import dev.agentspan.runtime.model.*;
-import com.netflix.conductor.core.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -27,6 +27,7 @@ public class AgentDagService {
     public InjectTaskResponse injectTask(String workflowId, InjectTaskRequest req) {
         WorkflowModel workflow = executionDAO.getWorkflow(workflowId, true);
         if (workflow == null) {
+            // NotFoundException is mapped to HTTP 404 by Conductor's ApplicationExceptionMapper
             throw new NotFoundException("Workflow not found: " + workflowId);
         }
 
