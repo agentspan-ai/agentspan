@@ -21,7 +21,8 @@ import {
 } from "@mui/material";
 import ConfirmChoiceDialog from "components/ConfirmChoiceDialog";
 import { SnackbarMessage } from "components/SnackbarMessage";
-import React, { useState, useMemo } from "react";
+import { Fragment, useState, useMemo } from "react";
+import { Helmet } from "react-helmet";
 import SectionContainer from "shared/SectionContainer";
 import SectionHeader from "shared/SectionHeader";
 import SectionHeaderActions from "shared/SectionHeaderActions";
@@ -84,6 +85,10 @@ export function CredentialsPage() {
 
   return (
     <>
+      <Helmet>
+        <title>Credentials</title>
+      </Helmet>
+
       {/* Dialogs */}
       {needs401Login && (
         <LoginDialog
@@ -218,7 +223,7 @@ export function CredentialsPage() {
                 const expanded = expandedName === cred.name;
                 const rowBindings = bindingsFor(cred.name);
                 return (
-                  <React.Fragment key={cred.name}>
+                  <Fragment key={cred.name}>
                     <TableRow
                       hover
                       sx={{ "& > *": { borderBottom: expanded ? 0 : undefined } }}
@@ -355,7 +360,7 @@ export function CredentialsPage() {
                         </Collapse>
                       </TableCell>
                     </TableRow>
-                  </React.Fragment>
+                  </Fragment>
                 );
               })}
 
