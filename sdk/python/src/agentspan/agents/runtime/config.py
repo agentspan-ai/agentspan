@@ -48,28 +48,26 @@ def _env_int(var: str, default: int = 0) -> int:
 class AgentConfig:
     """Configuration for the agents runtime.
 
-    Values are loaded from environment variables via ``from_env()``.
-    Direct construction with kwargs is supported for tests and explicit config.
-
     Attributes:
         server_url: Agentspan server API URL.
-        auth_key: Auth key (optional for OSS).
-        auth_secret: Auth secret (optional for OSS).
+        api_key: Bearer token or static API key for the Authorization header.
+            Preferred over auth_key/auth_secret for new deployments.
+        auth_key: Auth key (kept for backward compatibility).
+        auth_secret: Auth secret (kept for backward compatibility).
         worker_poll_interval_ms: Worker polling interval in milliseconds.
         worker_thread_count: Number of threads per worker.
         auto_start_workers: Whether to auto-start worker processes.
         daemon_workers: Whether worker processes are daemon (killed on exit).
-        auto_start_server: Whether to auto-start the local server process
-            when the server URL points to localhost and the server is not
-            already running.  Set to ``False`` for remote/production servers.
-        auto_register_integrations: When ``True``, automatically create LLM
-            integrations and register models on the Conductor server before
-            executing agents.  Reads API keys from provider-specific env vars
-            (e.g. ``OPENAI_API_KEY``).
+        auto_start_server: Whether to auto-start the local server process.
+        auto_register_integrations: Auto-create LLM integrations on startup.
+        credential_strict_mode: When ``True``, disables env var fallback for
+            credential resolution. Required credentials must come from the
+            credential service.
         log_level: Logging level for the agentspan logger.
     """
 
     server_url: str = "http://localhost:8080/api"
+    api_key: Optional[str] = None
     auth_key: Optional[str] = None
     auth_secret: Optional[str] = None
     llm_retry_count: int = 3
@@ -80,6 +78,7 @@ class AgentConfig:
     daemon_workers: bool = True
     auto_register_integrations: bool = False
     streaming_enabled: bool = True
+    credential_strict_mode: bool = False
     log_level: str = "INFO"
 
     def __post_init__(self):
@@ -103,6 +102,7 @@ class AgentConfig:
             log_level = "INFO"
         return cls(
             server_url=_env("AGENTSPAN_SERVER_URL", "http://localhost:8080/api"),
+            api_key=_env("AGENTSPAN_API_KEY"),
             auth_key=_env("AGENTSPAN_AUTH_KEY"),
             auth_secret=_env("AGENTSPAN_AUTH_SECRET"),
             llm_retry_count=_env_int("AGENTSPAN_LLM_RETRY_COUNT", 3),
@@ -113,13 +113,9 @@ class AgentConfig:
             daemon_workers=_env_bool("AGENTSPAN_DAEMON_WORKERS", True),
             auto_register_integrations=_env_bool("AGENTSPAN_INTEGRATIONS_AUTO_REGISTER", False),
             streaming_enabled=_env_bool("AGENTSPAN_STREAMING_ENABLED", True),
+            credential_strict_mode=_env_bool("AGENTSPAN_CREDENTIAL_STRICT_MODE", False),
             log_level=log_level,
         )
-
-    @property
-    def api_key(self) -> Optional[str]:
-        """Alias for :attr:`auth_key` (industry-standard naming)."""
-        return self.auth_key
 
     @property
     def api_secret(self) -> Optional[str]:
@@ -131,13 +127,14 @@ class AgentConfig:
         from conductor.client.configuration.configuration import Configuration
 
         config = Configuration(server_api_url=self.server_url)
-        if self.auth_key:
+        # Prefer api_key; fall back to auth_key for backward compat
+        effective_key = self.api_key or self.auth_key
+        if effective_key:
             from conductor.client.configuration.settings.authentication_settings import (
                 AuthenticationSettings,
             )
-
             config.authentication_settings = AuthenticationSettings(
-                key_id=self.auth_key,
+                key_id=effective_key,
                 key_secret=self.auth_secret or "",
             )
         return config
