@@ -72,8 +72,10 @@ test.describe("Add Credential dialog — layout & alignment", () => {
 
     const helperBottom = helperBox!.y + helperBox!.height;
 
-    // Value input must start well below the Name helper text
-    expect(valueBox!.y).toBeGreaterThan(helperBottom + 8); // at least 8px gap
+    // Value input must start well below the Name helper text.
+    // The MUI outlined label floats at (inputTop - 9px), so inputTop must be
+    // at least 16px below helper text for the label to have a clear 7px gap.
+    expect(valueBox!.y).toBeGreaterThan(helperBottom + 16);
 
     console.log(`Name helper bottom: ${helperBottom.toFixed(0)}px`);
     console.log(`Value input top:    ${valueBox!.y.toFixed(0)}px`);

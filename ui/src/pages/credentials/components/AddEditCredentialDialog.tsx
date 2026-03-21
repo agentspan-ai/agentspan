@@ -108,7 +108,7 @@ export function AddEditCredentialDialog({
       <DialogTitle>{mode === "add" ? "Add Credential" : "Edit Credential"}</DialogTitle>
       <form onSubmit={handleSubmit(onSubmit)} noValidate>
         <DialogContent>
-          <Stack spacing={3} sx={{ mt: 1 }}>
+          <Stack spacing={4} sx={{ mt: 1 }}>
             {mode === "add" && (
               <>
                 <Autocomplete
