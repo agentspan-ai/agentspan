@@ -637,7 +637,10 @@ def make_claude_worker(
             if tool_use_id and tool_use_id in tool_task_map:
                 wf_id, task_id = tool_task_map.pop(tool_use_id)
                 tool_response = input_data.get("tool_response")
-                await dag.complete_task(wf_id, task_id, {"result": tool_response})
+                try:
+                    await dag.complete_task(wf_id, task_id, {"result": tool_response})
+                except Exception as exc:
+                    logger.debug("post_tool_hook failed (non-fatal): %s", exc)
             _checkpoint_session(workflow_id, session_id_ref["value"], cwd, server_url, headers)
             return {}
 
@@ -645,7 +648,10 @@ def make_claude_worker(
             if tool_use_id and tool_use_id in tool_task_map:
                 wf_id, task_id = tool_task_map.pop(tool_use_id)
                 error = input_data.get("error", "tool failed")
-                await dag.fail_task(wf_id, task_id, error)
+                try:
+                    await dag.fail_task(wf_id, task_id, error)
+                except Exception as exc:
+                    logger.debug("post_tool_failure_hook failed (non-fatal): %s", exc)
             return {}
 
         async def subagent_stop_hook(input_data, tool_use_id, context):

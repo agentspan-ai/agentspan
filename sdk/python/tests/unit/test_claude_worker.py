@@ -1032,3 +1032,47 @@ class TestDagHooks:
 
         # Worker must complete, not raise
         assert task_result.status.name == "COMPLETED"
+
+    def test_post_tool_hook_failure_is_non_fatal(self):
+        """complete_task raising must not propagate — worker still completes."""
+        from agentspan.agents.frameworks.claude import ClaudeCodeAgent, make_claude_worker
+
+        agent = ClaudeCodeAgent(name="dag_test")
+        worker = make_claude_worker(agent, "_fw_claude_dag_test", "http://localhost:8080", "", "")
+
+        mock_dag = AsyncMock()
+        mock_dag.inject_task = AsyncMock(return_value="t-99")
+        mock_dag.complete_task = AsyncMock(side_effect=RuntimeError("server down"))
+
+        async def fake_query(prompt, options, **kwargs):
+            hooks = options.hooks or {}
+            pre_hook = hooks["PreToolUse"][0].hooks[0]
+            post_hook = hooks["PostToolUse"][0].hooks[0]
+
+            await pre_hook({
+                "tool_name": "Bash",
+                "tool_input": {"command": "ls"},
+            }, "tu-post-99", {})
+            await post_hook({
+                "tool_response": "file.txt",
+            }, "tu-post-99", {})
+
+            init = MagicMock()
+            init.__class__.__name__ = "SystemMessage"
+            init.subtype = "init"
+            init.data = {"session_id": "sess-001"}
+            yield init
+            rm = MagicMock()
+            rm.__class__.__name__ = "ResultMessage"
+            rm.result = "done"
+            yield rm
+
+        with (
+            patch("agentspan.agents.frameworks.claude.query", fake_query),
+            patch("agentspan.agents.frameworks.claude._restore_session", return_value=None),
+            patch("agentspan.agents.frameworks.claude._checkpoint_session"),
+            patch("agentspan.agents.frameworks.claude._AgentDagClient", return_value=mock_dag),
+        ):
+            task_result = worker(_make_dag_task())
+
+        assert task_result.status.name == "COMPLETED"
