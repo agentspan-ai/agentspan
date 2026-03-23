@@ -104,7 +104,7 @@ Most SDKs only implement checkpoints 1 and 5 (input/output). But for agents, the
 
 ---
 
-## 4. How Guardrails Work — Failure Modes
+## 4. How Guardrails Work — Failure Mode Patterns
 
 When a guardrail fails, the system must decide what to do. The industry has converged on five patterns:
 
@@ -150,7 +150,343 @@ Guardrail fails -> Pause execution -> Wait for human review
 
 ---
 
-## 5. How the Industry Does It — SDK Comparison
+## 5. Architecture & Design
+
+Guardrails validate agent input/output and take corrective action on failure. They compile into Conductor workflow tasks positioned before (input) or after (output) the LLM call, providing durable, server-side validation that survives process restarts.
+
+### Overview
+
+```
+User Prompt
+    │
+    ├─ [Input Guardrails]        ← validate before LLM sees the prompt
+    │
+    ├─ LLM Call
+    │
+    ├─ [Output Guardrails]       ← validate LLM response
+    │     │
+    │     ├─ pass  → return result
+    │     ├─ retry → feedback appended to conversation, LLM retries
+    │     ├─ fix   → use corrected output, skip LLM retry
+    │     ├─ raise → terminate workflow with error
+    │     └─ human → pause for human review (approve/edit/reject)
+    │
+    └─ [Tool Guardrails]         ← validate tool inputs/outputs (Python-level)
+```
+
+---
+
+## 6. Guardrail Types
+
+### Custom Function Guardrail
+
+Write a Python function that validates content and returns `GuardrailResult`.
+
+```python
+from agentspan.agents import Guardrail, GuardrailResult, guardrail
+
+@guardrail
+def no_pii(content: str) -> GuardrailResult:
+    """Reject responses containing credit card numbers."""
+    if re.search(r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b", content):
+        return GuardrailResult(
+            passed=False,
+            message="Contains PII. Redact all card numbers before responding.",
+        )
+    return GuardrailResult(passed=True)
+
+agent = Agent(
+    ...,
+    guardrails=[
+        Guardrail(no_pii, position="output", on_fail="retry", max_retries=3),
+    ],
+)
+```
+
+**Compilation:** Compiles to a Conductor **worker task**. The `@guardrail` function runs in the SDK's worker process. Multiple custom guardrails are batched into a single combined worker task — the first failure halts evaluation.
+
+**Output path:** `${ref}.output.*` (direct).
+
+### RegexGuardrail
+
+Pattern-based validation. Runs entirely server-side as a JavaScript InlineTask — no Python worker needed.
+
+```python
+from agentspan.agents import RegexGuardrail, OnFail, Position
+
+# Block mode: fail if any pattern matches (blocklist)
+no_emails = RegexGuardrail(
+    patterns=[r"[\w.+-]+@[\w-]+\.[\w.-]+"],
+    mode="block",
+    name="no_email_addresses",
+    message="Response must not contain email addresses.",
+    position=Position.OUTPUT,
+    on_fail=OnFail.RETRY,
+)
+
+# Allow mode: fail if NO pattern matches (allowlist)
+json_only = RegexGuardrail(
+    patterns=[r"^\s*[\{\[]"],
+    mode="allow",
+    name="json_output",
+    message="Response must be valid JSON.",
+)
+```
+
+**Compilation:** Compiles to a Conductor **InlineTask** with JavaScript regex evaluation (GraalVM). Patterns, mode, on_fail, message, and max_retries are baked into the script at compile time.
+
+**Output path:** `${ref}.output.result.*` (InlineTask wraps under `.result`).
+
+### LLMGuardrail
+
+Uses a second LLM to evaluate content against a policy. The evaluator LLM receives the policy + content and returns `{"passed": true/false, "reason": "..."}`.
+
+```python
+from agentspan.agents import LLMGuardrail
+
+safety = LLMGuardrail(
+    model="openai/gpt-4o-mini",
+    policy=(
+        "Reject any content that:\n"
+        "1. Contains medical or legal advice presented as fact\n"
+        "2. Makes promises or guarantees about outcomes\n"
+        "3. Includes discriminatory or biased language"
+    ),
+    name="content_safety",
+    position="output",
+    on_fail="retry",
+    max_tokens=10000,
+)
+```
+
+**Compilation:** Compiles to a **LlmChatComplete** task (evaluator call) followed by an **InlineTask** (response parser). The parser extracts `passed` and `reason` from the LLM's JSON response and maps the on_fail logic.
+
+**Output path:** `${ref}.output.result.*` (InlineTask).
+
+**Note:** Use a fast, small model for the evaluator to avoid slowing down the agent loop.
+
+### External Guardrail
+
+Reference a guardrail worker running elsewhere. No local function — just the name.
+
+```python
+# Reference a guardrail deployed as a remote worker
+agent = Agent(
+    ...,
+    guardrails=[
+        Guardrail(name="compliance_check", position="output", on_fail="retry"),
+    ],
+)
+```
+
+**Compilation:** Compiles to a Conductor **SimpleTask** referencing the remote worker by name.
+
+**Worker contract:**
+- Input: `{"content": "<text>", "iteration": <n>}`
+- Output: `{"passed": bool, "message": str, "on_fail": str, "should_continue": bool}`
+
+**Output path:** `${ref}.output.*` (direct).
+
+---
+
+## 7. Failure Modes (on_fail)
+
+| Mode | Behavior | Use Case |
+|------|----------|----------|
+| `"retry"` | Feedback message appended to conversation. LLM retries with the feedback. After `max_retries` exhausted, escalates to `"raise"`. | Style issues, format corrections — let the LLM fix it. |
+| `"fix"` | Uses `GuardrailResult.fixed_output` directly. No LLM retry. | Deterministic fixes (PII redaction, truncation, formatting). Faster and cheaper than retry. |
+| `"raise"` | Terminates the workflow with `FAILED` status and the guardrail message. | Hard blocks — content that must never pass through. |
+| `"human"` | Pauses the workflow at a HumanTask. Human can approve, edit, or reject. Only valid for `position="output"`. | Compliance review, sensitive content that needs human judgment. |
+
+### Retry Escalation
+
+When `on_fail="retry"` and the DoWhile loop iteration reaches `max_retries`, the guardrail automatically escalates to `"raise"`. This prevents infinite retry loops.
+
+### Fix Mode
+
+The `fixed_output` field in `GuardrailResult` provides the corrected output:
+
+```python
+@guardrail
+def redact_phones(content: str) -> GuardrailResult:
+    phone_pattern = r"(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}"
+    if re.search(phone_pattern, content):
+        redacted = re.sub(phone_pattern, "[PHONE REDACTED]", content)
+        return GuardrailResult(
+            passed=False,
+            message="Phone numbers detected and redacted.",
+            fixed_output=redacted,
+        )
+    return GuardrailResult(passed=True)
+
+agent = Agent(
+    ...,
+    guardrails=[Guardrail(redact_phones, on_fail="fix")],
+)
+```
+
+### Human Mode
+
+When `on_fail="human"`, the workflow pauses at a HumanTask. Use `start()` (async) since `run()` would block:
+
+```python
+handle = runtime.start(agent, "...")
+
+# Poll until waiting
+status = handle.get_status()
+if status.is_waiting:
+    runtime.approve(handle.workflow_id)    # approve as-is
+    # or: runtime.reject(handle.workflow_id, "reason")
+    # or: runtime.respond(handle.workflow_id, {"edited_output": "..."})
+```
+
+The human review flow compiles to:
+
+```
+HumanTask → validate → [normalize if needed] → route
+  ├─ approve: continue with original output
+  ├─ edit: continue with edited output
+  └─ reject: terminate workflow (FAILED)
+```
+
+---
+
+## 8. Position: Input vs Output
+
+| Position | When it runs | Compilation | Scope |
+|----------|-------------|-------------|-------|
+| `"output"` | After each LLM response, inside the DoWhile loop | Compiled as Conductor workflow tasks (durable, visible in UI) | Agent-level guardrails |
+| `"input"` | Before tool execution | Python-level wrapping inside the tool worker (not a separate workflow task) | Tool-level guardrails only |
+
+**Note:** `on_fail="human"` is only valid for `position="output"` — input guardrails run inside Python and cannot pause a workflow.
+
+---
+
+## 9. Tool Guardrails
+
+Guardrails can be attached directly to tools for pre/post-execution validation:
+
+```python
+sql_guard = Guardrail(
+    no_sql_injection,
+    position="input",     # check BEFORE tool executes
+    on_fail="raise",      # hard block
+)
+
+@tool(guardrails=[sql_guard])
+def run_query(query: str) -> str:
+    """Execute a database query."""
+    ...
+```
+
+Tool guardrails run inside the tool worker process (Python-level wrapping, not Conductor workflow tasks). The `make_tool_worker()` dispatch wrapper:
+
+1. **Pre-execution** (position="input"): Serializes tool kwargs to JSON, runs guardrail check. On failure with `on_fail="raise"`, raises `ValueError`. Otherwise returns `{error: ..., blocked: True}`.
+
+2. **Post-execution** (position="output"): Serializes tool result, runs guardrail check. On failure with `on_fail="fix"`, replaces result with `fixed_output`. With `on_fail="raise"`, raises `ValueError`.
+
+---
+
+## 10. Standalone Guardrails
+
+`@guardrail`-decorated functions are plain callables — usable without an agent or server:
+
+```python
+@guardrail
+def no_pii(content: str) -> GuardrailResult:
+    ...
+
+# Call directly
+result = no_pii("Some text to validate")
+print(result.passed, result.message)
+```
+
+They can also be deployed as standalone Conductor workers (see example 35), allowing any agent in any language to reference them by name.
+
+---
+
+## 11. Compilation Details
+
+### Where Guardrails Appear in the Workflow
+
+Output guardrails are compiled inside the DoWhile loop, after the LLM task:
+
+```
+DoWhile Loop
+  ├─ LLM_CHAT_COMPLETE
+  ├─ [Guardrail Check Task]           ← evaluates content
+  ├─ [Guardrail Routing SwitchTask]   ← acts on result
+  ├─ Tool Router (if agent has tools)
+  └─ ...
+```
+
+### Guardrail Routing SwitchTask
+
+After each guardrail check task, a SwitchTask routes based on `on_fail`:
+
+```
+SwitchTask
+  expression: ${guardrail_ref}.output[.result].on_fail
+  │
+  ├─ "pass" (default): SetVariable (no-op, continue)
+  │
+  ├─ "retry": InlineTask formats feedback
+  │    → "[Output validation failed: {message}]"
+  │    → wired to LLM as user message for next iteration
+  │
+  ├─ "raise": TerminateTask (FAILED)
+  │
+  ├─ "fix": InlineTask passes fixed_output through
+  │
+  └─ "human": HumanTask → validate → normalize → route
+       ├─ approve: continue
+       ├─ edit: use edited output
+       └─ reject: TerminateTask
+```
+
+### Termination Condition Integration
+
+When output guardrails with `on_fail="retry"` exist, their `should_continue` flag is ANDed into the DoWhile termination condition:
+
+```javascript
+iteration < max_turns
+  && finishReason != 'LENGTH'
+  && (toolCalls != null || guardrail_should_continue)
+```
+
+This ensures the loop continues when a guardrail signals retry.
+
+### Output Path Differences
+
+The SwitchTask must read from different paths depending on guardrail type:
+
+| Guardrail Type | Output Path |
+|----------------|-------------|
+| RegexGuardrail (InlineTask) | `$.{ref}.result.on_fail` |
+| LLMGuardrail (InlineTask) | `$.{ref}.result.on_fail` |
+| Custom function (Worker) | `$.{ref}.on_fail` |
+| External (SimpleTask) | `$.{ref}.on_fail` |
+
+This is tracked via the `is_inline` flag returned by `_compile_output_guardrail_tasks()`.
+
+---
+
+## 12. Multi-Agent Guardrail Wrapping
+
+When a multi-agent strategy workflow has output guardrails, the entire strategy workflow is wrapped in an outer DoWhile loop:
+
+```
+DoWhile (guardrail_loop)
+  ├─ InlineSubWorkflow (strategy workflow)
+  ├─ [Guardrail Check Task(s)]
+  └─ [Guardrail Routing SwitchTask(s)]
+```
+
+This re-runs the full strategy workflow on retry.
+
+---
+
+## 13. How the Industry Does It — SDK Comparison
 
 ### OpenAI Agents SDK
 **Key innovation: Parallel execution + tripwire**
@@ -226,7 +562,7 @@ Guardrail fails -> Pause execution -> Wait for human review
 
 ---
 
-## 6. Our Current Implementation — Honest Assessment
+## 14. Our Current Implementation — Honest Assessment
 
 ### What we have today
 
@@ -266,11 +602,11 @@ The `compile_guardrail_tasks()` method in `agent_compiler.py` was clearly the in
 
 ---
 
-## 7. Gaps & Recommendations
+## 15. Gaps & Recommendations
 
 ### Tier 1: Critical gaps (should fix)
 
-**7a. Compile output guardrails into the DoWhile loop**
+**15a. Compile output guardrails into the DoWhile loop**
 - Output guardrails should be worker tasks INSIDE the agent loop
 - After the LLM responds and before the next iteration, check guardrails
 - If guardrail fails with `retry`: append feedback to messages and continue the loop (no full re-execution)
@@ -278,60 +614,60 @@ The `compile_guardrail_tasks()` method in `agent_compiler.py` was clearly the in
 - This makes guardrails **durable** and **visible in Conductor UI**
 - The `compile_guardrail_tasks()` method is the starting point
 
-**7b. Add tool guardrails (Checkpoint 4)**
+**15b. Add tool guardrails (Checkpoint 4)**
 - Allow `@tool(guardrails=[...])` or a new `ToolGuardrail` type
 - Validate tool inputs before execution (e.g., block SQL injection in query params)
 - Validate tool outputs after execution (e.g., redact PII from API responses)
 - This is the highest-risk checkpoint for agents and only OpenAI/LangGraph address it
 
-**7c. Make retry limit configurable**
+**15c. Make retry limit configurable**
 - `Guardrail(func, on_fail="retry", max_retries=5)`
 - Currently hardcoded to 3 in runtime.py
 
 ### Tier 2: Important enhancements
 
-**7d. Add `on_fail="fix"` mode**
+**15d. Add `on_fail="fix"` mode**
 - Guardrail returns corrected content instead of just pass/fail
 - `GuardrailResult(passed=False, message="...", fixed_output="corrected text")`
 - Runtime uses `fixed_output` instead of retrying — faster, cheaper
 - Useful for deterministic corrections (PII redaction, format fixing)
 
-**7e. Add `on_fail="human"` mode**
+**15e. Add `on_fail="human"` mode**
 - Guardrail failure pauses workflow via Conductor HumanTask
 - Human reviews and approves/rejects/edits
 - Natural fit for Conductor's existing human-in-the-loop support
 - Major differentiator — no other SDK has durable human escalation for guardrails
 
-**7f. Composable guardrails with `&` / `|`**
+**15f. Composable guardrails with `&` / `|`**
 - `guardrail_a & guardrail_b` -> both must pass
 - `guardrail_a | guardrail_b` -> either can pass
 - Same pattern as our TerminationCondition composability
 
-**7g. Support guardrails in `start()` and `stream()`**
+**15g. Support guardrails in `start()` and `stream()`**
 - Since guardrails will be compiled into the workflow, they'll automatically work with all execution modes
-- This is a natural consequence of fixing 7a
+- This is a natural consequence of fixing 15a
 
 ### Tier 3: Nice-to-have
 
-**7h. Parallel execution mode (OpenAI-style)**
+**15h. Parallel execution mode (OpenAI-style)**
 - Run guardrails concurrently with the LLM call
 - If guardrail fails, cancel/discard the LLM response
 - Optimization for latency-sensitive applications
 
-**7i. Built-in guardrail types**
+**15i. Built-in guardrail types**
 - `PromptInjectionGuardrail` — detect common injection patterns
 - `PIIGuardrail` — detect PII with multiple strategies (block, redact, mask)
 - `HallucinationGuardrail` — fact-check against provided context (CrewAI-style)
 - `ToxicityGuardrail` — content safety classification
 
-**7j. Guardrail metrics/observability**
+**15j. Guardrail metrics/observability**
 - Track pass/fail rates per guardrail
 - Track retry counts and costs
 - Surface in Conductor UI dashboard
 
 ---
 
-## 8. Recommended Architecture
+## 16. Recommended Architecture
 
 ```
 User Input
