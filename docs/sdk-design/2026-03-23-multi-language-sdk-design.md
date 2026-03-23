@@ -354,7 +354,7 @@ This is the JSON structure that every SDK must produce when serializing an Agent
     "properties": { "city": { "type": "string" } },
     "required": ["city"]
   },
-  "toolType": "worker|http|mcp|agent_tool|human|generate_image|generate_audio|generate_video|generate_pdf|search|index",
+  "toolType": "worker|http|mcp|agent_tool|human|generate_image|generate_audio|generate_video|generate_pdf|rag_search|rag_index",
   "outputSchema": { ... },
   "approvalRequired": true,
   "timeoutSeconds": 120,
@@ -577,7 +577,7 @@ These create tools that execute on the server — no local worker needed:
 |-------------|---------|----------------|
 | `http_tool` | HTTP API call | `(name, description, url, method="GET", headers=None, input_schema=None, accept=["application/json"], content_type="application/json", credentials=None)` |
 | `mcp_tool` | MCP protocol tool | `(server_url, name=None, description=None, headers=None, tool_names=None, max_tools=64, credentials=None)` |
-| `agent_tool` | Sub-agent as tool | `(agent)` — wraps an Agent as a tool |
+| `agent_tool` | Sub-agent as tool | `(agent, name=None, description=None, retry_count=None, retry_delay_seconds=None, optional=None)` |
 | `human_tool` | Human-in-the-loop tool | `(name, description, input_schema=None)` |
 | `image_tool` | Image generation | `(name, description, llm_provider, model, input_schema=None, **defaults)` |
 | `audio_tool` | Audio generation | `(name, description, llm_provider, model, input_schema=None, **defaults)` |
