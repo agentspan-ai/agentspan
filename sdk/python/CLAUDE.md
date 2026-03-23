@@ -50,5 +50,5 @@ Configured in `[judge]` section of TOML config, or via env vars:
 
 ## Reference
 
-- SDK API docs: `AGENTS.md`
-- Design docs: `docs/`
+- SDK API docs: `../../docs/python-sdk/api-reference.md`
+- Design docs: `../../docs/`

@@ -22,7 +22,7 @@
   <a href="#quickstart">Quickstart</a> &bull;
   <a href="#examples">52+ Examples</a> &bull;
   <a href="https://discord.gg/agentspan">Discord</a> &bull;
-  <a href="AGENTS.md">API Reference</a>
+  <a href="../../docs/python-sdk/api-reference.md">API Reference</a>
 </p>
 
 ---
@@ -550,7 +550,7 @@ If Agentspan is useful to you, help others find it:
 
 ## API Reference
 
-See [AGENTS.md](AGENTS.md) for the complete API reference and architecture guide.
+See [API Reference](../../docs/python-sdk/api-reference.md) for the complete API reference and architecture guide.
 
 ## License
 
