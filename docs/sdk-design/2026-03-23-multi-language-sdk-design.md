@@ -128,7 +128,17 @@ Same request as `/start`, returns compiled WorkflowDef without executing.
 
 Registers the workflow and task definitions for later execution. CI/CD operation.
 
-**Request/Response:** Same as `/start`.
+**Request:** Same as `/start`.
+
+**Response:**
+```json
+{
+  "workflowName": "agent_name",
+  "workflowDef": { ... }
+}
+```
+
+Note: Unlike `/start`, deploy does NOT return a `workflowId` because no execution is started.
 
 #### GET /agent/{workflowId}/status — Poll Status
 
@@ -194,6 +204,8 @@ data: {"type":"done","output":{"result":"..."},"workflowId":"...","timestamp":12
 
 **Event Types:**
 
+**SDK EventType enum (must be in every SDK):**
+
 | Type | Fields | Description |
 |------|--------|-------------|
 | `thinking` | content | LLM reasoning text |
@@ -203,8 +215,16 @@ data: {"type":"done","output":{"result":"..."},"workflowId":"...","timestamp":12
 | `guardrail_fail` | guardrailName, content | Guardrail failed |
 | `waiting` | pendingTool | HITL pause (tool awaiting approval) |
 | `handoff` | target | Agent handoff |
+| `message` | content | Assistant message text |
 | `error` | content | Error occurred |
 | `done` | output | Workflow completed |
+
+**Server-only event types (pass through, not in EventType enum):**
+
+These may appear on the SSE stream but are not part of the SDK's EventType enum. SDKs should forward them as raw events:
+
+| Type | Fields | Description |
+|------|--------|-------------|
 | `context_condensed` | content | Context window condensation |
 | `subagent_start` | workflowId | Sub-agent workflow started |
 | `subagent_stop` | workflowId | Sub-agent workflow completed |
@@ -296,8 +316,8 @@ This is the JSON structure that every SDK must produce when serializing an Agent
   "introduction": "I am agent X, I specialize in...",
   "metadata": { "key": "value" },
   "planner": true,
-  "callbacks": [ { "position": "on_agent_start", "taskName": "agent_name_on_agent_start" } ],
-  "includeContents": "file contents string",
+  "callbacks": [ { "position": "before_agent", "taskName": "agent_name_before_agent" } ],
+  "includeContents": "default|none",
   "thinkingConfig": { "enabled": true, "budgetTokens": 1024 },
   "requiredTools": ["tool_a", "tool_b"],
   "gate": GateConfig,
@@ -341,7 +361,7 @@ This is the JSON structure that every SDK must produce when serializing an Agent
   "config": {
     "url": "https://api.example.com/data",
     "method": "GET",
-    "headers": { "Authorization": "Bearer ${credential.API_KEY}" },
+    "headers": { "Authorization": "Bearer ${API_KEY}" },
     "credentials": ["API_KEY"]
   },
   "guardrails": [ GuardrailConfig... ]
@@ -361,8 +381,8 @@ This is the JSON structure that every SDK must produce when serializing an Agent
 | `generate_audio` | GENERATE_AUDIO | No | Server-side audio generation |
 | `generate_video` | GENERATE_VIDEO | No | Server-side video generation |
 | `generate_pdf` | GENERATE_PDF | No | Server-side PDF generation |
-| `search` | LLM_SEARCH_INDEX | No | Vector search (RAG) |
-| `index` | LLM_INDEX_TEXT | No | Vector index (RAG) |
+| `rag_search` | LLM_SEARCH_INDEX | No | Vector search (RAG) |
+| `rag_index` | LLM_INDEX_TEXT | No | Vector index (RAG) |
 
 **External/by-reference tools:** When `toolType` is `worker` but no function is registered, the SDK emits just the task name. A remote worker running elsewhere picks up the task. The SDK does not need to register a local worker.
 
@@ -397,7 +417,7 @@ This is the JSON structure that every SDK must produce when serializing an Agent
 Composable with AND/OR operators:
 
 ```json
-{ "type": "text_mention", "text": "DONE", "caseSensitive": true }
+{ "type": "text_mention", "text": "DONE", "caseSensitive": false }
 { "type": "stop_message", "stopMessage": "TERMINATE" }
 { "type": "max_message", "maxMessages": 50 }
 { "type": "token_usage", "maxTotalTokens": 100000, "maxPromptTokens": 80000, "maxCompletionTokens": 20000 }
@@ -427,7 +447,7 @@ Composable with AND/OR operators:
 ### 3.7 GateConfig (Sequential Pipeline Gates)
 
 ```json
-{ "type": "text_contains", "text": "APPROVED", "caseSensitive": false }
+{ "type": "text_contains", "text": "APPROVED", "caseSensitive": true }
 { "taskName": "agent_name_gate" }
 ```
 
@@ -484,7 +504,7 @@ The single orchestration primitive. Every agent — simple or complex — is an 
 | `metadata` | map | null | Arbitrary metadata |
 | `callbacks` | CallbackHandler[] | [] | Lifecycle hooks |
 | `planner` | bool | false | Enable planning mode |
-| `include_contents` | string | null | File contents to include |
+| `include_contents` | string | null | Controls parent context for sub-agents: `"default"` passes full context, `"none"` gives fresh context |
 | `thinking_budget_tokens` | int | null | Extended thinking budget |
 | `required_tools` | string[] | null | Tools the LLM must use |
 | `gate` | GateCondition | null | Pipeline gate condition |
@@ -526,12 +546,13 @@ def get_weather(city: str) -> str:
 ```
 
 **Tool decorator options:**
-- `name`: override tool name
-- `description`: override description
-- `approval_required`: bool — HITL gate before execution
+- `name`: override tool name (default: function name)
+- `external`: bool (default: false) — when true, no local worker is started; only the schema is emitted. Conductor dispatches to external workers polling for that task name.
+- `approval_required`: bool (default: false) — HITL gate before execution
 - `timeout_seconds`: int — per-invocation timeout
-- `credentials`: list — credential names this tool needs
 - `guardrails`: list — tool-level input guardrails
+- `isolated`: bool (default: true) — controls credential isolation. When true, tool runs in subprocess with credentials as env vars. When false, tool runs in-process.
+- `credentials`: list — credential names this tool needs
 
 #### ToolContext (Dependency Injection)
 
@@ -552,18 +573,20 @@ The server passes `__agentspan_ctx__` in the task input. The SDK extracts and po
 
 These create tools that execute on the server — no local worker needed:
 
-| Constructor | Purpose | Key Config |
-|-------------|---------|------------|
-| `http_tool(name, url, method, headers, body)` | HTTP API call | URL, method, headers, body template |
-| `mcp_tool(server_name, tool_name)` | MCP protocol tool | MCP server name + tool name |
-| `agent_tool(agent)` | Sub-agent as tool | Nested Agent definition |
-| `human_tool(name, description, schema)` | Human-in-the-loop tool | Input schema for human |
-| `image_tool(name, instructions)` | Image generation | Generation instructions |
-| `audio_tool(name, instructions)` | Audio generation | Generation instructions |
-| `video_tool(name, instructions)` | Video generation | Generation instructions |
-| `pdf_tool(name, template)` | PDF generation | Template |
-| `search_tool(name, index)` | Vector search (RAG) | Index name |
-| `index_tool(name, index)` | Vector index (RAG) | Index name |
+| Constructor | Purpose | Full Signature |
+|-------------|---------|----------------|
+| `http_tool` | HTTP API call | `(name, description, url, method="GET", headers=None, input_schema=None, accept=["application/json"], content_type="application/json", credentials=None)` |
+| `mcp_tool` | MCP protocol tool | `(server_url, name=None, description=None, headers=None, tool_names=None, max_tools=64, credentials=None)` |
+| `agent_tool` | Sub-agent as tool | `(agent)` — wraps an Agent as a tool |
+| `human_tool` | Human-in-the-loop tool | `(name, description, input_schema=None)` |
+| `image_tool` | Image generation | `(name, description, llm_provider, model, input_schema=None, **defaults)` |
+| `audio_tool` | Audio generation | `(name, description, llm_provider, model, input_schema=None, **defaults)` |
+| `video_tool` | Video generation | `(name, description, llm_provider, model, input_schema=None, **defaults)` |
+| `pdf_tool` | PDF generation | `(name="generate_pdf", description="Generate a PDF...", input_schema=None, **defaults)` |
+| `search_tool` | Vector search (RAG) | `(name, description, vector_db, index, embedding_model_provider, embedding_model, namespace="default_ns", max_results=5, dimensions=None, input_schema=None)` |
+| `index_tool` | Vector index (RAG) | `(name, description, vector_db, index, embedding_model_provider, embedding_model, namespace="default_ns", chunk_size=None, chunk_overlap=None, dimensions=None, input_schema=None)` |
+
+**Note on `http_tool` credential headers:** Headers can reference credentials using `${NAME}` syntax (e.g., `"Authorization": "Bearer ${API_KEY}"`). The server resolves these at execution time from the credential store. All placeholder names must be declared in the `credentials` list.
 
 #### External / By-Reference Tools
 
@@ -692,6 +715,7 @@ Every method must have both sync and async variants.
 | `is_waiting` | bool | Paused (HITL) |
 | `output` | any | Available when complete |
 | `status` | string | Raw Conductor status |
+| `reason` | string | Failure/termination reason |
 | `current_task` | string | Currently executing task |
 | `messages` | Message[] | Conversation so far |
 | `pending_tool` | map | Tool awaiting approval |
@@ -715,6 +739,8 @@ Every method must have both sync and async variants.
 ```
 THINKING, TOOL_CALL, TOOL_RESULT, HANDOFF, WAITING, MESSAGE, ERROR, DONE, GUARDRAIL_PASS, GUARDRAIL_FAIL
 ```
+
+Note: Server-only event types (`context_condensed`, `subagent_start`, `subagent_stop`) are NOT in this enum. SDKs should pass them through as raw events.
 
 #### AgentStream / AsyncAgentStream
 
@@ -747,7 +773,7 @@ Every SDK must provide these functions. Each function operates on a **singleton 
 | `deploy(agent)` | Compile + register (no execution) | DeploymentInfo |
 | `deploy_async(agent)` | Deploy asynchronously | Future<DeploymentInfo> |
 | `serve()` | Start workflow server (blocking) | void |
-| `plan(agent, prompt)` | Dry-run preview | ExecutionPlan |
+| `plan(agent)` | Compile-only dry-run preview (no prompt, no execution) | ExecutionPlan |
 | `shutdown()` | Shutdown singleton runtime | void |
 
 **Context Manager / Resource Management:** The runtime must support language-appropriate resource management (Python `with`, Java `try-with-resources`, Go `defer`, C# `using`, Ruby `ensure`, etc.).
@@ -812,7 +838,7 @@ Composable with `&` (AND) and `|` (OR) operators:
 
 | Condition | Parameters | Description |
 |-----------|-----------|-------------|
-| `TextMentionTermination` | text, case_sensitive | Stop when text appears in output |
+| `TextMentionTermination` | text, case_sensitive (default: false) | Stop when text appears in output |
 | `StopMessageTermination` | stop_message | Stop on specific message |
 | `MaxMessageTermination` | max_messages | Stop after N messages |
 | `TokenUsageTermination` | max_total, max_prompt, max_completion | Stop on token budget |
@@ -892,6 +918,8 @@ The server stores encrypted credentials (AES-256-GCM). SDKs interact via:
 
 Declares a credential requirement:
 - `env_var`: the logical name (e.g., `GITHUB_TOKEN`)
+- `relative_path`: optional path relative to subprocess HOME (for file-based credentials like `KUBECONFIG`)
+- `content`: optional static content (alternative to store lookup)
 
 #### get_credential(name) → string
 
@@ -914,16 +942,18 @@ CredentialServiceError  — server error
 
 #### CallbackHandler
 
-Lifecycle hooks:
+Lifecycle hooks. Method names map to wire format positions:
 
-| Method | When |
-|--------|------|
-| `on_agent_start(agent_name, prompt)` | Agent begins execution |
-| `on_agent_end(agent_name, result)` | Agent completes |
-| `on_model_start(agent_name, messages)` | LLM call begins |
-| `on_model_end(agent_name, response)` | LLM call completes |
-| `on_tool_start(agent_name, tool_name, args)` | Tool invocation begins |
-| `on_tool_end(agent_name, tool_name, result)` | Tool invocation completes |
+| Method | Wire Position | When |
+|--------|--------------|------|
+| `on_agent_start(agent_name, prompt)` | `before_agent` | Agent begins execution |
+| `on_agent_end(agent_name, result)` | `after_agent` | Agent completes |
+| `on_model_start(agent_name, messages)` | `before_model` | LLM call begins |
+| `on_model_end(agent_name, response)` | `after_model` | LLM call completes |
+| `on_tool_start(agent_name, tool_name, args)` | `before_tool` | Tool invocation begins |
+| `on_tool_end(agent_name, tool_name, result)` | `after_tool` | Tool invocation completes |
+
+**Wire format:** Callbacks are serialized as `{"position": "<wire_position>", "taskName": "<agent_name>_<wire_position>"}`. The position values are `before_agent`, `after_agent`, `before_model`, `after_model`, `before_tool`, `after_tool` — NOT the method names.
 
 Callbacks are registered as Conductor workers (same as tools). The server dispatches to them at the appropriate lifecycle points.
 
@@ -961,7 +991,20 @@ Checks if OpenTelemetry is configured. SDKs should support optional OTel integra
 | `AgentspanError` | Base exception |
 | `AgentAPIError` | Server returned an error |
 | `AgentNotFoundError` | Agent not found |
-| `ConfigurationError` | Invalid configuration |
+| `ConfigurationError` | Invalid agent configuration (missing model, conflicting settings) |
+
+### 4.17 @agent Decorator
+
+The `@agent` decorator is an alternative to `Agent()` for defining agents from functions. It attaches an `AgentDef` to the decorated function, which can then be used anywhere an `Agent` is expected:
+
+```python
+@agent(name="researcher", model="openai/gpt-4o", tools=[search])
+def researcher(prompt: str) -> str:
+    """Research assistant that finds information."""
+    pass  # implementation handled by the runtime
+```
+
+The decorator accepts all the same parameters as the `Agent` constructor. Each SDK should provide an equivalent pattern (annotation, attribute, or builder).
 
 ---
 
@@ -1169,7 +1212,7 @@ A single mega-workflow that processes an article request through a complete publ
 **Features:** deploy, serve, plan, run/run_async, start/start_async, stream/stream_async
 
 - `deploy()` registers the workflow
-- `plan()` dry-run preview
+- `plan()` compile-only dry-run preview
 - `run()` synchronous execution
 - `run_async()` asynchronous execution
 - `start()` fire-and-forget + polling
@@ -1194,7 +1237,7 @@ The kitchen sink includes a comprehensive test suite:
 
 | Test Type | Description |
 |-----------|-------------|
-| `mock_run()` | Execute without server for unit testing |
+| `mock_run()` | Execute without server for unit testing (in `testing` subpackage) |
 | `expect()` fluent API | `expect(result).completed().output_contains("article")` |
 | `assert_*()` functions | `assert_tool_used("search")`, `assert_guardrail_passed("pii_check")` |
 | `record()` / `replay()` | Capture execution for deterministic replay |
@@ -1355,7 +1398,7 @@ Every feature must be traceable from concept → Python reference → wire forma
 | 13 | Agent tool | `tool.py:agent_tool` | `tools[].toolType="agent_tool"` | ToolCompiler → SUB_WORKFLOW | Stage 8 |
 | 14 | Human tool | `tool.py:human_tool` | `tools[].toolType="human"` | ToolCompiler → HUMAN | Stage 5 |
 | 15 | Image/audio/video/pdf tool | `tool.py:image_tool` etc | `tools[].toolType="generate_*"` | ToolCompiler → GENERATE_* | Stage 8 |
-| 16 | Search/index tool | `tool.py:search_tool` | `tools[].toolType="search\|index"` | ToolCompiler → LLM_*_INDEX | Stage 8 |
+| 16 | Search/index tool | `tool.py:search_tool` | `tools[].toolType="rag_search\|rag_index"` | ToolCompiler → LLM_*_INDEX | Stage 8 |
 | 17 | Tool approval | `tool.py:approval_required` | `tools[].approvalRequired=true` | HUMAN task wrapper | Stage 5 |
 | 18 | Tool context | `tool.py:ToolContext` | `__agentspan_ctx__` in task input | Injected by server | Stage 2 |
 | 19 | Tool credentials | `tool.py:credentials` | `tools[].config.credentials` | ExecutionTokenService | Stage 2 |
