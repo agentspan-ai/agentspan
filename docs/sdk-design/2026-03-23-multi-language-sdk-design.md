@@ -1526,3 +1526,241 @@ A new language SDK is considered complete when:
 8. Both sync and async APIs work correctly
 9. Documentation covers all public APIs
 10. Package is publishable to the language's package registry
+
+---
+
+## 14. Addendum: Implementation Details (from 3-pass review)
+
+This section documents critical implementation details discovered during a thorough 3-pass review of the Python SDK source, all examples (agentspan, LangChain, LangGraph, OpenAI, ADK), and server-side code. These details are **required for SDK correctness** and were not covered in the original spec.
+
+### 14.1 Type Coercion Rules (Worker Dispatch)
+
+Every SDK must coerce tool input values from Conductor's type system to the target language's type system. The rules must be applied **in order**:
+
+1. **Null/empty check:** If value is null or target type is unknown, return value unchanged
+2. **Optional unwrapping:** If target type is `Optional<X>`, extract `X` and recurse
+3. **Type match short-circuit:** If value already matches target type, return unchanged
+4. **String → list/dict via JSON:** If value is string and target is list/dict, try `JSON.parse(value)`. On failure, return original string (silent fallback)
+5. **dict/list → string via JSON:** If value is dict/list and target is string, try `JSON.stringify(value)`. **Reason:** Conductor delivers AI_MODEL arguments as parsed objects; tools expecting JSON strings must re-serialize
+6. **String → int/float/bool:** Try conversion. Boolean: `"true"/"1"/"yes" → true`, `"false"/"0"/"no" → false`. On failure, return original string
+7. **Fallback:** Return original value unchanged
+
+**All coercion failures are silent** — return original value, never throw.
+
+Python reference: `sdk/python/src/agentspan/agents/runtime/_dispatch.py:_coerce_value()`
+
+### 14.2 Circuit Breaker
+
+Tools that fail consecutively are automatically disabled to prevent cascading failures.
+
+| Setting | Value |
+|---------|-------|
+| Threshold | 10 consecutive failures |
+| Reset | On any successful execution (counter → 0) |
+| Scope | Per tool name, module-level (persists across workflows) |
+| Behavior when open | Immediate `RuntimeError`, no execution attempt |
+| Manual reset | `reset_circuit_breaker(tool_name)` or `reset_all_circuit_breakers()` |
+
+### 14.3 Worker Naming Conventions
+
+The SDK generates these Conductor task names for system workers. The **server expects exact names** for routing.
+
+| Worker Type | Name Pattern | Created When |
+|-------------|--------------|-------------|
+| Tool | `{tool.name}` | Always (for `@tool` functions) |
+| Tool-level guardrail | `{guardrail.name}` | Tool has guardrails |
+| Output guardrail wrapper | `{agent_name}_output_guardrail` | Agent has custom guardrails |
+| stop_when | `{agent_name}_stop_when` | `agent.stop_when` is callable |
+| termination | `{agent_name}_termination` | `agent.termination` is set |
+| gate | `{agent_name}_gate` | `agent.gate` is callable |
+| check_transfer | `{agent_name}_check_transfer` | Agent has both tools AND sub-agents |
+| router_fn | `{agent_name}_router_fn` | Strategy=ROUTER and router is callable |
+| handoff_check | `{agent_name}_handoff_check` | `agent.handoffs` is non-empty |
+| process_selection | `{agent_name}_process_selection` | Strategy=MANUAL |
+| Callback | `{agent_name}_{position}` | Callback handler exists for that position |
+
+Worker names are collected recursively through nested agents (including `agent_tool()` sub-agents).
+
+### 14.4 Additional HTTP Payload Fields
+
+The `POST /agent/start` payload includes fields not previously documented:
+
+```json
+{
+  "agentConfig": { ... },
+  "prompt": "user input",
+  "sessionId": "",
+  "media": [],
+  "idempotencyKey": "optional-key",
+  "timeoutSeconds": 300,
+  "credentials": ["CRED_A", "CRED_B"]
+}
+```
+
+**Rules:**
+- `sessionId`: **Always present** in payload. Empty string `""` if not provided (never omitted)
+- `idempotencyKey`: **Only present** if explicitly provided. Omitted if null
+- `media`: **Always present**. Empty array `[]` if not provided. Contains list of media URLs (strings)
+- `timeoutSeconds`: Only present if provided. Overrides agent-level `timeout_seconds`
+- `credentials`: Only present if provided. Agent-level credential declarations
+
+### 14.5 Idempotency Semantics
+
+When `idempotencyKey` is provided:
+1. Server maps it to Conductor's `correlationId`
+2. Server searches for existing workflow with same agent name + correlationId
+3. Search scope: **RUNNING or COMPLETED** workflows only (not FAILED)
+4. If found: returns existing `workflowId` without re-execution
+5. If not found: creates new execution with `correlationId = idempotencyKey`
+
+**Key behavior:** Failed workflows are NOT deduplicated — a new execution is created.
+
+### 14.6 ToolContext.state Mutation Capture
+
+When a tool modifies `ToolContext.state`, the SDK captures mutations and appends them to the tool result:
+
+```json
+{
+  "original_result_key": "value",
+  "_state_updates": {
+    "key1": "new_value",
+    "key2": [1, 2, 3]
+  }
+}
+```
+
+**Rules:**
+- Key name: `_state_updates` (underscore prefix)
+- Only included if `state` is non-empty after tool execution
+- If tool result is a dict: merged into the dict
+- If tool result is not a dict: wrapped as `{"result": <original>, "_state_updates": {...}}`
+- Server extracts `_state_updates`, persists state, removes key from user-visible output
+
+### 14.7 Framework Event Push Wire Format
+
+Framework passthrough workers push events to `POST /agent/{workflowId}/events`:
+
+```json
+[
+  {"type": "thinking", "content": "reasoning text"},
+  {"type": "tool_call", "toolName": "search", "args": {"input": "query"}},
+  {"type": "tool_result", "toolName": "search", "result": "result text"},
+  {"type": "context_condensed", "trigger": "reason", "messagesBefore": 50, "messagesAfter": 20},
+  {"type": "subagent_start", "subWorkflowId": "uuid", "prompt": "text"},
+  {"type": "subagent_stop", "subWorkflowId": "uuid", "result": "text"}
+]
+```
+
+**Only these 6 event types are supported.** Unknown types are silently dropped by the server.
+
+Headers: Same auth headers as other endpoints (`Authorization`, `X-Auth-Key`/`X-Auth-Secret`).
+
+### 14.8 correlation_id
+
+- **Auto-generated** by the SDK as a UUID for every `run()`/`start()`/`stream()` call
+- **Not user-provided** (no parameter)
+- Stored in `AgentHandle.correlation_id` and propagated to `AgentResult.correlation_id`
+- Used for client-side tracing only (not sent to server unless via `idempotencyKey`)
+
+### 14.9 Gate Condition Behavior
+
+Gates are inserted **between sequential pipeline stages** by the server compiler:
+
+**Text gate:** Compiled to INLINE JavaScript task
+- Input: previous stage output + gate config (text, caseSensitive)
+- Output: `{"decision": "continue"}` or `{"decision": "stop"}`
+- Default `caseSensitive: true`
+
+**Worker gate:** Compiled to SIMPLE task
+- Worker receives previous stage output as input
+- **Must return** `{"decision": "continue"}` or `{"decision": "stop"}`
+
+If gate returns `"stop"`, the sequential pipeline **terminates early**.
+
+### 14.10 required_tools Enforcement
+
+When `required_tools` is set, the server wraps the agent's main loop in an **outer DO_WHILE**:
+
+1. Agent executes normally (inner loop)
+2. INLINE JavaScript task checks if all `required_tools` were called (via `completedTaskNames`)
+3. If not all called: re-execute agent (up to **3 outer iterations**)
+4. After 3 failures: workflow completes with whatever results are available
+
+**Impact:** `required_tools` can triple execution time in worst case.
+
+### 14.11 Tool Execution Model
+
+| Tool Type | Executed By | Worker Needed |
+|-----------|------------|---------------|
+| `worker` | SDK worker (Conductor SIMPLE) | **Yes** |
+| `http` | Server (Conductor HTTP) | No |
+| `mcp` | Server (Conductor CALL_MCP_TOOL) | No |
+| `agent_tool` | Server (Conductor SUB_WORKFLOW) | Depends on sub-agent |
+| `human` | Server (Conductor HUMAN) | No |
+| `generate_image` | Server (Conductor GENERATE_IMAGE) | No |
+| `generate_audio` | Server (Conductor GENERATE_AUDIO) | No |
+| `generate_video` | Server (Conductor GENERATE_VIDEO) | No |
+| `generate_pdf` | Server (Conductor GENERATE_PDF) | No |
+| `rag_index` | Server (Conductor LLM_INDEX_TEXT) | No |
+| `rag_search` | Server (Conductor LLM_SEARCH_INDEX) | No |
+
+**Critical:** Media tools (`generate_*`) and RAG tools are **server-side only**. SDKs must NOT attempt to execute them as worker tasks.
+
+### 14.12 Event Filtering
+
+Before exposing `AgentEvent` to users, SDKs must strip internal Conductor keys from tool `args`:
+
+**Keys to strip:** `_agent_state`, `method`
+
+These are injected by Conductor for internal routing and should not appear in user-facing events.
+
+### 14.13 Result Normalization
+
+`AgentResult.output` must always be a dict. SDKs must normalize:
+
+| Input | Output |
+|-------|--------|
+| `dict` | Return as-is |
+| `string` (on success) | `{"result": "<string>"}` |
+| `null` (on success) | `{"result": null}` |
+| `string` (on failure) | `{"error": "<string>", "status": "FAILED"}` |
+| `null` (on failure) | `{"error": "Unknown error", "status": "FAILED"}` |
+
+### 14.14 Sequential Agent Flattening (`>>` operator)
+
+When agents are chained with `>>`, the SDK **flattens** the result:
+
+```
+a >> b >> c  →  Agent(name="a_b_c", strategy=SEQUENTIAL, agents=[a, b, c])
+```
+
+NOT:
+```
+a >> b >> c  →  Agent(agents=[Agent(agents=[a, b]), c])  # WRONG — no nesting
+```
+
+Both sides are flattened: if `a >> b` produces a sequential agent, then `(a >> b) >> c` expands to `[a, b, c]`, not `[sequential(a,b), c]`.
+
+### 14.15 Swarm Transfer Tools (Auto-Generated)
+
+When strategy is `SWARM`, the server **automatically generates** `transfer_to_{agent_name}` tool definitions for each sub-agent. SDKs should NOT manually add these — they are created during compilation.
+
+### 14.16 Execution Token Extraction
+
+Workers extract the execution token from task input for credential resolution:
+
+```json
+{
+  "tool_arg_1": "value",
+  "__agentspan_ctx__": {
+    "execution_token": "base64url.payload.signature",
+    "workflow_id": "uuid",
+    "session_id": "optional"
+  }
+}
+```
+
+**Primary path:** `task.input_data.__agentspan_ctx__.execution_token`
+**Fallback:** `task.workflow_input.__agentspan_ctx__.execution_token`
+
+The `__agentspan_ctx__` field is injected by the server and must be stripped before passing args to the tool function.
