@@ -29,9 +29,20 @@
 
 **Agentspan** is a distributed, durable runtime for AI agents that survive crashes, scale across machines, and pause for human approval for days — not minutes.
 
-Every other agent SDK runs agents in-memory. When the process dies, the agent dies. Agentspan compiles your agents to durable workflows that execute on a server, giving you reliability, observability, and distributed scaling out of the box.
+## Quickstart (60 seconds)
+
+```bash
+# 1. Install
+npm install -g @agentspan/agentspan          # installs the CLI
+pip install agentspan                         # installs the Python SDK
+export OPENAI_API_KEY=sk-...                  # or any supported provider
+
+# 2. Start the server
+agentspan server start                        # runs on localhost:8080 with UI
+```
 
 ```python
+# 3. Run your first agent (save as hello.py, run with: python hello.py)
 from agentspan.agents import Agent, AgentRuntime, tool
 
 @tool
@@ -46,75 +57,24 @@ with AgentRuntime() as runtime:
     result.print_result()
 ```
 
-## Why Agentspan?
+That's it. The server auto-starts workers, compiles your agent to a durable workflow, and executes it. Open `http://localhost:8080` to see the visual workflow UI.
 
-Other frameworks give you a Python library. Agentspan gives you a **production runtime**.
-
-Your agent code compiles to a durable, server-side workflow. The server manages execution, retries, scaling, and state — so your agents keep running even when your process doesn't.
-
-| | CrewAI | LangChain | AutoGen | OpenAI Agents | **Agentspan** |
-|---|---|---|---|---|---|
-| **Execution model** | In-memory | Checkpoints | In-memory | Client-side loop | **Server-side workflows** |
-| **Crash recovery** | Manual replay from checkpoints | Resume from checkpointer (Postgres, Redis) | None (v0.4) | None (Temporal add-on available) | **Automatic — workflow resumes exactly where it left off** |
-| **Tool scaling** | Single process | Single process (Platform for managed scaling) | Distributed runtime | Single process | **Distributed workers in any language (Python, Java, Go, etc.)** |
-| **Human approval** | Stdin-blocking (minutes) | `interrupt()` + checkpointer (days) | Stdin-blocking (minutes) | In-process | **Durable pause — approve from any process, any machine, days later** |
-| **Cross-process access** | None | Thread ID + checkpointer (rebuild graph) | None | `response_id` (continue only) | **Workflow ID — status, approve, pause, resume, cancel from anywhere** |
-| **Orchestration API** | Crew, Task, Agent, Flow | StateGraph, Node, Edge, ToolNode | AssistantAgent, GroupChat, Swarm, Team | Agent, Runner, Handoff | **One class: `Agent`** |
-| **Pipeline syntax** | YAML + Python | Graph builder API | Nested class hierarchy | Handoff chains | **`agent_a >> agent_b >> agent_c`** |
-| **Guardrails** | Task guardrails | Middleware-based | Limited | Input, output, tool guardrails | **Custom, regex, LLM — 4 failure modes: retry, raise, fix, human** |
-| **Code execution** | Docker sandbox | Community packages | Docker, Jupyter | Hosted Code Interpreter | **4 built-in: local, Docker, Jupyter, serverless** |
-| **MCP tools** | Manual config | Manual config | Manual config | Manual config | **Auto-discovered, server-side (no worker needed)** |
-| **Observability** | OTel + CrewAI AMP | LangSmith + OTel | OTel + AutoGen Studio | Built-in traces | **OTel + Prometheus + visual workflow UI + execution replay** |
-
-### What makes it different
-
-1. **True durable execution** — Not checkpoints. Not client-side loops. Your agent compiles to a server-side workflow that the Agentspan server executes independently of your process. Deploy new code, restart your machine, kill the process — the agent keeps running. When it finishes, poll for the result from anywhere. This is the same execution model that powers mission-critical systems at scale.
-
-2. **Cross-process agent access** — Every running agent has a workflow ID. Any process, on any machine, can use that ID to check status, stream events, approve or reject tool calls, pause, resume, or cancel the agent. No graph rebuilding, no checkpointer setup — just the ID and a runtime connection. LangGraph requires re-instantiating the graph and checkpointer; CrewAI and AutoGen have no cross-process access at all.
-
-3. **Distributed workers in any language** — Tools don't run inside your agent process. They execute as distributed tasks that workers pick up. Write workers in Python, Java, Go, or any language. Scale each tool independently. Load-balance automatically. Your agent process just submits work — the server and workers handle the rest.
-
-4. **One primitive** — No `Crew`, `Task`, `StateGraph`, `Node`, or `AssistantAgent`. Everything is an `Agent`. Single agents, multi-agent teams, nested hierarchies — one class.
-
-5. **The `>>` operator** — Compose pipelines with Python syntax: `researcher >> writer >> editor`. No YAML, no graph builders.
-
-6. **Real human-in-the-loop** — `@tool(approval_required=True)` pauses the workflow durably on the server. No process stays alive waiting. Approve from any machine, any process, days later.
-
-7. **Production guardrails** — Custom functions, regex patterns, or LLM judges. Four failure modes: retry, raise, fix, or escalate to human. Guardrails are durable tasks, not post-processing — they survive workflow restarts.
-
-8. **Server-side tools** — HTTP endpoints and MCP servers execute as server-side tasks. No worker process needed. MCP tools are auto-discovered at compile time.
-
-9. **Code execution sandboxes** — Local subprocess, Docker containers, Jupyter kernels, or serverless functions. Four options, built in.
-
-10. **Full observability** — OpenTelemetry spans, Prometheus metrics, visual workflow UI, execution history, and token/cost tracking — all built in.
-
-11. **Google ADK compatible** — Use the `google.adk.agents` API you already know, backed by Agentspan's durable execution. [32 ADK examples included](sdk/python/examples/adk/).
-
-## Quickstart
-
-### 1. Install the CLI
+<details><summary>Alternative install methods</summary>
 
 ```bash
-brew install agentspan/agentspan/agentspan
-# or: npm install -g @agentspan/agentspan
-# or: curl -fsSL https://raw.githubusercontent.com/agentspan/agentspan/main/cli/install.sh | sh
-```
+# CLI alternative (if you don't have npm)
+curl -fsSL https://raw.githubusercontent.com/agentspan/agentspan/main/cli/install.sh | sh
 
-Verify everything is ready:
+# Python SDK with uv
+uv pip install agentspan
 
-```bash
+# Verify setup
 agentspan doctor
 ```
 
-### 2. Set your LLM provider API key
+</details>
 
-```bash
-export OPENAI_API_KEY=sk-...          # For OpenAI models (gpt-4o, gpt-4o-mini, etc.)
-# export ANTHROPIC_API_KEY=sk-ant-... # For Anthropic models (claude-sonnet, etc.)
-# export GEMINI_API_KEY=AI...         # For Google models (gemini, etc.)
-```
-
-<details><summary>All supported providers</summary>
+<details><summary>All supported LLM providers (15+)</summary>
 
 | Provider | Env Var | Model Format |
 |---|---|---|
@@ -136,38 +96,45 @@ export OPENAI_API_KEY=sk-...          # For OpenAI models (gpt-4o, gpt-4o-mini, 
 
 </details>
 
-### 3. Start the server
+---
 
-```bash
-agentspan server start
-```
+## Why Agentspan?
 
-The server runs on `http://localhost:8080` by default. Manage it with:
+Every other agent SDK runs agents in-memory. When the process dies, the agent dies. Agentspan compiles your agents to durable workflows that execute on a server — giving you reliability, observability, and distributed scaling out of the box.
 
-```bash
-agentspan server start   # Start the server
-agentspan server stop    # Stop the server
-agentspan server logs    # View server logs
-```
+| | CrewAI | LangChain | AutoGen | OpenAI Agents | **Agentspan** |
+|---|---|---|---|---|---|
+| **Execution model** | In-memory | Checkpoints | In-memory | Client-side loop | **Server-side workflows** |
+| **Crash recovery** | Manual replay | Checkpointer (Postgres) | None | None | **Automatic resume** |
+| **Tool scaling** | Single process | Single process | Distributed | Single process | **Distributed workers (any language)** |
+| **Human approval** | Stdin-blocking | `interrupt()` + checkpointer | Stdin-blocking | In-process | **Durable pause (days, any machine)** |
+| **Orchestration API** | Crew, Task, Agent, Flow | StateGraph, Node, Edge | AssistantAgent, GroupChat | Agent, Runner, Handoff | **One class: `Agent`** |
+| **Pipeline syntax** | YAML + Python | Graph builder API | Nested class hierarchy | Handoff chains | **`a >> b >> c`** |
+| **Guardrails** | Task guardrails | Middleware-based | Limited | Input/output/tool | **Custom, regex, LLM — 4 failure modes** |
+| **Code execution** | Docker sandbox | Community packages | Docker, Jupyter | Hosted interpreter | **4 built-in sandboxes** |
+| **MCP tools** | Manual config | Manual config | Manual config | Manual config | **Auto-discovered, server-side** |
 
-### 4. Install the Python SDK
+<details><summary>What makes it different (detailed)</summary>
 
-```bash
-uv venv && source .venv/bin/activate
-uv pip install agentspan
-```
+1. **True durable execution** — Your agent compiles to a server-side workflow. Kill the process — the agent keeps running. Poll for results from anywhere.
 
-### 5. Run your first agent
+2. **Cross-process agent access** — Every agent has a workflow ID. Check status, stream events, approve tool calls, pause, resume, or cancel from any process, any machine.
 
-```python
-from agentspan.agents import Agent, AgentRuntime
+3. **Distributed workers in any language** — Tools execute as distributed tasks. Write workers in Python, Java, Go, or any language. Scale each tool independently.
 
-agent = Agent(name="hello", model="openai/gpt-4o")
+4. **One primitive** — Everything is an `Agent`. Single agents, multi-agent teams, nested hierarchies — one class.
 
-with AgentRuntime() as runtime:
-    result = runtime.run(agent, "Say hello and tell me a fun fact.")
-    result.print_result()
-```
+5. **Real human-in-the-loop** — `@tool(approval_required=True)` pauses the workflow durably. Approve days later, from any machine.
+
+6. **Production guardrails** — Custom functions, regex, or LLM judges. Four failure modes: retry, raise, fix, or human escalation.
+
+7. **Server-side tools** — HTTP endpoints and MCP servers execute as server-side tasks. No worker needed. MCP auto-discovered at compile time.
+
+8. **Full observability** — OpenTelemetry, Prometheus, visual workflow UI, execution history, token/cost tracking.
+
+9. **Framework compatible** — Works with Google ADK, OpenAI Agents SDK, LangChain, and LangGraph. [180+ examples](sdk/python/examples/).
+
+</details>
 
 ## Code Examples
 
@@ -559,26 +526,82 @@ Execution order: `on_agent_start` → (`on_model_start` → LLM → `on_model_en
 
 ### Credential Management
 
-Securely manage API keys and secrets across agents, tools, and frameworks:
+Store API keys and secrets once on the server. Tools resolve them automatically at runtime — no `.env` files, no hardcoded keys, no secrets in git.
 
-```python
-from agentspan.agents import Agent, tool, CredentialFile, get_credential
+**Step 1: Store credentials on the server**
 
-@tool(credentials=[CredentialFile(env_var="GITHUB_TOKEN")])
-def list_repos(username: str) -> dict:
-    """List GitHub repos. Credential auto-injected."""
-    import os
-    token = os.environ.get("GITHUB_TOKEN")  # Available in isolated subprocess
-    return {"repos": ["repo1", "repo2"]}
-
-# Or access credentials in-process
-@tool(isolated=False, credentials=["API_KEY"])
-def call_api(query: str) -> dict:
-    key = get_credential("API_KEY")
-    return {"result": "data"}
+```bash
+agentspan credential store GITHUB_TOKEN ghp_xxxxxxxxxxxx
+agentspan credential store OPENAI_API_KEY sk-xxxxxxxxxxxx
+agentspan credential store SEARCH_API_KEY xxx-your-key
 ```
 
-Credentials are stored encrypted (AES-256-GCM) on the server. Workers resolve them at runtime via scoped execution tokens.
+Credentials are encrypted at rest (AES-256-GCM). List stored credentials:
+
+```bash
+agentspan credential list
+```
+
+**Step 2: Declare which credentials a tool needs**
+
+```python
+from agentspan.agents import Agent, AgentRuntime, tool, get_credential
+
+# Default: tool runs in isolated subprocess with credentials as env vars
+@tool(credentials=["GITHUB_TOKEN"])
+def list_repos(username: str) -> dict:
+    """List GitHub repos."""
+    import os
+    token = os.environ["GITHUB_TOKEN"]  # Auto-injected by the runtime
+    # ... use token to call GitHub API
+    return {"repos": ["repo1", "repo2"]}
+
+# Alternative: access credentials in-process (no subprocess)
+@tool(isolated=False, credentials=["SEARCH_API_KEY"])
+def search(query: str) -> dict:
+    """Search using API key."""
+    key = get_credential("SEARCH_API_KEY")  # Resolve from server at runtime
+    # ... use key to call search API
+    return {"results": ["result1"]}
+```
+
+**Step 3: Run the agent — credentials resolve automatically**
+
+```python
+agent = Agent(
+    name="github_helper",
+    model="openai/gpt-4o",
+    tools=[list_repos, search],
+    credentials=["GITHUB_TOKEN"],  # Agent-level credentials (shared with all tools)
+)
+
+with AgentRuntime() as runtime:
+    result = runtime.run(agent, "List my GitHub repos and search for AI papers")
+    result.print_result()
+```
+
+**Credentials work everywhere:**
+
+```python
+from agentspan.agents import http_tool, mcp_tool
+
+# HTTP tools: server substitutes ${NAME} in headers at runtime
+api = http_tool(
+    name="weather_api",
+    description="Get weather data",
+    url="https://api.weather.com/v1/current",
+    headers={"Authorization": "Bearer ${WEATHER_KEY}"},
+    credentials=["WEATHER_KEY"],  # Declare which credentials to resolve
+)
+
+# MCP tools: credentials passed to MCP server connection
+github = mcp_tool(
+    server_url="http://localhost:3001/mcp",
+    credentials=["GITHUB_TOKEN"],
+)
+```
+
+No credentials leave the server unencrypted. Workers resolve them via scoped execution tokens that expire with the workflow. See the [11 credential examples](sdk/python/examples/) (`16_*.py` through `16k_*.py`) for every mode: isolated subprocess, in-process, CLI tools, HTTP headers, MCP, and framework passthrough.
 
 ### Google ADK Compatibility
 
