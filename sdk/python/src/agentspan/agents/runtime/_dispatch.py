@@ -366,7 +366,15 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
             if credential_names:
                 token = _extract_execution_token(task)
                 fetcher = _get_credential_fetcher()
-                resolved_credentials = fetcher.fetch(token, credential_names)
+                try:
+                    resolved_credentials = fetcher.fetch(token, credential_names)
+                except Exception as cred_err:
+                    # Credential errors are configuration issues, not tool failures.
+                    # Don't count toward circuit breaker — just fail the task.
+                    logger.error("Credential resolution failed for tool '%s': %s", tool_name, cred_err)
+                    task_result.status = TaskResultStatus.FAILED
+                    task_result.reason_for_incompletion = str(cred_err)
+                    return task_result
 
             # Map task input to function kwargs
             sig = inspect.signature(tool_func)
