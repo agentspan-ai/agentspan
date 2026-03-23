@@ -103,6 +103,31 @@ def make_langchain_worker(
                 session_id,
             )
 
+        # Resolve workflow-level credentials and inject into os.environ
+        _injected_cred_keys = []
+        try:
+            import os as _os
+            from agentspan.agents.runtime._dispatch import (
+                _extract_execution_token,
+                _get_credential_fetcher,
+                _workflow_credentials,
+                _workflow_credentials_lock,
+            )
+            wf_id = workflow_id or ""
+            with _workflow_credentials_lock:
+                cred_names = list(_workflow_credentials.get(wf_id, []))
+            if cred_names:
+                token = _extract_execution_token(task)
+                if token:
+                    fetcher = _get_credential_fetcher()
+                    resolved = fetcher.fetch(token, cred_names)
+                    for k, v in resolved.items():
+                        if isinstance(v, str):
+                            _os.environ[k] = v
+                            _injected_cred_keys.append(k)
+        except Exception as _cred_err:
+            logger.warning("Failed to resolve credentials for LangChain: %s", _cred_err)
+
         try:
             handler = AgentspanCallbackHandler(workflow_id, server_url, auth_key, auth_secret)
             result = executor.invoke({"input": prompt}, config={"callbacks": [handler]})
@@ -121,6 +146,10 @@ def make_langchain_worker(
                 status=TaskResultStatus.FAILED,
                 reason_for_incompletion=str(exc),
             )
+        finally:
+            import os as _os
+            for k in _injected_cred_keys:
+                _os.environ.pop(k, None)
 
     return tool_worker
 

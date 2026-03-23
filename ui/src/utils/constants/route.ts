@@ -166,3 +166,5 @@ export const TAGS_DASHBOARD_URL = {
 export const API_REFERENCE_URL = {
   BASE: "/api-reference",
 };
+
+export const CREDENTIALS_URL = "/credentials";

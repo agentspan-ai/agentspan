@@ -65,7 +65,7 @@ class ToolRegistry:
         for td in tool_defs:
             if td.func is not None and td.tool_type in ("worker", "cli"):
                 guardrails = td.guardrails if td.guardrails else None
-                wrapper = make_tool_worker(td.func, td.name, guardrails=guardrails)
+                wrapper = make_tool_worker(td.func, td.name, guardrails=guardrails, tool_def=td)
                 worker_task(
                     task_definition_name=td.name,
                     task_def=_default_task_def(td.name),

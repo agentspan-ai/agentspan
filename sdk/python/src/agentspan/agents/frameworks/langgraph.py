@@ -1419,6 +1419,33 @@ def make_langgraph_worker(
         prompt = task.input_data.get("prompt", "")
         session_id = (task.input_data.get("session_id") or "").strip()
 
+        # Resolve workflow-level credentials and inject into os.environ
+        _injected_cred_keys = []
+        try:
+            import os as _os
+            from agentspan.agents.runtime._dispatch import (
+                _extract_execution_token,
+                _get_credential_fetcher,
+                _workflow_credentials,
+                _workflow_credentials_lock,
+            )
+            wf_id = workflow_id or ""
+            with _workflow_credentials_lock:
+                cred_names = list(_workflow_credentials.get(wf_id, []))
+            if cred_names:
+                token = _extract_execution_token(task)
+                if token:
+                    fetcher = _get_credential_fetcher()
+                    resolved = fetcher.fetch(token, cred_names)
+                    for k, v in resolved.items():
+                        if isinstance(v, str):
+                            _os.environ[k] = v
+                            _injected_cred_keys.append(k)
+        except Exception as _cred_err:
+            import logging as _log
+            _log.getLogger("agentspan.agents.frameworks.langgraph").warning(
+                "Failed to resolve credentials for LangGraph: %s", _cred_err)
+
         try:
             graph_input = _build_input(graph, prompt)
             config = {}
@@ -1448,6 +1475,11 @@ def make_langgraph_worker(
                 status=TaskResultStatus.FAILED,
                 reason_for_incompletion=str(exc),
             )
+        finally:
+            # Clean up injected credential env vars
+            import os as _os
+            for k in _injected_cred_keys:
+                _os.environ.pop(k, None)
 
     return tool_worker
 

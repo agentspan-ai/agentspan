@@ -80,8 +80,8 @@ Every feature that involves HTTP endpoints or SSE streaming **must also** includ
 | `model/AgentSSEEventTest.java` | Unit | Event factory methods, JSON serialization, null exclusion |
 | `model/AgentConfigTest.java` | Unit | JSON deserialization, nested agents |
 | `service/AgentStreamRegistryTest.java` | Unit | Emitter registration, event buffering, alias forwarding, reconnection replay, buffer eviction, heartbeats, cleanup |
-| `service/AgentEventListenerTest.java` | Unit (mocked) | Conductor callback → SSE event mapping for all task/workflow states |
-| `controller/AgentControllerSSETest.java` | Unit (mocked) | Controller delegation, lifecycle |
+| `service/AgentEventListenerTest.java` | Unit | Conductor callback → SSE event mapping for all task/workflow states |
+| `controller/AgentControllerSSETest.java` | Unit | Controller delegation, lifecycle |
 | `controller/AgentControllerSSEIntegrationTest.java` | **E2E** | Real HTTP SSE over `@SpringBootTest(RANDOM_PORT)` — all event types, reconnection, sub-workflow aliases, multi-client, wire format |
 | `compiler/AgentCompilerTest.java` | Unit | Single agent compilation |
 | `compiler/MultiAgentCompilerTest.java` | Unit | Multi-agent strategies |
@@ -91,10 +91,12 @@ Every feature that involves HTTP endpoints or SSE streaming **must also** includ
 
 ### Writing Tests
 
-- **Unit tests:** No Spring context. Mock external dependencies. Place in the appropriate package under `src/test/java/dev/agentspan/runtime/`.
+- **Do NOT use mocks (Mockito) for internal services.** Tests that mock `CredentialStoreProvider`, `CredentialBindingService`, `UserRepository`, `ExecutionTokenService`, or any other internal service hide bugs at layer boundaries — the exact place bugs live. Use `@SpringBootTest` with the test profile's real SQLite DB instead.
+- **Mocks are only acceptable for external framework objects** that cannot be instantiated in tests (e.g., Conductor's `WorkflowExecutor`, servlet `HttpServletRequest`). If you can use the real implementation, use it.
+- **Unit tests** (no Spring context) are for pure logic only: compilers, parsers, model serialization. Place in the appropriate package under `src/test/java/dev/agentspan/runtime/`.
 - **Integration tests:** Use `@SpringBootTest(classes = AgentRuntime.class, webEnvironment = RANDOM_PORT)` with `@ActiveProfiles("test")`. Test config at `src/test/resources/application-test.properties`.
 - **SSE tests MUST be E2E:** Use real `HttpURLConnection` to open SSE streams. Verify wire format (`id:`, `event:`, `data:` fields), not just Java objects.
-- Use AssertJ for assertions, Mockito for mocks, JUnit 5 for test lifecycle.
+- Use AssertJ for assertions, JUnit 5 for test lifecycle.
 - **Real examples are mandatory:** After all automated tests pass, run a real agent example (`uv run python examples/claude/01_hello_world.py` from `sdk/python/`) against a live server to verify the feature end-to-end.
 
 ### Integration Test Config

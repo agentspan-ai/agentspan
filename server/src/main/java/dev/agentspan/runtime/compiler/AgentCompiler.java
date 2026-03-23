@@ -682,6 +682,8 @@ public class AgentCompiler {
         inputs.put("prompt", promptRef);
         inputs.put("media", mediaRef);
         inputs.put("session_id", "${workflow.input.session_id}");
+        // Forward execution token to sub-workflows for credential resolution
+        inputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
         // When includeContents is "none", signal the sub-workflow to skip parent context
         if ("none".equalsIgnoreCase(sub.getIncludeContents())) {
             inputs.put("include_contents", "none");
@@ -869,6 +871,9 @@ public class AgentCompiler {
             }
             inputs.put("thinkingConfig", thinking);
         }
+
+        // Forward execution token so per-user credential resolution works in worker threads
+        inputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
 
         llm.setInputParameters(inputs);
         return llm;
@@ -1265,9 +1270,10 @@ public class AgentCompiler {
             subParams.setName(subWf.getName());
             subParams.setWorkflowDef(subWf);
             subTask.setSubWorkflowParam(subParams);
-            // Pass subgraph input from prep output
+            // Pass subgraph input from prep output + execution token
             Map<String, Object> subInputs = new LinkedHashMap<>();
             subInputs.put("state", "${" + prepRef + ".output.subgraph_input}");
+            subInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
             subTask.setInputParameters(subInputs);
             defaultTasks.add(subTask);
 

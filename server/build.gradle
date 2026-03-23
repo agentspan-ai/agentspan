@@ -54,6 +54,11 @@ dependencies {
     // JSON Schema
     implementation 'com.networknt:json-schema-validator:1.0.73'
 
+    // SQLite JDBC driver (for credential DataSource)
+    implementation 'org.xerial:sqlite-jdbc:3.47.0.0'
+    // Spring Security Crypto (BCrypt password hashing, no full Security stack)
+    implementation 'org.springframework.security:spring-security-crypto:6.3.4'
+
     // Test dependencies
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'

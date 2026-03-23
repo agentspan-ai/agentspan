@@ -361,6 +361,7 @@ class AgentRuntime:
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
         timeout: Optional[int] = None,
+        credentials: Optional[List[str]] = None,
     ) -> str:
         """Start an agent via the server's /api/agent/start endpoint.
 
@@ -387,6 +388,8 @@ class AgentRuntime:
             payload["idempotencyKey"] = idempotency_key
         if timeout is not None:
             payload["timeoutSeconds"] = timeout
+        if credentials:
+            payload["credentials"] = credentials
 
         url = self._agent_api_url("/start")
         resp = req_lib.post(url, json=payload, headers=self._agent_api_headers(), timeout=30)
@@ -703,7 +706,7 @@ class AgentRuntime:
         for t in agent.tools:
             try:
                 td = get_tool_def(t)
-                if td.tool_type == "worker":
+                if td.tool_type in ("worker", "cli"):
                     names.add(td.name)
                 elif td.tool_type == "agent_tool" and td.config and "agent" in td.config:
                     nested_agent = td.config["agent"]
@@ -1650,7 +1653,7 @@ class AgentRuntime:
                 td = get_tool_def(t)
             except TypeError:
                 continue
-            if td.tool_type == "worker":
+            if td.tool_type in ("worker", "cli"):
                 return True
             if td.tool_type == "agent_tool" and td.config and "agent" in td.config:
                 nested_agent = td.config["agent"]
@@ -1918,6 +1921,7 @@ class AgentRuntime:
         idempotency_key: Optional[str] = None,
         on_event: Optional[Any] = None,
         timeout: Optional[int] = None,
+        credentials: Optional[List[str]] = None,
         **kwargs: Any,
     ) -> AgentResult:
         """Execute an agent synchronously and return the result.
@@ -2017,13 +2021,29 @@ class AgentRuntime:
             session_id=session_id,
             idempotency_key=idempotency_key,
             timeout=timeout,
+            credentials=credentials,
         )
+
+        # Register workflow-level credentials for framework-extracted tools
+        if credentials:
+            from agentspan.agents.runtime._dispatch import (
+                _workflow_credentials,
+                _workflow_credentials_lock,
+            )
+            with _workflow_credentials_lock:
+                _workflow_credentials[workflow_id] = list(credentials)
 
         # Poll until complete
         effective_timeout = timeout or (
             agent.timeout_seconds if agent.timeout_seconds > 0 else None
         )
-        status = self._poll_status_until_complete(workflow_id, timeout=effective_timeout)
+        try:
+            status = self._poll_status_until_complete(workflow_id, timeout=effective_timeout)
+        finally:
+            # Clean up workflow credentials
+            if credentials:
+                with _workflow_credentials_lock:
+                    _workflow_credentials.pop(workflow_id, None)
 
         output = status.output
         raw_status = status.status

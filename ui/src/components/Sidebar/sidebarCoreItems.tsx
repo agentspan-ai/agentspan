@@ -12,12 +12,14 @@
 import CodeIcon from "@mui/icons-material/Code";
 import PlayIcon from "@mui/icons-material/PlayArrowOutlined";
 import PlaylistPlayIcon from "@mui/icons-material/PlaylistPlay";
+import SettingsIcon from "@mui/icons-material/Settings";
 import SupportIcon from "@mui/icons-material/Support";
 import WebhookOutlinedIcon from "@mui/icons-material/WebhookOutlined";
 import RunWorkflowButton from "components/Sidebar/RunWorkflowButton";
 import { MenuItemType } from "components/Sidebar/types";
 import { FEATURES, featureFlags } from "utils";
 import {
+  CREDENTIALS_URL,
   EVENT_HANDLERS_URL,
   NEW_TASK_DEF_URL,
   RUN_WORKFLOW_URL,
@@ -41,6 +43,7 @@ const CORE_SIDEBAR_POSITIONS = {
     executionsSubMenu: 100,
     runWorkflow: 200,
     definitionsSubMenu: 300,
+    settingsSubMenu: 350,
     helpMenu: 400,
     swaggerItem: 500,
   },
@@ -155,6 +158,30 @@ export function getCoreSidebarItems(open: boolean): MenuItemType[] {
           hotkeys: "",
           hidden: false,
           position: D.taskDefItem,
+        },
+      ],
+    },
+    // Settings submenu
+    {
+      id: "settingsSubMenu",
+      title: "Settings",
+      icon: <SettingsIcon />,
+      linkTo: "",
+      shortcuts: [],
+      hotkeys: "",
+      hidden: false,
+      position: R.settingsSubMenu,
+      items: [
+        {
+          id: "credentialsItem",
+          title: "Credentials",
+          icon: null,
+          linkTo: CREDENTIALS_URL,
+          activeRoutes: [CREDENTIALS_URL],
+          shortcuts: [],
+          hotkeys: "",
+          hidden: false,
+          position: 100,
         },
       ],
     },

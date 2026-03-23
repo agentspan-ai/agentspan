@@ -1070,13 +1070,61 @@ result = runtime.run(agent, "Hello")
 
 All changes must be validated before merging.
 
+### Testing Rules
+
+1. **No mocks for integration boundaries.** Tests that verify how components interact (credential resolution, token extraction, subprocess isolation, DB operations) MUST use real implementations, not mocks. Mocks hide bugs at layer boundaries — the exact place bugs live.
+
+2. **E2E tests are mandatory for new features.** Any feature that spans multiple components (SDK → server → DB, or SDK → subprocess → env) MUST have an e2e test in `tests/e2e/` that exercises the real path against a running server.
+
+3. **Unit tests are for pure logic only.** Use unit tests for data transformations, schema generation, parsing, and other functions with no external dependencies. If your test needs `patch()` or `MagicMock`, it's probably testing the wrong thing — write an integration test instead.
+
+4. **Server-side tests use `@SpringBootTest` with real DB.** No mocking `CredentialStoreProvider`, `UserRepository`, or JDBC templates. Use the test profile's in-memory SQLite DB.
+
 ### Unit Tests
 
 ```bash
 python3 -m pytest tests/unit/ -v
 ```
 
-All unit tests must pass.
+### E2E Tests (require running server)
+
+```bash
+python3 -m pytest tests/e2e/ -v
+```
+
+E2E tests run against a live Agentspan server at `AGENTSPAN_SERVER_URL` (default `http://localhost:8080`).
+
+All unit and e2e tests must pass.
+
+### Credential Support by Tool Type
+
+| Tool Type | Declaration | Resolution |
+|-----------|------------|------------|
+| `@tool` (worker) | `@tool(credentials=[...])` | SDK resolves via server, injects into env |
+| `http_tool()` | `http_tool(credentials=[...])` | `${NAME}` in headers resolved server-side |
+| `mcp_tool()` | `mcp_tool(credentials=[...])` | Same as http_tool |
+| `agent_tool()` | Inherited from sub-agent | Token forwarded to sub-workflows |
+| CLI tools | `Agent(credentials=[...])` | Auto-propagated to run_command tool |
+| Code execution | `Agent(credentials=[...])` | Auto-propagated to execute_code tool |
+| Framework passthrough | `run(agent, credentials=[...])` | Resolved and injected before graph invocation |
+| External workers | `@tool(external=True, credentials=[...])` | Use `resolve_credentials()` helper |
+| Media/RAG tools | None needed | Server resolves LLM/VectorDB keys internally |
+| LLMGuardrail | None needed | Server resolves LLM keys internally |
+
+### External Worker Credential Resolution
+
+External workers receive the execution token in `task.input_data["__agentspan_ctx__"]`.
+Use the `resolve_credentials` helper:
+
+```python
+from agentspan.agents import resolve_credentials
+
+@worker_task(task_definition_name="my_tool")
+def my_external_tool(task):
+    creds = resolve_credentials(task.input_data, ["GITHUB_TOKEN"])
+    token = creds["GITHUB_TOKEN"]
+    # ... use token ...
+```
 
 ### Example Validation
 

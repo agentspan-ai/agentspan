@@ -22,6 +22,7 @@ type Client struct {
 	httpClient *http.Client
 	authKey    string
 	authSecret string
+	apiKey     string
 }
 
 func New(cfg *config.Config) *Client {
@@ -30,6 +31,7 @@ func New(cfg *config.Config) *Client {
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 		authKey:    cfg.AuthKey,
 		authSecret: cfg.AuthSecret,
+		apiKey:     cfg.APIKey,
 	}
 }
 
@@ -50,11 +52,15 @@ func (c *Client) doRequest(method, path string, body interface{}) (*http.Respons
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if c.authKey != "" {
-		req.Header.Set("X-Auth-Key", c.authKey)
-	}
-	if c.authSecret != "" {
-		req.Header.Set("X-Auth-Secret", c.authSecret)
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	} else {
+		if c.authKey != "" {
+			req.Header.Set("X-Auth-Key", c.authKey)
+		}
+		if c.authSecret != "" {
+			req.Header.Set("X-Auth-Secret", c.authSecret)
+		}
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -362,4 +368,122 @@ func (c *Client) Stream(workflowID string, lastEventID string, events chan<- SSE
 
 		done <- scanner.Err()
 	}()
+}
+
+// ─── Auth API ─────────────────────────────────────────────────────────────────
+
+// LoginRequest is the payload for POST /api/auth/login
+type LoginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+// LoginResponse carries the JWT returned by the server
+type LoginResponse struct {
+	Token string `json:"token"`
+}
+
+// Login authenticates with the server and returns a JWT.
+func (c *Client) Login(username, password string) (*LoginResponse, error) {
+	resp, err := c.doRequest("POST", "/api/auth/login", &LoginRequest{
+		Username: username,
+		Password: password,
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var result LoginResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode login response: %w", err)
+	}
+	return &result, nil
+}
+
+// ─── Credential management API ────────────────────────────────────────────────
+
+// CredentialMeta is the list-view for a stored credential.
+type CredentialMeta struct {
+	Name      string `json:"name"`
+	Partial   string `json:"partial"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+// CredentialSetRequest is the body for POST /api/credentials.
+type CredentialSetRequest struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// BindingMeta represents one logical key → store name binding.
+type BindingMeta struct {
+	LogicalKey string `json:"logical_key"`
+	StoreName  string `json:"store_name"`
+}
+
+// BindingSetRequest is the body for PUT /api/credentials/bindings/{key}.
+type BindingSetRequest struct {
+	StoreName string `json:"store_name"`
+}
+
+// ListCredentials returns all stored credential metadata.
+func (c *Client) ListCredentials() ([]CredentialMeta, error) {
+	resp, err := c.doRequest("GET", "/api/credentials", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var result []CredentialMeta
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode credentials: %w", err)
+	}
+	return result, nil
+}
+
+// SetCredential stores a credential value on the server.
+func (c *Client) SetCredential(name, value string) error {
+	resp, err := c.doRequest("POST", "/api/credentials", &CredentialSetRequest{
+		Name:  name,
+		Value: value,
+	})
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	return nil
+}
+
+// DeleteCredential removes a stored credential by name.
+func (c *Client) DeleteCredential(name string) error {
+	resp, err := c.doRequest("DELETE", "/api/credentials/"+url.PathEscape(name), nil)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	return nil
+}
+
+// ListBindings returns all logical key → store name bindings.
+func (c *Client) ListBindings() ([]BindingMeta, error) {
+	resp, err := c.doRequest("GET", "/api/credentials/bindings", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var result []BindingMeta
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode bindings: %w", err)
+	}
+	return result, nil
+}
+
+// SetBinding sets (or updates) a logical key → store name binding.
+func (c *Client) SetBinding(logicalKey, storeName string) error {
+	resp, err := c.doRequest("PUT", "/api/credentials/bindings/"+url.PathEscape(logicalKey),
+		&BindingSetRequest{StoreName: storeName})
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	return nil
 }

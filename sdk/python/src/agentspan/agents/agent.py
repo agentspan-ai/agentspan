@@ -20,6 +20,14 @@ from typing import Any, Callable, Dict, List, Optional, Union
 _VALID_NAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_-]*$")
 
 
+class ConfigurationError(ValueError):
+    """Raised at agent definition time for invalid configuration.
+
+    Example: using ``terraform`` in ``cli_allowed_commands`` without providing
+    an explicit ``credentials=[...]`` list.
+    """
+
+
 class Strategy(str, Enum):
     """How sub-agents are orchestrated."""
 
@@ -98,6 +106,7 @@ class AgentDef:
     cli_commands: bool = False
     cli_config: Optional[Any] = None
     cli_allowed_commands: List[str] = field(default_factory=list)
+    credentials: List[Any] = field(default_factory=list)
 
 
 # ── @agent decorator ────────────────────────────────────────────────────
@@ -123,6 +132,7 @@ def agent(
     cli_commands: bool = False,
     cli_config: Optional[Any] = None,
     cli_allowed_commands: Optional[List[str]] = None,
+    credentials: Optional[List[Any]] = None,
 ) -> Any:
     """Register a Python function as an agent definition.
 
@@ -174,6 +184,7 @@ def agent(
             cli_commands=cli_commands,
             cli_config=cli_config,
             cli_allowed_commands=list(cli_allowed_commands) if cli_allowed_commands else [],
+            credentials=list(credentials) if credentials else [],
         )
 
         @functools.wraps(fn)
@@ -226,6 +237,7 @@ def _resolve_agent(obj: Any, parent_model: str = "") -> "Agent":
             cli_commands=ad.cli_commands,
             cli_config=ad.cli_config,
             cli_allowed_commands=ad.cli_allowed_commands or None,
+            credentials=ad.credentials or None,
         )
     raise TypeError(f"Expected an Agent or @agent-decorated function, got {type(obj).__name__}")
 
@@ -341,6 +353,7 @@ class Agent:
         thinking_budget_tokens: Optional[int] = None,
         required_tools: Optional[List[str]] = None,
         gate: Optional[Any] = None,
+        credentials: Optional[List[Any]] = None,
     ) -> None:
         if not name or not isinstance(name, str):
             raise ValueError("Agent name must be a non-empty string")
@@ -436,7 +449,7 @@ class Agent:
         self.cli_config: Optional[Any] = None
         if cli_config is not None:
             self.cli_config = cli_config
-        elif cli_commands:
+        elif cli_commands or cli_allowed_commands:
             from agentspan.agents.cli_config import CliConfig
 
             self.cli_config = CliConfig(
@@ -450,6 +463,55 @@ class Agent:
             )
         if self.cli_config and self.cli_config.enabled:
             self._attach_cli_tool()
+
+        # ── Credential setup ─────────────────────────────────────────────
+        # When explicit credentials provided, use them as-is.
+        # When not provided, auto-map from cli_allowed_commands via CLI_CREDENTIAL_MAP.
+        from agentspan.agents.runtime.credentials.cli_map import CLI_CREDENTIAL_MAP
+
+        if credentials is not None:
+            self.credentials: List[Any] = list(credentials)
+        elif self.cli_config and self.cli_config.allowed_commands:
+            # Check for terraform (None entry) before auto-mapping
+            null_mapped = [
+                cmd
+                for cmd in self.cli_config.allowed_commands
+                if CLI_CREDENTIAL_MAP.get(cmd) is None and cmd in CLI_CREDENTIAL_MAP
+            ]
+            if null_mapped:
+                raise ConfigurationError(
+                    f"CLI command(s) {null_mapped!r} have no credential auto-mapping. "
+                    f"You must provide an explicit credentials=[...] list. "
+                    f"Example: Agent(cli_allowed_commands=['terraform', ...], "
+                    f"credentials=['AWS_ACCESS_KEY_ID', 'TF_VAR_...'])"
+                )
+            # Collect and deduplicate
+            seen: set = set()
+            auto_creds: List[Any] = []
+            for cmd in self.cli_config.allowed_commands:
+                mapped = CLI_CREDENTIAL_MAP.get(cmd)
+                if mapped:
+                    for cred in mapped:
+                        key = cred.env_var if hasattr(cred, "env_var") else cred
+                        if key not in seen:
+                            seen.add(key)
+                            auto_creds.append(cred)
+            self.credentials = auto_creds
+        else:
+            self.credentials = []
+
+        # Propagate agent-level credentials to CLI/code tools so the
+        # dispatch layer can resolve them per-tool (the dispatch only
+        # looks at tool_def.credentials, not agent-level credentials).
+        if self.credentials:
+            from agentspan.agents.tool import get_tool_def
+            for t in self.tools:
+                td = getattr(t, "_tool_def", None)
+                if td is not None and not td.credentials and td.tool_type in ("cli", "code"):
+                    td.credentials = list(self.credentials)
+                    # Also update _tool_def on raw func for pickle survival
+                    if td.func and hasattr(td.func, "_tool_def"):
+                        td.func._tool_def.credentials = list(self.credentials)
 
     def _attach_code_execution_tool(self) -> None:
         """Auto-create and attach a code execution tool from config."""

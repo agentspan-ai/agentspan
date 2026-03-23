@@ -24,7 +24,15 @@ Quick start::
 """
 
 # Core primitive
-from agentspan.agents.agent import Agent, AgentDef, PromptTemplate, Strategy, agent, scatter_gather
+from agentspan.agents.agent import (
+    Agent,
+    AgentDef,
+    ConfigurationError,
+    PromptTemplate,
+    Strategy,
+    agent,
+    scatter_gather,
+)
 
 # Callback handlers
 from agentspan.agents.callback import CallbackHandler
@@ -98,6 +106,45 @@ from agentspan.agents.run import (
 
 # Runtime (for context manager and advanced usage)
 from agentspan.agents.runtime.config import AgentConfig
+
+# Credential management
+from agentspan.agents.runtime.credentials.accessor import get_credential
+from agentspan.agents.runtime.credentials.types import (
+    CredentialAuthError,
+    CredentialFile,
+    CredentialNotFoundError,
+    CredentialRateLimitError,
+    CredentialServiceError,
+)
+
+
+def resolve_credentials(input_data: dict, names: list) -> dict:
+    """Resolve credentials from Conductor task input data.
+
+    For external workers that need to resolve credentials from the
+    agentspan credential store. Extracts the execution token from
+    ``__agentspan_ctx__`` in the task input and calls the server.
+
+    Args:
+        input_data: The Conductor task's ``input_data`` dict.
+        names: Credential names to resolve.
+
+    Returns:
+        Dict mapping credential name to resolved plaintext value.
+    """
+    from agentspan.agents.runtime.credentials.fetcher import WorkerCredentialFetcher
+    from agentspan.agents.runtime.config import AgentConfig
+
+    token = None
+    ctx = input_data.get("__agentspan_ctx__")
+    if isinstance(ctx, dict):
+        token = ctx.get("execution_token")
+    elif isinstance(ctx, str):
+        token = ctx
+
+    config = AgentConfig.from_env()
+    fetcher = WorkerCredentialFetcher(server_url=config.server_url)
+    return fetcher.fetch(token, names)
 
 # Agent discovery
 from agentspan.agents.runtime.discovery import discover_agents
@@ -235,4 +282,14 @@ __all__ = [
     "discover_agents",
     # Tracing
     "is_tracing_enabled",
+    # Credentials
+    "get_credential",
+    "resolve_credentials",
+    "CredentialFile",
+    "CredentialNotFoundError",
+    "CredentialAuthError",
+    "CredentialRateLimitError",
+    "CredentialServiceError",
+    # Configuration errors
+    "ConfigurationError",
 ]

@@ -98,6 +98,9 @@ public class AgentConfig {
      */
     private Map<String, Object> gate;
 
+    /** Agent-level credential names (e.g. ["GH_TOKEN", "AWS_ACCESS_KEY_ID"]). */
+    private List<String> credentials;
+
     /** Whether this is an external agent (no model, references existing workflow). */
     @Builder.Default
     private boolean external = false;

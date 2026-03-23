@@ -21,15 +21,21 @@ import com.netflix.conductor.service.WorkflowService;
 import com.netflix.conductor.common.run.SearchResult;
 import com.netflix.conductor.common.run.WorkflowSummary;
 
+import dev.agentspan.runtime.auth.RequestContextHolder;
+import dev.agentspan.runtime.auth.User;
 import dev.agentspan.runtime.compiler.AgentCompiler;
+import dev.agentspan.runtime.credentials.ExecutionTokenService;
 import dev.agentspan.runtime.model.*;
 import dev.agentspan.runtime.normalizer.NormalizerRegistry;
 import dev.agentspan.runtime.util.ModelParser;
 import dev.agentspan.runtime.util.ProviderValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.util.*;
 
 import lombok.RequiredArgsConstructor;
 
@@ -41,7 +47,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Component
-@RequiredArgsConstructor
+@RequiredArgsConstructor(onConstructor_ = {@Autowired})
 public class AgentService {
 
     private static final Logger log = LoggerFactory.getLogger(AgentService.class);
@@ -55,6 +61,26 @@ public class AgentService {
     private final AgentStreamRegistry streamRegistry;
     private final ExecutionService executionService;
     private final ProviderValidator providerValidator;
+
+    @Autowired(required = false)
+    private ExecutionTokenService executionTokenService;
+
+    /** Package-private constructor for testing with ExecutionTokenService */
+    AgentService(AgentCompiler agentCompiler, NormalizerRegistry normalizerRegistry,
+                 MetadataDAO metadataDAO, WorkflowExecutor workflowExecutor,
+                 WorkflowService workflowService, AgentStreamRegistry streamRegistry,
+                 ExecutionService executionService, ProviderValidator providerValidator,
+                 ExecutionTokenService executionTokenService) {
+        this.agentCompiler = agentCompiler;
+        this.normalizerRegistry = normalizerRegistry;
+        this.metadataDAO = metadataDAO;
+        this.workflowExecutor = workflowExecutor;
+        this.workflowService = workflowService;
+        this.streamRegistry = streamRegistry;
+        this.executionService = executionService;
+        this.providerValidator = providerValidator;
+        this.executionTokenService = executionTokenService;
+    }
 
     /**
      * Compile an agent config into a WorkflowDef and return it.
@@ -171,6 +197,37 @@ public class AgentService {
             cwd = rawCwd;
         }
         input.put("cwd", cwd);
+
+        // Mint execution token and embed in workflow variables for worker credential resolution
+        if (executionTokenService != null) {
+            try {
+                long timeoutSeconds = config.getTimeoutSeconds() > 0 ? config.getTimeoutSeconds() : 0;
+                List<String> declaredNames = extractDeclaredCredentials(config);
+                // Also include credentials from the start request payload
+                // (used by framework agents and run(credentials=[...]) calls)
+                Object inputCreds = input.get("credentials");
+                if (inputCreds instanceof List<?> credList) {
+                    for (Object c : credList) {
+                        if (c instanceof String s && !declaredNames.contains(s)) {
+                            declaredNames.add(s);
+                        }
+                    }
+                }
+                User currentUser = RequestContextHolder.get()
+                    .map(ctx -> ctx.getUser())
+                    .orElse(null);
+                if (currentUser != null) {
+                    String token = executionTokenService.mint(
+                        currentUser.getId(), null /* workflowId not known yet */, declaredNames, timeoutSeconds);
+                    Map<String, Object> agentCtx = new LinkedHashMap<>();
+                    agentCtx.put("execution_token", token);
+                    input.put("__agentspan_ctx__", agentCtx);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to mint execution token: {}", e.getMessage());
+            }
+        }
+
         startReq.setInput(input);
 
         // Idempotency: use the key as correlationId and check for existing executions
@@ -480,6 +537,51 @@ public class AgentService {
             log.debug("Idempotency check failed for key '{}': {}", idempotencyKey, e.getMessage());
         }
         return null;
+    }
+
+    /**
+     * Extract credential names declared in tool configs (for execution token bounding).
+     */
+    private List<String> extractDeclaredCredentials(AgentConfig config) {
+        Set<String> names = new LinkedHashSet<>();
+        collectCredentialsRecursive(config, names);
+        return new ArrayList<>(names);
+    }
+
+    private void collectCredentialsRecursive(AgentConfig config, Set<String> names) {
+        // Agent-level credentials
+        if (config.getCredentials() != null) {
+            names.addAll(config.getCredentials());
+        }
+        // Tool-level credentials
+        if (config.getTools() != null) {
+            for (ToolConfig tool : config.getTools()) {
+                if (tool.getConfig() != null && tool.getConfig().get("credentials") instanceof List<?> creds) {
+                    for (Object c : creds) {
+                        if (c instanceof String s) names.add(s);
+                    }
+                }
+                // Recurse into agent_tool nested agents
+                if ("agent_tool".equals(tool.getToolType()) && tool.getConfig() != null) {
+                    Object nested = tool.getConfig().get("agentConfig");
+                    if (nested instanceof Map<?, ?> nestedMap) {
+                        try {
+                            AgentConfig nestedConfig = new com.fasterxml.jackson.databind.ObjectMapper()
+                                .convertValue(nestedMap, AgentConfig.class);
+                            collectCredentialsRecursive(nestedConfig, names);
+                        } catch (Exception e) {
+                            // Skip if can't parse nested config
+                        }
+                    }
+                }
+            }
+        }
+        // Recurse into sub-agents (multi-agent strategies)
+        if (config.getAgents() != null) {
+            for (AgentConfig sub : config.getAgents()) {
+                collectCredentialsRecursive(sub, names);
+            }
+        }
     }
 
     /**

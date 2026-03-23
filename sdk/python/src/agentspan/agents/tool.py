@@ -77,6 +77,8 @@ class ToolDef:
     tool_type: str = "worker"
     config: Dict[str, Any] = field(default_factory=dict)
     guardrails: List[Any] = field(default_factory=list)
+    isolated: bool = True
+    credentials: List[Any] = field(default_factory=list)
 
 
 # ── @tool decorator ─────────────────────────────────────────────────────
@@ -94,6 +96,8 @@ def tool(
     approval_required: bool = False,
     timeout_seconds: Optional[int] = None,
     guardrails: Optional[List[Any]] = None,
+    isolated: bool = True,
+    credentials: Optional[List[Any]] = None,
 ) -> Callable[[F], F]: ...
 
 
@@ -105,6 +109,8 @@ def tool(
     approval_required: bool = False,
     timeout_seconds: Optional[int] = None,
     guardrails: Optional[List[Any]] = None,
+    isolated: bool = True,
+    credentials: Optional[List[Any]] = None,
 ) -> Any:
     """Register a Python function as a Conductor agent tool.
 
@@ -148,6 +154,8 @@ def tool(
             timeout_seconds=timeout_seconds,
             tool_type="worker",
             guardrails=list(guardrails) if guardrails else [],
+            isolated=isolated,
+            credentials=list(credentials) if credentials else [],
         )
 
         @functools.wraps(fn)
@@ -155,6 +163,7 @@ def tool(
             return fn(*args, **kwargs)
 
         wrapper._tool_def = tool_def  # type: ignore[attr-defined]
+        fn._tool_def = tool_def  # type: ignore[attr-defined]  # Also on raw fn for pickling
         return wrapper  # type: ignore[return-value]
 
     if func is not None:
@@ -174,22 +183,42 @@ def http_tool(
     input_schema: Optional[Dict[str, Any]] = None,
     accept: List[str] = ["application/json"],
     content_type: str = "application/json",
+    credentials: Optional[List[str]] = None,
 ) -> ToolDef:
     """Create a tool backed by an HTTP endpoint (Conductor ``HttpTask``).
 
     No worker process is needed — the Conductor server makes the HTTP call
     directly.
 
+    Headers can reference credentials using ``${NAME}`` syntax. The server
+    resolves these at execution time from the credential store.
+
     Args:
         name: Tool name.
         description: Human-readable description for the LLM.
         url: The HTTP endpoint URL.
         method: HTTP method (GET, POST, PUT, DELETE).
-        headers: Optional HTTP headers.
+        headers: Optional HTTP headers. Use ``${NAME}`` for credential placeholders.
         input_schema: JSON Schema for the tool's input parameters.
         accept: Value for the ``Accept`` header (default ``application/json``).
         content_type: Value for the ``Content-Type`` header (default ``application/json``).
+        credentials: Credential names referenced by ``${NAME}`` in headers.
     """
+    import re as _re
+
+    cred_list = list(credentials) if credentials else []
+
+    # Validate: any ${NAME} in headers must be in credentials list
+    if headers:
+        placeholders = set(_re.findall(r"\$\{(\w+)}", str(headers)))
+        if placeholders:
+            missing = placeholders - set(cred_list)
+            if missing:
+                raise ValueError(
+                    f"Header placeholder(s) {missing} not declared in credentials={cred_list}. "
+                    f"Add them to the credentials list."
+                )
+
     return ToolDef(
         name=name,
         description=description,
@@ -202,6 +231,7 @@ def http_tool(
             "accept": accept,
             "contentType": content_type,
         },
+        credentials=cred_list,
     )
 
 
@@ -212,6 +242,7 @@ def mcp_tool(
     headers: Optional[Dict[str, str]] = None,
     tool_names: Optional[List[str]] = None,
     max_tools: int = 64,
+    credentials: Optional[List[str]] = None,
 ) -> ToolDef:
     """Create tool(s) from an MCP server (Conductor ``ListMcpTools`` + ``CallMcpTool``).
 
@@ -222,18 +253,33 @@ def mcp_tool(
     **No worker process is needed** — the Conductor server handles MCP
     protocol communication directly.
 
-    If the number of discovered tools exceeds *max_tools*, a lightweight
-    runtime LLM step is added to filter the tool list per-request based
-    on the user's prompt.
+    Headers can reference credentials using ``${NAME}`` syntax. The server
+    resolves these at execution time from the credential store.
 
     Args:
         server_url: URL of the MCP server (e.g. ``"http://localhost:3001/mcp"``).
         name: Optional override name (defaults to ``"mcp_tools"``).
         description: Optional override description.
-        headers: Optional HTTP headers for MCP server authentication.
+        headers: Optional HTTP headers. Use ``${NAME}`` for credential placeholders.
         tool_names: Optional whitelist — only include these tool names.
         max_tools: Threshold for runtime LLM filtering (default 64).
+        credentials: Credential names referenced by ``${NAME}`` in headers.
     """
+    import re as _re
+
+    cred_list = list(credentials) if credentials else []
+
+    # Validate: any ${NAME} in headers must be in credentials list
+    if headers:
+        placeholders = set(_re.findall(r"\$\{(\w+)}", str(headers)))
+        if placeholders:
+            missing = placeholders - set(cred_list)
+            if missing:
+                raise ValueError(
+                    f"Header placeholder(s) {missing} not declared in credentials={cred_list}. "
+                    f"Add them to the credentials list."
+                )
+
     config: Dict[str, Any] = {"server_url": server_url}
     if headers:
         config["headers"] = headers
@@ -245,6 +291,7 @@ def mcp_tool(
         description=description or f"MCP tools from {server_url}",
         tool_type="mcp",
         config=config,
+        credentials=cred_list,
     )
 
 

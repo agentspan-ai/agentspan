@@ -13,6 +13,7 @@
  * - Event monitor
  * - API reference
  * - Tags dashboard
+ * - Credentials management
  *
  * Enterprise routes (registered via plugins):
  * - Auth (login, callbacks, RBAC pages)
@@ -32,6 +33,7 @@
 import { App } from "components/App";
 import DefaultAuthGuard from "components/auth/AuthGuard";
 import ApiReferencePage from "pages/apiDocs/ApiReferencePage";
+import { CredentialsPage } from "pages/credentials";
 import { CreatorFlags } from "pages/creatorFlags/CreatorFlags";
 import { TaskDefinition } from "pages/definition/task";
 import WorkflowDefinition from "pages/definition/WorkflowDefinition";
@@ -49,6 +51,7 @@ import { pluginRegistry } from "plugins/registry";
 import { featureFlags, FEATURES } from "utils";
 import {
   API_REFERENCE_URL,
+  CREDENTIALS_URL,
   EVENT_HANDLERS_URL,
   EVENT_MONITOR_URL,
   NEW_TASK_DEF_URL,
@@ -118,6 +121,12 @@ const getCoreAuthenticatedRoutes = () => [
   {
     path: TASK_DEF_URL.NAME,
     element: <TaskDefinition />,
+  },
+
+  // Credentials
+  {
+    path: CREDENTIALS_URL,
+    element: <CredentialsPage />,
   },
 
   // Event Handlers

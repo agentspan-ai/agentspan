@@ -8,6 +8,8 @@ package dev.agentspan.runtime.controller;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import dev.agentspan.runtime.credentials.CredentialResolutionService;
+import dev.agentspan.runtime.credentials.ExecutionTokenService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -21,5 +23,26 @@ public class AgentExceptionHandler {
         body.put("error", ex.getMessage());
         body.put("status", 400);
         return ResponseEntity.badRequest().body(body);
+    }
+
+    @ExceptionHandler(CredentialResolutionService.CredentialNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleCredentialNotFound(
+            CredentialResolutionService.CredentialNotFoundException ex) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("error", ex.getMessage());
+        body.put("status", 404);
+        return ResponseEntity.status(404).body(body);
+    }
+
+    @ExceptionHandler({
+        ExecutionTokenService.TokenInvalidException.class,
+        ExecutionTokenService.TokenExpiredException.class,
+        ExecutionTokenService.TokenRevokedException.class
+    })
+    public ResponseEntity<Map<String, Object>> handleTokenError(RuntimeException ex) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("error", ex.getMessage());
+        body.put("status", 401);
+        return ResponseEntity.status(401).body(body);
     }
 }

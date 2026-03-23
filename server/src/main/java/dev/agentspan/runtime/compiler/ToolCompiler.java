@@ -315,6 +315,7 @@ public class ToolCompiler {
         enrichInput.put("expression", script);
         enrichInput.put("toolCalls", "${" + llmRef + ".output.toolCalls}");
         enrichInput.put("agentState", "${workflow.variables._agent_state}");
+        enrichInput.put("agentspanCtx", "${workflow.input.__agentspan_ctx__}");
         enrichTask.setInputParameters(enrichInput);
 
         // InlineTask output is at output.result.*
@@ -908,6 +909,7 @@ public class ToolCompiler {
         enrichInput.put("toolCalls", "${" + llmRef + ".output.toolCalls}");
         enrichInput.put("mcpConfig", mcpConfigRef);
         enrichInput.put("agentState", "${workflow.variables._agent_state}");
+        enrichInput.put("agentspanCtx", "${workflow.input.__agentspan_ctx__}");
         enrichTask.setInputParameters(enrichInput);
 
         String outputRef = "${" + enrichRef + ".output.result.dynamicTasks}";

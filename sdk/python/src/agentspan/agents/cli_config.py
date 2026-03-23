@@ -197,5 +197,7 @@ def _make_cli_tool(
     if not allow_shell:
         desc += " Shell mode is disabled — do not set shell=True."
     run_command._tool_def.description = desc
+    run_command._tool_def.tool_type = "cli"
+    run_command._tool_def.config = {"allowedCommands": list(allowed_commands)}
 
     return run_command

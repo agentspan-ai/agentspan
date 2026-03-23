@@ -5,6 +5,7 @@ package config
 
 import (
 	"encoding/json"
+	"net/url"
 	"os"
 	"path/filepath"
 )
@@ -13,6 +14,18 @@ type Config struct {
 	ServerURL  string `json:"server_url"`
 	AuthKey    string `json:"auth_key,omitempty"`
 	AuthSecret string `json:"auth_secret,omitempty"`
+	APIKey     string `json:"api_key,omitempty"`
+}
+
+// IsLocalhost returns true when the server URL points to a loopback address
+// (localhost, 127.0.0.1, or ::1) over any scheme (http or https).
+func (c *Config) IsLocalhost() bool {
+	u, err := url.Parse(c.ServerURL)
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	return host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]"
 }
 
 func DefaultConfig() *Config {
@@ -65,6 +78,9 @@ func Load() *Config {
 		}
 		if cfg.AuthSecret == "" && fileCfg.AuthSecret != "" {
 			cfg.AuthSecret = fileCfg.AuthSecret
+		}
+		if cfg.APIKey == "" {
+			cfg.APIKey = fileCfg.APIKey
 		}
 	}
 

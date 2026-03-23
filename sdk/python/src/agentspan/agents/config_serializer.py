@@ -184,6 +184,14 @@ class AgentConfigSerializer:
                 "allowShell": cfg.allow_shell,
             }
 
+        # Agent-level credentials
+        if hasattr(agent, "credentials") and agent.credentials:
+            from agentspan.agents.runtime.credentials.types import CredentialFile
+            config["credentials"] = [
+                c if isinstance(c, str) else c.env_var
+                for c in agent.credentials
+            ]
+
         # Remove None values for cleaner JSON
         return {k: v for k, v in config.items() if v is not None}
 
@@ -220,6 +228,17 @@ class AgentConfigSerializer:
 
         if td.guardrails:
             result["guardrails"] = [self._serialize_guardrail(g) for g in td.guardrails]
+
+        # Credentials — must be in config so the server includes them in
+        # the execution token's declared_names (bounds credential resolution).
+        if td.credentials:
+            cred_names = [
+                c if isinstance(c, str) else c.env_var
+                for c in td.credentials
+            ]
+            if "config" not in result:
+                result["config"] = {}
+            result["config"]["credentials"] = cred_names
 
         return result
 

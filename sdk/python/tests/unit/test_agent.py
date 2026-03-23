@@ -442,3 +442,107 @@ class TestScatterGather:
         worker = Agent(name="w", model="openai/gpt-4o")
         coord = scatter_gather("coord", worker, timeout_seconds=600)
         assert coord.timeout_seconds == 600
+
+
+class TestAgentCredentials:
+    """Agent credentials param and CLI auto-mapping."""
+
+    def test_credentials_defaults_to_empty_list(self):
+        from agentspan.agents.agent import Agent
+        a = Agent(name="test_agent", model="openai/gpt-4o")
+        assert a.credentials == []
+
+    def test_explicit_credentials_stored(self):
+        from agentspan.agents.agent import Agent
+        a = Agent(
+            name="test_agent",
+            model="openai/gpt-4o",
+            credentials=["GITHUB_TOKEN", "OPENAI_API_KEY"],
+        )
+        assert "GITHUB_TOKEN" in a.credentials
+        assert "OPENAI_API_KEY" in a.credentials
+
+    def test_cli_allowed_commands_automapped_gh(self):
+        """gh → GITHUB_TOKEN, GH_TOKEN auto-mapped when no explicit credentials."""
+        from agentspan.agents.agent import Agent
+        a = Agent(
+            name="test_agent",
+            model="openai/gpt-4o",
+            cli_commands=True,
+            cli_allowed_commands=["gh", "git"],
+        )
+        assert "GITHUB_TOKEN" in a.credentials
+        assert "GH_TOKEN" in a.credentials
+
+    def test_cli_allowed_commands_automapped_aws(self):
+        from agentspan.agents.agent import Agent
+        a = Agent(
+            name="test_agent",
+            model="openai/gpt-4o",
+            cli_commands=True,
+            cli_allowed_commands=["aws"],
+        )
+        assert "AWS_ACCESS_KEY_ID" in a.credentials
+        assert "AWS_SECRET_ACCESS_KEY" in a.credentials
+
+    def test_cli_allowed_commands_no_dup_in_credentials(self):
+        """gh and git both map to GITHUB_TOKEN — deduplication required."""
+        from agentspan.agents.agent import Agent
+        a = Agent(
+            name="test_agent",
+            model="openai/gpt-4o",
+            cli_commands=True,
+            cli_allowed_commands=["gh", "git"],
+        )
+        # GITHUB_TOKEN should appear only once
+        assert a.credentials.count("GITHUB_TOKEN") == 1
+
+    def test_terraform_without_credentials_raises_configuration_error(self):
+        """terraform in cli_allowed_commands without explicit credentials is an error."""
+        from agentspan.agents.agent import Agent, ConfigurationError
+        with pytest.raises(ConfigurationError, match="terraform"):
+            Agent(
+                name="test_agent",
+                model="openai/gpt-4o",
+                cli_commands=True,
+                cli_allowed_commands=["terraform"],
+            )
+
+    def test_terraform_with_explicit_credentials_does_not_raise(self):
+        """terraform is fine when explicit credentials are declared."""
+        from agentspan.agents.agent import Agent
+        # Should not raise
+        a = Agent(
+            name="test_agent",
+            model="openai/gpt-4o",
+            cli_commands=True,
+            cli_allowed_commands=["terraform", "aws"],
+            credentials=["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "TF_VAR_db_password"],
+        )
+        assert "TF_VAR_db_password" in a.credentials
+
+    def test_commands_not_in_map_are_ignored_gracefully(self):
+        """CLI commands like mktemp, rm not in map produce no credentials (no error)."""
+        from agentspan.agents.agent import Agent
+        a = Agent(
+            name="test_agent",
+            model="openai/gpt-4o",
+            cli_commands=True,
+            cli_allowed_commands=["mktemp", "rm"],
+        )
+        # Neither command has credentials — empty list is fine
+        assert a.credentials == []
+
+    def test_explicit_credentials_override_automapping(self):
+        """When explicit credentials provided, auto-mapping is not applied."""
+        from agentspan.agents.agent import Agent
+        a = Agent(
+            name="test_agent",
+            model="openai/gpt-4o",
+            cli_commands=True,
+            cli_allowed_commands=["gh"],
+            credentials=["MY_CUSTOM_TOKEN"],
+        )
+        # Only explicit credentials, no auto-mapped ones added on top
+        assert a.credentials == ["MY_CUSTOM_TOKEN"]
+        assert "GITHUB_TOKEN" not in a.credentials
