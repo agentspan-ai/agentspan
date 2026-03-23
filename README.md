@@ -20,7 +20,7 @@
 <p align="center">
   <a href="https://docs.agentspan.dev">Docs</a> &bull;
   <a href="#quickstart">Quickstart</a> &bull;
-  <a href="#examples">52+ Examples</a> &bull;
+  <a href="#examples">180+ Examples</a> &bull;
   <a href="https://discord.gg/agentspan">Discord</a> &bull;
   <a href="docs/python-sdk/api-reference.md">API Reference</a>
 </p>
@@ -461,10 +461,11 @@ Execution order: `on_agent_start` → (`on_model_start` → LLM → `on_model_en
 | `round_robin` | Agents take turns in a fixed rotation |
 | `swarm` | Condition-based handoffs between agents |
 | `random` | Random sub-agent selection each turn |
+| `manual` | Human selects which agent speaks each turn |
 
 ## Examples
 
-52+ runnable examples covering every feature:
+180+ runnable examples covering every feature across 5 frameworks:
 
 | Example | Description |
 |---|---|
@@ -530,6 +531,54 @@ Execution order: `on_agent_start` → (`on_model_start` → LLM → `on_model_en
 | [`51_shared_state.py`](sdk/python/examples/51_shared_state.py) | Shared state via ToolContext |
 | [`52_nested_strategies.py`](sdk/python/examples/52_nested_strategies.py) | Nested parallel + sequential |
 | [`53_agent_lifecycle_callbacks.py`](sdk/python/examples/53_agent_lifecycle_callbacks.py) | Agent-level before/after hooks |
+| [`54_software_bug_assistant.py`](sdk/python/examples/54_software_bug_assistant.py) | Software debugging agent |
+| [`55_ml_engineering.py`](sdk/python/examples/55_ml_engineering.py) | ML engineering assistant |
+| [`56_rag_agent.py`](sdk/python/examples/56_rag_agent.py) | Retrieval-augmented generation |
+| [`57_plan_dry_run.py`](sdk/python/examples/57_plan_dry_run.py) | Plan execution preview |
+| [`58_scatter_gather.py`](sdk/python/examples/58_scatter_gather.py) | Massive parallel map-reduce |
+| [`59_coding_agent.py`](sdk/python/examples/59_coding_agent.py) | Code generation agent |
+| [`60_github_coding_agent.py`](sdk/python/examples/60_github_coding_agent.py) | GitHub integration for coding |
+| [`61_github_coding_agent_chained.py`](sdk/python/examples/61_github_coding_agent_chained.py) | Chained GitHub operations |
+| [`62_cli_tool_guardrails.py`](sdk/python/examples/62_cli_tool_guardrails.py) | CLI tool input validation |
+| [`63_deploy.py`](sdk/python/examples/63_deploy.py) | Agent deployment |
+| [`64_swarm_with_tools.py`](sdk/python/examples/64_swarm_with_tools.py) | Swarm + tool orchestration |
+| [`65_parallel_with_tools.py`](sdk/python/examples/65_parallel_with_tools.py) | Parallel agents with tools |
+| [`66_handoff_to_parallel.py`](sdk/python/examples/66_handoff_to_parallel.py) | Handoff to parallel execution |
+| [`67_router_to_sequential.py`](sdk/python/examples/67_router_to_sequential.py) | Router to sequential pipeline |
+| [`68_context_condensation.py`](sdk/python/examples/68_context_condensation.py) | Auto-condense long conversations |
+| [`70_ce_support_agent.py`](sdk/python/examples/70_ce_support_agent.py) | Full support agent with Zendesk, JIRA, HubSpot |
+
+**Framework Examples:**
+
+| Framework | Count | Location |
+|---|---|---|
+| [OpenAI Agents SDK](sdk/python/examples/openai/) | 10 examples | Handoffs, guardrails, streaming, multi-model |
+| [Google ADK](sdk/python/examples/adk/) | 35 examples | Full ADK compatibility, all agent types |
+| [LangChain](sdk/python/examples/langchain/) | 25 examples | ReAct, memory, document analysis |
+| [LangGraph](sdk/python/examples/langgraph/) | 44 examples | StateGraph, human-in-the-loop, subgraphs |
+
+### Credential Management
+
+Securely manage API keys and secrets across agents, tools, and frameworks:
+
+```python
+from agentspan.agents import Agent, tool, CredentialFile, get_credential
+
+@tool(credentials=[CredentialFile(env_var="GITHUB_TOKEN")])
+def list_repos(username: str) -> dict:
+    """List GitHub repos. Credential auto-injected."""
+    import os
+    token = os.environ.get("GITHUB_TOKEN")  # Available in isolated subprocess
+    return {"repos": ["repo1", "repo2"]}
+
+# Or access credentials in-process
+@tool(isolated=False, credentials=["API_KEY"])
+def call_api(query: str) -> dict:
+    key = get_credential("API_KEY")
+    return {"result": "data"}
+```
+
+Credentials are stored encrypted (AES-256-GCM) on the server. Workers resolve them at runtime via scoped execution tokens.
 
 ### Google ADK Compatibility
 
@@ -651,11 +700,19 @@ The server auto-enables LLM providers when their API key is set. No manual integ
 ├── server/               # Java runtime server (Spring Boot + Conductor)
 │   ├── docker-compose.yml
 │   └── src/
-└── sdk/
-    └── python/           # Python SDK
-        ├── src/agentspan/agents/
-        ├── examples/     # 52+ progressive examples
-        └── tests/
+├── ui/                   # React workflow UI (served at localhost:8080)
+├── sdk/
+│   ├── python/           # Python SDK
+│   │   ├── src/agentspan/agents/
+│   │   ├── examples/     # 70+ progressive examples
+│   │   └── validation/   # Multi-model validation framework
+│   └── typescript/       # TypeScript SDK
+│       ├── src/
+│       └── examples/
+└── docs/                 # Consolidated documentation
+    ├── sdk-design/       # Multi-language SDK design specs
+    ├── python-sdk/       # Python SDK reference docs
+    └── server/           # Server documentation
 ```
 
 ## CLI Reference
