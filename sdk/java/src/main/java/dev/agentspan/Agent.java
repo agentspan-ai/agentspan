@@ -59,10 +59,10 @@ public class Agent {
         this.strategy = builder.strategy != null ? builder.strategy : Strategy.HANDOFF;
         this.router = builder.router;
         this.guardrails = builder.guardrails != null ? new ArrayList<>(builder.guardrails) : new ArrayList<>();
-        this.maxTurns = builder.maxTurns > 0 ? builder.maxTurns : 10;
+        this.maxTurns = builder.maxTurns;
         this.maxTokens = builder.maxTokens;
         this.temperature = builder.temperature;
-        this.timeoutSeconds = builder.timeoutSeconds > 0 ? builder.timeoutSeconds : 300;
+        this.timeoutSeconds = builder.timeoutSeconds;
         this.termination = builder.termination;
         this.outputType = builder.outputType;
         this.sessionId = builder.sessionId;
@@ -151,10 +151,10 @@ public class Agent {
         private Strategy strategy = Strategy.HANDOFF;
         private Agent router;
         private List<GuardrailDef> guardrails;
-        private int maxTurns = 10;
+        private int maxTurns = 25;
         private Integer maxTokens;
         private Double temperature;
-        private int timeoutSeconds = 300;
+        private int timeoutSeconds = 0;
         private TerminationCondition termination;
         private Class<?> outputType;
         private String sessionId;

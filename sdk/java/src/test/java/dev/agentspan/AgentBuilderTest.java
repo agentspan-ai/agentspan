@@ -38,7 +38,7 @@ class AgentBuilderTest {
         assertEquals("openai/gpt-4o", agent.getModel());
         assertEquals("You are a test agent.", agent.getInstructions());
         assertFalse(agent.isExternal());
-        assertEquals(10, agent.getMaxTurns());
+        assertEquals(25, agent.getMaxTurns());
     }
 
     @Test

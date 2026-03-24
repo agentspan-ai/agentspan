@@ -40,11 +40,6 @@ public class AgentConfigSerializer {
             agentMap.put("model", agent.getModel());
         }
 
-        // Instructions
-        if (agent.getInstructions() != null && !agent.getInstructions().isEmpty()) {
-            agentMap.put("instructions", agent.getInstructions());
-        }
-
         // Strategy — only if sub-agents present
         if (agent.getAgents() != null && !agent.getAgents().isEmpty()) {
             agentMap.put("strategy", agent.getStrategy().toJsonValue());
@@ -55,14 +50,15 @@ public class AgentConfigSerializer {
             agentMap.put("maxTurns", agent.getMaxTurns());
         }
 
-        // Timeout
-        if (agent.getTimeoutSeconds() > 0) {
-            agentMap.put("timeoutSeconds", agent.getTimeoutSeconds());
-        }
+        // Timeout (always emit, including 0)
+        agentMap.put("timeoutSeconds", agent.getTimeoutSeconds());
 
-        // External flag
-        if (agent.isExternal()) {
-            agentMap.put("external", true);
+        // External flag (always emit)
+        agentMap.put("external", agent.isExternal());
+
+        // Instructions
+        if (agent.getInstructions() != null && !agent.getInstructions().isEmpty()) {
+            agentMap.put("instructions", agent.getInstructions());
         }
 
         // Tools
@@ -152,7 +148,7 @@ public class AgentConfigSerializer {
         gMap.put("guardrailType", g.getGuardrailType() != null ? g.getGuardrailType() : "custom");
 
         if (g.getFunc() != null) {
-            gMap.put("taskName", g.getName() + "_guardrail");
+            gMap.put("taskName", g.getName());
         }
 
         if (g.getConfig() != null && !g.getConfig().isEmpty()) {
