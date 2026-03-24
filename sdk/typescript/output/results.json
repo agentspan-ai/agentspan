@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-24T22:16:16.849Z",
+  "timestamp": "2026-03-24T22:50:59.612Z",
   "results": [
     {
-      "example": "langchain/02-react-with-tools",
+      "example": "langgraph/04-simple-stategraph",
       "status": "FAIL",
-      "duration": 1.849,
+      "duration": 2.024,
       "checks": {
         "workflowCompleted": false,
         "noUnhandledErrors": true,
@@ -15,12 +15,12 @@
       },
       "output": "",
       "events": [],
-      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:51:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
+      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:57:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
     },
     {
-      "example": "langchain/08-multi-tool-agent",
+      "example": "langgraph/06-conditional-routing",
       "status": "FAIL",
-      "duration": 1.785,
+      "duration": 2.048,
       "checks": {
         "workflowCompleted": false,
         "noUnhandledErrors": true,
@@ -31,12 +31,12 @@
       },
       "output": "",
       "events": [],
-      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:51:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
+      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:57:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
     },
     {
-      "example": "langchain/06-chat-history",
+      "example": "langgraph/02-react-with-tools",
       "status": "FAIL",
-      "duration": 1.847,
+      "duration": 2.336,
       "checks": {
         "workflowCompleted": false,
         "noUnhandledErrors": true,
@@ -47,12 +47,12 @@
       },
       "output": "",
       "events": [],
-      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:51:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
+      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:57:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
     },
     {
-      "example": "langchain/04-structured-output",
+      "example": "langgraph/01-hello-world",
       "status": "FAIL",
-      "duration": 1.888,
+      "duration": 2.346,
       "checks": {
         "workflowCompleted": false,
         "noUnhandledErrors": true,
@@ -63,12 +63,12 @@
       },
       "output": "",
       "events": [],
-      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:51:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
+      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:57:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
     },
     {
-      "example": "langchain/03-custom-tools",
+      "example": "langgraph/07-system-prompt",
       "status": "FAIL",
-      "duration": 1.931,
+      "duration": 2.296,
       "checks": {
         "workflowCompleted": false,
         "noUnhandledErrors": true,
@@ -79,12 +79,12 @@
       },
       "output": "",
       "events": [],
-      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:51:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
+      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:57:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
     },
     {
-      "example": "langchain/05-prompt-templates",
+      "example": "langgraph/05-tool-node",
       "status": "FAIL",
-      "duration": 1.964,
+      "duration": 2.456,
       "checks": {
         "workflowCompleted": false,
         "noUnhandledErrors": true,
@@ -95,12 +95,12 @@
       },
       "output": "",
       "events": [],
-      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:51:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
+      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:57:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
     },
     {
-      "example": "langchain/07-memory-agent",
+      "example": "langgraph/08-structured-output",
       "status": "FAIL",
-      "duration": 1.936,
+      "duration": 2.408,
       "checks": {
         "workflowCompleted": false,
         "noUnhandledErrors": true,
@@ -111,12 +111,12 @@
       },
       "output": "",
       "events": [],
-      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:51:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
+      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:57:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
     },
     {
-      "example": "langchain/01-hello-world",
+      "example": "langgraph/03-memory",
       "status": "FAIL",
-      "duration": 2.065,
+      "duration": 2.582,
       "checks": {
         "workflowCompleted": false,
         "noUnhandledErrors": true,
@@ -127,12 +127,12 @@
       },
       "output": "",
       "events": [],
-      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:51:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
+      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:57:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
     },
     {
-      "example": "langchain/10-web-search-agent",
+      "example": "langgraph/09-math-agent",
       "status": "FAIL",
-      "duration": 1.365,
+      "duration": 1.943,
       "checks": {
         "workflowCompleted": false,
         "noUnhandledErrors": true,
@@ -143,12 +143,12 @@
       },
       "output": "",
       "events": [],
-      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:51:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
+      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:57:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
     },
     {
-      "example": "langchain/09-math-calculator",
+      "example": "langgraph/10-research-agent",
       "status": "FAIL",
-      "duration": 1.414,
+      "duration": 1.904,
       "checks": {
         "workflowCompleted": false,
         "noUnhandledErrors": true,
@@ -159,7 +159,7 @@
       },
       "output": "",
       "events": [],
-      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:51:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
+      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:57:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
     }
   ]
 }
