@@ -1877,7 +1877,7 @@ Since the Vercel AI SDK is TypeScript-specific, these examples only apply to the
    - Output should be semantically similar (LLM judge comparison)
    - The validation framework's per-framework groups (LANGGRAPH, LANGCHAIN, VERCEL_AI, etc.) should run these comparisons
 
-4. **If a framework package is not available** for the target language (e.g., no LangGraph for Go), skip those framework examples for that SDK — but document the gap. Never substitute mocks.
+4. **If a framework package is not available or incompatible** for the target language, skip those framework examples for that SDK — but document the gap. Never substitute mocks. Example: `@openai/agents` v0.8 and `@google/adk` v0.5 require Zod v4, while the TypeScript SDK uses Zod v3. These examples use mocks until Zod v4 migration. This is acceptable for v0.x packages — track and revisit when they stabilize.
 
 5. **Framework packages are dev/optional dependencies** — they must NOT be required for core SDK functionality. Only needed to run framework-specific examples and validation.
 
