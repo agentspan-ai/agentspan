@@ -8,19 +8,19 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "require": "./dist/index.cjs",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/index.cjs"
     },
     "./testing": {
+      "types": "./dist/testing/index.d.ts",
       "import": "./dist/testing/index.js",
-      "require": "./dist/testing/index.cjs",
-      "types": "./dist/testing/index.d.ts"
+      "require": "./dist/testing/index.cjs"
     },
     "./validation": {
+      "types": "./dist/validation/runner.d.ts",
       "import": "./dist/validation/runner.js",
-      "require": "./dist/validation/runner.cjs",
-      "types": "./dist/validation/runner.d.ts"
+      "require": "./dist/validation/runner.cjs"
     }
   },
   "engines": { "node": ">=18.0.0" },
