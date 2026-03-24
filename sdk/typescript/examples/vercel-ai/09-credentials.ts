@@ -34,45 +34,49 @@ if (!hasOpenAIKey) {
 }
 
 // ── Path 1: Native Vercel AI SDK ─────────────────────────
-console.log('\n=== Native Vercel AI SDK ===');
-const nativeResult = await generateText({
-  model,
-  prompt,
-});
-console.log('Output:', nativeResult.text);
-console.log('Model:', nativeResult.response.modelId);
-console.log('Usage:', nativeResult.usage);
+async function main() {
+  console.log('\n=== Native Vercel AI SDK ===');
+  const nativeResult = await generateText({
+    model,
+    prompt,
+  });
+  console.log('Output:', nativeResult.text);
+  console.log('Model:', nativeResult.response.modelId);
+  console.log('Usage:', nativeResult.usage);
 
-// ── Path 2: Agentspan passthrough ────────────────────────
-// In production, agentspan resolves the API key from its credential
-// store and injects it into the environment before the agent runs.
-// Here we demonstrate the wrapper pattern.
-const vercelAgent = {
-  id: 'credentialed_agent',
-  tools: {},
-  generate: async (opts: { prompt: string; onStepFinish?: (step: any) => void }) => {
-    // The Vercel AI SDK reads OPENAI_API_KEY from the environment.
-    // In production, agentspan would have already injected it.
-    const result = await generateText({
-      model,
-      prompt: opts.prompt,
-    });
-    return {
-      text: result.text,
-      toolCalls: [],
-      toolResults: [],
-      finishReason: result.finishReason,
-    };
-  },
-  stream: async function* () { yield { type: 'finish' as const }; },
-};
+  // ── Path 2: Agentspan passthrough ────────────────────────
+  // In production, agentspan resolves the API key from its credential
+  // store and injects it into the environment before the agent runs.
+  // Here we demonstrate the wrapper pattern.
+  const vercelAgent = {
+    id: 'credentialed_agent',
+    tools: {},
+    generate: async (opts: { prompt: string; onStepFinish?: (step: any) => void }) => {
+      // The Vercel AI SDK reads OPENAI_API_KEY from the environment.
+      // In production, agentspan would have already injected it.
+      const result = await generateText({
+        model,
+        prompt: opts.prompt,
+      });
+      return {
+        text: result.text,
+        toolCalls: [],
+        toolResults: [],
+        finishReason: result.finishReason,
+      };
+    },
+    stream: async function* () { yield { type: 'finish' as const }; },
+  };
 
-console.log('\n=== Agentspan Passthrough ===');
-const runtime = new AgentRuntime();
-try {
-  const agentspanResult = await runtime.run(vercelAgent, prompt);
-  console.log('Output:', JSON.stringify(agentspanResult.output));
-  console.log('Status:', agentspanResult.status);
-} finally {
-  await runtime.shutdown();
+  console.log('\n=== Agentspan Passthrough ===');
+  const runtime = new AgentRuntime();
+  try {
+    const agentspanResult = await runtime.run(vercelAgent, prompt);
+    console.log('Output:', JSON.stringify(agentspanResult.output));
+    console.log('Status:', agentspanResult.status);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

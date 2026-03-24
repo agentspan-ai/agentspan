@@ -117,5 +117,9 @@ async function runAgentspan() {
 
 // ── Run ──────────────────────────────────────────────────────────────
 
-await runNative();
-await runAgentspan();
+async function main() {
+  await runNative();
+  await runAgentspan();
+}
+
+main().catch(console.error);

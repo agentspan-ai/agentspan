@@ -30,53 +30,57 @@ type Person = z.infer<typeof PersonSchema>;
 const prompt = 'Generate a profile for a fictional ML engineer from Japan.';
 
 // ── Path 1a: Native generateObject ───────────────────────
-console.log('=== Native generateObject ===');
-const objectResult = await generateObject({
-  model,
-  schema: PersonSchema,
-  prompt,
-});
-console.log('Output:', JSON.stringify(objectResult.object, null, 2));
-console.log('Usage:', objectResult.usage);
+async function main() {
+  console.log('=== Native generateObject ===');
+  const objectResult = await generateObject({
+    model,
+    schema: PersonSchema,
+    prompt,
+  });
+  console.log('Output:', JSON.stringify(objectResult.object, null, 2));
+  console.log('Usage:', objectResult.usage);
 
-// ── Path 1b: Native generateText with Output.object ──────
-console.log('\n=== Native generateText + Output.object ===');
-const textResult = await generateText({
-  model,
-  prompt,
-  experimental_output: Output.object({ schema: PersonSchema }),
-});
-console.log('Output:', JSON.stringify(textResult.experimental_output, null, 2));
-console.log('Steps:', textResult.steps.length);
+  // ── Path 1b: Native generateText with Output.object ──────
+  console.log('\n=== Native generateText + Output.object ===');
+  const textResult = await generateText({
+    model,
+    prompt,
+    experimental_output: Output.object({ schema: PersonSchema }),
+  });
+  console.log('Output:', JSON.stringify(textResult.experimental_output, null, 2));
+  console.log('Steps:', textResult.steps.length);
 
-// ── Path 2: Agentspan passthrough ────────────────────────
-const vercelAgent = {
-  id: 'structured_output_agent',
-  tools: {},
-  generate: async (opts: { prompt: string; onStepFinish?: (step: any) => void }) => {
-    const result = await generateObject({
-      model,
-      schema: PersonSchema,
-      prompt: opts.prompt,
-    });
-    const validated: Person = PersonSchema.parse(result.object);
-    return {
-      text: JSON.stringify(validated, null, 2),
-      toolCalls: [],
-      toolResults: [],
-      finishReason: 'stop' as const,
-      experimental_output: validated,
-    };
-  },
-  stream: async function* () { yield { type: 'finish' as const }; },
-};
+  // ── Path 2: Agentspan passthrough ────────────────────────
+  const vercelAgent = {
+    id: 'structured_output_agent',
+    tools: {},
+    generate: async (opts: { prompt: string; onStepFinish?: (step: any) => void }) => {
+      const result = await generateObject({
+        model,
+        schema: PersonSchema,
+        prompt: opts.prompt,
+      });
+      const validated: Person = PersonSchema.parse(result.object);
+      return {
+        text: JSON.stringify(validated, null, 2),
+        toolCalls: [],
+        toolResults: [],
+        finishReason: 'stop' as const,
+        experimental_output: validated,
+      };
+    },
+    stream: async function* () { yield { type: 'finish' as const }; },
+  };
 
-console.log('\n=== Agentspan Passthrough ===');
-const runtime = new AgentRuntime();
-try {
-  const agentspanResult = await runtime.run(vercelAgent, prompt);
-  console.log('Output:', JSON.stringify(agentspanResult.output));
-  console.log('Status:', agentspanResult.status);
-} finally {
-  await runtime.shutdown();
+  console.log('\n=== Agentspan Passthrough ===');
+  const runtime = new AgentRuntime();
+  try {
+    const agentspanResult = await runtime.run(vercelAgent, prompt);
+    console.log('Output:', JSON.stringify(agentspanResult.output));
+    console.log('Status:', agentspanResult.status);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

@@ -72,49 +72,53 @@ const prompt = 'Search for quantum computing and also calculate 2 + 2.';
 const system = 'You are a helpful assistant. Use the available tools to answer.';
 
 // ── Path 1: Native Vercel AI SDK ─────────────────────────
-console.log('\n=== Native Vercel AI SDK ===');
-const nativeResult = await generateText({
-  model,
-  system,
-  prompt,
-  tools,
-  maxSteps: 5,
-});
-console.log('Output:', nativeResult.text);
-console.log(
-  'Tool calls:',
-  nativeResult.steps.flatMap(s => s.toolCalls).map(tc => `${tc.toolName}(${JSON.stringify(tc.args)})`),
-);
+async function main() {
+  console.log('\n=== Native Vercel AI SDK ===');
+  const nativeResult = await generateText({
+    model,
+    system,
+    prompt,
+    tools,
+    maxSteps: 5,
+  });
+  console.log('Output:', nativeResult.text);
+  console.log(
+    'Tool calls:',
+    nativeResult.steps.flatMap(s => s.toolCalls).map(tc => `${tc.toolName}(${JSON.stringify(tc.args)})`),
+  );
 
-// ── Path 2: Agentspan passthrough ────────────────────────
-const vercelAgent = {
-  id: 'mixed_tools_agent',
-  tools,
-  generate: async (opts: { prompt: string; onStepFinish?: (step: any) => void }) => {
-    const result = await generateText({
-      model,
-      system,
-      prompt: opts.prompt,
-      tools,
-      maxSteps: 5,
-      onStepFinish: opts.onStepFinish,
-    });
-    return {
-      text: result.text,
-      toolCalls: result.steps.flatMap(s => s.toolCalls),
-      toolResults: result.steps.flatMap(s => s.toolResults),
-      finishReason: result.finishReason,
-    };
-  },
-  stream: async function* () { yield { type: 'finish' as const }; },
-};
+  // ── Path 2: Agentspan passthrough ────────────────────────
+  const vercelAgent = {
+    id: 'mixed_tools_agent',
+    tools,
+    generate: async (opts: { prompt: string; onStepFinish?: (step: any) => void }) => {
+      const result = await generateText({
+        model,
+        system,
+        prompt: opts.prompt,
+        tools,
+        maxSteps: 5,
+        onStepFinish: opts.onStepFinish,
+      });
+      return {
+        text: result.text,
+        toolCalls: result.steps.flatMap(s => s.toolCalls),
+        toolResults: result.steps.flatMap(s => s.toolResults),
+        finishReason: result.finishReason,
+      };
+    },
+    stream: async function* () { yield { type: 'finish' as const }; },
+  };
 
-console.log('\n=== Agentspan Passthrough ===');
-const runtime = new AgentRuntime();
-try {
-  const agentspanResult = await runtime.run(vercelAgent, prompt);
-  console.log('Output:', JSON.stringify(agentspanResult.output));
-  console.log('Status:', agentspanResult.status);
-} finally {
-  await runtime.shutdown();
+  console.log('\n=== Agentspan Passthrough ===');
+  const runtime = new AgentRuntime();
+  try {
+    const agentspanResult = await runtime.run(vercelAgent, prompt);
+    console.log('Output:', JSON.stringify(agentspanResult.output));
+    console.log('Status:', agentspanResult.status);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);
