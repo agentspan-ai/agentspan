@@ -20,8 +20,6 @@ Requirements:
     - Provider API key configured on the server (for example OPENAI_API_KEY)
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import os
