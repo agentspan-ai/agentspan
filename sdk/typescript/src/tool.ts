@@ -1,5 +1,8 @@
+import { createRequire } from 'node:module';
 import type { ToolDef, ToolType, ToolContext, CredentialFile } from './types.js';
 import { ConfigurationError } from './errors.js';
+
+const require = createRequire(import.meta.url);
 
 // ── Symbol for attaching ToolDef metadata ─────────────────
 
