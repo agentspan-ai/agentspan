@@ -1597,7 +1597,8 @@ class AgentCompileE2ETest {
     void compileVercelAiBasicAgent() throws Exception {
         Map<String, Object> rawConfig = new LinkedHashMap<>();
         rawConfig.put("name", "test_vercel_agent");
-        rawConfig.put("_worker_name", "test_vercel_agent");
+        rawConfig.put("model", "gpt-4o");
+        rawConfig.put("system", "You are a helpful assistant.");
 
         JsonNode resp = postCompile(vercelAiRequest(rawConfig));
         JsonNode wf = resp.get("workflowDef");
@@ -1605,47 +1606,110 @@ class AgentCompileE2ETest {
         assertThat(wf.get("name").asText()).isEqualTo("test_vercel_agent");
 
         List<Map<String, Object>> tasks = getTasks(resp);
-        // Passthrough framework = single SIMPLE task
+        // Real extraction: simple agent = single LLM_CHAT_COMPLETE task (not passthrough _fw_task)
         assertThat(tasks).hasSize(1);
-        assertThat(tasks.get(0).get("type")).isEqualTo("SIMPLE");
-        assertThat(tasks.get(0).get("taskReferenceName")).isEqualTo("_fw_task");
+        assertThat(tasks.get(0).get("type")).isEqualTo("LLM_CHAT_COMPLETE");
     }
 
     @Test
-    void compileVercelAiWorkflowInputs() throws Exception {
+    void compileVercelAiModelPrefixing() throws Exception {
+        // Bare model name should get "openai/" prefix
         Map<String, Object> rawConfig = new LinkedHashMap<>();
-        rawConfig.put("name", "vercel_inputs_e2e");
-        rawConfig.put("_worker_name", "vercel_inputs_e2e");
+        rawConfig.put("name", "vercel_model_e2e");
+        rawConfig.put("model", "gpt-4o-mini");
+        rawConfig.put("system", "Test.");
+
+        JsonNode resp = postCompile(vercelAiRequest(rawConfig));
+        List<Map<String, Object>> llm = findAllTasksByType(getTasks(resp), "LLM_CHAT_COMPLETE");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> inputs = (Map<String, Object>) llm.get(0).get("inputParameters");
+        assertThat(inputs.get("llmProvider")).isEqualTo("openai");
+        assertThat(inputs.get("model")).isEqualTo("gpt-4o-mini");
+    }
+
+    @Test
+    void compileVercelAiModelWithProviderPassesThrough() throws Exception {
+        // Model with explicit provider should not get double-prefixed
+        Map<String, Object> rawConfig = new LinkedHashMap<>();
+        rawConfig.put("name", "vercel_provider_e2e");
+        rawConfig.put("model", "anthropic/claude-sonnet-4-20250514");
+        rawConfig.put("system", "Test.");
+
+        JsonNode resp = postCompile(vercelAiRequest(rawConfig));
+        List<Map<String, Object>> llm = findAllTasksByType(getTasks(resp), "LLM_CHAT_COMPLETE");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> inputs = (Map<String, Object>) llm.get(0).get("inputParameters");
+        assertThat(inputs.get("llmProvider")).isEqualTo("anthropic");
+        assertThat(inputs.get("model")).isEqualTo("claude-sonnet-4-20250514");
+    }
+
+    @Test
+    void compileVercelAiWithWorkerRefTools() throws Exception {
+        // Tools arrive as _worker_ref from the generic serializer
+        Map<String, Object> tool1 = new LinkedHashMap<>();
+        tool1.put("_worker_ref", "get_weather");
+        tool1.put("description", "Get current weather");
+        tool1.put("parameters", Map.of("type", "object",
+                "properties", Map.of("city", Map.of("type", "string")),
+                "required", List.of("city")));
+
+        Map<String, Object> tool2 = new LinkedHashMap<>();
+        tool2.put("_worker_ref", "calculate");
+        tool2.put("description", "Do math");
+        tool2.put("parameters", Map.of("type", "object",
+                "properties", Map.of("expr", Map.of("type", "string"))));
+
+        Map<String, Object> rawConfig = new LinkedHashMap<>();
+        rawConfig.put("name", "vercel_tools_e2e");
+        rawConfig.put("model", "gpt-4o");
+        rawConfig.put("system", "Use tools to help.");
+        rawConfig.put("tools", List.of(tool1, tool2));
 
         JsonNode resp = postCompile(vercelAiRequest(rawConfig));
         List<Map<String, Object>> tasks = getTasks(resp);
 
+        // Tool agent = DO_WHILE loop (not single SIMPLE _fw_task)
+        assertThat(findTaskByType(tasks, "DO_WHILE")).isNotNull();
+
+        // Two tool specs in LLM inputs
+        List<Map<String, Object>> llm = findAllTasksByType(tasks, "LLM_CHAT_COMPLETE");
+        assertThat(llm).isNotEmpty();
         @SuppressWarnings("unchecked")
-        Map<String, Object> inputs = (Map<String, Object>) tasks.get(0).get("inputParameters");
-        assertThat(inputs.get("prompt")).isEqualTo("${workflow.input.prompt}");
-        assertThat(inputs.get("session_id")).isEqualTo("${workflow.input.session_id}");
-        assertThat(inputs.get("media")).isEqualTo("${workflow.input.media}");
-        assertThat(inputs.get("cwd")).isEqualTo("${workflow.input.cwd}");
+        Map<String, Object> inputs = (Map<String, Object>) llm.get(0).get("inputParameters");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> toolSpecs = (List<Map<String, Object>>) inputs.get("tools");
+        assertThat(toolSpecs).hasSize(2);
+        assertThat(toolSpecs.stream().map(t -> t.get("name")).toList())
+                .containsExactlyInAnyOrder("get_weather", "calculate");
+
+        // FORK_JOIN_DYNAMIC for tool dispatch (SIMPLE tasks for each tool)
+        List<Map<String, Object>> forkTasks = findAllTasksByType(tasks, "FORK_JOIN_DYNAMIC");
+        assertThat(forkTasks).isNotEmpty();
     }
 
     @Test
-    void compileVercelAiWorkflowOutput() throws Exception {
+    void compileVercelAiWithTemperatureAndMaxTokens() throws Exception {
         Map<String, Object> rawConfig = new LinkedHashMap<>();
-        rawConfig.put("name", "vercel_output_e2e");
-        rawConfig.put("_worker_name", "vercel_output_e2e");
+        rawConfig.put("name", "vercel_params_e2e");
+        rawConfig.put("model", "gpt-4o");
+        rawConfig.put("system", "Test.");
+        rawConfig.put("temperature", 0.7);
+        rawConfig.put("maxTokens", 500);
 
         JsonNode resp = postCompile(vercelAiRequest(rawConfig));
-        JsonNode wf = resp.get("workflowDef");
-        JsonNode outputParams = wf.get("outputParameters");
-        assertThat(outputParams).isNotNull();
-        assertThat(outputParams.get("result").asText()).isEqualTo("${_fw_task.output.result}");
+        List<Map<String, Object>> llm = findAllTasksByType(getTasks(resp), "LLM_CHAT_COMPLETE");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> inputs = (Map<String, Object>) llm.get(0).get("inputParameters");
+        assertThat(inputs.get("temperature")).isEqualTo(0.7);
+        assertThat(inputs.get("maxTokens")).isEqualTo(500);
     }
 
     @Test
     void startVercelAiAgent() throws Exception {
         Map<String, Object> rawConfig = new LinkedHashMap<>();
         rawConfig.put("name", "vercel_start_e2e");
-        rawConfig.put("_worker_name", "vercel_start_e2e");
+        rawConfig.put("model", "gpt-4o");
+        rawConfig.put("system", "You are helpful.");
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("framework", "vercel_ai");
