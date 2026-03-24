@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-24T19:40:58.266Z",
+  "timestamp": "2026-03-24T20:17:13.369Z",
   "results": [
     {
-      "example": "vercel-ai/04-structured-output",
+      "example": "adk/06-streaming",
       "status": "FAIL",
-      "duration": 1.392,
+      "duration": 3.288,
       "checks": {
         "workflowCompleted": false,
         "noUnhandledErrors": true,
@@ -15,149 +15,142 @@
       },
       "output": "",
       "events": [],
-      "error": "APICallError [AI_APICallError]: You didn't provide an API key. You need to provide your API key in an Authorization header using Bearer auth (i.e. Authorization: Bearer YOUR_KEY), or as the password field (with blank username) if you're accessing the API from your browser and are prompted for a username and password. You can obtain an API key from https://platform.openai.com/account/api-keys.\n    at <anonymous> (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript"
+      "error": "AgentspanError: Framework streaming is not yet supported. Use run() for framework agents.\n    at AgentRuntime.stream (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:266:13)\n    at main (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/examples/adk/06-streaming.ts:67:40)\n    at <anonymous> (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/examples/adk/06-streaming.ts:101:1)"
     },
     {
-      "example": "vercel-ai/06-middleware",
-      "status": "FAIL",
-      "duration": 1.478,
-      "checks": {
-        "workflowCompleted": false,
-        "noUnhandledErrors": true,
-        "toolAudit": [],
-        "allToolsSucceeded": true,
-        "llmEngaged": false,
-        "outputNonEmpty": false
-      },
-      "output": "",
-      "events": [],
-      "error": "node:internal/modules/run_main:107\n    triggerUncaughtException(\n    ^\n\nAPICallError [AI_APICallError]: You didn't provide an API key. You need to provide your API key in an Authorization header using Bearer auth (i.e. Authorization: Bearer YOUR_KEY), or as the password field (with blank username) if you're accessing the API from your browser and are prompted for a username and password. You can obtain an API key from https://platform.openai.com/account/api-keys.\n    at <anonymous> (/Users/viren"
-    },
-    {
-      "example": "vercel-ai/02-tools-compat",
-      "status": "FAIL",
-      "duration": 1.532,
-      "checks": {
-        "workflowCompleted": false,
-        "noUnhandledErrors": true,
-        "toolAudit": [],
-        "allToolsSucceeded": true,
-        "llmEngaged": false,
-        "outputNonEmpty": false
-      },
-      "output": "",
-      "events": [],
-      "error": "APICallError [AI_APICallError]: You didn't provide an API key. You need to provide your API key in an Authorization header using Bearer auth (i.e. Authorization: Bearer YOUR_KEY), or as the password field (with blank username) if you're accessing the API from your browser and are prompted for a username and password. You can obtain an API key from https://platform.openai.com/account/api-keys.\n    at <anonymous> (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript"
-    },
-    {
-      "example": "vercel-ai/08-agent-handoff",
-      "status": "FAIL",
-      "duration": 1.484,
-      "checks": {
-        "workflowCompleted": false,
-        "noUnhandledErrors": true,
-        "toolAudit": [],
-        "allToolsSucceeded": true,
-        "llmEngaged": false,
-        "outputNonEmpty": false
-      },
-      "output": "",
-      "events": [],
-      "error": "node:internal/modules/run_main:107\n    triggerUncaughtException(\n    ^\n\nAPICallError [AI_APICallError]: You didn't provide an API key. You need to provide your API key in an Authorization header using Bearer auth (i.e. Authorization: Bearer YOUR_KEY), or as the password field (with blank username) if you're accessing the API from your browser and are prompted for a username and password. You can obtain an API key from https://platform.openai.com/account/api-keys.\n    at <anonymous> (/Users/viren"
-    },
-    {
-      "example": "vercel-ai/07-stop-conditions",
-      "status": "FAIL",
-      "duration": 1.5,
-      "checks": {
-        "workflowCompleted": false,
-        "noUnhandledErrors": true,
-        "toolAudit": [],
-        "allToolsSucceeded": true,
-        "llmEngaged": false,
-        "outputNonEmpty": false
-      },
-      "output": "",
-      "events": [],
-      "error": "APICallError [AI_APICallError]: You didn't provide an API key. You need to provide your API key in an Authorization header using Bearer auth (i.e. Authorization: Bearer YOUR_KEY), or as the password field (with blank username) if you're accessing the API from your browser and are prompted for a username and password. You can obtain an API key from https://platform.openai.com/account/api-keys.\n    at <anonymous> (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript"
-    },
-    {
-      "example": "vercel-ai/03-streaming",
-      "status": "FAIL",
-      "duration": 1.544,
+      "example": "adk/07-output-key-state",
+      "status": "PASS",
+      "duration": 18.4,
       "checks": {
         "workflowCompleted": true,
         "noUnhandledErrors": true,
         "toolAudit": [],
         "allToolsSucceeded": true,
         "llmEngaged": true,
-        "outputNonEmpty": false
+        "outputNonEmpty": true
       },
-      "output": "",
+      "output": "{\n  \"result\": null,\n  \"finishReason\": null\n}",
       "events": []
     },
     {
-      "example": "vercel-ai/01-passthrough",
-      "status": "FAIL",
-      "duration": 1.559,
-      "checks": {
-        "workflowCompleted": false,
-        "noUnhandledErrors": true,
-        "toolAudit": [],
-        "allToolsSucceeded": true,
-        "llmEngaged": false,
-        "outputNonEmpty": false
-      },
-      "output": "",
-      "events": [],
-      "error": "APICallError [AI_APICallError]: You didn't provide an API key. You need to provide your API key in an Authorization header using Bearer auth (i.e. Authorization: Bearer YOUR_KEY), or as the password field (with blank username) if you're accessing the API from your browser and are prompted for a username and password. You can obtain an API key from https://platform.openai.com/account/api-keys.\n    at <anonymous> (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript"
-    },
-    {
-      "example": "vercel-ai/05-multi-step",
-      "status": "FAIL",
-      "duration": 1.533,
-      "checks": {
-        "workflowCompleted": false,
-        "noUnhandledErrors": true,
-        "toolAudit": [],
-        "allToolsSucceeded": true,
-        "llmEngaged": false,
-        "outputNonEmpty": false
-      },
-      "output": "",
-      "events": [],
-      "error": "APICallError [AI_APICallError]: You didn't provide an API key. You need to provide your API key in an Authorization header using Bearer auth (i.e. Authorization: Bearer YOUR_KEY), or as the password field (with blank username) if you're accessing the API from your browser and are prompted for a username and password. You can obtain an API key from https://platform.openai.com/account/api-keys.\n    at <anonymous> (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript"
-    },
-    {
-      "example": "vercel-ai/09-credentials",
-      "status": "FAIL",
-      "duration": 0.962,
+      "example": "adk/04-sub-agents",
+      "status": "PASS",
+      "duration": 18.538,
       "checks": {
         "workflowCompleted": true,
         "noUnhandledErrors": true,
         "toolAudit": [],
         "allToolsSucceeded": true,
         "llmEngaged": true,
-        "outputNonEmpty": false
+        "outputNonEmpty": true
       },
-      "output": "",
+      "output": "{\n  \"result\": null,\n  \"finishReason\": null\n}",
       "events": []
     },
     {
-      "example": "vercel-ai/10-hitl",
-      "status": "FAIL",
-      "duration": 1.099,
+      "example": "adk/00-hello-world",
+      "status": "PASS",
+      "duration": 18.624,
       "checks": {
-        "workflowCompleted": false,
+        "workflowCompleted": true,
         "noUnhandledErrors": true,
         "toolAudit": [],
         "allToolsSucceeded": true,
-        "llmEngaged": false,
-        "outputNonEmpty": false
+        "llmEngaged": true,
+        "outputNonEmpty": true
       },
-      "output": "",
-      "events": [],
-      "error": "node:internal/modules/run_main:107\n    triggerUncaughtException(\n    ^\n\nAPICallError [AI_APICallError]: You didn't provide an API key. You need to provide your API key in an Authorization header using Bearer auth (i.e. Authorization: Bearer YOUR_KEY), or as the password field (with blank username) if you're accessing the API from your browser and are prompted for a username and password. You can obtain an API key from https://platform.openai.com/account/api-keys.\n    at <anonymous> (/Users/viren"
+      "output": "{\n  \"result\": null,\n  \"finishReason\": null\n}",
+      "events": []
+    },
+    {
+      "example": "adk/02-function-tools",
+      "status": "PASS",
+      "duration": 18.629,
+      "checks": {
+        "workflowCompleted": true,
+        "noUnhandledErrors": true,
+        "toolAudit": [],
+        "allToolsSucceeded": true,
+        "llmEngaged": true,
+        "outputNonEmpty": true
+      },
+      "output": "{\n  \"result\": null,\n  \"finishReason\": null\n}",
+      "events": []
+    },
+    {
+      "example": "adk/03-structured-output",
+      "status": "PASS",
+      "duration": 18.646,
+      "checks": {
+        "workflowCompleted": true,
+        "noUnhandledErrors": true,
+        "toolAudit": [],
+        "allToolsSucceeded": true,
+        "llmEngaged": true,
+        "outputNonEmpty": true
+      },
+      "output": "{\n  \"result\": null,\n  \"finishReason\": null\n}",
+      "events": []
+    },
+    {
+      "example": "adk/01-basic-agent",
+      "status": "PASS",
+      "duration": 18.67,
+      "checks": {
+        "workflowCompleted": true,
+        "noUnhandledErrors": true,
+        "toolAudit": [],
+        "allToolsSucceeded": true,
+        "llmEngaged": true,
+        "outputNonEmpty": true
+      },
+      "output": "{\n  \"result\": null,\n  \"finishReason\": null\n}",
+      "events": []
+    },
+    {
+      "example": "adk/08-instruction-templating",
+      "status": "PASS",
+      "duration": 16.951,
+      "checks": {
+        "workflowCompleted": true,
+        "noUnhandledErrors": true,
+        "toolAudit": [],
+        "allToolsSucceeded": true,
+        "llmEngaged": true,
+        "outputNonEmpty": true
+      },
+      "output": "{\n  \"result\": null,\n  \"finishReason\": null\n}",
+      "events": []
+    },
+    {
+      "example": "adk/05-generation-config",
+      "status": "PASS",
+      "duration": 33.667,
+      "checks": {
+        "workflowCompleted": true,
+        "noUnhandledErrors": true,
+        "toolAudit": [],
+        "allToolsSucceeded": true,
+        "llmEngaged": true,
+        "outputNonEmpty": true
+      },
+      "output": "{\n  \"result\": null,\n  \"finishReason\": null\n}",
+      "events": []
+    },
+    {
+      "example": "adk/09-multi-tool-agent",
+      "status": "PASS",
+      "duration": 17.391,
+      "checks": {
+        "workflowCompleted": true,
+        "noUnhandledErrors": true,
+        "toolAudit": [],
+        "allToolsSucceeded": true,
+        "llmEngaged": true,
+        "outputNonEmpty": true
+      },
+      "output": "{\n  \"result\": null,\n  \"finishReason\": null\n}",
+      "events": []
     }
   ]
 }

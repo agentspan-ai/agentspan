@@ -14,7 +14,7 @@
  */
 
 import { Agent, setTracingDisabled } from '@openai/agents';
-import { AgentRuntime } from '@agentspan/sdk';
+import { AgentRuntime } from '../../src/index.js';
 
 setTracingDisabled(true);
 
