@@ -85,10 +85,14 @@ Agent Signals allow humans and agents to send context, redirections, and coordin
                     ┌──────────────▼───────────────────────────┐
                     │         Enrichment Script                 │
                     │                                          │
-                    │  accept_signal → INLINE (update vars)    │
-                    │  reject_signal → INLINE (update vars)    │
-                    │  accept_all   → INLINE (batch update)    │
+                    │  accept_signal → INLINE (compute)        │
+                    │  reject_signal → INLINE (compute)        │
+                    │  accept_all   → INLINE (compute)         │
                     │  regular tools → SIMPLE/HTTP/MCP as usual│
+                    │                                          │
+                    │  → FORK_JOIN_DYNAMIC → JOIN               │
+                    │  → Signal merge (INLINE + SET_VARIABLE)  │
+                    │  → Implicit accept (INLINE + SET_VARIABLE)│
                     └──────────────────────────────────────────┘
 ```
 
@@ -250,35 +254,62 @@ When a signal arrives at a parent workflow:
 
 ### 5.1 Enrichment Script Routing
 
-In `JavaScriptBuilder.enrichToolsScriptDynamic()`, add signal tool routing before regular tool routing:
+Signal disposition tools are **compile-time known** — they are always `accept_signal`, `reject_signal`, and `accept_all_signals`. The enrichment script is compiled at workflow creation time, so we bake signal tool routing into the script as a static `if` check, the same way `httpCfg`, `mcpCfg`, etc. are baked in. This works because the tool names are fixed (not user-defined) and can be hard-coded.
+
+In `JavaScriptBuilder.enrichToolsScript()` / `enrichToolsScriptDynamic()`, add signal tool routing **before** regular tool routing in the `for` loop:
 
 ```javascript
 var signalTools = {'accept_signal': true, 'reject_signal': true, 'accept_all_signals': true};
+// signalScripts is baked in at compile time by JavaScriptBuilder.
+// Each value is a stringified IIFE — the disposition script for that action.
+// Example: signalScripts['accept_signal'] = '(function() { var processing = ... })()';
+var signalScripts = {BAKED_SIGNAL_SCRIPTS_JSON};  // replaced at compile time
 
-for (var i = 0; i < toolCalls.length; i++) {
-    var tc = toolCalls[i];
-    var n = tc.name || tc.taskReferenceName;
+for (var i = 0; i < tcs.length; i++) {
+    var tc = tcs[i]; var n = tc.name;
+    var t = {name: n, taskReferenceName: tc.taskReferenceName || n,
+             type: tc.type || 'SIMPLE', inputParameters: tc.inputParameters || {},
+             optional: true, retryCount: 0};
 
     if (signalTools[n]) {
-        // Route to INLINE task — resolves before regular tools
+        // Route to INLINE task — signal disposition is server-side only.
+        // The expression is baked in at compile time by JavaScriptBuilder.
+        // signalScripts[n] is a compile-time variable holding the JS string
+        // for accept_signal, reject_signal, or accept_all_signals.
         t.type = 'INLINE';
         t.inputParameters = {
             evaluatorType: 'graaljs',
-            expression: signalDispositionScript(n),
-            signal_id: tc.inputParameters.signal_id,
+            expression: signalScripts[n],
+            signal_id: tc.inputParameters.signal_id || '',
             reason: tc.inputParameters.reason || '',
-            processed: '${workflow.variables._processing_signals}',
-            signal_data: '${workflow.variables._signal_data}'
+            processing: $.processingSignals || [],
+            already_processed: $.processedSignals || [],
+            signal_data: $.signalData || {}
         };
     }
-    else if (apiCfg && apiCfg[n]) { ... }
+    else if (httpCfg[n]) { ... }
     else if (mcpCfg && mcpCfg[n]) { ... }
-    else if (httpCfg && httpCfg[n]) { ... }
+    else if (apiCfg && apiCfg[n]) { ... }
     else { /* SIMPLE worker task */ }
 }
 ```
 
+The `$.processingSignals`, `$.processedSignals`, and `$.signalData` references are fed from the enrichment task's `inputParameters`:
+
+```java
+// In ToolCompiler, when building the enrichment task inputParameters:
+enrichInput.put("processingSignals", "${workflow.variables._processing_signals}");
+enrichInput.put("processedSignals", "${workflow.variables._processed_signals}");
+enrichInput.put("signalData", "${workflow.variables._signal_data}");
+```
+
+These are only added when the agent has `signalMode != "disabled"`. When no signals are active, the arrays are empty and the `signalTools[n]` check never matches — zero overhead.
+
 ### 5.2 Disposition INLINE Scripts
+
+> **Important: INLINE tasks cannot write workflow variables directly.** Conductor's INLINE task puts its return value in `output.result`. To persist changes to workflow variables, a **separate SET_VARIABLE task** must read from the INLINE output and write to variables (see Section 5.2.1). This matches the existing pattern used throughout the codebase (e.g., `buildStateMergeTasks`: INLINE computes merged state, then SET_VARIABLE persists it).
+
+The `$` references in INLINE scripts correspond to keys in the task's `inputParameters`. Here the enrichment script passes the signal state as nested `inputParameters` on each dynamically-created INLINE task (see Section 5.1), so the scripts use `$.processing`, `$.already_processed`, `$.signal_data` — matching the keys set in the enrichment routing block.
 
 **accept_signal:**
 
@@ -314,7 +345,8 @@ for (var i = 0; i < toolCalls.length; i++) {
     return {
         status: 'accepted', signalId: signalId,
         _signal_event: 'signal_accepted',
-        _update_vars: {_processing_signals: processing, _processed_signals: processed}
+        updatedProcessing: processing,
+        updatedProcessed: processed
     };
 })()
 ```
@@ -355,7 +387,9 @@ for (var i = 0; i < toolCalls.length; i++) {
     return {
         status: 'rejected', signalId: signalId, reason: reason,
         _signal_event: 'signal_rejected',
-        _update_vars: {_processing_signals: processing, _processed_signals: processed, _signal_data: signalData}
+        updatedProcessing: processing,
+        updatedProcessed: processed,
+        updatedSignalData: signalData
     };
 })()
 ```
@@ -379,34 +413,100 @@ for (var i = 0; i < toolCalls.length; i++) {
     return {
         status: 'accepted', count: events.length,
         _signal_events: events,
-        _update_vars: {_processing_signals: [], _processed_signals: processed}
+        updatedProcessing: [],
+        updatedProcessed: processed
     };
 })()
 ```
 
+### 5.2.1 Variable Persistence via SET_VARIABLE
+
+Since INLINE tasks cannot write workflow variables, signal disposition requires a **post-fork SET_VARIABLE task** to persist the updated signal state. This follows the same pattern as `buildStateMergeTasks` (INLINE merge + SET_VARIABLE persist).
+
+However, signal disposition INLINE tasks run inside `FORK_JOIN_DYNAMIC` alongside regular tools. Multiple signal disposition tasks may run in parallel (e.g., LLM calls `accept_signal("a")` and `reject_signal("b")` in the same turn). Each INLINE task independently mutates its copy of the `processing` array — these copies diverge.
+
+**Solution: Post-JOIN signal state merge.**
+
+After the JOIN task (which collects all forked task outputs), add a signal-specific merge INLINE + SET_VARIABLE pair, similar to `buildStateMergeTasks`:
+
+```java
+// Signal state merge INLINE — runs after JOIN, scans all forked outputs for signal dispositions
+String mergeScript = JavaScriptBuilder.signalStateMergeScript();
+
+WorkflowTask mergeTask = new WorkflowTask();
+mergeTask.setType("INLINE");
+mergeTask.setTaskReferenceName(agentName + "_signal_merge");
+Map<String, Object> mergeInputs = new LinkedHashMap<>();
+mergeInputs.put("evaluatorType", "graaljs");
+mergeInputs.put("expression", mergeScript);
+mergeInputs.put("joinOutput", "${" + joinRef + ".output}");
+mergeInputs.put("currentProcessing", "${workflow.variables._processing_signals}");
+mergeInputs.put("currentProcessed", "${workflow.variables._processed_signals}");
+mergeInputs.put("currentSignalData", "${workflow.variables._signal_data}");
+mergeTask.setInputParameters(mergeInputs);
+
+// SET_VARIABLE to persist merged signal state
+WorkflowTask setTask = new WorkflowTask();
+setTask.setType("SET_VARIABLE");
+setTask.setTaskReferenceName(agentName + "_signal_set");
+setTask.setInputParameters(Map.of(
+    "_processing_signals", "${" + mergeTask.getTaskReferenceName() + ".output.result.processing}",
+    "_processed_signals", "${" + mergeTask.getTaskReferenceName() + ".output.result.processed}",
+    "_signal_data", "${" + mergeTask.getTaskReferenceName() + ".output.result.signalData}"
+));
+```
+
+The merge script scans `joinOutput` for tasks whose `output.result` contains `updatedProcessing` / `updatedProcessed` fields, applies each disposition to the authoritative variable state, and returns the merged result. Signal data deletions (from `reject_signal`) are also merged.
+
+This pair is only added when the agent has `signalMode != "disabled"`. When no signals are active, the merge is a no-op (no forked tasks have signal output fields).
+
 ### 5.3 Implicit Acceptance
 
-A cleanup task at the end of each DO_WHILE iteration checks if `_processing_signals` is non-empty. If so, all remaining signals are moved to `_processed` with `disposition: "accepted_implicit"`.
+A cleanup task pair at the end of each DO_WHILE iteration checks if `_processing_signals` is non-empty. If so, all remaining signals are moved to `_processed` with `disposition: "accepted_implicit"`.
 
-This is an INLINE task added after the tool routing SWITCH:
+This is an **INLINE + SET_VARIABLE** pair added after the signal state merge (Section 5.2.1):
+
+**INLINE task** (computes the implicit acceptance):
 
 ```javascript
 (function() {
     var processing = $.processing || [];
-    if (processing.length === 0) return {noop: true};
+    var processed = $.already_processed || [];
+    if (processing.length === 0) return {noop: true, processing: processing, processed: processed};
 
+    var events = [];
     for (var i = 0; i < processing.length; i++) {
         processing[i].disposition = 'accepted_implicit';
         processing[i].processedAt = Date.now();
+        events.push({type: 'signal_accepted', signalId: processing[i].signalId, implicit: true});
+        processed.push(processing[i]);
     }
 
     return {
-        _update_vars: {_processing_signals: [], _processed_signals: processing},
-        _signal_events: processing.map(function(s) {
-            return {type: 'signal_accepted', signalId: s.signalId, implicit: true};
-        })
+        processing: [],
+        processed: processed,
+        _signal_events: events
     };
 })()
+```
+
+**SET_VARIABLE task** (persists the result):
+
+```java
+WorkflowTask setTask = new WorkflowTask();
+setTask.setType("SET_VARIABLE");
+setTask.setTaskReferenceName(agentName + "_signal_implicit_set");
+setTask.setInputParameters(Map.of(
+    "_processing_signals", "${" + implicitInlineRef + ".output.result.processing}",
+    "_processed_signals", "${" + implicitInlineRef + ".output.result.processed}"
+));
+```
+
+The INLINE task's `inputParameters` wire `processing` and `already_processed` from workflow variables:
+
+```java
+implicitInputs.put("processing", "${workflow.variables._processing_signals}");
+implicitInputs.put("already_processed", "${workflow.variables._processed_signals}");
 ```
 
 ### 5.4 Execution Order
@@ -416,12 +516,22 @@ Within a single DO_WHILE iteration when signals are present:
 ```
 1. Task mapper injects signal messages + ephemeral tools
 2. LLM_CHAT_COMPLETE: LLM sees signals, calls accept/reject + regular tools
-3. Signal disposition INLINE tasks execute FIRST (fast, no external calls)
-4. Regular tool tasks execute via FORK_JOIN_DYNAMIC (may be parallel)
-5. Results merged
-6. Implicit acceptance cleanup runs
-7. Loop continues or terminates
+3. Enrichment INLINE routes tool calls:
+   - accept_signal / reject_signal → INLINE tasks (disposition computation)
+   - regular tools → SIMPLE / HTTP / MCP / SUB_WORKFLOW tasks
+4. FORK_JOIN_DYNAMIC executes ALL tasks in parallel (signal + regular)
+   - Signal INLINE tasks complete near-instantly (no external calls)
+   - Regular tools execute normally
+5. JOIN collects all results
+6. Signal state merge (INLINE) — scans JOIN output for dispositions
+7. Signal state persist (SET_VARIABLE) — writes merged state to workflow vars
+8. Agent state merge + persist (existing pattern for ToolContext.state)
+9. Implicit acceptance cleanup (INLINE + SET_VARIABLE) — catches undispositioned signals
+10. AgentEventListener emits SSE events for _signal_event/_signal_events in task outputs
+11. Loop continues or terminates
 ```
+
+Note: Signal disposition INLINE tasks run **inside** the FORK_JOIN_DYNAMIC, not before it. The enrichment script produces them as dynamic task entries alongside regular tools. This is simpler than a separate pre-fork step and matches the existing architecture where all tool-call-derived tasks go through the same enrich-fork-join pipeline.
 
 ---
 
@@ -436,7 +546,9 @@ public SignalReceipt signal(String workflowId, SignalRequest request) {
     // ... validation, store signal, emit SSE ...
 
     if ("urgent".equals(request.getPriority())) {
-        // Set flag — the event listener will pause after current task
+        // Set flag — the event listener will pause after current task.
+        // This runs inside the per-workflow synchronized block (Section 17.2),
+        // so concurrent urgent signals are serialized.
         Map<String, Object> vars = new LinkedHashMap<>();
         vars.put("_urgent_pause_requested", true);
         workflowExecutor.updateVariables(workflowId, vars);
@@ -464,7 +576,9 @@ public void onTaskCompleted(TaskModel task) {
     Object pauseFlag = workflow.getVariables().get("_urgent_pause_requested");
 
     if (Boolean.TRUE.equals(pauseFlag)) {
-        // Clear flag
+        // Clear flag FIRST, then pause. This order prevents a second
+        // onTaskCompleted from double-pausing if the clear+pause are
+        // not atomic (see 6.4 Race Condition Analysis).
         workflowExecutor.updateVariables(workflowId,
             Map.of("_urgent_pause_requested", false));
 
@@ -473,7 +587,12 @@ public void onTaskCompleted(TaskModel task) {
 
         // Schedule auto-resume (100ms for variable propagation)
         scheduler.schedule(() -> {
-            workflowExecutor.resumeWorkflow(workflowId);
+            try {
+                workflowExecutor.resumeWorkflow(workflowId);
+            } catch (Exception e) {
+                // Workflow may have completed/terminated between pause and resume
+                logger.debug("Auto-resume failed for {}: {}", workflowId, e.getMessage());
+            }
         }, 100, TimeUnit.MILLISECONDS);
     }
 
@@ -486,6 +605,37 @@ public void onTaskCompleted(TaskModel task) {
 - Normal signal: agent sees it on next LLM iteration (after full current iteration completes — could be seconds to minutes)
 - Urgent signal: agent sees it after current individual Conductor task completes (typically seconds)
 - The difference matters when the agent is executing 5 parallel tool calls that each take 30 seconds — normal waits 2.5 minutes, urgent waits ~30 seconds
+
+### 6.4 Race Condition Analysis
+
+**Race 1: Two urgent signals arrive simultaneously.**
+
+Both calls to `AgentService.signal()` run inside the per-workflow `synchronized` block (Section 17.2). The first sets `_urgent_pause_requested = true`, the second also sets it to `true` (idempotent). Only one `onTaskCompleted` fires per task completion — it reads the flag once, clears it, and pauses. The second signal's flag-set is a no-op since the flag is already `true`. Result: one pause occurs, both signals are in `_pending_signals`. Correct.
+
+**Race 2: Flag set but `onTaskCompleted` reads stale variable state.**
+
+Conductor's `updateVariables` writes to the persistent store (Redis/database) synchronously. `onTaskCompleted` calls `getWorkflow()` which reads from the same store. As long as the `updateVariables` call from `signal()` completes before `onTaskCompleted` calls `getWorkflow()`, the flag is visible. If the flag write is still in-flight when `onTaskCompleted` fires, the task completion proceeds without pausing — the signal downgrades to normal delivery (next iteration). This is acceptable: urgent is best-effort-faster, not guaranteed-immediate. The signal is still delivered on the next iteration regardless.
+
+**Race 3: `onTaskCompleted` fires for an internal system task (SWITCH, INLINE, etc.).**
+
+`onTaskCompleted` is called for all task types. If the urgent flag triggers a pause during an internal system task (e.g., between SWITCH evaluation and fork execution), the pause/resume cycle could interfere with Conductor's internal state machine. **Mitigation:** Only check the urgent flag for task types that represent natural pause points — specifically `LLM_CHAT_COMPLETE` and tool tasks (SIMPLE, HTTP, MCP, SUB_WORKFLOW). Skip the check for internal system tasks:
+
+```java
+if (Boolean.TRUE.equals(pauseFlag) && isNaturalPausePoint(task)) {
+    // ... pause logic ...
+}
+
+private boolean isNaturalPausePoint(TaskModel task) {
+    String type = task.getTaskType();
+    return "LLM_CHAT_COMPLETE".equals(type) || "SIMPLE".equals(type)
+        || "HTTP".equals(type) || "CALL_MCP_TOOL".equals(type)
+        || "SUB_WORKFLOW".equals(type);
+}
+```
+
+**Race 4: Workflow completes between pause and scheduled resume.**
+
+The auto-resume lambda must handle `WorkflowNotFoundException` or similar exceptions gracefully (already shown in 6.2 code with try/catch).
 
 ---
 
@@ -618,8 +768,12 @@ public static AgentSSEEvent signalRejected(String workflowId, String signalId,
 | Event | Emitted by | When |
 |---|---|---|
 | `signal_received` | `AgentService.signal()` | Immediately when signal is stored |
-| `signal_accepted` | `AgentEventListener` | When accept INLINE task completes (reads `_signal_event` from output) |
-| `signal_rejected` | `AgentEventListener` | When reject INLINE task completes |
+| `signal_accepted` | `AgentEventListener` | When signal merge SET_VARIABLE completes (listener scans `_processed_signals` diff) |
+| `signal_rejected` | `AgentEventListener` | When signal merge SET_VARIABLE completes (listener scans `_processed_signals` diff) |
+
+**Note on SSE emission mechanism:** The original design proposed reading `_signal_event` from INLINE task output in `onTaskCompleted`. However, INLINE tasks that run inside FORK_JOIN_DYNAMIC do fire `onTaskCompleted`, but their output is nested under `output.result` and is not easily distinguishable from regular tool outputs. Instead, the event listener should detect signal disposition changes by watching the **signal merge SET_VARIABLE task** (Section 5.2.1). When a SET_VARIABLE task with reference name matching `*_signal_set` or `*_signal_implicit_set` completes, the listener compares the new `_processed_signals` with the previous value to find newly-dispositioned signals and emits the appropriate SSE events.
+
+Alternative (simpler): The signal merge INLINE task (Section 5.2.1) already computes the list of newly-dispositioned signals. Store this as a field in the merge output (e.g., `newDispositions`), and have the event listener read it from the SET_VARIABLE task's input (which references the merge output). This avoids diffing.
 
 ### 8.3 SDK Event Types
 
@@ -838,24 +992,41 @@ In `compileWithTools()`:
 
 1. Read `signalMode` from AgentConfig
 2. If agent has `onSignalReceived` callback, register a worker for it
-3. No compile-time signal tasks — all signal handling is dynamic (task mapper + enrichment)
-
-The only compile-time change is adding the signal system prompt line (Section 4.2) and the implicit acceptance cleanup task in the DO_WHILE loop.
+3. Add signal system prompt line (Section 4.2)
+4. If `signalMode != "disabled"`:
+   - Add `processingSignals`, `processedSignals`, `signalData` to the enrichment task's `inputParameters` (so the enrichment script can pass them to signal INLINE tasks)
+   - Add signal state merge INLINE + SET_VARIABLE pair after the existing `buildStateMergeTasks` (Section 5.2.1)
+   - Add implicit acceptance INLINE + SET_VARIABLE pair after the signal state merge (Section 5.3)
+5. Initialize signal variables in the pre-loop SET_VARIABLE task (alongside `_agent_state`, `_human_feedback`, etc.):
+   ```java
+   initVars.put("_pending_signals", Collections.emptyList());
+   initVars.put("_processing_signals", Collections.emptyList());
+   initVars.put("_processed_signals", Collections.emptyList());
+   initVars.put("_signal_data", Collections.emptyMap());
+   initVars.put("_signal_counts", Map.of("lifetime", 0, "pending", 0));
+   initVars.put("_urgent_pause_requested", false);
+   ```
 
 ### 11.2 ToolCompiler Modifications
 
 1. Add `"signal"` to `TYPE_MAP` (maps to `"HTTP"`)
-2. Add signal tool routing in `enrichToolsScriptDynamic()`
-3. Add signal disposition tools in `enrichToolsScriptDynamic()` (INLINE routing for accept/reject)
+2. Add signal tool routing block in `enrichToolsScript()` and `enrichToolsScriptDynamic()` — a static `if (signalTools[n])` check baked into the enrichment JavaScript (Section 5.1). This is compile-time code, not dynamic.
+3. Add `processingSignals`, `processedSignals`, `signalData` input parameters to enrichment tasks when signals are enabled
+4. Add `buildSignalStateMergeTasks()` method (analogous to `buildStateMergeTasks()`)
 
 ### 11.3 JavaScriptBuilder Additions
 
 New methods:
 
 ```java
+/** Returns INLINE script for accept_signal, reject_signal, or accept_all_signals. */
 public static String signalDispositionScript(String action) { ... }
+
+/** Returns INLINE script for implicit acceptance cleanup. */
 public static String implicitAcceptScript() { ... }
-public static String signalEnrichmentBlock() { ... }
+
+/** Returns INLINE script for post-JOIN signal state merge. */
+public static String signalStateMergeScript() { ... }
 ```
 
 ---
@@ -984,7 +1155,7 @@ Modify `condenseIfNeeded()` to:
 
 ### 16.1 When It Fires
 
-The `on_signal_received` callback fires **before** signals are injected into the LLM conversation. It runs as an INLINE task (not a worker) to minimize latency.
+The `on_signal_received` callback fires **before** signals are injected into the LLM conversation. It runs as a SIMPLE worker task (the Python callback is registered as a worker, same as `before_model`/`after_model` callbacks).
 
 ### 16.2 Flow
 
