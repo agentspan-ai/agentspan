@@ -1843,6 +1843,44 @@ Since the Vercel AI SDK is TypeScript-specific, these examples only apply to the
 5. **Helper files** (settings, run_all) should be ported as appropriate for the language's idioms
 6. **Kitchen sink** remains the single acceptance test exercising all features in one workflow
 
+#### HARD REQUIREMENT: Framework Examples Must Use Real Native SDKs
+
+**Framework examples (LangGraph, LangChain, OpenAI Agents, Google ADK, Vercel AI SDK) MUST import and use the REAL framework packages — never mocks or duck-typed stand-ins.** This is a non-negotiable requirement for all language SDKs.
+
+**Rationale:** The entire value proposition of framework integration is "take your existing framework code, run it on agentspan." If examples use mocks, they prove nothing — they only test the detection duck-typing, not the actual passthrough execution. Users need real, runnable examples they can copy and adapt.
+
+**What this means:**
+
+1. **Install real framework packages** as dev/optional dependencies:
+   - TypeScript: `ai`, `@ai-sdk/openai`, `@langchain/core`, `@langchain/langgraph`, `@langchain/openai`
+   - Python: `langchain`, `langgraph`, `openai-agents`, `google-adk` (already done)
+   - Go/Java/Kotlin/C#/Ruby: equivalent packages for their ecosystems when available
+
+2. **Each framework example must:**
+   - Import from the real framework package (e.g., `import { generateText } from 'ai'`, not a mock)
+   - Create a real framework agent/graph/executor using the framework's native API
+   - Pass that real object to `runtime.run()` for agentspan execution
+   - Include TWO execution paths for validation comparison:
+     ```
+     // Path 1: Native framework execution (baseline)
+     const nativeResult = await agent.generate({ prompt });
+
+     // Path 2: Agentspan passthrough (what we're testing)
+     const agentspanResult = await runtime.run(agent, prompt);
+
+     // Compare results
+     ```
+
+3. **Validation must compare native vs agentspan execution:**
+   - Both should complete successfully
+   - Tool calls should match (same tools invoked)
+   - Output should be semantically similar (LLM judge comparison)
+   - The validation framework's per-framework groups (LANGGRAPH, LANGCHAIN, VERCEL_AI, etc.) should run these comparisons
+
+4. **If a framework package is not available** for the target language (e.g., no LangGraph for Go), skip those framework examples for that SDK — but document the gap. Never substitute mocks.
+
+5. **Framework packages are dev/optional dependencies** — they must NOT be required for core SDK functionality. Only needed to run framework-specific examples and validation.
+
 ---
 
 ## 13. Success Criteria
