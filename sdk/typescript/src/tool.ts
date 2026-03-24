@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import type { ToolDef, ToolType, ToolContext, CredentialFile } from './types.js';
 import { ConfigurationError } from './errors.js';
 
@@ -32,9 +31,56 @@ export function isZodSchema(obj: unknown): boolean {
  * If it's already JSON Schema, returns as-is.
  * Uses Zod v4's built-in z.toJSONSchema() — no external dependency needed.
  */
-function toJsonSchema(schema: unknown): object {
+/**
+ * Convert a Zod schema to JSON Schema.
+ * Supports both Zod v3 (via zod-to-json-schema) and Zod v4 (built-in z.toJSONSchema).
+ */
+async function zodSchemaToJson(schema: unknown): Promise<object> {
+  // Try Zod v4 built-in first (z.toJSONSchema exists on the module)
+  try {
+    const zod = await import('zod');
+    if (typeof (zod as any).toJSONSchema === 'function') {
+      return (zod as any).toJSONSchema(schema) as object;
+    }
+  } catch { /* fall through */ }
+
+  // Fall back to zod-to-json-schema (works with Zod v3)
+  try {
+    const { zodToJsonSchema } = await import('zod-to-json-schema');
+    return zodToJsonSchema(schema as any, { target: 'jsonSchema7' });
+  } catch { /* fall through */ }
+
+  throw new ConfigurationError('Cannot convert Zod schema to JSON Schema. Install zod-to-json-schema or use Zod v4+.');
+}
+
+// Synchronous version using cached converter
+let _zodConverter: ((schema: unknown) => object) | null = null;
+
+function initZodConverter(): void {
+  if (_zodConverter) return;
+  try {
+    // Try Zod v4 built-in
+    const zod = require('zod');
+    if (typeof zod.toJSONSchema === 'function') {
+      _zodConverter = (s: unknown) => zod.toJSONSchema(s) as object;
+      return;
+    }
+  } catch { /* fall through */ }
+
+  try {
+    // Fall back to zod-to-json-schema
+    const { zodToJsonSchema } = require('zod-to-json-schema');
+    _zodConverter = (s: unknown) => zodToJsonSchema(s as any, { target: 'jsonSchema7' });
+    return;
+  } catch { /* fall through */ }
+
+  _zodConverter = () => { throw new ConfigurationError('No Zod-to-JSON-Schema converter available'); };
+}
+
+export function toJsonSchema(schema: unknown): object {
   if (isZodSchema(schema)) {
-    return z.toJSONSchema(schema as z.ZodType) as object;
+    initZodConverter();
+    return _zodConverter!(schema);
   }
   return schema as object;
 }

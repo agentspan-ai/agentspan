@@ -1,0 +1,163 @@
+{
+  "timestamp": "2026-03-24T19:05:48.833Z",
+  "results": [
+    {
+      "example": "vercel-ai/02-tools-compat",
+      "status": "FAIL",
+      "duration": 2.004,
+      "checks": {
+        "workflowCompleted": false,
+        "noUnhandledErrors": true,
+        "toolAudit": [],
+        "allToolsSucceeded": true,
+        "llmEngaged": false,
+        "outputNonEmpty": false
+      },
+      "output": "",
+      "events": [],
+      "error": "/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/tool.ts:77\n  _zodConverter = () => { throw new ConfigurationError('No Zod-to-JSON-Schema converter available'); };\n                                ^\n\nConfigurationError: No Zod-to-JSON-Schema converter available\n    at _zodConverter (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/tool.ts:77:33)\n    at toJsonSchema (/Users/viren/workspace/github/agentspan-dev/branches"
+    },
+    {
+      "example": "vercel-ai/08-agent-handoff",
+      "status": "FAIL",
+      "duration": 2.251,
+      "checks": {
+        "workflowCompleted": false,
+        "noUnhandledErrors": true,
+        "toolAudit": [],
+        "allToolsSucceeded": true,
+        "llmEngaged": false,
+        "outputNonEmpty": false
+      },
+      "output": "",
+      "events": [],
+      "error": "node:internal/modules/run_main:107\n    triggerUncaughtException(\n    ^\n\nAPICallError [AI_APICallError]: Invalid schema for function 'classify': schema must be a JSON Schema of 'type: \"object\"', got 'type: \"None\"'.\n    at <anonymous> (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/node_modules/@ai-sdk/provider-utils/src/response-handler.ts:59:16)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async postToApi (/Users/"
+    },
+    {
+      "example": "vercel-ai/03-streaming",
+      "status": "FAIL",
+      "duration": 2.492,
+      "checks": {
+        "workflowCompleted": false,
+        "noUnhandledErrors": true,
+        "toolAudit": [],
+        "allToolsSucceeded": true,
+        "llmEngaged": false,
+        "outputNonEmpty": false
+      },
+      "output": "",
+      "events": [],
+      "error": "Warning: Detected unsettled top-level await at /Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/examples/vercel-ai/03-streaming.ts:52\nconst finishReason = await streamResult.finishReason;\n                     ^\n\n\n\n"
+    },
+    {
+      "example": "vercel-ai/01-passthrough",
+      "status": "FAIL",
+      "duration": 2.505,
+      "checks": {
+        "workflowCompleted": false,
+        "noUnhandledErrors": true,
+        "toolAudit": [],
+        "allToolsSucceeded": true,
+        "llmEngaged": false,
+        "outputNonEmpty": false
+      },
+      "output": "",
+      "events": [],
+      "error": "node:internal/modules/run_main:107\n    triggerUncaughtException(\n    ^\n\nAPICallError [AI_APICallError]: Invalid schema for function 'weather': schema must be a JSON Schema of 'type: \"object\"', got 'type: \"None\"'.\n    at <anonymous> (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/node_modules/@ai-sdk/provider-utils/src/response-handler.ts:59:16)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async postToApi (/Users/v"
+    },
+    {
+      "example": "vercel-ai/04-structured-output",
+      "status": "FAIL",
+      "duration": 2.49,
+      "checks": {
+        "workflowCompleted": false,
+        "noUnhandledErrors": true,
+        "toolAudit": [],
+        "allToolsSucceeded": true,
+        "llmEngaged": false,
+        "outputNonEmpty": false
+      },
+      "output": "",
+      "events": [],
+      "error": "node:internal/modules/run_main:107\n    triggerUncaughtException(\n    ^\n\nAPICallError [AI_APICallError]: Invalid schema for function 'json': schema must be a JSON Schema of 'type: \"object\"', got 'type: \"None\"'.\n    at <anonymous> (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/node_modules/@ai-sdk/provider-utils/src/response-handler.ts:59:16)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async postToApi (/Users/vire"
+    },
+    {
+      "example": "vercel-ai/07-stop-conditions",
+      "status": "FAIL",
+      "duration": 2.413,
+      "checks": {
+        "workflowCompleted": false,
+        "noUnhandledErrors": true,
+        "toolAudit": [],
+        "allToolsSucceeded": true,
+        "llmEngaged": false,
+        "outputNonEmpty": false
+      },
+      "output": "",
+      "events": [],
+      "error": "node:internal/modules/run_main:107\n    triggerUncaughtException(\n    ^\n\nAPICallError [AI_APICallError]: Invalid schema for function 'analyzeStep': schema must be a JSON Schema of 'type: \"object\"', got 'type: \"None\"'.\n    at <anonymous> (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/node_modules/@ai-sdk/provider-utils/src/response-handler.ts:59:16)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async postToApi (/Use"
+    },
+    {
+      "example": "vercel-ai/05-multi-step",
+      "status": "FAIL",
+      "duration": 2.51,
+      "checks": {
+        "workflowCompleted": false,
+        "noUnhandledErrors": true,
+        "toolAudit": [],
+        "allToolsSucceeded": true,
+        "llmEngaged": false,
+        "outputNonEmpty": false
+      },
+      "output": "",
+      "events": [],
+      "error": "node:internal/modules/run_main:107\n    triggerUncaughtException(\n    ^\n\nAPICallError [AI_APICallError]: Invalid schema for function 'lookupWeather': schema must be a JSON Schema of 'type: \"object\"', got 'type: \"None\"'.\n    at <anonymous> (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/node_modules/@ai-sdk/provider-utils/src/response-handler.ts:59:16)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async postToApi (/U"
+    },
+    {
+      "example": "vercel-ai/10-hitl",
+      "status": "FAIL",
+      "duration": 1.511,
+      "checks": {
+        "workflowCompleted": false,
+        "noUnhandledErrors": true,
+        "toolAudit": [],
+        "allToolsSucceeded": true,
+        "llmEngaged": false,
+        "outputNonEmpty": false
+      },
+      "output": "",
+      "events": [],
+      "error": "node:internal/modules/run_main:107\n    triggerUncaughtException(\n    ^\n\nAPICallError [AI_APICallError]: Invalid schema for function 'assessRisk': schema must be a JSON Schema of 'type: \"object\"', got 'type: \"None\"'.\n    at <anonymous> (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/node_modules/@ai-sdk/provider-utils/src/response-handler.ts:59:16)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async postToApi (/User"
+    },
+    {
+      "example": "vercel-ai/09-credentials",
+      "status": "PASS",
+      "duration": 17.356,
+      "checks": {
+        "workflowCompleted": true,
+        "noUnhandledErrors": true,
+        "toolAudit": [],
+        "allToolsSucceeded": true,
+        "llmEngaged": true,
+        "outputNonEmpty": true
+      },
+      "output": "Recent research on transformer architectures has focused on improving efficiency and scalability, with innovations such as sparse attention mechanisms and hybrid models that combine transformers with convolutional networks. Additionally, advancements in training techniques, such as self-supervised learning and better initialization methods, have enhanced performance on various tasks, including natural language processing and computer vision. Researchers are also exploring the interpretability of transformers and their application in real-world scenarios, addressing challenges like model size and energy consumption.",
+      "events": []
+    },
+    {
+      "example": "vercel-ai/06-middleware",
+      "status": "PASS",
+      "duration": 37.461,
+      "checks": {
+        "workflowCompleted": true,
+        "noUnhandledErrors": true,
+        "toolAudit": [],
+        "allToolsSucceeded": true,
+        "llmEngaged": true,
+        "outputNonEmpty": true
+      },
+      "output": "Middleware in AI agent pipelines serves as an intermediary layer that facilitates communication, data management, and integration between different components of the pipeline. It plays a crucial role ...",
+      "events": []
+    }
+  ]
+}
