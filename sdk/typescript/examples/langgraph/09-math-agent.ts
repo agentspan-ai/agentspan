@@ -1,155 +1,140 @@
 /**
- * Math Agent -- create_react_agent with comprehensive arithmetic and math tools.
+ * Math Agent -- createReactAgent with comprehensive arithmetic and math tools.
  *
  * Demonstrates:
  *   - Defining multiple related tools in a single agent
- *   - Using create_react_agent for a specialized domain (mathematics)
+ *   - Using createReactAgent for a specialized domain (mathematics)
  *   - Chaining multiple tool calls to solve multi-step problems
- *
- * In production you would use:
- *   import { createReactAgent } from '@langchain/langgraph/prebuilt';
- *   import { tool } from '@langchain/core/tools';
  */
 
+import { createReactAgent } from '@langchain/langgraph/prebuilt';
+import { ChatOpenAI } from '@langchain/openai';
+import { HumanMessage } from '@langchain/core/messages';
+import { DynamicStructuredTool } from '@langchain/core/tools';
+import { z } from 'zod';
 import { AgentRuntime } from '../../src/index.js';
 
 // ---------------------------------------------------------------------------
-// Math tool implementations
+// Math tool definitions
 // ---------------------------------------------------------------------------
-function add(a: number, b: number): number {
-  return a + b;
-}
-
-function subtract(a: number, b: number): number {
-  return a - b;
-}
-
-function multiply(a: number, b: number): number {
-  return a * b;
-}
-
-function divide(a: number, b: number): string {
-  if (b === 0) return 'Error: Division by zero is undefined.';
-  return String(a / b);
-}
-
-function power(base: number, exponent: number): number {
-  return base ** exponent;
-}
-
-function sqrt(n: number): string {
-  if (n < 0) return `Error: Cannot compute the square root of a negative number (${n}).`;
-  return String(Math.sqrt(n));
-}
-
-function factorial(n: number): string {
-  if (n < 0) return 'Error: Factorial is not defined for negative numbers.';
-  if (n > 20) return 'Error: Input too large (max 20 to avoid overflow).';
-  let result = 1;
-  for (let i = 2; i <= n; i++) result *= i;
-  return String(result);
-}
-
-// ---------------------------------------------------------------------------
-// Mock compiled graph with math tools
-// ---------------------------------------------------------------------------
-const graph = {
-  name: 'math_agent',
-
-  builder: { channels: { messages: true } },
-
-  invoke: async (input: Record<string, unknown>) => {
-    // Simulate the ReAct loop solving: (2^10 + sqrt(144)) / 4, then 5!
-    const step1 = power(2, 10); // 1024
-    const step2 = sqrt(144); // 12
-    const step3 = add(step1, Number(step2)); // 1036
-    const step4 = divide(step3, 4); // 259
-    const step5 = factorial(5); // 120
-
-    return {
-      messages: [
-        {
-          role: 'ai',
-          content: null,
-          tool_calls: [
-            { name: 'power', args: { base: 2, exponent: 10 } },
-            { name: 'sqrt', args: { n: 144 } },
-          ],
-        },
-        { role: 'tool', name: 'power', content: String(step1) },
-        { role: 'tool', name: 'sqrt', content: step2 },
-        {
-          role: 'ai',
-          content: null,
-          tool_calls: [
-            { name: 'add', args: { a: step1, b: Number(step2) } },
-          ],
-        },
-        { role: 'tool', name: 'add', content: String(step3) },
-        {
-          role: 'ai',
-          content: null,
-          tool_calls: [
-            { name: 'divide', args: { a: step3, b: 4 } },
-            { name: 'factorial', args: { n: 5 } },
-          ],
-        },
-        { role: 'tool', name: 'divide', content: step4 },
-        { role: 'tool', name: 'factorial', content: step5 },
-        {
-          role: 'assistant',
-          content:
-            `The calculation (2^10 + sqrt(144)) / 4 = (1024 + 12) / 4 = 1036 / 4 = ${step4}. ` +
-            `And 5! = ${step5}.`,
-        },
-      ],
-    };
-  },
-
-  getGraph: () => ({
-    nodes: new Map([
-      ['__start__', {}],
-      ['agent', {}],
-      ['tools', {}],
-      ['__end__', {}],
-    ]),
-    edges: [
-      ['__start__', 'agent'],
-      ['agent', 'tools'],
-      ['tools', 'agent'],
-      ['agent', '__end__'],
-    ],
+const addTool = new DynamicStructuredTool({
+  name: 'add',
+  description: 'Add two numbers together.',
+  schema: z.object({
+    a: z.number().describe('First number'),
+    b: z.number().describe('Second number'),
   }),
+  func: async ({ a, b }) => String(a + b),
+});
 
-  nodes: new Map([
-    ['agent', {}],
-    ['tools', {}],
-  ]),
+const subtractTool = new DynamicStructuredTool({
+  name: 'subtract',
+  description: 'Subtract b from a.',
+  schema: z.object({
+    a: z.number().describe('First number'),
+    b: z.number().describe('Second number'),
+  }),
+  func: async ({ a, b }) => String(a - b),
+});
 
-  stream: async function* (input: Record<string, unknown>) {
-    const state = await graph.invoke(input);
-    // Emit updates for each agent/tools cycle
-    yield ['updates', { agent: { messages: [state.messages[0]] } }];
-    yield ['updates', { tools: { messages: state.messages.slice(1, 3) } }];
-    yield ['updates', { agent: { messages: [state.messages[3]] } }];
-    yield ['updates', { tools: { messages: [state.messages[4]] } }];
-    yield ['updates', { agent: { messages: [state.messages[5]] } }];
-    yield ['updates', { tools: { messages: state.messages.slice(6, 8) } }];
-    yield ['updates', { agent: { messages: [state.messages[8]] } }];
-    yield ['values', state];
+const multiplyTool = new DynamicStructuredTool({
+  name: 'multiply',
+  description: 'Multiply two numbers.',
+  schema: z.object({
+    a: z.number().describe('First number'),
+    b: z.number().describe('Second number'),
+  }),
+  func: async ({ a, b }) => String(a * b),
+});
+
+const divideTool = new DynamicStructuredTool({
+  name: 'divide',
+  description: 'Divide a by b.',
+  schema: z.object({
+    a: z.number().describe('Dividend'),
+    b: z.number().describe('Divisor'),
+  }),
+  func: async ({ a, b }) => {
+    if (b === 0) return 'Error: Division by zero is undefined.';
+    return String(a / b);
   },
-};
+});
+
+const powerTool = new DynamicStructuredTool({
+  name: 'power',
+  description: 'Raise base to the given exponent.',
+  schema: z.object({
+    base: z.number().describe('The base number'),
+    exponent: z.number().describe('The exponent'),
+  }),
+  func: async ({ base, exponent }) => String(Math.pow(base, exponent)),
+});
+
+const sqrtTool = new DynamicStructuredTool({
+  name: 'sqrt',
+  description: 'Compute the square root of a number.',
+  schema: z.object({
+    n: z.number().describe('The number to take the square root of'),
+  }),
+  func: async ({ n }) => {
+    if (n < 0) return `Error: Cannot compute the square root of a negative number (${n}).`;
+    return String(Math.sqrt(n));
+  },
+});
+
+const factorialTool = new DynamicStructuredTool({
+  name: 'factorial',
+  description: 'Compute the factorial of n (n!).',
+  schema: z.object({
+    n: z.number().describe('A non-negative integer (max 20)'),
+  }),
+  func: async ({ n }) => {
+    if (n < 0) return 'Error: Factorial is not defined for negative numbers.';
+    if (n > 20) return 'Error: Input too large (max 20 to avoid overflow).';
+    let result = 1;
+    for (let i = 2; i <= n; i++) result *= i;
+    return String(result);
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Build the graph
+// ---------------------------------------------------------------------------
+const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
+const graph = createReactAgent({
+  llm,
+  tools: [addTool, subtractTool, multiplyTool, divideTool, powerTool, sqrtTool, factorialTool],
+});
+
+const PROMPT =
+  'Calculate: (2^10 + sqrt(144)) / 4, then compute 5! and tell me the final answers.';
 
 // ---------------------------------------------------------------------------
 // Run
 // ---------------------------------------------------------------------------
 async function main() {
+  // ── Path 1: Native ──
+  console.log('=== Native LangGraph execution ===');
+  const nativeResult = await graph.invoke({
+    messages: [new HumanMessage(PROMPT)],
+  });
+  for (const msg of nativeResult.messages) {
+    const role = msg.constructor.name;
+    if (msg.tool_calls && msg.tool_calls.length > 0) {
+      console.log(`  ${role}: [tool_calls]`, msg.tool_calls.map((tc: any) => `${tc.name}(${JSON.stringify(tc.args)})`));
+    } else if (msg.name) {
+      console.log(`  ${role} (${msg.name}): ${msg.content}`);
+    } else {
+      const content = typeof msg.content === 'string' ? msg.content.slice(0, 300) : JSON.stringify(msg.content);
+      console.log(`  ${role}: ${content}`);
+    }
+  }
+
+  // ── Path 2: Agentspan ──
+  console.log('\n=== Agentspan passthrough execution ===');
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      graph,
-      'Calculate: (2^10 + sqrt(144)) / 4, then compute 5! and tell me the final answers.',
-    );
+    const result = await runtime.run(graph, PROMPT);
     console.log('Status:', result.status);
     result.printResult();
   } finally {

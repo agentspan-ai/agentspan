@@ -1,31 +1,39 @@
 /**
- * Conditional Routing -- StateGraph with add_conditional_edges.
+ * Conditional Routing -- StateGraph with addConditionalEdges.
  *
  * Demonstrates:
- *   - Using add_conditional_edges to branch based on state content
+ *   - Using addConditionalEdges to branch based on state content
  *   - A sentiment classifier that routes to positive, negative, or neutral handlers
  *   - Multiple terminal nodes converging to END
- *
- * In production you would use:
- *   import { StateGraph, START, END } from '@langchain/langgraph';
- *   builder.addConditionalEdges("classify", routeSentiment, { ... });
  */
 
+import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import { AgentRuntime } from '../../src/index.js';
 
 // ---------------------------------------------------------------------------
-// State type
+// State schema
 // ---------------------------------------------------------------------------
-interface SentimentState {
-  text: string;
-  sentiment: 'positive' | 'negative' | 'neutral';
-  response: string;
-}
+const SentimentState = Annotation.Root({
+  text: Annotation<string>({
+    reducer: (_prev: string, next: string) => next ?? _prev,
+    default: () => '',
+  }),
+  sentiment: Annotation<string>({
+    reducer: (_prev: string, next: string) => next ?? _prev,
+    default: () => 'neutral',
+  }),
+  response: Annotation<string>({
+    reducer: (_prev: string, next: string) => next ?? _prev,
+    default: () => '',
+  }),
+});
+
+type State = typeof SentimentState.State;
 
 // ---------------------------------------------------------------------------
 // Node functions
 // ---------------------------------------------------------------------------
-function classifySentiment(state: SentimentState): Partial<SentimentState> {
+function classify(state: State): Partial<State> {
   const text = state.text.toLowerCase();
   const positiveWords = ['thrilled', 'promoted', 'love', 'great', 'happy', 'amazing', 'excellent'];
   const negativeWords = ['sad', 'angry', 'terrible', 'hate', 'awful', 'disappointed', 'frustrated'];
@@ -33,107 +41,74 @@ function classifySentiment(state: SentimentState): Partial<SentimentState> {
   const posCount = positiveWords.filter((w) => text.includes(w)).length;
   const negCount = negativeWords.filter((w) => text.includes(w)).length;
 
-  let sentiment: SentimentState['sentiment'];
-  if (posCount > negCount) sentiment = 'positive';
-  else if (negCount > posCount) sentiment = 'negative';
-  else sentiment = 'neutral';
-
-  return { sentiment };
+  if (posCount > negCount) return { sentiment: 'positive' };
+  if (negCount > posCount) return { sentiment: 'negative' };
+  return { sentiment: 'neutral' };
 }
 
-function routeSentiment(state: SentimentState): string {
+function routeSentiment(state: State): string {
   return state.sentiment;
 }
 
-function handlePositive(state: SentimentState): Partial<SentimentState> {
+function handlePositive(_state: State): Partial<State> {
   return {
-    response: `That's wonderful news! Congratulations on your promotion! Your hard work and dedication are clearly paying off. Keep up the amazing work!`,
+    response:
+      "That's wonderful news! Congratulations on your promotion! " +
+      'Your hard work and dedication are clearly paying off. Keep up the amazing work!',
   };
 }
 
-function handleNegative(state: SentimentState): Partial<SentimentState> {
+function handleNegative(_state: State): Partial<State> {
   return {
-    response: `I'm sorry to hear that. It's completely valid to feel that way. Remember, difficult times are temporary and things can improve. Is there anything specific I can help with?`,
+    response:
+      "I'm sorry to hear that. It's completely valid to feel that way. " +
+      'Remember, difficult times are temporary and things can improve. ' +
+      'Is there anything specific I can help with?',
   };
 }
 
-function handleNeutral(state: SentimentState): Partial<SentimentState> {
+function handleNeutral(_state: State): Partial<State> {
   return {
-    response: `Thank you for sharing that. I'm here to help if you need anything. Feel free to ask me any questions or share more about what's on your mind.`,
+    response:
+      "Thank you for sharing that. I'm here to help if you need anything. " +
+      "Feel free to ask me any questions or share more about what's on your mind.",
   };
 }
 
 // ---------------------------------------------------------------------------
-// Mock compiled graph
+// Build the graph
 // ---------------------------------------------------------------------------
-const graph = {
-  name: 'sentiment_router',
+const builder = new StateGraph(SentimentState);
+builder.addNode('classify', classify);
+builder.addNode('positive', handlePositive);
+builder.addNode('negative', handleNegative);
+builder.addNode('neutral', handleNeutral);
+builder.addEdge(START, 'classify');
+builder.addConditionalEdges('classify', routeSentiment, {
+  positive: 'positive',
+  negative: 'negative',
+  neutral: 'neutral',
+});
+builder.addEdge('positive', END);
+builder.addEdge('negative', END);
+builder.addEdge('neutral', END);
 
-  invoke: async (input: Record<string, unknown>) => {
-    const text = (input.input as string) ?? '';
-    let state: SentimentState = { text, sentiment: 'neutral', response: '' };
-
-    state = { ...state, ...classifySentiment(state) };
-
-    // Route based on sentiment
-    const handlers: Record<string, (s: SentimentState) => Partial<SentimentState>> = {
-      positive: handlePositive,
-      negative: handleNegative,
-      neutral: handleNeutral,
-    };
-    state = { ...state, ...handlers[state.sentiment](state) };
-
-    return { output: state.response };
-  },
-
-  getGraph: () => ({
-    nodes: new Map([
-      ['__start__', {}],
-      ['classify', {}],
-      ['positive', {}],
-      ['negative', {}],
-      ['neutral', {}],
-      ['__end__', {}],
-    ]),
-    edges: [
-      ['__start__', 'classify'],
-      // Conditional: classify -> positive | negative | neutral
-      ['positive', '__end__'],
-      ['negative', '__end__'],
-      ['neutral', '__end__'],
-    ],
-  }),
-
-  nodes: new Map([
-    ['classify', {}],
-    ['positive', {}],
-    ['negative', {}],
-    ['neutral', {}],
-  ]),
-
-  stream: async function* (input: Record<string, unknown>) {
-    const text = (input.input as string) ?? '';
-    let state: SentimentState = { text, sentiment: 'neutral', response: '' };
-
-    state = { ...state, ...classifySentiment(state) };
-    yield ['updates', { classify: { sentiment: state.sentiment } }];
-
-    const handlers: Record<string, (s: SentimentState) => Partial<SentimentState>> = {
-      positive: handlePositive,
-      negative: handleNegative,
-      neutral: handleNeutral,
-    };
-    state = { ...state, ...handlers[state.sentiment](state) };
-    yield ['updates', { [state.sentiment]: { response: state.response } }];
-
-    yield ['values', { output: state.response }];
-  },
-};
+const graph = builder.compile();
 
 // ---------------------------------------------------------------------------
 // Run
 // ---------------------------------------------------------------------------
 async function main() {
+  // ── Path 1: Native ──
+  console.log('=== Native LangGraph execution ===');
+  const nativeResult = await graph.invoke({
+    text: "I just got promoted at work and I'm thrilled!",
+  });
+  console.log('Sentiment:', nativeResult.sentiment);
+  console.log('Response:', nativeResult.response);
+
+  // ── Path 2: Agentspan ──
+  console.log('\n=== Agentspan passthrough execution ===');
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(

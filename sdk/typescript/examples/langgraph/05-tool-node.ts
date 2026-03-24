@@ -1,21 +1,23 @@
 /**
- * ToolNode -- StateGraph with ToolNode + tools_condition for ReAct loop.
+ * ToolNode -- StateGraph with ToolNode + toolsCondition for a ReAct loop.
  *
  * Demonstrates:
- *   - Manually building a ReAct loop with StateGraph
+ *   - Manually building a ReAct loop with StateGraph + MessagesAnnotation
  *   - Using ToolNode to execute tool calls returned by the LLM
- *   - Using tools_condition to route between tool execution and END
- *   - Message accumulation via list reducer
- *
- * In production you would use:
- *   import { StateGraph, START, END } from '@langchain/langgraph';
- *   import { ToolNode, toolsCondition } from '@langchain/langgraph/prebuilt';
+ *   - Using toolsCondition to route between tool execution and END
+ *   - Message accumulation via the messages state reducer
  */
 
+import { StateGraph, START, MessagesAnnotation } from '@langchain/langgraph';
+import { ToolNode, toolsCondition } from '@langchain/langgraph/prebuilt';
+import { ChatOpenAI } from '@langchain/openai';
+import { DynamicStructuredTool } from '@langchain/core/tools';
+import { HumanMessage } from '@langchain/core/messages';
+import { z } from 'zod';
 import { AgentRuntime } from '../../src/index.js';
 
 // ---------------------------------------------------------------------------
-// Tool implementations
+// Tool definitions
 // ---------------------------------------------------------------------------
 const capitals: Record<string, string> = {
   france: 'Paris',
@@ -39,94 +41,73 @@ const populations: Record<string, string> = {
   canada: '38 million',
 };
 
-function lookupCapital(country: string): string {
-  return capitals[country.toLowerCase()] ?? `Capital of ${country} is not in my database.`;
-}
-
-function lookupPopulation(country: string): string {
-  return populations[country.toLowerCase()] ?? `Population data for ${country} is not available.`;
-}
-
-// ---------------------------------------------------------------------------
-// Mock compiled graph (simulates agent + ToolNode + tools_condition loop)
-// ---------------------------------------------------------------------------
-const graph = {
-  name: 'tool_node_agent',
-
-  // Indicate messages schema for the SDK
-  builder: { channels: { messages: true } },
-
-  invoke: async (input: Record<string, unknown>) => {
-    const japanCapital = lookupCapital('japan');
-    const japanPop = lookupPopulation('japan');
-    const brazilCapital = lookupCapital('brazil');
-    const brazilPop = lookupPopulation('brazil');
-
-    return {
-      messages: [
-        {
-          role: 'ai',
-          content: null,
-          tool_calls: [
-            { name: 'lookup_capital', args: { country: 'Japan' } },
-            { name: 'lookup_population', args: { country: 'Japan' } },
-            { name: 'lookup_capital', args: { country: 'Brazil' } },
-            { name: 'lookup_population', args: { country: 'Brazil' } },
-          ],
-        },
-        { role: 'tool', name: 'lookup_capital', content: japanCapital },
-        { role: 'tool', name: 'lookup_population', content: japanPop },
-        { role: 'tool', name: 'lookup_capital', content: brazilCapital },
-        { role: 'tool', name: 'lookup_population', content: brazilPop },
-        {
-          role: 'assistant',
-          content:
-            `Japan: capital is ${japanCapital}, population is ${japanPop}. ` +
-            `Brazil: capital is ${brazilCapital}, population is ${brazilPop}.`,
-        },
-      ],
-    };
-  },
-
-  getGraph: () => ({
-    nodes: new Map([
-      ['__start__', {}],
-      ['agent', {}],
-      ['tools', {}],
-      ['__end__', {}],
-    ]),
-    edges: [
-      ['__start__', 'agent'],
-      ['agent', 'tools'],
-      ['tools', 'agent'],
-      ['agent', '__end__'],
-    ],
+const lookupCapitalTool = new DynamicStructuredTool({
+  name: 'lookup_capital',
+  description: 'Look up the capital city of a country.',
+  schema: z.object({
+    country: z.string().describe('The country name'),
   }),
+  func: async ({ country }) =>
+    capitals[country.toLowerCase()] ?? `Capital of ${country} is not in my database.`,
+});
 
-  nodes: new Map([
-    ['agent', {}],
-    ['tools', {}],
-  ]),
+const lookupPopulationTool = new DynamicStructuredTool({
+  name: 'lookup_population',
+  description: 'Look up the approximate population of a country.',
+  schema: z.object({
+    country: z.string().describe('The country name'),
+  }),
+  func: async ({ country }) =>
+    populations[country.toLowerCase()] ?? `Population data for ${country} is not available.`,
+});
 
-  stream: async function* (input: Record<string, unknown>) {
-    const state = await graph.invoke(input);
-    yield ['updates', { agent: { messages: [state.messages[0]] } }];
-    yield ['updates', { tools: { messages: state.messages.slice(1, 5) } }];
-    yield ['updates', { agent: { messages: [state.messages[5]] } }];
-    yield ['values', state];
-  },
-};
+// ---------------------------------------------------------------------------
+// Build the graph manually (ReAct loop with ToolNode)
+// ---------------------------------------------------------------------------
+const tools = [lookupCapitalTool, lookupPopulationTool];
+const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 }).bindTools(tools);
+const toolNode = new ToolNode(tools);
+
+async function callModel(state: typeof MessagesAnnotation.State) {
+  const response = await llm.invoke(state.messages);
+  return { messages: [response] };
+}
+
+const builder = new StateGraph(MessagesAnnotation)
+  .addNode('agent', callModel)
+  .addNode('tools', toolNode)
+  .addEdge(START, 'agent')
+  .addConditionalEdges('agent', toolsCondition)
+  .addEdge('tools', 'agent');
+
+const graph = builder.compile();
+
+const PROMPT = 'What is the capital and population of Japan and Brazil?';
 
 // ---------------------------------------------------------------------------
 // Run
 // ---------------------------------------------------------------------------
 async function main() {
+  // ── Path 1: Native ──
+  console.log('=== Native LangGraph execution ===');
+  const nativeResult = await graph.invoke({
+    messages: [new HumanMessage(PROMPT)],
+  });
+  for (const msg of nativeResult.messages) {
+    const role = msg.constructor.name;
+    if (msg.tool_calls && msg.tool_calls.length > 0) {
+      console.log(`  ${role}: [tool_calls]`, msg.tool_calls.map((tc: any) => tc.name));
+    } else {
+      const content = typeof msg.content === 'string' ? msg.content.slice(0, 200) : JSON.stringify(msg.content);
+      console.log(`  ${role}: ${content}`);
+    }
+  }
+
+  // ── Path 2: Agentspan ──
+  console.log('\n=== Agentspan passthrough execution ===');
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      graph,
-      'What is the capital and population of Japan and Brazil?',
-    );
+    const result = await runtime.run(graph, PROMPT);
     console.log('Status:', result.status);
     result.printResult();
   } finally {

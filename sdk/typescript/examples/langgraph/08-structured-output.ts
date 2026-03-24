@@ -1,92 +1,75 @@
 /**
- * Structured Output -- create_react_agent with response_format for typed output.
+ * Structured Output -- createReactAgent with withStructuredOutput for typed data.
  *
  * Demonstrates:
- *   - Passing a schema as response_format to create_react_agent
- *   - Forcing the LLM to return structured, typed data
- *   - Accessing fields of the structured response
- *
- * In production you would use:
- *   import { createReactAgent } from '@langchain/langgraph/prebuilt';
- *   import { z } from 'zod';
- *   const MovieReview = z.object({ title: z.string(), rating: z.number(), ... });
- *   const graph = createReactAgent({ llm, tools: [], responseFormat: MovieReview });
+ *   - Using withStructuredOutput on the LLM for typed JSON responses
+ *   - Defining a Zod schema for the expected output shape
+ *   - Parsing and accessing structured fields from the result
  */
 
+import { createReactAgent } from '@langchain/langgraph/prebuilt';
+import { ChatOpenAI } from '@langchain/openai';
+import { HumanMessage } from '@langchain/core/messages';
+import { z } from 'zod';
 import { AgentRuntime } from '../../src/index.js';
 
 // ---------------------------------------------------------------------------
-// Structured output schema (mirrors Pydantic MovieReview)
+// Structured output schema
 // ---------------------------------------------------------------------------
-interface MovieReview {
-  title: string;
-  rating: number;
-  pros: string[];
-  cons: string[];
-  summary: string;
-  recommended: boolean;
-}
+const MovieReviewSchema = z.object({
+  title: z.string().describe('The movie title'),
+  rating: z.number().describe('Rating out of 10'),
+  pros: z.array(z.string()).describe('List of positive aspects'),
+  cons: z.array(z.string()).describe('List of negative aspects'),
+  summary: z.string().describe('A brief summary of the review'),
+  recommended: z.boolean().describe('Whether the movie is recommended'),
+});
 
 // ---------------------------------------------------------------------------
-// Mock compiled graph that returns structured output
+// Build the graph with structured output
 // ---------------------------------------------------------------------------
-const graph = {
-  name: 'movie_review_agent',
+const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
+const graph = createReactAgent({
+  llm,
+  tools: [],
+  responseFormat: MovieReviewSchema,
+});
 
-  builder: { channels: { messages: true } },
-
-  invoke: async (input: Record<string, unknown>) => {
-    const review: MovieReview = {
-      title: 'Inception',
-      rating: 9.2,
-      pros: [
-        'Mind-bending narrative that rewards multiple viewings',
-        'Outstanding visual effects and cinematography',
-        'Stellar ensemble cast led by Leonardo DiCaprio',
-      ],
-      cons: [
-        'Complex plot may confuse some viewers on first watch',
-        'Emotional depth occasionally sacrificed for spectacle',
-      ],
-      summary:
-        'Inception is a masterful sci-fi thriller that challenges viewers with its layered dream-within-a-dream concept while delivering spectacular action.',
-      recommended: true,
-    };
-
-    return {
-      messages: [
-        {
-          role: 'assistant',
-          content: JSON.stringify(review, null, 2),
-        },
-      ],
-    };
-  },
-
-  getGraph: () => ({
-    nodes: new Map([['__start__', {}], ['agent', {}], ['__end__', {}]]),
-    edges: [['__start__', 'agent'], ['agent', '__end__']],
-  }),
-
-  nodes: new Map([['agent', {}]]),
-
-  stream: async function* (input: Record<string, unknown>) {
-    const result = await graph.invoke(input);
-    yield ['updates', { agent: { messages: result.messages } }];
-    yield ['values', result];
-  },
-};
+const PROMPT = 'Write a review for the movie Inception (2010).';
 
 // ---------------------------------------------------------------------------
 // Run
 // ---------------------------------------------------------------------------
 async function main() {
+  // ── Path 1: Native ──
+  console.log('=== Native LangGraph execution ===');
+  const nativeResult = await graph.invoke({
+    messages: [new HumanMessage(PROMPT)],
+  });
+
+  // With responseFormat, the last message contains structured output
+  // and structuredResponse holds the parsed object
+  if (nativeResult.structuredResponse) {
+    const review = nativeResult.structuredResponse;
+    console.log('Title:', review.title);
+    console.log('Rating:', review.rating, '/ 10');
+    console.log('Pros:');
+    for (const pro of review.pros) console.log('  +', pro);
+    console.log('Cons:');
+    for (const con of review.cons) console.log('  -', con);
+    console.log('Summary:', review.summary);
+    console.log('Recommended:', review.recommended);
+  } else {
+    // Fallback: print last message
+    const lastMsg = nativeResult.messages[nativeResult.messages.length - 1];
+    console.log('Response:', lastMsg.content);
+  }
+
+  // ── Path 2: Agentspan ──
+  console.log('\n=== Agentspan passthrough execution ===');
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      graph,
-      'Write a review for the movie Inception (2010).',
-    );
+    const result = await runtime.run(graph, PROMPT);
     console.log('Status:', result.status);
     result.printResult();
   } finally {
