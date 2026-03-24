@@ -21,6 +21,21 @@
       "types": "./dist/validation/runner.d.ts",
       "import": "./dist/validation/runner.js",
       "require": "./dist/validation/runner.cjs"
+    },
+    "./ai": {
+      "types": "./dist/wrappers/ai.d.ts",
+      "import": "./dist/wrappers/ai.js",
+      "require": "./dist/wrappers/ai.cjs"
+    },
+    "./langgraph": {
+      "types": "./dist/wrappers/langgraph.d.ts",
+      "import": "./dist/wrappers/langgraph.js",
+      "require": "./dist/wrappers/langgraph.cjs"
+    },
+    "./langchain": {
+      "types": "./dist/wrappers/langchain.d.ts",
+      "import": "./dist/wrappers/langchain.js",
+      "require": "./dist/wrappers/langchain.cjs"
     }
   },
   "engines": {

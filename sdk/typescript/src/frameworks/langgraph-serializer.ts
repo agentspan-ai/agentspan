@@ -27,6 +27,12 @@ export function serializeLangGraph(
   const g = graph as Record<string, unknown>;
   const name = (typeof g.name === 'string' && g.name) || _DEFAULT_NAME;
 
+  // Check for wrapper metadata first (set by @agentspan/sdk/langgraph wrapper)
+  const metadata = g._agentspan as Record<string, unknown> | undefined;
+  if (metadata?.model && metadata?.tools) {
+    return _serializeFromMetadata(name, metadata);
+  }
+
   // Try full extraction: find model and tools in the compiled graph
   const modelStr = _findModelInGraph(graph);
   const toolObjs = _findToolsInGraph(graph);
@@ -52,6 +58,55 @@ export function serializeLangGraph(
     `Cannot extract from LangGraph graph. No model or tools detected. ` +
     `Use createReactAgent() or create a native agentspan Agent.`,
   );
+}
+
+// ── Wrapper metadata extraction ─────────────────────────
+
+/**
+ * Serialize from wrapper-captured metadata (set by @agentspan/sdk/langgraph).
+ * Uses the model/tools/instructions stored on the graph by the wrapper.
+ */
+function _serializeFromMetadata(
+  name: string,
+  metadata: Record<string, unknown>,
+): [Record<string, unknown>, WorkerInfo[]] {
+  const modelStr = metadata.model as string;
+  const tools = metadata.tools as unknown[];
+  const instructions = metadata.instructions as string | undefined;
+
+  const rawConfig: Record<string, unknown> = { name, model: modelStr };
+  if (instructions) {
+    rawConfig.instructions = instructions;
+  }
+
+  const toolDicts: Record<string, unknown>[] = [];
+  const workers: WorkerInfo[] = [];
+
+  for (const toolObj of tools) {
+    const t = toolObj as Record<string, unknown>;
+    const toolName = (typeof t.name === 'string' && t.name) || '';
+    const description = (typeof t.description === 'string' && t.description) || '';
+    const schema = _getToolSchema(toolObj);
+
+    toolDicts.push({
+      _worker_ref: toolName,
+      description,
+      parameters: schema,
+    });
+
+    const func = _getToolCallable(toolObj);
+    if (func !== null) {
+      workers.push({
+        name: toolName,
+        description: description.trim().split('\n')[0],
+        inputSchema: schema,
+        func,
+      });
+    }
+  }
+
+  rawConfig.tools = toolDicts;
+  return [rawConfig, workers];
 }
 
 // ── Full extraction ─────────────────────────────────────
