@@ -1,0 +1,154 @@
+{
+  "format": 1,
+  "restore": {
+    "/Users/mananbhatt/Orkes/agentspan/sdk/dotnet/examples/10_Guardrails/10_Guardrails.csproj": {}
+  },
+  "projects": {
+    "/Users/mananbhatt/Orkes/agentspan/sdk/dotnet/examples/10_Guardrails/10_Guardrails.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/mananbhatt/Orkes/agentspan/sdk/dotnet/examples/10_Guardrails/10_Guardrails.csproj",
+        "projectName": "10_Guardrails",
+        "projectPath": "/Users/mananbhatt/Orkes/agentspan/sdk/dotnet/examples/10_Guardrails/10_Guardrails.csproj",
+        "packagesPath": "/Users/mananbhatt/.nuget/packages/",
+        "outputPath": "/Users/mananbhatt/Orkes/agentspan/sdk/dotnet/examples/10_Guardrails/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/mananbhatt/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {
+              "/Users/mananbhatt/Orkes/agentspan/sdk/dotnet/src/Agentspan/Agentspan.csproj": {
+                "projectPath": "/Users/mananbhatt/Orkes/agentspan/sdk/dotnet/src/Agentspan/Agentspan.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "10.0.200"
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[8.0.25, 8.0.25]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Host.osx-arm64",
+              "version": "[8.0.25, 8.0.25]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[8.0.25, 8.0.25]"
+            }
+          ],
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/10.0.201/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "/Users/mananbhatt/Orkes/agentspan/sdk/dotnet/src/Agentspan/Agentspan.csproj": {
+      "version": "0.1.0",
+      "restore": {
+        "projectUniqueName": "/Users/mananbhatt/Orkes/agentspan/sdk/dotnet/src/Agentspan/Agentspan.csproj",
+        "projectName": "Agentspan",
+        "projectPath": "/Users/mananbhatt/Orkes/agentspan/sdk/dotnet/src/Agentspan/Agentspan.csproj",
+        "packagesPath": "/Users/mananbhatt/.nuget/packages/",
+        "outputPath": "/Users/mananbhatt/Orkes/agentspan/sdk/dotnet/src/Agentspan/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/mananbhatt/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "10.0.200"
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[8.0.25, 8.0.25]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[8.0.25, 8.0.25]"
+            }
+          ],
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/10.0.201/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}

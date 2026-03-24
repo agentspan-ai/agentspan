@@ -1,0 +1,79 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agentspan", "src\Agentspan\Agentspan.csproj", "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agentspan.Examples.BasicAgent", "examples\01_BasicAgent\01_BasicAgent.csproj", "{B1B2C3D4-E5F6-7890-ABCD-EF1234567891}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agentspan.Examples.Tools", "examples\02_Tools\02_Tools.csproj", "{C1B2C3D4-E5F6-7890-ABCD-EF1234567892}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agentspan.Examples.StructuredOutput", "examples\03_StructuredOutput\03_StructuredOutput.csproj", "{D1B2C3D4-E5F6-7890-ABCD-EF1234567893}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agentspan.Examples.Handoffs", "examples\05_Handoffs\05_Handoffs.csproj", "{E1B2C3D4-E5F6-7890-ABCD-EF1234567894}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agentspan.Examples.SequentialPipeline", "examples\06_SequentialPipeline\06_SequentialPipeline.csproj", "{F1B2C3D4-E5F6-7890-ABCD-EF1234567895}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agentspan.Examples.ParallelAgents", "examples\07_ParallelAgents\07_ParallelAgents.csproj", "{01B2C3D4-E5F6-7890-ABCD-EF1234567896}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agentspan.Examples.RouterAgent", "examples\08_RouterAgent\08_RouterAgent.csproj", "{11B2C3D4-E5F6-7890-ABCD-EF1234567897}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agentspan.Examples.HumanInTheLoop", "examples\09_HumanInTheLoop\09_HumanInTheLoop.csproj", "{21B2C3D4-E5F6-7890-ABCD-EF1234567898}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agentspan.Examples.Guardrails", "examples\10_Guardrails\10_Guardrails.csproj", "{31B2C3D4-E5F6-7890-ABCD-EF1234567899}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agentspan.Examples.Streaming", "examples\11_Streaming\11_Streaming.csproj", "{41B2C3D4-E5F6-7890-ABCD-EF123456789A}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B1B2C3D4-E5F6-7890-ABCD-EF1234567891}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B1B2C3D4-E5F6-7890-ABCD-EF1234567891}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B1B2C3D4-E5F6-7890-ABCD-EF1234567891}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B1B2C3D4-E5F6-7890-ABCD-EF1234567891}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C1B2C3D4-E5F6-7890-ABCD-EF1234567892}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C1B2C3D4-E5F6-7890-ABCD-EF1234567892}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C1B2C3D4-E5F6-7890-ABCD-EF1234567892}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C1B2C3D4-E5F6-7890-ABCD-EF1234567892}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D1B2C3D4-E5F6-7890-ABCD-EF1234567893}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D1B2C3D4-E5F6-7890-ABCD-EF1234567893}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D1B2C3D4-E5F6-7890-ABCD-EF1234567893}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D1B2C3D4-E5F6-7890-ABCD-EF1234567893}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E1B2C3D4-E5F6-7890-ABCD-EF1234567894}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E1B2C3D4-E5F6-7890-ABCD-EF1234567894}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E1B2C3D4-E5F6-7890-ABCD-EF1234567894}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E1B2C3D4-E5F6-7890-ABCD-EF1234567894}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F1B2C3D4-E5F6-7890-ABCD-EF1234567895}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F1B2C3D4-E5F6-7890-ABCD-EF1234567895}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F1B2C3D4-E5F6-7890-ABCD-EF1234567895}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F1B2C3D4-E5F6-7890-ABCD-EF1234567895}.Release|Any CPU.Build.0 = Release|Any CPU
+		{01B2C3D4-E5F6-7890-ABCD-EF1234567896}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{01B2C3D4-E5F6-7890-ABCD-EF1234567896}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{01B2C3D4-E5F6-7890-ABCD-EF1234567896}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{01B2C3D4-E5F6-7890-ABCD-EF1234567896}.Release|Any CPU.Build.0 = Release|Any CPU
+		{11B2C3D4-E5F6-7890-ABCD-EF1234567897}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{11B2C3D4-E5F6-7890-ABCD-EF1234567897}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{11B2C3D4-E5F6-7890-ABCD-EF1234567897}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{11B2C3D4-E5F6-7890-ABCD-EF1234567897}.Release|Any CPU.Build.0 = Release|Any CPU
+		{21B2C3D4-E5F6-7890-ABCD-EF1234567898}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{21B2C3D4-E5F6-7890-ABCD-EF1234567898}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{21B2C3D4-E5F6-7890-ABCD-EF1234567898}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{21B2C3D4-E5F6-7890-ABCD-EF1234567898}.Release|Any CPU.Build.0 = Release|Any CPU
+		{31B2C3D4-E5F6-7890-ABCD-EF1234567899}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{31B2C3D4-E5F6-7890-ABCD-EF1234567899}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{31B2C3D4-E5F6-7890-ABCD-EF1234567899}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{31B2C3D4-E5F6-7890-ABCD-EF1234567899}.Release|Any CPU.Build.0 = Release|Any CPU
+		{41B2C3D4-E5F6-7890-ABCD-EF123456789A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{41B2C3D4-E5F6-7890-ABCD-EF123456789A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{41B2C3D4-E5F6-7890-ABCD-EF123456789A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{41B2C3D4-E5F6-7890-ABCD-EF123456789A}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

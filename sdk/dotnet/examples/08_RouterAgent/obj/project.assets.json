@@ -1,0 +1,109 @@
+{
+  "version": 3,
+  "targets": {
+    "net8.0": {
+      "Agentspan/0.1.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v8.0",
+        "compile": {
+          "bin/placeholder/Agentspan.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/Agentspan.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "Agentspan/0.1.0": {
+      "type": "project",
+      "path": "../../src/Agentspan/Agentspan.csproj",
+      "msbuildProject": "../../src/Agentspan/Agentspan.csproj"
+    }
+  },
+  "projectFileDependencyGroups": {
+    "net8.0": [
+      "Agentspan >= 0.1.0"
+    ]
+  },
+  "packageFolders": {
+    "/Users/mananbhatt/.nuget/packages/": {}
+  },
+  "project": {
+    "version": "1.0.0",
+    "restore": {
+      "projectUniqueName": "/Users/mananbhatt/Orkes/agentspan/sdk/dotnet/examples/08_RouterAgent/08_RouterAgent.csproj",
+      "projectName": "08_RouterAgent",
+      "projectPath": "/Users/mananbhatt/Orkes/agentspan/sdk/dotnet/examples/08_RouterAgent/08_RouterAgent.csproj",
+      "packagesPath": "/Users/mananbhatt/.nuget/packages/",
+      "outputPath": "/Users/mananbhatt/Orkes/agentspan/sdk/dotnet/examples/08_RouterAgent/obj/",
+      "projectStyle": "PackageReference",
+      "configFilePaths": [
+        "/Users/mananbhatt/.nuget/NuGet/NuGet.Config"
+      ],
+      "originalTargetFrameworks": [
+        "net8.0"
+      ],
+      "sources": {
+        "https://api.nuget.org/v3/index.json": {}
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "projectReferences": {
+            "/Users/mananbhatt/Orkes/agentspan/sdk/dotnet/src/Agentspan/Agentspan.csproj": {
+              "projectPath": "/Users/mananbhatt/Orkes/agentspan/sdk/dotnet/src/Agentspan/Agentspan.csproj"
+            }
+          }
+        }
+      },
+      "warningProperties": {
+        "warnAsError": [
+          "NU1605"
+        ]
+      },
+      "restoreAuditProperties": {
+        "enableAudit": "true",
+        "auditLevel": "low",
+        "auditMode": "direct"
+      },
+      "SdkAnalysisLevel": "10.0.200"
+    },
+    "frameworks": {
+      "net8.0": {
+        "targetAlias": "net8.0",
+        "imports": [
+          "net461",
+          "net462",
+          "net47",
+          "net471",
+          "net472",
+          "net48",
+          "net481"
+        ],
+        "assetTargetFallback": true,
+        "warn": true,
+        "downloadDependencies": [
+          {
+            "name": "Microsoft.AspNetCore.App.Ref",
+            "version": "[8.0.25, 8.0.25]"
+          },
+          {
+            "name": "Microsoft.NETCore.App.Host.osx-arm64",
+            "version": "[8.0.25, 8.0.25]"
+          },
+          {
+            "name": "Microsoft.NETCore.App.Ref",
+            "version": "[8.0.25, 8.0.25]"
+          }
+        ],
+        "frameworkReferences": {
+          "Microsoft.NETCore.App": {
+            "privateAssets": "all"
+          }
+        },
+        "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/10.0.201/PortableRuntimeIdentifierGraph.json"
+      }
+    }
+  }
+}
