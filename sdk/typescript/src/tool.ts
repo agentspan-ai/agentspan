@@ -1,4 +1,4 @@
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import { z } from 'zod';
 import type { ToolDef, ToolType, ToolContext, CredentialFile } from './types.js';
 import { ConfigurationError } from './errors.js';
 
@@ -30,11 +30,11 @@ export function isZodSchema(obj: unknown): boolean {
 /**
  * Convert a Zod schema or JSON Schema object to JSON Schema.
  * If it's already JSON Schema, returns as-is.
+ * Uses Zod v4's built-in z.toJSONSchema() — no external dependency needed.
  */
 function toJsonSchema(schema: unknown): object {
   if (isZodSchema(schema)) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return zodToJsonSchema(schema as any, { target: 'jsonSchema7' });
+    return z.toJSONSchema(schema as z.ZodType) as object;
   }
   return schema as object;
 }

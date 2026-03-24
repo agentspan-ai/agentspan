@@ -156,7 +156,7 @@ const ClassificationResult = z.object({
   category: z.enum(['tech', 'business', 'creative']).describe('Article category'),
   priority: z.number().describe('Priority level (1=highest)'),
   tags: z.array(z.string()).describe('Relevant tags'),
-  metadata: z.record(z.string()).optional().describe('Additional metadata'),
+  metadata: z.record(z.string(), z.string()).optional().describe('Additional metadata'),
 }).describe('ClassificationResult');
 
 // @agent decorator equivalents

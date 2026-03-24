@@ -1,4 +1,4 @@
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import { z } from 'zod';
 import { Agent, PromptTemplate } from './agent.js';
 import type {
   CallbackHandler,
@@ -48,8 +48,7 @@ function serializeOutputType(
   if (outputType == null) return undefined;
 
   if (isZodSchema(outputType)) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const schema = zodToJsonSchema(outputType as any, { target: 'jsonSchema7' });
+    const schema = z.toJSONSchema(outputType as z.ZodType) as Record<string, unknown>;
     // Use schema description or default to 'Output'
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const desc = (outputType as any).description;
