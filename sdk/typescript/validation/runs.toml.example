@@ -1,0 +1,87 @@
+# TypeScript SDK Validation Configuration
+#
+# Each [runs.*] section defines a named run. One run = one model + group.
+# [defaults] values are merged into every run (run-level overrides win).
+#
+# Usage:
+#   npx tsx validation/runner.ts --config validation/runs.toml.example
+#   npx tsx validation/runner.ts --config validation/runs.toml.example --group SMOKE_TEST
+#   npx tsx validation/runner.ts --config validation/runs.toml.example --dry-run
+#   npx tsx validation/runner.ts --config validation/runs.toml.example --judge --report
+
+[defaults]
+timeout = 300          # per-example timeout (seconds)
+parallel = true        # run examples within this run concurrently
+max_workers = 8        # max concurrent examples per run
+server_url = "http://localhost:8080/api"
+
+[judge]
+model = "gpt-4o-mini"           # LLM model for judging
+max_output_chars = 3000          # truncate outputs before judging
+max_tokens = 300                 # max tokens for judge response
+rate_limit = 0.5                 # seconds between judge calls
+pass_threshold = 3               # minimum judge score for PASS
+
+# ── Smoke test ──────────────────────────────────────────────
+
+[runs.smoke]
+group = "SMOKE_TEST"
+model = "openai/gpt-4o-mini"
+
+# ── Framework-specific runs ─────────────────────────────────
+
+[runs.vercel_ai]
+group = "VERCEL_AI"
+model = "openai/gpt-4o-mini"
+
+[runs.vercel_native]
+group = "VERCEL_AI"
+model = "openai/gpt-4o-mini"
+native = true
+
+[runs.langgraph]
+group = "LANGGRAPH"
+model = "openai/gpt-4o-mini"
+
+[runs.langgraph_native]
+group = "LANGGRAPH"
+model = "openai/gpt-4o-mini"
+native = true
+
+[runs.langchain]
+group = "LANGCHAIN"
+model = "openai/gpt-4o-mini"
+
+[runs.langchain_native]
+group = "LANGCHAIN"
+model = "openai/gpt-4o-mini"
+native = true
+
+[runs.openai_sdk]
+group = "OPENAI"
+model = "openai/gpt-4o-mini"
+
+[runs.openai_native]
+group = "OPENAI"
+model = "openai/gpt-4o-mini"
+native = true
+
+[runs.adk]
+group = "ADK"
+model = "openai/gpt-4o-mini"
+
+[runs.adk_native]
+group = "ADK"
+model = "openai/gpt-4o-mini"
+native = true
+
+# ── Run Config Reference ────────────────────────────────────
+#
+# name            (auto-set from section key)
+# group           Example group from groups.ts (null = all examples)
+# model           "provider/model-name" (default: "openai/gpt-4o-mini")
+# native          Run in native framework mode (default: false)
+# parallel        Run examples concurrently (default: true)
+# max_workers     Max concurrent examples (default: 8)
+# timeout         Per-example timeout in seconds (default: 300)
+# server_url      Agentspan server URL (default: "http://localhost:8080/api")
