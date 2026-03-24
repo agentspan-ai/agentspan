@@ -23,6 +23,7 @@ Requirements:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import signal
 import time
@@ -32,7 +33,7 @@ from agentspan.agents import Agent, AgentRuntime, tool
 from settings import settings
 
 DEFAULT_WORKFLOW_FILE = Path("/tmp/agentspan_client_reconnect.workflow_id")
-DEFAULT_CLIENT_PID_FILE = Path("/tmp/agentspan_client_reconnect.pid")
+DEFAULT_CLIENT_INFO_FILE = Path("/tmp/agentspan_client_reconnect.client.json")
 
 
 @tool(approval_required=True)
@@ -63,6 +64,14 @@ def load_text(path: Path) -> str:
     return value
 
 
+def save_json(path: Path, payload: dict) -> None:
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def load_json(path: Path) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def print_status(prefix: str, status: object) -> None:
     print(
         f"{prefix} status={status.status} "
@@ -70,16 +79,25 @@ def print_status(prefix: str, status: object) -> None:
     )
 
 
-def start_workflow(prompt: str, workflow_file: Path, client_pid_file: Path, timeout_seconds: int) -> None:
+def start_workflow(prompt: str, workflow_file: Path, client_info_file: Path, timeout_seconds: int) -> None:
+    try:
+        os.setsid()
+    except OSError:
+        pass
+
     with AgentRuntime() as runtime:
-        save_text(client_pid_file, str(os.getpid()))
+        save_json(
+            client_info_file,
+            {"pid": os.getpid(), "pgid": os.getpgid(0)},
+        )
         handle = runtime.start(agent, prompt)
         save_text(workflow_file, handle.workflow_id)
 
         print(f"Client PID: {os.getpid()}")
+        print(f"Client PGID: {os.getpgid(0)}")
         print(f"Workflow ID: {handle.workflow_id}")
         print(f"Saved workflow ID to: {workflow_file}")
-        print(f"Saved client PID to: {client_pid_file}")
+        print(f"Saved client info to: {client_info_file}")
         print("Waiting for the workflow to reach a durable WAITING state...")
 
         for second in range(timeout_seconds + 1):
@@ -89,7 +107,7 @@ def start_workflow(prompt: str, workflow_file: Path, client_pid_file: Path, time
                 print()
                 print("Workflow is durably paused on the server.")
                 print("Now hard-kill this client from another terminal with:")
-                print(f"  python {Path(__file__).name} kill-client --pid-file {client_pid_file}")
+                print(f"  python {Path(__file__).name} kill-client --client-info-file {client_info_file}")
                 print()
                 break
             if status.is_complete:
@@ -107,10 +125,11 @@ def start_workflow(prompt: str, workflow_file: Path, client_pid_file: Path, time
             time.sleep(2)
 
 
-def kill_client(client_pid_file: Path) -> None:
-    pid = int(load_text(client_pid_file))
-    print(f"Sending SIGKILL to client PID {pid}")
-    os.kill(pid, signal.SIGKILL)
+def kill_client(client_info_file: Path) -> None:
+    info = load_json(client_info_file)
+    pgid = int(info["pgid"])
+    print(f"Sending SIGKILL to client process group {pgid}")
+    os.killpg(pgid, signal.SIGKILL)
 
 
 def show_status(workflow_id: str, timeout_seconds: int) -> None:
@@ -166,10 +185,10 @@ def parse_args() -> argparse.Namespace:
         help="Path to store workflow_id.",
     )
     start.add_argument(
-        "--pid-file",
+        "--client-info-file",
         type=Path,
-        default=DEFAULT_CLIENT_PID_FILE,
-        help="Path to store the client PID for kill-client.",
+        default=DEFAULT_CLIENT_INFO_FILE,
+        help="Path to store the client PID/PGID info for kill-client.",
     )
     start.add_argument(
         "--timeout-seconds",
@@ -183,10 +202,10 @@ def parse_args() -> argparse.Namespace:
         help="Send SIGKILL to the saved client PID.",
     )
     kill.add_argument(
-        "--pid-file",
+        "--client-info-file",
         type=Path,
-        default=DEFAULT_CLIENT_PID_FILE,
-        help="Path containing the client PID.",
+        default=DEFAULT_CLIENT_INFO_FILE,
+        help="Path containing the client PID/PGID info.",
     )
 
     status = sub.add_parser(
@@ -237,9 +256,9 @@ if __name__ == "__main__":
     args = parse_args()
 
     if args.command == "start":
-        start_workflow(args.prompt, args.file, args.pid_file, args.timeout_seconds)
+        start_workflow(args.prompt, args.file, args.client_info_file, args.timeout_seconds)
     elif args.command == "kill-client":
-        kill_client(args.pid_file)
+        kill_client(args.client_info_file)
     elif args.command == "status":
         workflow_id = args.workflow_id or load_text(args.file)
         show_status(workflow_id, args.timeout_seconds)

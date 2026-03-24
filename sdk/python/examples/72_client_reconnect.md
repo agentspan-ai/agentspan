@@ -41,7 +41,7 @@ Wait for:
 ```text
 Workflow is durably paused on the server.
 Now hard-kill this client from another terminal with:
-  python 72_client_reconnect.py kill-client --pid-file /tmp/agentspan_client_reconnect.pid
+  python 72_client_reconnect.py kill-client --client-info-file /tmp/agentspan_client_reconnect.client.json
 ```
 
 ## Terminal 2: Hard-kill the client
