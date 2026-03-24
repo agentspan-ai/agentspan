@@ -119,13 +119,24 @@ export class TokenUsageCondition extends TerminationCondition {
 
 /**
  * AND composition — all conditions must be met.
+ * Flattens nested AND children: A.and(B).and(C) → and([A, B, C])
+ * This matches the Python SDK's flattening behavior for wire format parity.
  */
 export class AndCondition extends TerminationCondition {
   readonly conditions: TerminationCondition[];
 
   constructor(...conditions: TerminationCondition[]) {
     super();
-    this.conditions = conditions;
+    // Flatten nested ANDs: if a child is AndCondition, merge its children
+    const flattened: TerminationCondition[] = [];
+    for (const c of conditions) {
+      if (c instanceof AndCondition) {
+        flattened.push(...c.conditions);
+      } else {
+        flattened.push(c);
+      }
+    }
+    this.conditions = flattened;
   }
 
   toJSON(): object {
@@ -138,13 +149,24 @@ export class AndCondition extends TerminationCondition {
 
 /**
  * OR composition — any condition can trigger termination.
+ * Flattens nested OR children: A.or(B).or(C) → or([A, B, C])
+ * This matches the Python SDK's flattening behavior for wire format parity.
  */
 export class OrCondition extends TerminationCondition {
   readonly conditions: TerminationCondition[];
 
   constructor(...conditions: TerminationCondition[]) {
     super();
-    this.conditions = conditions;
+    // Flatten nested ORs: if a child is OrCondition, merge its children
+    const flattened: TerminationCondition[] = [];
+    for (const c of conditions) {
+      if (c instanceof OrCondition) {
+        flattened.push(...c.conditions);
+      } else {
+        flattened.push(c);
+      }
+    }
+    this.conditions = flattened;
   }
 
   toJSON(): object {

@@ -180,4 +180,56 @@ describe('Composition', () => {
       expect(conditions[1].type).toBe('text_mention');
     });
   });
+
+  describe('flattening (Python parity)', () => {
+    it('flattens A.or(B).or(C) to or([A, B, C])', () => {
+      const a = new TextMention('A');
+      const b = new TextMention('B');
+      const c = new TextMention('C');
+
+      const composed = a.or(b).or(c);
+      const json = composed.toJSON() as Record<string, unknown>;
+      expect(json.type).toBe('or');
+
+      const conditions = json.conditions as Array<Record<string, unknown>>;
+      expect(conditions).toHaveLength(3);
+      expect(conditions[0]).toEqual({ type: 'text_mention', text: 'A', caseSensitive: false });
+      expect(conditions[1]).toEqual({ type: 'text_mention', text: 'B', caseSensitive: false });
+      expect(conditions[2]).toEqual({ type: 'text_mention', text: 'C', caseSensitive: false });
+    });
+
+    it('flattens A.and(B).and(C) to and([A, B, C])', () => {
+      const a = new MaxMessage(10);
+      const b = new MaxMessage(20);
+      const c = new MaxMessage(30);
+
+      const composed = a.and(b).and(c);
+      const json = composed.toJSON() as Record<string, unknown>;
+      expect(json.type).toBe('and');
+
+      const conditions = json.conditions as Array<Record<string, unknown>>;
+      expect(conditions).toHaveLength(3);
+    });
+
+    it('does not flatten mixed: A.or(B).and(C) keeps or inside and', () => {
+      const a = new TextMention('A');
+      const b = new TextMention('B');
+      const c = new MaxMessage(10);
+
+      const composed = a.or(b).and(c);
+      const json = composed.toJSON() as Record<string, unknown>;
+      expect(json.type).toBe('and');
+
+      const conditions = json.conditions as Array<Record<string, unknown>>;
+      expect(conditions).toHaveLength(2);
+      expect(conditions[0]).toEqual({
+        type: 'or',
+        conditions: [
+          { type: 'text_mention', text: 'A', caseSensitive: false },
+          { type: 'text_mention', text: 'B', caseSensitive: false },
+        ],
+      });
+      expect(conditions[1]).toEqual({ type: 'max_message', maxMessages: 10 });
+    });
+  });
 });
