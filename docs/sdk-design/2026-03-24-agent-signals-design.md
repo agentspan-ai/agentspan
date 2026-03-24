@@ -36,10 +36,11 @@ Agent Signals allow humans and agents to send context, redirections, and coordin
                     │  4. Check limits (100 lifetime, 10 pend) │
                     │  5. Generate signalId (UUID)              │
                     │  6. Store in _pending_signals (updateVar) │
-                    │  7. If urgent: set _urgent_pause flag     │
-                    │  8. Emit SSE: signal_received             │
-                    │  9. If propagate: recurse into sub-wfs    │
-                    │ 10. Return SignalReceipt                  │
+                    │  7. Store data in _signal_data (if any)   │
+                    │  8. If urgent: set _urgent_pause flag     │
+                    │  9. Emit SSE: signal_received             │
+                    │ 10. If propagate: recurse into sub-wfs    │
+                    │ 11. Return SignalReceipt                  │
                     └──────────────┬───────────────────────────┘
                                    │
               ┌────────────────────┼────────────────────┐
@@ -60,7 +61,7 @@ Agent Signals allow humans and agents to send context, redirections, and coordin
                     │   (INLINE + SET_VARIABLE pair)            │
                     │                                          │
                     │  INLINE: read _pending_signals            │
-                    │    If empty → no-op (zero overhead)       │
+                    │    If empty → no-op (near-zero overhead)  │
                     │    If auto_accept → move to _processed    │
                     │    If evaluate → move to _processing      │
                     │    Output: injection messages + tools     │
@@ -227,7 +228,8 @@ Signal intake is handled by an **INLINE + SET_VARIABLE pair** inserted into the 
             newProcessed: processed,
             newSignalCounts: signalCounts,
             injectionMessages: [],
-            injectionTools: []
+            injectionTools: [],
+            newDispositions: []
         };
     }
 
@@ -240,12 +242,18 @@ Signal intake is handled by an **INLINE + SET_VARIABLE pair** inserted into the 
             var sig = pending[i];
             messages.push({
                 role: 'user',
-                message: '[Signal from ' + (sig.sender || 'unknown') + ']: ' + sig.message
+                message: '[SIGNAL_START id=' + sig.signalId + ']\n' +
+                         '[Signal from ' + (sig.sender || 'unknown') + ']: ' + sig.message + '\n' +
+                         '[SIGNAL_END]'
             });
             sig.disposition = 'accepted';
             sig.processedAt = Date.now();
             sig.deliveredAt = Date.now();
             processed.push(sig);
+        }
+        var events = [];
+        for (var j = 0; j < pending.length; j++) {
+            events.push({type: 'signal_accepted', signalId: pending[j].signalId});
         }
         signalCounts.pending = 0;
         return {
@@ -256,7 +264,7 @@ Signal intake is handled by an **INLINE + SET_VARIABLE pair** inserted into the 
             newSignalCounts: signalCounts,
             injectionMessages: messages,
             injectionTools: [],
-            autoAcceptedSignals: pending
+            newDispositions: events
         };
     }
 
@@ -296,7 +304,8 @@ Signal intake is handled by an **INLINE + SET_VARIABLE pair** inserted into the 
         newProcessed: processed,
         newSignalCounts: signalCounts,
         injectionMessages: messages,
-        injectionTools: tools
+        injectionTools: tools,
+        newDispositions: []  // evaluate mode: dispositions happen post-LLM
     };
 })()
 ```
@@ -369,7 +378,9 @@ if (signalInjection != null) {
 
 **Position in message list:** Signal messages are appended AFTER all conversation history. This places them as the most recent user messages, ensuring the LLM treats them as current context rather than stale history. They appear after tool results from the previous iteration and before the LLM generates its next response.
 
-**When `_signal_injection` is empty/null:** The `if` check short-circuits — zero overhead. The `_signal_injection` variable contains empty arrays when no signals are pending (from the INLINE task's `noop: true` path).
+**When `_signal_injection` is empty/null:** The `if` check short-circuits — zero overhead in the task mapper. The `_signal_injection` variable contains empty arrays when no signals are pending (from the INLINE task's `noop: true` path).
+
+**Per-iteration overhead when no signals are pending:** The INLINE + SET_VARIABLE pair executes every iteration even with no signals. The INLINE returns immediately (empty array check), and the SET_VARIABLE writes back the same empty values. This adds approximately 5-10ms of Conductor task scheduling overhead per iteration — negligible compared to LLM call latency (typically 1-30 seconds). This is NOT zero overhead, but it is near-zero and consistent with how other optional features (e.g., guardrails, callbacks) add lightweight tasks to the loop body.
 
 ### 4.1.2 Message Format — Evaluate Mode
 
@@ -388,12 +399,12 @@ if (signalInjection != null) {
 [
   {
     "role": "user",
-    "message": "[Signal from supervisor]: Focus on error correction — the team decided that's the priority."
+    "message": "[SIGNAL_START id=uuid-1]\n[Signal from supervisor]: Focus on error correction — the team decided that's the priority.\n[SIGNAL_END]"
   }
 ]
 ```
 
-No ephemeral tools injected. Signals are already moved to `_processed` with `disposition: "accepted"` by the pre-LLM INLINE task.
+No ephemeral tools injected. Signals are already moved to `_processed` with `disposition: "accepted"` by the pre-LLM INLINE task. The `[SIGNAL_START]...[SIGNAL_END]` delimiters are included in both modes (per FR-2.5 / NFR-4.4) so that context condensation (Section 15) can reliably detect signal messages.
 
 ### 4.2 System Prompt Addition
 
@@ -712,6 +723,7 @@ Within a single DO_WHILE iteration when signals are present:
 
 ```
  1. [on_signal_received callback SIMPLE task — optional, if configured]
+ 1b.[on_signal_received SET_VARIABLE — writes filtered _pending_signals back]
  2. Signal intake INLINE — reads _pending_signals, computes injection payloads
     and variable transitions (pending→processing or pending→processed)
  3. Signal intake SET_VARIABLE — persists updated signal variables +
@@ -988,7 +1000,7 @@ public static AgentSSEEvent signalRejected(String workflowId, String signalId,
 
 When any of these SET_VARIABLE tasks complete, the listener reads the `newDispositions` field from the preceding INLINE task's output (available via the SET_VARIABLE task's input references). Each INLINE task (intake, merge, implicit) should include a `newDispositions` array in its output listing the signals that changed state in that step, along with their disposition type. This avoids diffing `_processed_signals`.
 
-For example, the signal intake INLINE (Section 4.1) includes `autoAcceptedSignals` in its output for auto_accept mode. The merge INLINE (Section 5.2.1) should similarly include a `newDispositions` field listing signals that were explicitly accepted or rejected in the current fork.
+All three INLINE tasks (intake, merge, implicit) include a `newDispositions` array in their output, using a consistent format: `[{type: 'signal_accepted', signalId: '...'}, ...]`. The signal intake INLINE (Section 4.1) populates this for auto_accept mode. The merge INLINE (Section 5.2.1) populates it for explicit accept/reject. The implicit acceptance INLINE (Section 5.3) populates it for undispositioned signals.
 
 ### 8.3 SDK Event Types
 
@@ -1170,6 +1182,19 @@ Response: 200 OK
 }
 ```
 
+**Implementation:** The server must locate the signal across three variable lists. Since the signalId is a UUID and the request does not include a workflowId, the server has two options:
+
+1. **Maintain a `signalId → workflowId` lookup** (in-memory map or Redis) populated by `AgentService.signal()` at send time. This avoids scanning all workflows.
+2. **Require `workflowId` as a query parameter** — simpler, but requires the sender to store the workflowId from the `SignalReceipt`.
+
+Option 1 is recommended (the receipt already includes `workflowId`, so the caller can provide it as a hint for faster lookup). Once the workflow is located, the server searches `_pending_signals`, `_processing_signals`, and `_processed_signals` in order:
+- Found in `_pending_signals` → `{delivered: false, disposition: "pending"}`
+- Found in `_processing_signals` → `{delivered: true, disposition: "pending"}`
+- Found in `_processed_signals` → `{delivered: true, disposition: signal.disposition, rejectionReason: signal.rejectionReason}`
+- Not found in any list → `404 Not Found`
+
+Possible `disposition` values: `"pending"`, `"accepted"`, `"rejected"`, `"accepted_implicit"`.
+
 ### 10.4 Resolve Agent Name
 
 ```
@@ -1219,7 +1244,7 @@ In `compileWithTools()`:
 The loop body order with signals enabled:
 
 ```
-[on_signal_received callback — optional]
+[on_signal_received callback SIMPLE + SET_VARIABLE — optional]
 [signal_intake INLINE]
 [signal_intake_set SET_VARIABLE]
 [before_model callback — optional]
@@ -1309,6 +1334,8 @@ A future version could compile framework agents with a DO_WHILE wrapper that per
 
 ## 13. Error Handling
 
+### 13.1 API Errors
+
 | Error | HTTP Status | When |
 |---|---|---|
 | `WorkflowNotActiveError` | 409 Conflict | Workflow is COMPLETED, FAILED, TERMINATED, or TIMED_OUT |
@@ -1317,6 +1344,19 @@ A future version could compile framework agents with a DO_WHILE wrapper that per
 | `PayloadTooLargeError` | 413 | Signal payload exceeds 64KB |
 | `SignalLimitExceededError` | 429 | Workflow has received 100+ signals |
 | `TooManyPendingSignalsError` | 429 | Workflow has 10+ unprocessed signals |
+
+### 13.2 INLINE Task Failures (Internal)
+
+Signal processing uses several INLINE (JavaScript) tasks. If any of these fail due to a script error (malformed data, unexpected null, GraalJS exception), the behavior is:
+
+| INLINE Task | Failure Impact | Mitigation |
+|---|---|---|
+| Signal intake INLINE (Section 4.1) | Signals remain in `_pending_signals`, not delivered this iteration. SET_VARIABLE does not execute. LLM proceeds without signal injection (signals are retried on next iteration). | Wrap entire script body in try/catch; on error, return `{noop: true, ...}` with current state unchanged. Log error to workflow output. |
+| Disposition INLINE (Section 5.2) | Individual accept/reject fails. The INLINE task returns error output. FORK_JOIN_DYNAMIC continues (task is `optional: true`). Signal remains in `_processing_signals` and is implicitly accepted at end of iteration. | Already handled: enrichment script sets `optional: true, retryCount: 0` on all dynamically-created tasks. |
+| Signal merge INLINE (Section 5.2.1) | Dispositions from this iteration are not persisted. Signals remain in `_processing_signals` and are implicitly accepted by the cleanup task. | Wrap script in try/catch; on error, return current state unchanged. |
+| Implicit acceptance INLINE (Section 5.3) | Signals remain in `_processing_signals` until the next iteration. | The implicit acceptance INLINE runs every iteration — on the next iteration, it catches and accepts the stale signals. One iteration of delay, no data loss. |
+
+All INLINE scripts should follow defensive coding: null-check all inputs, use `|| []` / `|| {}` defaults, and wrap the main body in try/catch that returns the current state unchanged on error. This ensures signal processing failures degrade gracefully (signals are delayed, not lost) rather than failing the workflow.
 
 ---
 
@@ -1455,13 +1495,77 @@ Two concurrent `signal()` calls to the same workflow can race:
 private final ConcurrentHashMap<String, Object> workflowLocks = new ConcurrentHashMap<>();
 
 public SignalReceipt signal(String workflowId, SignalRequest request) {
+    // Validate workflow is active (FR-1.4)
+    WorkflowModel workflow = workflowExecutor.getWorkflow(workflowId);
+    if (workflow == null) throw new WorkflowNotFoundError(workflowId);
+    if (workflow.getStatus().isTerminal()) throw new WorkflowNotActiveError(workflowId, workflow.getStatus());
+
+    // Validate payload (FR-17.3)
+    if (request.getMessage().length() > 4096) throw new PayloadTooLargeError("message exceeds 4096 chars");
+    // ... validate total payload <= 64KB ...
+
+    String signalId = UUID.randomUUID().toString();
+
     Object lock = workflowLocks.computeIfAbsent(workflowId, k -> new Object());
     synchronized (lock) {
-        // 1. Read current _pending_signals
-        // 2. Append new signal
-        // 3. Write back via updateVariables
-        // 4. Update _signal_counts
+        Map<String, Object> vars = workflow.getVariables();
+
+        // 1. Check limits (FR-17.1, FR-17.2)
+        Map<String, Object> counts = (Map<String, Object>) vars.getOrDefault("_signal_counts",
+            Map.of("lifetime", 0, "pending", 0));
+        if ((int) counts.get("lifetime") >= 100) throw new SignalLimitExceededError(workflowId);
+        if ((int) counts.get("pending") >= 10) throw new TooManyPendingSignalsError(workflowId);
+
+        // 2. Build signal object
+        Map<String, Object> signal = new LinkedHashMap<>();
+        signal.put("signalId", signalId);
+        signal.put("message", request.getMessage());
+        signal.put("data", request.getData());
+        signal.put("sender", request.getSender());
+        signal.put("priority", request.getPriority());
+        signal.put("timestamp", System.currentTimeMillis());
+
+        // 3. Append to _pending_signals
+        List<Map<String, Object>> pending = new ArrayList<>(
+            (List<Map<String, Object>>) vars.getOrDefault("_pending_signals", List.of()));
+        pending.add(signal);
+
+        // 4. Store data in _signal_data (FR-16.1)
+        Map<String, Object> signalData = new LinkedHashMap<>(
+            (Map<String, Object>) vars.getOrDefault("_signal_data", Map.of()));
+        if (request.getData() != null && !request.getData().isEmpty()) {
+            signalData.put(signalId, request.getData());
+        }
+
+        // 5. Update counts
+        Map<String, Object> newCounts = new LinkedHashMap<>();
+        newCounts.put("lifetime", (int) counts.get("lifetime") + 1);
+        newCounts.put("pending", pending.size());
+
+        // 6. Write all via updateVariables (single call)
+        Map<String, Object> update = new LinkedHashMap<>();
+        update.put("_pending_signals", pending);
+        update.put("_signal_data", signalData);
+        update.put("_signal_counts", newCounts);
+        workflowExecutor.updateVariables(workflowId, update);
     }
+
+    // 7. If urgent: set _urgent_pause flag (outside lock — idempotent write)
+    if ("urgent".equals(request.getPriority())) {
+        workflowExecutor.updateVariables(workflowId,
+            Map.of("_urgent_pause_requested", true));
+    }
+
+    // 8. Emit SSE event
+    agentStreamRegistry.emit(workflowId, AgentSSEEvent.signalReceived(
+        workflowId, signalId, request.getMessage(), request.getSender(), request.getPriority()));
+
+    // 9. Propagate to sub-workflows (Section 4.3)
+    if (Boolean.TRUE.equals(request.getPropagate())) {
+        propagateToSubWorkflows(workflowId, request, signalId);
+    }
+
+    return new SignalReceipt(signalId, workflowId, "queued");
 }
 ```
 
