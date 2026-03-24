@@ -1,116 +1,176 @@
 /**
- * Multi-Tool Agent -- agent with diverse tool categories.
+ * Multi-Tool Agent -- agent with diverse tool categories for travel planning.
  *
  * Demonstrates:
- *   - Combining tools from different domains: time, currency, weather, distance
- *   - Agent correctly selects and chains tool calls
- *   - Tools returning realistic formatted data
- *   - Practical use case: travel planning assistant
+ *   - Combining tools from different domains: time, currency, flight info
+ *   - ChatOpenAI with bindTools() selecting and chaining multiple tool calls
+ *   - Real LLM reasoning about which tools to use
+ *   - Running natively and via AgentRuntime
  *
- * In production you would use:
- *   import { ChatOpenAI } from '@langchain/openai';
- *   import { tool } from '@langchain/core/tools';
- *   import { createReactAgent } from 'langchain/agents';
+ * Requires: OPENAI_API_KEY environment variable
  */
 
+import { ChatOpenAI } from '@langchain/openai';
+import { DynamicStructuredTool } from '@langchain/core/tools';
+import { HumanMessage, AIMessage, ToolMessage, SystemMessage } from '@langchain/core/messages';
+import { RunnableLambda } from '@langchain/core/runnables';
+import { z } from 'zod';
 import { AgentRuntime } from '../../src/index.js';
 
-// -- Mock tool implementations --
+// ── Tool definitions ─────────────────────────────────────
 
-const timezones: Record<string, [string, number]> = {
-  'new york': ['UTC-5 (EST)', -5],
-  london: ['UTC+0 (GMT)', 0],
-  paris: ['UTC+1 (CET)', 1],
-  tokyo: ['UTC+9 (JST)', 9],
-  sydney: ['UTC+11 (AEDT)', 11],
-  dubai: ['UTC+4 (GST)', 4],
-  'los angeles': ['UTC-8 (PST)', -8],
-};
+const getLocalTimeTool = new DynamicStructuredTool({
+  name: 'get_local_time',
+  description: 'Get the current local time in a city. Supported: New York, London, Paris, Tokyo, Sydney, Dubai, Los Angeles.',
+  schema: z.object({
+    city: z.string().describe('City name'),
+  }),
+  func: async ({ city }) => {
+    const timezones: Record<string, [string, number]> = {
+      'new york': ['UTC-5 (EST)', -5],
+      london: ['UTC+0 (GMT)', 0],
+      paris: ['UTC+1 (CET)', 1],
+      tokyo: ['UTC+9 (JST)', 9],
+      sydney: ['UTC+11 (AEDT)', 11],
+      dubai: ['UTC+4 (GST)', 4],
+      'los angeles': ['UTC-8 (PST)', -8],
+    };
+    const key = city.toLowerCase().trim();
+    const entry = timezones[key];
+    if (!entry) return `Time data not available for ${city}.`;
+    const [label, offset] = entry;
+    const utcNow = new Date();
+    const local = new Date(utcNow.getTime() + offset * 3600 * 1000);
+    const hours = local.getUTCHours().toString().padStart(2, '0');
+    const mins = local.getUTCMinutes().toString().padStart(2, '0');
+    return `${city}: ${hours}:${mins} (${label})`;
+  },
+});
 
-function getLocalTime(city: string): string {
-  const key = city.toLowerCase().trim();
-  const [label, offset] = timezones[key] ?? ['UTC', 0];
-  const utcNow = new Date();
-  const local = new Date(utcNow.getTime() + offset * 3600 * 1000);
-  const hours = local.getUTCHours().toString().padStart(2, '0');
-  const mins = local.getUTCMinutes().toString().padStart(2, '0');
-  return `${city}: ${hours}:${mins} (${label})`;
-}
+const convertCurrencyTool = new DynamicStructuredTool({
+  name: 'convert_currency',
+  description: 'Convert an amount from one currency to another. Supported: USD, EUR, GBP, JPY, AUD, CAD, CHF, INR.',
+  schema: z.object({
+    amount: z.number().describe('Amount to convert'),
+    from: z.string().describe('Source currency code (e.g. "USD")'),
+    to: z.string().describe('Target currency code (e.g. "JPY")'),
+  }),
+  func: async ({ amount, from, to }) => {
+    const ratesToUsd: Record<string, number> = {
+      usd: 1.0, eur: 1.08, gbp: 1.26, jpy: 0.0067,
+      aud: 0.64, cad: 0.74, chf: 1.11, inr: 0.012,
+    };
+    const fromRate = ratesToUsd[from.toLowerCase()];
+    const toRate = ratesToUsd[to.toLowerCase()];
+    if (!fromRate || !toRate) {
+      return `Currency conversion not supported for ${from}/${to}`;
+    }
+    const result = (amount * fromRate) / toRate;
+    return `${amount} ${from.toUpperCase()} = ${result.toFixed(2)} ${to.toUpperCase()}`;
+  },
+});
 
-const ratesToUsd: Record<string, number> = {
-  usd: 1.0, eur: 1.08, gbp: 1.26, jpy: 0.0067,
-  aud: 0.64, cad: 0.74, chf: 1.11, inr: 0.012,
-};
+const getFlightDurationTool = new DynamicStructuredTool({
+  name: 'get_flight_duration',
+  description: 'Get estimated flight duration between two cities.',
+  schema: z.object({
+    from: z.string().describe('Departure city'),
+    to: z.string().describe('Arrival city'),
+  }),
+  func: async ({ from, to }) => {
+    const durations: Record<string, string> = {
+      'new york->london': '7h 30m',
+      'london->new york': '8h 00m',
+      'london->tokyo': '11h 45m',
+      'tokyo->london': '12h 15m',
+      'new york->los angeles': '5h 30m',
+      'los angeles->tokyo': '11h 00m',
+      'new york->tokyo': '14h 00m',
+      'tokyo->new york': '13h 00m',
+      'paris->new york': '8h 10m',
+      'dubai->london': '7h 10m',
+    };
+    const key = `${from.toLowerCase()}->${to.toLowerCase()}`;
+    const revKey = `${to.toLowerCase()}->${from.toLowerCase()}`;
+    const duration = durations[key] ?? durations[revKey];
+    if (duration) {
+      return `Flight from ${from} to ${to}: approximately ${duration}`;
+    }
+    return `No direct flight data available for ${from} to ${to}`;
+  },
+});
 
-function convertCurrency(amount: number, from: string, to: string): string {
-  const fromRate = ratesToUsd[from.toLowerCase()];
-  const toRate = ratesToUsd[to.toLowerCase()];
-  if (!fromRate || !toRate) {
-    return `Currency conversion not supported for ${from}/${to}`;
+// ── Agent loop ───────────────────────────────────────────
+
+const tools = [getLocalTimeTool, convertCurrencyTool, getFlightDurationTool];
+const toolMap = Object.fromEntries(tools.map((t) => [t.name, t]));
+
+async function runTravelAgent(prompt: string): Promise<string> {
+  const model = new ChatOpenAI({ modelName: 'gpt-4o-mini', temperature: 0 }).bindTools(tools);
+
+  const messages: (SystemMessage | HumanMessage | AIMessage | ToolMessage)[] = [
+    new SystemMessage(
+      'You are a travel planning assistant. Use the provided tools to help with ' +
+      'time zones, currency conversion, and flight duration estimates. ' +
+      'Provide a comprehensive, well-formatted summary.'
+    ),
+    new HumanMessage(prompt),
+  ];
+
+  for (let i = 0; i < 5; i++) {
+    const response = await model.invoke(messages);
+    messages.push(response);
+
+    const toolCalls = response.tool_calls ?? [];
+    if (toolCalls.length === 0) {
+      return typeof response.content === 'string'
+        ? response.content
+        : JSON.stringify(response.content);
+    }
+
+    for (const tc of toolCalls) {
+      const tool = toolMap[tc.name];
+      if (tool) {
+        const result = await (tool as any).invoke(tc.args);
+        messages.push(new ToolMessage({ content: String(result), tool_call_id: tc.id! }));
+      }
+    }
   }
-  const result = (amount * fromRate) / toRate;
-  return `${amount} ${from.toUpperCase()} ~ ${result.toFixed(2)} ${to.toUpperCase()}`;
+
+  return 'Agent reached maximum iterations.';
 }
 
-const flightDurations: Record<string, string> = {
-  'new york->london': '7h 30m',
-  'london->new york': '8h 00m',
-  'london->tokyo': '11h 45m',
-  'tokyo->london': '12h 15m',
-  'new york->los angeles': '5h 30m',
-  'los angeles->tokyo': '11h 00m',
-  'paris->new york': '8h 10m',
-  'dubai->london': '7h 10m',
-};
+// ── Wrap for Agentspan ───────────────────────────────────
 
-function getFlightDuration(from: string, to: string): string {
-  const key = `${from.toLowerCase()}->${to.toLowerCase()}`;
-  const revKey = `${to.toLowerCase()}->${from.toLowerCase()}`;
-  const duration = flightDurations[key] ?? flightDurations[revKey];
-  if (duration) {
-    return `Flight from ${from} to ${to}: approximately ${duration}`;
-  }
-  return `No direct flight data available for ${from} to ${to}`;
-}
-
-// -- Mock LangChain AgentExecutor --
-const langchainAgent = {
-  invoke: async (input: { input: string }, _config?: any) => {
-    const query = input.input.toLowerCase();
-    const parts: string[] = [];
-
-    if (query.includes('time') && query.includes('tokyo')) {
-      parts.push(getLocalTime('Tokyo'));
-    }
-    if (query.includes('flight') || (query.includes('new york') && query.includes('tokyo'))) {
-      parts.push(getFlightDuration('New York', 'Tokyo'));
-    }
-    if (query.includes('usd') || (query.includes('500') && query.includes('jpy'))) {
-      parts.push(convertCurrency(500, 'USD', 'JPY'));
-    }
-
-    const output = parts.length > 0
-      ? `Travel information:\n${parts.join('\n')}`
-      : 'Please ask about local times, flights, or currency conversion.';
-
+const agentRunnable = new RunnableLambda({
+  func: async (input: { input: string }) => {
+    const output = await runTravelAgent(input.input);
     return { output };
   },
-  lc_namespace: ['langchain', 'agents'],
-};
+});
 
 async function main() {
   const runtime = new AgentRuntime();
 
-  console.log('Running multi-tool travel assistant via Agentspan...');
-  const result = await runtime.run(
-    langchainAgent,
+  const userPrompt =
     "I'm an American planning to travel from New York to Tokyo. " +
-      'What time is it there right now, how long is the flight, ' +
-      'and how much is 500 USD in JPY?',
-  );
+    'What time is it there right now, how long is the flight, ' +
+    'and how much is 500 USD in JPY?';
 
-  console.log(`Status: ${result.status}`);
-  result.printResult();
+  // ── Path 1: Native ───────────────────────────────────────
+  console.log('=== Native LangChain Execution ===');
+  const nativeResult = await runTravelAgent(userPrompt);
+  console.log('Result:', nativeResult);
+
+  // ── Path 2: Agentspan ────────────────────────────────────
+  console.log('\n=== Agentspan Runtime Execution ===');
+  const agentspanResult = await runtime.run(agentRunnable, userPrompt);
+  console.log(`Status: ${agentspanResult.status}`);
+  agentspanResult.printResult();
+
+  // ── Compare ──────────────────────────────────────────────
+  console.log('\n=== Comparison ===');
+  console.log('Both paths used real OpenAI tool-calling with 3 travel tools.');
 
   await runtime.shutdown();
 }

@@ -2,74 +2,109 @@
  * Chat History -- maintaining conversation history across multiple turns.
  *
  * Demonstrates:
- *   - Passing prior conversation turns via the messages list in input_data
- *   - Using session_id to maintain separate conversations per user
- *   - How AgentRuntime maps session_id to LangGraph thread_id
- *   - Practical use case: persistent multi-turn conversation with context
+ *   - Accumulating HumanMessage/AIMessage pairs across turns
+ *   - ChatOpenAI responding with full conversation context
+ *   - Multi-turn conversation where the model recalls prior information
+ *   - Running natively and via AgentRuntime
  *
- * In production you would use:
- *   import { ChatOpenAI } from '@langchain/openai';
- *   import { createReactAgent } from 'langchain/agents';
- *   import { tool } from '@langchain/core/tools';
+ * Requires: OPENAI_API_KEY environment variable
  */
 
+import { ChatOpenAI } from '@langchain/openai';
+import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages';
+import type { BaseMessage } from '@langchain/core/messages';
+import { RunnableLambda } from '@langchain/core/runnables';
 import { AgentRuntime } from '../../src/index.js';
 
-// -- Simulated memory for the mock --
-const conversationHistory: string[] = [];
+// ── Chat with history ────────────────────────────────────
 
-// -- Mock LangChain AgentExecutor --
-const langchainAgent = {
-  invoke: async (input: { input: string }, _config?: any) => {
-    const message = input.input;
-    conversationHistory.push(`User: ${message}`);
+class ChatWithHistory {
+  private model: ChatOpenAI;
+  private history: BaseMessage[];
 
-    let output: string;
+  constructor() {
+    this.model = new ChatOpenAI({ modelName: 'gpt-4o-mini', temperature: 0.3 });
+    this.history = [
+      new SystemMessage(
+        'You are a friendly, helpful assistant. Remember everything the user tells you ' +
+        'within this conversation and reference it when relevant. Keep responses concise.'
+      ),
+    ];
+  }
 
-    // Simulate recalling context from conversation history
-    if (message.toLowerCase().includes('what') && message.toLowerCase().includes('name')) {
-      const nameMsg = conversationHistory.find((m) => m.includes('My name is'));
-      const learningMsg = conversationHistory.find((m) => m.includes('learning'));
-      const parts: string[] = [];
-      if (nameMsg) {
-        const match = nameMsg.match(/My name is (\w+)/);
-        if (match) parts.push(`Your name is ${match[1]}`);
-      }
-      if (learningMsg) {
-        parts.push('you mentioned you are learning LangGraph for building AI agents');
-      }
-      output = parts.length > 0
-        ? `Based on our conversation: ${parts.join(', and ')}.`
-        : 'I don\'t have that information yet.';
-    } else if (message.toLowerCase().includes('my name is')) {
-      output = 'Nice to meet you! I\'ll remember that.';
-    } else {
-      output = `Got it! I've noted: ${message}`;
-    }
+  async chat(message: string): Promise<string> {
+    this.history.push(new HumanMessage(message));
 
-    conversationHistory.push(`Agent: ${output}`);
-    return { output };
-  },
-  lc_namespace: ['langchain', 'agents'],
-};
+    const response = await this.model.invoke(this.history);
+    const content = typeof response.content === 'string'
+      ? response.content
+      : JSON.stringify(response.content);
+
+    this.history.push(new AIMessage(content));
+    return content;
+  }
+
+  getHistoryLength(): number {
+    return this.history.length;
+  }
+}
+
+// ── Wrap as runnable for Agentspan ─────────────────────────
+
+// For the Agentspan path, we use a separate ChatWithHistory instance
+// to demonstrate independent execution.
+function createAgentRunnable() {
+  const chat = new ChatWithHistory();
+
+  return {
+    runnable: new RunnableLambda({
+      func: async (input: { input: string }) => {
+        const output = await chat.chat(input.input);
+        return { output };
+      },
+    }),
+    chat,
+  };
+}
 
 async function main() {
-  const runtime = new AgentRuntime();
-  const session = 'user-session-001';
-
   const turns = [
     'Hi! My name is Alex and I work in data science.',
-    'I\'m learning LangGraph for building AI agents.',
-    'What\'s my name and what am I learning about?',
+    "I'm learning LangGraph for building AI agents.",
+    "What's my name and what am I learning about?",
   ];
+
+  // ── Path 1: Native LangChain execution ───────────────────
+  console.log('=== Native LangChain Execution ===');
+  const nativeChat = new ChatWithHistory();
 
   for (let i = 0; i < turns.length; i++) {
     console.log(`\n--- Turn ${i + 1} ---`);
     console.log(`User: ${turns[i]}`);
-    const result = await runtime.run(langchainAgent, turns[i], { sessionId: session });
+    const response = await nativeChat.chat(turns[i]);
+    console.log(`Assistant: ${response}`);
+    console.log(`(History: ${nativeChat.getHistoryLength()} messages)`);
+  }
+
+  // ── Path 2: Agentspan runtime execution ──────────────────
+  console.log('\n\n=== Agentspan Runtime Execution ===');
+  const runtime = new AgentRuntime();
+  const { runnable, chat: agentspanChat } = createAgentRunnable();
+
+  for (let i = 0; i < turns.length; i++) {
+    console.log(`\n--- Turn ${i + 1} ---`);
+    console.log(`User: ${turns[i]}`);
+    const result = await runtime.run(runnable, turns[i]);
     console.log(`Status: ${result.status}`);
     result.printResult();
+    console.log(`(History: ${agentspanChat.getHistoryLength()} messages)`);
   }
+
+  // ── Compare ──────────────────────────────────────────────
+  console.log('\n=== Comparison ===');
+  console.log('Both paths maintained real conversation history with ChatOpenAI.');
+  console.log(`Native history:    ${nativeChat.getHistoryLength()} messages`);
+  console.log(`Agentspan history: ${agentspanChat.getHistoryLength()} messages`);
 
   await runtime.shutdown();
 }

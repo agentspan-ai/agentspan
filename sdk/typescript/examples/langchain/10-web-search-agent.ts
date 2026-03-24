@@ -1,23 +1,27 @@
 /**
- * Web Search Agent -- agent that simulates web search and summarization.
+ * Web Search Agent -- agent that performs search and summarization with tools.
  *
  * Demonstrates:
- *   - Simulated search tool returning structured mock results
- *   - Agent combining multiple search results into a coherent answer
- *   - Citation-aware summarization
- *   - Practical use case: research assistant with web search capability
+ *   - Simulated web search tool returning structured results (mock data)
+ *   - Page fetch tool returning mock content
+ *   - ChatOpenAI reasoning about search results and summarizing
+ *   - Real LLM combining multiple search results into a coherent answer
+ *   - Running natively and via AgentRuntime
  *
- * NOTE: This example uses mock search results. For production, integrate
- * Tavily, SerpAPI, or Brave Search with their respective API keys.
+ * NOTE: This example uses mock search/fetch results for reproducibility.
+ * For production, integrate Tavily, SerpAPI, or Brave Search.
  *
- * In production you would use:
- *   import { TavilySearchResults } from '@langchain/community/tools/tavily_search';
- *   import { createReactAgent } from 'langchain/agents';
+ * Requires: OPENAI_API_KEY environment variable
  */
 
+import { ChatOpenAI } from '@langchain/openai';
+import { DynamicStructuredTool } from '@langchain/core/tools';
+import { HumanMessage, AIMessage, ToolMessage, SystemMessage } from '@langchain/core/messages';
+import { RunnableLambda } from '@langchain/core/runnables';
+import { z } from 'zod';
 import { AgentRuntime } from '../../src/index.js';
 
-// -- Mock search index --
+// ── Mock search index (simulates web search API) ─────────
 
 interface SearchResult {
   title: string;
@@ -44,58 +48,118 @@ const searchIndex: Record<string, SearchResult[]> = {
 
 const pageContent: Record<string, string> = {
   'docs.langchain.com': 'LangChain provides components including LLMs, PromptTemplates, Chains, Agents, and Memory. The LCEL allows composing these components with the | operator.',
-  'langchain-ai.github.io/langgraph': 'LangGraph is built on top of LangChain and uses a graph-based approach where nodes are Python functions and edges define the flow between them.',
+  'langchain-ai.github.io/langgraph': 'LangGraph is built on top of LangChain and uses a graph-based approach where nodes are Python functions and edges define the flow between them. Supports cycles, persistence, and human-in-the-loop.',
   'python.org': 'Python 3.13 is the latest stable release. Key features include improved error messages and a free-threaded build option.',
-  'platform.openai.com': 'GPT-4o is OpenAI\'s most capable and efficient model. The API supports text, images, and function calling.',
+  'platform.openai.com': "GPT-4o is OpenAI's most capable and efficient model. The API supports text, images, and function calling.",
 };
 
-function webSearch(query: string): string {
-  const queryLower = query.toLowerCase();
-  const results: SearchResult[] = [];
-  for (const [keyword, entries] of Object.entries(searchIndex)) {
-    if (queryLower.includes(keyword)) results.push(...entries);
-  }
-  if (results.length === 0) {
-    return JSON.stringify([{ title: `Search results for '${query}'`, url: `https://search.example.com/?q=${query}`, snippet: `No cached results for '${query}'.` }]);
-  }
-  return JSON.stringify(results.slice(0, 3), null, 2);
-}
+// ── Tool definitions ─────────────────────────────────────
 
-function fetchPageSummary(url: string): string {
-  for (const [key, content] of Object.entries(pageContent)) {
-    if (url.includes(key)) return `Page content from ${url}:\n${content}`;
-  }
-  return `Page at ${url} contains general information about the topic. (Mock result)`;
-}
+const webSearchTool = new DynamicStructuredTool({
+  name: 'web_search',
+  description: 'Search the web for information. Returns a list of search results with titles, URLs, and snippets.',
+  schema: z.object({
+    query: z.string().describe('The search query'),
+  }),
+  func: async ({ query }) => {
+    const queryLower = query.toLowerCase();
+    const results: SearchResult[] = [];
+    for (const [keyword, entries] of Object.entries(searchIndex)) {
+      if (queryLower.includes(keyword)) results.push(...entries);
+    }
+    if (results.length === 0) {
+      return JSON.stringify([{
+        title: `No results for '${query}'`,
+        url: `https://search.example.com/?q=${encodeURIComponent(query)}`,
+        snippet: `No cached results available for '${query}'.`,
+      }]);
+    }
+    return JSON.stringify(results.slice(0, 3), null, 2);
+  },
+});
 
-// -- Mock LangChain AgentExecutor --
-const langchainAgent = {
-  invoke: async (input: { input: string }, _config?: any) => {
-    const query = input.input;
-    const searchResults = webSearch(query);
-    const parsed: SearchResult[] = JSON.parse(searchResults);
+const fetchPageTool = new DynamicStructuredTool({
+  name: 'fetch_page',
+  description: 'Fetch and summarize the content of a web page given its URL.',
+  schema: z.object({
+    url: z.string().describe('The URL to fetch'),
+  }),
+  func: async ({ url }) => {
+    for (const [key, content] of Object.entries(pageContent)) {
+      if (url.includes(key)) return `Page content from ${url}:\n${content}`;
+    }
+    return `Page at ${url} returned general information. (Mock result)`;
+  },
+});
 
-    const summaries: string[] = [`Search results:\n${searchResults}`];
-    if (parsed.length > 0 && parsed[0].url) {
-      summaries.push(fetchPageSummary(parsed[0].url));
+// ── Agent loop ───────────────────────────────────────────
+
+const tools = [webSearchTool, fetchPageTool];
+const toolMap = Object.fromEntries(tools.map((t) => [t.name, t]));
+
+async function runSearchAgent(prompt: string): Promise<string> {
+  const model = new ChatOpenAI({ modelName: 'gpt-4o-mini', temperature: 0 }).bindTools(tools);
+
+  const messages: (SystemMessage | HumanMessage | AIMessage | ToolMessage)[] = [
+    new SystemMessage(
+      'You are a research assistant. Use web_search to find information, then optionally ' +
+      'use fetch_page to get more details from specific URLs. Synthesize the results into ' +
+      'a clear, well-organized summary with citations.'
+    ),
+    new HumanMessage(prompt),
+  ];
+
+  for (let i = 0; i < 6; i++) {
+    const response = await model.invoke(messages);
+    messages.push(response);
+
+    const toolCalls = response.tool_calls ?? [];
+    if (toolCalls.length === 0) {
+      return typeof response.content === 'string'
+        ? response.content
+        : JSON.stringify(response.content);
     }
 
-    return { output: summaries.join('\n\n') };
+    for (const tc of toolCalls) {
+      const tool = toolMap[tc.name];
+      if (tool) {
+        const result = await (tool as any).invoke(tc.args);
+        messages.push(new ToolMessage({ content: String(result), tool_call_id: tc.id! }));
+      }
+    }
+  }
+
+  return 'Agent reached maximum iterations.';
+}
+
+// ── Wrap for Agentspan ───────────────────────────────────
+
+const agentRunnable = new RunnableLambda({
+  func: async (input: { input: string }) => {
+    const output = await runSearchAgent(input.input);
+    return { output };
   },
-  lc_namespace: ['langchain', 'agents'],
-};
+});
 
 async function main() {
   const runtime = new AgentRuntime();
 
-  console.log('Running web search agent via Agentspan...');
-  const result = await runtime.run(
-    langchainAgent,
-    'Search for information about LangGraph and summarize what you find.',
-  );
+  const userPrompt = 'Search for information about LangGraph and summarize what you find.';
 
-  console.log(`Status: ${result.status}`);
-  result.printResult();
+  // ── Path 1: Native ───────────────────────────────────────
+  console.log('=== Native LangChain Execution ===');
+  const nativeResult = await runSearchAgent(userPrompt);
+  console.log('Result:', nativeResult);
+
+  // ── Path 2: Agentspan ────────────────────────────────────
+  console.log('\n=== Agentspan Runtime Execution ===');
+  const agentspanResult = await runtime.run(agentRunnable, userPrompt);
+  console.log(`Status: ${agentspanResult.status}`);
+  agentspanResult.printResult();
+
+  // ── Compare ──────────────────────────────────────────────
+  console.log('\n=== Comparison ===');
+  console.log('Both paths used real OpenAI to reason over search results and produce summaries.');
 
   await runtime.shutdown();
 }

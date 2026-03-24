@@ -1,42 +1,53 @@
 /**
- * Hello World -- simplest LangChain agent with no tools.
+ * Hello World -- simplest LangChain chain with no tools.
  *
  * Demonstrates:
- *   - Creating a basic LangChain agent (mock AgentExecutor)
- *   - Running it with AgentRuntime via framework passthrough
- *   - Printing the result
+ *   - Creating a real ChatOpenAI model with ChatPromptTemplate
+ *   - Piping prompt -> model -> StringOutputParser into a RunnableSequence
+ *   - Running the chain natively and via AgentRuntime
+ *   - Comparing the two results
  *
- * In production you would use:
- *   import { ChatOpenAI } from '@langchain/openai';
- *   import { AgentExecutor, createOpenAIFunctionsAgent } from 'langchain/agents';
+ * Requires: OPENAI_API_KEY environment variable
  */
 
+import { ChatOpenAI } from '@langchain/openai';
+import { ChatPromptTemplate } from '@langchain/core/prompts';
+import { StringOutputParser } from '@langchain/core/output_parsers';
 import { AgentRuntime } from '../../src/index.js';
 
-// -- Mock LangChain AgentExecutor-like object --
-const langchainAgent = {
-  invoke: async (input: { input: string }, _config?: any) => {
-    const prompt = input.input;
-    return {
-      output: `Hello! I'm a LangChain agent. You said: "${prompt}". ` +
-        'Here is an interesting fact: Large language models can contain hundreds of billions of parameters, ' +
-        'yet they learn language patterns from simple next-token prediction.',
-    };
-  },
-  lc_namespace: ['langchain', 'agents'],
-};
-
 async function main() {
+  // ── Build a real LangChain chain ─────────────────────────
+  const model = new ChatOpenAI({
+    modelName: 'gpt-4o-mini',
+    temperature: 0.7,
+  });
+
+  const prompt = ChatPromptTemplate.fromMessages([
+    ['system', 'You are a friendly, concise AI assistant. Keep answers under 3 sentences.'],
+    ['human', '{input}'],
+  ]);
+
+  const chain = prompt.pipe(model).pipe(new StringOutputParser());
+
+  const userPrompt = 'Introduce yourself and tell me one interesting fact about large language models.';
+
+  // ── Path 1: Native LangChain execution ───────────────────
+  console.log('=== Native LangChain Execution ===');
+  const nativeResult = await chain.invoke({ input: userPrompt });
+  console.log('Result:', nativeResult);
+
+  // ── Path 2: Agentspan runtime execution ──────────────────
+  console.log('\n=== Agentspan Runtime Execution ===');
   const runtime = new AgentRuntime();
+  const agentspanResult = await runtime.run(chain, userPrompt);
+  console.log(`Status: ${agentspanResult.status}`);
+  agentspanResult.printResult();
 
-  console.log('Running LangChain Hello World agent via Agentspan...');
-  const result = await runtime.run(
-    langchainAgent,
-    'Introduce yourself and tell me one interesting fact about large language models.',
-  );
-
-  console.log(`Status: ${result.status}`);
-  result.printResult();
+  // ── Compare ──────────────────────────────────────────────
+  console.log('\n=== Comparison ===');
+  console.log(`Native length:     ${nativeResult.length} chars`);
+  console.log(`Agentspan length:  ${String(agentspanResult.output).length} chars`);
+  console.log('Both paths produced valid LLM responses.');
 
   await runtime.shutdown();
 }

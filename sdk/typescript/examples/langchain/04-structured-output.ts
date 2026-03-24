@@ -1,77 +1,78 @@
 /**
- * Structured Output -- extracting structured data using with_structured_output.
+ * Structured Output -- extracting structured data using withStructuredOutput.
  *
  * Demonstrates:
- *   - Using ChatOpenAI.with_structured_output() with a schema (Pydantic in Python, Zod in TS)
- *   - Embedding structured LLM calls inside tool functions
- *   - The outer agent returns a natural language summary of structured results
- *   - Practical use case: entity extraction from unstructured text
+ *   - Using ChatOpenAI.withStructuredOutput() with Zod schemas
+ *   - Extracting typed Person and Event data from unstructured text
+ *   - RunnableSequence with prompt template and structured output
+ *   - Running natively and via AgentRuntime
  *
- * In production you would use:
- *   import { ChatOpenAI } from '@langchain/openai';
- *   import { ChatPromptTemplate } from '@langchain/core/prompts';
- *   import { tool } from '@langchain/core/tools';
+ * Requires: OPENAI_API_KEY environment variable
  */
 
+import { ChatOpenAI } from '@langchain/openai';
+import { ChatPromptTemplate } from '@langchain/core/prompts';
+import { RunnableLambda } from '@langchain/core/runnables';
+import { z } from 'zod';
 import { AgentRuntime } from '../../src/index.js';
 
-// -- Mock structured data extraction --
+// ── Zod schemas for structured extraction ────────────────
 
-interface Person {
-  name: string;
-  age?: number;
-  occupation?: string;
-  location?: string;
+const PersonSchema = z.object({
+  name: z.string().describe('Full name of the person'),
+  age: z.number().nullable().describe('Age if mentioned, null otherwise'),
+  occupation: z.string().nullable().describe('Job title or role, null if unknown'),
+  location: z.string().nullable().describe('City or country, null if unknown'),
+});
+
+const PersonListSchema = z.object({
+  people: z.array(PersonSchema).describe('List of people extracted from the text'),
+  totalCount: z.number().describe('Total number of people found'),
+});
+
+const EventSchema = z.object({
+  eventName: z.string().describe('Name of the event'),
+  date: z.string().nullable().describe('Date of the event, null if unknown'),
+  location: z.string().nullable().describe('Location of the event, null if unknown'),
+  keyOutcomes: z.array(z.string()).describe('Key outcomes or announcements'),
+});
+
+// ── Extraction chains ────────────────────────────────────
+
+const personExtractionPrompt = ChatPromptTemplate.fromMessages([
+  ['system', 'Extract all people mentioned in the text. Return structured data with name, age, occupation, and location when available.'],
+  ['human', '{input}'],
+]);
+
+const eventExtractionPrompt = ChatPromptTemplate.fromMessages([
+  ['system', 'Extract event information from the text. Return the event name, date, location, and key outcomes.'],
+  ['human', '{input}'],
+]);
+
+async function extractPeople(text: string) {
+  const model = new ChatOpenAI({ modelName: 'gpt-4o-mini', temperature: 0 });
+  const structuredModel = model.withStructuredOutput(PersonListSchema);
+  const chain = personExtractionPrompt.pipe(structuredModel);
+  return chain.invoke({ input: text });
 }
 
-interface PersonList {
-  people: Person[];
-  totalCount: number;
+async function extractEvent(text: string) {
+  const model = new ChatOpenAI({ modelName: 'gpt-4o-mini', temperature: 0 });
+  const structuredModel = model.withStructuredOutput(EventSchema);
+  const chain = eventExtractionPrompt.pipe(structuredModel);
+  return chain.invoke({ input: text });
 }
 
-interface EventSummary {
-  eventName: string;
-  date?: string;
-  location?: string;
-  keyOutcomes: string[];
-}
+// ── Combined extraction as a runnable ────────────────────
 
-function extractPeopleFromText(text: string): PersonList {
-  // Simulated extraction
-  return {
-    people: [
-      { name: 'Sarah Chen', age: 52, occupation: 'Prime Minister' },
-      { name: 'Marcus Rodriguez', age: 45, occupation: 'Tech CEO', location: 'San Francisco' },
-      { name: 'Dr. Yuki Tanaka', age: 38, occupation: 'Economist', location: 'Tokyo' },
-    ],
-    totalCount: 3,
-  };
-}
+async function extractAll(text: string): Promise<string> {
+  const parts: string[] = [];
 
-function extractEventFromText(text: string): EventSummary {
-  // Simulated extraction
-  return {
-    eventName: '2024 OpenAI DevDay',
-    date: 'November 6th, 2024',
-    location: 'San Francisco',
-    keyOutcomes: [
-      'GPT-4 Turbo announcement',
-      'New Assistants API with code interpreter and file handling',
-      'Significant price reductions across the API',
-    ],
-  };
-}
-
-// -- Mock LangChain AgentExecutor --
-const langchainAgent = {
-  invoke: async (input: { input: string }, _config?: any) => {
-    const query = input.input;
-    const parts: string[] = [];
-
-    if (query.toLowerCase().includes('people') || query.toLowerCase().includes('person') || query.includes('Sarah Chen')) {
-      const result = extractPeopleFromText(query);
-      parts.push(`Found ${result.totalCount} person(s):`);
-      for (const p of result.people) {
+  try {
+    const people = await extractPeople(text);
+    if (people.totalCount > 0) {
+      parts.push(`Found ${people.totalCount} person(s):`);
+      for (const p of people.people) {
         const details = [p.name];
         if (p.age) details.push(`age ${p.age}`);
         if (p.occupation) details.push(p.occupation);
@@ -79,26 +80,36 @@ const langchainAgent = {
         parts.push(`  - ${details.join(', ')}`);
       }
     }
+  } catch {
+    // Text may not contain people
+  }
 
-    if (query.toLowerCase().includes('event') || query.toLowerCase().includes('devday') || query.includes('OpenAI')) {
-      const result = extractEventFromText(query);
-      const outcomes = result.keyOutcomes.map((o) => `    - ${o}`).join('\n');
-      parts.push(
-        `Event: ${result.eventName}`,
-        `Date:  ${result.date ?? 'Not specified'}`,
-        `Location: ${result.location ?? 'Not specified'}`,
-        `Outcomes:\n${outcomes}`,
-      );
+  try {
+    const event = await extractEvent(text);
+    if (event.eventName) {
+      parts.push(`\nEvent: ${event.eventName}`);
+      if (event.date) parts.push(`Date:  ${event.date}`);
+      if (event.location) parts.push(`Location: ${event.location}`);
+      if (event.keyOutcomes.length > 0) {
+        parts.push('Outcomes:');
+        for (const o of event.keyOutcomes) {
+          parts.push(`  - ${o}`);
+        }
+      }
     }
+  } catch {
+    // Text may not contain events
+  }
 
-    const output = parts.length > 0
-      ? parts.join('\n')
-      : 'Could not extract structured information from the provided text.';
+  return parts.length > 0 ? parts.join('\n') : 'Could not extract structured information.';
+}
 
+const agentRunnable = new RunnableLambda({
+  func: async (input: { input: string }) => {
+    const output = await extractAll(input.input);
     return { output };
   },
-  lc_namespace: ['langchain', 'agents'],
-};
+});
 
 async function main() {
   const runtime = new AgentRuntime();
@@ -113,12 +124,21 @@ async function main() {
   ];
 
   for (const text of texts) {
-    console.log(`\nText: ${text.slice(0, 80)}...`);
-    const result = await runtime.run(
-      langchainAgent,
-      `Extract all information from this text: ${text}`,
-    );
-    result.printResult();
+    console.log(`\n${'='.repeat(60)}`);
+    console.log(`Text: ${text.slice(0, 80)}...`);
+
+    const queryText = `Extract all information from this text: ${text}`;
+
+    // ── Path 1: Native ─────────────────────────────────────
+    console.log('\n--- Native LangChain ---');
+    const nativeResult = await extractAll(text);
+    console.log(nativeResult);
+
+    // ── Path 2: Agentspan ──────────────────────────────────
+    console.log('\n--- Agentspan Runtime ---');
+    const agentspanResult = await runtime.run(agentRunnable, queryText);
+    agentspanResult.printResult();
+
     console.log('-'.repeat(60));
   }
 
