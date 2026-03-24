@@ -160,7 +160,7 @@ There is no mechanism for **providing new context, redirecting priorities, or co
 
 ### FR-2: Normal Priority Signal
 
-**FR-2.1:** A normal signal is injected into the workflow's conversation context as a system message.
+**FR-2.1:** A normal signal is injected into the workflow's conversation context as a **user-role message** (see Decision Q5).
 
 **FR-2.2:** The agent sees the message on its **next LLM iteration** (after current tool call or LLM call completes).
 
@@ -189,7 +189,7 @@ There is no mechanism for **providing new context, redirecting priorities, or co
 
 ### FR-4: Signal Delivery Guarantees
 
-**FR-4.1:** Signals are **at-least-once** delivery. A signal will be delivered even if the server restarts (durability).
+**FR-4.1:** Signals are **at-least-once** delivery while the workflow is active. A signal will be delivered even if the server restarts (durability). If the workflow completes before delivery, the signal is discarded (see FR-4.5).
 
 **FR-4.2:** Signals are delivered in **FIFO order** per workflow (first signal sent = first signal delivered).
 
@@ -408,9 +408,10 @@ for event in result.events:
 - Signal events appear in SSE stream as `signal_received`
 - Clients see signals in real-time
 - `AgentStream` exposes signals alongside other events
+- `AgentStream` gets a `.signal()` convenience method (matching `.approve()`/`.reject()`/`.send()`)
 
 ### Signals + Guardrails
-- Signals bypass guardrails (they're injected as system messages, not agent output)
+- Signals bypass guardrails (they're injected as user-role messages, not agent output)
 - A signal cannot trigger a guardrail failure
 
 ### Signals + Termination Conditions
@@ -419,13 +420,33 @@ for event in result.events:
 
 ### Signals + Sub-workflows
 - Each sub-workflow has its own workflow ID and can be signaled independently
-- Signaling a parent workflow does NOT propagate to sub-workflows (explicit targeting required)
-- To signal "the whole team," use broadcast with all workflow IDs
+- Signaling a parent workflow **propagates** to all active sub-workflows by default (see FR-11)
+- Set `propagate=False` to signal only the parent without propagation
+- In a `>>` sequential pipeline, only the currently-running stage agent is active — the signal reaches that agent only
+
+### Signals + Sequential Pipelines (`>>`)
+- A `>>` pipeline has one parent workflow with sequential sub-workflows
+- At any given time, only ONE stage agent is running (the others are completed or not yet started)
+- A signal to the pipeline's workflow ID reaches the currently-active stage agent only
+- To signal a specific stage by name, use `runtime.signal(agent_name="writer", ...)` — this targets the specific sub-workflow, not the pipeline
 
 ### Signals + Callbacks
-- A new callback position could be added: `on_signal_received(message, data, sender, priority)`
+- A new callback position: `on_signal_received(message, data, sender, priority)`
 - Callback can modify/filter the signal before it reaches the LLM
 - Callback can trigger side effects (logging, alerting, forwarding)
+
+### Signals + Framework Passthrough Agents (LangGraph/LangChain)
+- Framework passthrough agents compile to a **single opaque SIMPLE task** — there is no Conductor-managed DO_WHILE loop or conversation
+- Normal signals: **queued** and delivered to the framework worker via a polling mechanism. The worker process periodically checks for pending signals and injects them into the framework's state/memory.
+- Urgent signals: **pause the workflow** after the passthrough task completes (since the whole framework execution is one atomic task, urgent signals cannot interrupt mid-execution)
+- This is a **degraded experience** compared to native agents — signals are less granular for passthrough agents
+- The framework worker SDK must implement a signal polling loop (e.g., check `/agent/{workflowId}/signals/pending` every 5 seconds)
+
+### Signals + Multi-Tool Iterations
+- During a multi-tool iteration (LLM requested 5 tools, all executing via FORK_JOIN_DYNAMIC), signals behave as follows:
+- **Normal signal:** Queued. Delivered after ALL tools in the current batch complete and the loop iterates back to the LLM
+- **Urgent signal:** Workflow pauses after ALL tools in the current batch complete (not mid-tool). This prevents inconsistent state from partial tool execution
+- "Current task" for urgent signals means the **current DO_WHILE iteration**, not individual tasks within the iteration
 
 ---
 
@@ -435,31 +456,42 @@ Agents are not passive recipients. When a signal arrives, the agent **evaluates 
 
 ### FR-12: Signal Evaluation
 
-**FR-12.1:** When a signal is delivered, the LLM evaluates it on its next iteration. The signal message includes an instruction for the LLM to assess relevance:
+**FR-12.1:** When signals are pending, the server injects **two implicit tools** into the agent's tool set for that iteration:
 
 ```
-[Signal from {sender}]: {message}
-
-Evaluate this signal. If it is relevant to your current task, accept it and adjust your approach.
-If it is not relevant (e.g., asks you to do something outside your role), reject it with a brief reason.
-Respond with [SIGNAL ACCEPTED] or [SIGNAL REJECTED: reason] before continuing.
+accept_signal(signal_id: str) → {"status": "accepted"}
+reject_signal(signal_id: str, reason: str) → {"status": "rejected", "reason": "..."}
 ```
 
-**FR-12.2:** The LLM's accept/reject decision is captured as a structured event:
+These are ephemeral — they only appear when signals are pending and are removed once all pending signals are dispositioned.
+
+**FR-12.2:** The signal message is injected as a user-role message with instructions:
+
+```
+[Signal from {sender} (id: {signalId})]: {message}
+
+You have received an external signal. Use accept_signal("{signalId}") if this is relevant to your current task, or reject_signal("{signalId}", "reason") if it is not relevant to your role or task.
+```
+
+**FR-12.3:** The LLM calls `accept_signal` or `reject_signal` as a **tool call** — structured, parseable, no text parsing needed. The server handles these tool calls as system operations (no external worker needed).
+
+**FR-12.4:** The accept/reject tool call produces a structured event:
 
 | Event | SSE type | Fields |
 |---|---|---|
-| Signal accepted | `signal_accepted` | `signalId`, `message`, `sender`, `agentResponse` |
-| Signal rejected | `signal_rejected` | `signalId`, `message`, `sender`, `reason` |
+| Signal accepted | `signal_accepted` | `signalId`, `message`, `sender`, `agentName` |
+| Signal rejected | `signal_rejected` | `signalId`, `message`, `sender`, `reason`, `agentName` |
 
-**FR-12.3:** If the agent accepts the signal, it incorporates the context and adjusts its behavior. The signal remains in the conversation history.
+**FR-12.5:** If the LLM does NOT call accept or reject (ignores the signal tools), the signal is treated as **implicitly accepted** after that LLM iteration completes. The implicit tools are removed, and the signal message remains in context.
 
-**FR-12.4:** If the agent rejects the signal, the rejection reason is:
-- Sent back to the sender as a response event (if sender is monitoring)
-- Logged in the workflow execution history
+**FR-12.6:** If the agent accepts the signal, it incorporates the context and adjusts its behavior. The signal remains in the conversation history.
+
+**FR-12.7:** If the agent rejects the signal, the rejection reason is:
 - Emitted as `signal_rejected` SSE event
+- Logged in the workflow execution history
+- Available to the sender via `get_signal_status()`
 
-**FR-12.5:** The sender can poll for signal status:
+**FR-12.8:** The sender can poll for signal status:
 ```python
 status = runtime.get_signal_status(signal_id)
 # status.delivered = True
@@ -468,7 +500,9 @@ status = runtime.get_signal_status(signal_id)
 # status.rejection_reason = "I am a research agent, not a coding agent."
 ```
 
-**FR-12.6:** Rejection does NOT cause any error. It's an informational response. The sender decides what to do (retry, signal a different agent, escalate).
+**FR-12.9:** Rejection does NOT cause any error. It's informational. The sender decides what to do (retry, signal a different agent, escalate).
+
+**FR-12.10:** For urgent signals, accept/reject still applies. The workflow pauses (per FR-3), the signal is injected, the workflow resumes, and the LLM evaluates and accepts/rejects on the resumed iteration. If rejected, the pause/resume overhead was incurred but the agent continues unchanged.
 
 ### FR-13: Signal Priority and Condensation
 
@@ -669,6 +703,45 @@ signal_tool(name="signal_agent", description="Signal another running agent")
 ```python
 runtime.signal(workflow_id="...", message="...", propagate=False)
 ```
+
+### FR-16: Signal Data Accessibility
+
+**FR-16.1:** The `data` field of a signal is stored in `workflow.variables._signal_data` as a namespaced dict:
+```json
+{
+  "_signal_data": {
+    "{signalId}": {"priority_topic": "quantum error correction"}
+  }
+}
+```
+
+**FR-16.2:** Tools can access signal data via `ToolContext.state["_signal_data"]`.
+
+**FR-16.3:** Signal data does NOT overwrite existing state keys — it lives in its own namespace.
+
+**FR-16.4:** When a signal is rejected, its data is removed from `_signal_data`.
+
+### FR-17: Signal Limits
+
+**FR-17.1:** Maximum **100 signals per workflow** lifetime. Exceeding this returns `SignalLimitExceededError`.
+
+**FR-17.2:** Maximum **10 pending signals** (unprocessed) per workflow. Exceeding this returns `TooManyPendingSignalsError`. This prevents runaway cost from circular signaling.
+
+**FR-17.3:** Maximum signal payload size: **64KB** (message + data combined).
+
+### FR-18: Implementation Mechanism (Conductor)
+
+**FR-18.1:** Signals are stored in `workflow.variables._pending_signals` (list of signal objects).
+
+**FR-18.2:** The server's `AgentChatCompleteTaskMapper` is modified to read `_pending_signals` and inject signal messages into the conversation on each LLM iteration.
+
+**FR-18.3:** After injection, processed signals are moved from `_pending_signals` to `_processed_signals` (for history tracking).
+
+**FR-18.4:** The `accept_signal`/`reject_signal` implicit tools are compiled as INLINE tasks (JavaScript) that update signal status in workflow variables.
+
+**FR-18.5:** Signal delivery to the workflow uses Conductor's `updateVariables` API — no new Conductor primitives required.
+
+**FR-18.6:** `AgentHandle` and `AgentStream` are extended with a `.signal()` method that calls the REST API.
 
 ### Updated API Surface
 
