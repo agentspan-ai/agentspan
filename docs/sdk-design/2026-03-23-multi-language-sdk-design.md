@@ -368,7 +368,7 @@ This is the JSON structure that every SDK must produce when serializing an Agent
     "properties": { "city": { "type": "string" } },
     "required": ["city"]
   },
-  "toolType": "worker|http|mcp|agent_tool|human|generate_image|generate_audio|generate_video|generate_pdf|rag_search|rag_index",
+  "toolType": "worker|http|api|mcp|agent_tool|human|generate_image|generate_audio|generate_video|generate_pdf|rag_search|rag_index",
   "outputSchema": { ... },
   "approvalRequired": true,
   "timeoutSeconds": 120,
@@ -387,7 +387,8 @@ This is the JSON structure that every SDK must produce when serializing an Agent
 | toolType | Conductor Task | Worker Needed | Description |
 |----------|---------------|---------------|-------------|
 | `worker` | SIMPLE | Yes (SDK) | Native `@tool` function executed by SDK worker |
-| `http` | HTTP | No | Server-side HTTP call |
+| `http` | HTTP | No | Server-side HTTP call (single endpoint) |
+| `api` | HTTP (via LIST_API_TOOLS discovery) | No | Auto-discovered from OpenAPI/Swagger/Postman spec |
 | `mcp` | CALL_MCP_TOOL | No | Model Context Protocol tool |
 | `agent_tool` | SUB_WORKFLOW | Depends | Nested agent as tool |
 | `human` | HUMAN | No | Human-in-the-loop tool |
@@ -590,6 +591,7 @@ These create tools that execute on the server — no local worker needed:
 | Constructor | Purpose | Full Signature |
 |-------------|---------|----------------|
 | `http_tool` | HTTP API call | `(name, description, url, method="GET", headers=None, input_schema=None, accept=["application/json"], content_type="application/json", credentials=None)` |
+| `api_tool` | Auto-discover from OpenAPI/Swagger/Postman | `(url, name=None, description=None, headers=None, tool_names=None, max_tools=64, credentials=None)` |
 | `mcp_tool` | MCP protocol tool | `(server_url, name=None, description=None, headers=None, tool_names=None, max_tools=64, credentials=None)` |
 | `agent_tool` | Sub-agent as tool | `(agent, name=None, description=None, retry_count=None, retry_delay_seconds=None, optional=None)` |
 | `human_tool` | Human-in-the-loop tool | `(name, description, input_schema=None)` |
@@ -601,6 +603,8 @@ These create tools that execute on the server — no local worker needed:
 | `index_tool` | Vector index (RAG) | `(name, description, vector_db, index, embedding_model_provider, embedding_model, namespace="default_ns", chunk_size=None, chunk_overlap=None, dimensions=None, input_schema=None)` |
 
 **Note on `http_tool` credential headers:** Headers can reference credentials using `${NAME}` syntax (e.g., `"Authorization": "Bearer ${API_KEY}"`). The server resolves these at execution time from the credential store. All placeholder names must be declared in the `credentials` list.
+
+**Note on `api_tool`:** Mirrors the `mcp_tool()` pattern. Points to an OpenAPI/Swagger/Postman spec URL (or base URL for auto-discovery). Server fetches and parses the spec at workflow startup via `LIST_API_TOOLS` system task, discovers all operations as individual tools, and executes them as standard HTTP tasks. If discovered operations exceed `max_tools`, a lightweight LLM selects the most relevant ones based on the user's prompt. See `docs/sdk-design/2026-03-23-api-tool-design.md` for full design.
 
 #### External / By-Reference Tools
 
@@ -1485,6 +1489,7 @@ Every feature must be traceable from concept → Python reference → wire forma
 | 86 | Validation: native execution | `validation/` | N/A | N/A | Validation |
 | 87 | Validation: HTML report | `validation/` | N/A | N/A | Validation |
 | 88 | External agent | `agent.py:external=True` | `agentConfig.external=true` | SUB_WORKFLOW (remote) | Stage 7 |
+| 89 | API tool (auto-discovery) | `tool.py:api_tool` | `tools[].toolType="api"` | LIST_API_TOOLS → HTTP | Stage 2 |
 
 ---
 
@@ -1694,6 +1699,7 @@ When `required_tools` is set, the server wraps the agent's main loop in an **out
 |-----------|------------|---------------|
 | `worker` | SDK worker (Conductor SIMPLE) | **Yes** |
 | `http` | Server (Conductor HTTP) | No |
+| `api` | Server (LIST_API_TOOLS discovery → Conductor HTTP) | No |
 | `mcp` | Server (Conductor CALL_MCP_TOOL) | No |
 | `agent_tool` | Server (Conductor SUB_WORKFLOW) | Depends on sub-agent |
 | `human` | Server (Conductor HUMAN) | No |

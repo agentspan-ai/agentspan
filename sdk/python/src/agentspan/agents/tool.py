@@ -235,6 +235,81 @@ def http_tool(
     )
 
 
+def api_tool(
+    url: str,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    headers: Optional[Dict[str, str]] = None,
+    tool_names: Optional[List[str]] = None,
+    max_tools: int = 64,
+    credentials: Optional[List[str]] = None,
+) -> ToolDef:
+    """Create tool(s) from an OpenAPI spec, Swagger spec, Postman collection, or base URL.
+
+    At compile time the server discovers API operations from the spec and
+    expands them into individual tools.  Tool calls execute as standard
+    Conductor ``HTTP`` tasks — **no worker process is needed**.
+
+    The server auto-detects the format:
+
+    - **OpenAPI 3.x** — JSON/YAML with ``openapi: "3.*"``
+    - **Swagger 2.0** — JSON with ``swagger: "2.0"``
+    - **Postman Collection** — JSON with ``info._postman_id`` or ``item[]``
+    - **Base URL** — tries ``/openapi.json``, ``/swagger.json``, etc.
+
+    Headers can reference credentials using ``${NAME}`` syntax. The server
+    resolves these at execution time from the credential store.
+
+    Args:
+        url: URL to the spec, collection, or base URL for auto-discovery.
+        name: Optional override name (defaults to spec ``info.title``).
+        description: Optional override description.
+        headers: Global HTTP headers applied to all discovered endpoints.
+            Use ``${NAME}`` for credential placeholders.
+        tool_names: Optional whitelist — only include these operation IDs.
+        max_tools: If operations exceed this, a filter LLM selects the
+            most relevant ones based on the user's prompt (default 64).
+        credentials: Credential names referenced by ``${NAME}`` in headers.
+
+    Example::
+
+        stripe = api_tool(
+            url="https://api.stripe.com/openapi.json",
+            headers={"Authorization": "Bearer ${STRIPE_KEY}"},
+            credentials=["STRIPE_KEY"],
+            max_tools=20,
+        )
+    """
+    import re as _re
+
+    cred_list = list(credentials) if credentials else []
+
+    # Validate: any ${NAME} in headers must be in credentials list
+    if headers:
+        placeholders = set(_re.findall(r"\$\{(\w+)}", str(headers)))
+        if placeholders:
+            missing = placeholders - set(cred_list)
+            if missing:
+                raise ValueError(
+                    f"Header placeholder(s) {missing} not declared in credentials={cred_list}. "
+                    f"Add them to the credentials list."
+                )
+
+    config: Dict[str, Any] = {"url": url}
+    if headers:
+        config["headers"] = headers
+    if tool_names is not None:
+        config["tool_names"] = list(tool_names)
+    config["max_tools"] = max_tools
+    return ToolDef(
+        name=name or "api_tools",
+        description=description or f"API tools from {url}",
+        tool_type="api",
+        config=config,
+        credentials=cred_list,
+    )
+
+
 def mcp_tool(
     server_url: str,
     name: Optional[str] = None,

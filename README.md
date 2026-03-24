@@ -384,22 +384,37 @@ with AgentRuntime() as runtime:
 ### Server-Side Tools (No Workers Needed)
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, http_tool, mcp_tool
+from agentspan.agents import Agent, AgentRuntime, api_tool, http_tool, mcp_tool
 
+# Point to any OpenAPI/Swagger spec — all endpoints auto-discovered
+stripe = api_tool(
+    url="https://api.stripe.com/openapi.json",
+    headers={"Authorization": "Bearer ${STRIPE_KEY}"},
+    credentials=["STRIPE_KEY"],
+    max_tools=20,  # LLM auto-filters 300+ ops to top 20 most relevant
+)
+
+# Single HTTP endpoint (manual definition)
 weather_api = http_tool(
     name="get_weather", description="Get weather for a city",
     url="https://api.weather.com/v1/current", method="GET",
     input_schema={"type": "object", "properties": {"city": {"type": "string"}}},
 )
 
-github = mcp_tool(server_url="http://localhost:8080/mcp")  # Auto-discovered
+# MCP server tools (auto-discovered)
+github = mcp_tool(server_url="http://localhost:8080/mcp")
 
-agent = Agent(name="assistant", model="openai/gpt-4o", tools=[weather_api, github])
+agent = Agent(name="assistant", model="openai/gpt-4o", tools=[stripe, weather_api, github])
 
 with AgentRuntime() as runtime:
-    result = runtime.run(agent, "What's the weather in NYC?")
+    result = runtime.run(agent, "Create a Stripe customer for alice@example.com")
     result.print_result()
 ```
+
+Three ways to connect APIs — all server-side, no workers needed:
+- **`api_tool()`** — point to an OpenAPI/Swagger/Postman spec, all endpoints auto-discovered
+- **`http_tool()`** — define a single HTTP endpoint manually
+- **`mcp_tool()`** — connect to an MCP server, tools auto-discovered
 
 ### Code Execution
 
@@ -582,6 +597,7 @@ Execution order: `on_agent_start` → (`on_model_start` → LLM → `on_model_en
 | [`67_router_to_sequential.py`](sdk/python/examples/67_router_to_sequential.py) | Router to sequential pipeline |
 | [`68_context_condensation.py`](sdk/python/examples/68_context_condensation.py) | Auto-condense long conversations |
 | [`70_ce_support_agent.py`](sdk/python/examples/70_ce_support_agent.py) | Full support agent with Zendesk, JIRA, HubSpot |
+| [`71_api_tool.py`](sdk/python/examples/71_api_tool.py) | Auto-discover tools from OpenAPI/Swagger/Postman |
 
 **Framework Examples:**
 
