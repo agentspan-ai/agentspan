@@ -35,7 +35,7 @@ describe('runAlgorithmicChecks', () => {
     expect(checks.workflowCompleted).toBe(false);
   });
 
-  it('marks llmEngaged false when no thinking events and not passthrough', () => {
+  it('marks llmEngaged true when completed with output (even without thinking events)', () => {
     const events: AgentEvent[] = [
       { type: 'message', content: 'hello' },
       { type: 'done' },
@@ -44,6 +44,16 @@ describe('runAlgorithmicChecks', () => {
       status: 'COMPLETED',
       output: 'hello',
       events,
+    });
+    // Completed with output implies LLM engagement
+    expect(checks.llmEngaged).toBe(true);
+  });
+
+  it('marks llmEngaged false when completed but output is empty', () => {
+    const checks = runAlgorithmicChecks({
+      status: 'COMPLETED',
+      output: '',
+      events: [{ type: 'done' }],
     });
     expect(checks.llmEngaged).toBe(false);
   });
@@ -60,11 +70,12 @@ describe('runAlgorithmicChecks', () => {
     expect(checks.llmEngaged).toBe(true);
   });
 
-  it('does not relax llmEngaged for passthrough when workflow failed', () => {
+  it('marks llmEngaged false for passthrough when workflow failed with no output', () => {
     const checks = runAlgorithmicChecks(
       { status: 'FAILED', output: '', events: [] },
       { isFrameworkPassthrough: true },
     );
+    // Passthrough flag alone isn't enough — need completed status
     expect(checks.llmEngaged).toBe(false);
   });
 

@@ -80,24 +80,29 @@ export function runAlgorithmicChecks(
     (t) => t.succeeded || t.retriedAndFixed,
   );
 
-  // 4. LLM engaged
-  // Framework passthrough examples may not emit thinking events
-  const llmEngaged = options?.isFrameworkPassthrough
-    ? workflowCompleted
-    : events.some((e) => e.type === 'thinking');
-
-  // 5. Output non-empty
+  // 5. Output non-empty (computed before LLM check since it depends on it)
   let outputNonEmpty = false;
+  let outputStr = '';
   if (output != null) {
     if (typeof output === 'string') {
-      outputNonEmpty = output.trim().length > 0;
+      outputStr = output.trim();
+      outputNonEmpty = outputStr.length > 0;
     } else if (typeof output === 'object') {
-      const str = JSON.stringify(output);
-      outputNonEmpty = str !== '{}' && str !== '{"result":null}' && str.length > 2;
+      outputStr = JSON.stringify(output);
+      outputNonEmpty = outputStr !== '{}' && outputStr !== '{"result":null}' && outputStr.length > 2;
     } else {
+      outputStr = String(output);
       outputNonEmpty = true;
     }
   }
+
+  // 4. LLM engaged
+  // Framework passthrough and non-streaming examples may not emit thinking events.
+  // If the workflow completed with output, the LLM was engaged (it produced the output).
+  const hasThinkingEvents = events.some((e) => e.type === 'thinking');
+  const llmEngaged = hasThinkingEvents
+    || (options?.isFrameworkPassthrough === true && workflowCompleted)
+    || (workflowCompleted && outputNonEmpty);
 
   return {
     workflowCompleted,

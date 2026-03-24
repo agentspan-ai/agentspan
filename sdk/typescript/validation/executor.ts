@@ -22,13 +22,16 @@ export interface ExecutionResult {
   workflowId?: string;
 }
 
-// Regex patterns for parsing stdout (mirroring Python's parsing.py)
-const WORKFLOW_ID_RE = /Workflow ID: (\S+)/;
-const TOOL_CALLS_RE = /Tool calls: (\d+)/;
+// Regex patterns for parsing stdout
+const WORKFLOW_ID_RE = /(?:Workflow ID|Workflow): (\S+)/;
+const TOOL_CALLS_RE = /Tool [Cc]alls: (\d+)/;
 const STATUS_RE = /Status: (\S+)/;
-// Output block between the box-drawing border and metadata lines
+// Output block: matches "[OK] Agent Result" format with "Output: { ... }" section
+// Also matches Python-style box-drawing border format
 const AGENT_OUTPUT_RE =
-  /[╘└]═+[╛┘]\s*\n(.*?)(?=\nTool calls:|\nTokens:|\nFinish reason:|\nWorkflow ID:|\n\n\n|$)/s;
+  /(?:[╘└]═+[╛┘]\s*\n(.*?)(?=\n\s*Tool calls:|\n\s*Tokens:|\n\s*Finish reason:|\n\s*Workflow ID:|\n\n\n|$))|(?:Output:\s*(\{[\s\S]*?\})\s*(?:\n\s*Events:|\n\s*Tool [Cc]alls:|\n\s*Messages:|$))/s;
+// Simpler fallback: grab Output: or Result: line content
+const OUTPUT_LINE_RE = /(?:Output|Result):\s*(.+)/;
 
 /**
  * Parse stdout for structured agent output data.
@@ -44,10 +47,32 @@ function parseStdout(stdout: string): {
   let workflowId: string | undefined;
   let statusFromOutput: string | undefined;
 
-  // Extract agent output block
+  // Extract agent output block — try multi-line JSON first, then single line
   const outputMatch = AGENT_OUTPUT_RE.exec(stdout);
   if (outputMatch) {
-    output = outputMatch[1].trim();
+    output = (outputMatch[1] || outputMatch[2] || '').trim();
+  }
+  if (!output) {
+    // Fallback: grab "Output: ..." single line
+    const lineMatch = OUTPUT_LINE_RE.exec(stdout);
+    if (lineMatch) {
+      output = lineMatch[1].trim();
+    }
+  }
+  if (!output) {
+    // Last resort: grab everything after "agent completed with status: COMPLETED"
+    const completedIdx = stdout.indexOf('Status: COMPLETED');
+    if (completedIdx !== -1) {
+      // Look for the Output: block in printResult output
+      const afterStatus = stdout.slice(completedIdx);
+      const outputIdx = afterStatus.indexOf('Output:');
+      if (outputIdx !== -1) {
+        const rest = afterStatus.slice(outputIdx + 7).trim();
+        // Take until "Events:" or "Tool Calls:" or end
+        const endIdx = rest.search(/\n\s*(?:Events|Tool [Cc]alls|Messages):/);
+        output = endIdx !== -1 ? rest.slice(0, endIdx).trim() : rest.trim();
+      }
+    }
   }
 
   // Extract metadata
@@ -91,6 +116,27 @@ function parseEvents(stdout: string): AgentEvent[] {
       } catch {
         // Skip malformed JSON
       }
+      continue;
+    }
+
+    // Parse human-readable event lines from streaming examples
+    if (trimmed.startsWith('[thinking]')) {
+      events.push({ type: 'thinking', content: trimmed.slice(10).trim() });
+    } else if (trimmed.startsWith('[tool_call]')) {
+      const rest = trimmed.slice(11).trim();
+      const parenIdx = rest.indexOf('(');
+      const toolName = parenIdx > 0 ? rest.slice(0, parenIdx) : rest;
+      events.push({ type: 'tool_call', toolName: toolName.trim() });
+    } else if (trimmed.startsWith('[tool_result]')) {
+      const rest = trimmed.slice(13).trim();
+      const arrowIdx = rest.indexOf('->');
+      const toolName = arrowIdx > 0 ? rest.slice(0, arrowIdx).trim() : '';
+      const result = arrowIdx > 0 ? rest.slice(arrowIdx + 2).trim() : rest;
+      events.push({ type: 'tool_result', toolName, result });
+    } else if (trimmed.startsWith('[error]')) {
+      events.push({ type: 'error', content: trimmed.slice(7).trim() });
+    } else if (trimmed.startsWith('[done]') || trimmed.startsWith('Result:')) {
+      events.push({ type: 'done' });
     }
   }
 
