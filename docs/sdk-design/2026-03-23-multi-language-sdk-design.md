@@ -1123,64 +1123,152 @@ The resulting Conductor workflow must have **individual tasks per tool, per LLM 
 | OpenAI Agents SDK | From `agent.model` | From `agent.tools` (with schemas) | From `agent.handoffs` |
 | Google ADK | From `agent.model` | From `agent.tools` (FunctionTool) | From `agent.subAgents` |
 
-#### When extraction fails
+#### Drop-In Import Wrappers (Vercel AI SDK, LangGraph, LangChain)
 
-If the SDK cannot extract model, tools, or instructions from a framework agent, it must **throw an error** explaining what couldn't be extracted and how the user can fix it. No fallback to a black-box task.
+Some frameworks hide model and tool references inside closures (e.g., `generateText` captures `model` in its options object, `createReactAgent` captures `llm` in a closure). JavaScript closures are opaque — unlike Python, there's no way to inspect captured variables.
 
-```
-Error: Cannot extract model from LangGraph CompiledStateGraph.
-The graph has no detectable LLM node. Either:
-  1. Use createReactAgent() which exposes the model
-  2. Create a native agentspan Agent with your tools instead
-```
+The solution: **drop-in import wrappers** that intercept framework function calls at creation/invocation time, capture the model/tools/instructions BEFORE they disappear into closures, and store them as extractable properties.
 
-#### Vercel AI SDK: handled by superset tools, NOT framework detection
+**User's change: ONE import line per framework. Everything else unchanged.**
 
-The Vercel AI SDK has **no agent class** — `generateText()` is a function, not an object. There is nothing to detect or extract. Instead, Vercel AI SDK users use **native agentspan Agent** with AI SDK `tool()` objects, which the superset tool system auto-detects and converts:
+##### Vercel AI SDK
 
 ```typescript
-import { tool } from 'ai';
-import { Agent, AgentRuntime } from '@agentspan/sdk';
+// BEFORE (user's existing code):
+import { generateText } from 'ai';
 
-const weatherTool = tool({
-  description: 'Get weather',
-  parameters: z.object({ city: z.string() }),
-  execute: async ({ city }) => ({ city, temp: 72 }),
+// AFTER (one import change):
+import { generateText } from '@agentspan/sdk/ai';
+
+// Everything else UNCHANGED:
+const result = await generateText({
+  model: openai('gpt-4o-mini'),
+  tools: { weather: weatherTool },
+  system: 'You are helpful.',
+  prompt: 'What is the weather?',
 });
-
-// Native Agent — superset tool system handles AI SDK tool() objects
-const agent = new Agent({
-  name: 'weather_agent',
-  model: 'openai/gpt-4o-mini',
-  tools: [weatherTool],  // auto-converted from Zod to JSON Schema
-});
-
-const result = await runtime.run(agent, 'What is the weather?');
-// Compiles to: LLM_CHAT_COMPLETE + SIMPLE task for weather tool
+// Now compiles to: LLM_CHAT_COMPLETE + SIMPLE per tool on Conductor
 ```
 
-This produces a full agentspan workflow — NOT a passthrough. The LLM call is a `LLM_CHAT_COMPLETE` system task, the tool is a `SIMPLE` task with a local worker.
+`@agentspan/sdk/ai` re-exports everything from `ai` but wraps `generateText` and `streamText`. The wrapper:
+1. Intercepts the options object `{ model, tools, system, maxSteps, prompt }`
+2. Extracts model (provider + model name from the AI SDK model object)
+3. Extracts tools (Zod schemas + execute functions → `ToolConfig[]` with workers)
+4. Extracts system prompt → `instructions`
+5. Compiles to `AgentConfig` → sends to server → Conductor workflow
+6. Returns the same result type the user expects
+
+##### LangGraph
+
+```typescript
+// BEFORE:
+import { createReactAgent } from '@langchain/langgraph/prebuilt';
+
+// AFTER:
+import { createReactAgent } from '@agentspan/sdk/langgraph';
+
+// Everything else UNCHANGED:
+const graph = createReactAgent({ llm: new ChatOpenAI({ model: 'gpt-4o-mini' }), tools: [search] });
+const result = await graph.invoke({ messages: [new HumanMessage('Search for...')] });
+```
+
+The wrapper captures `llm` and `tools` at creation time (before they enter closures) and stores them as extractable properties on the returned graph object. When `runtime.run(graph, prompt)` is called, or when `graph.invoke()` is called, the extraction finds them.
+
+For custom `StateGraph`, the wrapper intercepts `addNode()` to capture node functions and `compile()` to store the final graph structure.
+
+##### LangChain
+
+```typescript
+// BEFORE:
+import { AgentExecutor } from 'langchain/agents';
+
+// AFTER:
+import { AgentExecutor } from '@agentspan/sdk/langchain';
+
+// Everything else UNCHANGED
+```
+
+The wrapper captures `agent` (with its LLM) and `tools` at `AgentExecutor` construction time.
+
+##### OpenAI Agents & Google ADK: Zero Changes Required
+
+These frameworks expose model, tools, and instructions as **public properties** on their Agent classes. No wrapper needed — the generic serializer extracts everything directly:
+
+```typescript
+// OpenAI — zero changes
+import { Agent } from '@openai/agents';
+const agent = new Agent({ name: 'test', model: 'gpt-4o', tools: [...] });
+const result = await runtime.run(agent, 'Hello');  // model/tools extracted from public properties
+
+// Google ADK — zero changes
+import { LlmAgent } from '@google/adk';
+const agent = new LlmAgent({ name: 'test', model: 'gemini-2.5-flash', tools: [...] });
+const result = await runtime.run(agent, 'Hello');  // model/tools extracted from public properties
+```
+
+##### SDK Subpath Exports for Wrappers
+
+```json
+{
+  "exports": {
+    ".": "./dist/index.js",
+    "./ai": "./dist/wrappers/ai.js",
+    "./langgraph": "./dist/wrappers/langgraph.js",
+    "./langchain": "./dist/wrappers/langchain.js",
+    "./testing": "./dist/testing/index.js"
+  }
+}
+```
+
+##### What Each Wrapper Does
+
+| Wrapper | Intercepts | Captures | Stores On |
+|---------|-----------|----------|-----------|
+| `@agentspan/sdk/ai` | `generateText`, `streamText` | model, tools, system, maxSteps | Options object → AgentConfig at call time |
+| `@agentspan/sdk/langgraph` | `createReactAgent`, `StateGraph` | llm, tools at creation | Graph object properties |
+| `@agentspan/sdk/langchain` | `AgentExecutor`, chain builders | agent.llm, tools at construction | Executor object properties |
 
 #### Detection (duck-typing, no hard imports)
 
-SDKs detect framework agents via property/method signatures without importing framework packages. **Vercel AI SDK is NOT detected** — it uses native Agent with superset tools instead.
+SDKs detect framework agents via property/method signatures without importing framework packages.
 
-| Framework | Detection signature |
-|-----------|-------------------|
-| LangGraph.js | Has `invoke()` + (`getGraph()` or `nodes` Map) |
-| LangChain.js | Has `invoke()` + `lc_namespace` |
-| OpenAI Agents SDK | Has `name` + `instructions` + `model` + `tools` + `handoffs` |
-| Google ADK | Has `model` + `instruction` + ADK-specific properties |
+| Framework | Integration method | Detection |
+|-----------|-------------------|-----------|
+| Vercel AI SDK | Drop-in wrapper (`@agentspan/sdk/ai`) | N/A — intercepted at call site |
+| LangGraph.js | Drop-in wrapper (`@agentspan/sdk/langgraph`) + duck-typing for wrapped graphs | Has `invoke()` + `_agentspan` metadata (set by wrapper) |
+| LangChain.js | Drop-in wrapper (`@agentspan/sdk/langchain`) + duck-typing for wrapped executors | Has `invoke()` + `_agentspan` metadata (set by wrapper) |
+| OpenAI Agents SDK | Direct extraction (zero changes) | Has `name` + `instructions` + `model` + `tools` + `handoffs` |
+| Google ADK | Direct extraction (zero changes) | Has `model` + `instruction` + ADK-specific properties |
+
+#### Summary: User Changes Required Per Framework
+
+| Framework | User changes | What happens |
+|-----------|-------------|-------------|
+| **Vercel AI SDK** | Change 1 import: `from 'ai'` → `from '@agentspan/sdk/ai'` | `generateText` intercepted, compiled to workflow |
+| **LangGraph** | Change 1 import: `from '@langchain/langgraph/prebuilt'` → `from '@agentspan/sdk/langgraph'` | `createReactAgent` captures llm/tools at creation |
+| **LangChain** | Change 1 import: `from 'langchain/agents'` → `from '@agentspan/sdk/langchain'` | `AgentExecutor` captures agent/tools at construction |
+| **OpenAI Agents** | **Zero changes** | Extracted from public properties |
+| **Google ADK** | **Zero changes** | Extracted from public properties |
 
 #### Framework-Specific Extraction: LangGraph
 
-**Full extraction (create_react_agent, simple tool-calling graphs):**
+**With wrapper (`@agentspan/sdk/langgraph`):**
 
-`createReactAgent({ llm, tools })` and similar patterns expose model + tools as extractable properties. The SDK:
-1. Finds the LLM node (walks `graph.nodes`, looks for objects with `.model_name` or model attributes)
-2. Extracts tools from `ToolNode.tools_by_name`
-3. Extracts system prompt from graph configuration
-4. Produces `AgentConfig` with `model` + `tools[]` → compiles to `LLM_CHAT_COMPLETE` + `SIMPLE` tasks
+The wrapper intercepts `createReactAgent` and captures `llm` + `tools` at creation time — before they enter closures. These are stored as `_agentspan` metadata on the returned graph. When `runtime.run(graph, prompt)` is called, the SDK reads the metadata.
+
+**Direct extraction (without wrapper — for graphs from `@langchain/langgraph` directly):**
+
+The SDK attempts to extract from the compiled graph's public structure:
+1. Finds tools from `graph.nodes.tools.bound.tools` (ToolNode)
+2. Attempts to find model from node properties (may fail for closure-captured models)
+3. If model can't be found, throws an error suggesting the wrapper import
+
+**Full extraction (create_react_agent with wrapper):**
+
+`createReactAgent({ llm, tools })` via the wrapper stores model + tools. The SDK:
+1. Reads `_agentspan.model` and `_agentspan.tools` from the graph
+2. Extracts system prompt from wrapper metadata
+3. Produces `AgentConfig` with `model` + `tools[]` → compiles to `LLM_CHAT_COMPLETE` + `SIMPLE` tasks
 
 **Graph-structure extraction (custom StateGraph):**
 
