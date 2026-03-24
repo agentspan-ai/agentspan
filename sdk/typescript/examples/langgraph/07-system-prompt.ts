@@ -38,6 +38,14 @@ const graph = createReactAgent({
   prompt: new SystemMessage(TUTOR_SYSTEM_PROMPT),
 });
 
+// Add agentspan metadata for extraction
+(graph as any)._agentspan = {
+  model: 'openai/gpt-4o-mini',
+  tools: [],
+  instructions: TUTOR_SYSTEM_PROMPT,
+  framework: 'langgraph',
+};
+
 const PROMPT = 'I want to understand why 1 + 1 = 2. Can you just tell me?';
 
 // ---------------------------------------------------------------------------

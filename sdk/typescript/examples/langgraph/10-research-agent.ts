@@ -106,6 +106,13 @@ const graph = createReactAgent({
   tools: [searchTool, summarizeTool, citeSourceTool],
 });
 
+// Add agentspan metadata for extraction
+(graph as any)._agentspan = {
+  model: 'openai/gpt-4o-mini',
+  tools: [searchTool, summarizeTool, citeSourceTool],
+  framework: 'langgraph',
+};
+
 const PROMPT =
   'What are the latest developments in climate change research? Please search, summarize, and include citations.';
 

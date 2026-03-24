@@ -118,6 +118,13 @@ const agentRunnable = new RunnableLambda({
   },
 });
 
+// Add agentspan metadata for extraction
+(agentRunnable as any)._agentspan = {
+  model: 'openai/gpt-4o-mini',
+  tools,
+  framework: 'langchain',
+};
+
 async function main() {
   const userPrompt = 'What tool should I use for batch processing, and can you explain ETL?';
 

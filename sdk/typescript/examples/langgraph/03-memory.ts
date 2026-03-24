@@ -19,6 +19,13 @@ const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
 const checkpointer = new MemorySaver();
 const graph = createReactAgent({ llm, tools: [], checkpointer });
 
+// Add agentspan metadata for extraction
+(graph as any)._agentspan = {
+  model: 'openai/gpt-4o-mini',
+  tools: [],
+  framework: 'langgraph',
+};
+
 // ---------------------------------------------------------------------------
 // Run on agentspan
 // ---------------------------------------------------------------------------

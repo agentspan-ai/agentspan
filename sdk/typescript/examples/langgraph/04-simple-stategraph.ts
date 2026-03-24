@@ -72,6 +72,13 @@ builder.addEdge('generate', END);
 
 const graph = builder.compile();
 
+// Add agentspan metadata for extraction (no LLM in this pipeline example)
+(graph as any)._agentspan = {
+  model: 'openai/gpt-4o-mini',
+  tools: [],
+  framework: 'langgraph',
+};
+
 // ---------------------------------------------------------------------------
 // Run on agentspan
 // ---------------------------------------------------------------------------

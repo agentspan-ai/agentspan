@@ -54,15 +54,21 @@ class ChatWithHistory {
 function createAgentRunnable() {
   const chat = new ChatWithHistory();
 
-  return {
-    runnable: new RunnableLambda({
-      func: async (input: { input: string }) => {
-        const output = await chat.chat(input.input);
-        return { output };
-      },
-    }),
-    chat,
+  const runnable = new RunnableLambda({
+    func: async (input: { input: string }) => {
+      const output = await chat.chat(input.input);
+      return { output };
+    },
+  });
+
+  // Add agentspan metadata for extraction
+  (runnable as any)._agentspan = {
+    model: 'openai/gpt-4o-mini',
+    tools: [],
+    framework: 'langchain',
   };
+
+  return { runnable, chat };
 }
 
 async function main() {

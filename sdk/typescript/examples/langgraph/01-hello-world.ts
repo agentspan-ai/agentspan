@@ -16,6 +16,13 @@ import { AgentRuntime } from '../../src/index.js';
 const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
 const graph = createReactAgent({ llm, tools: [] });
 
+// Add agentspan metadata for extraction
+(graph as any)._agentspan = {
+  model: 'openai/gpt-4o-mini',
+  tools: [],
+  framework: 'langgraph',
+};
+
 const PROMPT = 'Say hello and tell me a fun fact about Python programming.';
 
 // ---------------------------------------------------------------------------

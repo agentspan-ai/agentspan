@@ -81,6 +81,13 @@ const builder = new StateGraph(MessagesAnnotation)
 
 const graph = builder.compile();
 
+// Add agentspan metadata for extraction
+(graph as any)._agentspan = {
+  model: 'openai/gpt-4o-mini',
+  tools,
+  framework: 'langgraph',
+};
+
 const PROMPT = 'What is the capital and population of Japan and Brazil?';
 
 // ---------------------------------------------------------------------------

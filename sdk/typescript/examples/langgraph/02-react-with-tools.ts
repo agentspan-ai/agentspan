@@ -65,6 +65,13 @@ const graph = createReactAgent({
   tools: [calculateTool, countWordsTool, getTodayTool],
 });
 
+// Add agentspan metadata for extraction
+(graph as any)._agentspan = {
+  model: 'openai/gpt-4o-mini',
+  tools: [calculateTool, countWordsTool, getTodayTool],
+  framework: 'langgraph',
+};
+
 const PROMPT =
   "What is the square root of 256? Also, how many words are in 'the quick brown fox'? And what is today's date?";
 

@@ -120,6 +120,13 @@ const agentRunnable = new RunnableLambda({
   },
 });
 
+// Add agentspan metadata for extraction
+(agentRunnable as any)._agentspan = {
+  model: 'openai/gpt-4o-mini',
+  tools,
+  framework: 'langchain',
+};
+
 async function main() {
   const runtime = new AgentRuntime();
   const userId = 'user-42';

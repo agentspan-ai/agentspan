@@ -149,6 +149,13 @@ const agentRunnable = new RunnableLambda({
   },
 });
 
+// Add agentspan metadata for extraction
+(agentRunnable as any)._agentspan = {
+  model: 'openai/gpt-4o-mini',
+  tools,
+  framework: 'langchain',
+};
+
 async function main() {
   const userPrompt =
     "I'm an American planning to travel from New York to Tokyo. " +

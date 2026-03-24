@@ -34,6 +34,13 @@ const graph = createReactAgent({
   responseFormat: MovieReviewSchema,
 });
 
+// Add agentspan metadata for extraction
+(graph as any)._agentspan = {
+  model: 'openai/gpt-4o-mini',
+  tools: [],
+  framework: 'langgraph',
+};
+
 const PROMPT = 'Write a review for the movie Inception (2010).';
 
 // ---------------------------------------------------------------------------

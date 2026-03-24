@@ -105,6 +105,13 @@ const graph = createReactAgent({
   tools: [addTool, subtractTool, multiplyTool, divideTool, powerTool, sqrtTool, factorialTool],
 });
 
+// Add agentspan metadata for extraction
+(graph as any)._agentspan = {
+  model: 'openai/gpt-4o-mini',
+  tools: [addTool, subtractTool, multiplyTool, divideTool, powerTool, sqrtTool, factorialTool],
+  framework: 'langgraph',
+};
+
 const PROMPT =
   'Calculate: (2^10 + sqrt(144)) / 4, then compute 5! and tell me the final answers.';
 

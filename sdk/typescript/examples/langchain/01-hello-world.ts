@@ -28,6 +28,13 @@ async function main() {
 
   const chain = prompt.pipe(model).pipe(new StringOutputParser());
 
+  // Add agentspan metadata for extraction
+  (chain as any)._agentspan = {
+    model: 'openai/gpt-4o-mini',
+    tools: [],
+    framework: 'langchain',
+  };
+
   const userPrompt = 'Introduce yourself and tell me one interesting fact about large language models.';
 
   // ── Run on agentspan ──────────────────────────────────────
