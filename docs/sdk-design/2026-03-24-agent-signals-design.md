@@ -31,13 +31,15 @@ Agent Signals allow humans and agents to send context, redirections, and coordin
                     │           AgentService.signal()           │
                     │                                          │
                     │  1. Validate workflow is active           │
-                    │  2. Check limits (100 lifetime, 10 pend) │
-                    │  3. Generate signalId (UUID)              │
-                    │  4. Store in _pending_signals (updateVar) │
-                    │  5. If urgent: set _urgent_pause flag     │
-                    │  6. Emit SSE: signal_received             │
-                    │  7. If propagate: recurse into sub-wfs    │
-                    │  8. Return SignalReceipt                  │
+                    │  2. Validate message <= 4096 chars        │
+                    │  3. Validate payload <= 64KB              │
+                    │  4. Check limits (100 lifetime, 10 pend) │
+                    │  5. Generate signalId (UUID)              │
+                    │  6. Store in _pending_signals (updateVar) │
+                    │  7. If urgent: set _urgent_pause flag     │
+                    │  8. Emit SSE: signal_received             │
+                    │  9. If propagate: recurse into sub-wfs    │
+                    │ 10. Return SignalReceipt                  │
                     └──────────────┬───────────────────────────┘
                                    │
               ┌────────────────────┼────────────────────┐
@@ -276,38 +278,111 @@ for (var i = 0; i < toolCalls.length; i++) {
 }
 ```
 
-### 5.2 Disposition INLINE Script
+### 5.2 Disposition INLINE Scripts
+
+**accept_signal:**
 
 ```javascript
-// signalDispositionScript("accept_signal")
 (function() {
-    var signals = $.processed || [];
+    var processing = $.processing || [];
+    var processed = $.already_processed || [];
     var signalId = $.signal_id;
-    var found = false;
 
-    for (var i = 0; i < signals.length; i++) {
-        if (signals[i].signalId === signalId) {
-            signals[i].disposition = 'accepted';
-            signals[i].processedAt = Date.now();
-            found = true;
-            break;
+    // Check if already dispositioned (idempotency — FR-12.12)
+    for (var i = 0; i < processed.length; i++) {
+        if (processed[i].signalId === signalId) {
+            return {status: 'already_' + processed[i].disposition, disposition: processed[i].disposition};
         }
     }
 
-    if (!found) return {status: 'error', message: 'Signal ' + signalId + ' not found'};
+    // Find in processing list
+    var found = -1;
+    for (var i = 0; i < processing.length; i++) {
+        if (processing[i].signalId === signalId) { found = i; break; }
+    }
+
+    // Not found (FR-12.13)
+    if (found < 0) return {error: 'invalid_signal_id', message: 'Signal ' + signalId + ' not found'};
+
+    // Accept: move to processed
+    var signal = processing.splice(found, 1)[0];
+    signal.disposition = 'accepted';
+    signal.processedAt = Date.now();
+    signal.deliveredAt = signal.deliveredAt || Date.now();
+    processed.push(signal);
 
     return {
-        status: 'accepted',
-        signalId: signalId,
+        status: 'accepted', signalId: signalId,
         _signal_event: 'signal_accepted',
-        _update_vars: {_processing_signals: [], _processed_signals: signals}
+        _update_vars: {_processing_signals: processing, _processed_signals: processed}
     };
 })()
 ```
 
-For `reject_signal`: same but sets `disposition: 'rejected'` and `rejectionReason: $.reason`, removes entry from `_signal_data`, and emits `signal_rejected`.
+**reject_signal:**
 
-For `accept_all_signals`: iterates all, sets all to `accepted`.
+```javascript
+(function() {
+    var processing = $.processing || [];
+    var processed = $.already_processed || [];
+    var signalData = $.signal_data || {};
+    var signalId = $.signal_id;
+    var reason = $.reason || '';
+
+    // Idempotency check (FR-12.12)
+    for (var i = 0; i < processed.length; i++) {
+        if (processed[i].signalId === signalId) {
+            return {status: 'already_' + processed[i].disposition, disposition: processed[i].disposition};
+        }
+    }
+
+    // Find in processing list
+    var found = -1;
+    for (var i = 0; i < processing.length; i++) {
+        if (processing[i].signalId === signalId) { found = i; break; }
+    }
+
+    if (found < 0) return {error: 'invalid_signal_id', message: 'Signal ' + signalId + ' not found'};
+
+    // Reject: move to processed, remove signal data (FR-16.4)
+    var signal = processing.splice(found, 1)[0];
+    signal.disposition = 'rejected';
+    signal.rejectionReason = reason;
+    signal.processedAt = Date.now();
+    processed.push(signal);
+    delete signalData[signalId];
+
+    return {
+        status: 'rejected', signalId: signalId, reason: reason,
+        _signal_event: 'signal_rejected',
+        _update_vars: {_processing_signals: processing, _processed_signals: processed, _signal_data: signalData}
+    };
+})()
+```
+
+**accept_all_signals:**
+
+```javascript
+(function() {
+    var processing = $.processing || [];
+    var processed = $.already_processed || [];
+    if (processing.length === 0) return {status: 'none_pending', count: 0};
+
+    var events = [];
+    for (var i = 0; i < processing.length; i++) {
+        processing[i].disposition = 'accepted';
+        processing[i].processedAt = Date.now();
+        events.push({type: 'signal_accepted', signalId: processing[i].signalId});
+        processed.push(processing[i]);
+    }
+
+    return {
+        status: 'accepted', count: events.length,
+        _signal_events: events,
+        _update_vars: {_processing_signals: [], _processed_signals: processed}
+    };
+})()
+```
 
 ### 5.3 Implicit Acceptance
 
@@ -372,6 +447,10 @@ public SignalReceipt signal(String workflowId, SignalRequest request) {
 ```
 
 ### 6.2 Event Listener Hook
+
+**Prerequisites:** `AgentEventListener` needs two new injections:
+- `WorkflowExecutor` — for `pauseWorkflow()` / `resumeWorkflow()` (currently not injected)
+- `ScheduledExecutorService` — for delayed auto-resume (create a single-thread scheduled executor)
 
 In `AgentEventListener.onTaskCompleted()`:
 
@@ -747,7 +826,7 @@ Response: 200 OK
 }
 ```
 
-Note: This is a **read-only** endpoint. Signals are NOT moved from pending — that happens in the task mapper. This endpoint is for framework passthrough workers that need to poll for signals.
+For framework passthrough workers: this endpoint **atomically returns and marks** signals as delivered (moves from `_pending` to `_processing`). This prevents double-delivery if the worker polls multiple times. For native agents, the task mapper handles this instead.
 
 ---
 
@@ -869,7 +948,140 @@ expect(result).completed().signal_accepted("QEC").signal_rejected("Write code")
 
 ---
 
-## 15. Implementation Order
+## 15. Context Condensation (FR-13)
+
+When context condensation triggers (conversation exceeds context window), the condensation logic in `AgentChatCompleteTaskMapper.condenseIfNeeded()` must handle signals specially:
+
+### 15.1 Signal Detection
+
+Signal messages are identified by the `[SIGNAL_START id=...]` / `[SIGNAL_END]` markers (evaluate mode) or `[Signal from ...]` prefix (auto_accept mode).
+
+### 15.2 Priority Preservation
+
+When building the condensation prompt, accepted signals are tagged as high-priority:
+
+```
+Preserve the following accepted signals in your summary — these are external
+instructions that the agent is actively following:
+- [Signal from supervisor]: Focus on error correction (ACCEPTED)
+- [Signal from monitor]: Budget at 80%, wrap up soon (ACCEPTED)
+
+The following signals were rejected and can be dropped:
+- [Signal from random]: Write code instead (REJECTED)
+```
+
+### 15.3 Implementation
+
+Modify `condenseIfNeeded()` to:
+1. Scan messages for signal markers
+2. Separate into accepted/rejected (read from `_processed_signals` for disposition)
+3. Include accepted signals as pinned context in the condensation prompt
+4. Drop rejected signals from the condensation input
+
+---
+
+## 16. Callback Invocation (on_signal_received)
+
+### 16.1 When It Fires
+
+The `on_signal_received` callback fires **before** signals are injected into the LLM conversation. It runs as an INLINE task (not a worker) to minimize latency.
+
+### 16.2 Flow
+
+In the task mapper (or as a pre-LLM INLINE task):
+
+```
+Read _pending_signals
+    │
+    ├─ For each signal:
+    │   ├─ Invoke on_signal_received callback
+    │   │   Return value:
+    │   │   ├─ str → modified message (signal proceeds with new message)
+    │   │   ├─ None → passthrough (signal proceeds unchanged)
+    │   │   ├─ "" (empty) → suppress (signal dropped, not delivered)
+    │   │   └─ raise SignalRejectedError → programmatic reject
+    │   │
+    │   └─ On unexpected exception → fail-open (signal proceeds unchanged, error logged)
+    │
+    └─ Inject surviving signals into conversation
+```
+
+### 16.3 Compilation
+
+If `on_signal_received` is set:
+- Register a worker for the callback function
+- Insert a SIMPLE task before LLM_CHAT_COMPLETE in the DO_WHILE loop that:
+  1. Reads `_pending_signals`
+  2. Calls the callback worker for each signal
+  3. Filters/modifies based on return values
+  4. Writes filtered list back to `_pending_signals`
+
+If `on_signal_received` is NOT set (default): no overhead — skip this step entirely.
+
+---
+
+## 17. Concurrent Write Serialization (FR-4.2)
+
+### 17.1 Problem
+
+Two concurrent `signal()` calls to the same workflow can race:
+1. Both read `_pending_signals = [A]`
+2. Call 1 writes `[A, B]`
+3. Call 2 writes `[A, C]` — signal B is lost
+
+### 17.2 Solution
+
+`AgentService.signal()` uses a per-workflow `synchronized` block:
+
+```java
+private final ConcurrentHashMap<String, Object> workflowLocks = new ConcurrentHashMap<>();
+
+public SignalReceipt signal(String workflowId, SignalRequest request) {
+    Object lock = workflowLocks.computeIfAbsent(workflowId, k -> new Object());
+    synchronized (lock) {
+        // 1. Read current _pending_signals
+        // 2. Append new signal
+        // 3. Write back via updateVariables
+        // 4. Update _signal_counts
+    }
+}
+```
+
+Lock objects are per-workflow (no global contention). Stale entries are cleaned periodically.
+
+### 17.3 Task Mapper Side
+
+The task mapper's read-and-clear is inherently serialized (runs inside a single Conductor task execution thread). No additional locking needed.
+
+---
+
+## 18. Simple Agents (No Tools, No Guardrails)
+
+### 18.1 Problem
+
+Agents without tools and without guardrails compile to a single `LLM_CHAT_COMPLETE` task — no DO_WHILE loop. There is no iteration boundary for signal injection.
+
+### 18.2 Solution
+
+When an agent has no tools and no guardrails but `signal_mode` is not disabled, the compiler wraps the LLM call in a minimal DO_WHILE loop:
+
+```
+DO_WHILE (max_turns=1 OR signal_pending):
+    [Read signals → inject → LLM_CHAT_COMPLETE]
+    Condition: signal_pending ? continue : exit
+```
+
+This adds one loop iteration for signal processing. If no signals arrive, the agent executes identically to today (single LLM call, exits immediately). The overhead of the DO_WHILE wrapper is negligible.
+
+**Alternatively**, for truly simple agents that should never receive signals, the agent can opt out:
+
+```python
+Agent(signal_mode="disabled", ...)  # No signal support, no DO_WHILE wrapper
+```
+
+---
+
+## 19. Implementation Order
 
 | Phase | What | Files |
 |---|---|---|
