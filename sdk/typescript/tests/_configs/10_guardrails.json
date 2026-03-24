@@ -1,0 +1,54 @@
+{
+  "name": "support_agent",
+  "model": "openai/gpt-4o-mini",
+  "instructions": "You are a customer support assistant. Use the available tools to answer questions about orders and customers. Always include all details from the tool results in your response.",
+  "tools": [
+    {
+      "name": "get_order_status",
+      "description": "Look up the current status of an order.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "description": "The order ID to look up"
+          }
+        },
+        "required": [
+          "orderId"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "toolType": "worker"
+    },
+    {
+      "name": "get_customer_info",
+      "description": "Retrieve customer details including payment info on file.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "customerId": {
+            "type": "string",
+            "description": "The customer ID to look up"
+          }
+        },
+        "required": [
+          "customerId"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "toolType": "worker"
+    }
+  ],
+  "guardrails": [
+    {
+      "name": "no_pii",
+      "position": "output",
+      "onFail": "retry",
+      "guardrailType": "custom",
+      "taskName": "no_pii"
+    }
+  ]
+}

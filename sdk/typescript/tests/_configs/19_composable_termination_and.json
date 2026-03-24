@@ -1,0 +1,38 @@
+{
+  "name": "deliberator",
+  "model": "openai/gpt-4o-mini",
+  "instructions": "Research thoroughly. Only provide your FINAL ANSWER after using the search tool at least twice.",
+  "tools": [
+    {
+      "name": "search",
+      "description": "Search for information.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The search query"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      },
+      "toolType": "worker"
+    }
+  ],
+  "termination": {
+    "type": "and",
+    "conditions": [
+      {
+        "type": "text_mention",
+        "text": "FINAL ANSWER",
+        "caseSensitive": false
+      },
+      {
+        "type": "max_message",
+        "maxMessages": 5
+      }
+    ]
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "researcher_writer_editor",
+  "agents": [
+    {
+      "name": "researcher",
+      "model": "openai/gpt-4o-mini",
+      "instructions": "You are a researcher. Given a topic, provide key facts and data points. Be thorough but concise. Output raw research findings."
+    },
+    {
+      "name": "writer",
+      "model": "openai/gpt-4o-mini",
+      "instructions": "You are a writer. Take research findings and write a clear, engaging article. Use headers and bullet points where appropriate."
+    },
+    {
+      "name": "editor",
+      "model": "openai/gpt-4o-mini",
+      "instructions": "You are an editor. Review the article for clarity, grammar, and tone. Make improvements and output the final polished version."
+    }
+  ],
+  "strategy": "sequential"
+}

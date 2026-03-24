@@ -1,0 +1,56 @@
+{
+  "name": "ceo",
+  "model": "openai/gpt-4o-mini",
+  "instructions": "You are the CEO. Route requests to the right department: engineering_lead for technical/development questions, marketing_lead for marketing/content/SEO questions.",
+  "agents": [
+    {
+      "name": "engineering_lead",
+      "model": "openai/gpt-4o-mini",
+      "instructions": "You are the engineering lead. Route technical questions to the right specialist: backend_dev for APIs/databases/servers, frontend_dev for UI/UX/client-side.",
+      "agents": [
+        {
+          "name": "backend_dev",
+          "model": "openai/gpt-4o-mini",
+          "instructions": "You are a backend developer. You design APIs, databases, and server architecture. Provide technical recommendations with code examples."
+        },
+        {
+          "name": "frontend_dev",
+          "model": "openai/gpt-4o-mini",
+          "instructions": "You are a frontend developer. You design UI components, user flows, and client-side architecture. Provide recommendations with code examples."
+        }
+      ],
+      "strategy": "handoff"
+    },
+    {
+      "name": "marketing_lead",
+      "model": "openai/gpt-4o-mini",
+      "instructions": "You are the marketing lead. Route marketing questions to the right specialist: content_writer for blog posts/copy, seo_specialist for SEO/keywords/rankings.",
+      "agents": [
+        {
+          "name": "content_writer",
+          "model": "openai/gpt-4o-mini",
+          "instructions": "You are a content writer. You create blog posts, landing page copy, and marketing materials. Write engaging, clear content."
+        },
+        {
+          "name": "seo_specialist",
+          "model": "openai/gpt-4o-mini",
+          "instructions": "You are an SEO specialist. You optimize content for search engines, suggest keywords, and improve page rankings."
+        }
+      ],
+      "strategy": "handoff"
+    }
+  ],
+  "strategy": "swarm",
+  "handoffs": [
+    {
+      "target": "engineering_lead",
+      "type": "on_text_mention",
+      "text": "engineering_lead"
+    },
+    {
+      "target": "marketing_lead",
+      "type": "on_text_mention",
+      "text": "marketing_lead"
+    }
+  ]
+}

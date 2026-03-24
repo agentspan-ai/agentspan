@@ -1,0 +1,22 @@
+{
+  "name": "analysis",
+  "model": "openai/gpt-4o-mini",
+  "agents": [
+    {
+      "name": "market_analyst",
+      "model": "openai/gpt-4o-mini",
+      "instructions": "You are a market analyst. Analyze the given topic from a market perspective: market size, growth trends, key players, and opportunities."
+    },
+    {
+      "name": "risk_analyst",
+      "model": "openai/gpt-4o-mini",
+      "instructions": "You are a risk analyst. Analyze the given topic for risks: regulatory risks, technical risks, competitive threats, and mitigation strategies."
+    },
+    {
+      "name": "compliance",
+      "model": "openai/gpt-4o-mini",
+      "instructions": "You are a compliance specialist. Check the given topic for compliance considerations: data privacy, regulatory requirements, and industry standards."
+    }
+  ],
+  "strategy": "parallel"
+}

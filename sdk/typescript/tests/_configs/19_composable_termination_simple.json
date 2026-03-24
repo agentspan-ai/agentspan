@@ -1,0 +1,29 @@
+{
+  "name": "researcher",
+  "model": "openai/gpt-4o-mini",
+  "instructions": "Research the topic and say DONE when you have enough info.",
+  "tools": [
+    {
+      "name": "search",
+      "description": "Search for information.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The search query"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      },
+      "toolType": "worker"
+    }
+  ],
+  "termination": {
+    "type": "text_mention",
+    "text": "DONE",
+    "caseSensitive": false
+  }
+}

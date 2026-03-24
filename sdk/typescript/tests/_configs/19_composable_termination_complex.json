@@ -1,0 +1,51 @@
+{
+  "name": "complex_agent",
+  "model": "openai/gpt-4o-mini",
+  "instructions": "Research and provide a comprehensive answer.",
+  "tools": [
+    {
+      "name": "search",
+      "description": "Search for information.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The search query"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      },
+      "toolType": "worker"
+    }
+  ],
+  "termination": {
+    "type": "or",
+    "conditions": [
+      {
+        "type": "stop_message",
+        "stopMessage": "TERMINATE"
+      },
+      {
+        "type": "and",
+        "conditions": [
+          {
+            "type": "text_mention",
+            "text": "DONE",
+            "caseSensitive": false
+          },
+          {
+            "type": "max_message",
+            "maxMessages": 10
+          }
+        ]
+      },
+      {
+        "type": "token_usage",
+        "maxTotalTokens": 50000
+      }
+    ]
+  }
+}

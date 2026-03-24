@@ -1,0 +1,28 @@
+{
+  "name": "dev_team",
+  "model": "openai/gpt-4o-mini",
+  "instructions": "You are the tech lead. Route requests to the right team member: planner for design/architecture, coder for implementation, reviewer for code review.",
+  "agents": [
+    {
+      "name": "planner",
+      "model": "openai/gpt-4o-mini",
+      "instructions": "You create implementation plans. Break down tasks into clear numbered steps."
+    },
+    {
+      "name": "coder",
+      "model": "openai/gpt-4o-mini",
+      "instructions": "You write code. Output clean, well-documented Python code."
+    },
+    {
+      "name": "reviewer",
+      "model": "openai/gpt-4o-mini",
+      "instructions": "You review code. Check for bugs, style issues, and suggest improvements."
+    }
+  ],
+  "strategy": "router",
+  "router": {
+    "name": "planner",
+    "model": "openai/gpt-4o-mini",
+    "instructions": "You create implementation plans. Break down tasks into clear numbered steps."
+  }
+}

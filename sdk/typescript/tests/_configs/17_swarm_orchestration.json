@@ -1,0 +1,31 @@
+{
+  "name": "support",
+  "model": "openai/gpt-4o-mini",
+  "instructions": "You are the front-line customer support agent. Triage customer requests. If the customer needs a refund, transfer to the refund specialist. If they have a technical issue, transfer to tech support. Use the transfer tools available to you to hand off the conversation.",
+  "agents": [
+    {
+      "name": "refund_specialist",
+      "model": "openai/gpt-4o-mini",
+      "instructions": "You are a refund specialist. Process the customer's refund request. Check eligibility, confirm the refund amount, and let them know the timeline. Be empathetic and clear. Do NOT ask follow-up questions -- just process the refund based on what the customer told you."
+    },
+    {
+      "name": "tech_support",
+      "model": "openai/gpt-4o-mini",
+      "instructions": "You are a technical support specialist. Diagnose the customer's technical issue and provide clear troubleshooting steps."
+    }
+  ],
+  "strategy": "swarm",
+  "maxTurns": 3,
+  "handoffs": [
+    {
+      "target": "refund_specialist",
+      "type": "on_text_mention",
+      "text": "refund"
+    },
+    {
+      "target": "tech_support",
+      "type": "on_text_mention",
+      "text": "technical"
+    }
+  ]
+}

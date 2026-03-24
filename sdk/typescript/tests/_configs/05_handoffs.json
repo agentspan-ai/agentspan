@@ -1,0 +1,86 @@
+{
+  "name": "support",
+  "model": "openai/gpt-4o-mini",
+  "instructions": "Route customer requests to the right specialist: billing, technical, or sales.",
+  "agents": [
+    {
+      "name": "billing",
+      "model": "openai/gpt-4o-mini",
+      "instructions": "You handle billing questions: balances, payments, invoices.",
+      "tools": [
+        {
+          "name": "check_balance",
+          "description": "Check the balance of a bank account.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "accountId": {
+                "type": "string",
+                "description": "The account ID to check"
+              }
+            },
+            "required": [
+              "accountId"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "toolType": "worker"
+        }
+      ]
+    },
+    {
+      "name": "technical",
+      "model": "openai/gpt-4o-mini",
+      "instructions": "You handle technical questions: order status, shipping, returns.",
+      "tools": [
+        {
+          "name": "lookup_order",
+          "description": "Look up the status of an order.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "orderId": {
+                "type": "string",
+                "description": "The order ID to look up"
+              }
+            },
+            "required": [
+              "orderId"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "toolType": "worker"
+        }
+      ]
+    },
+    {
+      "name": "sales",
+      "model": "openai/gpt-4o-mini",
+      "instructions": "You handle sales questions: pricing, products, promotions.",
+      "tools": [
+        {
+          "name": "get_pricing",
+          "description": "Get pricing information for a product.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "product": {
+                "type": "string",
+                "description": "The product to get pricing for"
+              }
+            },
+            "required": [
+              "product"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "toolType": "worker"
+        }
+      ]
+    }
+  ],
+  "strategy": "handoff"
+}

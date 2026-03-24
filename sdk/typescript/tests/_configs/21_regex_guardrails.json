@@ -1,0 +1,48 @@
+{
+  "name": "hr_assistant",
+  "model": "openai/gpt-4o-mini",
+  "instructions": "You are an HR assistant. When asked about employees, look up their profile and share ALL the details you find.",
+  "tools": [
+    {
+      "name": "get_user_profile",
+      "description": "Retrieve a user's profile from the database.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "description": "The user ID"
+          }
+        },
+        "required": [
+          "user_id"
+        ]
+      },
+      "toolType": "worker"
+    }
+  ],
+  "guardrails": [
+    {
+      "name": "no_email_addresses",
+      "position": "output",
+      "onFail": "retry",
+      "guardrailType": "regex",
+      "patterns": [
+        "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+      ],
+      "mode": "block",
+      "message": "Response must not contain email addresses. Redact them."
+    },
+    {
+      "name": "no_ssn",
+      "position": "output",
+      "onFail": "raise",
+      "guardrailType": "regex",
+      "patterns": [
+        "\\b\\d{3}-\\d{2}-\\d{4}\\b"
+      ],
+      "mode": "block",
+      "message": "Response must not contain Social Security Numbers."
+    }
+  ]
+}

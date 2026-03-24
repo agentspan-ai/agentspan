@@ -1,0 +1,76 @@
+{
+  "name": "tool_demo_agent",
+  "model": "openai/gpt-4o-mini",
+  "instructions": "You are a helpful assistant with access to weather, calculator, and email tools.",
+  "tools": [
+    {
+      "name": "get_weather",
+      "description": "Get current weather for a city.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "city": {
+            "type": "string",
+            "description": "The city to get weather for"
+          }
+        },
+        "required": [
+          "city"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "toolType": "worker"
+    },
+    {
+      "name": "calculate",
+      "description": "Evaluate a math expression.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "The math expression to evaluate"
+          }
+        },
+        "required": [
+          "expression"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "toolType": "worker"
+    },
+    {
+      "name": "send_email",
+      "description": "Send an email.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string",
+            "description": "Recipient email address"
+          },
+          "subject": {
+            "type": "string",
+            "description": "Email subject"
+          },
+          "body": {
+            "type": "string",
+            "description": "Email body"
+          }
+        },
+        "required": [
+          "to",
+          "subject",
+          "body"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "toolType": "worker",
+      "approvalRequired": true,
+      "timeoutSeconds": 60
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "name": "monitored_agent_47",
+  "model": "openai/gpt-4o-mini",
+  "instructions": "You are a helpful assistant. Use get_facts when asked about topics.",
+  "tools": [
+    {
+      "name": "get_facts",
+      "description": "Get interesting facts about a topic.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "topic": {
+            "type": "string",
+            "description": "The topic to get facts about"
+          }
+        },
+        "required": [
+          "topic"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "toolType": "worker"
+    }
+  ],
+  "callbacks": [
+    {
+      "position": "before_model",
+      "taskName": "monitored_agent_47_before_model"
+    },
+    {
+      "position": "after_model",
+      "taskName": "monitored_agent_47_after_model"
+    }
+  ]
+}

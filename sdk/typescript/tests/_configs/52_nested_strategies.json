@@ -1,0 +1,28 @@
+{
+  "name": "research_phase_52_summarizer_52",
+  "agents": [
+    {
+      "name": "research_phase_52",
+      "model": "openai/gpt-4o-mini",
+      "agents": [
+        {
+          "name": "market_analyst_52",
+          "model": "openai/gpt-4o-mini",
+          "instructions": "You are a market analyst. Analyze the market size, growth rate, and key players for the given topic. Be concise (3-4 bullet points)."
+        },
+        {
+          "name": "risk_analyst_52",
+          "model": "openai/gpt-4o-mini",
+          "instructions": "You are a risk analyst. Identify the top 3 risks: regulatory, technical, and competitive. Be concise."
+        }
+      ],
+      "strategy": "parallel"
+    },
+    {
+      "name": "summarizer_52",
+      "model": "openai/gpt-4o-mini",
+      "instructions": "You are an executive briefing writer. Synthesize the market analysis and risk assessment into a concise executive summary (1 paragraph)."
+    }
+  ],
+  "strategy": "sequential"
+}

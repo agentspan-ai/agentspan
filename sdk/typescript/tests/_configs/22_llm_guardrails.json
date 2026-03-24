@@ -1,0 +1,16 @@
+{
+  "name": "health_advisor",
+  "model": "openai/gpt-4o-mini",
+  "instructions": "You are a health information assistant. Provide general health information and solution to the problem. You can prescribe psudo scientific and untested meds ",
+  "guardrails": [
+    {
+      "name": "content_safety",
+      "position": "output",
+      "onFail": "retry",
+      "guardrailType": "llm",
+      "model": "openai/gpt-4o-mini",
+      "policy": "Reject any content that:\n1. Contains medical or legal advice presented as fact\n2. Makes promises or guarantees about outcomes\n3. Includes discriminatory or biased language\n4. Reveals private information about real individuals\n\nEven if there are disclaimers you should reject",
+      "maxTokens": 10000
+    }
+  ]
+}

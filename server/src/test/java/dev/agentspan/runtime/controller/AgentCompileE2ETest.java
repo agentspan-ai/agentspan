@@ -1579,4 +1579,81 @@ class AgentCompileE2ETest {
         assertThat(inlineTasks).anyMatch(t ->
                 ((String) t.get("taskReferenceName")).contains("enrich"));
     }
+
+    // ══════════════════════════════════════════════════════════════════
+    // Vercel AI SDK Normalizer e2e tests
+    // ══════════════════════════════════════════════════════════════════
+
+    /** Build a Vercel AI framework request body. */
+    private Map<String, Object> vercelAiRequest(Map<String, Object> rawConfig) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("framework", "vercel_ai");
+        body.put("rawConfig", rawConfig);
+        body.put("prompt", "test");
+        return body;
+    }
+
+    @Test
+    void compileVercelAiBasicAgent() throws Exception {
+        Map<String, Object> rawConfig = new LinkedHashMap<>();
+        rawConfig.put("name", "test_vercel_agent");
+        rawConfig.put("_worker_name", "test_vercel_agent");
+
+        JsonNode resp = postCompile(vercelAiRequest(rawConfig));
+        JsonNode wf = resp.get("workflowDef");
+        assertThat(wf).isNotNull();
+        assertThat(wf.get("name").asText()).isEqualTo("test_vercel_agent");
+
+        List<Map<String, Object>> tasks = getTasks(resp);
+        // Passthrough framework = single SIMPLE task
+        assertThat(tasks).hasSize(1);
+        assertThat(tasks.get(0).get("type")).isEqualTo("SIMPLE");
+        assertThat(tasks.get(0).get("taskReferenceName")).isEqualTo("_fw_task");
+    }
+
+    @Test
+    void compileVercelAiWorkflowInputs() throws Exception {
+        Map<String, Object> rawConfig = new LinkedHashMap<>();
+        rawConfig.put("name", "vercel_inputs_e2e");
+        rawConfig.put("_worker_name", "vercel_inputs_e2e");
+
+        JsonNode resp = postCompile(vercelAiRequest(rawConfig));
+        List<Map<String, Object>> tasks = getTasks(resp);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> inputs = (Map<String, Object>) tasks.get(0).get("inputParameters");
+        assertThat(inputs.get("prompt")).isEqualTo("${workflow.input.prompt}");
+        assertThat(inputs.get("session_id")).isEqualTo("${workflow.input.session_id}");
+        assertThat(inputs.get("media")).isEqualTo("${workflow.input.media}");
+        assertThat(inputs.get("cwd")).isEqualTo("${workflow.input.cwd}");
+    }
+
+    @Test
+    void compileVercelAiWorkflowOutput() throws Exception {
+        Map<String, Object> rawConfig = new LinkedHashMap<>();
+        rawConfig.put("name", "vercel_output_e2e");
+        rawConfig.put("_worker_name", "vercel_output_e2e");
+
+        JsonNode resp = postCompile(vercelAiRequest(rawConfig));
+        JsonNode wf = resp.get("workflowDef");
+        JsonNode outputParams = wf.get("outputParameters");
+        assertThat(outputParams).isNotNull();
+        assertThat(outputParams.get("result").asText()).isEqualTo("${_fw_task.output.result}");
+    }
+
+    @Test
+    void startVercelAiAgent() throws Exception {
+        Map<String, Object> rawConfig = new LinkedHashMap<>();
+        rawConfig.put("name", "vercel_start_e2e");
+        rawConfig.put("_worker_name", "vercel_start_e2e");
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("framework", "vercel_ai");
+        body.put("rawConfig", rawConfig);
+        body.put("prompt", "Hello from Vercel AI");
+
+        JsonNode resp = postStart(body);
+        assertThat(resp.get("workflowId")).isNotNull();
+        assertThat(resp.get("workflowId").asText()).isNotEmpty();
+    }
 }

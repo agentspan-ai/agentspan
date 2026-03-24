@@ -1,0 +1,19 @@
+{
+  "name": "chatbot",
+  "model": "openai/gpt-4o-mini",
+  "instructions": "Have a conversation. Say GOODBYE when you're finished.",
+  "termination": {
+    "type": "or",
+    "conditions": [
+      {
+        "type": "text_mention",
+        "text": "GOODBYE",
+        "caseSensitive": false
+      },
+      {
+        "type": "max_message",
+        "maxMessages": 20
+      }
+    ]
+  }
+}

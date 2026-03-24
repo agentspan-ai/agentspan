@@ -1,0 +1,54 @@
+{
+  "name": "weather_reporter",
+  "model": "openai/gpt-4o-mini",
+  "instructions": "You are a weather reporter. Get the weather and provide a recommendation.",
+  "tools": [
+    {
+      "name": "get_weather",
+      "description": "Get current weather data for a city.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "city": {
+            "type": "string",
+            "description": "The city to get weather for"
+          }
+        },
+        "required": [
+          "city"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "toolType": "worker"
+    }
+  ],
+  "outputType": {
+    "schema": {
+      "type": "object",
+      "properties": {
+        "city": {
+          "type": "string"
+        },
+        "temperature": {
+          "type": "number"
+        },
+        "condition": {
+          "type": "string"
+        },
+        "recommendation": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "city",
+        "temperature",
+        "condition",
+        "recommendation"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "className": "Output"
+  }
+}

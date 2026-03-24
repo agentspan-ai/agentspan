@@ -1,0 +1,63 @@
+{
+  "name": "manager_45",
+  "model": "openai/gpt-4o-mini",
+  "instructions": "You are a project manager. Use the researcher tool to gather information and the calculate tool for math. Synthesize findings.",
+  "tools": [
+    {
+      "name": "researcher_45_tool",
+      "description": "Run researcher_45 as a tool",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "toolType": "agent_tool",
+      "config": {
+        "agentConfig": {
+          "name": "researcher_45",
+          "model": "openai/gpt-4o-mini",
+          "instructions": "You are a research assistant. Use search_knowledge_base to find information about topics. Provide concise summaries.",
+          "tools": [
+            {
+              "name": "search_knowledge_base",
+              "description": "Search an internal knowledge base for information.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "query": {
+                    "type": "string",
+                    "description": "The search query"
+                  }
+                },
+                "required": [
+                  "query"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "toolType": "worker"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "calculate",
+      "description": "Evaluate a math expression safely.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "A mathematical expression to evaluate"
+          }
+        },
+        "required": [
+          "expression"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "toolType": "worker"
+    }
+  ]
+}
