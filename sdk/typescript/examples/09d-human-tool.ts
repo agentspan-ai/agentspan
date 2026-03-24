@@ -1,0 +1,150 @@
+/**
+ * Human Tool — LLM-initiated human interaction.
+ *
+ * Unlike approvalRequired tools (09-human-in-the-loop.ts) where humans gate
+ * tool execution, humanTool lets the LLM **ask the human questions** at
+ * any point. The LLM decides when to call the tool, and the human's response
+ * is returned as the tool output.
+ *
+ * The tool is entirely server-side (Conductor HUMAN task) — no worker process
+ * needed. The server generates the response form and validation pipeline
+ * automatically, so this works with any SDK language.
+ *
+ * Demonstrates:
+ *   - humanTool() for LLM-initiated human interaction
+ *   - Mixing human tools with regular tools
+ *   - The LLM using human input to make decisions
+ *
+ * Requirements:
+ *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+ *   - AGENTSPAN_LLM_MODEL (default: openai/gpt-4o-mini)
+ */
+
+import { z } from 'zod';
+import { Agent, AgentRuntime, humanTool, tool } from '../src/index.js';
+import type { AgentHandle } from '../src/index.js';
+import { llmModel } from './settings.js';
+
+const lookupEmployee = tool(
+  async (args: { name: string }) => {
+    const employees: Record<
+      string,
+      { name: string; department: string; level: string }
+    > = {
+      alice: {
+        name: 'Alice Chen',
+        department: 'Engineering',
+        level: 'Senior',
+      },
+      bob: {
+        name: 'Bob Martinez',
+        department: 'Sales',
+        level: 'Manager',
+      },
+      carol: {
+        name: 'Carol Wu',
+        department: 'Engineering',
+        level: 'Staff',
+      },
+    };
+    const key = args.name.toLowerCase().split(' ')[0];
+    return employees[key] ?? { error: `Employee '${args.name}' not found` };
+  },
+  {
+    name: 'lookup_employee',
+    description: 'Look up an employee by name and return their info.',
+    inputSchema: z.object({
+      name: z.string().describe('Employee name to look up'),
+    }),
+  },
+);
+
+const submitTicket = tool(
+  async (args: { title: string; priority: string; assignee: string }) => {
+    return {
+      ticket_id: 'TKT-4821',
+      title: args.title,
+      priority: args.priority,
+      assignee: args.assignee,
+    };
+  },
+  {
+    name: 'submit_ticket',
+    description: 'Submit an IT support ticket.',
+    inputSchema: z.object({
+      title: z.string().describe('Ticket title'),
+      priority: z.string().describe('Priority level'),
+      assignee: z.string().describe('Assignee name'),
+    }),
+  },
+);
+
+const askUser = humanTool({
+  name: 'ask_user',
+  description:
+    'Ask the user a question when you need clarification or additional information.',
+});
+
+const agent = new Agent({
+  name: 'it_support',
+  model: llmModel,
+  tools: [lookupEmployee, submitTicket, askUser],
+  instructions:
+    'You are an IT support assistant. Help users create support tickets. ' +
+    'Use lookup_employee to find employee info. ' +
+    'If you need clarification about the issue or any details, use ask_user ' +
+    'to ask the user directly. Always confirm the ticket details with the user ' +
+    'before submitting.',
+});
+
+const runtime = new AgentRuntime();
+try {
+  const handle: AgentHandle = await runtime.start(
+    agent,
+    'I need to file a ticket for Alice about a laptop issue',
+  );
+  console.log(`Workflow started: ${handle.workflowId}\n`);
+
+  for await (const event of handle.stream()) {
+    switch (event.type) {
+      case 'thinking':
+        console.log(`  [thinking] ${event.content}`);
+        break;
+
+      case 'tool_call':
+        console.log(
+          `  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`,
+        );
+        break;
+
+      case 'tool_result':
+        console.log(
+          `  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result)}`,
+        );
+        break;
+
+      case 'waiting':
+        console.log('\n--- Human input required ---');
+        // Auto-respond since we can't do interactive stdin
+        console.log(
+          '  Auto-responding: "The laptop screen is flickering, high priority please"',
+        );
+        await handle.respond({
+          response:
+            'The laptop screen is flickering, high priority please',
+        });
+        console.log();
+        break;
+
+      case 'error':
+        console.log(`  [error] ${event.content}`);
+        break;
+
+      case 'done':
+        console.log(`\nResult: ${JSON.stringify(event.output)}`);
+        break;
+    }
+  }
+} finally {
+  await runtime.shutdown();
+}
