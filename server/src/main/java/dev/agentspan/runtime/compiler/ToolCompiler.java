@@ -68,7 +68,8 @@ public class ToolCompiler {
             Map.entry("generate_audio", "GENERATE_AUDIO"),
             Map.entry("generate_video", "GENERATE_VIDEO"),
             Map.entry("rag_index", "LLM_INDEX_TEXT"),
-            Map.entry("rag_search", "LLM_SEARCH_INDEX")
+            Map.entry("rag_search", "LLM_SEARCH_INDEX"),
+            Map.entry("wait_for_webhook", "WAIT_FOR_WEBHOOK")
     );
 
     // ── Public API ───────────────────────────────────────────────────────
@@ -243,11 +244,12 @@ public class ToolCompiler {
         Map<String, Object> ragConfig = new LinkedHashMap<>();
         Map<String, Object> cliConfig = new LinkedHashMap<>();
         Map<String, Object> humanConfig = new LinkedHashMap<>();
+        Map<String, Object> webhookConfig = new LinkedHashMap<>();
 
         if (tools != null) {
             Set<String> serverSideTypes = Set.of("http", "mcp", "agent_tool", "cli",
                     "generate_image", "generate_audio", "generate_video", "generate_pdf",
-                    "rag_index", "rag_search", "human");
+                    "rag_index", "rag_search", "human", "wait_for_webhook");
 
             for (ToolConfig tool : tools) {
                 String toolType = tool.getToolType() != null ? tool.getToolType() : "worker";
@@ -304,6 +306,10 @@ public class ToolCompiler {
                     humanEntry.put("displayName", agentName + " — " + tool.getName());
                     humanEntry.put("description", tool.getDescription());
                     humanConfig.put(tool.getName(), humanEntry);
+                } else if ("wait_for_webhook".equals(toolType)) {
+                    Map<String, Object> webhookEntry = new LinkedHashMap<>();
+                    webhookEntry.put("matches", cfg.getOrDefault("matches", Collections.emptyMap()));
+                    webhookConfig.put(tool.getName(), webhookEntry);
                 }
             }
         }
@@ -315,8 +321,9 @@ public class ToolCompiler {
         String ragJson = JavaScriptBuilder.toJson(ragConfig);
         String cliJson = JavaScriptBuilder.toJson(cliConfig);
         String humanJson = JavaScriptBuilder.toJson(humanConfig);
+        String webhookJson = JavaScriptBuilder.toJson(webhookConfig);
 
-        String script = JavaScriptBuilder.enrichToolsScript(httpJson, mcpJson, mediaJson, agentToolJson, ragJson, cliJson, humanJson);
+        String script = JavaScriptBuilder.enrichToolsScript(httpJson, mcpJson, mediaJson, agentToolJson, ragJson, cliJson, humanJson, webhookJson);
 
         String enrichRef = agentName + "_" + p + "enrich_tools";
 
@@ -1359,6 +1366,7 @@ public class ToolCompiler {
         Map<String, Object> agentToolConfig = new LinkedHashMap<>();
         Map<String, Object> ragConfig = new LinkedHashMap<>();
         Map<String, Object> humanConfig = new LinkedHashMap<>();
+        Map<String, Object> webhookConfig = new LinkedHashMap<>();
 
         if (tools != null) {
             for (ToolConfig tool : tools) {
@@ -1401,6 +1409,10 @@ public class ToolCompiler {
                     humanEntry.put("displayName", agentName + " — " + tool.getName());
                     humanEntry.put("description", tool.getDescription());
                     humanConfig.put(tool.getName(), humanEntry);
+                } else if ("wait_for_webhook".equals(toolType)) {
+                    Map<String, Object> webhookEntry = new LinkedHashMap<>();
+                    webhookEntry.put("matches", cfg.getOrDefault("matches", Collections.emptyMap()));
+                    webhookConfig.put(tool.getName(), webhookEntry);
                 }
                 // MCP config comes from runtime — skip here
             }
@@ -1411,7 +1423,8 @@ public class ToolCompiler {
         String agentToolJson = JavaScriptBuilder.toJson(agentToolConfig);
         String ragJson = JavaScriptBuilder.toJson(ragConfig);
         String humanJson = JavaScriptBuilder.toJson(humanConfig);
-        String script = JavaScriptBuilder.enrichToolsScriptDynamic(httpJson, mediaJson, agentToolJson, ragJson, humanJson);
+        String webhookJson = JavaScriptBuilder.toJson(webhookConfig);
+        String script = JavaScriptBuilder.enrichToolsScriptDynamic(httpJson, mediaJson, agentToolJson, ragJson, humanJson, webhookJson);
 
         String enrichRef = agentName + "_" + p + "enrich_tools";
 

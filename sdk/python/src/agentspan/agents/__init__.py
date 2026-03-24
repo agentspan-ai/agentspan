@@ -180,6 +180,7 @@ from agentspan.agents.tool import (
     search_tool,
     tool,
     video_tool,
+    webhook_tool,
 )
 
 # Tracing (optional — only activates if opentelemetry is installed)
@@ -207,6 +208,7 @@ __all__ = [
     "http_tool",
     "human_tool",
     "mcp_tool",
+    "webhook_tool",
     "image_tool",
     "audio_tool",
     "video_tool",

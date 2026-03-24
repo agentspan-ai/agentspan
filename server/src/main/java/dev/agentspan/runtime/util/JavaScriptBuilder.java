@@ -168,7 +168,7 @@ public class JavaScriptBuilder {
     public static String enrichToolsScript(String httpConfigJson, String mcpConfigJson,
                                               String mediaConfigJson, String agentToolConfigJson,
                                               String ragConfigJson, String cliConfigJson,
-                                              String humanConfigJson) {
+                                              String humanConfigJson, String webhookConfigJson) {
         return iife(
             "  var httpCfg = " + httpConfigJson + ";" +
             "  var mcpCfg = " + mcpConfigJson + ";" +
@@ -177,6 +177,7 @@ public class JavaScriptBuilder {
             "  var ragCfg = " + ragConfigJson + ";" +
             "  var cliCfg = " + cliConfigJson + ";" +
             "  var humanCfg = " + humanConfigJson + ";" +
+            "  var webhookCfg = " + webhookConfigJson + ";" +
             "  var agentState = $.agentState || {};" +
             "  var tcs = $.toolCalls || [];" +
             "  var result = [];" +
@@ -254,6 +255,12 @@ public class JavaScriptBuilder {
             "      for (var k in inp) { hInputs[k] = inp[k]; }" +
             "      if (humanCfg[n].description) hInputs._description = humanCfg[n].description;" +
             "      t.inputParameters = hInputs;" +
+            "      t.optional = false;" +
+            "    } else if (webhookCfg[n]) {" +
+            "      t.type = 'WAIT_FOR_WEBHOOK';" +
+            "      t.name = n;" +
+            "      t.inputParameters = {matches: webhookCfg[n].matches || {}};" +
+            "      t.retryCount = 0;" +
             "      t.optional = false;" +
             "    }" +
             "    if (t.type === 'SIMPLE') {" +
@@ -712,7 +719,7 @@ public class JavaScriptBuilder {
      */
     public static String enrichToolsScriptDynamic(String httpConfigJson, String mediaConfigJson,
                                                      String agentToolConfigJson, String ragConfigJson,
-                                                     String humanConfigJson) {
+                                                     String humanConfigJson, String webhookConfigJson) {
         return iife(
             "  var httpCfg = " + httpConfigJson + ";" +
             "  var mcpCfg = $.mcpConfig || {};" +
@@ -721,6 +728,7 @@ public class JavaScriptBuilder {
             "  var agentToolCfg = " + agentToolConfigJson + ";" +
             "  var ragCfg = " + ragConfigJson + ";" +
             "  var humanCfg = " + humanConfigJson + ";" +
+            "  var webhookCfg = " + webhookConfigJson + ";" +
             "  var agentState = $.agentState || {};" +
             "  var tcs = $.toolCalls || [];" +
             "  var result = [];" +
@@ -831,6 +839,12 @@ public class JavaScriptBuilder {
             "      for (var k in inp) { hInputs[k] = inp[k]; }" +
             "      if (humanCfg[n].description) hInputs._description = humanCfg[n].description;" +
             "      t.inputParameters = hInputs;" +
+            "      t.optional = false;" +
+            "    } else if (webhookCfg[n]) {" +
+            "      t.type = 'WAIT_FOR_WEBHOOK';" +
+            "      t.name = n;" +
+            "      t.inputParameters = {matches: webhookCfg[n].matches || {}};" +
+            "      t.retryCount = 0;" +
             "      t.optional = false;" +
             "    }" +
             "    if (t.type === 'SIMPLE') {" +

@@ -926,6 +926,55 @@ def search_tool(
     )
 
 
+# ── Webhook wait tool ───────────────────────────────────────────────────
+
+
+def webhook_tool(
+    name: str,
+    description: str,
+    matches: Optional[Dict[str, str]] = None,
+    input_schema: Optional[Dict[str, Any]] = None,
+) -> ToolDef:
+    """Create a tool that waits for an inbound webhook event (Conductor ``WAIT_FOR_WEBHOOK`` task).
+
+    When the LLM calls this tool, the workflow pauses until a webhook arrives
+    whose payload matches all of the provided JSONPath expressions.
+
+    No worker process is needed — the Conductor server handles the
+    ``WAIT_FOR_WEBHOOK`` task directly.
+
+    Args:
+        name: Tool name (shown to the LLM).
+        description: Human-readable description for the LLM.
+        matches: Static JSONPath match conditions baked in at compile time.
+            Keys are JSONPath expressions (e.g. ``"$['event']['type']"``),
+            values are the expected string values.
+        input_schema: JSON Schema for the LLM-provided parameters.
+
+    Example::
+
+        slack_event = webhook_tool(
+            name="wait_for_slack_message",
+            description="Wait for a Slack message webhook event.",
+            matches={
+                "$['event']['type']": "message",
+                "$['event']['text']": "Hello",
+            },
+        )
+    """
+    config: Dict[str, Any] = {}
+    if matches is not None:
+        config["matches"] = matches
+
+    return ToolDef(
+        name=name,
+        description=description,
+        input_schema=input_schema or {"type": "object", "properties": {}},
+        tool_type="wait_for_webhook",
+        config=config,
+    )
+
+
 # ── Human interaction tool ──────────────────────────────────────────────
 
 
