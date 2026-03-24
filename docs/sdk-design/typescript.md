@@ -1459,7 +1459,7 @@ const intakeRouter = new Agent({
 **Python features:** `@tool` with `ToolContext`, `CredentialFile`, `http_tool`, `mcp_tool`, `scatter_gather`, `Strategy.PARALLEL`
 
 ```typescript
-import { tool, httpTool, mcpTool, scatterGather, getCredential, Agent } from "agentspan";
+import { tool, httpTool, mcpTool, apiTool, scatterGather, getCredential, Agent } from "agentspan";
 import type { ToolContext, CredentialFile } from "agentspan";
 
 const researchDatabase = tool(
@@ -1488,6 +1488,14 @@ const mcpFactChecker = mcpTool({
   description: "Verify factual claims using knowledge base.",
   toolNames: ["verify_claim", "check_source"],
   credentials: ["MCP_AUTH_TOKEN"],
+});
+
+// Auto-discover from OpenAPI/Swagger/Postman spec
+const stripe = apiTool({
+  url: "https://api.stripe.com/openapi.json",
+  headers: { Authorization: "Bearer ${STRIPE_KEY}" },
+  credentials: ["STRIPE_KEY"],
+  maxTools: 20,
 });
 
 const researchCoordinator = scatterGather({

@@ -1506,6 +1506,13 @@ mcpFactChecker := agentspan.MCPTool(
     agentspan.WithCredentials("MCP_AUTH_TOKEN"),
 )
 
+// Auto-discover from OpenAPI/Swagger/Postman spec
+stripe := agentspan.NewApiTool("https://api.stripe.com/openapi.json",
+    agentspan.WithHeaders(map[string]string{"Authorization": "Bearer ${STRIPE_KEY}"}),
+    agentspan.WithCredentials("STRIPE_KEY"),
+    agentspan.WithMaxTools(20),
+)
+
 // External tool (by-reference, no local worker)
 externalResearch := agentspan.NewTool(
     "external_research_aggregator",

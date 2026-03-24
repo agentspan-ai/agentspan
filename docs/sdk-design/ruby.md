@@ -1677,6 +1677,14 @@ mcp_fact_checker = Agentspan.mcp_tool(
   credentials: ["MCP_AUTH_TOKEN"]
 )
 
+# Auto-discover from OpenAPI/Swagger/Postman spec
+stripe = Agentspan.api_tool(
+  url: "https://api.stripe.com/openapi.json",
+  headers: { "Authorization" => "Bearer ${STRIPE_KEY}" },
+  credentials: ["STRIPE_KEY"],
+  max_tools: 20
+)
+
 # External tool (by-reference, no local worker)
 external_research_aggregator = Agentspan::ToolDef.new(
   name: "external_research_aggregator",

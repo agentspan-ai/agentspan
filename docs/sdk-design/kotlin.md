@@ -842,6 +842,12 @@ val mcpFactChecker = mcpTool(
     serverUrl = "http://localhost:3001/mcp", name = "fact_checker", description = "Verify factual claims.",
     toolNames = listOf("verify_claim", "check_source"), credentials = listOf("MCP_AUTH_TOKEN"),
 )
+// Auto-discover from OpenAPI/Swagger/Postman spec
+val stripe = apiTool("https://api.stripe.com/openapi.json") {
+    headers("Authorization" to "Bearer \${STRIPE_KEY}")
+    credentials("STRIPE_KEY")
+    maxTools(20)
+}
 val externalResearchAggregator = tool("external_research_aggregator") { description = "Remote research."; external = true }
 
 val researcherWorker = agent("research_worker") {

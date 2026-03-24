@@ -2,7 +2,7 @@
 
 ## Overview
 
-A single mega-workflow that processes an article request through a complete publishing pipeline, exercising every Agentspan SDK feature (88 features per the traceability matrix in `2026-03-23-multi-language-sdk-design.md` Section 11).
+A single mega-workflow that processes an article request through a complete publishing pipeline, exercising every Agentspan SDK feature (89 features per the traceability matrix in `2026-03-23-multi-language-sdk-design.md` Section 11).
 
 **Reference implementation:** `sdk/python/examples/kitchen_sink.py`
 
@@ -57,6 +57,7 @@ The workflow processes this through 9 stages, each targeting a specific feature 
 - `#53` In-process credential mode (`isolated=False` + `get_credential()`)
 - `#55` HTTP header credential substitution (`${NAME}` syntax)
 - `#56` MCP tool credentials
+- `#89` `api_tool()` (auto-discovery from OpenAPI/Swagger/Postman spec)
 - `CredentialFile` for file-based credential declarations
 
 **Expected behavior:**
@@ -67,6 +68,7 @@ The workflow processes this through 9 stages, each targeting a specific feature 
 - `web_search` HTTP tool has `Authorization: Bearer ${SEARCH_API_KEY}` header
 - `mcp_fact_checker` connects to MCP server with credentials
 - `external_research_aggregator` has no local worker — task dispatched to remote queue
+- `petstore_api` auto-discovers operations from the OpenAPI spec at workflow startup and creates HTTP tasks for each operation (capped at `max_tools=5`)
 
 **Assertions:**
 - `assert_tool_used("research_database")`

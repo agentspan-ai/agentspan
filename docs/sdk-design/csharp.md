@@ -443,6 +443,13 @@ public class ResearchTools
     }
 }
 
+// Auto-discover from OpenAPI/Swagger/Postman spec
+var stripe = ApiTool.Create("https://api.stripe.com/openapi.json")
+    .WithHeaders(new() { ["Authorization"] = "Bearer ${STRIPE_KEY}" })
+    .WithCredentials("STRIPE_KEY")
+    .WithMaxTools(20)
+    .Build();
+
 public class SafetyGuardrails
 {
     [Guardrail(Position = Position.Output, OnFail = OnFail.Human)]

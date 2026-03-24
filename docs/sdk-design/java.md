@@ -507,6 +507,14 @@ ToolDef mcpFactChecker = McpTool.builder()
     .credentials(List.of("MCP_AUTH_TOKEN"))
     .build();
 
+// Auto-discover from OpenAPI/Swagger/Postman spec
+var stripe = ApiTool.builder()
+    .url("https://api.stripe.com/openapi.json")
+    .header("Authorization", "Bearer ${STRIPE_KEY}")
+    .credentials("STRIPE_KEY")
+    .maxTools(20)
+    .build();
+
 ToolDef researchSubtool = AgentTool.of(
     Agent.builder().name("quick_researcher").model("openai/gpt-4o")
         .instructions("Do a quick research lookup on the given topic.").build(),

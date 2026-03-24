@@ -3,12 +3,12 @@
 
 """Kitchen Sink — Content Publishing Platform.
 
-A single mega-workflow that exercises every Agentspan SDK feature (88 features).
+A single mega-workflow that exercises every Agentspan SDK feature (89 features).
 See docs/sdk-design/kitchen-sink.md for the full scenario specification.
 
 Demonstrates:
     - All 8 multi-agent strategies
-    - All tool types (worker, http, mcp, agent_tool, human, media, RAG)
+    - All tool types (worker, http, mcp, api, agent_tool, human, media, RAG)
     - All guardrail types (regex, llm, custom, external) with all OnFail modes
     - HITL (approve, reject, feedback, UserProxyAgent, human_tool)
     - Memory (conversation + semantic)
@@ -47,6 +47,7 @@ from agentspan.agents import (
     ToolDef,
     http_tool,
     mcp_tool,
+    api_tool,
     agent_tool,
     human_tool,
     image_tool,
@@ -184,9 +185,9 @@ intake_router = Agent(
 # ═══════════════════════════════════════════════════════════════════════
 # STAGE 2: Research Team
 # Features: #4 Parallel, #76 scatter_gather, #10 native tool,
-#   #11 http_tool, #12 mcp_tool, #18 ToolContext, #19 tool credentials,
-#   #21 external tool, #52 isolated creds, #53 in-process creds,
-#   #55 HTTP header creds, #56 MCP creds, CredentialFile
+#   #11 http_tool, #12 mcp_tool, #89 api_tool, #18 ToolContext,
+#   #19 tool credentials, #21 external tool, #52 isolated creds,
+#   #53 in-process creds, #55 HTTP header creds, #56 MCP creds, CredentialFile
 # ═══════════════════════════════════════════════════════════════════════
 
 
@@ -236,6 +237,13 @@ mcp_fact_checker = mcp_tool(
     credentials=["MCP_AUTH_TOKEN"],
 )
 
+# -- API tool (auto-discovered from OpenAPI spec) --
+petstore_api = api_tool(
+    url="https://petstore3.swagger.io/api/v3/openapi.json",
+    name="petstore",
+    max_tools=5,
+)
+
 # -- External tool (by-reference, no local worker) --
 @tool(external=True)
 def external_research_aggregator(query: str, sources: int = 10) -> dict:
@@ -269,7 +277,7 @@ data_analyst = Agent(
     name="data_analyst",
     model=settings.llm_model,
     instructions="Analyze data trends for the topic.",
-    tools=[analyze_trends],
+    tools=[analyze_trends, petstore_api],
 )
 
 research_team = Agent(
