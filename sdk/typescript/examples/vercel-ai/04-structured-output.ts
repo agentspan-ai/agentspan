@@ -1,19 +1,23 @@
 /**
  * Vercel AI SDK -- Structured Output
  *
- * Demonstrates using Zod schemas to produce structured (typed) output
- * from a Vercel AI SDK agent running on Agentspan.
+ * Demonstrates generating typed structured output using:
+ * - generateObject() for direct schema-based generation
+ * - generateText() with experimental_output: Output.object() for tool-augmented structured output
  *
- * In production you would use:
- *   import { generateObject } from 'ai';
- *   import { z } from 'zod';
- *   const result = await generateObject({ model, schema, prompt });
+ * Path 1: Native generateObject call (direct Vercel AI SDK usage).
+ * Path 2: Agentspan passthrough with structured output.
  */
 
+import { generateObject, generateText, Output } from 'ai';
+import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
 import { AgentRuntime } from '../../src/index.js';
 
-// -- Define the output schema --
+// ── Model ────────────────────────────────────────────────
+const model = openai('gpt-4o-mini');
+
+// ── Schema ───────────────────────────────────────────────
 const PersonSchema = z.object({
   name: z.string().describe('Full name'),
   age: z.number().int().describe('Age in years'),
@@ -23,46 +27,56 @@ const PersonSchema = z.object({
 
 type Person = z.infer<typeof PersonSchema>;
 
-// -- Mock Vercel AI SDK agent with structured output --
-// Detection requires: .generate() + .stream() + .tools
+const prompt = 'Generate a profile for a fictional ML engineer from Japan.';
+
+// ── Path 1a: Native generateObject ───────────────────────
+console.log('=== Native generateObject ===');
+const objectResult = await generateObject({
+  model,
+  schema: PersonSchema,
+  prompt,
+});
+console.log('Output:', JSON.stringify(objectResult.object, null, 2));
+console.log('Usage:', objectResult.usage);
+
+// ── Path 1b: Native generateText with Output.object ──────
+console.log('\n=== Native generateText + Output.object ===');
+const textResult = await generateText({
+  model,
+  prompt,
+  experimental_output: Output.object({ schema: PersonSchema }),
+});
+console.log('Output:', JSON.stringify(textResult.experimental_output, null, 2));
+console.log('Steps:', textResult.steps.length);
+
+// ── Path 2: Agentspan passthrough ────────────────────────
 const vercelAgent = {
-  generate: async (options: { prompt: string; onStepFinish?: Function }) => {
-    // Simulate structured output generation
-    const person: Person = {
-      name: 'Aiko Yamamoto',
-      age: 31,
-      occupation: 'Machine Learning Engineer',
-      skills: ['PyTorch', 'Distributed Systems', 'Natural Language Processing'],
-    };
-
-    // Validate against schema
-    const validated = PersonSchema.parse(person);
-
+  id: 'structured_output_agent',
+  tools: {},
+  generate: async (opts: { prompt: string; onStepFinish?: (step: any) => void }) => {
+    const result = await generateObject({
+      model,
+      schema: PersonSchema,
+      prompt: opts.prompt,
+    });
+    const validated: Person = PersonSchema.parse(result.object);
     return {
       text: JSON.stringify(validated, null, 2),
       toolCalls: [],
+      toolResults: [],
       finishReason: 'stop' as const,
       experimental_output: validated,
     };
   },
-
-  stream: async function* () { yield { type: 'finish' }; },
-  tools: [],
-  id: 'vercel_structured_output_agent',
+  stream: async function* () { yield { type: 'finish' as const }; },
 };
 
-async function main() {
-  const runtime = new AgentRuntime();
-
-  console.log('Running Vercel AI structured output agent...\n');
-  const result = await runtime.run(
-    vercelAgent,
-    'Generate a profile for a fictional ML engineer from Japan.',
-  );
-  console.log('Status:', result.status);
-  result.printResult();
-
+console.log('\n=== Agentspan Passthrough ===');
+const runtime = new AgentRuntime();
+try {
+  const agentspanResult = await runtime.run(vercelAgent, prompt);
+  console.log('Output:', JSON.stringify(agentspanResult.output));
+  console.log('Status:', agentspanResult.status);
+} finally {
   await runtime.shutdown();
 }
-
-main().catch(console.error);

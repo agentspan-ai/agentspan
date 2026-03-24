@@ -1,93 +1,113 @@
 /**
- * Vercel AI SDK -- Middleware + Agentspan Guardrails
+ * Vercel AI SDK -- Middleware
  *
- * Demonstrates combining Vercel AI SDK middleware patterns with
- * Agentspan guardrails for input/output validation.
+ * Demonstrates using wrapLanguageModel to apply middleware that
+ * intercepts and transforms LLM calls. The middleware logs requests
+ * and can block calls containing PII patterns.
  *
- * In production you would use:
- *   import { generateText, experimental_wrapLanguageModel } from 'ai';
- *   const wrappedModel = experimental_wrapLanguageModel({ model, middleware });
+ * Path 1: Native generateText with wrapped model.
+ * Path 2: Agentspan passthrough with the same wrapped model.
  */
 
-import { AgentRuntime, Agent } from '../../src/index.js';
+import {
+  generateText,
+  wrapLanguageModel,
+  type LanguageModelV1Middleware,
+} from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { AgentRuntime } from '../../src/index.js';
 
-// -- Mock middleware that logs and validates --
-function applyMiddleware(
-  input: string,
-): { allowed: boolean; reason?: string; sanitized: string } {
-  // Check for PII patterns
-  const piiPatterns = [
-    /\b\d{3}-\d{2}-\d{4}\b/,  // SSN
-    /\b\d{16}\b/,               // Credit card
-  ];
+// ── PII detection patterns ───────────────────────────────
+const PII_PATTERNS = [
+  /\b\d{3}-\d{2}-\d{4}\b/,   // SSN
+  /\b\d{16}\b/,                // Credit card
+  /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/, // Email
+];
 
-  for (const pattern of piiPatterns) {
-    if (pattern.test(input)) {
-      return {
-        allowed: false,
-        reason: 'Input contains potential PII. Request blocked by middleware.',
-        sanitized: input,
-      };
-    }
-  }
-
-  // Sanitize: strip excessive whitespace
-  const sanitized = input.replace(/\s+/g, ' ').trim();
-  return { allowed: true, sanitized };
+function containsPII(text: string): boolean {
+  return PII_PATTERNS.some(p => p.test(text));
 }
 
-// -- Mock Vercel AI SDK agent with middleware --
-// Detection requires: .generate() + .stream() + .tools
-const vercelAgent = {
-  generate: async (options: { prompt: string; onStepFinish?: Function }) => {
-    // Apply middleware before processing
-    const check = applyMiddleware(options.prompt);
+// ── Middleware: logging + PII guard ──────────────────────
+const loggingMiddleware: LanguageModelV1Middleware = {
+  transformParams: async ({ type, params }) => {
+    console.log(`  [middleware] ${type} call, ${params.prompt.length} prompt parts`);
 
-    if (!check.allowed) {
-      return {
-        text: `[BLOCKED] ${check.reason}`,
-        toolCalls: [],
-        finishReason: 'stop' as const,
-      };
+    // Check for PII in user messages
+    for (const part of params.prompt) {
+      if (part.role === 'user') {
+        for (const content of part.content) {
+          if (content.type === 'text' && containsPII(content.text)) {
+            console.log('  [middleware] PII detected! Sanitizing input...');
+            // Replace PII with redacted placeholder
+            content.text = content.text
+              .replace(/\b\d{3}-\d{2}-\d{4}\b/g, '[REDACTED-SSN]')
+              .replace(/\b\d{16}\b/g, '[REDACTED-CC]');
+          }
+        }
+      }
     }
-
-    return {
-      text:
-        `[Middleware: input sanitized, ${check.sanitized.length} chars]\n\n` +
-        `Response: Your question about "${check.sanitized.slice(0, 50)}..." has been processed. ` +
-        `All middleware checks passed and guardrails are satisfied.`,
-      toolCalls: [],
-      finishReason: 'stop' as const,
-    };
+    return params;
   },
-
-  stream: async function* () { yield { type: 'finish' }; },
-  tools: [],
-  id: 'vercel_middleware_agent',
 };
 
-async function main() {
-  const runtime = new AgentRuntime();
+// ── Wrapped model ────────────────────────────────────────
+const baseModel = openai('gpt-4o-mini');
+const wrappedModel = wrapLanguageModel({
+  model: baseModel,
+  middleware: loggingMiddleware,
+});
 
-  // Test 1: Normal request (passes middleware)
-  console.log('=== Test 1: Normal request ===');
-  let result = await runtime.run(
-    vercelAgent,
-    'Explain how middleware works in AI agent pipelines.',
-  );
-  console.log('Status:', result.status);
-  result.printResult();
+// ── Test prompts ─────────────────────────────────────────
+const prompts = [
+  {
+    label: 'Normal request',
+    text: 'Explain how middleware works in AI agent pipelines.',
+  },
+  {
+    label: 'Request with PII (should be sanitized)',
+    text: 'My social security number is 123-45-6789. Can you verify it?',
+  },
+];
 
-  // Test 2: Request with PII (blocked by middleware)
-  console.log('\n=== Test 2: Request with PII (should be blocked) ===');
-  result = await runtime.run(
-    vercelAgent,
-    'My social security number is 123-45-6789. Can you verify it?',
-  );
-  console.log('Status:', result.status);
-  result.printResult();
-
-  await runtime.shutdown();
+// ── Path 1: Native Vercel AI SDK with middleware ─────────
+for (const { label, text } of prompts) {
+  console.log(`\n=== Native: ${label} ===`);
+  const result = await generateText({
+    model: wrappedModel,
+    prompt: text,
+  });
+  console.log('Output:', result.text.slice(0, 200) + (result.text.length > 200 ? '...' : ''));
 }
 
-main().catch(console.error);
+// ── Path 2: Agentspan passthrough ────────────────────────
+const vercelAgent = {
+  id: 'middleware_agent',
+  tools: {},
+  generate: async (opts: { prompt: string; onStepFinish?: (step: any) => void }) => {
+    const result = await generateText({
+      model: wrappedModel,
+      prompt: opts.prompt,
+    });
+    return {
+      text: result.text,
+      toolCalls: [],
+      toolResults: [],
+      finishReason: result.finishReason,
+    };
+  },
+  stream: async function* () { yield { type: 'finish' as const }; },
+};
+
+console.log('\n\n=== Agentspan Passthrough ===');
+const runtime = new AgentRuntime();
+try {
+  for (const { label, text } of prompts) {
+    console.log(`\n--- ${label} ---`);
+    const agentspanResult = await runtime.run(vercelAgent, text);
+    console.log('Output:', JSON.stringify(agentspanResult.output).slice(0, 200));
+    console.log('Status:', agentspanResult.status);
+  }
+} finally {
+  await runtime.shutdown();
+}

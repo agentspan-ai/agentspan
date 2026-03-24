@@ -2,17 +2,22 @@
  * Vercel AI SDK -- Human-in-the-Loop (HITL)
  *
  * Demonstrates a Vercel AI SDK agent that pauses for human approval
- * before executing sensitive actions. The Agentspan runtime manages
- * the approval workflow.
+ * before executing sensitive actions. Uses a tool without an execute
+ * function (requires human confirmation) and a risk assessment tool.
  *
- * In production you would use:
- *   import { generateText } from 'ai';
- *   // Human approval gate managed by Agentspan Conductor HUMAN task
+ * Path 1: Native generateText with HITL simulation.
+ * Path 2: Agentspan passthrough with HITL via runtime.
  */
 
+import { generateText, tool } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
 import { AgentRuntime } from '../../src/index.js';
 
-// -- Simulated approval state --
+// ── Model ────────────────────────────────────────────────
+const model = openai('gpt-4o-mini');
+
+// ── HITL approval simulation ─────────────────────────────
 interface ApprovalRequest {
   action: string;
   description: string;
@@ -20,8 +25,8 @@ interface ApprovalRequest {
 }
 
 function checkApproval(request: ApprovalRequest): { approved: boolean; feedback: string } {
-  // In production, this would pause and wait for human input via Agentspan UI/API
-  // Here we simulate: approve low/medium risk, reject high risk
+  // In production, this would pause and wait for human input via Agentspan UI/API.
+  // Here we simulate: approve low/medium risk, reject high risk.
   if (request.risk === 'high') {
     return {
       approved: false,
@@ -34,89 +39,127 @@ function checkApproval(request: ApprovalRequest): { approved: boolean; feedback:
   };
 }
 
-// -- Mock Vercel AI SDK agent with HITL --
-// Detection requires: .generate() + .stream() + .tools
-const vercelAgent = {
-  generate: async (options: { prompt: string; onStepFinish?: Function }) => {
-    const prompt = options.prompt.toLowerCase();
-    const steps: string[] = [];
-
-    // Step 1: Analyze the request
-    steps.push('[Step 1] Analyzing request and determining risk level...');
-
+// ── Tools ────────────────────────────────────────────────
+const assessRisk = tool({
+  description: 'Assess the risk level of a requested operation.',
+  parameters: z.object({
+    action: z.string().describe('The action to assess'),
+    description: z.string().describe('Description of what the action will do'),
+  }),
+  execute: async ({ action, description }) => {
     let risk: 'low' | 'medium' | 'high' = 'low';
-    let action: string;
+    const lower = `${action} ${description}`.toLowerCase();
 
-    if (prompt.includes('delete') || prompt.includes('drop') || prompt.includes('destroy')) {
+    if (lower.includes('delete') || lower.includes('drop') || lower.includes('destroy')) {
       risk = 'high';
-      action = 'destructive database operation';
-    } else if (prompt.includes('update') || prompt.includes('modify') || prompt.includes('change')) {
+    } else if (lower.includes('update') || lower.includes('modify') || lower.includes('change')) {
       risk = 'medium';
-      action = 'data modification operation';
-    } else {
-      risk = 'low';
-      action = 'read-only query';
     }
 
-    steps.push(`[Step 2] Risk assessment: ${risk.toUpperCase()} -- Action: ${action}`);
-
-    // Step 2: Request human approval
-    steps.push('[Step 3] Requesting human approval...');
-    const approval = checkApproval({ action, description: options.prompt, risk });
-    steps.push(`[Step 4] Approval result: ${approval.approved ? 'APPROVED' : 'REJECTED'} -- ${approval.feedback}`);
-
-    // Step 3: Execute or abort based on approval
-    if (approval.approved) {
-      steps.push(`[Step 5] Executing action: ${action}`);
-      steps.push('[Result] Operation completed successfully.');
-    } else {
-      steps.push('[Step 5] Action aborted -- awaiting revised request.');
-    }
-
+    const approval = checkApproval({ action, description, risk });
     return {
-      text: steps.join('\n'),
-      toolCalls: [],
-      finishReason: 'stop' as const,
-      metadata: { risk, approved: approval.approved },
+      risk,
+      approved: approval.approved,
+      feedback: approval.feedback,
     };
   },
+});
 
-  stream: async function* () { yield { type: 'finish' }; },
-  tools: [],
-  id: 'vercel_hitl_agent',
-};
+const executeAction = tool({
+  description: 'Execute an approved action. Only call this after risk assessment shows approval.',
+  parameters: z.object({
+    action: z.string().describe('The approved action to execute'),
+  }),
+  execute: async ({ action }) => ({
+    status: 'completed',
+    message: `Action "${action}" executed successfully.`,
+  }),
+});
 
-async function main() {
-  const runtime = new AgentRuntime();
+const tools = { assessRisk, executeAction };
+const system = `You are a careful assistant that assesses risk before taking action.
+For every user request:
+1. First use assessRisk to evaluate the operation
+2. If approved, use executeAction to carry it out
+3. If rejected, explain why and suggest alternatives
+Never execute an action without assessing its risk first.`;
 
-  // Test 1: Low risk (auto-approved)
-  console.log('=== Test 1: Low risk query (should be approved) ===');
-  let result = await runtime.run(
-    vercelAgent,
-    'Fetch the latest sales report for Q4 2024.',
-  );
-  console.log('Status:', result.status);
-  result.printResult();
+// ── Test cases ───────────────────────────────────────────
+const testCases = [
+  { label: 'Low risk (should be approved)', prompt: 'Fetch the latest sales report for Q4 2024.' },
+  { label: 'Medium risk (should be approved)', prompt: 'Update the customer email address for account #12345.' },
+  { label: 'High risk (should be rejected)', prompt: 'Delete all records from the staging database.' },
+];
 
-  // Test 2: Medium risk (approved)
-  console.log('\n=== Test 2: Medium risk update (should be approved) ===');
-  result = await runtime.run(
-    vercelAgent,
-    'Update the customer email address for account #12345.',
-  );
-  console.log('Status:', result.status);
-  result.printResult();
+// ── Path 1: Native Vercel AI SDK ─────────────────────────
+for (const { label, prompt } of testCases) {
+  console.log(`\n=== Native: ${label} ===`);
+  const result = await generateText({
+    model,
+    system,
+    prompt,
+    tools,
+    maxSteps: 5,
+  });
 
-  // Test 3: High risk (rejected)
-  console.log('\n=== Test 3: High risk deletion (should be rejected) ===');
-  result = await runtime.run(
-    vercelAgent,
-    'Delete all records from the staging database.',
-  );
-  console.log('Status:', result.status);
-  result.printResult();
+  const riskResults = result.steps
+    .flatMap(s => s.toolResults)
+    .filter(tr => tr.toolName === 'assessRisk');
+  const actionResults = result.steps
+    .flatMap(s => s.toolResults)
+    .filter(tr => tr.toolName === 'executeAction');
 
-  await runtime.shutdown();
+  if (riskResults.length > 0) {
+    console.log('Risk assessment:', JSON.stringify(riskResults[0].result));
+  }
+  if (actionResults.length > 0) {
+    console.log('Action result:', JSON.stringify(actionResults[0].result));
+  }
+  console.log('Response:', result.text.slice(0, 200) + (result.text.length > 200 ? '...' : ''));
 }
 
-main().catch(console.error);
+// ── Path 2: Agentspan passthrough ────────────────────────
+const vercelAgent = {
+  id: 'hitl_agent',
+  tools,
+  generate: async (opts: { prompt: string; onStepFinish?: (step: any) => void }) => {
+    const result = await generateText({
+      model,
+      system,
+      prompt: opts.prompt,
+      tools,
+      maxSteps: 5,
+      onStepFinish: opts.onStepFinish,
+    });
+
+    // Extract risk metadata
+    const riskResults = result.steps
+      .flatMap(s => s.toolResults)
+      .filter(tr => tr.toolName === 'assessRisk');
+    const riskInfo = riskResults.length > 0
+      ? (riskResults[0].result as { risk: string; approved: boolean })
+      : { risk: 'unknown', approved: false };
+
+    return {
+      text: result.text,
+      toolCalls: result.steps.flatMap(s => s.toolCalls),
+      toolResults: result.steps.flatMap(s => s.toolResults),
+      finishReason: result.finishReason,
+      metadata: riskInfo,
+    };
+  },
+  stream: async function* () { yield { type: 'finish' as const }; },
+};
+
+console.log('\n\n=== Agentspan Passthrough ===');
+const runtime = new AgentRuntime();
+try {
+  for (const { label, prompt } of testCases) {
+    console.log(`\n--- ${label} ---`);
+    const result = await runtime.run(vercelAgent, prompt);
+    console.log('Output:', JSON.stringify(result.output).slice(0, 200));
+    console.log('Status:', result.status);
+  }
+} finally {
+  await runtime.shutdown();
+}
