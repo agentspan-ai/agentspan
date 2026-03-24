@@ -8,17 +8,21 @@
 
 import { AgentRuntime } from '../../src/index.js';
 
-// -- Mock a Vercel AI SDK agent-like object --
+// -- Mock a Vercel AI SDK ToolLoopAgent-like object --
+// Detection requires: .generate() + .stream() + .tools
 // In production, this would be a real Vercel AI SDK agent
 const vercelAgent = {
-  // Vercel AI SDK agents expose a generateText function
-  generateText: async (options: { prompt: string; messages?: unknown[] }) => {
+  // .generate() is called by the passthrough worker
+  generate: async (options: { prompt: string; onStepFinish?: Function }) => {
     return {
       text: `Vercel AI response to: ${options.prompt}`,
       toolCalls: [],
       finishReason: 'stop',
     };
   },
+  // Required for framework detection
+  stream: async function* () { yield { type: 'finish' }; },
+  tools: [],
   // Name for identification
   id: 'vercel_research_agent',
 };
