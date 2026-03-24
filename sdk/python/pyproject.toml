@@ -10,7 +10,7 @@ readme = "README.md"
 license = {text = "MIT License"}
 requires-python = ">=3.10"
 dependencies = [
-    "conductor-python>=1.3.6",
+    "conductor-python",
     "httpx>=0.24",
     "cloudpickle>=2.0",
 ]
@@ -93,6 +93,9 @@ ignore = ["E501"]
 python_version = "3.9"
 ignore_missing_imports = true
 no_strict_optional = true
+
+[tool.uv.sources]
+conductor-python = { path = "../../../python-sdk", editable = true }
 
 [dependency-groups]
 dev = [

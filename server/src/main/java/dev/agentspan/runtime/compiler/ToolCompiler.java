@@ -97,7 +97,9 @@ public class ToolCompiler {
             Map.entry("generate_audio", "GENERATE_AUDIO"),
             Map.entry("generate_video", "GENERATE_VIDEO"),
             Map.entry("rag_index", "LLM_INDEX_TEXT"),
-            Map.entry("rag_search", "LLM_SEARCH_INDEX"));
+            Map.entry("rag_search", "LLM_SEARCH_INDEX"),
+            Map.entry("pull_workflow_messages", "PULL_WORKFLOW_MESSAGES")
+    );
 
     // ── Public API ───────────────────────────────────────────────────────
 
@@ -265,20 +267,12 @@ public class ToolCompiler {
         Map<String, Object> ragConfig = new LinkedHashMap<>();
         Map<String, Object> cliConfig = new LinkedHashMap<>();
         Map<String, Object> humanConfig = new LinkedHashMap<>();
+        Map<String, Object> wmqConfig = new LinkedHashMap<>();
 
         if (tools != null) {
-            Set<String> serverSideTypes = Set.of(
-                    "http",
-                    "mcp",
-                    "agent_tool",
-                    "cli",
-                    "generate_image",
-                    "generate_audio",
-                    "generate_video",
-                    "generate_pdf",
-                    "rag_index",
-                    "rag_search",
-                    "human");
+            Set<String> serverSideTypes = Set.of("http", "mcp", "agent_tool", "cli",
+                    "generate_image", "generate_audio", "generate_video", "generate_pdf",
+                    "rag_index", "rag_search", "human", "pull_workflow_messages");
 
             for (ToolConfig tool : tools) {
                 String toolType = tool.getToolType() != null ? tool.getToolType() : "worker";
@@ -338,6 +332,10 @@ public class ToolCompiler {
                     humanEntry.put("displayName", agentName + " — " + tool.getName());
                     humanEntry.put("description", tool.getDescription());
                     humanConfig.put(tool.getName(), humanEntry);
+                } else if ("pull_workflow_messages".equals(toolType)) {
+                    Map<String, Object> wmqEntry = new LinkedHashMap<>();
+                    wmqEntry.put("batchSize", cfg.getOrDefault("batchSize", 1));
+                    wmqConfig.put(tool.getName(), wmqEntry);
                 }
             }
         }
@@ -349,9 +347,9 @@ public class ToolCompiler {
         String ragJson = JavaScriptBuilder.toJson(ragConfig);
         String cliJson = JavaScriptBuilder.toJson(cliConfig);
         String humanJson = JavaScriptBuilder.toJson(humanConfig);
+        String wmqJson = JavaScriptBuilder.toJson(wmqConfig);
 
-        String script = JavaScriptBuilder.enrichToolsScript(
-                httpJson, mcpJson, mediaJson, agentToolJson, ragJson, cliJson, humanJson);
+        String script = JavaScriptBuilder.enrichToolsScript(httpJson, mcpJson, mediaJson, agentToolJson, ragJson, cliJson, humanJson, wmqJson);
 
         String enrichRef = agentName + "_" + p + "enrich_tools";
 
@@ -1428,6 +1426,7 @@ public class ToolCompiler {
         Map<String, Object> agentToolConfig = new LinkedHashMap<>();
         Map<String, Object> ragConfig = new LinkedHashMap<>();
         Map<String, Object> humanConfig = new LinkedHashMap<>();
+        Map<String, Object> wmqConfig = new LinkedHashMap<>();
 
         if (tools != null) {
             for (ToolConfig tool : tools) {
@@ -1469,6 +1468,10 @@ public class ToolCompiler {
                     humanEntry.put("displayName", agentName + " — " + tool.getName());
                     humanEntry.put("description", tool.getDescription());
                     humanConfig.put(tool.getName(), humanEntry);
+                } else if ("pull_workflow_messages".equals(toolType)) {
+                    Map<String, Object> wmqEntry = new LinkedHashMap<>();
+                    wmqEntry.put("batchSize", cfg.getOrDefault("batchSize", 1));
+                    wmqConfig.put(tool.getName(), wmqEntry);
                 }
                 // MCP config comes from runtime — skip here
             }
@@ -1479,8 +1482,8 @@ public class ToolCompiler {
         String agentToolJson = JavaScriptBuilder.toJson(agentToolConfig);
         String ragJson = JavaScriptBuilder.toJson(ragConfig);
         String humanJson = JavaScriptBuilder.toJson(humanConfig);
-        String script =
-                JavaScriptBuilder.enrichToolsScriptDynamic(httpJson, mediaJson, agentToolJson, ragJson, humanJson);
+        String wmqJson = JavaScriptBuilder.toJson(wmqConfig);
+        String script = JavaScriptBuilder.enrichToolsScriptDynamic(httpJson, mediaJson, agentToolJson, ragJson, humanJson, wmqJson);
 
         String enrichRef = agentName + "_" + p + "enrich_tools";
 

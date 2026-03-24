@@ -926,7 +926,58 @@ def search_tool(
     )
 
 
+
 # ── Human interaction tool ──────────────────────────────────────────────
+
+
+def wait_for_message_tool(
+    name: str,
+    description: str,
+    batch_size: int = 1,
+) -> ToolDef:
+    """Create a tool that pauses execution until a workflow message is received
+    (Conductor ``PULL_WORKFLOW_MESSAGES`` task).
+
+    When the LLM calls this tool, the workflow dequeues up to *batch_size*
+    messages from its Workflow Message Queue (WMQ).  The task stays
+    ``IN_PROGRESS`` while the queue is empty and completes once messages
+    arrive, returning them to the next LLM turn as tool output.
+
+    No worker process is needed — the Conductor server handles the
+    ``PULL_WORKFLOW_MESSAGES`` task directly.  Use
+    :meth:`~agentspan.AgentRuntime.send_message` from outside the workflow to
+    push a message into the queue.
+
+    Args:
+        name: Tool name (shown to the LLM).
+        description: Human-readable description for the LLM.
+        batch_size: Maximum number of messages to dequeue per invocation
+            (server cap is 100, default 1).
+
+    Example::
+
+        listen = wait_for_message_tool(
+            name="wait_for_message",
+            description="Wait until a message is sent to this agent.",
+        )
+
+        agent = Agent(
+            name="listener",
+            model="openai/gpt-4o",
+            tools=[listen],
+            instructions="Call wait_for_message when you need to wait for input.",
+        )
+
+        # From the caller side:
+        runtime.send_message(workflow_id, {"text": "hello"})
+    """
+    return ToolDef(
+        name=name,
+        description=description,
+        input_schema={"type": "object", "properties": {}},
+        tool_type="pull_workflow_messages",
+        config={"batchSize": batch_size},
+    )
 
 
 def human_tool(
