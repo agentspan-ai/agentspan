@@ -104,3 +104,47 @@ export {
 // ── Serializer ──────────────────────────────────────────
 export type { SerializeOptions } from './serializer.js';
 export { AgentConfigSerializer } from './serializer.js';
+
+// ── Worker Manager ──────────────────────────────────────
+export type { WorkerHandler } from './worker.js';
+export {
+  WorkerManager,
+  coerceValue,
+  extractToolContext,
+  captureStateMutations,
+  appendStateUpdates,
+  stripInternalKeys,
+  recordFailure,
+  recordSuccess,
+  isCircuitBreakerOpen,
+  resetCircuitBreaker,
+  resetAllCircuitBreakers,
+} from './worker.js';
+
+// ── Result ──────────────────────────────────────────────
+export type { MakeAgentResultData } from './result.js';
+export {
+  makeAgentResult,
+  EventTypes,
+  Statuses,
+  FinishReasons,
+  TERMINAL_STATUSES,
+} from './result.js';
+
+// ── Stream ──────────────────────────────────────────────
+export type { RespondFn } from './stream.js';
+export { AgentStream } from './stream.js';
+
+// ── Runtime ─────────────────────────────────────────────
+export type { AgentHandle } from './runtime.js';
+export {
+  AgentRuntime,
+  configure,
+  run,
+  start,
+  stream,
+  deploy,
+  plan,
+  serve,
+  shutdown,
+} from './runtime.js';
