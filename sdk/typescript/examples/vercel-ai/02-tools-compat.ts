@@ -1,22 +1,19 @@
 /**
- * Vercel AI SDK -- Tool Compatibility
+ * Vercel AI SDK Tools + Native Agent -- Tool Compatibility
  *
  * Demonstrates mixing Vercel AI SDK tool() with agentspan native tool()
- * in the same agent. Both tool formats share the same shape (Zod parameters
- * + execute function) so they can co-exist in a single tool set.
+ * in the same native Agent. The superset tool system normalizes both formats
+ * to ToolDef automatically -- they work side by side without any conversion.
  */
 
-import { generateText, tool as aiTool } from 'ai';
-import { openai } from '@ai-sdk/openai';
+import { tool as aiTool } from 'ai';
 import { z } from 'zod';
 import {
+  Agent,
   AgentRuntime,
   tool as agentspanTool,
   getToolDef,
 } from '../../src/index.js';
-
-// ── Model ────────────────────────────────────────────────
-const model = openai('gpt-4o-mini');
 
 // ── Agentspan native tool ────────────────────────────────
 const nativeSearchTool = agentspanTool(
@@ -40,7 +37,6 @@ const calculatorTool = aiTool({
   }),
   execute: async ({ expression }) => {
     try {
-      // Safe eval for simple expressions
       const result = Function(`"use strict"; return (${expression})`)();
       return { expression, result: String(result) };
     } catch {
@@ -51,49 +47,23 @@ const calculatorTool = aiTool({
 
 // ── Show normalized tool definitions ─────────────────────
 console.log('Native tool def:', getToolDef(nativeSearchTool).name);
-console.log('Vercel tool def:', JSON.stringify(getToolDef(calculatorTool)));
+console.log('Vercel tool def:', getToolDef(calculatorTool).name);
 
-// ── Combined tool set (Vercel AI format) ─────────────────
-const tools = {
-  native_search: aiTool({
-    description: 'Search using native agentspan tool format.',
-    parameters: z.object({ query: z.string() }),
-    execute: async ({ query }) => ({ results: [`Result for: ${query}`] }),
-  }),
-  calculator: calculatorTool,
-};
+// ── Native Agent mixing both tool formats ────────────────
+const agent = new Agent({
+  name: 'mixed_tools_agent',
+  model: 'openai/gpt-4o-mini',
+  instructions: 'You are a helpful assistant. Use the available tools to answer.',
+  tools: [nativeSearchTool, calculatorTool], // Both formats coexist
+});
 
 const prompt = 'Search for quantum computing and also calculate 2 + 2.';
-const system = 'You are a helpful assistant. Use the available tools to answer.';
-
-// ── Wrap as a duck-typed agent for agentspan ─────────────
-const vercelAgent = {
-  id: 'mixed_tools_agent',
-  tools,
-  generate: async (opts: { prompt: string; onStepFinish?: (step: any) => void }) => {
-    const result = await generateText({
-      model,
-      system,
-      prompt: opts.prompt,
-      tools,
-      maxSteps: 5,
-      onStepFinish: opts.onStepFinish,
-    });
-    return {
-      text: result.text,
-      toolCalls: result.steps.flatMap(s => s.toolCalls),
-      toolResults: result.steps.flatMap(s => s.toolResults),
-      finishReason: result.finishReason,
-    };
-  },
-  stream: async function* () { yield { type: 'finish' as const }; },
-};
 
 // ── Run on agentspan ─────────────────────────────────────
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(vercelAgent, prompt);
+    const result = await runtime.run(agent, prompt);
     console.log('Status:', result.status);
     result.printResult();
   } finally {

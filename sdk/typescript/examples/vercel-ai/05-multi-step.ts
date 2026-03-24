@@ -1,20 +1,16 @@
 /**
- * Vercel AI SDK -- Multi-Step Agent Loop
+ * Vercel AI SDK Tools + Native Agent -- Multi-Step
  *
- * Demonstrates a multi-step agent loop where generateText is called with
- * maxSteps > 1. The model calls tools iteratively until it has enough
- * information to produce a final answer.
+ * Demonstrates a native agentspan Agent with multiple AI SDK tools and maxTurns.
+ * The agent calls tools iteratively until it has enough information to produce
+ * a final answer. maxTurns controls the maximum number of LLM turns.
  */
 
-import { generateText, tool } from 'ai';
-import { openai } from '@ai-sdk/openai';
+import { tool as aiTool } from 'ai';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { Agent, AgentRuntime } from '../../src/index.js';
 
-// ── Model ────────────────────────────────────────────────
-const model = openai('gpt-4o-mini');
-
-// ── Tool definitions ─────────────────────────────────────
+// ── Tool data ────────────────────────────────────────────
 const weatherData: Record<string, string> = {
   'san francisco': '62F, Foggy',
   'new york': '45F, Cloudy',
@@ -29,7 +25,8 @@ const timeData: Record<string, string> = {
   'london': '17:30 GMT (UTC+0)',
 };
 
-const lookupWeather = tool({
+// ── Vercel AI SDK tools ──────────────────────────────────
+const lookupWeather = aiTool({
   description: 'Look up current weather for a city.',
   parameters: z.object({ city: z.string().describe('City name') }),
   execute: async ({ city }) => {
@@ -38,7 +35,7 @@ const lookupWeather = tool({
   },
 });
 
-const lookupTime = tool({
+const lookupTime = aiTool({
   description: 'Look up current local time for a city.',
   parameters: z.object({ city: z.string().describe('City name') }),
   execute: async ({ city }) => {
@@ -47,40 +44,25 @@ const lookupTime = tool({
   },
 });
 
-const tools = { lookupWeather, lookupTime };
-const prompt = 'What is the current weather and time in San Francisco and Tokyo?';
-const system = 'You are a helpful assistant. Use the available tools to look up weather and time data, then summarize the results.';
+// ── Native Agent with multiple tools and maxTurns ────────
+const agent = new Agent({
+  name: 'multistep_agent',
+  model: 'openai/gpt-4o-mini',
+  instructions:
+    'You are a helpful assistant. Use the available tools to look up weather and time data, then summarize the results.',
+  tools: [lookupWeather, lookupTime],
+  maxTurns: 8, // Maximum number of LLM turns
+});
 
-// ── Wrap as a duck-typed agent for agentspan ─────────────
-const vercelAgent = {
-  id: 'multistep_agent',
-  tools,
-  generate: async (opts: { prompt: string; onStepFinish?: (step: any) => void }) => {
-    const result = await generateText({
-      model,
-      system,
-      prompt: opts.prompt,
-      tools,
-      maxSteps: 8,
-      onStepFinish: opts.onStepFinish,
-    });
-    return {
-      text: result.text,
-      toolCalls: result.steps.flatMap(s => s.toolCalls),
-      toolResults: result.steps.flatMap(s => s.toolResults),
-      finishReason: result.finishReason,
-      steps: result.steps.length,
-    };
-  },
-  stream: async function* () { yield { type: 'finish' as const }; },
-};
+const prompt = 'What is the current weather and time in San Francisco and Tokyo?';
 
 // ── Run on agentspan ─────────────────────────────────────
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(vercelAgent, prompt);
+    const result = await runtime.run(agent, prompt);
     console.log('Status:', result.status);
+    console.log('Tool calls:', result.toolCalls.length);
     result.printResult();
   } finally {
     await runtime.shutdown();

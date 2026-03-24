@@ -1,49 +1,55 @@
 /**
- * Vercel AI SDK -- Credential Passthrough
+ * Vercel AI SDK Tools + Native Agent -- Credentials
  *
- * Demonstrates passing credentials (API keys) through Agentspan
- * to a Vercel AI SDK agent. The Vercel AI SDK uses the OPENAI_API_KEY
- * environment variable natively; Agentspan's credential system can
- * resolve and inject keys transparently.
+ * Demonstrates agentspan's credential system with AI SDK tools on a native Agent.
+ * Credentials are declared on the Agent and resolved by the agentspan server
+ * before tool execution -- the tool receives credentials via environment injection.
  */
 
-import { generateText } from 'ai';
-import { openai } from '@ai-sdk/openai';
-import { AgentRuntime } from '../../src/index.js';
+import { tool as aiTool } from 'ai';
+import { z } from 'zod';
+import { Agent, AgentRuntime } from '../../src/index.js';
 
-// ── Model ────────────────────────────────────────────────
-const model = openai('gpt-4o-mini');
-
-const prompt = 'Summarize the latest research on transformer architectures in 2-3 sentences.';
-
-// ── Wrap as a duck-typed agent for agentspan ─────────────
-// In production, agentspan resolves the API key from its credential
-// store and injects it into the environment before the agent runs.
-const vercelAgent = {
-  id: 'credentialed_agent',
-  tools: {},
-  generate: async (opts: { prompt: string; onStepFinish?: (step: any) => void }) => {
-    // The Vercel AI SDK reads OPENAI_API_KEY from the environment.
-    // In production, agentspan would have already injected it.
-    const result = await generateText({
-      model,
-      prompt: opts.prompt,
-    });
+// ── Vercel AI SDK tool that uses a credential ────────────
+const fetchReport = aiTool({
+  description: 'Fetch a report from the analytics API.',
+  parameters: z.object({
+    reportId: z.string().describe('Report ID to fetch'),
+  }),
+  execute: async ({ reportId }) => {
+    // In production, the agentspan server injects ANALYTICS_API_KEY
+    // into the environment before this tool executes.
+    const apiKey = process.env.ANALYTICS_API_KEY ?? 'demo-key';
     return {
-      text: result.text,
-      toolCalls: [],
-      toolResults: [],
-      finishReason: result.finishReason,
+      reportId,
+      data: `Report ${reportId} fetched successfully (key: ${apiKey.slice(0, 4)}...)`,
+      rows: 42,
     };
   },
-  stream: async function* () { yield { type: 'finish' as const }; },
-};
+});
+
+// ── Native Agent with credentials ────────────────────────
+const agent = new Agent({
+  name: 'credentialed_agent',
+  model: 'openai/gpt-4o-mini',
+  instructions:
+    'You are a helpful assistant with access to analytics reports. ' +
+    'Use the fetchReport tool to retrieve data when asked.',
+  tools: [fetchReport],
+  credentials: [
+    // Credential references resolved by the agentspan server.
+    // In production, these are stored in the credential vault.
+    'ANALYTICS_API_KEY',
+  ],
+});
+
+const prompt = 'Fetch the analytics report with ID RPT-2024-Q4.';
 
 // ── Run on agentspan ─────────────────────────────────────
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(vercelAgent, prompt);
+    const result = await runtime.run(agent, prompt);
     console.log('Status:', result.status);
     result.printResult();
   } finally {

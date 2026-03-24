@@ -1,43 +1,25 @@
 /**
- * Vercel AI SDK -- Human-in-the-Loop (HITL)
+ * Vercel AI SDK Tools + Native Agent -- Human-in-the-Loop (HITL)
  *
- * Demonstrates a Vercel AI SDK agent that pauses for human approval
- * before executing sensitive actions. Uses a risk assessment tool
- * and an execution tool with simulated approval logic.
+ * Demonstrates approval_required on tools with a native agentspan Agent.
+ * When a tool has approvalRequired: true, the agent pauses for human approval
+ * before executing the tool. Uses runtime.start() for async interaction
+ * with approve/reject via the AgentHandle.
+ *
+ * This example mixes Vercel AI SDK tool() (for risk assessment, auto-execute)
+ * and agentspan native tool() (for action execution, requires approval).
  */
 
-import { generateText, tool } from 'ai';
-import { openai } from '@ai-sdk/openai';
+import { tool as aiTool } from 'ai';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import {
+  Agent,
+  AgentRuntime,
+  tool as agentspanTool,
+} from '../../src/index.js';
 
-// ── Model ────────────────────────────────────────────────
-const model = openai('gpt-4o-mini');
-
-// ── HITL approval simulation ─────────────────────────────
-interface ApprovalRequest {
-  action: string;
-  description: string;
-  risk: 'low' | 'medium' | 'high';
-}
-
-function checkApproval(request: ApprovalRequest): { approved: boolean; feedback: string } {
-  // In production, this would pause and wait for human input via Agentspan UI/API.
-  // Here we simulate: approve low/medium risk, reject high risk.
-  if (request.risk === 'high') {
-    return {
-      approved: false,
-      feedback: 'High-risk action rejected. Please provide additional justification.',
-    };
-  }
-  return {
-    approved: true,
-    feedback: `Action approved (${request.risk} risk).`,
-  };
-}
-
-// ── Tools ────────────────────────────────────────────────
-const assessRisk = tool({
+// ── Risk assessment tool (AI SDK, auto-execute) ──────────
+const assessRisk = aiTool({
   description: 'Assess the risk level of a requested operation.',
   parameters: z.object({
     action: z.string().describe('The action to assess'),
@@ -53,33 +35,40 @@ const assessRisk = tool({
       risk = 'medium';
     }
 
-    const approval = checkApproval({ action, description, risk });
-    return {
-      risk,
-      approved: approval.approved,
-      feedback: approval.feedback,
-    };
+    return { action, risk };
   },
 });
 
-const executeAction = tool({
-  description: 'Execute an approved action. Only call this after risk assessment shows approval.',
-  parameters: z.object({
-    action: z.string().describe('The approved action to execute'),
-  }),
-  execute: async ({ action }) => ({
+// ── Execution tool (agentspan native, requires approval) ─
+const executeAction = agentspanTool(
+  async (args: { action: string }) => ({
     status: 'completed',
-    message: `Action "${action}" executed successfully.`,
+    message: `Action "${args.action}" executed successfully.`,
   }),
-});
+  {
+    name: 'execute_action',
+    description: 'Execute an approved action. Only call this after risk assessment.',
+    inputSchema: z.object({
+      action: z.string().describe('The approved action to execute'),
+    }),
+    approvalRequired: true, // Pauses for human approval
+  },
+);
 
-const tools = { assessRisk, executeAction };
-const system = `You are a careful assistant that assesses risk before taking action.
-For every user request:
-1. First use assessRisk to evaluate the operation
-2. If approved, use executeAction to carry it out
-3. If rejected, explain why and suggest alternatives
-Never execute an action without assessing its risk first.`;
+// ── Native Agent with HITL tools ─────────────────────────
+const agent = new Agent({
+  name: 'hitl_agent',
+  model: 'openai/gpt-4o-mini',
+  instructions:
+    'You are a careful assistant that assesses risk before taking action.\n' +
+    'For every user request:\n' +
+    '1. First use assessRisk to evaluate the operation\n' +
+    '2. Then use execute_action to carry it out (requires human approval)\n' +
+    '3. Report the outcome\n' +
+    'Never execute an action without assessing its risk first.',
+  tools: [assessRisk, executeAction],
+  maxTurns: 6,
+});
 
 // ── Test cases ───────────────────────────────────────────
 const testCases = [
@@ -88,38 +77,49 @@ const testCases = [
   { label: 'High risk (should be rejected)', prompt: 'Delete all records from the staging database.' },
 ];
 
-// ── Wrap as a duck-typed agent for agentspan ─────────────
-const vercelAgent = {
-  id: 'hitl_agent',
-  tools,
-  generate: async (opts: { prompt: string; onStepFinish?: (step: any) => void }) => {
-    const result = await generateText({
-      model,
-      system,
-      prompt: opts.prompt,
-      tools,
-      maxSteps: 5,
-      onStepFinish: opts.onStepFinish,
-    });
+// ── HITL simulation: auto-approve low/medium, reject high ─
+async function runWithApproval(runtime: AgentRuntime, prompt: string) {
+  const handle = await runtime.start(agent, prompt);
+  const MAX_POLLS = 30;
+  let polls = 0;
 
-    // Extract risk metadata
-    const riskResults = result.steps
-      .flatMap(s => s.toolResults)
-      .filter(tr => tr.toolName === 'assessRisk');
-    const riskInfo = riskResults.length > 0
-      ? (riskResults[0].result as { risk: string; approved: boolean })
-      : { risk: 'unknown', approved: false };
+  // Poll until done or waiting for approval
+  while (polls < MAX_POLLS) {
+    polls++;
+    const status = await handle.getStatus();
 
-    return {
-      text: result.text,
-      toolCalls: result.steps.flatMap(s => s.toolCalls),
-      toolResults: result.steps.flatMap(s => s.toolResults),
-      finishReason: result.finishReason,
-      metadata: riskInfo,
-    };
-  },
-  stream: async function* () { yield { type: 'finish' as const }; },
-};
+    if (status.isComplete) {
+      return await handle.wait();
+    }
+
+    if (status.isWaiting) {
+      // Check if there is a pending tool requiring approval
+      const pending = status.pendingTool;
+      if (pending && pending.args) {
+        const action = String(pending.args.action ?? pending.name ?? '');
+        const lower = action.toLowerCase();
+
+        if (lower.includes('delete') || lower.includes('drop')) {
+          console.log(`  [HITL] Rejecting: "${action}"`);
+          await handle.reject('High-risk action rejected by human reviewer.');
+        } else {
+          console.log(`  [HITL] Approving: "${action}"`);
+          await handle.approve();
+        }
+      } else {
+        // Waiting but no pending tool details -- auto-approve to unblock
+        console.log('  [HITL] Waiting (no pending tool details) -- auto-approving');
+        await handle.approve();
+      }
+    }
+
+    // Brief wait before next poll
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+
+  // If we exhaust polls, wait for final result
+  return await handle.wait();
+}
 
 // ── Run on agentspan ─────────────────────────────────────
 async function main() {
@@ -127,9 +127,13 @@ async function main() {
   try {
     for (const { label, prompt } of testCases) {
       console.log(`\n--- ${label} ---`);
-      const result = await runtime.run(vercelAgent, prompt);
-      console.log('Status:', result.status);
-      result.printResult();
+      try {
+        const result = await runWithApproval(runtime, prompt);
+        console.log('Status:', result.status);
+        result.printResult();
+      } catch (err: any) {
+        console.log('Error:', err.message);
+      }
     }
   } finally {
     await runtime.shutdown();

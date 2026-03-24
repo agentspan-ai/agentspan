@@ -1,75 +1,77 @@
 /**
- * Vercel AI SDK -- Agent Handoff
+ * Vercel AI SDK Tools + Native Agent -- Agent Handoff
  *
- * Demonstrates handoff from a Vercel AI SDK triage agent to a native
- * Agentspan specialist agent. The triage agent classifies the request
- * and delegates to the appropriate specialist.
+ * Demonstrates multi-agent orchestration with handoff strategy using AI SDK tools.
+ * A triage agent classifies requests and hands off to specialist agents,
+ * each equipped with their own AI SDK tools.
  */
 
-import { generateText, tool } from 'ai';
-import { openai } from '@ai-sdk/openai';
+import { tool as aiTool } from 'ai';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { Agent, AgentRuntime } from '../../src/index.js';
 
-// ── Model ────────────────────────────────────────────────
-const model = openai('gpt-4o-mini');
+// ── Specialist tools (Vercel AI SDK format) ──────────────
 
-// ── Vercel AI triage tool ────────────────────────────────
-const classifyTool = tool({
-  description: 'Classify a user request into a category for routing.',
+const lookupCode = aiTool({
+  description: 'Look up a code snippet or programming concept.',
   parameters: z.object({
-    category: z.enum(['coding', 'data_science', 'general']).describe('The category of the request'),
-    reasoning: z.string().describe('Why this category was chosen'),
+    topic: z.string().describe('Programming topic to look up'),
   }),
-  execute: async ({ category, reasoning }) => ({
-    category,
-    reasoning,
-    handoffTo: category === 'coding' ? 'code_specialist'
-             : category === 'data_science' ? 'data_specialist'
-             : 'none',
+  execute: async ({ topic }) => ({
+    topic,
+    answer: `Here is the solution for "${topic}": Use try-catch with specific exception types for robust error handling.`,
   }),
 });
 
-const triageTools = { classify: classifyTool };
+const analyzeData = aiTool({
+  description: 'Analyze a dataset description and return insights.',
+  parameters: z.object({
+    dataset: z.string().describe('Description of the dataset'),
+  }),
+  execute: async ({ dataset }) => ({
+    dataset,
+    insights: `Dataset "${dataset}" shows positive correlation. Recommend further statistical testing.`,
+  }),
+});
 
+// ── Specialist agents ────────────────────────────────────
+
+const codeSpecialist = new Agent({
+  name: 'code_specialist',
+  model: 'openai/gpt-4o-mini',
+  instructions:
+    'You are a coding expert. Use the lookupCode tool to help users with programming questions.',
+  tools: [lookupCode],
+});
+
+const dataSpecialist = new Agent({
+  name: 'data_specialist',
+  model: 'openai/gpt-4o-mini',
+  instructions:
+    'You are a data science expert. Use the analyzeData tool to help users with data analysis.',
+  tools: [analyzeData],
+});
+
+// ── Triage agent with handoff strategy ───────────────────
+
+const triageAgent = new Agent({
+  name: 'triage_agent',
+  model: 'openai/gpt-4o-mini',
+  instructions:
+    "You are a triage agent. Determine the user's need and hand off:\n" +
+    '- Coding questions -> code_specialist\n' +
+    '- Data analysis questions -> data_specialist\n' +
+    'Be brief in your initial response before handing off.',
+  agents: [codeSpecialist, dataSpecialist],
+  strategy: 'handoff',
+});
+
+// ── Test queries ─────────────────────────────────────────
 const queries = [
   'How do I fix a null pointer exception in Java?',
   'Help me analyze this CSV dataset for trends.',
   'What is the weather like today?',
 ];
-
-const system = 'You are a triage agent. Classify the user request using the classify tool, then provide a brief response based on the classification.';
-
-// ── Wrap as a duck-typed agent for agentspan ─────────────
-const triageAgent = {
-  id: 'vercel_triage_agent',
-  tools: triageTools,
-  generate: async (opts: { prompt: string; onStepFinish?: (step: any) => void }) => {
-    const result = await generateText({
-      model,
-      system,
-      prompt: opts.prompt,
-      tools: triageTools,
-      maxSteps: 3,
-      onStepFinish: opts.onStepFinish,
-    });
-    // Extract classification for metadata
-    const classifications = result.steps
-      .flatMap(s => s.toolResults)
-      .filter(tr => tr.toolName === 'classify');
-    const classification = classifications.length > 0
-      ? (classifications[0].result as { category: string; handoffTo: string })
-      : { category: 'general', handoffTo: 'none' };
-    return {
-      text: result.text,
-      toolCalls: result.steps.flatMap(s => s.toolCalls),
-      toolResults: result.steps.flatMap(s => s.toolResults),
-      finishReason: result.finishReason,
-      metadata: classification,
-    };
-  },
-  stream: async function* () { yield { type: 'finish' as const }; },
-};
 
 // ── Run on agentspan ─────────────────────────────────────
 async function main() {

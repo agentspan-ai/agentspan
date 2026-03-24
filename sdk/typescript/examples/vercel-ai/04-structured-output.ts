@@ -1,17 +1,13 @@
 /**
- * Vercel AI SDK -- Structured Output
+ * Vercel AI SDK Tools + Native Agent -- Structured Output
  *
- * Demonstrates generating typed structured output using generateObject()
- * via the agentspan passthrough.
+ * Demonstrates typed structured output using a Zod schema as the Agent's outputType.
+ * The agentspan runtime sends the schema to the server, which constrains the LLM
+ * to produce valid JSON matching the schema.
  */
 
-import { generateObject } from 'ai';
-import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
-
-// ── Model ────────────────────────────────────────────────
-const model = openai('gpt-4o-mini');
+import { Agent, AgentRuntime } from '../../src/index.js';
 
 // ── Schema ───────────────────────────────────────────────
 const PersonSchema = z.object({
@@ -23,36 +19,30 @@ const PersonSchema = z.object({
 
 type Person = z.infer<typeof PersonSchema>;
 
-const prompt = 'Generate a profile for a fictional ML engineer from Japan.';
+// ── Native Agent with structured output ──────────────────
+const agent = new Agent({
+  name: 'structured_output_agent',
+  model: 'openai/gpt-4o-mini',
+  instructions: 'Generate fictional but realistic profiles when asked.',
+  outputType: PersonSchema, // Zod schema auto-converted to JSON Schema
+});
 
-// ── Wrap as a duck-typed agent for agentspan ─────────────
-const vercelAgent = {
-  id: 'structured_output_agent',
-  tools: {},
-  generate: async (opts: { prompt: string; onStepFinish?: (step: any) => void }) => {
-    const result = await generateObject({
-      model,
-      schema: PersonSchema,
-      prompt: opts.prompt,
-    });
-    const validated: Person = PersonSchema.parse(result.object);
-    return {
-      text: JSON.stringify(validated, null, 2),
-      toolCalls: [],
-      toolResults: [],
-      finishReason: 'stop' as const,
-      experimental_output: validated,
-    };
-  },
-  stream: async function* () { yield { type: 'finish' as const }; },
-};
+const prompt = 'Generate a profile for a fictional ML engineer from Japan.';
 
 // ── Run on agentspan ─────────────────────────────────────
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(vercelAgent, prompt);
+    const result = await runtime.run(agent, prompt);
     console.log('Status:', result.status);
+
+    // Output conforms to the schema
+    const person = result.output as unknown as Person;
+    console.log('Name:', person.name);
+    console.log('Age:', person.age);
+    console.log('Occupation:', person.occupation);
+    console.log('Skills:', person.skills);
+
     result.printResult();
   } finally {
     await runtime.shutdown();

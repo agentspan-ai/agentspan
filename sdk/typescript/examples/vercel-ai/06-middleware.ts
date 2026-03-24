@@ -1,59 +1,57 @@
 /**
- * Vercel AI SDK -- Middleware
+ * Vercel AI SDK Tools + Native Agent -- Guardrails (Middleware equivalent)
  *
- * Demonstrates using wrapLanguageModel to apply middleware that
- * intercepts and transforms LLM calls. The middleware logs requests
- * and can block calls containing PII patterns.
+ * Demonstrates agentspan's guardrail system as the native equivalent of
+ * Vercel AI SDK middleware. Guardrails validate input/output and can block,
+ * retry, or fix content -- applied declaratively on the Agent.
+ *
+ * Uses RegexGuardrail for PII detection (server-side, no local worker)
+ * and a custom guardrail function for logging.
  */
 
+import { z } from 'zod';
 import {
-  generateText,
-  wrapLanguageModel,
-  type LanguageModelV1Middleware,
-} from 'ai';
-import { openai } from '@ai-sdk/openai';
-import { AgentRuntime } from '../../src/index.js';
+  Agent,
+  AgentRuntime,
+  RegexGuardrail,
+  guardrail,
+} from '../../src/index.js';
 
-// ── PII detection patterns ───────────────────────────────
-const PII_PATTERNS = [
-  /\b\d{3}-\d{2}-\d{4}\b/,   // SSN
-  /\b\d{16}\b/,                // Credit card
-  /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/, // Email
-];
+// ── Regex guardrail: block PII patterns (server-side) ────
+const piiGuardrail = new RegexGuardrail({
+  name: 'pii_blocker',
+  patterns: [
+    '\\b\\d{3}-\\d{2}-\\d{4}\\b',   // SSN
+    '\\b\\d{16}\\b',                  // Credit card
+  ],
+  mode: 'block',
+  position: 'input',
+  onFail: 'raise',
+  message: 'PII detected in input. Request blocked for safety.',
+});
 
-function containsPII(text: string): boolean {
-  return PII_PATTERNS.some(p => p.test(text));
-}
-
-// ── Middleware: logging + PII guard ──────────────────────
-const loggingMiddleware: LanguageModelV1Middleware = {
-  transformParams: async ({ type, params }) => {
-    console.log(`  [middleware] ${type} call, ${params.prompt.length} prompt parts`);
-
-    // Check for PII in user messages
-    for (const part of params.prompt) {
-      if (part.role === 'user') {
-        for (const content of part.content) {
-          if (content.type === 'text' && containsPII(content.text)) {
-            console.log('  [middleware] PII detected! Sanitizing input...');
-            // Replace PII with redacted placeholder
-            content.text = content.text
-              .replace(/\b\d{3}-\d{2}-\d{4}\b/g, '[REDACTED-SSN]')
-              .replace(/\b\d{16}\b/g, '[REDACTED-CC]');
-          }
-        }
+// ── Custom guardrail: log and validate output ────────────
+const outputLogGuardrail = guardrail(
+  async (content: string) => {
+    console.log(`  [guardrail] Output length: ${content.length} chars`);
+    // Block outputs that mention internal system details
+    const forbidden = ['internal system', 'database password', 'api key'];
+    for (const phrase of forbidden) {
+      if (content.toLowerCase().includes(phrase)) {
+        return {
+          passed: false,
+          message: `Forbidden phrase detected: '${phrase}'`,
+        };
       }
     }
-    return params;
+    return { passed: true };
   },
-};
-
-// ── Wrapped model ────────────────────────────────────────
-const baseModel = openai('gpt-4o-mini');
-const wrappedModel = wrapLanguageModel({
-  model: baseModel,
-  middleware: loggingMiddleware,
-});
+  {
+    name: 'output_safety_check',
+    position: 'output',
+    onFail: 'raise',
+  },
+);
 
 // ── Test prompts ─────────────────────────────────────────
 const prompts = [
@@ -62,29 +60,18 @@ const prompts = [
     text: 'Explain how middleware works in AI agent pipelines.',
   },
   {
-    label: 'Request with PII (should be sanitized)',
+    label: 'Request with PII (should be blocked by regex guardrail)',
     text: 'My social security number is 123-45-6789. Can you verify it?',
   },
 ];
 
-// ── Wrap as a duck-typed agent for agentspan ─────────────
-const vercelAgent = {
-  id: 'middleware_agent',
-  tools: {},
-  generate: async (opts: { prompt: string; onStepFinish?: (step: any) => void }) => {
-    const result = await generateText({
-      model: wrappedModel,
-      prompt: opts.prompt,
-    });
-    return {
-      text: result.text,
-      toolCalls: [],
-      toolResults: [],
-      finishReason: result.finishReason,
-    };
-  },
-  stream: async function* () { yield { type: 'finish' as const }; },
-};
+// ── Native Agent with guardrails ─────────────────────────
+const agent = new Agent({
+  name: 'guarded_agent',
+  model: 'openai/gpt-4o-mini',
+  instructions: 'You are a helpful assistant. Never reveal internal system details.',
+  guardrails: [piiGuardrail, outputLogGuardrail],
+});
 
 // ── Run on agentspan ─────────────────────────────────────
 async function main() {
@@ -92,9 +79,13 @@ async function main() {
   try {
     for (const { label, text } of prompts) {
       console.log(`\n--- ${label} ---`);
-      const result = await runtime.run(vercelAgent, text);
-      console.log('Status:', result.status);
-      result.printResult();
+      try {
+        const result = await runtime.run(agent, text);
+        console.log('Status:', result.status);
+        result.printResult();
+      } catch (err: any) {
+        console.log('Blocked:', err.message);
+      }
     }
   } finally {
     await runtime.shutdown();
