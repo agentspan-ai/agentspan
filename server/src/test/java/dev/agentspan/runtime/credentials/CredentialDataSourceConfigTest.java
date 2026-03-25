@@ -6,7 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
-import org.conductoross.conductor.AgentRuntime;
+import dev.agentspan.runtime.AgentRuntime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

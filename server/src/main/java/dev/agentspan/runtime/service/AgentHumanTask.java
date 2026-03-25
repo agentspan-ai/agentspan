@@ -37,7 +37,7 @@ public class AgentHumanTask extends WorkflowSystemTask {
     public AgentHumanTask(AgentStreamRegistry streamRegistry) {
         super(TASK_TYPE_HUMAN);
         this.streamRegistry = streamRegistry;
-        logger.info("AgentHumanTask registered (overrides default HUMAN with SSE support)");
+        logger.debug("AgentHumanTask registered (overrides default HUMAN with SSE support)");
     }
 
     @Override

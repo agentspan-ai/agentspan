@@ -12,7 +12,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
-import org.conductoross.conductor.AgentRuntime;
+import dev.agentspan.runtime.AgentRuntime;
 
 import java.util.List;
 import java.util.Map;

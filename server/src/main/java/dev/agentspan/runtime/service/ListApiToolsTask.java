@@ -72,7 +72,7 @@ public class ListApiToolsTask extends WorkflowSystemTask {
         super(TASK_TYPE);
         this.objectMapper = objectMapper;
         this.httpClient = httpClient;
-        logger.info("ListApiToolsTask registered (task type={})", TASK_TYPE);
+        logger.debug("ListApiToolsTask registered (task type={})", TASK_TYPE);
     }
 
     // -----------------------------------------------------------------------

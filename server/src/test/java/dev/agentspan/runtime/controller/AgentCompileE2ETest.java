@@ -8,7 +8,7 @@ package dev.agentspan.runtime.controller;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.conductoross.conductor.AgentRuntime;
+import dev.agentspan.runtime.AgentRuntime;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;

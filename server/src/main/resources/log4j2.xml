@@ -28,5 +28,11 @@
             <AppenderRef ref="CONSOLE" />
         </Root>
         <logger name="org.flywaydb" level="error" additivity="false" />
+        <logger name="com.netflix.conductor" level="error" additivity="false" />
+        <logger name="org.conductoross.conductor" level="error" additivity="false" />
+        <logger name="org.springframework" level="error" additivity="false" />
+        <logger name="org.apache" level="error" additivity="false" />
+        <logger name="com.zaxxer" level="error" additivity="false" />
+        <logger name="org.hibernate" level="error" additivity="false" />
     </Loggers>
 </Configuration>

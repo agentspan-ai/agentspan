@@ -3,7 +3,7 @@
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
-package org.conductoross.conductor;
+package dev.agentspan.runtime;
 
 import java.net.InetAddress;
 import java.util.Map;
@@ -20,10 +20,8 @@ import org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.core.env.Environment;
 import org.springframework.scheduling.annotation.EnableScheduling;
-import com.mongodb.internal.connection.DefaultClusterFactory;
 
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 
 @SpringBootApplication(exclude = {DataSourceAutoConfiguration.class, MongoAutoConfiguration.class, MongoDataAutoConfiguration.class})
 @EnableScheduling
@@ -63,7 +61,7 @@ public class AgentRuntime implements ApplicationRunner {
         String serverUrl = String.format("http://%s:%s%s", hostname, port, contextPath);
         log.info("\n\n\n");
         log.info("┌────────────────────────────────────────────────────────────────────────┐");
-        log.info("│                    CONDUCTOR SERVER CONFIGURATION                      │");
+        log.info("│                    AGENTSPAN SERVER CONFIGURATION                      │");
         log.info("├────────────────────────────────────────────────────────────────────────┤");
         log.info("│  Database Type    : {}", padRight(dbType, 51) + "│");
         log.info("│  Queue Type       : {}", padRight(queueType, 51) + "│");

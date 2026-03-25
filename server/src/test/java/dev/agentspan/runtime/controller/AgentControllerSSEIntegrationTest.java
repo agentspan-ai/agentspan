@@ -9,7 +9,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.netflix.conductor.model.TaskModel;
 import com.netflix.conductor.model.WorkflowModel;
-import org.conductoross.conductor.AgentRuntime;
+import dev.agentspan.runtime.AgentRuntime;
 import org.junit.jupiter.api.Test;
 import dev.agentspan.runtime.model.AgentSSEEvent;
 import dev.agentspan.runtime.service.AgentEventListener;
