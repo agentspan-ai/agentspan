@@ -36,8 +36,8 @@ jobs:
       - name: Update package.json version
         run: npm version ${{ inputs.version }} --no-git-tag-version --allow-same-version
 
-      - name: Build TypeScript decorators
-        run: npm run build:decorators
+      - name: Build
+        run: npm run build
 
       - name: Publish to npm
         run: npm publish --access public
