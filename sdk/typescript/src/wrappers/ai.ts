@@ -14,11 +14,14 @@
  */
 
 // Re-export everything from 'ai' unchanged
-let _ai: typeof import('ai') | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _ai: any = null;
 
-async function _loadAI(): Promise<typeof import('ai')> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function _loadAI(): Promise<any> {
   if (_ai) return _ai;
   try {
+    // @ts-expect-error 'ai' is an optional peer dependency
     _ai = await import('ai');
     return _ai;
   } catch {

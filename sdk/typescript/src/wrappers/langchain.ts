@@ -110,7 +110,9 @@ export function createAgentExecutor(options: {
   let llm = options.llm;
   if (!llm && options.agent) {
     const a = options.agent as Record<string, unknown>;
-    llm = a.llm ?? a.llm_chain?.llm ?? a.runnable?.first;
+    llm = a.llm
+      ?? (a.llm_chain as Record<string, unknown> | undefined)?.llm
+      ?? (a.runnable as Record<string, unknown> | undefined)?.first;
   }
 
   const modelStr = extractModelFromLLM(llm);

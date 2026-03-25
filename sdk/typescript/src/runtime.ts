@@ -5,22 +5,37 @@ import type {
   DeploymentInfo,
   RunOptions,
   ToolDef,
+  GuardrailDef,
   FrameworkId,
 } from './types.js';
 import { AgentAPIError, AgentspanError } from './errors.js';
 import { AgentConfig } from './config.js';
 import type { AgentConfigOptions } from './config.js';
 import { Agent } from './agent.js';
+import type { CallbackHandler } from './agent.js';
 import { AgentConfigSerializer } from './serializer.js';
 import { getToolDef } from './tool.js';
 import { WorkerManager } from './worker.js';
 import { AgentStream } from './stream.js';
 import { makeAgentResult } from './result.js';
 import { TERMINAL_STATUSES } from './result.js';
+import type { TerminationCondition } from './termination.js';
 import { detectFramework } from './frameworks/detect.js';
 import { serializeFrameworkAgent } from './frameworks/serializer.js';
 import { serializeLangGraph } from './frameworks/langgraph-serializer.js';
 import { serializeLangChain } from './frameworks/langchain-serializer.js';
+
+/**
+ * Callback method → wire position mapping (must match serializer.ts).
+ */
+const CALLBACK_POSITION_MAP: Record<string, string> = {
+  onAgentStart: 'before_agent',
+  onAgentEnd: 'after_agent',
+  onModelStart: 'before_model',
+  onModelEnd: 'after_model',
+  onToolStart: 'before_tool',
+  onToolEnd: 'after_tool',
+};
 
 // ── AgentHandle ─────────────────────────────────────────
 
@@ -463,7 +478,8 @@ export class AgentRuntime {
   }
 
   /**
-   * Register all tool workers for an agent tree.
+   * Register all workers for an agent tree: tools, termination, guardrails,
+   * stopWhen, callbacks, gates, and router functions.
    */
   private async _registerAllWorkers(agent: Agent): Promise<void> {
     const toolDefs = this._collectToolDefs(agent);
@@ -480,6 +496,245 @@ export class AgentRuntime {
         return handler(inputData, toolContext);
       });
     }
+
+    // Register custom guardrail workers from tools
+    for (const def of toolDefs) {
+      if (def.guardrails) {
+        for (const g of def.guardrails) {
+          const gDef = this._normalizeGuardrailDef(g);
+          if (gDef && gDef.func && gDef.taskName) {
+            await this._registerGuardrailWorker(gDef);
+          }
+        }
+      }
+    }
+
+    // Register system workers for the full agent tree
+    await this._registerSystemWorkers(agent);
+  }
+
+  /**
+   * Recursively register all system workers (non-tool) for an agent tree.
+   */
+  private async _registerSystemWorkers(agent: Agent): Promise<void> {
+    // Termination
+    if (agent.termination) {
+      await this._registerTerminationWorker(agent.name, agent.termination as TerminationCondition);
+    }
+
+    // Custom guardrails (those with func)
+    for (const g of agent.guardrails) {
+      const gDef = this._normalizeGuardrailDef(g);
+      if (gDef && gDef.func && gDef.taskName) {
+        await this._registerGuardrailWorker(gDef);
+      }
+    }
+
+    // stopWhen
+    if (agent.stopWhen) {
+      await this._registerStopWhenWorker(agent.name, agent.stopWhen);
+    }
+
+    // Callbacks
+    if (agent.callbacks.length > 0) {
+      await this._registerCallbackWorkers(agent.name, agent.callbacks);
+    }
+
+    // Gate (callable)
+    if (agent.gate && typeof agent.gate.fn === 'function') {
+      await this._registerGateWorker(agent.name, agent.gate.fn as (...args: unknown[]) => unknown);
+    }
+
+    // Router (function, not Agent)
+    if (agent.router && typeof agent.router === 'function') {
+      await this._registerRouterWorker(agent.name, agent.router as (...args: unknown[]) => string);
+    }
+
+    // Recurse into sub-agents
+    for (const subAgent of agent.agents) {
+      await this._registerSystemWorkers(subAgent);
+    }
+  }
+
+  /**
+   * Register a termination condition worker.
+   * Server dispatches {agent}_termination with {result, iteration, messages}.
+   * Worker returns {should_continue, reason}.
+   */
+  private async _registerTerminationWorker(
+    agentName: string,
+    cond: TerminationCondition,
+  ): Promise<void> {
+    const taskName = `${agentName}_termination`;
+    await this.workerManager.registerTaskDef(taskName, { timeoutSeconds: 120 });
+    this.workerManager.addWorker(taskName, async (inputData) => {
+      const result = String(inputData['result'] ?? '');
+      const iteration = Number(inputData['iteration'] ?? 0);
+      const messages = Array.isArray(inputData['messages']) ? inputData['messages'] : [];
+      try {
+        const outcome = cond.shouldTerminate({ result, messages, iteration });
+        return { should_continue: !outcome.shouldTerminate, reason: outcome.reason };
+      } catch {
+        return { should_continue: true, reason: '' };
+      }
+    });
+  }
+
+  /**
+   * Register a custom guardrail worker.
+   * Server dispatches {guardrail.taskName} with {content, iteration}.
+   * Worker returns {passed, message, on_fail, ...}.
+   */
+  private async _registerGuardrailWorker(gDef: GuardrailDef): Promise<void> {
+    const taskName = gDef.taskName!;
+    const fn = gDef.func!;
+    await this.workerManager.registerTaskDef(taskName, { timeoutSeconds: 120 });
+    this.workerManager.addWorker(taskName, async (inputData) => {
+      const content = String(inputData['content'] ?? '');
+      try {
+        const result = await fn(content);
+        return {
+          passed: result.passed ?? true,
+          message: result.message ?? '',
+          on_fail: gDef.onFail ?? 'raise',
+          fixed_output: result.fixedOutput,
+          guardrail_name: gDef.name,
+          should_continue: result.passed ?? true,
+        };
+      } catch (err) {
+        return {
+          passed: false,
+          message: err instanceof Error ? err.message : String(err),
+          on_fail: gDef.onFail ?? 'raise',
+          guardrail_name: gDef.name,
+          should_continue: false,
+        };
+      }
+    });
+  }
+
+  /**
+   * Register a stopWhen callback worker.
+   * Server dispatches {agent}_stop_when with {result, iteration}.
+   * Worker returns {should_continue}.
+   */
+  private async _registerStopWhenWorker(
+    agentName: string,
+    stopWhenFn: (messages: unknown[], ...args: unknown[]) => boolean,
+  ): Promise<void> {
+    const taskName = `${agentName}_stop_when`;
+    await this.workerManager.registerTaskDef(taskName, { timeoutSeconds: 120 });
+    this.workerManager.addWorker(taskName, async (inputData) => {
+      const result = String(inputData['result'] ?? '');
+      const iteration = Number(inputData['iteration'] ?? 0);
+      try {
+        const shouldStop = stopWhenFn([result], iteration);
+        return { should_continue: !shouldStop };
+      } catch {
+        return { should_continue: true };
+      }
+    });
+  }
+
+  /**
+   * Register callback workers for each lifecycle position.
+   * Server dispatches {agent}_{position} with {messages, llm_result}.
+   * Worker returns the callback result or {}.
+   */
+  private async _registerCallbackWorkers(
+    agentName: string,
+    callbacks: CallbackHandler[],
+  ): Promise<void> {
+    for (const [methodName, wirePosition] of Object.entries(CALLBACK_POSITION_MAP)) {
+      // Check if any handler implements this method
+      const handlers = callbacks.filter(
+        (h) => typeof (h as Record<string, unknown>)[methodName] === 'function',
+      );
+      if (handlers.length === 0) continue;
+
+      const taskName = `${agentName}_${wirePosition}`;
+      await this.workerManager.registerTaskDef(taskName, { timeoutSeconds: 120 });
+      this.workerManager.addWorker(taskName, async (inputData) => {
+        const messages = inputData['messages'] ?? null;
+        const llmResult = inputData['llm_result'] ?? null;
+        try {
+          let result: unknown = {};
+          for (const handler of handlers) {
+            const fn = (handler as Record<string, unknown>)[methodName] as Function;
+            const kwargs: Record<string, unknown> = {};
+            if (messages !== null) kwargs.messages = messages;
+            if (llmResult !== null) kwargs.llmResult = llmResult;
+            result = await fn.call(handler, kwargs);
+          }
+          return typeof result === 'object' && result !== null ? result : {};
+        } catch {
+          return {};
+        }
+      });
+    }
+  }
+
+  /**
+   * Register a callable gate worker.
+   * Server dispatches {agent}_gate with {result}.
+   * Worker returns {decision: "continue"|"stop"}.
+   */
+  private async _registerGateWorker(
+    agentName: string,
+    gateFn: (...args: unknown[]) => unknown,
+  ): Promise<void> {
+    const taskName = `${agentName}_gate`;
+    await this.workerManager.registerTaskDef(taskName, { timeoutSeconds: 120 });
+    this.workerManager.addWorker(taskName, async (inputData) => {
+      const result = String(inputData['result'] ?? '');
+      try {
+        const decision = await gateFn(result);
+        if (typeof decision === 'string') {
+          return { decision };
+        }
+        return { decision: decision ? 'continue' : 'stop' };
+      } catch {
+        return { decision: 'continue' };
+      }
+    });
+  }
+
+  /**
+   * Register a function-based router worker.
+   * Server dispatches {agent}_router_fn with {prompt}.
+   * Worker returns {selected_agent}.
+   */
+  private async _registerRouterWorker(
+    agentName: string,
+    routerFn: (...args: unknown[]) => string,
+  ): Promise<void> {
+    const taskName = `${agentName}_router_fn`;
+    await this.workerManager.registerTaskDef(taskName, { timeoutSeconds: 120 });
+    this.workerManager.addWorker(taskName, async (inputData) => {
+      const prompt = String(inputData['prompt'] ?? '');
+      try {
+        const selected = await routerFn(prompt);
+        return { selected_agent: selected };
+      } catch {
+        return { selected_agent: '' };
+      }
+    });
+  }
+
+  /**
+   * Normalize a guardrail from any input format to GuardrailDef (if it has a func).
+   */
+  private _normalizeGuardrailDef(g: unknown): GuardrailDef | null {
+    if (g == null || typeof g !== 'object') return null;
+
+    // Already a GuardrailDef with func
+    const obj = g as Record<string, unknown>;
+    if (typeof obj.func === 'function') {
+      return obj as unknown as GuardrailDef;
+    }
+
+    // RegexGuardrail, LLMGuardrail — server-side, no local worker needed
+    return null;
   }
 
   /**

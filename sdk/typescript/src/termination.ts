@@ -1,6 +1,24 @@
 // ── Termination conditions ──────────────────────────────
 
 /**
+ * Context passed to shouldTerminate() for evaluation.
+ */
+export interface TerminationContext {
+  result: string;
+  messages: unknown[];
+  iteration: number;
+  token_usage?: Record<string, number>;
+}
+
+/**
+ * Result of evaluating a termination condition.
+ */
+export interface TerminationResult {
+  shouldTerminate: boolean;
+  reason: string;
+}
+
+/**
  * Abstract base class for termination conditions.
  * Supports compositional `.and()` and `.or()` operators.
  */
@@ -18,6 +36,11 @@ export abstract class TerminationCondition {
   or(other: TerminationCondition): OrCondition {
     return new OrCondition(this, other);
   }
+
+  /**
+   * Evaluate whether the agent should stop.
+   */
+  abstract shouldTerminate(context: TerminationContext): TerminationResult;
 
   /**
    * Serialize to the wire format object.
@@ -40,6 +63,19 @@ export class TextMention extends TerminationCondition {
     this.caseSensitive = caseSensitive;
   }
 
+  shouldTerminate(context: TerminationContext): TerminationResult {
+    let result = String(context.result ?? '');
+    let text = this.text;
+    if (!this.caseSensitive) {
+      result = result.toLowerCase();
+      text = text.toLowerCase();
+    }
+    if (result.includes(text)) {
+      return { shouldTerminate: true, reason: `Text '${this.text}' found in output` };
+    }
+    return { shouldTerminate: false, reason: '' };
+  }
+
   toJSON(): object {
     return {
       type: 'text_mention',
@@ -60,6 +96,14 @@ export class StopMessage extends TerminationCondition {
     this.stopMessage = stopMessage;
   }
 
+  shouldTerminate(context: TerminationContext): TerminationResult {
+    const result = String(context.result ?? '').trim();
+    if (result === this.stopMessage) {
+      return { shouldTerminate: true, reason: `Stop message '${this.stopMessage}' received` };
+    }
+    return { shouldTerminate: false, reason: '' };
+  }
+
   toJSON(): object {
     return {
       type: 'stop_message',
@@ -77,6 +121,17 @@ export class MaxMessage extends TerminationCondition {
   constructor(maxMessages: number) {
     super();
     this.maxMessages = maxMessages;
+  }
+
+  shouldTerminate(context: TerminationContext): TerminationResult {
+    const messages = Array.isArray(context.messages) ? context.messages : [];
+    if (messages.length >= this.maxMessages) {
+      return {
+        shouldTerminate: true,
+        reason: `Message count (${messages.length}) >= limit (${this.maxMessages})`,
+      };
+    }
+    return { shouldTerminate: false, reason: '' };
   }
 
   toJSON(): object {
@@ -104,6 +159,33 @@ export class TokenUsageCondition extends TerminationCondition {
     this.maxTotalTokens = options.maxTotalTokens;
     this.maxPromptTokens = options.maxPromptTokens;
     this.maxCompletionTokens = options.maxCompletionTokens;
+  }
+
+  shouldTerminate(context: TerminationContext): TerminationResult {
+    const usage = context.token_usage ?? {};
+    const total = usage.total_tokens ?? 0;
+    const prompt = usage.prompt_tokens ?? 0;
+    const completion = usage.completion_tokens ?? 0;
+
+    if (this.maxTotalTokens !== undefined && total >= this.maxTotalTokens) {
+      return {
+        shouldTerminate: true,
+        reason: `Total tokens (${total}) >= limit (${this.maxTotalTokens})`,
+      };
+    }
+    if (this.maxPromptTokens !== undefined && prompt >= this.maxPromptTokens) {
+      return {
+        shouldTerminate: true,
+        reason: `Prompt tokens (${prompt}) >= limit (${this.maxPromptTokens})`,
+      };
+    }
+    if (this.maxCompletionTokens !== undefined && completion >= this.maxCompletionTokens) {
+      return {
+        shouldTerminate: true,
+        reason: `Completion tokens (${completion}) >= limit (${this.maxCompletionTokens})`,
+      };
+    }
+    return { shouldTerminate: false, reason: '' };
   }
 
   toJSON(): object {
@@ -139,6 +221,18 @@ export class AndCondition extends TerminationCondition {
     this.conditions = flattened;
   }
 
+  shouldTerminate(context: TerminationContext): TerminationResult {
+    const reasons: string[] = [];
+    for (const cond of this.conditions) {
+      const result = cond.shouldTerminate(context);
+      if (!result.shouldTerminate) {
+        return { shouldTerminate: false, reason: '' };
+      }
+      if (result.reason) reasons.push(result.reason);
+    }
+    return { shouldTerminate: true, reason: reasons.join(' AND ') };
+  }
+
   toJSON(): object {
     return {
       type: 'and',
@@ -167,6 +261,14 @@ export class OrCondition extends TerminationCondition {
       }
     }
     this.conditions = flattened;
+  }
+
+  shouldTerminate(context: TerminationContext): TerminationResult {
+    for (const cond of this.conditions) {
+      const result = cond.shouldTerminate(context);
+      if (result.shouldTerminate) return result;
+    }
+    return { shouldTerminate: false, reason: '' };
   }
 
   toJSON(): object {

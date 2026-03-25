@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-03-24T22:50:59.612Z",
+  "timestamp": "2026-03-25T01:03:02.931Z",
   "results": [
     {
-      "example": "langgraph/04-simple-stategraph",
+      "example": "vercel-ai/01-passthrough",
       "status": "FAIL",
-      "duration": 2.024,
+      "duration": 0,
       "checks": {
         "workflowCompleted": false,
         "noUnhandledErrors": true,
@@ -15,124 +15,121 @@
       },
       "output": "",
       "events": [],
-      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:57:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
+      "error": "Example file not found"
     },
     {
-      "example": "langgraph/06-conditional-routing",
-      "status": "FAIL",
-      "duration": 2.048,
+      "example": "vercel-ai/04-structured-output",
+      "status": "PASS",
+      "duration": 15.992,
       "checks": {
-        "workflowCompleted": false,
+        "workflowCompleted": true,
         "noUnhandledErrors": true,
         "toolAudit": [],
         "allToolsSucceeded": true,
-        "llmEngaged": false,
-        "outputNonEmpty": false
+        "llmEngaged": true,
+        "outputNonEmpty": true
       },
-      "output": "",
-      "events": [],
-      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:57:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
+      "output": "{\n  \"result\": {\n    \"name\": \"Akira Tanaka\",\n    \"age\": 34,\n    \"occupation\": \"Machine Learning Engineer\",\n    \"skills\": [\n      \"Python\",\n      \"TensorFlow\",\n      \"Data Analysis\",\n      \"Natural Language Processing\",\n      \"Computer Vision\"\n    ]\n  },\n  \"finishReason\": \"STOP\"\n}",
+      "events": []
     },
     {
-      "example": "langgraph/02-react-with-tools",
-      "status": "FAIL",
-      "duration": 2.336,
+      "example": "vercel-ai/03-streaming",
+      "status": "PASS",
+      "duration": 16.12,
       "checks": {
-        "workflowCompleted": false,
+        "workflowCompleted": true,
         "noUnhandledErrors": true,
         "toolAudit": [],
         "allToolsSucceeded": true,
-        "llmEngaged": false,
-        "outputNonEmpty": false
+        "llmEngaged": true,
+        "outputNonEmpty": true
       },
-      "output": "",
-      "events": [],
-      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:57:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
+      "output": "{\n  \"result\": \"Quantum computing is a revolutionary technology that harnesses the principles of quantum mechanics to process information in fundamentally different ways compared to classical computers. Unlike classical bits, which exist in a state of 0 or 1, quantum bits, or qubits, can exist simultaneously in multiple states thanks to superposition. This allows quantum computers to perform many calculations at once, making them potentially much more powerful for specific tasks such as factoring large numbers, optimizing complex systems, and simulating quantum physical processes.\\n\\nAs for the weather in San Francisco, it is currently 62°F and foggy.\",\n  \"finishReason\": \"STOP\",\n  \"rejectionReason\": null\n}",
+      "events": [
+        {
+          "type": "done"
+        }
+      ]
     },
     {
-      "example": "langgraph/01-hello-world",
-      "status": "FAIL",
-      "duration": 2.346,
+      "example": "vercel-ai/02-tools-compat",
+      "status": "PASS",
+      "duration": 16.134,
       "checks": {
-        "workflowCompleted": false,
+        "workflowCompleted": true,
         "noUnhandledErrors": true,
         "toolAudit": [],
         "allToolsSucceeded": true,
-        "llmEngaged": false,
-        "outputNonEmpty": false
+        "llmEngaged": true,
+        "outputNonEmpty": true
       },
-      "output": "",
-      "events": [],
-      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:57:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
+      "output": "{\n  \"result\": \"I found results for your search on quantum computing, but the specific details weren't included in the output. However, I can provide some general information if you need it.\\n\\nAs for the calculation, \\\\(2 + 2 = 4\\\\).\",\n  \"finishReason\": \"STOP\",\n  \"rejectionReason\": null\n}",
+      "events": []
     },
     {
-      "example": "langgraph/07-system-prompt",
-      "status": "FAIL",
-      "duration": 2.296,
+      "example": "vercel-ai/09-credentials",
+      "status": "PASS",
+      "duration": 16.124,
       "checks": {
-        "workflowCompleted": false,
+        "workflowCompleted": true,
         "noUnhandledErrors": true,
         "toolAudit": [],
         "allToolsSucceeded": true,
-        "llmEngaged": false,
-        "outputNonEmpty": false
+        "llmEngaged": true,
+        "outputNonEmpty": true
       },
-      "output": "",
-      "events": [],
-      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:57:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
+      "output": "{\n  \"result\": \"The analytics report with ID **RPT-2024-Q4** has been fetched successfully. It contains a total of **42 rows** of data. If you need specific details from this report, please let me know!\",\n  \"finishReason\": \"STOP\",\n  \"rejectionReason\": null\n}",
+      "events": []
     },
     {
-      "example": "langgraph/05-tool-node",
-      "status": "FAIL",
-      "duration": 2.456,
+      "example": "vercel-ai/05-multi-step",
+      "status": "PASS",
+      "duration": 20.68,
       "checks": {
-        "workflowCompleted": false,
+        "workflowCompleted": true,
         "noUnhandledErrors": true,
         "toolAudit": [],
         "allToolsSucceeded": true,
-        "llmEngaged": false,
-        "outputNonEmpty": false
+        "llmEngaged": true,
+        "outputNonEmpty": true
       },
-      "output": "",
-      "events": [],
-      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:57:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
+      "output": "{\n  \"result\": \"I'm currently unable to retrieve the current weather and time for San Francisco and Tokyo due to a technical issue. Please try again later, or check a reliable weather website for the most up-to-date information.\",\n  \"finishReason\": \"STOP\",\n  \"rejectionReason\": null\n}",
+      "events": []
     },
     {
-      "example": "langgraph/08-structured-output",
-      "status": "FAIL",
-      "duration": 2.408,
+      "example": "vercel-ai/10-hitl",
+      "status": "PASS",
+      "duration": 15.631,
       "checks": {
-        "workflowCompleted": false,
+        "workflowCompleted": true,
         "noUnhandledErrors": true,
         "toolAudit": [],
         "allToolsSucceeded": true,
-        "llmEngaged": false,
-        "outputNonEmpty": false
+        "llmEngaged": true,
+        "outputNonEmpty": true
       },
-      "output": "",
-      "events": [],
-      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:57:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
+      "output": "{\n  \"result\": \"The action to fetch the latest sales report for Q4 2024 has been executed successfully.\",\n  \"finishReason\": \"STOP\",\n  \"rejectionReason\": null\n}",
+      "events": []
     },
     {
-      "example": "langgraph/03-memory",
-      "status": "FAIL",
-      "duration": 2.582,
+      "example": "vercel-ai/08-agent-handoff",
+      "status": "PASS",
+      "duration": 125.433,
       "checks": {
-        "workflowCompleted": false,
+        "workflowCompleted": true,
         "noUnhandledErrors": true,
         "toolAudit": [],
         "allToolsSucceeded": true,
-        "llmEngaged": false,
-        "outputNonEmpty": false
+        "llmEngaged": true,
+        "outputNonEmpty": true
       },
-      "output": "",
-      "events": [],
-      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:57:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
+      "output": "{\n  \"result\": \"To fix a Null Pointer Exception in Java, you can use the following approaches:\\n\\n1. **Check for null before dereferencing**: Always check if an object is null before using it.  \\n   ```java\\n   if (myObject != null) {\\n       myObject.doSomething();\\n   }\\n   ```\\n\\n2. **Use try-catch**: Implement a try-catch block to handle the exception gracefully.  \\n   ```java\\n   try {\\n       myObject.doSomething();\\n   } catch (NullPointerException e) {\\n       // Handle the exception, perhaps log it or print a user-friendly message\\n       System.out.println(\\\"Caught a NullPointerException: \\\" + e.getMessage());\\n   }\\n   ```\\n\\n3. **Use Optional**: In Java 8 and above, you can use `Optional` to avoid nulls.  \\n   ```java\\n   Optional<MyClass> optionalObject = Optional.ofNullable(myObject);\\n   optionalObject.ifPresent(obj -> obj.doSomething());\\n   ```\\n\\nBy implementing these practices, you can reduce the chances of encountering a Null Pointer Exception in your Java code.\"\n}",
+      "events": []
     },
     {
-      "example": "langgraph/09-math-agent",
+      "example": "vercel-ai/06-middleware",
       "status": "FAIL",
-      "duration": 1.943,
+      "duration": 300.073,
       "checks": {
         "workflowCompleted": false,
         "noUnhandledErrors": true,
@@ -142,13 +139,12 @@
         "outputNonEmpty": false
       },
       "output": "",
-      "events": [],
-      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:57:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
+      "events": []
     },
     {
-      "example": "langgraph/10-research-agent",
+      "example": "vercel-ai/07-stop-conditions",
       "status": "FAIL",
-      "duration": 1.904,
+      "duration": 300.073,
       "checks": {
         "workflowCompleted": false,
         "noUnhandledErrors": true,
@@ -158,8 +154,7 @@
         "outputNonEmpty": false
       },
       "output": "",
-      "events": [],
-      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:57:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
+      "events": []
     }
   ]
 }

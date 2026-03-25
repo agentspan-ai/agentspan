@@ -195,6 +195,7 @@ export {
   AndCondition,
   OrCondition,
 } from './termination.js';
+export type { TerminationContext, TerminationResult } from './termination.js';
 
 // ── Handoffs ────────────────────────────────────────────
 export {
