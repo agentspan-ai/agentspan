@@ -17,7 +17,7 @@
       "import": "./dist/testing/index.js",
       "require": "./dist/testing/index.cjs"
     },
-    "./ai": {
+    "./vercel-ai": {
       "types": "./dist/wrappers/ai.d.ts",
       "import": "./dist/wrappers/ai.js",
       "require": "./dist/wrappers/ai.cjs"

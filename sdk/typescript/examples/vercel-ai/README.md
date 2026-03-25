@@ -38,9 +38,9 @@ console.log(result.text);
 </td><td>
 
 ```typescript
-import { generateText, tool } from '@agentspan/sdk/ai';
+import { generateText, tool } from '@agentspan/sdk/vercel-ai';
 //      ^^^^^^^^^^^^
-//      from '@agentspan/sdk/ai'  <-- only change
+//      from '@agentspan/sdk/vercel-ai'  <-- only change
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
 

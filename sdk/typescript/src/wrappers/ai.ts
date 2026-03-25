@@ -8,7 +8,7 @@
  * Usage:
  *   // BEFORE: import { generateText } from 'ai';
  *   // AFTER:
- *   import { generateText } from '@agentspan/sdk/ai';
+ *   import { generateText } from '@agentspan/sdk/vercel-ai';
  *
  * Everything else in user code stays UNCHANGED.
  */
@@ -26,7 +26,7 @@ async function _loadAI(): Promise<any> {
     return _ai;
   } catch {
     throw new Error(
-      `The 'ai' package is required by @agentspan/sdk/ai but was not found. ` +
+      `The 'ai' package is required by @agentspan/sdk/vercel-ai but was not found. ` +
       `Install it with: npm install ai`,
     );
   }
@@ -231,7 +231,7 @@ export function getAIModule(): Record<string, unknown> {
     return _aiModule!;
   } catch {
     throw new Error(
-      `The 'ai' package is required by @agentspan/sdk/ai but was not found. ` +
+      `The 'ai' package is required by @agentspan/sdk/vercel-ai but was not found. ` +
       `Install it with: npm install ai`,
     );
   }
