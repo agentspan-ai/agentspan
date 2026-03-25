@@ -115,12 +115,12 @@ async function review(state: State): Promise<Partial<State>> {
 const builder = new StateGraph(PlannerState);
 builder.addNode('plan', plan);
 builder.addNode('execute', executeSteps);
-builder.addNode('review', review);
+builder.addNode('review_node', review);
 
 builder.addEdge(START, 'plan');
 builder.addEdge('plan', 'execute');
-builder.addEdge('execute', 'review');
-builder.addEdge('review', END);
+builder.addEdge('execute', 'review_node');
+builder.addEdge('review_node', END);
 
 const graph = builder.compile();
 

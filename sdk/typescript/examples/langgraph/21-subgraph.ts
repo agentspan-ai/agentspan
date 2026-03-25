@@ -75,12 +75,12 @@ async function summarizeText(state: AnalysisStateType): Promise<Partial<Analysis
 // Build the subgraph
 // ---------------------------------------------------------------------------
 const analysisBuilder = new StateGraph(AnalysisState);
-analysisBuilder.addNode('sentiment', analyzeSentiment);
-analysisBuilder.addNode('keywords', extractKeywords);
+analysisBuilder.addNode('sentiment_node', analyzeSentiment);
+analysisBuilder.addNode('keywords_node', extractKeywords);
 analysisBuilder.addNode('summarize', summarizeText);
-analysisBuilder.addEdge(START, 'sentiment');
-analysisBuilder.addEdge('sentiment', 'keywords');
-analysisBuilder.addEdge('keywords', 'summarize');
+analysisBuilder.addEdge(START, 'sentiment_node');
+analysisBuilder.addEdge('sentiment_node', 'keywords_node');
+analysisBuilder.addEdge('keywords_node', 'summarize');
 analysisBuilder.addEdge('summarize', END);
 const analysisSubgraph = analysisBuilder.compile();
 

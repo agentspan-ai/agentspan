@@ -87,17 +87,17 @@ async function mergeAndSummarize(state: State): Promise<Partial<State>> {
 // Build the graph
 // ---------------------------------------------------------------------------
 const builder = new StateGraph(ParallelState);
-builder.addNode('pros', analyzePros);
-builder.addNode('cons', analyzeCons);
+builder.addNode('pros_node', analyzePros);
+builder.addNode('cons_node', analyzeCons);
 builder.addNode('merge', mergeAndSummarize);
 
 // Fan-out: both branches run in parallel from START
-builder.addEdge(START, 'pros');
-builder.addEdge(START, 'cons');
+builder.addEdge(START, 'pros_node');
+builder.addEdge(START, 'cons_node');
 
 // Fan-in: both branches feed into merge
-builder.addEdge('pros', 'merge');
-builder.addEdge('cons', 'merge');
+builder.addEdge('pros_node', 'merge');
+builder.addEdge('cons_node', 'merge');
 builder.addEdge('merge', END);
 
 const graph = builder.compile();

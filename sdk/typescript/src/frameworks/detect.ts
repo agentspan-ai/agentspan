@@ -78,6 +78,10 @@ function hasADKMarkers(obj: any): boolean {
     'afterModelCallback' in obj ||
     'disallowTransferToParent' in obj ||
     'includeContents' in obj;
+  // ADK multi-agent types (SequentialAgent, ParallelAgent, LoopAgent)
+  // have .subAgents but no .model — they're orchestration-only
+  const hasSubAgents = Array.isArray(obj.subAgents);
+  if (hasSubAgents && !hasModel) return true;
   return hasModel && (hasInstruction || hasADKProps);
 }
 

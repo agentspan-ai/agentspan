@@ -114,13 +114,13 @@ const builder = new StateGraph(PipelineState);
 builder.addNode('load', loadData);
 builder.addNode('clean', cleanData);
 builder.addNode('analyze', analyzeData);
-builder.addNode('report', generateReport);
+builder.addNode('report_node', generateReport);
 
 builder.addEdge(START, 'load');
 builder.addEdge('load', 'clean');
 builder.addEdge('clean', 'analyze');
-builder.addEdge('analyze', 'report');
-builder.addEdge('report', END);
+builder.addEdge('analyze', 'report_node');
+builder.addEdge('report_node', END);
 
 const graph = builder.compile();
 
