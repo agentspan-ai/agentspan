@@ -1,5 +1,6 @@
 import type { ToolContext } from './types.js';
 import { AgentAPIError } from './errors.js';
+import { extractExecutionToken, setCredentialContext, clearCredentialContext } from './credentials.js';
 
 // ── Type coercion (base spec §14.1) ─────────────────────
 
@@ -245,9 +246,15 @@ export class WorkerManager {
 
   /**
    * Queue a worker for the given task name.
+   * Replaces any existing worker with the same task name.
    */
   addWorker(taskName: string, handler: WorkerHandler): void {
-    this.workers.push({ taskName, handler });
+    const idx = this.workers.findIndex((w) => w.taskName === taskName);
+    if (idx >= 0) {
+      this.workers[idx] = { taskName, handler };
+    } else {
+      this.workers.push({ taskName, handler });
+    }
   }
 
   /**
@@ -288,8 +295,10 @@ export class WorkerManager {
 
   /**
    * Start polling for all queued workers.
+   * Stops any existing pollers first to prevent duplicates.
    */
   startPolling(): void {
+    this.stopPolling();
     for (const worker of this.workers) {
       const poller = setInterval(async () => {
         await this._pollAndExecute(worker);
@@ -441,6 +450,12 @@ export class WorkerManager {
         cleanedInput['__toolContext__'] = toolContext;
       }
 
+      // Set up credential context so getCredential() works inside handlers
+      const executionToken = extractExecutionToken(inputData);
+      if (executionToken) {
+        setCredentialContext(this.serverUrl, this.headers, executionToken);
+      }
+
       try {
         let result = await worker.handler(cleanedInput);
 
@@ -461,6 +476,10 @@ export class WorkerManager {
           task.workflowInstanceId,
           error instanceof Error ? error : new Error(String(error)),
         );
+      } finally {
+        if (executionToken) {
+          clearCredentialContext();
+        }
       }
     } catch {
       // Swallow poll-level errors to keep the polling loop alive

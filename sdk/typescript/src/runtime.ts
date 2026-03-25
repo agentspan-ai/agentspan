@@ -124,7 +124,7 @@ export class AgentRuntime {
       const workflowId = startResponse.workflowId as string;
 
       // Create SSE stream
-      const sseUrl = `${this.config.serverUrl}/agent/${workflowId}/sse`;
+      const sseUrl = `${this.config.serverUrl}/agent/stream/${workflowId}`;
       const agentStream = new AgentStream(
         sseUrl,
         this.authHeaders,
@@ -253,7 +253,7 @@ export class AgentRuntime {
         ).then(() => {}),
 
       stream: () => {
-        const sseUrl = `${this.config.serverUrl}/agent/${workflowId}/sse`;
+        const sseUrl = `${this.config.serverUrl}/agent/stream/${workflowId}`;
         return new AgentStream(
           sseUrl,
           this.authHeaders,
@@ -828,7 +828,7 @@ export class AgentRuntime {
       const workflowId = startResponse.workflowId as string;
 
       // Create SSE stream to drain events and wait for completion
-      const sseUrl = `${this.config.serverUrl}/agent/${workflowId}/sse`;
+      const sseUrl = `${this.config.serverUrl}/agent/stream/${workflowId}`;
       const agentStream = new AgentStream(
         sseUrl,
         this.authHeaders,
@@ -954,7 +954,7 @@ export class AgentRuntime {
         ).then(() => {}),
 
       stream: () => {
-        const sseUrl = `${this.config.serverUrl}/agent/${workflowId}/sse`;
+        const sseUrl = `${this.config.serverUrl}/agent/stream/${workflowId}`;
         return new AgentStream(
           sseUrl,
           this.authHeaders,

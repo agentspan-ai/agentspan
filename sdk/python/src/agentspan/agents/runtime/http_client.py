@@ -37,20 +37,24 @@ class AgentHttpClient:
     def __init__(
         self,
         server_url: str,
+        api_key: str = "",
         auth_key: str = "",
         auth_secret: str = "",
     ) -> None:
         self._server_url = server_url.rstrip("/")
+        self._api_key = api_key
         self._auth_key = auth_key
         self._auth_secret = auth_secret
         self._client: Optional[httpx.AsyncClient] = None
 
     def _base_headers(self) -> Dict[str, str]:
         headers: Dict[str, str] = {}
-        if self._auth_key:
+        if self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
+        elif self._auth_key:
             headers["X-Auth-Key"] = self._auth_key
-        if self._auth_secret:
-            headers["X-Auth-Secret"] = self._auth_secret
+            if self._auth_secret:
+                headers["X-Auth-Secret"] = self._auth_secret
         return headers
 
     async def _get_client(self) -> httpx.AsyncClient:

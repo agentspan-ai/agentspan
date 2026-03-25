@@ -178,6 +178,68 @@ describe('AgentRuntime', () => {
       await expect(runtime.shutdown()).resolves.not.toThrow();
     });
   });
+
+  describe('SSE URL construction', () => {
+    it('constructs SSE URL as /agent/stream/{workflowId}', async () => {
+      const fetchCalls: string[] = [];
+
+      global.fetch = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+        fetchCalls.push(url);
+
+        if (url.includes('/agent/start')) {
+          return {
+            ok: true,
+            status: 200,
+            text: async () => JSON.stringify({ workflowId: 'wf-sse-test' }),
+          };
+        }
+        if (url.includes('/agent/stream/') || url.includes('/sse')) {
+          // SSE endpoint — return a stream with a done event
+          const ssePayload = 'event: done\ndata: {"output":"result","status":"COMPLETED"}\n\n';
+          return {
+            ok: true,
+            status: 200,
+            headers: new Headers({ 'content-type': 'text/event-stream' }),
+            body: new ReadableStream({
+              start(controller) {
+                controller.enqueue(new TextEncoder().encode(ssePayload));
+                controller.close();
+              },
+            }),
+          };
+        }
+        if (url.includes('/status')) {
+          return {
+            ok: true,
+            status: 200,
+            text: async () => JSON.stringify({ status: 'COMPLETED', output: 'result' }),
+          };
+        }
+        if (url.includes('/metadata/taskdefs')) {
+          return { ok: true, status: 200, text: async () => '' };
+        }
+        if (url.includes('/tasks/poll/')) {
+          return { ok: true, status: 204, text: async () => '' };
+        }
+        return { ok: true, status: 200, text: async () => '{}' };
+      });
+
+      const runtime = new AgentRuntime({ serverUrl: 'http://localhost:8080/api' });
+      const { Agent } = await import('../../src/agent.js');
+      const agent = new Agent({ name: 'test_agent', model: 'gpt-4o' });
+
+      // run() drains the SSE stream, which triggers the fetch to the SSE URL
+      try {
+        await runtime.run(agent, 'test prompt');
+      } catch {
+        // May error on SSE parsing — that's OK, we just need the URL
+      }
+
+      // Verify SSE URL uses /agent/stream/{id}
+      const sseCall = fetchCalls.find((u) => u.includes('/stream/') || u.includes('/sse'));
+      expect(sseCall).toBe('http://localhost:8080/api/agent/stream/wf-sse-test');
+    });
+  });
 });
 
 // ── Singleton functions ─────────────────────────────────

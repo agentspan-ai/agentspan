@@ -128,8 +128,28 @@ describe('resolveCredentials', () => {
         'Content-Type': 'application/json',
         ...headers,
       },
-      body: JSON.stringify({ executionToken: token, names: ['GITHUB_TOKEN', 'AWS_KEY'] }),
+      body: JSON.stringify({ token, names: ['GITHUB_TOKEN', 'AWS_KEY'] }),
     });
+  });
+
+  it('sends token field (not executionToken) matching server contract', async () => {
+    const mockResponse = { MY_CRED: 'val' };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => mockResponse,
+      }),
+    );
+
+    await resolveCredentials(serverUrl, headers, token, ['MY_CRED']);
+
+    const call = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const body = JSON.parse(call[1].body);
+    // Server expects "token", not "executionToken"
+    expect(body).toHaveProperty('token');
+    expect(body).not.toHaveProperty('executionToken');
+    expect(body.token).toBe(token);
   });
 
   it('throws CredentialNotFoundError on 404', async () => {

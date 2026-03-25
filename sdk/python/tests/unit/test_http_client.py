@@ -176,3 +176,81 @@ async def test_close_idempotent():
     client = _make_client(handler)
     await client.close()
     await client.close()  # should not raise
+
+
+# ── api_key Bearer auth (fix #4) ─────────────────────────────────────
+
+
+def _make_client_with_api_key(handler) -> AgentHttpClient:
+    """Create an AgentHttpClient with api_key (Bearer auth)."""
+    client = AgentHttpClient(
+        server_url="http://test-server/api",
+        api_key="my-bearer-token",
+    )
+    client._client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        headers=client._base_headers(),
+    )
+    return client
+
+
+@pytest.mark.asyncio
+async def test_api_key_sends_bearer_auth():
+    """api_key should produce Authorization: Bearer header."""
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers.get("authorization") == "Bearer my-bearer-token"
+        # Should NOT have X-Auth-Key when api_key is used
+        assert "x-auth-key" not in request.headers
+        return httpx.Response(200, json={"workflowId": "wf-1"})
+
+    client = _make_client_with_api_key(handler)
+    await client.start_agent({"prompt": "test"})
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_api_key_takes_precedence_over_auth_key():
+    """When both api_key and auth_key are set, api_key (Bearer) wins."""
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers.get("authorization") == "Bearer my-api-key"
+        assert "x-auth-key" not in request.headers
+        return httpx.Response(200, json={"workflowId": "wf-1"})
+
+    client = AgentHttpClient(
+        server_url="http://test-server/api",
+        api_key="my-api-key",
+        auth_key="my-auth-key",
+        auth_secret="my-auth-secret",
+    )
+    client._client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        headers=client._base_headers(),
+    )
+    await client.start_agent({"prompt": "test"})
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_legacy_auth_key_still_works():
+    """When api_key is empty, auth_key/auth_secret headers are sent."""
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers.get("x-auth-key") == "legacy-key"
+        assert request.headers.get("x-auth-secret") == "legacy-secret"
+        assert "authorization" not in request.headers
+        return httpx.Response(200, json={"workflowId": "wf-1"})
+
+    client = AgentHttpClient(
+        server_url="http://test-server/api",
+        api_key="",
+        auth_key="legacy-key",
+        auth_secret="legacy-secret",
+    )
+    client._client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        headers=client._base_headers(),
+    )
+    await client.start_agent({"prompt": "test"})
+    await client.close()

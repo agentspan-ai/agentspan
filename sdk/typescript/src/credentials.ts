@@ -108,7 +108,7 @@ export async function resolveCredentials(
         'Content-Type': 'application/json',
         ...headers,
       },
-      body: JSON.stringify({ executionToken, names }),
+      body: JSON.stringify({ token: executionToken, names }),
     });
   } catch (err) {
     throw new CredentialServiceError(

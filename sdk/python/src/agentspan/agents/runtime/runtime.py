@@ -240,7 +240,7 @@ class AgentRuntime:
         if server_url is not None:
             overrides["server_url"] = server_url
         if api_key is not None:
-            overrides["auth_key"] = api_key
+            overrides["api_key"] = api_key
         if api_secret is not None:
             overrides["auth_secret"] = api_secret
         self._config = replace(base, **overrides) if overrides else base
@@ -307,6 +307,7 @@ class AgentRuntime:
         # Async HTTP client for agent API endpoints
         self._http = AgentHttpClient(
             server_url=self._config.server_url,
+            api_key=self._config.api_key or "",
             auth_key=self._config.auth_key or "",
             auth_secret=self._config.auth_secret or "",
         )
@@ -346,10 +347,12 @@ class AgentRuntime:
         headers: Dict[str, str] = {}
         if content_type:
             headers["Content-Type"] = content_type
-        if self._config.auth_key:
+        if self._config.api_key:
+            headers["Authorization"] = f"Bearer {self._config.api_key}"
+        elif self._config.auth_key:
             headers["X-Auth-Key"] = self._config.auth_key
-        if self._config.auth_secret:
-            headers["X-Auth-Secret"] = self._config.auth_secret
+            if self._config.auth_secret:
+                headers["X-Auth-Secret"] = self._config.auth_secret
         return headers
 
     def _start_via_server(
