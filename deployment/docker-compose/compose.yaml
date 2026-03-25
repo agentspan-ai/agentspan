@@ -1,0 +1,63 @@
+name: agentspan
+
+services:
+  postgres:
+    image: "${POSTGRES_IMAGE:-postgres:16-alpine}"
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:-agentspan}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-changeme}"
+      POSTGRES_DB: "${POSTGRES_DB:-agentspan}"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  agentspan:
+    image: "${AGENTSPAN_IMAGE:-agentspan/server:latest}"
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${AGENTSPAN_PORT:-8080}:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      SPRING_PROFILES_ACTIVE: "${SPRING_PROFILES_ACTIVE:-postgres}"
+      SPRING_DATASOURCE_URL: "jdbc:postgresql://${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-agentspan}"
+      SPRING_DATASOURCE_USERNAME: "${POSTGRES_USER:-agentspan}"
+      SPRING_DATASOURCE_PASSWORD: "${POSTGRES_PASSWORD:-changeme}"
+
+      JAVA_TOOL_OPTIONS: "${JAVA_TOOL_OPTIONS:--Xms512m -Xmx1536m -XX:+UseG1GC -XX:MaxGCPauseMillis=200}"
+      LOGGING_LEVEL_ROOT: "${LOGGING_LEVEL_ROOT:-WARN}"
+      LOGGING_LEVEL_DEV_AGENTSPAN: "${LOGGING_LEVEL_DEV_AGENTSPAN:-INFO}"
+      OLLAMA_HOST: "${OLLAMA_HOST:-http://host.docker.internal:11434}"
+
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      MISTRAL_API_KEY: "${MISTRAL_API_KEY:-}"
+      COHERE_API_KEY: "${COHERE_API_KEY:-}"
+      XAI_API_KEY: "${XAI_API_KEY:-}"
+      PERPLEXITY_API_KEY: "${PERPLEXITY_API_KEY:-}"
+
+      AZURE_OPENAI_API_KEY: "${AZURE_OPENAI_API_KEY:-}"
+      AZURE_OPENAI_ENDPOINT: "${AZURE_OPENAI_ENDPOINT:-}"
+      AZURE_OPENAI_DEPLOYMENT: "${AZURE_OPENAI_DEPLOYMENT:-}"
+
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
+      AWS_REGION: "${AWS_REGION:-us-east-1}"
+
+      GOOGLE_CLOUD_PROJECT: "${GOOGLE_CLOUD_PROJECT:-}"
+      GOOGLE_CLOUD_LOCATION: "${GOOGLE_CLOUD_LOCATION:-us-central1}"
+
+volumes:
+  postgres_data:

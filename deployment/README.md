@@ -109,6 +109,20 @@ Point your DNS A record to the ingress load balancer IP and open `http://your-do
 
 ---
 
+## Docker Compose (Single VM / Local)
+
+For a turn-key single-node deployment (Agentspan + Postgres), use:
+
+```bash
+cd deployment/docker-compose
+cp .env.example .env
+docker compose up -d
+```
+
+See `deployment/docker-compose/README.md` for full usage.
+
+---
+
 ## Building the Image Manually
 
 ```bash
@@ -257,6 +271,13 @@ server/Dockerfile               Builds UI + server into one image (build context
 deployment/
 ├── README.md                   This file
 ├── deploy.sh                   One-shot deployment script
+├── docker-compose/
+│   ├── compose.yaml             Turn-key Compose stack (server + postgres)
+│   ├── .env.example             Environment template
+│   └── README.md                Compose deployment guide
+├── helm/
+│   ├── README.md                Helm usage guide
+│   └── agentspan/               Deployable Helm chart
 └── k8s/
     ├── namespace.yaml           Namespace: agentspan
     ├── configmap.yaml           Non-secret runtime config
