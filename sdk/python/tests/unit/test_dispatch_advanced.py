@@ -6,8 +6,9 @@ make_tool_worker, and ToolContext injection.
 """
 
 import inspect
-from unittest.mock import MagicMock, patch
+import os
 from typing import List, Optional
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -311,6 +312,67 @@ class TestMakeToolWorker:
         assert first.status == "COMPLETED"
         assert second.status == "FAILED"
         assert "Command 'git' is not allowed. Allowed commands: gh" in second.reason_for_incompletion
+
+    def test_cli_worker_can_clear_default_working_dir(self):
+        from agentspan.agents.cli_config import _make_cli_tool
+
+        tool_fn = _make_cli_tool(allowed_commands=["git"], working_dir="/default")
+        td = tool_fn._tool_def
+        wrapper = make_tool_worker(td.func, td.name, tool_def=td)
+
+        task = _make_task(
+            input_data={
+                "command": "git",
+                "args": ["status"],
+                "_working_dir": None,
+            }
+        )
+
+        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="ok\n", stderr="")
+            result = wrapper(task)
+
+        assert result.status == "COMPLETED"
+        assert mock_run.call_args.kwargs["cwd"] is None
+
+    def test_task_credential_names_override_shared_tool_definition(self, monkeypatch):
+        from agentspan.agents.tool import tool
+
+        captured = {}
+
+        class _FakeFetcher:
+            def fetch(self, token, credential_names):
+                captured["token"] = token
+                captured["credential_names"] = list(credential_names)
+                return {"ALT_TOKEN": "alt-value"}
+
+        monkeypatch.setattr(
+            "agentspan.agents.runtime._dispatch._get_credential_fetcher",
+            lambda: _FakeFetcher(),
+        )
+
+        @tool(credentials=["DEFAULT_TOKEN"])
+        def read_tokens() -> dict:
+            return {
+                "alt": os.getenv("ALT_TOKEN"),
+                "default": os.getenv("DEFAULT_TOKEN"),
+            }
+
+        td = read_tokens._tool_def
+        wrapper = make_tool_worker(td.func, td.name, tool_def=td)
+        result = wrapper(
+            _make_task(
+                input_data={
+                    "__agentspan_ctx__": {"execution_token": "exec-token"},
+                    "_credential_names": ["ALT_TOKEN"],
+                }
+            )
+        )
+
+        assert result.status == "COMPLETED"
+        assert captured["token"] == "exec-token"
+        assert captured["credential_names"] == ["ALT_TOKEN"]
+        assert result.output_data == {"alt": "alt-value", "default": None}
 
 
 # ── Guardrail integration with make_tool_worker ────────────────────────

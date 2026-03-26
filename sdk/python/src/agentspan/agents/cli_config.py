@@ -34,10 +34,10 @@ Example::
 from __future__ import annotations
 
 from contextvars import ContextVar
+from dataclasses import dataclass, field
 import os
 import shlex
 import subprocess
-from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 
@@ -65,6 +65,7 @@ _cli_runtime_overrides: ContextVar[Optional[Dict[str, Any]]] = ContextVar(
     "agentspan_cli_runtime_overrides",
     default=None,
 )
+_CLI_OVERRIDE_UNSET = object()
 
 
 # ── Validation ─────────────────────────────────────────────────────────
@@ -94,7 +95,7 @@ def _set_cli_runtime_overrides(
     allowed_commands: Optional[List[str]] = None,
     allow_shell: Optional[bool] = None,
     timeout: Optional[int] = None,
-    working_dir: Optional[str] = None,
+    working_dir: Any = _CLI_OVERRIDE_UNSET,
 ):
     """Install per-task CLI policy overrides for the current execution context."""
     overrides: Dict[str, Any] = {}
@@ -104,7 +105,7 @@ def _set_cli_runtime_overrides(
         overrides["allow_shell"] = bool(allow_shell)
     if timeout is not None:
         overrides["timeout"] = int(timeout)
-    if working_dir is not None:
+    if working_dir is not _CLI_OVERRIDE_UNSET:
         overrides["working_dir"] = working_dir
     return _cli_runtime_overrides.set(overrides or None)
 
@@ -258,8 +259,7 @@ def _make_cli_tool(
         "allowedCommands": list(allowed_commands),
         "allowShell": allow_shell,
         "timeout": timeout,
+        "workingDir": working_dir,
     }
-    if working_dir:
-        run_command._tool_def.config["workingDir"] = working_dir
 
     return run_command

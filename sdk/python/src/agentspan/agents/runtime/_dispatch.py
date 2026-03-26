@@ -351,13 +351,17 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
             # 3. _tool_def attribute on tool_func (works everywhere)
             _td = _tool_def_registry.get(tool_name) or tool_def
             raw_credentials = list(getattr(_td, "credentials", [])) if _td else _get_credential_names_from_tool(tool_func)
+            task_credential_names = task.input_data.pop("_credential_names", None)
             # Normalize: CredentialFile → env_var string, keep strings as-is
             from agentspan.agents.runtime.credentials.types import CredentialFile
-            credential_names = [
-                c.env_var if isinstance(c, CredentialFile) else c
-                for c in raw_credentials
-                if isinstance(c, (str, CredentialFile))
-            ]
+            if isinstance(task_credential_names, list):
+                credential_names = [str(c) for c in task_credential_names if isinstance(c, str)]
+            else:
+                credential_names = [
+                    c.env_var if isinstance(c, CredentialFile) else c
+                    for c in raw_credentials
+                    if isinstance(c, (str, CredentialFile))
+                ]
             # Fallback: workflow-level credentials (for framework-extracted tools)
             if not credential_names and task.workflow_instance_id:
                 with _workflow_credentials_lock:
@@ -415,6 +419,7 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
             # Conductor workers default to thread_count=1, so concurrent
             # credential injection is not a risk. Clean up in finally block.
             _injected_env_keys = []
+            clear_credential_context = None
             if resolved_credentials:
                 for k, v in resolved_credentials.items():
                     if isinstance(v, str):
@@ -423,9 +428,10 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
 
                 # Also set credential context for non-isolated tools using get_credential()
                 from agentspan.agents.runtime.credentials.accessor import (
-                    clear_credential_context,
+                    clear_credential_context as _clear_credential_context,
                     set_credential_context,
                 )
+                clear_credential_context = _clear_credential_context
                 set_credential_context(resolved_credentials)
 
             try:
@@ -440,8 +446,7 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
                 # Clean up injected env vars
                 for k in _injected_env_keys:
                     os.environ.pop(k, None)
-                if resolved_credentials:
-                    from agentspan.agents.runtime.credentials.accessor import clear_credential_context
+                if clear_credential_context is not None:
                     clear_credential_context()
 
             if isinstance(result, dict):

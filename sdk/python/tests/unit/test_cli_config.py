@@ -178,6 +178,11 @@ class TestMakeCliTool:
             "workingDir": "/workspace",
         }
 
+    def test_tool_config_preserves_null_working_dir(self):
+        tool_fn = _make_cli_tool(allowed_commands=["gh"])
+        assert "workingDir" in tool_fn._tool_def.config
+        assert tool_fn._tool_def.config["workingDir"] is None
+
 
 class TestAgentCliIntegration:
     """Test Agent integration with CLI tools."""

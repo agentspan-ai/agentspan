@@ -162,9 +162,9 @@ public class JavaScriptBuilder {
      * Build the tool call enrichment JavaScript.
      * Injects {@code _agent_state} from {@code $.agentState} into worker (SIMPLE) tasks
      * so that ToolContext.state is available server-side.
-     * Injects per-task CLI policy for CLI (SIMPLE) tasks so that command whitelists
-     * and shell/runtime settings are enforced even when multiple agents share the
-     * same worker.
+     * Injects per-task CLI policy and credential names for CLI (SIMPLE) tasks so
+     * that command whitelists, shell/runtime settings, and credential lookup stay
+     * agent-specific even when multiple agents share the same worker.
      */
     public static String enrichToolsScript(String httpConfigJson, String mcpConfigJson,
                                               String mediaConfigJson, String agentToolConfigJson,
@@ -265,6 +265,7 @@ public class JavaScriptBuilder {
             "        if (cliCfg[n].allowShell !== undefined) t.inputParameters._allow_shell = cliCfg[n].allowShell;" +
             "        if (cliCfg[n].timeout !== undefined) t.inputParameters._timeout = cliCfg[n].timeout;" +
             "        if (cliCfg[n].workingDir !== undefined) t.inputParameters._working_dir = cliCfg[n].workingDir;" +
+            "        if (cliCfg[n].credentials !== undefined) t.inputParameters._credential_names = cliCfg[n].credentials;" +
             "      }" +
             "    }" +
             "    result.push(t);" +

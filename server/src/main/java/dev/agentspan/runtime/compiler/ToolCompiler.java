@@ -273,6 +273,9 @@ public class ToolCompiler {
                     if (cfg.containsKey("workingDir")) {
                         cliEntry.put("workingDir", cfg.get("workingDir"));
                     }
+                    if (cfg.containsKey("credentials")) {
+                        cliEntry.put("credentials", cfg.get("credentials"));
+                    }
                     cliConfig.put(tool.getName(), cliEntry);
                 } else if ("mcp".equals(toolType)) {
                     Map<String, Object> mcpEntry = new LinkedHashMap<>();
