@@ -164,6 +164,20 @@ class TestMakeCliTool:
         tool_fn = _make_cli_tool(allowed_commands=[], timeout=120)
         assert "120s" in tool_fn._tool_def.description
 
+    def test_tool_config_carries_full_cli_policy(self):
+        tool_fn = _make_cli_tool(
+            allowed_commands=["git", "gh"],
+            timeout=90,
+            working_dir="/workspace",
+            allow_shell=True,
+        )
+        assert tool_fn._tool_def.config == {
+            "allowedCommands": ["git", "gh"],
+            "allowShell": True,
+            "timeout": 90,
+            "workingDir": "/workspace",
+        }
+
 
 class TestAgentCliIntegration:
     """Test Agent integration with CLI tools."""

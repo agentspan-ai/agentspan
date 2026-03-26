@@ -376,6 +376,25 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
                     task_result.reason_for_incompletion = str(cred_err)
                     return task_result
 
+            cli_override_token = None
+            if _td is not None and getattr(_td, "tool_type", None) == "cli":
+                from agentspan.agents.cli_config import (
+                    _reset_cli_runtime_overrides,
+                    _set_cli_runtime_overrides,
+                )
+
+                cli_overrides = {}
+                if "_allowed_commands" in task.input_data:
+                    cli_overrides["allowed_commands"] = task.input_data.pop("_allowed_commands")
+                if "_allow_shell" in task.input_data:
+                    cli_overrides["allow_shell"] = task.input_data.pop("_allow_shell")
+                if "_timeout" in task.input_data:
+                    cli_overrides["timeout"] = task.input_data.pop("_timeout")
+                if "_working_dir" in task.input_data:
+                    cli_overrides["working_dir"] = task.input_data.pop("_working_dir")
+                if cli_overrides:
+                    cli_override_token = _set_cli_runtime_overrides(**cli_overrides)
+
             # Map task input to function kwargs
             sig = inspect.signature(tool_func)
             fn_kwargs = {}
@@ -416,6 +435,8 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
                     agent_state=agent_state,
                 )
             finally:
+                if cli_override_token is not None:
+                    _reset_cli_runtime_overrides(cli_override_token)
                 # Clean up injected env vars
                 for k in _injected_env_keys:
                     os.environ.pop(k, None)

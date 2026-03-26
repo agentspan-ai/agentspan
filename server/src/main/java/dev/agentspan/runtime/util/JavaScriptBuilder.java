@@ -162,8 +162,9 @@ public class JavaScriptBuilder {
      * Build the tool call enrichment JavaScript.
      * Injects {@code _agent_state} from {@code $.agentState} into worker (SIMPLE) tasks
      * so that ToolContext.state is available server-side.
-     * Injects {@code _allowed_commands} for CLI (SIMPLE) tasks so that per-agent
-     * command whitelists are enforced even when multiple agents share the same worker.
+     * Injects per-task CLI policy for CLI (SIMPLE) tasks so that command whitelists
+     * and shell/runtime settings are enforced even when multiple agents share the
+     * same worker.
      */
     public static String enrichToolsScript(String httpConfigJson, String mcpConfigJson,
                                               String mediaConfigJson, String agentToolConfigJson,
@@ -259,7 +260,12 @@ public class JavaScriptBuilder {
             "    if (t.type === 'SIMPLE') {" +
             "      t.inputParameters._agent_state = agentState;" +
             "      if ($.agentspanCtx) { t.inputParameters.__agentspan_ctx__ = $.agentspanCtx; }" +
-            "      if (cliCfg[n]) { t.inputParameters._allowed_commands = cliCfg[n].allowedCommands; }" +
+            "      if (cliCfg[n]) {" +
+            "        if (cliCfg[n].allowedCommands !== undefined) t.inputParameters._allowed_commands = cliCfg[n].allowedCommands;" +
+            "        if (cliCfg[n].allowShell !== undefined) t.inputParameters._allow_shell = cliCfg[n].allowShell;" +
+            "        if (cliCfg[n].timeout !== undefined) t.inputParameters._timeout = cliCfg[n].timeout;" +
+            "        if (cliCfg[n].workingDir !== undefined) t.inputParameters._working_dir = cliCfg[n].workingDir;" +
+            "      }" +
             "    }" +
             "    result.push(t);" +
             "  }" +

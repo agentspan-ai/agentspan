@@ -6,6 +6,7 @@ make_tool_worker, and ToolContext injection.
 """
 
 import inspect
+from unittest.mock import MagicMock, patch
 from typing import List, Optional
 
 import pytest
@@ -245,6 +246,71 @@ class TestMakeToolWorker:
 
         wrapper = make_tool_worker(get_weather, "get_weather")
         assert wrapper.__name__ == "get_weather"
+
+    def test_cli_worker_honors_task_specific_runtime_policy(self):
+        from agentspan.agents.cli_config import _make_cli_tool
+
+        tool_fn = _make_cli_tool(
+            allowed_commands=["gh"],
+            timeout=30,
+            working_dir="/default",
+            allow_shell=False,
+        )
+        td = tool_fn._tool_def
+        wrapper = make_tool_worker(td.func, td.name, tool_def=td)
+
+        task = _make_task(
+            input_data={
+                "command": "git",
+                "args": ["status"],
+                "shell": True,
+                "_allowed_commands": ["gh", "git"],
+                "_allow_shell": True,
+                "_timeout": 90,
+                "_working_dir": "/override",
+            }
+        )
+
+        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="ok\n", stderr="")
+            result = wrapper(task)
+
+        assert result.status == "COMPLETED"
+        assert result.output_data == {"status": "success", "stdout": "ok\n", "stderr": ""}
+        assert mock_run.call_args.args[0] == "git status"
+        assert mock_run.call_args.kwargs["shell"] is True
+        assert mock_run.call_args.kwargs["timeout"] == 90
+        assert mock_run.call_args.kwargs["cwd"] == "/override"
+
+    def test_cli_worker_resets_runtime_policy_between_tasks(self):
+        from agentspan.agents.cli_config import _make_cli_tool
+
+        tool_fn = _make_cli_tool(
+            allowed_commands=["gh"],
+            timeout=30,
+            working_dir="/default",
+            allow_shell=False,
+        )
+        td = tool_fn._tool_def
+        wrapper = make_tool_worker(td.func, td.name, tool_def=td)
+
+        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="ok\n", stderr="")
+            first = wrapper(
+                _make_task(
+                    input_data={
+                        "command": "git",
+                        "args": ["status"],
+                        "_allowed_commands": ["gh", "git"],
+                    }
+                )
+            )
+
+        second = wrapper(_make_task(input_data={"command": "git", "args": ["status"]}))
+
+        assert first.status == "COMPLETED"
+        assert second.status == "FAILED"
+        assert "Command 'git' is not allowed. Allowed commands: gh" in second.reason_for_incompletion
 
 
 # ── Guardrail integration with make_tool_worker ────────────────────────

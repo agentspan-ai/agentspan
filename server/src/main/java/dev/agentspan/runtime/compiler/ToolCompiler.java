@@ -264,6 +264,15 @@ public class ToolCompiler {
                 } else if ("cli".equals(toolType)) {
                     Map<String, Object> cliEntry = new LinkedHashMap<>();
                     cliEntry.put("allowedCommands", cfg.getOrDefault("allowedCommands", Collections.emptyList()));
+                    if (cfg.containsKey("allowShell")) {
+                        cliEntry.put("allowShell", cfg.get("allowShell"));
+                    }
+                    if (cfg.containsKey("timeout")) {
+                        cliEntry.put("timeout", cfg.get("timeout"));
+                    }
+                    if (cfg.containsKey("workingDir")) {
+                        cliEntry.put("workingDir", cfg.get("workingDir"));
+                    }
                     cliConfig.put(tool.getName(), cliEntry);
                 } else if ("mcp".equals(toolType)) {
                     Map<String, Object> mcpEntry = new LinkedHashMap<>();
