@@ -84,6 +84,9 @@ public class CredentialEnvSeeder implements ApplicationRunner {
             "TOGETHER_API_KEY",
             // Replicate
             "REPLICATE_API_TOKEN",
+            // GitHub CLI / API
+            "GH_TOKEN",
+            "GITHUB_TOKEN",
             // AWS Bedrock
             "AWS_ACCESS_KEY_ID",
             "AWS_SECRET_ACCESS_KEY",

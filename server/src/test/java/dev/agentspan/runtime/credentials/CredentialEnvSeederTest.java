@@ -39,6 +39,8 @@ class CredentialEnvSeederTest {
         // Remove test credentials from previous runs
         jdbc.update("DELETE FROM credentials_store WHERE user_id = :uid AND name LIKE '_TEST_%'",
             Map.of("uid", ANONYMOUS_USER_ID));
+        storeProvider.delete(ANONYMOUS_USER_ID, "GH_TOKEN");
+        storeProvider.delete(ANONYMOUS_USER_ID, "GITHUB_TOKEN");
     }
 
     @Test
@@ -128,5 +130,26 @@ class CredentialEnvSeederTest {
 
         String value = storeProvider.get(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY");
         assertThat(value).isNull();
+    }
+
+    @Test
+    void seeder_storesGitHubCliCredentials_fromEnv() throws Exception {
+        Function<String, String> envLookup = name -> switch (name) {
+            case "GH_TOKEN" -> "ghp-test-gh-token";
+            case "GITHUB_TOKEN" -> "ghp-test-github-token";
+            default -> null;
+        };
+
+        CredentialEnvSeeder seeder = new CredentialEnvSeeder(storeProvider, envLookup);
+        var field = CredentialEnvSeeder.class.getDeclaredField("credentialsStore");
+        field.setAccessible(true);
+        field.set(seeder, "built-in");
+
+        seeder.run(new org.springframework.boot.DefaultApplicationArguments());
+
+        assertThat(storeProvider.get(ANONYMOUS_USER_ID, "GH_TOKEN"))
+            .isEqualTo("ghp-test-gh-token");
+        assertThat(storeProvider.get(ANONYMOUS_USER_ID, "GITHUB_TOKEN"))
+            .isEqualTo("ghp-test-github-token");
     }
 }
