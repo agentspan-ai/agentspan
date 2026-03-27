@@ -34,7 +34,7 @@ const getWeather = tool(
   },
 );
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'weather_reporter',
   model: llmModel,
   tools: [getWeather],
@@ -43,10 +43,13 @@ const agent = new Agent({
     'You are a weather reporter. Get the weather and provide a recommendation.',
 });
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(agent, "What's the weather in NYC?");
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('03-structured-output.ts') || process.argv[1]?.endsWith('03-structured-output.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(agent, "What's the weather in NYC?");
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

@@ -54,7 +54,7 @@ const checkGithubAuth = tool(
   },
 );
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'framework_passthrough_agent',
   model: llmModel,
   tools: [checkGithubAuth],
@@ -64,13 +64,16 @@ const agent = new Agent({
 
 // -- Run ----------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    agent,
-    'Check if GitHub authentication is available',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('16g-credentials-framework-passthrough.ts') || process.argv[1]?.endsWith('16g-credentials-framework-passthrough.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      agent,
+      'Check if GitHub authentication is available',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

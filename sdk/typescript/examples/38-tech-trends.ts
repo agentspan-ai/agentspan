@@ -235,7 +235,7 @@ const compareNumbers = tool(
 
 // -- Agent definitions --------------------------------------------------------
 
-const researcher = new Agent({
+export const researcher = new Agent({
   name: 'hn_researcher',
   model: llmModel,
   tools: [searchHackernews, getHnStoryComments, getWikipediaSummary],
@@ -264,7 +264,7 @@ const researcher = new Agent({
     'Include REAL numbers and titles -- no placeholders.',
 });
 
-const analyst = new Agent({
+export const analyst = new Agent({
   name: 'hn_analyst',
   model: llmModel,
   tools: [fetchPypiDownloads, fetchNpmDownloads, compareNumbers],
@@ -299,7 +299,7 @@ const analyst = new Agent({
 
 // -- PDF generator agent ------------------------------------------------------
 
-const pdfGenerator = new Agent({
+export const pdfGenerator = new Agent({
   name: 'pdf_report_generator',
   model: llmModel,
   tools: [pdfTool()],
@@ -320,15 +320,18 @@ const pipeline = researcher.pipe(analyst).pipe(pdfGenerator);
 console.log('Starting Tech Trend Analyzer: Python vs Rust');
 console.log('='.repeat(60));
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    pipeline,
-    'Compare Python and Rust: which has stronger developer mindshare and ' +
-    'ecosystem momentum right now? Use real HackerNews data and package ' +
-    'download statistics to support your analysis.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('38-tech-trends.ts') || process.argv[1]?.endsWith('38-tech-trends.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      pipeline,
+      'Compare Python and Rust: which has stronger developer mindshare and ' +
+      'ecosystem momentum right now? Use real HackerNews data and package ' +
+      'download statistics to support your analysis.',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

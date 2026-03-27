@@ -62,7 +62,7 @@ const minLength = guardrail(
 
 // -- Agent (no tools) --------------------------------------------------------
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'essay_writer',
   model: llmModel,
   instructions:
@@ -72,25 +72,28 @@ const agent = new Agent({
   guardrails: [noBulletLists.toGuardrailDef(), minLength],
 });
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(agent, 'Explain why the sky is blue.');
-  result.printResult();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('36-simple-agent-guardrails.ts') || process.argv[1]?.endsWith('36-simple-agent-guardrails.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(agent, 'Explain why the sky is blue.');
+    result.printResult();
 
-  // Verify guardrails
-  const output = String(result.output);
-  const hasBullets = output
-    .split('\n')
-    .some((line) => line.trim().startsWith('-') || line.trim().startsWith('*'));
-  const wordCount = output.split(/\s+/).filter(Boolean).length;
+    // Verify guardrails
+    const output = String(result.output);
+    const hasBullets = output
+      .split('\n')
+      .some((line) => line.trim().startsWith('-') || line.trim().startsWith('*'));
+    const wordCount = output.split(/\s+/).filter(Boolean).length;
 
-  if (hasBullets) {
-    console.log('[WARN] Output contains bullet points -- guardrail may not have fired');
-  } else if (wordCount < 50) {
-    console.log(`[WARN] Output too short (${wordCount} words)`);
-  } else {
-    console.log(`[OK] Prose response, ${wordCount} words -- guardrails passed`);
+    if (hasBullets) {
+      console.log('[WARN] Output contains bullet points -- guardrail may not have fired');
+    } else if (wordCount < 50) {
+      console.log(`[WARN] Output too short (${wordCount} words)`);
+    } else {
+      console.log(`[OK] Prose response, ${wordCount} words -- guardrails passed`);
+    }
+  } finally {
+    await runtime.shutdown();
   }
-} finally {
-  await runtime.shutdown();
 }

@@ -33,7 +33,7 @@ const summarizeText = tool(
 // -- Agents ------------------------------------------------------------------
 
 // This sub-agent won't see the parent's conversation history
-const independentSummarizer = new Agent({
+export const independentSummarizer = new Agent({
   name: 'independent_summarizer_49',
   model: llmModel,
   instructions: 'You are a summarizer. Summarize any text given to you concisely.',
@@ -42,13 +42,13 @@ const independentSummarizer = new Agent({
 });
 
 // This sub-agent WILL see the parent's conversation history (default)
-const contextAwareHelper = new Agent({
+export const contextAwareHelper = new Agent({
   name: 'context_aware_helper_49',
   model: llmModel,
   instructions: 'You are a helpful assistant that builds on prior conversation context.',
 });
 
-const coordinator = new Agent({
+export const coordinator = new Agent({
   name: 'coordinator_49',
   model: llmModel,
   instructions:
@@ -60,15 +60,18 @@ const coordinator = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    coordinator,
-    "Please summarize this: 'The quick brown fox jumps over the lazy dog. " +
-    "This sentence contains every letter of the alphabet and is commonly " +
-    "used for typography testing.'",
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('49-include-contents.ts') || process.argv[1]?.endsWith('49-include-contents.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      coordinator,
+      "Please summarize this: 'The quick brown fox jumps over the lazy dog. " +
+      "This sentence contains every letter of the alphabet and is commonly " +
+      "used for typography testing.'",
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

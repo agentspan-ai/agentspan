@@ -18,7 +18,7 @@
 import { Agent, AgentRuntime } from '../src/index.js';
 import { llmModel } from './settings.js';
 
-const developer = new Agent({
+export const developer = new Agent({
   name: 'developer',
   model: llmModel,
   instructions:
@@ -26,7 +26,7 @@ const developer = new Agent({
     'Keep responses focused on code changes.',
 });
 
-const reviewer = new Agent({
+export const reviewer = new Agent({
   name: 'reviewer',
   model: llmModel,
   instructions:
@@ -34,7 +34,7 @@ const reviewer = new Agent({
     'and best practices. Provide specific, actionable feedback.',
 });
 
-const approver = new Agent({
+export const approver = new Agent({
   name: 'approver',
   model: llmModel,
   instructions:
@@ -46,7 +46,7 @@ const approver = new Agent({
 //   developer -> reviewer (code must be reviewed)
 //   reviewer -> developer OR approver (send back for fixes or escalate)
 //   approver -> developer (request revisions)
-const codeReview = new Agent({
+export const codeReview = new Agent({
   name: 'code_review',
   model: llmModel,
   agents: [developer, reviewer, approver],
@@ -61,13 +61,16 @@ const codeReview = new Agent({
 
 // -- Run -------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    codeReview,
-    'Write a Python function to validate email addresses using regex.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('20-constrained-transitions.ts') || process.argv[1]?.endsWith('20-constrained-transitions.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      codeReview,
+      'Write a Python function to validate email addresses using regex.',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

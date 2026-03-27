@@ -66,7 +66,7 @@ const getUserProfile = tool(
   },
 );
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'hr_assistant',
   model: llmModel,
   tools: [getUserProfile],
@@ -78,56 +78,59 @@ const agent = new Agent({
 
 // -- Run -------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  // -- Scenario 1: Guardrail TRIGGERS -- PII in tool output -----------------
-  console.log('='.repeat(60));
-  console.log('  Scenario 1: Request PII -- guardrails trigger');
-  console.log('='.repeat(60));
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('21-regex-guardrails.ts') || process.argv[1]?.endsWith('21-regex-guardrails.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    // -- Scenario 1: Guardrail TRIGGERS -- PII in tool output -----------------
+    console.log('='.repeat(60));
+    console.log('  Scenario 1: Request PII -- guardrails trigger');
+    console.log('='.repeat(60));
 
-  const result = await runtime.run(
-    agent,
-    'Tell me everything about user U-001.',
-  );
-  result.printResult();
+    const result = await runtime.run(
+      agent,
+      'Tell me everything about user U-001.',
+    );
+    result.printResult();
 
-  const output = JSON.stringify(result.output);
-  if (output.includes('alice.johnson@example.com')) {
-    console.log('[FAIL] Email leaked!');
-  } else {
-    console.log('[OK] Email was blocked by RegexGuardrail');
+    const output = JSON.stringify(result.output);
+    if (output.includes('alice.johnson@example.com')) {
+      console.log('[FAIL] Email leaked!');
+    } else {
+      console.log('[OK] Email was blocked by RegexGuardrail');
+    }
+
+    if (output.includes('123-45-6789')) {
+      console.log('[FAIL] SSN leaked!');
+    } else {
+      console.log('[OK] SSN was blocked by RegexGuardrail');
+    }
+
+    // -- Scenario 2: Guardrail does NOT trigger -- no PII ---------------------
+    console.log('\n' + '='.repeat(60));
+    console.log('  Scenario 2: Non-PII question -- guardrails pass');
+    console.log('='.repeat(60));
+
+    // New agent without PII-returning tool
+    const cleanAgent = new Agent({
+      name: 'dept_assistant',
+      model: llmModel,
+      instructions: 'You are an HR assistant. Answer questions about departments.',
+      guardrails: [noEmails, noSsn],
+    });
+
+    const result2 = await runtime.run(
+      cleanAgent,
+      'What departments exist at the company?',
+    );
+    result2.printResult();
+
+    if (result2.status === 'COMPLETED') {
+      console.log('[OK] Clean response passed guardrails successfully');
+    } else {
+      console.log(`[WARN] Unexpected status: ${result2.status}`);
+    }
+  } finally {
+    await runtime.shutdown();
   }
-
-  if (output.includes('123-45-6789')) {
-    console.log('[FAIL] SSN leaked!');
-  } else {
-    console.log('[OK] SSN was blocked by RegexGuardrail');
-  }
-
-  // -- Scenario 2: Guardrail does NOT trigger -- no PII ---------------------
-  console.log('\n' + '='.repeat(60));
-  console.log('  Scenario 2: Non-PII question -- guardrails pass');
-  console.log('='.repeat(60));
-
-  // New agent without PII-returning tool
-  const cleanAgent = new Agent({
-    name: 'dept_assistant',
-    model: llmModel,
-    instructions: 'You are an HR assistant. Answer questions about departments.',
-    guardrails: [noEmails, noSsn],
-  });
-
-  const result2 = await runtime.run(
-    cleanAgent,
-    'What departments exist at the company?',
-  );
-  result2.printResult();
-
-  if (result2.status === 'COMPLETED') {
-    console.log('[OK] Clean response passed guardrails successfully');
-  } else {
-    console.log(`[WARN] Unexpected status: ${result2.status}`);
-  }
-} finally {
-  await runtime.shutdown();
 }

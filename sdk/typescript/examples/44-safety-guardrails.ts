@@ -97,7 +97,7 @@ const sanitizeResponse = tool(
 // -- Pipeline agents ----------------------------------------------------------
 
 // Main assistant generates responses
-const assistant = new Agent({
+export const assistant = new Agent({
   name: 'helpful_assistant',
   model: llmModel,
   instructions:
@@ -107,7 +107,7 @@ const assistant = new Agent({
 });
 
 // Safety checker scans the response for PII
-const safetyChecker = new Agent({
+export const safetyChecker = new Agent({
   name: 'safety_checker',
   model: llmModel,
   instructions:
@@ -121,14 +121,17 @@ const safetyChecker = new Agent({
 // Pipeline: generate -> check and sanitize
 const pipeline = assistant.pipe(safetyChecker);
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    pipeline,
-    'What are the contact details for our support team? ' +
-    'Include email support@company.com and phone 555-123-4567.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('44-safety-guardrails.ts') || process.argv[1]?.endsWith('44-safety-guardrails.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      pipeline,
+      'What are the contact details for our support team? ' +
+      'Include email support@company.com and phone 555-123-4567.',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

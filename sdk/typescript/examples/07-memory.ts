@@ -66,7 +66,7 @@ const recallTool = tool(
 
 // ── Agent with memory ───────────────────────────────────
 
-const researchAgent = new Agent({
+export const researchAgent = new Agent({
   name: 'research_agent',
   model: MODEL,
   instructions: 'Use your memory and recall tool to answer questions.',
@@ -84,4 +84,8 @@ async function main() {
   await runtime.shutdown();
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('07-memory.ts') || process.argv[1]?.endsWith('07-memory.js')) {
+
+  main().catch(console.error);
+}

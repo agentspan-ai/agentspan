@@ -85,7 +85,7 @@ const askUser = humanTool({
     'Ask the user a question when you need clarification or additional information.',
 });
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'it_support',
   model: llmModel,
   tools: [lookupEmployee, submitTicket, askUser],
@@ -97,54 +97,57 @@ const agent = new Agent({
     'before submitting.',
 });
 
-const runtime = new AgentRuntime();
-try {
-  const handle: AgentHandle = await runtime.start(
-    agent,
-    'I need to file a ticket for Alice about a laptop issue',
-  );
-  console.log(`Workflow started: ${handle.workflowId}\n`);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('09d-human-tool.ts') || process.argv[1]?.endsWith('09d-human-tool.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const handle: AgentHandle = await runtime.start(
+      agent,
+      'I need to file a ticket for Alice about a laptop issue',
+    );
+    console.log(`Workflow started: ${handle.workflowId}\n`);
 
-  for await (const event of handle.stream()) {
-    switch (event.type) {
-      case 'thinking':
-        console.log(`  [thinking] ${event.content}`);
-        break;
+    for await (const event of handle.stream()) {
+      switch (event.type) {
+        case 'thinking':
+          console.log(`  [thinking] ${event.content}`);
+          break;
 
-      case 'tool_call':
-        console.log(
-          `  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`,
-        );
-        break;
+        case 'tool_call':
+          console.log(
+            `  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`,
+          );
+          break;
 
-      case 'tool_result':
-        console.log(
-          `  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result)}`,
-        );
-        break;
+        case 'tool_result':
+          console.log(
+            `  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result)}`,
+          );
+          break;
 
-      case 'waiting':
-        console.log('\n--- Human input required ---');
-        // Auto-respond since we can't do interactive stdin
-        console.log(
-          '  Auto-responding: "The laptop screen is flickering, high priority please"',
-        );
-        await handle.respond({
-          response:
-            'The laptop screen is flickering, high priority please',
-        });
-        console.log();
-        break;
+        case 'waiting':
+          console.log('\n--- Human input required ---');
+          // Auto-respond since we can't do interactive stdin
+          console.log(
+            '  Auto-responding: "The laptop screen is flickering, high priority please"',
+          );
+          await handle.respond({
+            response:
+              'The laptop screen is flickering, high priority please',
+          });
+          console.log();
+          break;
 
-      case 'error':
-        console.log(`  [error] ${event.content}`);
-        break;
+        case 'error':
+          console.log(`  [error] ${event.content}`);
+          break;
 
-      case 'done':
-        console.log(`\nResult: ${JSON.stringify(event.output)}`);
-        break;
+        case 'done':
+          console.log(`\nResult: ${JSON.stringify(event.output)}`);
+          break;
+      }
     }
+  } finally {
+    await runtime.shutdown();
   }
-} finally {
-  await runtime.shutdown();
 }

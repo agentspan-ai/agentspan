@@ -15,7 +15,7 @@ import { llmModel } from './settings.js';
 
 // -- Quick check (single agent) ----------------------------------------------
 
-const quickCheck = new Agent({
+export const quickCheck = new Agent({
   name: 'quick_check',
   model: llmModel,
   instructions: 'You provide quick, 1-sentence assessments. Be brief and direct.',
@@ -23,7 +23,7 @@ const quickCheck = new Agent({
 
 // -- Deep analysis (parallel group) ------------------------------------------
 
-const marketAnalyst = new Agent({
+export const marketAnalyst = new Agent({
   name: 'market_analyst_66',
   model: llmModel,
   instructions:
@@ -31,7 +31,7 @@ const marketAnalyst = new Agent({
     'size, growth rate, key players. 3-4 bullet points.',
 });
 
-const riskAnalyst = new Agent({
+export const riskAnalyst = new Agent({
   name: 'risk_analyst_66',
   model: llmModel,
   instructions:
@@ -39,7 +39,7 @@ const riskAnalyst = new Agent({
     'regulatory, technical, and competitive. 3-4 bullet points.',
 });
 
-const deepAnalysis = new Agent({
+export const deepAnalysis = new Agent({
   name: 'deep_analysis',
   model: llmModel,
   agents: [marketAnalyst, riskAnalyst],
@@ -48,7 +48,7 @@ const deepAnalysis = new Agent({
 
 // -- Coordinator with handoff ------------------------------------------------
 
-const coordinator = new Agent({
+export const coordinator = new Agent({
   name: 'coordinator_66',
   model: llmModel,
   instructions:
@@ -61,39 +61,42 @@ const coordinator = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  // Scenario 1: Deep analysis (handoff to parallel group)
-  console.log('='.repeat(60));
-  console.log('  Scenario 1: Deep analysis (handoff -> parallel group)');
-  console.log('='.repeat(60));
-  const result = await runtime.run(
-    coordinator,
-    'Provide a deep analysis of entering the AI healthcare market.',
-  );
-  result.printResult();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('66-handoff-to-parallel.ts') || process.argv[1]?.endsWith('66-handoff-to-parallel.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    // Scenario 1: Deep analysis (handoff to parallel group)
+    console.log('='.repeat(60));
+    console.log('  Scenario 1: Deep analysis (handoff -> parallel group)');
+    console.log('='.repeat(60));
+    const result = await runtime.run(
+      coordinator,
+      'Provide a deep analysis of entering the AI healthcare market.',
+    );
+    result.printResult();
 
-  if (result.status === 'COMPLETED') {
-    console.log('[OK] Handoff to parallel group completed successfully');
-  } else {
-    console.log(`[WARN] Unexpected status: ${result.status}`);
+    if (result.status === 'COMPLETED') {
+      console.log('[OK] Handoff to parallel group completed successfully');
+    } else {
+      console.log(`[WARN] Unexpected status: ${result.status}`);
+    }
+
+    // Scenario 2: Quick check (handoff to single agent)
+    console.log('\n' + '='.repeat(60));
+    console.log('  Scenario 2: Quick check (handoff -> single agent)');
+    console.log('='.repeat(60));
+    const result2 = await runtime.run(
+      coordinator,
+      'Is the mobile app market still growing?',
+    );
+    result2.printResult();
+
+    if (result2.status === 'COMPLETED') {
+      console.log('[OK] Quick check completed successfully');
+    } else {
+      console.log(`[WARN] Unexpected status: ${result2.status}`);
+    }
+  } finally {
+    await runtime.shutdown();
   }
-
-  // Scenario 2: Quick check (handoff to single agent)
-  console.log('\n' + '='.repeat(60));
-  console.log('  Scenario 2: Quick check (handoff -> single agent)');
-  console.log('='.repeat(60));
-  const result2 = await runtime.run(
-    coordinator,
-    'Is the mobile app market still growing?',
-  );
-  result2.printResult();
-
-  if (result2.status === 'COMPLETED') {
-    console.log('[OK] Quick check completed successfully');
-  } else {
-    console.log(`[WARN] Unexpected status: ${result2.status}`);
-  }
-} finally {
-  await runtime.shutdown();
 }

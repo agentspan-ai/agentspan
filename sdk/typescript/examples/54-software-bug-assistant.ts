@@ -182,7 +182,7 @@ const searchWebTool = tool(
   },
 );
 
-const searchAgent = new Agent({
+export const searchAgent = new Agent({
   name: 'search_agent_54',
   model: llmModel,
   instructions:
@@ -217,7 +217,7 @@ const github = mcpTool({
 
 // -- Root agent --------------------------------------------------------------
 
-const softwareAssistant = new Agent({
+export const softwareAssistant = new Agent({
   name: 'software_assistant_54',
   model: llmModel,
   instructions:
@@ -246,16 +246,19 @@ const softwareAssistant = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    softwareAssistant,
-    'Review the latest open issues and PRs on conductor-oss/conductor. ' +
-    'Check if any of them relate to our internal tickets. ' +
-    'Pay attention to the DO_WHILE fix (PR #820) and the scheduler ' +
-    'persistence PRs. Give me a triage summary.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('54-software-bug-assistant.ts') || process.argv[1]?.endsWith('54-software-bug-assistant.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      softwareAssistant,
+      'Review the latest open issues and PRs on conductor-oss/conductor. ' +
+      'Check if any of them relate to our internal tickets. ' +
+      'Pay attention to the DO_WHILE fix (PR #820) and the scheduler ' +
+      'persistence PRs. Give me a triage summary.',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

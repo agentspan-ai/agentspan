@@ -25,7 +25,7 @@ import { llmModel } from './settings.js';
 // The system prompt comes from a named template stored on the server.
 // Variables are substituted at execution time by the Conductor server.
 
-const supportAgent = new Agent({
+export const supportAgent = new Agent({
   name: 'support_agent',
   model: llmModel,
   instructions: new PromptTemplate(
@@ -62,7 +62,7 @@ const lookupCustomer = tool(
   },
 );
 
-const orderAgent = new Agent({
+export const orderAgent = new Agent({
   name: 'order_assistant',
   model: llmModel,
   instructions: new PromptTemplate(
@@ -75,7 +75,7 @@ const orderAgent = new Agent({
 // -- Example 3: Pinned template version --------------------------------------
 // Pin to a specific version for production stability.
 
-const stableAgent = new Agent({
+export const stableAgent = new Agent({
   name: 'stable_agent',
   model: llmModel,
   instructions: new PromptTemplate('production-prompt', undefined, 3),
@@ -83,28 +83,31 @@ const stableAgent = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  // --- 1. Template-based instructions ---
-  console.log('=== Support Agent (template instructions) ===');
-  const result1 = await runtime.run(supportAgent, 'What are your return policies?');
-  result1.printResult();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('34-prompt-templates.ts') || process.argv[1]?.endsWith('34-prompt-templates.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    // --- 1. Template-based instructions ---
+    console.log('=== Support Agent (template instructions) ===');
+    const result1 = await runtime.run(supportAgent, 'What are your return policies?');
+    result1.printResult();
 
-  // --- 2. Template with tools ---
-  console.log('\n=== Order Agent (template + tools) ===');
-  const result2 = await runtime.run(orderAgent, 'Can you check order #12345?');
-  result2.printResult();
+    // --- 2. Template with tools ---
+    console.log('\n=== Order Agent (template + tools) ===');
+    const result2 = await runtime.run(orderAgent, 'Can you check order #12345?');
+    result2.printResult();
 
-  // --- 3. User prompt from a template ---
-  // Note: In the TS SDK, PromptTemplate is supported for instructions
-  // (server-side resolution). For user prompts, resolve the template
-  // client-side since runtime.run() expects a string prompt.
-  console.log('\n=== User Prompt Template ===');
-  const result3 = await runtime.run(
-    stableAgent,
-    'Please analyze Q4 2025 earnings trends and provide key insights with recommendations.',
-  );
-  result3.printResult();
-} finally {
-  await runtime.shutdown();
+    // --- 3. User prompt from a template ---
+    // Note: In the TS SDK, PromptTemplate is supported for instructions
+    // (server-side resolution). For user prompts, resolve the template
+    // client-side since runtime.run() expects a string prompt.
+    console.log('\n=== User Prompt Template ===');
+    const result3 = await runtime.run(
+      stableAgent,
+      'Please analyze Q4 2025 earnings trends and provide key insights with recommendations.',
+    );
+    result3.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

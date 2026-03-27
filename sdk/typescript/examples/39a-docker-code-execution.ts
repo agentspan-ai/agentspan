@@ -21,7 +21,7 @@ const dockerExecutor = new DockerCodeExecutor({
   memoryLimit: '256m',
 });
 
-const dockerCoder = new Agent({
+export const dockerCoder = new Agent({
   name: 'docker_coder',
   model: llmModel,
   tools: [dockerExecutor.asTool('execute_code')],
@@ -33,14 +33,17 @@ const dockerCoder = new Agent({
     'You have no network access. Write self-contained code.',
 });
 
-const runtime = new AgentRuntime();
-try {
-  console.log('--- Docker Sandboxed Code Execution ---');
-  const result = await runtime.run(
-    dockerCoder,
-    "Print Python's version and the container's hostname.",
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('39a-docker-code-execution.ts') || process.argv[1]?.endsWith('39a-docker-code-execution.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('--- Docker Sandboxed Code Execution ---');
+    const result = await runtime.run(
+      dockerCoder,
+      "Print Python's version and the container's hostname.",
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

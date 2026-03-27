@@ -68,7 +68,7 @@ const serverlessExecutor = new ServerlessCodeExecutor({
   timeout: 15,
 });
 
-const serverlessCoder = new Agent({
+export const serverlessCoder = new Agent({
   name: 'serverless_coder',
   model: llmModel,
   tools: [serverlessExecutor.asTool('execute_code')],
@@ -82,15 +82,18 @@ const serverlessCoder = new Agent({
 
 // -- Run ----------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  console.log('--- Serverless Code Execution ---');
-  const result = await runtime.run(
-    serverlessCoder,
-    'Calculate 2**100 and print the result.',
-  );
-  result.printResult();
-} finally {
-  server.close();
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('39c-serverless-code-execution.ts') || process.argv[1]?.endsWith('39c-serverless-code-execution.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('--- Serverless Code Execution ---');
+    const result = await runtime.run(
+      serverlessCoder,
+      'Calculate 2**100 and print the result.',
+    );
+    result.printResult();
+  } finally {
+    server.close();
+    await runtime.shutdown();
+  }
 }

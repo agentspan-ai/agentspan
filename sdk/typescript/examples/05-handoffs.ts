@@ -57,21 +57,21 @@ const getPricing = tool(
 
 // -- Specialist agents -------------------------------------------------------
 
-const billingAgent = new Agent({
+export const billingAgent = new Agent({
   name: 'billing',
   model: llmModel,
   instructions: 'You handle billing questions: balances, payments, invoices.',
   tools: [checkBalance],
 });
 
-const technicalAgent = new Agent({
+export const technicalAgent = new Agent({
   name: 'technical',
   model: llmModel,
   instructions: 'You handle technical questions: order status, shipping, returns.',
   tools: [lookupOrder],
 });
 
-const salesAgent = new Agent({
+export const salesAgent = new Agent({
   name: 'sales',
   model: llmModel,
   instructions: 'You handle sales questions: pricing, products, promotions.',
@@ -80,7 +80,7 @@ const salesAgent = new Agent({
 
 // -- Orchestrator with handoffs -----------------------------------------------
 
-const support = new Agent({
+export const support = new Agent({
   name: 'support',
   model: llmModel,
   instructions:
@@ -89,13 +89,16 @@ const support = new Agent({
   strategy: 'handoff',
 });
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    support,
-    "What's the balance on account ACC-123?",
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('05-handoffs.ts') || process.argv[1]?.endsWith('05-handoffs.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      support,
+      "What's the balance on account ACC-123?",
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

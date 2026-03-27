@@ -22,7 +22,7 @@ import { llmModel } from './settings.js';
 // -- Example 1: Simple flag --------------------------------------------------
 // Just set codeExecutionConfig with enabled: true
 
-const simpleCoder = new Agent({
+export const simpleCoder = new Agent({
   name: 'simple_coder',
   model: llmModel,
   codeExecutionConfig: {
@@ -34,7 +34,7 @@ const simpleCoder = new Agent({
 // -- Example 2: With restrictions --------------------------------------------
 // Allow Python + Bash, but only permit pip and ls commands.
 
-const restrictedCoder = new Agent({
+export const restrictedCoder = new Agent({
   name: 'restricted_coder',
   model: llmModel,
   codeExecutionConfig: {
@@ -53,7 +53,7 @@ const restrictedCoder = new Agent({
 const executor = new LocalCodeExecutor({ timeout: 60 });
 const codeTool = executor.asTool('execute_code');
 
-const configCoder = new Agent({
+export const configCoder = new Agent({
   name: 'config_coder',
   model: llmModel,
   tools: [codeTool],
@@ -68,21 +68,24 @@ const configCoder = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  console.log('--- Simple Code Execution ---');
-  const result1 = await runtime.run(
-    simpleCoder,
-    'Write a Python function to find the first 10 prime numbers and print them.',
-  );
-  result1.printResult();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('39-local-code-execution.ts') || process.argv[1]?.endsWith('39-local-code-execution.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('--- Simple Code Execution ---');
+    const result1 = await runtime.run(
+      simpleCoder,
+      'Write a Python function to find the first 10 prime numbers and print them.',
+    );
+    result1.printResult();
 
-  console.log('\n--- Restricted Code Execution ---');
-  const result2 = await runtime.run(
-    restrictedCoder,
-    'List the files in the current directory using bash.',
-  );
-  result2.printResult();
-} finally {
-  await runtime.shutdown();
+    console.log('\n--- Restricted Code Execution ---');
+    const result2 = await runtime.run(
+      restrictedCoder,
+      'List the files in the current directory using bash.',
+    );
+    result2.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

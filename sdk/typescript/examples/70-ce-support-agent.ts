@@ -213,7 +213,7 @@ const piiGuardrail = new RegexGuardrail({
 
 // -- Agent definitions -------------------------------------------------------
 
-const zendeskAgent = new Agent({
+export const zendeskAgent = new Agent({
   name: 'zendesk_investigator',
   model: llmModel,
   instructions:
@@ -223,7 +223,7 @@ const zendeskAgent = new Agent({
   credentials: ZENDESK_CREDS,
 });
 
-const jiraAgent = new Agent({
+export const jiraAgent = new Agent({
   name: 'jira_investigator',
   model: llmModel,
   instructions:
@@ -233,7 +233,7 @@ const jiraAgent = new Agent({
   credentials: JIRA_CREDS,
 });
 
-const hubspotAgent = new Agent({
+export const hubspotAgent = new Agent({
   name: 'hubspot_investigator',
   model: llmModel,
   instructions:
@@ -243,7 +243,7 @@ const hubspotAgent = new Agent({
   credentials: HUBSPOT_CREDS,
 });
 
-const runbookAgent = new Agent({
+export const runbookAgent = new Agent({
   name: 'runbook_searcher',
   model: llmModel,
   instructions:
@@ -253,7 +253,7 @@ const runbookAgent = new Agent({
   credentials: NOTION_CREDS,
 });
 
-const githubAgent = new Agent({
+export const githubAgent = new Agent({
   name: 'github_investigator',
   model: llmModel,
   instructions:
@@ -277,7 +277,7 @@ const ORCHESTRATOR_INSTRUCTIONS =
   '- P3: Non-critical feature issue, minor inconvenience\n' +
   '- P4: Enhancement request, cosmetic issue, documentation question';
 
-const ceSupportAgent = new Agent({
+export const ceSupportAgent = new Agent({
   name: 'ce_support_agent',
   model: llmModel,
   instructions: ORCHESTRATOR_INSTRUCTIONS,
@@ -299,11 +299,14 @@ const ceSupportAgent = new Agent({
 const ticketId = process.argv[2] ?? '12345';
 const prompt = `Investigate Zendesk ticket #${ticketId} and provide a full analysis with solution and priority.`;
 
-const runtime = new AgentRuntime();
-try {
-  console.log(`\n--- Investigating ticket #${ticketId} ---\n`);
-  const result = await runtime.run(ceSupportAgent, prompt);
-  console.log(result.output);
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('70-ce-support-agent.ts') || process.argv[1]?.endsWith('70-ce-support-agent.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    console.log(`\n--- Investigating ticket #${ticketId} ---\n`);
+    const result = await runtime.run(ceSupportAgent, prompt);
+    console.log(result.output);
+  } finally {
+    await runtime.shutdown();
+  }
 }

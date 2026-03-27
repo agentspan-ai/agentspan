@@ -165,7 +165,7 @@ const awsGetCallerIdentity = tool(
 
 // -- Agent with CLI allowed commands ------------------------------------------
 
-const githubAwsAgent = new Agent({
+export const githubAwsAgent = new Agent({
   name: 'devops_agent',
   model: llmModel,
   tools: [ghListPrs, ghCreatePr, awsListS3Buckets, awsGetCallerIdentity],
@@ -179,10 +179,13 @@ const githubAwsAgent = new Agent({
 
 const task = process.argv.slice(2).join(' ') || 'Who am I in AWS, and list my S3 buckets?';
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(githubAwsAgent, task);
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('16c-credentials-cli-tools.ts') || process.argv[1]?.endsWith('16c-credentials-cli-tools.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(githubAwsAgent, task);
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

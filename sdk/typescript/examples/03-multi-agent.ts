@@ -17,13 +17,13 @@ const MODEL = process.env.AGENTSPAN_LLM_MODEL ?? 'openai/gpt-4o';
 
 // ── Sequential: writer -> editor ─────────────────────────
 
-const writer = new Agent({
+export const writer = new Agent({
   name: 'writer',
   model: MODEL,
   instructions: 'Write a short paragraph about the given topic.',
 });
 
-const editor = new Agent({
+export const editor = new Agent({
   name: 'editor',
   model: MODEL,
   instructions: 'Edit the text for clarity and brevity.',
@@ -34,19 +34,19 @@ const writingPipeline = writer.pipe(editor);
 
 // ── Parallel: multiple researchers ───────────────────────
 
-const webResearcher = new Agent({
+export const webResearcher = new Agent({
   name: 'web_researcher',
   model: MODEL,
   instructions: 'Research the topic from web sources.',
 });
 
-const dataAnalyst = new Agent({
+export const dataAnalyst = new Agent({
   name: 'data_analyst',
   model: MODEL,
   instructions: 'Analyze data trends related to the topic.',
 });
 
-const researchTeam = new Agent({
+export const researchTeam = new Agent({
   name: 'research_team',
   agents: [webResearcher, dataAnalyst],
   strategy: 'parallel',
@@ -54,21 +54,21 @@ const researchTeam = new Agent({
 
 // ── Handoff: router delegates to specialists ────────────
 
-const pythonExpert = new Agent({
+export const pythonExpert = new Agent({
   name: 'python_expert',
   model: MODEL,
   instructions: 'Answer Python programming questions.',
   introduction: 'I specialize in Python.',
 });
 
-const jsExpert = new Agent({
+export const jsExpert = new Agent({
   name: 'js_expert',
   model: MODEL,
   instructions: 'Answer JavaScript programming questions.',
   introduction: 'I specialize in JavaScript.',
 });
 
-const codingTeam = new Agent({
+export const codingTeam = new Agent({
   name: 'coding_team',
   model: MODEL,
   instructions: 'Route to the appropriate language expert.',
@@ -103,4 +103,8 @@ async function main() {
   await runtime.shutdown();
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('03-multi-agent.ts') || process.argv[1]?.endsWith('03-multi-agent.js')) {
+
+  main().catch(console.error);
+}

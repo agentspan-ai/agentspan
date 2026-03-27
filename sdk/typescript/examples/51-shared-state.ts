@@ -63,7 +63,7 @@ const clearList = tool(
 
 // -- Agent -------------------------------------------------------------------
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'shopping_assistant_51',
   model: llmModel,
   instructions:
@@ -77,13 +77,16 @@ const agent = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    agent,
-    'Add milk, eggs, and bread to my shopping list, then show me the list.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('51-shared-state.ts') || process.argv[1]?.endsWith('51-shared-state.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      agent,
+      'Add milk, eggs, and bread to my shopping list, then show me the list.',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

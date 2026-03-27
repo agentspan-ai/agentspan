@@ -56,7 +56,7 @@ const lookup = tool(
   },
 );
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'traced_agent',
   model: llmModel,
   tools: [lookup],
@@ -65,15 +65,18 @@ const agent = new Agent({
 
 // -- Run -------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  // The runtime automatically creates spans if OTel is configured.
-  const result = await runtime.run(agent, 'Who created Python?');
-  result.printResult();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('26-opentelemetry-tracing.ts') || process.argv[1]?.endsWith('26-opentelemetry-tracing.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    // The runtime automatically creates spans if OTel is configured.
+    const result = await runtime.run(agent, 'Who created Python?');
+    result.printResult();
 
-  if (result.tokenUsage) {
-    console.log(`Tokens: ${result.tokenUsage.totalTokens}`);
+    if (result.tokenUsage) {
+      console.log(`Tokens: ${result.tokenUsage.totalTokens}`);
+    }
+  } finally {
+    await runtime.shutdown();
   }
-} finally {
-  await runtime.shutdown();
 }

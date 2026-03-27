@@ -40,7 +40,7 @@ const searchKnowledgeBase = tool(
 
 // -- Worker agent: researches a single country -------------------------------
 
-const researcher = new Agent({
+export const researcher = new Agent({
   name: 'researcher',
   model: 'anthropic/claude-sonnet-4-20250514',
   instructions:
@@ -106,11 +106,14 @@ console.log(`\nPrompt: ${prompt}`);
 console.log(`Countries: ${COUNTRIES.length}`);
 console.log(`Dispatching ${COUNTRIES.length} parallel researcher agents...\n`);
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(coordinator, prompt);
-  console.log('--- Coordinator Result ---');
-  console.log(result.output);
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('58-scatter-gather.ts') || process.argv[1]?.endsWith('58-scatter-gather.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(coordinator, prompt);
+    console.log('--- Coordinator Result ---');
+    console.log(result.output);
+  } finally {
+    await runtime.shutdown();
+  }
 }

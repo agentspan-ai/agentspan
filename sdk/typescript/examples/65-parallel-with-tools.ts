@@ -44,7 +44,7 @@ const lookupOrder = tool(
 
 // -- Parallel agents with tools ----------------------------------------------
 
-const financialAnalyst = new Agent({
+export const financialAnalyst = new Agent({
   name: 'financial_analyst',
   model: llmModel,
   instructions:
@@ -53,7 +53,7 @@ const financialAnalyst = new Agent({
   tools: [checkBalance],
 });
 
-const orderAnalyst = new Agent({
+export const orderAnalyst = new Agent({
   name: 'order_analyst',
   model: llmModel,
   instructions:
@@ -63,7 +63,7 @@ const orderAnalyst = new Agent({
 });
 
 // Both analysts run concurrently
-const analysis = new Agent({
+export const analysis = new Agent({
   name: 'parallel_analysis',
   model: llmModel,
   agents: [financialAnalyst, orderAnalyst],
@@ -72,29 +72,32 @@ const analysis = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    analysis,
-    'Check account ACC-200 balance and look up order ORD-300 status.',
-  );
-  result.printResult();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('65-parallel-with-tools.ts') || process.argv[1]?.endsWith('65-parallel-with-tools.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      analysis,
+      'Check account ACC-200 balance and look up order ORD-300 status.',
+    );
+    result.printResult();
 
-  const output = String(result.output);
-  const checks: string[] = [];
-  if (output.includes('5432')) {
-    checks.push('[OK] Financial analyst retrieved balance');
-  } else {
-    checks.push('[WARN] Expected balance in output');
+    const output = String(result.output);
+    const checks: string[] = [];
+    if (output.includes('5432')) {
+      checks.push('[OK] Financial analyst retrieved balance');
+    } else {
+      checks.push('[WARN] Expected balance in output');
+    }
+    if (output.toLowerCase().includes('shipped')) {
+      checks.push('[OK] Order analyst retrieved order status');
+    } else {
+      checks.push('[WARN] Expected order status in output');
+    }
+    for (const c of checks) {
+      console.log(c);
+    }
+  } finally {
+    await runtime.shutdown();
   }
-  if (output.toLowerCase().includes('shipped')) {
-    checks.push('[OK] Order analyst retrieved order status');
-  } else {
-    checks.push('[WARN] Expected order status in output');
-  }
-  for (const c of checks) {
-    console.log(c);
-  }
-} finally {
-  await runtime.shutdown();
 }

@@ -34,7 +34,7 @@ const publishArticle = tool(
   },
 );
 
-const publishingAgent = new Agent({
+export const publishingAgent = new Agent({
   name: 'publisher',
   model: MODEL,
   instructions: 'Write and publish articles when asked.',
@@ -82,4 +82,8 @@ async function main() {
   await runtime.shutdown();
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('06-hitl.ts') || process.argv[1]?.endsWith('06-hitl.js')) {
+
+  main().catch(console.error);
+}

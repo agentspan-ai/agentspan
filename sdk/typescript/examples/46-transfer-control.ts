@@ -58,21 +58,21 @@ const writeSummary = tool(
 
 // -- Agents ------------------------------------------------------------------
 
-const dataCollector = new Agent({
+export const dataCollector = new Agent({
   name: 'data_collector_46',
   model: llmModel,
   instructions: 'Collect data using collect_data. Then transfer to the analyst.',
   tools: [collectData],
 });
 
-const analyst = new Agent({
+export const analyst = new Agent({
   name: 'analyst_46',
   model: llmModel,
   instructions: 'Analyze data using analyze_data. Transfer to summarizer when done.',
   tools: [analyzeData],
 });
 
-const summarizer = new Agent({
+export const summarizer = new Agent({
   name: 'summarizer_46',
   model: llmModel,
   instructions: 'Write a summary using write_summary.',
@@ -83,7 +83,7 @@ const summarizer = new Agent({
 // - data_collector can only go to analyst (not back to coordinator or peers)
 // - analyst can go to summarizer or coordinator
 // - summarizer can only return to coordinator
-const coordinator = new Agent({
+export const coordinator = new Agent({
   name: 'coordinator_46',
   model: llmModel,
   instructions:
@@ -100,13 +100,16 @@ const coordinator = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    coordinator,
-    'Collect data from the sales database, analyze trends, and write a summary.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('46-transfer-control.ts') || process.argv[1]?.endsWith('46-transfer-control.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      coordinator,
+      'Collect data from the sales database, analyze trends, and write a summary.',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

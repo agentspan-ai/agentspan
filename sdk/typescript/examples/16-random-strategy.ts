@@ -14,7 +14,7 @@
 import { Agent, AgentRuntime } from '../src/index.js';
 import { llmModel } from './settings.js';
 
-const creative = new Agent({
+export const creative = new Agent({
   name: 'creative',
   model: llmModel,
   instructions:
@@ -22,7 +22,7 @@ const creative = new Agent({
     'Keep your response to 2-3 sentences.',
 });
 
-const practical = new Agent({
+export const practical = new Agent({
   name: 'practical',
   model: llmModel,
   instructions:
@@ -30,7 +30,7 @@ const practical = new Agent({
     'Keep your response to 2-3 sentences.',
 });
 
-const critical = new Agent({
+export const critical = new Agent({
   name: 'critical',
   model: llmModel,
   instructions:
@@ -39,7 +39,7 @@ const critical = new Agent({
 });
 
 // Random selection: each turn, one of the three agents is picked at random
-const brainstorm = new Agent({
+export const brainstorm = new Agent({
   name: 'brainstorm',
   model: llmModel,
   agents: [creative, practical, critical],
@@ -47,13 +47,16 @@ const brainstorm = new Agent({
   maxTurns: 6,
 });
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    brainstorm,
-    'How should we approach building an AI-powered customer service platform?',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('16-random-strategy.ts') || process.argv[1]?.endsWith('16-random-strategy.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      brainstorm,
+      'How should we approach building an AI-powered customer service platform?',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

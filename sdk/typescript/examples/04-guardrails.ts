@@ -61,7 +61,7 @@ const factChecker = guardrail(
 );
 
 // -- Agent with all guardrails --
-const safeWriter = new Agent({
+export const safeWriter = new Agent({
   name: 'safe_writer',
   model: MODEL,
   instructions: 'Write informative content. Avoid PII and biased language.',
@@ -79,4 +79,8 @@ async function main() {
   await runtime.shutdown();
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('04-guardrails.ts') || process.argv[1]?.endsWith('04-guardrails.js')) {
+
+  main().catch(console.error);
+}

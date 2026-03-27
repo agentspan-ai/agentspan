@@ -15,7 +15,7 @@ import { llmModel } from './settings.js';
 
 // -- Quick answer (single agent) ---------------------------------------------
 
-const quickAnswer = new Agent({
+export const quickAnswer = new Agent({
   name: 'quick_answer_67',
   model: llmModel,
   instructions: 'You give quick, 1-2 sentence answers to simple questions.',
@@ -23,7 +23,7 @@ const quickAnswer = new Agent({
 
 // -- Research pipeline (sequential) ------------------------------------------
 
-const researcher = new Agent({
+export const researcher = new Agent({
   name: 'researcher_67',
   model: llmModel,
   instructions:
@@ -31,7 +31,7 @@ const researcher = new Agent({
     'facts with supporting details.',
 });
 
-const writer = new Agent({
+export const writer = new Agent({
   name: 'writer_67',
   model: llmModel,
   instructions:
@@ -39,7 +39,7 @@ const writer = new Agent({
     'engaging summary. Use headers and bullet points.',
 });
 
-const researchPipeline = new Agent({
+export const researchPipeline = new Agent({
   name: 'research_pipeline_67',
   model: llmModel,
   agents: [researcher, writer],
@@ -48,7 +48,7 @@ const researchPipeline = new Agent({
 
 // -- Router agent ------------------------------------------------------------
 
-const selector = new Agent({
+export const selector = new Agent({
   name: 'selector_67',
   model: llmModel,
   instructions:
@@ -59,7 +59,7 @@ const selector = new Agent({
 
 // -- Team with router --------------------------------------------------------
 
-const team = new Agent({
+export const team = new Agent({
   name: 'team_67',
   model: llmModel,
   agents: [quickAnswer, researchPipeline],
@@ -69,39 +69,42 @@ const team = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  // Scenario 1: Research task (routes to pipeline)
-  console.log('='.repeat(60));
-  console.log('  Scenario 1: Research task (router -> sequential pipeline)');
-  console.log('='.repeat(60));
-  const result = await runtime.run(
-    team,
-    'Research the current state of quantum computing and write a summary.',
-  );
-  result.printResult();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('67-router-to-sequential.ts') || process.argv[1]?.endsWith('67-router-to-sequential.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    // Scenario 1: Research task (routes to pipeline)
+    console.log('='.repeat(60));
+    console.log('  Scenario 1: Research task (router -> sequential pipeline)');
+    console.log('='.repeat(60));
+    const result = await runtime.run(
+      team,
+      'Research the current state of quantum computing and write a summary.',
+    );
+    result.printResult();
 
-  if (result.status === 'COMPLETED') {
-    console.log('[OK] Router -> sequential pipeline completed');
-  } else {
-    console.log(`[WARN] Unexpected status: ${result.status}`);
+    if (result.status === 'COMPLETED') {
+      console.log('[OK] Router -> sequential pipeline completed');
+    } else {
+      console.log(`[WARN] Unexpected status: ${result.status}`);
+    }
+
+    // Scenario 2: Quick question (routes to single agent)
+    console.log('\n' + '='.repeat(60));
+    console.log('  Scenario 2: Quick question (router -> single agent)');
+    console.log('='.repeat(60));
+    const result2 = await runtime.run(
+      team,
+      'What is the capital of France?',
+    );
+    result2.printResult();
+
+    if (result2.status === 'COMPLETED') {
+      console.log('[OK] Router -> quick answer completed');
+    } else {
+      console.log(`[WARN] Unexpected status: ${result2.status}`);
+    }
+  } finally {
+    await runtime.shutdown();
   }
-
-  // Scenario 2: Quick question (routes to single agent)
-  console.log('\n' + '='.repeat(60));
-  console.log('  Scenario 2: Quick question (router -> single agent)');
-  console.log('='.repeat(60));
-  const result2 = await runtime.run(
-    team,
-    'What is the capital of France?',
-  );
-  result2.printResult();
-
-  if (result2.status === 'COMPLETED') {
-    console.log('[OK] Router -> quick answer completed');
-  } else {
-    console.log(`[WARN] Unexpected status: ${result2.status}`);
-  }
-} finally {
-  await runtime.shutdown();
 }

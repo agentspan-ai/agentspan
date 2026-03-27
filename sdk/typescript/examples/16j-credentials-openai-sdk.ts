@@ -50,7 +50,7 @@ const checkGithubAuth = tool(
   },
 );
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'openai_sdk_cred_agent',
   model: llmModel,
   tools: [checkGithubAuth],
@@ -60,13 +60,16 @@ const agent = new Agent({
 
 // -- Run ----------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    agent,
-    'Is GitHub authentication available?',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('16j-credentials-openai-sdk.ts') || process.argv[1]?.endsWith('16j-credentials-openai-sdk.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      agent,
+      'Is GitHub authentication available?',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

@@ -110,7 +110,7 @@ const checkInventory = tool(
 
 // -- Agent: combines local + external tools ----------------------------------
 
-const supportAgent = new Agent({
+export const supportAgent = new Agent({
   name: 'support_agent',
   model: llmModel,
   instructions:
@@ -127,18 +127,21 @@ const supportAgent = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  console.log('=== External Worker Tools ===');
-  console.log('Agent has 1 local tool + 3 external worker references.\n');
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('33-external-workers.ts') || process.argv[1]?.endsWith('33-external-workers.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('=== External Worker Tools ===');
+    console.log('Agent has 1 local tool + 3 external worker references.\n');
 
-  const result = await runtime.run(
-    supportAgent,
-    'Customer C-1234 wants to cancel order ORD-5678. ' +
-    'Look up the customer, check if we have the product in stock, ' +
-    'and process the cancellation.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    const result = await runtime.run(
+      supportAgent,
+      'Customer C-1234 wants to cancel order ORD-5678. ' +
+      'Look up the customer, check if we have the product in stock, ' +
+      'and process the cancellation.',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

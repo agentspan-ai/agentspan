@@ -27,7 +27,7 @@ import { llmModel } from './settings.js';
 
 // -- Discussion participants --------------------------------------------------
 
-const optimist = new Agent({
+export const optimist = new Agent({
   name: 'optimist',
   model: llmModel,
   instructions:
@@ -36,7 +36,7 @@ const optimist = new Agent({
     "Acknowledge the other side's points before making your case.",
 });
 
-const skeptic = new Agent({
+export const skeptic = new Agent({
   name: 'skeptic',
   model: llmModel,
   instructions:
@@ -46,7 +46,7 @@ const skeptic = new Agent({
     "Acknowledge the other side's points before making your case.",
 });
 
-const summarizer = new Agent({
+export const summarizer = new Agent({
   name: 'summarizer',
   model: llmModel,
   instructions:
@@ -59,7 +59,7 @@ const summarizer = new Agent({
 
 // -- Round-robin discussion: 6 turns (3 rounds of back-and-forth) -------------
 
-const discussion = new Agent({
+export const discussion = new Agent({
   name: 'discussion',
   model: llmModel,
   agents: [optimist, skeptic],
@@ -72,13 +72,16 @@ const pipeline = discussion.pipe(summarizer);
 
 // -- Run ----------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    pipeline,
-    'Should AI agents be allowed to autonomously make financial decisions for individuals?',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('15-agent-discussion.ts') || process.argv[1]?.endsWith('15-agent-discussion.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      pipeline,
+      'Should AI agents be allowed to autonomously make financial decisions for individuals?',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

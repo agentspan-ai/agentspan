@@ -69,7 +69,7 @@ const lookupWeather = tool(
 
 // -- Agent with chained handlers ---------------------------------------------
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'lifecycle_agent_53',
   model: llmModel,
   instructions: 'You are a helpful assistant. Use lookup_weather for weather queries.',
@@ -79,10 +79,13 @@ const agent = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(agent, "What's the weather like in Tokyo?");
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('53-agent-lifecycle-callbacks.ts') || process.argv[1]?.endsWith('53-agent-lifecycle-callbacks.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(agent, "What's the weather like in Tokyo?");
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

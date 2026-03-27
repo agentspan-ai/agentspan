@@ -86,7 +86,7 @@ const getContactInfo = tool(
 
 // -- Agent -------------------------------------------------------------------
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'directory_agent',
   model: llmModel,
   tools: [getContactInfo],
@@ -96,43 +96,46 @@ const agent = new Agent({
   guardrails: [redactPhoneNumbers],
 });
 
-const runtime = new AgentRuntime();
-try {
-  // -- Scenario 1: Guardrail TRIGGERS -- contact has phone number
-  console.log('='.repeat(60));
-  console.log('  Scenario 1: Contact with phone number (guardrail triggers)');
-  console.log('='.repeat(60));
-  const result = await runtime.run(
-    agent,
-    "What's Alice Johnson's contact information?",
-  );
-  result.printResult();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('37-fix-guardrail.ts') || process.argv[1]?.endsWith('37-fix-guardrail.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    // -- Scenario 1: Guardrail TRIGGERS -- contact has phone number
+    console.log('='.repeat(60));
+    console.log('  Scenario 1: Contact with phone number (guardrail triggers)');
+    console.log('='.repeat(60));
+    const result = await runtime.run(
+      agent,
+      "What's Alice Johnson's contact information?",
+    );
+    result.printResult();
 
-  const output = String(result.output);
-  if (output.includes('(555) 123-4567') || output.includes('555-123-4567')) {
-    console.log('[FAIL] Phone number leaked through the guardrail!');
-  } else if (output.includes('[PHONE REDACTED]')) {
-    console.log('[OK] Phone number was auto-redacted by fix guardrail');
-  } else {
-    console.log('[OK] No phone number in output');
+    const output = String(result.output);
+    if (output.includes('(555) 123-4567') || output.includes('555-123-4567')) {
+      console.log('[FAIL] Phone number leaked through the guardrail!');
+    } else if (output.includes('[PHONE REDACTED]')) {
+      console.log('[OK] Phone number was auto-redacted by fix guardrail');
+    } else {
+      console.log('[OK] No phone number in output');
+    }
+
+    // -- Scenario 2: Guardrail does NOT trigger -- no phone in response
+    console.log('\n' + '='.repeat(60));
+    console.log('  Scenario 2: General question (guardrail does not trigger)');
+    console.log('='.repeat(60));
+    const result2 = await runtime.run(
+      agent,
+      'What department does Alice work in? Just the department name.',
+    );
+    result2.printResult();
+
+    const output2 = String(result2.output);
+    if (output2.includes('[PHONE REDACTED]')) {
+      console.log('[WARN] Unexpected redaction in clean response');
+    } else {
+      console.log('[OK] No redaction needed -- guardrail passed cleanly');
+    }
+  } finally {
+    await runtime.shutdown();
   }
-
-  // -- Scenario 2: Guardrail does NOT trigger -- no phone in response
-  console.log('\n' + '='.repeat(60));
-  console.log('  Scenario 2: General question (guardrail does not trigger)');
-  console.log('='.repeat(60));
-  const result2 = await runtime.run(
-    agent,
-    'What department does Alice work in? Just the department name.',
-  );
-  result2.printResult();
-
-  const output2 = String(result2.output);
-  if (output2.includes('[PHONE REDACTED]')) {
-    console.log('[WARN] Unexpected redaction in clean response');
-  } else {
-    console.log('[OK] No redaction needed -- guardrail passed cleanly');
-  }
-} finally {
-  await runtime.shutdown();
 }

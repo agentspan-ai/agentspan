@@ -56,7 +56,7 @@ const getCustomerContext = tool(
 
 // -- Agent with memory-backed context --------------------------------------
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'memory_agent',
   model: llmModel,
   tools: [getCustomerContext],
@@ -68,33 +68,36 @@ const agent = new Agent({
 
 // -- Run -------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  console.log('--- Query 1: Billing question ---');
-  const result = await runtime.run(
-    agent,
-    'I have a question about my billing -- is there an issue with my account?',
-  );
-  result.printResult();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('25-semantic-memory.ts') || process.argv[1]?.endsWith('25-semantic-memory.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('--- Query 1: Billing question ---');
+    const result = await runtime.run(
+      agent,
+      'I have a question about my billing -- is there an issue with my account?',
+    );
+    result.printResult();
 
-  console.log('\n--- Query 2: Plan question ---');
-  const result2 = await runtime.run(
-    agent,
-    'What plan am I on and when did I sign up?',
-  );
-  result2.printResult();
-} finally {
-  await runtime.shutdown();
-}
+    console.log('\n--- Query 2: Plan question ---');
+    const result2 = await runtime.run(
+      agent,
+      'What plan am I on and when did I sign up?',
+    );
+    result2.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 
-// -- Direct memory operations ------------------------------------------------
+  // -- Direct memory operations ------------------------------------------------
 
-console.log('\n--- Memory contents ---');
-for (const entry of memory.listAll()) {
-  console.log(`  [${entry.id.slice(0, 8)}] ${entry.content}`);
-}
+  console.log('\n--- Memory contents ---');
+  for (const entry of memory.listAll()) {
+    console.log(`  [${entry.id.slice(0, 8)}] ${entry.content}`);
+  }
 
-console.log('\n--- Search for "billing" ---');
-for (const entry of memory.search('billing invoice')) {
-  console.log(`  -> ${entry.content}`);
+  console.log('\n--- Search for "billing" ---');
+  for (const entry of memory.search('billing invoice')) {
+    console.log(`  -> ${entry.content}`);
+  }
 }

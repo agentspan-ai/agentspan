@@ -19,7 +19,7 @@ const WORK_DIR = `/tmp/codingexamples-${randomBytes(4).toString('hex')}`;
 
 // -- GitHub Agent ------------------------------------------------------------
 
-const githubAgent = new Agent({
+export const githubAgent = new Agent({
   name: 'github_agent',
   model: 'anthropic/claude-sonnet-4-20250514',
   instructions:
@@ -43,7 +43,7 @@ const githubAgent = new Agent({
 
 // -- Coder -------------------------------------------------------------------
 
-const coder = new Agent({
+export const coder = new Agent({
   name: 'coder',
   model: 'anthropic/claude-sonnet-4-20250514',
   instructions:
@@ -63,7 +63,7 @@ const coder = new Agent({
 
 // -- QA Tester ---------------------------------------------------------------
 
-const qaTester = new Agent({
+export const qaTester = new Agent({
   name: 'qa_tester',
   model: 'anthropic/claude-sonnet-4-20250514',
   instructions:
@@ -81,7 +81,7 @@ const qaTester = new Agent({
 
 // -- Coding Team: swarm coordinator ------------------------------------------
 
-const codingTeam = new Agent({
+export const codingTeam = new Agent({
   name: 'coding_team',
   model: 'anthropic/claude-sonnet-4-20250514',
   instructions:
@@ -119,26 +119,29 @@ console.log('  Tools: built-in code execution (any language)');
 console.log('='.repeat(60));
 console.log(`\nPrompt: ${prompt}\n`);
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(codingTeam, prompt);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('60a-github-coding-agent-simple.ts') || process.argv[1]?.endsWith('60a-github-coding-agent-simple.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(codingTeam, prompt);
 
-  const output = result.output;
-  const skipKeys = new Set(['finishReason', 'rejectionReason', 'is_transfer', 'transfer_to']);
-  if (output && typeof output === 'object' && !Array.isArray(output)) {
-    for (const [key, text] of Object.entries(output as Record<string, string>)) {
-      if (skipKeys.has(key) || !text) continue;
-      console.log(`\n${'─'.repeat(60)}`);
-      console.log(`  [${key}]`);
-      console.log('─'.repeat(60));
-      console.log(text);
+    const output = result.output;
+    const skipKeys = new Set(['finishReason', 'rejectionReason', 'is_transfer', 'transfer_to']);
+    if (output && typeof output === 'object' && !Array.isArray(output)) {
+      for (const [key, text] of Object.entries(output as Record<string, string>)) {
+        if (skipKeys.has(key) || !text) continue;
+        console.log(`\n${'─'.repeat(60)}`);
+        console.log(`  [${key}]`);
+        console.log('─'.repeat(60));
+        console.log(text);
+      }
+    } else {
+      console.log(output);
     }
-  } else {
-    console.log(output);
-  }
 
-  console.log(`\nFinish reason: ${result.finishReason}`);
-  console.log(`Workflow ID: ${result.workflowId}`);
-} finally {
-  await runtime.shutdown();
+    console.log(`\nFinish reason: ${result.finishReason}`);
+    console.log(`Workflow ID: ${result.workflowId}`);
+  } finally {
+    await runtime.shutdown();
+  }
 }

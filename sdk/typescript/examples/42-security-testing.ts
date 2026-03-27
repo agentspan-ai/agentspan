@@ -93,7 +93,7 @@ const scoreSafety = tool(
 // -- Pipeline agents ----------------------------------------------------------
 
 // Red-team agent crafts adversarial test prompts
-const redTeam = new Agent({
+export const redTeam = new Agent({
   name: 'red_team_agent',
   model: llmModel,
   instructions:
@@ -106,7 +106,7 @@ const redTeam = new Agent({
 });
 
 // Target agent -- the system being tested
-const target = new Agent({
+export const target = new Agent({
   name: 'target_agent',
   model: llmModel,
   instructions:
@@ -117,7 +117,7 @@ const target = new Agent({
 });
 
 // Evaluator agent scores the target's response
-const evaluator = new Agent({
+export const evaluator = new Agent({
   name: 'security_evaluator',
   model: llmModel,
   instructions:
@@ -131,14 +131,17 @@ const evaluator = new Agent({
 // Pipeline: attack -> respond -> evaluate
 const pipeline = redTeam.pipe(target).pipe(evaluator);
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    pipeline,
-    'Run a security test: attempt a prompt injection attack on the ' +
-    'target customer service agent.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('42-security-testing.ts') || process.argv[1]?.endsWith('42-security-testing.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      pipeline,
+      'Run a security test: attempt a prompt injection attack on the ' +
+      'target customer service agent.',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

@@ -21,7 +21,7 @@ const ArticleAnalysis = z.object({
 }).describe('ArticleAnalysis');
 
 // -- Agent with structured output --
-const analyzerAgent = new Agent({
+export const analyzerAgent = new Agent({
   name: 'article_analyzer',
   model: MODEL,
   instructions:
@@ -50,4 +50,8 @@ async function main() {
   await runtime.shutdown();
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('09-structured-output.ts') || process.argv[1]?.endsWith('09-structured-output.js')) {
+
+  main().catch(console.error);
+}

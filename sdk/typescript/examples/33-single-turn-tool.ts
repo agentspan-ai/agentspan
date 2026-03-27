@@ -31,7 +31,7 @@ const getWeather = tool(
   },
 );
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'weather_agent',
   model: llmModel,
   instructions: 'You are a weather assistant. Use the get_weather tool to answer.',
@@ -39,10 +39,13 @@ const agent = new Agent({
   maxTurns: 2, // 1 turn to call the tool, 1 turn to answer
 });
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(agent, "What's the weather in San Francisco?");
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('33-single-turn-tool.ts') || process.argv[1]?.endsWith('33-single-turn-tool.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(agent, "What's the weather in San Francisco?");
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

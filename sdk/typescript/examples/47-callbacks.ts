@@ -54,7 +54,7 @@ const getFacts = tool(
 
 // -- Agent with callbacks ----------------------------------------------------
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'monitored_agent_47',
   model: llmModel,
   instructions: 'You are a helpful assistant. Use get_facts when asked about topics.',
@@ -65,10 +65,13 @@ const agent = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(agent, 'Tell me interesting facts about AI and space.');
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('47-callbacks.ts') || process.argv[1]?.endsWith('47-callbacks.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(agent, 'Tell me interesting facts about AI and space.');
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

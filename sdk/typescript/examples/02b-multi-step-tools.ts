@@ -92,7 +92,7 @@ const sendSummaryEmail = tool(
   },
 );
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'account_analyst',
   model: llmModel,
   tools: [lookupCustomer, getTransactions, calculateTotal, sendSummaryEmail],
@@ -102,14 +102,17 @@ const agent = new Agent({
     'Use the tools step by step.',
 });
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    agent,
-    'How much has alice@example.com spent recently? ' +
-      'Get her last 3 transactions and give me the total.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('02b-multi-step-tools.ts') || process.argv[1]?.endsWith('02b-multi-step-tools.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      agent,
+      'How much has alice@example.com spent recently? ' +
+        'Get her last 3 transactions and give me the total.',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

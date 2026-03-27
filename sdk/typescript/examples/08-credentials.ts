@@ -89,7 +89,7 @@ const searchApi = httpTool({
 });
 
 // -- Agent using all credential patterns --
-const agent = new Agent({
+export const agent = new Agent({
   name: 'credentialed_agent',
   model: MODEL,
   instructions: 'Use tools to research topics. All tools have proper credentials.',
@@ -104,4 +104,8 @@ async function main() {
   await runtime.shutdown();
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('08-credentials.ts') || process.argv[1]?.endsWith('08-credentials.js')) {
+
+  main().catch(console.error);
+}

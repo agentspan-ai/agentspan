@@ -44,21 +44,24 @@ const dataAnalyst = new GPTAssistantAgent({
 
 // -- Run -------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  console.log('--- GPT Assistant with Code Interpreter ---');
-  console.log(`Using assistant ID: ${assistantId}`);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('28-gpt-assistant-agent.ts') || process.argv[1]?.endsWith('28-gpt-assistant-agent.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('--- GPT Assistant with Code Interpreter ---');
+    console.log(`Using assistant ID: ${assistantId}`);
 
-  if (assistantId === 'asst_placeholder') {
-    console.log('(Skipping run -- set OPENAI_ASSISTANT_ID to use a real assistant)');
-    console.log('[OK] GPTAssistantAgent structure validated');
-  } else {
-    const result = await runtime.run(
-      dataAnalyst,
-      'Calculate the standard deviation of these numbers: 4, 8, 15, 16, 23, 42',
-    );
-    result.printResult();
+    if (assistantId === 'asst_placeholder') {
+      console.log('(Skipping run -- set OPENAI_ASSISTANT_ID to use a real assistant)');
+      console.log('[OK] GPTAssistantAgent structure validated');
+    } else {
+      const result = await runtime.run(
+        dataAnalyst,
+        'Calculate the standard deviation of these numbers: 4, 8, 15, 16, 23, 42',
+      );
+      result.printResult();
+    }
+  } finally {
+    await runtime.shutdown();
   }
-} finally {
-  await runtime.shutdown();
 }

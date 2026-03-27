@@ -62,7 +62,7 @@ const getMarketData = tool(
 
 // -- Agent -------------------------------------------------------------------
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'finance_agent',
   model: llmModel,
   tools: [getMarketData],
@@ -73,40 +73,43 @@ const agent = new Agent({
   guardrails: [complianceCheck],
 });
 
-const runtime = new AgentRuntime();
-try {
-  // Start the agent (async -- does not block)
-  const handle = await runtime.start(
-    agent,
-    'Look up AAPL and explain whether it\'s a good investment. ' +
-    'Include your opinion on potential returns.',
-  );
-  console.log(`Workflow started: ${handle.workflowId}`);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('32-human-guardrail.ts') || process.argv[1]?.endsWith('32-human-guardrail.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    // Start the agent (async -- does not block)
+    const handle = await runtime.start(
+      agent,
+      'Look up AAPL and explain whether it\'s a good investment. ' +
+      'Include your opinion on potential returns.',
+    );
+    console.log(`Workflow started: ${handle.workflowId}`);
 
-  // Poll for status
-  for (let i = 0; i < 60; i++) {
-    const status = await handle.getStatus();
-    console.log(`  Status: ${status.status} (waiting=${status.isWaiting})`);
+    // Poll for status
+    for (let i = 0; i < 60; i++) {
+      const status = await handle.getStatus();
+      console.log(`  Status: ${status.status} (waiting=${status.isWaiting})`);
 
-    if (status.isWaiting) {
-      console.log('\n--- Workflow paused for human review ---');
-      console.log('The guardrail flagged the response for compliance review.');
-      console.log('Options: approve(), reject(reason), or respond(output)');
+      if (status.isWaiting) {
+        console.log('\n--- Workflow paused for human review ---');
+        console.log('The guardrail flagged the response for compliance review.');
+        console.log('Options: approve(), reject(reason), or respond(output)');
 
-      // In a real app, a human would review in the Conductor UI.
-      // Here we auto-reject for the demo.
-      console.log('Auto-rejecting for demo...');
-      await handle.reject('bad idea');
-      console.log('Rejected! Resuming workflow...\n');
+        // In a real app, a human would review in the Conductor UI.
+        // Here we auto-reject for the demo.
+        console.log('Auto-rejecting for demo...');
+        await handle.reject('bad idea');
+        console.log('Rejected! Resuming workflow...\n');
+      }
+
+      if (status.isComplete) {
+        console.log(`\nFinal output: ${status.output}`);
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
-
-    if (status.isComplete) {
-      console.log(`\nFinal output: ${status.output}`);
-      break;
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+  } finally {
+    await runtime.shutdown();
   }
-} finally {
-  await runtime.shutdown();
 }

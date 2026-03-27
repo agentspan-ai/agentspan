@@ -47,7 +47,7 @@ const genVideo = videoTool({
 
 // -- Orchestrator Agent -------------------------------------------------------
 
-const mediaAgent = new Agent({
+export const mediaAgent = new Agent({
   name: 'media_generator',
   model: llmModel,
   tools: [genImage, genAudio, genVideo],
@@ -66,15 +66,18 @@ const mediaAgent = new Agent({
 console.log('Media Generation Agent');
 console.log('='.repeat(60));
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    mediaAgent,
-    'Create an image of a serene Japanese garden with a koi pond ' +
-    'at sunset, cherry blossoms falling gently. Use vivid style. ' +
-    'Use that image to generate a video with audio narration describing the image.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('40-media-generation-agent.ts') || process.argv[1]?.endsWith('40-media-generation-agent.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      mediaAgent,
+      'Create an image of a serene Japanese garden with a koi pond ' +
+      'at sunset, cherry blossoms falling gently. Use vivid style. ' +
+      'Use that image to generate a video with audio narration describing the image.',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

@@ -23,7 +23,7 @@ const MODEL = 'anthropic/claude-sonnet-4-6';
 
 // -- Stage 1: Fetch issues ---------------------------------------------------
 
-const gitFetchIssues = new Agent({
+export const gitFetchIssues = new Agent({
   name: 'git_fetch_issues',
   model: MODEL,
   instructions:
@@ -47,7 +47,7 @@ const gitFetchIssues = new Agent({
 
 // -- Stage 2: Coding + QA (SWARM) -------------------------------------------
 
-const coderStage = new Agent({
+export const coderStage = new Agent({
   name: 'coder',
   model: MODEL,
   maxTokens: 60000,
@@ -63,7 +63,7 @@ const coderStage = new Agent({
   codeExecutionConfig: { enabled: true },
 });
 
-const qaStage = new Agent({
+export const qaStage = new Agent({
   name: 'qa_tester',
   model: MODEL,
   instructions:
@@ -78,7 +78,7 @@ const qaStage = new Agent({
   maxTurns: 5,
 });
 
-const codingQA = new Agent({
+export const codingQA = new Agent({
   name: 'coding_qa',
   model: MODEL,
   instructions:
@@ -103,7 +103,7 @@ const codingQA = new Agent({
 
 // -- Stage 3: Create PR ------------------------------------------------------
 
-const gitPushPR = new Agent({
+export const gitPushPR = new Agent({
   name: 'git_push_pr',
   model: MODEL,
   instructions:
@@ -121,42 +121,46 @@ const gitPushPR = new Agent({
 const pipeline = gitFetchIssues.pipe(codingQA).pipe(gitPushPR);
 
 // Run the pipeline with streaming
-const runtime = new AgentRuntime();
-try {
-  console.log('Starting pipeline: gitFetchIssues >> codingQA >> gitPushPR\n');
-  const agentStream = await runtime.stream(
-    pipeline,
-    `Pick the most suitable open issue on ${REPO} and implement a fix.`,
-  );
 
-  console.log(`Workflow: ${agentStream.workflowId}\n`);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('61-github-coding-agent-chained.ts') || process.argv[1]?.endsWith('61-github-coding-agent-chained.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('Starting pipeline: gitFetchIssues >> codingQA >> gitPushPR\n');
+    const agentStream = await runtime.stream(
+      pipeline,
+      `Pick the most suitable open issue on ${REPO} and implement a fix.`,
+    );
 
-  for await (const event of agentStream) {
-    switch (event.type) {
-      case 'thinking':
-        console.log(`  [thinking] ${String(event.content).slice(0, 120)}...`);
-        break;
-      case 'tool_call':
-        console.log(`  [tool_call] ${event.toolName}(${JSON.stringify(event.args).slice(0, 100)})`);
-        break;
-      case 'tool_result':
-        console.log(`  [tool_result] ${event.toolName} -> ${String(event.result).slice(0, 200)}`);
-        break;
-      case 'error':
-        console.log(`  [error] ${event.content}`);
-        break;
-      case 'done':
-        console.log(`\n[done] Pipeline complete.`);
-        console.log(`Output: ${JSON.stringify(event.output).slice(0, 500)}`);
-        break;
-      default:
-        console.log(`  [${event.type}] ${JSON.stringify(event).slice(0, 150)}`);
+    console.log(`Workflow: ${agentStream.workflowId}\n`);
+
+    for await (const event of agentStream) {
+      switch (event.type) {
+        case 'thinking':
+          console.log(`  [thinking] ${String(event.content).slice(0, 120)}...`);
+          break;
+        case 'tool_call':
+          console.log(`  [tool_call] ${event.toolName}(${JSON.stringify(event.args).slice(0, 100)})`);
+          break;
+        case 'tool_result':
+          console.log(`  [tool_result] ${event.toolName} -> ${String(event.result).slice(0, 200)}`);
+          break;
+        case 'error':
+          console.log(`  [error] ${event.content}`);
+          break;
+        case 'done':
+          console.log(`\n[done] Pipeline complete.`);
+          console.log(`Output: ${JSON.stringify(event.output).slice(0, 500)}`);
+          break;
+        default:
+          console.log(`  [${event.type}] ${JSON.stringify(event).slice(0, 150)}`);
+      }
     }
-  }
 
-  const result = await agentStream.getResult();
-  console.log(`\nStatus: ${result.status}`);
-  console.log(`Tool calls: ${result.toolCalls.length}`);
-} finally {
-  await runtime.shutdown();
+    const result = await agentStream.getResult();
+    console.log(`\nStatus: ${result.status}`);
+    console.log(`Tool calls: ${result.toolCalls.length}`);
+  } finally {
+    await runtime.shutdown();
+  }
 }

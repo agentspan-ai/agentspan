@@ -110,7 +110,7 @@ const createSupportTicket = tool(
 
 // --- Agent that mixes worker-backed and agent-specific tools ---
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'customer_support',
   model: llmModel,
   tools: [getCustomerData, getOrderHistory, createSupportTicket],
@@ -119,13 +119,16 @@ const agent = new Agent({
     'customer information, check order history, and create support tickets.',
 });
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    agent,
-    'Customer C001 is asking about their recent orders. Look them up and summarize.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('14-existing-workers.ts') || process.argv[1]?.endsWith('14-existing-workers.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      agent,
+      'Customer C001 is asking about their recent orders. Look them up and summarize.',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

@@ -43,21 +43,24 @@ const getStockPrice = tool(
   },
 );
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'weather_stock_agent',
   model: llmModel,
   tools: [getWeather, getStockPrice],
   instructions: 'You are a helpful assistant. Use tools to answer questions.',
 });
 
-const runtime = new AgentRuntime();
-try {
-  // The LLM will call get_weather (not get_stock_price)
-  const result = await runtime.run(
-    agent,
-    "What's the weather like in San Francisco?",
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('02a-simple-tools.ts') || process.argv[1]?.endsWith('02a-simple-tools.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    // The LLM will call get_weather (not get_stock_price)
+    const result = await runtime.run(
+      agent,
+      "What's the weather like in San Francisco?",
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

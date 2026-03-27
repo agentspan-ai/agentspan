@@ -27,7 +27,7 @@ const weather = mcpTool({
     'Weather and air quality tools via MCP, use it to get current and historical weather information for a city',
 });
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'weather_mcp_agent',
   model: llmModel,
   maxTokens: 10240,
@@ -39,13 +39,16 @@ const agent = new Agent({
     'use the tools provided',
 });
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    agent,
-    "What's the weather like in San Francisco (CA) right now?",
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('04-mcp-weather.ts') || process.argv[1]?.endsWith('04-mcp-weather.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      agent,
+      "What's the weather like in San Francisco (CA) right now?",
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

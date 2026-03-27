@@ -25,7 +25,7 @@ console.log('Success:', directResult.success);
 const codeTool = executor.asTool('run_code');
 
 // -- Agent with code execution --
-const codeAgent = new Agent({
+export const codeAgent = new Agent({
   name: 'code_agent',
   model: MODEL,
   instructions:
@@ -49,4 +49,8 @@ async function main() {
   await runtime.shutdown();
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('10-code-execution.ts') || process.argv[1]?.endsWith('10-code-execution.js')) {
+
+  main().catch(console.error);
+}

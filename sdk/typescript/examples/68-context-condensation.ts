@@ -128,7 +128,7 @@ const fetchDomainData = tool(
 
 // -- Sub-agent: calls fetchDomainData and writes analysis --------------------
 
-const deepAnalyst = new Agent({
+export const deepAnalyst = new Agent({
   name: 'deep_analyst_68',
   model: llmModel,
   tools: [fetchDomainData],
@@ -153,7 +153,7 @@ const deepAnalyst = new Agent({
 
 const DOMAINS = Object.keys(DOMAIN_DATA);
 
-const orchestrator = new Agent({
+export const orchestrator = new Agent({
   name: 'research_orchestrator_68',
   model: llmModel,
   tools: [agentTool(deepAnalyst)],
@@ -169,16 +169,19 @@ const orchestrator = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    orchestrator,
-    'Produce comprehensive analyses for each of the following technology domains ' +
-    'by calling deep_analyst ONCE PER DOMAIN, one domain at a time (not in parallel). ' +
-    `Complete all ${DOMAINS.length} domains, then summarise cross-domain trends. ` +
-    `Domains: ${DOMAINS.join(', ')}.`,
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('68-context-condensation.ts') || process.argv[1]?.endsWith('68-context-condensation.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      orchestrator,
+      'Produce comprehensive analyses for each of the following technology domains ' +
+      'by calling deep_analyst ONCE PER DOMAIN, one domain at a time (not in parallel). ' +
+      `Complete all ${DOMAINS.length} domains, then summarise cross-domain trends. ` +
+      `Domains: ${DOMAINS.join(', ')}.`,
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

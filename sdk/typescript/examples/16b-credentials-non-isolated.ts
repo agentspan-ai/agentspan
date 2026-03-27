@@ -142,7 +142,7 @@ const listRecentCharges = tool(
 
 // -- Agent definition ---------------------------------------------------------
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'billing_agent',
   model: llmModel,
   tools: [getCustomerBalance, listRecentCharges],
@@ -154,10 +154,13 @@ const agent = new Agent({
 
 // -- Run ----------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(agent, 'Show me the 3 most recent charges.');
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('16b-credentials-non-isolated.ts') || process.argv[1]?.endsWith('16b-credentials-non-isolated.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(agent, 'Show me the 3 most recent charges.');
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

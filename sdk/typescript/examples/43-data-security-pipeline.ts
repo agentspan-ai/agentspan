@@ -84,7 +84,7 @@ const redactSensitiveFields = tool(
 // -- Pipeline agents ----------------------------------------------------------
 
 // Data collector fetches raw user data
-const collector = new Agent({
+export const collector = new Agent({
   name: 'data_collector',
   model: llmModel,
   instructions:
@@ -95,7 +95,7 @@ const collector = new Agent({
 });
 
 // Validator enforces data security policy
-const validator = new Agent({
+export const validator = new Agent({
   name: 'security_validator',
   model: llmModel,
   instructions:
@@ -107,7 +107,7 @@ const validator = new Agent({
 });
 
 // Responder formats the final answer
-const responder = new Agent({
+export const responder = new Agent({
   name: 'responder',
   model: llmModel,
   instructions:
@@ -120,13 +120,16 @@ const responder = new Agent({
 // Sequential pipeline enforces data flow: collect -> validate -> respond
 const pipeline = collector.pipe(validator).pipe(responder);
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    pipeline,
-    'Tell me everything about user U001 including their financial details.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('43-data-security-pipeline.ts') || process.argv[1]?.endsWith('43-data-security-pipeline.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      pipeline,
+      'Tell me everything about user U001 including their financial details.',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

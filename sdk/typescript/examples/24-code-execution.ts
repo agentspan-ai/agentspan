@@ -28,7 +28,7 @@ import { llmModel } from './settings.js';
 
 const localExecutor = new LocalCodeExecutor({ timeout: 10 });
 
-const coder = new Agent({
+export const coder = new Agent({
   name: 'local_coder',
   model: llmModel,
   tools: [localExecutor.asTool()],
@@ -45,7 +45,7 @@ const dockerExecutor = new DockerCodeExecutor({
   memoryLimit: '256m',
 });
 
-const sandboxedCoder = new Agent({
+export const sandboxedCoder = new Agent({
   name: 'sandboxed_coder',
   model: llmModel,
   tools: [dockerExecutor.asTool('run_sandboxed')],
@@ -56,14 +56,17 @@ const sandboxedCoder = new Agent({
 
 // -- Run -------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  console.log('--- Local Code Execution ---');
-  const result = await runtime.run(
-    coder,
-    'Write a Python function to find the first 10 Fibonacci numbers and print them.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('24-code-execution.ts') || process.argv[1]?.endsWith('24-code-execution.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('--- Local Code Execution ---');
+    const result = await runtime.run(
+      coder,
+      'Write a Python function to find the first 10 Fibonacci numbers and print them.',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

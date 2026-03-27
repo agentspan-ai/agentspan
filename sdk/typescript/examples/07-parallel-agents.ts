@@ -15,7 +15,7 @@ import { llmModel } from './settings.js';
 
 // -- Specialist analysts -----------------------------------------------------
 
-const marketAnalyst = new Agent({
+export const marketAnalyst = new Agent({
   name: 'market_analyst',
   model: llmModel,
   instructions:
@@ -23,7 +23,7 @@ const marketAnalyst = new Agent({
     'market size, growth trends, key players, and opportunities.',
 });
 
-const riskAnalyst = new Agent({
+export const riskAnalyst = new Agent({
   name: 'risk_analyst',
   model: llmModel,
   instructions:
@@ -31,7 +31,7 @@ const riskAnalyst = new Agent({
     'regulatory risks, technical risks, competitive threats, and mitigation strategies.',
 });
 
-const complianceChecker = new Agent({
+export const complianceChecker = new Agent({
   name: 'compliance',
   model: llmModel,
   instructions:
@@ -41,20 +41,23 @@ const complianceChecker = new Agent({
 
 // -- Parallel analysis -------------------------------------------------------
 
-const analysis = new Agent({
+export const analysis = new Agent({
   name: 'analysis',
   model: llmModel,
   agents: [marketAnalyst, riskAnalyst, complianceChecker],
   strategy: 'parallel',
 });
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    analysis,
-    'Launching an AI-powered healthcare diagnostic tool in the US market',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('07-parallel-agents.ts') || process.argv[1]?.endsWith('07-parallel-agents.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      analysis,
+      'Launching an AI-powered healthcare diagnostic tool in the US market',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

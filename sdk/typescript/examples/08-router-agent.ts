@@ -15,21 +15,21 @@ import { llmModel } from './settings.js';
 
 // -- Specialist agents -------------------------------------------------------
 
-const planner = new Agent({
+export const planner = new Agent({
   name: 'planner',
   model: llmModel,
   instructions:
     'You create implementation plans. Break down tasks into clear numbered steps.',
 });
 
-const coder = new Agent({
+export const coder = new Agent({
   name: 'coder',
   model: llmModel,
   instructions:
     'You write code. Output clean, well-documented Python code.',
 });
 
-const reviewer = new Agent({
+export const reviewer = new Agent({
   name: 'reviewer',
   model: llmModel,
   instructions:
@@ -38,7 +38,7 @@ const reviewer = new Agent({
 
 // -- Router (LLM decides who to use) ----------------------------------------
 
-const team = new Agent({
+export const team = new Agent({
   name: 'dev_team',
   model: llmModel,
   instructions:
@@ -50,13 +50,16 @@ const team = new Agent({
   router: planner, // Required for router strategy
 });
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    team,
-    'Write a Python function to validate email addresses using regex',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('08-router-agent.ts') || process.argv[1]?.endsWith('08-router-agent.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      team,
+      'Write a Python function to validate email addresses using regex',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

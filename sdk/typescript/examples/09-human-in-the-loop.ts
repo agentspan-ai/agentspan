@@ -51,7 +51,7 @@ const transferFunds = tool(
   },
 );
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'banker',
   model: llmModel,
   tools: [checkBalance, transferFunds],
@@ -59,46 +59,49 @@ const agent = new Agent({
     'You are a banking assistant. Help with balance inquiries and transfers.',
 });
 
-const runtime = new AgentRuntime();
-try {
-  // start() returns a handle; handle.stream() streams events with HITL support
-  const handle: AgentHandle = await runtime.start(
-    agent,
-    'Transfer $500 from ACC-789 to ACC-456',
-  );
-  console.log(`Workflow started: ${handle.workflowId}\n`);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('09-human-in-the-loop.ts') || process.argv[1]?.endsWith('09-human-in-the-loop.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    // start() returns a handle; handle.stream() streams events with HITL support
+    const handle: AgentHandle = await runtime.start(
+      agent,
+      'Transfer $500 from ACC-789 to ACC-456',
+    );
+    console.log(`Workflow started: ${handle.workflowId}\n`);
 
-  for await (const event of handle.stream()) {
-    switch (event.type) {
-      case 'thinking':
-        console.log(`  [thinking] ${event.content}`);
-        break;
+    for await (const event of handle.stream()) {
+      switch (event.type) {
+        case 'thinking':
+          console.log(`  [thinking] ${event.content}`);
+          break;
 
-      case 'tool_call':
-        console.log(`  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`);
-        break;
+        case 'tool_call':
+          console.log(`  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`);
+          break;
 
-      case 'tool_result':
-        console.log(`  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result)}`);
-        break;
+        case 'tool_result':
+          console.log(`  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result)}`);
+          break;
 
-      case 'waiting':
-        console.log(`\n--- Human approval required ---`);
-        // Auto-approve since we can't do interactive stdin
-        console.log('  Auto-approving for demo...');
-        await handle.approve();
-        console.log('  Approved!\n');
-        break;
+        case 'waiting':
+          console.log(`\n--- Human approval required ---`);
+          // Auto-approve since we can't do interactive stdin
+          console.log('  Auto-approving for demo...');
+          await handle.approve();
+          console.log('  Approved!\n');
+          break;
 
-      case 'error':
-        console.log(`  [error] ${event.content}`);
-        break;
+        case 'error':
+          console.log(`  [error] ${event.content}`);
+          break;
 
-      case 'done':
-        console.log(`\nResult: ${JSON.stringify(event.output)}`);
-        break;
+        case 'done':
+          console.log(`\nResult: ${JSON.stringify(event.output)}`);
+          break;
+      }
     }
+  } finally {
+    await runtime.shutdown();
   }
-} finally {
-  await runtime.shutdown();
 }

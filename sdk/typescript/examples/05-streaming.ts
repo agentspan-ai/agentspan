@@ -13,7 +13,7 @@ import {
 
 const MODEL = process.env.AGENTSPAN_LLM_MODEL ?? 'openai/gpt-4o';
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'streaming_agent',
   model: MODEL,
   instructions: 'Answer the question thoroughly.',
@@ -79,4 +79,8 @@ async function main() {
   await runtime.shutdown();
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('05-streaming.ts') || process.argv[1]?.endsWith('05-streaming.js')) {
+
+  main().catch(console.error);
+}

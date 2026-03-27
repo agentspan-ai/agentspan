@@ -14,7 +14,7 @@
 import { Agent, AgentRuntime } from '../src/index.js';
 import { llmModel } from './settings.js';
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'saas_analyst',
   model: llmModel,
   instructions:
@@ -23,31 +23,35 @@ const agent = new Agent({
 });
 
 // Start agent asynchronously (returns immediately)
-const runtime = new AgentRuntime();
-try {
-  const handle = await runtime.start(
-    agent,
-    'What are the key metrics to track for a SaaS product?',
-  );
-  console.log(`Agent started: ${handle.workflowId}`);
 
-  // Poll for completion
-  let completed = false;
-  for (let i = 0; i < 30; i++) {
-    const status = await handle.getStatus();
-    console.log(`  [${i}s] Status: ${status.status} | Complete: ${status.isComplete}`);
-    if (status.isComplete) {
-      console.log(`\nResult: ${JSON.stringify(status.output)}`);
-      completed = true;
-      break;
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('12-long-running.ts') || process.argv[1]?.endsWith('12-long-running.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const handle = await runtime.start(
+      agent,
+      'What are the key metrics to track for a SaaS product?',
+    );
+    console.log(`Agent started: ${handle.workflowId}`);
+
+    // Poll for completion
+    let completed = false;
+    for (let i = 0; i < 30; i++) {
+      const status = await handle.getStatus();
+      console.log(`  [${i}s] Status: ${status.status} | Complete: ${status.isComplete}`);
+      if (status.isComplete) {
+        console.log(`\nResult: ${JSON.stringify(status.output)}`);
+        completed = true;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-  }
 
-  if (!completed) {
-    console.log('\nAgent still running. Check the Conductor UI:');
-    console.log(`  http://localhost:8080/execution/${handle.workflowId}`);
+    if (!completed) {
+      console.log('\nAgent still running. Check the Conductor UI:');
+      console.log(`  http://localhost:8080/execution/${handle.workflowId}`);
+    }
+  } finally {
+    await runtime.shutdown();
   }
-} finally {
-  await runtime.shutdown();
 }

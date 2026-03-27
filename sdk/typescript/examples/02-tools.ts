@@ -86,7 +86,7 @@ const sendEmail = tool(
   },
 );
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'tool_demo_agent',
   model: llmModel,
   tools: [getWeather, calculate, sendEmail],
@@ -94,50 +94,53 @@ const agent = new Agent({
     'You are a helpful assistant with access to weather, calculator, and email tools.',
 });
 
-const runtime = new AgentRuntime();
-try {
-  const streamHandle = await runtime.stream(
-    agent,
-    'send email to developer@orkes.io with current weather details in SF',
-  );
-  console.log(`Workflow started: ${streamHandle.workflowId}\n`);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('02-tools.ts') || process.argv[1]?.endsWith('02-tools.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const streamHandle = await runtime.stream(
+      agent,
+      'send email to developer@orkes.io with current weather details in SF',
+    );
+    console.log(`Workflow started: ${streamHandle.workflowId}\n`);
 
-  for await (const event of streamHandle) {
-    switch (event.type) {
-      case 'thinking':
-        console.log(`  [thinking] ${event.content}`);
-        break;
+    for await (const event of streamHandle) {
+      switch (event.type) {
+        case 'thinking':
+          console.log(`  [thinking] ${event.content}`);
+          break;
 
-      case 'tool_call':
-        console.log(`  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`);
-        break;
+        case 'tool_call':
+          console.log(`  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`);
+          break;
 
-      case 'tool_result':
-        console.log(`  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result)}`);
-        break;
+        case 'tool_result':
+          console.log(`  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result)}`);
+          break;
 
-      case 'waiting':
-        console.log(`\n--- Human approval required for send_email ---`);
-        // In a real application you'd prompt for user input.
-        // Auto-approve for this example:
-        console.log('  Auto-approving for demo...');
-        await streamHandle.approve();
-        console.log('  Approved!\n');
-        break;
+        case 'waiting':
+          console.log(`\n--- Human approval required for send_email ---`);
+          // In a real application you'd prompt for user input.
+          // Auto-approve for this example:
+          console.log('  Auto-approving for demo...');
+          await streamHandle.approve();
+          console.log('  Approved!\n');
+          break;
 
-      case 'error':
-        console.log(`  [error] ${event.content}`);
-        break;
+        case 'error':
+          console.log(`  [error] ${event.content}`);
+          break;
 
-      case 'done':
-        console.log(`\nResult: ${JSON.stringify(event.output)}`);
-        break;
+        case 'done':
+          console.log(`\nResult: ${JSON.stringify(event.output)}`);
+          break;
+      }
     }
-  }
 
-  const final = await streamHandle.getResult();
-  console.log(`\nTool calls: ${final.toolCalls.length}`);
-  console.log(`Status: ${final.status}`);
-} finally {
-  await runtime.shutdown();
+    const final = await streamHandle.getResult();
+    console.log(`\nTool calls: ${final.toolCalls.length}`);
+    console.log(`Status: ${final.status}`);
+  } finally {
+    await runtime.shutdown();
+  }
 }

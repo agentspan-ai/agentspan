@@ -20,7 +20,7 @@
 import { Agent, AgentRuntime } from '../src/index.js';
 import { llmModel } from './settings.js';
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'github_cli_agent',
   model: llmModel,
   cliConfig: { enabled: true, allowedCommands: ['gh'] },
@@ -34,13 +34,16 @@ const agent = new Agent({
 
 // -- Run ----------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    agent,
-    "List the 5 most recently updated repos for the 'agentspan'",
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('16d-credentials-gh-cli.ts') || process.argv[1]?.endsWith('16d-credentials-gh-cli.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      agent,
+      "List the 5 most recently updated repos for the 'agentspan'",
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

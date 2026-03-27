@@ -86,7 +86,7 @@ const githubTools = mcpTool({
   description: 'GitHub operations via MCP',
 });
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'api_assistant',
   model: llmModel,
   tools: [formatReport, weatherApi],
@@ -94,10 +94,13 @@ const agent = new Agent({
   instructions: 'You have access to weather data, GitHub, and report formatting.',
 });
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(agent, 'Get the weather in London and format it as a report.');
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('04-http-and-mcp-tools.ts') || process.argv[1]?.endsWith('04-http-and-mcp-tools.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(agent, 'Get the weather in London and format it as a report.');
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

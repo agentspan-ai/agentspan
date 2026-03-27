@@ -379,35 +379,35 @@ const INST_PROC = "You process data. Use the tool with the user's exact input.";
 const INST_FETCH = "You fetch data. Use the tool with the user's query.";
 const INST_UDATA = "You fetch user data. Use the tool with the user's ID.";
 
-const a01 = new Agent({ name: 'e2e_01', model: M, tools: [getCcData], instructions: INST_CC, guardrails: [regexAoutRetry.toGuardrailDef()] });
-const a02 = new Agent({ name: 'e2e_02', model: M, tools: [getSsnData], instructions: INST_SSN, guardrails: [regexAoutRaise.toGuardrailDef()] });
-const a03 = new Agent({ name: 'e2e_03', model: M, tools: [getCcData], instructions: INST_CC, guardrails: [regexAoutFix.toGuardrailDef()] });
-const a04 = new Agent({ name: 'e2e_04', model: M, instructions: INST_MED, guardrails: [llmAoutRetry.toGuardrailDef()] });
-const a05 = new Agent({ name: 'e2e_05', model: M, instructions: INST_MED, guardrails: [llmAoutRaise.toGuardrailDef()] });
-const a06 = new Agent({ name: 'e2e_06', model: M, instructions: INST_MED, guardrails: [llmAoutFix.toGuardrailDef()] });
-const a07 = new Agent({ name: 'e2e_07', model: M, tools: [getSecretData], instructions: INST_SECRET, guardrails: [customAoutBlock] });
-const a08 = new Agent({ name: 'e2e_08', model: M, tools: [getSecretData], instructions: INST_SECRET, guardrails: [{ ...customAoutBlock, onFail: 'raise' as const }] });
-const a09 = new Agent({ name: 'e2e_09', model: M, tools: [getSecretData], instructions: INST_SECRET, guardrails: [customAoutFix] });
+export const a01 = new Agent({ name: 'e2e_01', model: M, tools: [getCcData], instructions: INST_CC, guardrails: [regexAoutRetry.toGuardrailDef()] });
+export const a02 = new Agent({ name: 'e2e_02', model: M, tools: [getSsnData], instructions: INST_SSN, guardrails: [regexAoutRaise.toGuardrailDef()] });
+export const a03 = new Agent({ name: 'e2e_03', model: M, tools: [getCcData], instructions: INST_CC, guardrails: [regexAoutFix.toGuardrailDef()] });
+export const a04 = new Agent({ name: 'e2e_04', model: M, instructions: INST_MED, guardrails: [llmAoutRetry.toGuardrailDef()] });
+export const a05 = new Agent({ name: 'e2e_05', model: M, instructions: INST_MED, guardrails: [llmAoutRaise.toGuardrailDef()] });
+export const a06 = new Agent({ name: 'e2e_06', model: M, instructions: INST_MED, guardrails: [llmAoutFix.toGuardrailDef()] });
+export const a07 = new Agent({ name: 'e2e_07', model: M, tools: [getSecretData], instructions: INST_SECRET, guardrails: [customAoutBlock] });
+export const a08 = new Agent({ name: 'e2e_08', model: M, tools: [getSecretData], instructions: INST_SECRET, guardrails: [{ ...customAoutBlock, onFail: 'raise' as const }] });
+export const a09 = new Agent({ name: 'e2e_09', model: M, tools: [getSecretData], instructions: INST_SECRET, guardrails: [customAoutFix] });
 
-const a10 = new Agent({ name: 'e2e_10', model: M, tools: [tTinRegexRetry], instructions: INST_DB });
-const a11 = new Agent({ name: 'e2e_11', model: M, tools: [tTinRegexRaise], instructions: INST_DB });
-const a12 = new Agent({ name: 'e2e_12', model: M, tools: [tTinRegexFix], instructions: INST_DB });
-const a13 = new Agent({ name: 'e2e_13', model: M, tools: [tTinLlmRetry], instructions: INST_LOOKUP });
-const a14 = new Agent({ name: 'e2e_14', model: M, tools: [tTinLlmRaise], instructions: INST_LOOKUP });
-const a15 = new Agent({ name: 'e2e_15', model: M, tools: [tTinLlmFix], instructions: INST_LOOKUP });
-const a16 = new Agent({ name: 'e2e_16', model: M, tools: [tTinCustomRetry], instructions: INST_PROC });
-const a17 = new Agent({ name: 'e2e_17', model: M, tools: [tTinCustomRaise], instructions: INST_PROC });
-const a18 = new Agent({ name: 'e2e_18', model: M, tools: [tTinCustomFix], instructions: INST_PROC });
+export const a10 = new Agent({ name: 'e2e_10', model: M, tools: [tTinRegexRetry], instructions: INST_DB });
+export const a11 = new Agent({ name: 'e2e_11', model: M, tools: [tTinRegexRaise], instructions: INST_DB });
+export const a12 = new Agent({ name: 'e2e_12', model: M, tools: [tTinRegexFix], instructions: INST_DB });
+export const a13 = new Agent({ name: 'e2e_13', model: M, tools: [tTinLlmRetry], instructions: INST_LOOKUP });
+export const a14 = new Agent({ name: 'e2e_14', model: M, tools: [tTinLlmRaise], instructions: INST_LOOKUP });
+export const a15 = new Agent({ name: 'e2e_15', model: M, tools: [tTinLlmFix], instructions: INST_LOOKUP });
+export const a16 = new Agent({ name: 'e2e_16', model: M, tools: [tTinCustomRetry], instructions: INST_PROC });
+export const a17 = new Agent({ name: 'e2e_17', model: M, tools: [tTinCustomRaise], instructions: INST_PROC });
+export const a18 = new Agent({ name: 'e2e_18', model: M, tools: [tTinCustomFix], instructions: INST_PROC });
 
-const a19 = new Agent({ name: 'e2e_19', model: M, tools: [tToutRegexRetry], instructions: INST_FETCH });
-const a20 = new Agent({ name: 'e2e_20', model: M, tools: [tToutRegexRaise], instructions: INST_FETCH });
-const a21 = new Agent({ name: 'e2e_21', model: M, tools: [tToutRegexFix], instructions: INST_FETCH });
-const a22 = new Agent({ name: 'e2e_22', model: M, tools: [tToutLlmRetry], instructions: INST_UDATA });
-const a23 = new Agent({ name: 'e2e_23', model: M, tools: [tToutLlmRaise], instructions: INST_UDATA });
-const a24 = new Agent({ name: 'e2e_24', model: M, tools: [tToutLlmFix], instructions: INST_UDATA });
-const a25 = new Agent({ name: 'e2e_25', model: M, tools: [tToutCustomRetry], instructions: INST_FETCH });
-const a26 = new Agent({ name: 'e2e_26', model: M, tools: [tToutCustomRaise], instructions: INST_FETCH });
-const a27 = new Agent({ name: 'e2e_27', model: M, tools: [tToutCustomFixTool], instructions: INST_FETCH });
+export const a19 = new Agent({ name: 'e2e_19', model: M, tools: [tToutRegexRetry], instructions: INST_FETCH });
+export const a20 = new Agent({ name: 'e2e_20', model: M, tools: [tToutRegexRaise], instructions: INST_FETCH });
+export const a21 = new Agent({ name: 'e2e_21', model: M, tools: [tToutRegexFix], instructions: INST_FETCH });
+export const a22 = new Agent({ name: 'e2e_22', model: M, tools: [tToutLlmRetry], instructions: INST_UDATA });
+export const a23 = new Agent({ name: 'e2e_23', model: M, tools: [tToutLlmRaise], instructions: INST_UDATA });
+export const a24 = new Agent({ name: 'e2e_24', model: M, tools: [tToutLlmFix], instructions: INST_UDATA });
+export const a25 = new Agent({ name: 'e2e_25', model: M, tools: [tToutCustomRetry], instructions: INST_FETCH });
+export const a26 = new Agent({ name: 'e2e_26', model: M, tools: [tToutCustomRaise], instructions: INST_FETCH });
+export const a27 = new Agent({ name: 'e2e_27', model: M, tools: [tToutCustomFixTool], instructions: INST_FETCH });
 
 // -- Test cases --------------------------------------------------------------
 
@@ -485,13 +485,17 @@ console.log('  Position (3) x Type (3) x OnFail (3)');
 console.log('='.repeat(90));
 
 const runner = new TestRunner();
-const runtime = new AgentRuntime();
 
-try {
-  await runTests(runtime, runner);
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('90-guardrail-e2e-tests.ts') || process.argv[1]?.endsWith('90-guardrail-e2e-tests.js')) {
+  const runtime = new AgentRuntime();
+
+  try {
+    await runTests(runtime, runner);
+  } finally {
+    await runtime.shutdown();
+  }
+
+  const failed = runner.printSummary();
+  process.exit(failed > 0 ? 1 : 0);
 }
-
-const failed = runner.printSummary();
-process.exit(failed > 0 ? 1 : 0);

@@ -22,7 +22,7 @@ import { llmModel } from './settings.js';
 
 // -- Example 1: Simple image analysis --------------------------------------
 
-const visionAgent = new Agent({
+export const visionAgent = new Agent({
   name: 'vision_analyst',
   model: llmModel,
   instructions:
@@ -67,7 +67,7 @@ const saveAnalysis = tool(
   },
 );
 
-const visionWithTools = new Agent({
+export const visionWithTools = new Agent({
   name: 'vision_researcher',
   model: llmModel,
   instructions:
@@ -78,7 +78,7 @@ const visionWithTools = new Agent({
 
 // -- Example 3: Multi-image comparison -------------------------------------
 
-const comparator = new Agent({
+export const comparator = new Agent({
   name: 'image_comparator',
   model: llmModel,
   instructions:
@@ -90,13 +90,13 @@ const comparator = new Agent({
 // -- Example 4: Multi-agent pipeline with vision ---------------------------
 // First agent describes the image, second generates a creative story
 
-const describer = new Agent({
+export const describer = new Agent({
   name: 'describer',
   model: llmModel,
   instructions: 'Describe the image in 2-3 vivid sentences.',
 });
 
-const storyteller = new Agent({
+export const storyteller = new Agent({
   name: 'storyteller',
   model: llmModel,
   instructions:
@@ -112,43 +112,46 @@ const creativePipeline = describer.pipe(storyteller);
 const SAMPLE_IMAGE = 'https://orkes.io/Home-Page-Prompt-to-Workflow-1.png';
 const SAMPLE_IMAGE_2 = 'https://orkes.io/icons/hero-section-workflow_updated.png';
 
-const runtime = new AgentRuntime();
-try {
-  // --- 1. Single image analysis ---
-  console.log('=== Single Image Analysis ===');
-  const result1 = await runtime.run(
-    visionAgent,
-    'What do you see in this image? Describe it in detail.',
-    { media: [SAMPLE_IMAGE] },
-  );
-  result1.printResult();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('30-multimodal-agent.ts') || process.argv[1]?.endsWith('30-multimodal-agent.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    // --- 1. Single image analysis ---
+    console.log('=== Single Image Analysis ===');
+    const result1 = await runtime.run(
+      visionAgent,
+      'What do you see in this image? Describe it in detail.',
+      { media: [SAMPLE_IMAGE] },
+    );
+    result1.printResult();
 
-  // --- 2. Image analysis with tools ---
-  console.log('\n=== Image Analysis with Tools ===');
-  const result2 = await runtime.run(
-    visionWithTools,
-    'Analyze this image, search for similar ones, and save your findings.',
-    { media: [SAMPLE_IMAGE] },
-  );
-  result2.printResult();
+    // --- 2. Image analysis with tools ---
+    console.log('\n=== Image Analysis with Tools ===');
+    const result2 = await runtime.run(
+      visionWithTools,
+      'Analyze this image, search for similar ones, and save your findings.',
+      { media: [SAMPLE_IMAGE] },
+    );
+    result2.printResult();
 
-  // --- 3. Compare multiple images ---
-  console.log('\n=== Multi-Image Comparison ===');
-  const result3 = await runtime.run(
-    comparator,
-    'Compare these two images. What are the key differences?',
-    { media: [SAMPLE_IMAGE, SAMPLE_IMAGE_2] },
-  );
-  result3.printResult();
+    // --- 3. Compare multiple images ---
+    console.log('\n=== Multi-Image Comparison ===');
+    const result3 = await runtime.run(
+      comparator,
+      'Compare these two images. What are the key differences?',
+      { media: [SAMPLE_IMAGE, SAMPLE_IMAGE_2] },
+    );
+    result3.printResult();
 
-  // --- 4. Creative pipeline from image ---
-  console.log('\n=== Creative Pipeline (describe -> story) ===');
-  const result4 = await runtime.run(
-    creativePipeline,
-    'Create a story inspired by this image.',
-    { media: [SAMPLE_IMAGE_2] },
-  );
-  result4.printResult();
-} finally {
-  await runtime.shutdown();
+    // --- 4. Creative pipeline from image ---
+    console.log('\n=== Creative Pipeline (describe -> story) ===');
+    const result4 = await runtime.run(
+      creativePipeline,
+      'Create a story inspired by this image.',
+      { media: [SAMPLE_IMAGE_2] },
+    );
+    result4.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

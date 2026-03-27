@@ -77,7 +77,7 @@ const calculate = tool(
 
 // -- Child agent (has its own tools) ------------------------------------------
 
-const researcher = new Agent({
+export const researcher = new Agent({
   name: 'researcher_45',
   model: llmModel,
   instructions:
@@ -88,7 +88,7 @@ const researcher = new Agent({
 
 // -- Parent agent (uses researcher as a tool) ---------------------------------
 
-const manager = new Agent({
+export const manager = new Agent({
   name: 'manager_45',
   model: llmModel,
   instructions:
@@ -97,14 +97,17 @@ const manager = new Agent({
   tools: [agentTool(researcher), calculate],
 });
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    manager,
-    'Research Python and Rust, then calculate how many use cases they ' +
-    'have combined.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('45-agent-tool.ts') || process.argv[1]?.endsWith('45-agent-tool.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      manager,
+      'Research Python and Rust, then calculate how many use cases they ' +
+      'have combined.',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

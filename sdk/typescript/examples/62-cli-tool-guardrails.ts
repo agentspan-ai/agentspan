@@ -40,7 +40,7 @@ const reviewSudo = new RegexGuardrail({
 
 // -- Agent -------------------------------------------------------------------
 
-const opsAgent = new Agent({
+export const opsAgent = new Agent({
   name: 'ops_agent',
   model: llmModel,
   instructions:
@@ -67,10 +67,13 @@ console.log('  Blocked: rm -rf, sudo, mkfs, dd');
 console.log('='.repeat(60));
 console.log(`\nPrompt: ${prompt}\n`);
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(opsAgent, prompt);
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('62-cli-tool-guardrails.ts') || process.argv[1]?.endsWith('62-cli-tool-guardrails.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(opsAgent, prompt);
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

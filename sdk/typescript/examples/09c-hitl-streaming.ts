@@ -64,7 +64,7 @@ const deleteServiceData = tool(
   },
 );
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'ops_agent',
   model: llmModel,
   tools: [checkService, restartService, deleteServiceData],
@@ -74,66 +74,69 @@ const agent = new Agent({
     'deleting data if explicitly asked.',
 });
 
-const runtime = new AgentRuntime();
-try {
-  // stream() starts the workflow and returns an AgentStream —
-  // iterable for events, with HITL controls built in.
-  const streamHandle = await runtime.stream(
-    agent,
-    'The payments service is down. Check it, restart it, and clear its stale cache data.',
-  );
-  console.log(`Workflow started: ${streamHandle.workflowId}\n`);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('09c-hitl-streaming.ts') || process.argv[1]?.endsWith('09c-hitl-streaming.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    // stream() starts the workflow and returns an AgentStream —
+    // iterable for events, with HITL controls built in.
+    const streamHandle = await runtime.stream(
+      agent,
+      'The payments service is down. Check it, restart it, and clear its stale cache data.',
+    );
+    console.log(`Workflow started: ${streamHandle.workflowId}\n`);
 
-  for await (const event of streamHandle) {
-    switch (event.type) {
-      case 'thinking':
-        console.log(`  [thinking] ${event.content}`);
-        break;
+    for await (const event of streamHandle) {
+      switch (event.type) {
+        case 'thinking':
+          console.log(`  [thinking] ${event.content}`);
+          break;
 
-      case 'tool_call':
-        console.log(
-          `  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`,
-        );
-        break;
+        case 'tool_call':
+          console.log(
+            `  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`,
+          );
+          break;
 
-      case 'tool_result':
-        console.log(
-          `  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result)}`,
-        );
-        break;
+        case 'tool_result':
+          console.log(
+            `  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result)}`,
+          );
+          break;
 
-      case 'waiting':
-        console.log(`\n--- Approval required ---`);
-        // Auto-approve since we can't do interactive stdin
-        console.log('  Auto-approving for demo...');
-        await streamHandle.approve();
-        console.log('  Approved!\n');
-        break;
+        case 'waiting':
+          console.log(`\n--- Approval required ---`);
+          // Auto-approve since we can't do interactive stdin
+          console.log('  Auto-approving for demo...');
+          await streamHandle.approve();
+          console.log('  Approved!\n');
+          break;
 
-      case 'guardrail_pass':
-        console.log(`  [guardrail] ${event.guardrailName} passed`);
-        break;
+        case 'guardrail_pass':
+          console.log(`  [guardrail] ${event.guardrailName} passed`);
+          break;
 
-      case 'guardrail_fail':
-        console.log(
-          `  [guardrail] ${event.guardrailName} FAILED: ${event.content}`,
-        );
-        break;
+        case 'guardrail_fail':
+          console.log(
+            `  [guardrail] ${event.guardrailName} FAILED: ${event.content}`,
+          );
+          break;
 
-      case 'error':
-        console.log(`  [error] ${event.content}`);
-        break;
+        case 'error':
+          console.log(`  [error] ${event.content}`);
+          break;
 
-      case 'done':
-        console.log(`\n  [done] ${JSON.stringify(event.output)}`);
-        break;
+        case 'done':
+          console.log(`\n  [done] ${JSON.stringify(event.output)}`);
+          break;
+      }
     }
-  }
 
-  // After iteration, the full result is available
-  const final = await streamHandle.getResult();
-  console.log(`\nTool calls made: ${final.toolCalls.length}`);
-  console.log(`Status: ${final.status}`);
-} finally {
-  await runtime.shutdown();
+    // After iteration, the full result is available
+    const final = await streamHandle.getResult();
+    console.log(`\nTool calls made: ${final.toolCalls.length}`);
+    console.log(`Status: ${final.status}`);
+  } finally {
+    await runtime.shutdown();
+  }
 }

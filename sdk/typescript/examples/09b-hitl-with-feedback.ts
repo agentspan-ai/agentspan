@@ -38,7 +38,7 @@ const publishArticle = tool(
   },
 );
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'writer',
   model: llmModel,
   tools: [publishArticle],
@@ -48,90 +48,93 @@ const agent = new Agent({
     'feedback, revise the article and try publishing again.',
 });
 
-const runtime = new AgentRuntime();
-try {
-  const streamHandle = await runtime.stream(
-    agent,
-    'Write a short blog post about the benefits of code review',
-  );
-  console.log(`Workflow started: ${streamHandle.workflowId}\n`);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('09b-hitl-with-feedback.ts') || process.argv[1]?.endsWith('09b-hitl-with-feedback.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const streamHandle = await runtime.stream(
+      agent,
+      'Write a short blog post about the benefits of code review',
+    );
+    console.log(`Workflow started: ${streamHandle.workflowId}\n`);
 
-  for await (const event of streamHandle) {
-    console.log(`event type: ${event.type} --> ${event.content}`);
+    for await (const event of streamHandle) {
+      console.log(`event type: ${event.type} --> ${event.content}`);
 
-    switch (event.type) {
-      case 'thinking':
-        console.log(`  [thinking] ${event.content}`);
-        break;
+      switch (event.type) {
+        case 'thinking':
+          console.log(`  [thinking] ${event.content}`);
+          break;
 
-      case 'tool_call': {
-        console.log(`  [tool_call] ${event.toolName}`);
-        if (event.args) {
-          const args = event.args as Record<string, string>;
-          if (args.title) {
-            console.log(`    Title: ${args.title}`);
+        case 'tool_call': {
+          console.log(`  [tool_call] ${event.toolName}`);
+          if (event.args) {
+            const args = event.args as Record<string, string>;
+            if (args.title) {
+              console.log(`    Title: ${args.title}`);
+            }
+            if (args.body) {
+              const preview =
+                args.body.length > 200
+                  ? args.body.slice(0, 200) + '...'
+                  : args.body;
+              console.log(`    Body:  ${preview}`);
+            }
           }
-          if (args.body) {
-            const preview =
-              args.body.length > 200
-                ? args.body.slice(0, 200) + '...'
-                : args.body;
-            console.log(`    Body:  ${preview}`);
-          }
+          break;
         }
-        break;
-      }
 
-      case 'guardrail_fail': {
-        console.log(`  [guardrail failed] ${event.guardrailName}`);
-        if (event.args) {
-          const args = event.args as Record<string, string>;
-          if (args.title) {
-            console.log(`    Title: ${args.title}`);
+        case 'guardrail_fail': {
+          console.log(`  [guardrail failed] ${event.guardrailName}`);
+          if (event.args) {
+            const args = event.args as Record<string, string>;
+            if (args.title) {
+              console.log(`    Title: ${args.title}`);
+            }
+            if (args.body) {
+              const preview =
+                args.body.length > 200
+                  ? args.body.slice(0, 200) + '...'
+                  : args.body;
+              console.log(`    Body:  ${preview}`);
+            }
           }
-          if (args.body) {
-            const preview =
-              args.body.length > 200
-                ? args.body.slice(0, 200) + '...'
-                : args.body;
-            console.log(`    Body:  ${preview}`);
-          }
+          break;
         }
-        break;
+
+        case 'tool_result':
+          console.log(
+            `  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result)}`,
+          );
+          break;
+
+        case 'waiting':
+          console.log(`\n--- Editorial Review Required ---`);
+          console.log('  [a] Approve and publish');
+          console.log('  [r] Reject entirely');
+          console.log('  [f] Provide feedback for revision');
+          console.log();
+          // Auto-approve since we can't do interactive stdin
+          console.log('  Auto-approving for demo...');
+          await streamHandle.approve();
+          console.log('  Approved for publication!\n');
+          break;
+
+        case 'error':
+          console.log(`  [error] ${event.content}`);
+          break;
+
+        case 'done':
+          console.log(`\n  [done] ${JSON.stringify(event.output)}`);
+          break;
       }
-
-      case 'tool_result':
-        console.log(
-          `  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result)}`,
-        );
-        break;
-
-      case 'waiting':
-        console.log(`\n--- Editorial Review Required ---`);
-        console.log('  [a] Approve and publish');
-        console.log('  [r] Reject entirely');
-        console.log('  [f] Provide feedback for revision');
-        console.log();
-        // Auto-approve since we can't do interactive stdin
-        console.log('  Auto-approving for demo...');
-        await streamHandle.approve();
-        console.log('  Approved for publication!\n');
-        break;
-
-      case 'error':
-        console.log(`  [error] ${event.content}`);
-        break;
-
-      case 'done':
-        console.log(`\n  [done] ${JSON.stringify(event.output)}`);
-        break;
     }
-  }
 
-  // Access the structured result after streaming
-  const final = await streamHandle.getResult();
-  console.log(`\nTool calls made: ${final.toolCalls.length}`);
-  console.log(`Status: ${final.status}`);
-} finally {
-  await runtime.shutdown();
+    // Access the structured result after streaming
+    const final = await streamHandle.getResult();
+    console.log(`\nTool calls made: ${final.toolCalls.length}`);
+    console.log(`Status: ${final.status}`);
+  } finally {
+    await runtime.shutdown();
+  }
 }

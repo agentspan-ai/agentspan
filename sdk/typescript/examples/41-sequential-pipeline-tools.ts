@@ -139,7 +139,7 @@ const assembleProduction = tool(
 
 // -- Pipeline stages ----------------------------------------------------------
 
-const conceptDeveloper = new Agent({
+export const conceptDeveloper = new Agent({
   name: 'concept_developer',
   model: llmModel,
   instructions:
@@ -149,7 +149,7 @@ const conceptDeveloper = new Agent({
   tools: [createConcept],
 });
 
-const scriptwriter = new Agent({
+export const scriptwriter = new Agent({
   name: 'scriptwriter',
   model: llmModel,
   instructions:
@@ -159,7 +159,7 @@ const scriptwriter = new Agent({
   tools: [writeScene],
 });
 
-const visualDirector = new Agent({
+export const visualDirector = new Agent({
   name: 'visual_director',
   model: llmModel,
   instructions:
@@ -169,7 +169,7 @@ const visualDirector = new Agent({
   tools: [describeVisual],
 });
 
-const audioDesigner = new Agent({
+export const audioDesigner = new Agent({
   name: 'audio_designer',
   model: llmModel,
   instructions:
@@ -179,7 +179,7 @@ const audioDesigner = new Agent({
   tools: [specifyAudio],
 });
 
-const producer = new Agent({
+export const producer = new Agent({
   name: 'producer',
   model: llmModel,
   instructions:
@@ -196,14 +196,17 @@ const pipeline = conceptDeveloper
   .pipe(audioDesigner)
   .pipe(producer);
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    pipeline,
-    'Create a 3-scene short film about a robot discovering music ' +
-    'for the first time in a post-apocalyptic world.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('41-sequential-pipeline-tools.ts') || process.argv[1]?.endsWith('41-sequential-pipeline-tools.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      pipeline,
+      'Create a 3-scene short film about a robot discovering music ' +
+      'for the first time in a post-apocalyptic world.',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

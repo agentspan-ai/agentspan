@@ -27,7 +27,7 @@ const petstore = apiTool({
   maxTools: 20,
 });
 
-const petAgent = new Agent({
+export const petAgent = new Agent({
   name: 'pet_store_assistant',
   model: llmModel,
   instructions: 'You help users manage a pet store. Use the available API tools.',
@@ -41,7 +41,7 @@ const weather = apiTool({
   toolNames: ['getCurrentWeather', 'getForecast'],
 });
 
-const weatherAgent = new Agent({
+export const weatherAgent = new Agent({
   name: 'weather_assistant',
   model: llmModel,
   instructions: 'You provide weather information.',
@@ -79,7 +79,7 @@ const petstoreApi = apiTool({
   maxTools: 10,
 });
 
-const multiToolAgent = new Agent({
+export const multiToolAgent = new Agent({
   name: 'multi_tool_assistant',
   model: llmModel,
   instructions:
@@ -106,7 +106,7 @@ const github = apiTool({
   maxTools: 20,
 });
 
-const githubAgent = new Agent({
+export const githubAgent = new Agent({
   name: 'github_assistant',
   model: llmModel,
   instructions: 'You help users manage their GitHub repositories and issues.',
@@ -115,17 +115,20 @@ const githubAgent = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  // Example 1: Petstore
-  console.log('=== Petstore API ===');
-  const result = await runtime.run(petAgent, "List all available pets with status 'available'");
-  result.printResult();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('71-api-tool.ts') || process.argv[1]?.endsWith('71-api-tool.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    // Example 1: Petstore
+    console.log('=== Petstore API ===');
+    const result = await runtime.run(petAgent, "List all available pets with status 'available'");
+    result.printResult();
 
-  // Example 3: Mixed tools
-  console.log('\n=== Mixed Tools ===');
-  const result2 = await runtime.run(multiToolAgent, "What's sqrt(144)? Also find pets named 'doggie'.");
-  result2.printResult();
-} finally {
-  await runtime.shutdown();
+    // Example 3: Mixed tools
+    console.log('\n=== Mixed Tools ===');
+    const result2 = await runtime.run(multiToolAgent, "What's sqrt(144)? Also find pets named 'doggie'.");
+    result2.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

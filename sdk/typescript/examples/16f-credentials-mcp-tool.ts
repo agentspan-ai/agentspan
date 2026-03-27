@@ -29,7 +29,7 @@ const myMcpTools = mcpTool({
   credentials: ['MCP_API_KEY'],
 });
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'mcp_cred_agent',
   model: llmModel,
   tools: [myMcpTools],
@@ -38,10 +38,13 @@ const agent = new Agent({
 
 // -- Run ----------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(agent, 'What tools are available?');
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('16f-credentials-mcp-tool.ts') || process.argv[1]?.endsWith('16f-credentials-mcp-tool.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(agent, 'What tools are available?');
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

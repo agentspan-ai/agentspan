@@ -61,7 +61,7 @@ const writeSection = tool(
 
 // -- Agent -------------------------------------------------------------------
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'research_writer_48',
   model: llmModel,
   instructions:
@@ -73,13 +73,16 @@ const agent = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    agent,
-    'Write a brief report on renewable energy and climate change solutions.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('48-planner.ts') || process.argv[1]?.endsWith('48-planner.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      agent,
+      'Write a brief report on renewable energy and climate change solutions.',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

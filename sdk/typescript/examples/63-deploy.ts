@@ -44,14 +44,14 @@ const checkStatus = tool(
 
 // -- Define agents -----------------------------------------------------------
 
-const docAssistant = new Agent({
+export const docAssistant = new Agent({
   name: 'doc_assistant',
   model: llmModel,
   tools: [searchDocs],
   instructions: 'Help users find documentation. Use search_docs to look up answers.',
 });
 
-const opsBot = new Agent({
+export const opsBot = new Agent({
   name: 'ops_bot',
   model: llmModel,
   tools: [checkStatus],
@@ -60,16 +60,19 @@ const opsBot = new Agent({
 
 // -- Deploy: compile + register on server ------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const agents = [docAssistant, opsBot];
-  for (const a of agents) {
-    const info = await runtime.deploy(a);
-    console.log(`Deployed: ${info.agentName} -> ${info.workflowName}`);
-  }
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('63-deploy.ts') || process.argv[1]?.endsWith('63-deploy.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const agents = [docAssistant, opsBot];
+    for (const a of agents) {
+      const info = await runtime.deploy(a);
+      console.log(`Deployed: ${info.agentName} -> ${info.workflowName}`);
+    }
 
-  console.log(`\n${agents.length} agent(s) registered on server.`);
-  console.log('Now run 63b-serve.ts to start workers, then 63c-run-by-name.ts to execute.');
-} finally {
-  await runtime.shutdown();
+    console.log(`\n${agents.length} agent(s) registered on server.`);
+    console.log('Now run 63b-serve.ts to start workers, then 63c-run-by-name.ts to execute.');
+  } finally {
+    await runtime.shutdown();
+  }
 }

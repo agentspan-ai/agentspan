@@ -17,7 +17,7 @@ import { llmModel } from './settings.js';
 
 // -- Pipeline agents ---------------------------------------------------------
 
-const researcher = new Agent({
+export const researcher = new Agent({
   name: 'researcher',
   model: llmModel,
   instructions:
@@ -25,7 +25,7 @@ const researcher = new Agent({
     'Be thorough but concise. Output raw research findings.',
 });
 
-const writer = new Agent({
+export const writer = new Agent({
   name: 'writer',
   model: llmModel,
   instructions:
@@ -33,7 +33,7 @@ const writer = new Agent({
     'article. Use headers and bullet points where appropriate.',
 });
 
-const editor = new Agent({
+export const editor = new Agent({
   name: 'editor',
   model: llmModel,
   instructions:
@@ -45,24 +45,27 @@ const editor = new Agent({
 
 const pipeline = researcher.pipe(writer).pipe(editor);
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    pipeline,
-    'The impact of AI agents on software development in 2025',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
-}
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('06-sequential-pipeline.ts') || process.argv[1]?.endsWith('06-sequential-pipeline.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      pipeline,
+      'The impact of AI agents on software development in 2025',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 
-// -- Option 2: Using strategy parameter (equivalent) -------------------------
-//
-// const pipeline = new Agent({
-//   name: 'content_pipeline',
-//   model: llmModel,
-//   agents: [researcher, writer, editor],
-//   strategy: 'sequential',
-// });
-// const runtime = new AgentRuntime();
-// const result = await runtime.run(pipeline, 'The impact of AI agents on software development in 2025');
+  // -- Option 2: Using strategy parameter (equivalent) -------------------------
+  //
+  // const pipeline = new Agent({
+  //   name: 'content_pipeline',
+  //   model: llmModel,
+  //   agents: [researcher, writer, editor],
+  //   strategy: 'sequential',
+  // });
+  // const runtime = new AgentRuntime();
+  // const result = await runtime.run(pipeline, 'The impact of AI agents on software development in 2025');
+}

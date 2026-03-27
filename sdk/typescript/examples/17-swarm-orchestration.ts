@@ -27,7 +27,7 @@ import { llmModel } from './settings.js';
 
 // -- Specialist agents --------------------------------------------------------
 
-const refundAgent = new Agent({
+export const refundAgent = new Agent({
   name: 'refund_specialist',
   model: llmModel,
   instructions:
@@ -37,7 +37,7 @@ const refundAgent = new Agent({
     'just process the refund based on what the customer told you.',
 });
 
-const techAgent = new Agent({
+export const techAgent = new Agent({
   name: 'tech_support',
   model: llmModel,
   instructions:
@@ -47,7 +47,7 @@ const techAgent = new Agent({
 
 // -- Front-line support agent with swarm handoffs -----------------------------
 
-const support = new Agent({
+export const support = new Agent({
   name: 'support',
   model: llmModel,
   instructions:
@@ -67,14 +67,17 @@ const support = new Agent({
 
 // -- Run ----------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  console.log('--- Refund scenario ---');
-  const result = await runtime.run(
-    support,
-    'I bought a product last week and it arrived damaged. I want my money back.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('17-swarm-orchestration.ts') || process.argv[1]?.endsWith('17-swarm-orchestration.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('--- Refund scenario ---');
+    const result = await runtime.run(
+      support,
+      'I bought a product last week and it arrived damaged. I want my money back.',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

@@ -45,7 +45,7 @@ const search = tool(
   },
 );
 
-const agent1 = new Agent({
+export const agent1 = new Agent({
   name: 'researcher',
   model: llmModel,
   tools: [search],
@@ -55,7 +55,7 @@ const agent1 = new Agent({
 
 // -- Example 2: OR -- stop on text OR after 20 messages --------------------
 
-const agent2 = new Agent({
+export const agent2 = new Agent({
   name: 'chatbot',
   model: llmModel,
   instructions: "Have a conversation. Say GOODBYE when you're finished.",
@@ -66,7 +66,7 @@ const agent2 = new Agent({
 
 // Only terminate when the agent says "FINAL ANSWER" AND we've had
 // at least 5 messages (ensuring sufficient deliberation)
-const agent3 = new Agent({
+export const agent3 = new Agent({
   name: 'deliberator',
   model: llmModel,
   tools: [search],
@@ -83,7 +83,7 @@ const complexStop = new StopMessage('TERMINATE')
   .or(new TextMention('DONE').and(new MaxMessage(10)))
   .or(new TokenUsageCondition({ maxTotalTokens: 50000 }));
 
-const agent4 = new Agent({
+export const agent4 = new Agent({
   name: 'complex_agent',
   model: llmModel,
   tools: [search],
@@ -93,11 +93,14 @@ const agent4 = new Agent({
 
 // -- Run -------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  console.log('--- Simple text mention termination ---');
-  const result = await runtime.run(agent1, 'What are AI agents?');
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('19-composable-termination.ts') || process.argv[1]?.endsWith('19-composable-termination.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('--- Simple text mention termination ---');
+    const result = await runtime.run(agent1, 'What are AI agents?');
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

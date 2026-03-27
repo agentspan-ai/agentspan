@@ -21,7 +21,7 @@ const jupyterExecutor = new JupyterCodeExecutor({
   timeout: 30,
 });
 
-const jupyterCoder = new Agent({
+export const jupyterCoder = new Agent({
   name: 'jupyter_coder',
   model: llmModel,
   tools: [jupyterExecutor.asTool('execute_code')],
@@ -35,16 +35,19 @@ const jupyterCoder = new Agent({
     "The 'math' module is already imported for you.",
 });
 
-const runtime = new AgentRuntime();
-try {
-  console.log('--- Jupyter Kernel Code Execution ---');
-  const result = await runtime.run(
-    jupyterCoder,
-    "Compute the first 10 Fibonacci numbers using a loop, store them in a " +
-    "list called 'fibs', and print them. Then in a second execution, print " +
-    "the sum of 'fibs' (it should still exist from the first call).",
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('39b-jupyter-code-execution.ts') || process.argv[1]?.endsWith('39b-jupyter-code-execution.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('--- Jupyter Kernel Code Execution ---');
+    const result = await runtime.run(
+      jupyterCoder,
+      "Compute the first 10 Fibonacci numbers using a loop, store them in a " +
+      "list called 'fibs', and print them. Then in a second execution, print " +
+      "the sum of 'fibs' (it should still exist from the first call).",
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

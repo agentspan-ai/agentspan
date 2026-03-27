@@ -17,7 +17,7 @@ import { llmModel } from './settings.js';
 
 // -- Parallel research phase -------------------------------------------------
 
-const marketAnalyst = new Agent({
+export const marketAnalyst = new Agent({
   name: 'market_analyst_52',
   model: llmModel,
   instructions:
@@ -25,7 +25,7 @@ const marketAnalyst = new Agent({
     'and key players for the given topic. Be concise (3-4 bullet points).',
 });
 
-const riskAnalyst = new Agent({
+export const riskAnalyst = new Agent({
   name: 'risk_analyst_52',
   model: llmModel,
   instructions:
@@ -34,7 +34,7 @@ const riskAnalyst = new Agent({
 });
 
 // Both analysts run concurrently
-const parallelResearch = new Agent({
+export const parallelResearch = new Agent({
   name: 'research_phase_52',
   model: llmModel,
   agents: [marketAnalyst, riskAnalyst],
@@ -43,7 +43,7 @@ const parallelResearch = new Agent({
 
 // -- Sequential summarizer ---------------------------------------------------
 
-const summarizer = new Agent({
+export const summarizer = new Agent({
   name: 'summarizer_52',
   model: llmModel,
   instructions:
@@ -55,13 +55,16 @@ const summarizer = new Agent({
 
 const pipeline = parallelResearch.pipe(summarizer);
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    pipeline,
-    'Launching an AI-powered healthcare diagnostics tool in the US',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('52-nested-strategies.ts') || process.argv[1]?.endsWith('52-nested-strategies.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      pipeline,
+      'Launching an AI-powered healthcare diagnostics tool in the US',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

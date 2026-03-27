@@ -122,7 +122,7 @@ const createGithubIssue = tool(
 
 // -- Agent definition ---------------------------------------------------------
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'github_agent',
   model: llmModel,
   tools: [listGithubRepos, createGithubIssue],
@@ -135,13 +135,16 @@ const agent = new Agent({
 
 // -- Run ----------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    agent,
-    "List the 5 most recently updated repos for the 'agentspan' GitHub user.",
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('16-credentials-isolated-tool.ts') || process.argv[1]?.endsWith('16-credentials-isolated-tool.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      agent,
+      "List the 5 most recently updated repos for the 'agentspan' GitHub user.",
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

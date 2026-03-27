@@ -39,7 +39,7 @@ const safetyGuard = new LLMGuardrail({
 
 // -- Agent with LLM guardrail ---------------------------------------------
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'health_advisor',
   model: llmModel,
   instructions:
@@ -50,13 +50,16 @@ const agent = new Agent({
 
 // -- Run -------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
-    agent,
-    'What should I do about persistent headaches?',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('22-llm-guardrails.ts') || process.argv[1]?.endsWith('22-llm-guardrails.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
+      agent,
+      'What should I do about persistent headaches?',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }

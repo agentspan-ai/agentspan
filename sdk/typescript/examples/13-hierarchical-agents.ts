@@ -24,7 +24,7 @@ import { llmModel } from './settings.js';
 
 // ── Level 3: Individual specialists ─────────────────────────
 
-const backendDev = new Agent({
+export const backendDev = new Agent({
   name: 'backend_dev',
   model: llmModel,
   instructions:
@@ -32,7 +32,7 @@ const backendDev = new Agent({
     'architecture. Provide technical recommendations with code examples.',
 });
 
-const frontendDev = new Agent({
+export const frontendDev = new Agent({
   name: 'frontend_dev',
   model: llmModel,
   instructions:
@@ -40,7 +40,7 @@ const frontendDev = new Agent({
     'and client-side architecture. Provide recommendations with code examples.',
 });
 
-const contentWriter = new Agent({
+export const contentWriter = new Agent({
   name: 'content_writer',
   model: llmModel,
   instructions:
@@ -48,7 +48,7 @@ const contentWriter = new Agent({
     'and marketing materials. Write engaging, clear content.',
 });
 
-const seoSpecialist = new Agent({
+export const seoSpecialist = new Agent({
   name: 'seo_specialist',
   model: llmModel,
   instructions:
@@ -58,7 +58,7 @@ const seoSpecialist = new Agent({
 
 // ── Level 2: Team leads (handoff to specialists) ───────────
 
-const engineeringLead = new Agent({
+export const engineeringLead = new Agent({
   name: 'engineering_lead',
   model: llmModel,
   instructions:
@@ -69,7 +69,7 @@ const engineeringLead = new Agent({
   strategy: 'handoff',
 });
 
-const marketingLead = new Agent({
+export const marketingLead = new Agent({
   name: 'marketing_lead',
   model: llmModel,
   instructions:
@@ -82,7 +82,7 @@ const marketingLead = new Agent({
 
 // ── Level 1: CEO orchestrator (handoff to leads) ───────────
 
-const ceo = new Agent({
+export const ceo = new Agent({
   name: 'ceo',
   model: llmModel,
   instructions:
@@ -96,15 +96,18 @@ const ceo = new Agent({
 
 // ── Run ───────────────────────────────────────────────────
 
-const runtime = new AgentRuntime();
-try {
-  console.log('--- Technical question (CEO -> Engineering -> Backend) ---');
-  const result = await runtime.run(
-    ceo,
-    'Design a REST API for a user management system with authentication ' +
-    'and then come up with a marketing campaign for the system',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('13-hierarchical-agents.ts') || process.argv[1]?.endsWith('13-hierarchical-agents.js')) {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('--- Technical question (CEO -> Engineering -> Backend) ---');
+    const result = await runtime.run(
+      ceo,
+      'Design a REST API for a user management system with authentication ' +
+      'and then come up with a marketing campaign for the system',
+    );
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }
