@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -46,26 +47,60 @@ jobs:
             --output semgrep.json \
             .
           status=$?
-          findings=$(jq '.results | length' semgrep.json)
+          if [ -f semgrep.json ]; then
+            findings=$(jq '.results | length' semgrep.json)
+          else
+            findings=0
+            echo '{"results":[]}' > semgrep.json
+          fi
           echo "exit_code=$status" >> "$GITHUB_OUTPUT"
           echo "findings=$findings" >> "$GITHUB_OUTPUT"
           exit 0
 
-      - name: Summarize results
+      - name: Build Semgrep report
         if: always()
         run: |
+          changed_files=$(git diff --name-only "${{ github.event.pull_request.base.sha }}"...HEAD | wc -l | tr -d ' ')
+          findings="${{ steps.semgrep.outputs.findings }}"
+
           {
             echo "## Semgrep Results"
             echo ""
-            echo "- Findings: ${{ steps.semgrep.outputs.findings }}"
+            echo "- Findings in changed files: $findings"
+            echo "- Changed files in pull request: $changed_files"
             echo "- Baseline commit: \`${{ github.event.pull_request.base.sha }}\`"
-            echo "- Report artifact: \`semgrep-results\`"
             if [ "${{ steps.semgrep.outputs.exit_code }}" = "0" ]; then
               echo "- Status: no blocking findings"
             else
               echo "- Status: blocking findings detected"
             fi
-          } >> "$GITHUB_STEP_SUMMARY"
+            echo ""
+
+            if [ "$findings" -gt 0 ]; then
+              echo "### Findings"
+              jq -r --arg repo "${{ github.repository }}" --arg sha "${{ github.event.pull_request.head.sha }}" '
+                .results[:10][] |
+                "- [`\(.path):\(.start.line)`](https://github.com/\($repo)/blob/\($sha)/\(.path)#L\(.start.line)) - **\(.check_id)**: \(.extra.message // "Semgrep finding")"
+              ' semgrep.json
+
+              if [ "$findings" -gt 10 ]; then
+                echo ""
+                echo "_Showing first 10 findings. Full report is attached as \`semgrep-results\`._"
+              fi
+            else
+              echo "No Semgrep findings were introduced in the files changed by this pull request."
+            fi
+          } > semgrep-comment.md
+
+          cat semgrep-comment.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment on pull request
+        if: always()
+        uses: marocchino/sticky-pull-request-comment@70d2764d1a7d5d9560b100cbea0077fc8f633987 # v3.0.2
+        with:
+          header: semgrep
+          path: semgrep-comment.md
+          skip_unchanged: true
 
       - name: Upload Semgrep report
         if: always()
