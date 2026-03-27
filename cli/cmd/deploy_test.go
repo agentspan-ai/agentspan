@@ -123,8 +123,8 @@ func TestInferPackage_Pyproject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if pkg != "my_agent" {
-		t.Errorf("got %q, want my_agent", pkg)
+	if pkg.Value != "my_agent" || pkg.IsPath {
+		t.Errorf("got %+v, want Value=my_agent IsPath=false", pkg)
 	}
 }
 
@@ -137,8 +137,8 @@ func TestInferPackage_HyphensToUnderscores(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if pkg != "my_cool_agent" {
-		t.Errorf("got %q, want my_cool_agent", pkg)
+	if pkg.Value != "my_cool_agent" {
+		t.Errorf("got %q, want my_cool_agent", pkg.Value)
 	}
 }
 
@@ -150,8 +150,8 @@ func TestInferPackage_TypescriptDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if pkg != "./src" {
-		t.Errorf("got %q, want ./src", pkg)
+	if pkg.Value != "./src" {
+		t.Errorf("got %q, want ./src", pkg.Value)
 	}
 
 	// Without src directory, should default to "."
@@ -160,8 +160,8 @@ func TestInferPackage_TypescriptDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if pkg2 != "." {
-		t.Errorf("got %q, want .", pkg2)
+	if pkg2.Value != "." {
+		t.Errorf("got %q, want .", pkg2.Value)
 	}
 }
 
@@ -172,21 +172,24 @@ func TestInferPackage_Override(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if pkg != "custom_pkg" {
-		t.Errorf("got %q, want custom_pkg", pkg)
+	if pkg.Value != "custom_pkg" {
+		t.Errorf("got %q, want custom_pkg", pkg.Value)
 	}
 }
 
-func TestInferPackage_NoConfigError(t *testing.T) {
+func TestInferPackage_PythonFallsBackToPath(t *testing.T) {
 	dir := t.TempDir()
-	// No pyproject.toml
+	// No pyproject.toml — should fall back to directory path
 
-	_, err := inferPackage(dir, "python", "")
-	if err == nil {
-		t.Fatal("expected error when pyproject.toml is missing")
+	pkg, err := inferPackage(dir, "python", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "pyproject.toml") {
-		t.Errorf("error should mention pyproject.toml: %v", err)
+	if !pkg.IsPath {
+		t.Errorf("expected IsPath=true for directory fallback, got %+v", pkg)
+	}
+	if pkg.Value != dir {
+		t.Errorf("got %q, want %q", pkg.Value, dir)
 	}
 }
 

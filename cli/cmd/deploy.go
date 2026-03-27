@@ -96,7 +96,7 @@ func runDeployCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(discovered) == 0 {
-		return fmt.Errorf("no agents found in package %q. Define agents as module-level Agent instances", pkg)
+		return fmt.Errorf("no agents found in %q. Define agents as module-level Agent instances", pkg.Value)
 	}
 
 	// Keep the full list for JSON output
@@ -110,7 +110,7 @@ func runDeployCmd(cmd *cobra.Command, args []string) error {
 
 	// 9. Show discovery table, prompt confirmation
 	if !jsonOutput {
-		fmt.Println(formatDiscoveryTable(discovered, pkg))
+		fmt.Println(formatDiscoveryTable(discovered, pkg.Value))
 
 		if !autoYes {
 			fmt.Print("Deploy these agents? [y/N] ")
@@ -235,23 +235,37 @@ func hasTSDependency(path string) bool {
 	return false
 }
 
+// packageInfo holds the inferred package/path and how to pass it to the subprocess.
+type packageInfo struct {
+	Value string // dotted module name or directory path
+	IsPath bool  // true = pass as --path; false = pass as --package
+}
+
 // inferPackage determines the package/path to scan for agents.
-func inferPackage(dir, language, override string) (string, error) {
+func inferPackage(dir, language, override string) (packageInfo, error) {
 	if override != "" {
-		return override, nil
+		// If override looks like a path (contains / or . prefix), treat as path
+		isPath := strings.Contains(override, "/") || strings.HasPrefix(override, ".")
+		return packageInfo{Value: override, IsPath: isPath}, nil
 	}
 
 	switch language {
 	case "python":
-		return inferPythonPackage(dir)
+		// Try package name from pyproject.toml first
+		pkg, err := inferPythonPackage(dir)
+		if err == nil {
+			return packageInfo{Value: pkg, IsPath: false}, nil
+		}
+		// Fall back to scanning current directory
+		return packageInfo{Value: dir, IsPath: true}, nil
 	case "typescript":
 		srcDir := filepath.Join(dir, "src")
 		if info, err := os.Stat(srcDir); err == nil && info.IsDir() {
-			return "./src", nil
+			return packageInfo{Value: "./src", IsPath: true}, nil
 		}
-		return ".", nil
+		return packageInfo{Value: ".", IsPath: true}, nil
 	default:
-		return "", fmt.Errorf("cannot infer package for language %q", language)
+		return packageInfo{}, fmt.Errorf("cannot infer package for language %q", language)
 	}
 }
 
@@ -367,15 +381,19 @@ func buildEnv(cfg *config.Config) []string {
 }
 
 // execDiscover runs the language-specific discover subprocess.
-func execDiscover(ctx context.Context, env []string, language, pythonBin, pkg string) ([]discoveredAgent, error) {
+func execDiscover(ctx context.Context, env []string, language, pythonBin string, pkg packageInfo) ([]discoveredAgent, error) {
 	var data []byte
 	var err error
 
 	switch language {
 	case "python":
-		data, err = runSubprocess(ctx, env, pythonBin, "-m", "agentspan.cli.discover", "--package", pkg)
+		flag := "--package"
+		if pkg.IsPath {
+			flag = "--path"
+		}
+		data, err = runSubprocess(ctx, env, pythonBin, "-m", "agentspan.cli.discover", flag, pkg.Value)
 	case "typescript":
-		data, err = runSubprocess(ctx, env, "npx", "tsx", "node_modules/agentspan/cli-bin/discover.ts", "--path", pkg)
+		data, err = runSubprocess(ctx, env, "npx", "tsx", "node_modules/agentspan/cli-bin/discover.ts", "--path", pkg.Value)
 	default:
 		return nil, fmt.Errorf("unsupported language for discover: %s", language)
 	}
@@ -388,19 +406,23 @@ func execDiscover(ctx context.Context, env []string, language, pythonBin, pkg st
 }
 
 // execDeploy runs the language-specific deploy subprocess.
-func execDeploy(ctx context.Context, env []string, language, pythonBin, pkg string, agentNames []string) ([]deployResult, error) {
+func execDeploy(ctx context.Context, env []string, language, pythonBin string, pkg packageInfo, agentNames []string) ([]deployResult, error) {
 	var data []byte
 	var err error
 
 	switch language {
 	case "python":
-		args := []string{"-m", "agentspan.cli.deploy", "--package", pkg}
+		flag := "--package"
+		if pkg.IsPath {
+			flag = "--path"
+		}
+		args := []string{"-m", "agentspan.cli.deploy", flag, pkg.Value}
 		if len(agentNames) > 0 {
 			args = append(args, "--agents", strings.Join(agentNames, ","))
 		}
 		data, err = runSubprocess(ctx, env, pythonBin, args...)
 	case "typescript":
-		args := []string{"tsx", "node_modules/agentspan/cli-bin/deploy.ts", "--path", pkg}
+		args := []string{"tsx", "node_modules/agentspan/cli-bin/deploy.ts", "--path", pkg.Value}
 		if len(agentNames) > 0 {
 			args = append(args, "--agents", strings.Join(agentNames, ","))
 		}
