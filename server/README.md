@@ -38,8 +38,15 @@ cd server
 # Build
 ./gradlew bootJar
 
+# Build a size-optimized shaded executable jar
+# This is more aggressive about trimming transitive bytecode than bootJar.
+./gradlew shadowJar
+
 # Run with default config (SQLite)
 java -jar build/libs/agentspan-runtime.jar
+
+# Run the shaded/minimized variant
+java -jar build/libs/agentspan-runtime-shaded.jar
 
 # Run with PostgreSQL
 java -jar build/libs/agentspan-runtime.jar --spring.profiles.active=postgres
@@ -49,6 +56,15 @@ Or use the CLI:
 
 ```bash
 agentspan server start --local
+```
+
+For container builds, the Dockerfile now accepts an alternate Gradle task and jar name:
+
+```bash
+docker build -f server/Dockerfile \
+  --build-arg GRADLE_TASK=shadowJar \
+  --build-arg RUNTIME_JAR=agentspan-runtime-shaded.jar \
+  -t agentspan/server:shaded .
 ```
 
 ### Set LLM provider API keys
@@ -333,6 +349,9 @@ The server is a Spring Boot application (Java 21) built on top of [Conductor](ht
 
 ```bash
 ./gradlew bootJar
+
+# Or build the size-optimized shaded executable
+./gradlew shadowJar
 ```
 
 ### Run tests

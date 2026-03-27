@@ -17,7 +17,7 @@ import MinusIcon from "components/flow/components/graphs/PanAndZoomWrapper/icons
 import PlusIcon from "components/flow/components/graphs/PanAndZoomWrapper/icons/Plus";
 import FitToFrame from "shared/icons/FitToFrame";
 import { colors } from "theme/tokens/variables";
-import { Canvas, CanvasPosition, Edge, Node, NodeData, EdgeData } from "reaflow";
+import { Canvas, CanvasPosition, Edge, Node, NodeData, EdgeData, PortData, PortSide } from "reaflow";
 import { getCardVariant } from "components/flow/components/shapes/styles";
 import { ArrowRight, Check, Prohibit } from "@phosphor-icons/react";
 import CardIcon from "components/flow/components/shapes/TaskCard/CardIcon";
@@ -175,12 +175,12 @@ function NodeCard({ data, width, height, selected, onSelect, onDrillIn, onBack, 
   onBack?: () => void;
   onToggleGroup?: () => void;
 }) {
-  // ── Fork/join junction node — thin visible bar ──────────────────────────────
+  // ── Fork/join junction node — thin bar spanning full node width ───────────────
   if (data.kind === "junction") {
     return (
       <div style={{ width, height, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{
-          width: Math.min(width, 120), height: 4,
+          width: width - 16, height: 4,
           borderRadius: 2,
           backgroundColor: "#c0c0c0",
         }} />
@@ -485,7 +485,9 @@ function buildTurnNodes(
 ) {
   const push = (id: string, data: DiagramNodeData, h = H) => {
     nodes.push({ id, width: W, height: h, data });
-    edges.push({ id: `${prevRef.id}→${id}`, from: prevRef.id, to: id });
+    // Use join junction's south port for clean outgoing routing
+    const fromPort = prevRef.id.endsWith("-join") ? `${prevRef.id}-south-port` : undefined;
+    edges.push({ id: `${prevRef.id}→${id}`, from: prevRef.id, to: id, ...(fromPort ? { fromPort } : {}) });
     if (data.ts === TaskStatus.COMPLETED) done.add(id);
     prevRef.id = id;
   };
@@ -500,21 +502,65 @@ function buildTurnNodes(
     joinId: string,
   ) => {
     if (branches.length === 0) return;
-    // Fork junction: small visible bar. No ports — ELK handles edge routing.
-    nodes.push({ id: forkId, width: 120, height: 16, data: { kind: "junction" as Kind, label: "", ts: TaskStatus.COMPLETED } });
+    const n = branches.length;
+
+    // Fork junction — indexed SOUTH ports, same pattern as debug view's FORK_JOIN.
+    // Width matches regular nodes so ELK keeps layers aligned.
+    const forkPorts: PortData[] = branches.map((_, i) => ({
+      id: `${forkId}_[key=${i}]-south-port`,
+      width: 2, height: 2, side: "SOUTH" as PortSide,
+      disabled: true, hidden: true, index: i,
+    }));
+    nodes.push({
+      id: forkId, width: W, height: 16,
+      data: { kind: "junction" as Kind, label: "", ts: TaskStatus.COMPLETED },
+      ports: forkPorts,
+    });
     edges.push({ id: `${prevRef.id}→${forkId}`, from: prevRef.id, to: forkId });
     done.add(forkId);
 
-    // Join junction: small visible bar.
-    nodes.push({ id: joinId, width: 120, height: 16, data: { kind: "junction" as Kind, label: "", ts: TaskStatus.COMPLETED } });
+    // Join junction — INVERTED indexed NORTH ports (key anti-crossing trick
+    // from the debug view: branch 0 → highest port index, branch N-1 → index 0).
+    // Plus a standard SOUTH port for the outgoing edge.
+    const joinPorts: PortData[] = [
+      { id: `${joinId}-south-port`, width: 2, height: 2,
+        side: "SOUTH" as PortSide, disabled: true, hidden: true },
+      ...branches.map((_, i) => {
+        const inv = n - 1 - i;
+        return {
+          id: `${joinId}-n${inv}-north-port`,
+          width: 2, height: 2, side: "NORTH" as PortSide,
+          disabled: true, hidden: true, index: inv,
+        };
+      }),
+    ];
+    nodes.push({
+      id: joinId, width: W, height: 16,
+      data: { kind: "junction" as Kind, label: "", ts: TaskStatus.COMPLETED },
+      ports: joinPorts,
+    });
     done.add(joinId);
 
-    // Branch nodes with edges from fork and to join
-    for (let i = 0; i < branches.length; i++) {
+    // Branch nodes — each gets a south port for the branch→join edge.
+    // Fully port-bound edges on both ends (fromPort + toPort).
+    for (let i = 0; i < n; i++) {
       const b = branches[i];
-      nodes.push({ id: b.id, width: W, height: b.h ?? H, data: b.data });
-      edges.push({ id: `${forkId}→${b.id}`, from: forkId, to: b.id });
-      edges.push({ id: `${b.id}→${joinId}`, from: b.id, to: joinId });
+      const inv = n - 1 - i;
+      nodes.push({
+        id: b.id, width: W, height: b.h ?? H, data: b.data,
+        ports: [{ id: `${b.id}-south-port`, width: 2, height: 2,
+          side: "SOUTH" as PortSide, disabled: true, hidden: true }],
+      });
+      edges.push({
+        id: `${forkId}→${b.id}`,
+        from: forkId, fromPort: `${forkId}_[key=${i}]-south-port`,
+        to: b.id,
+      });
+      edges.push({
+        id: `${b.id}→${joinId}`,
+        from: b.id, fromPort: `${b.id}-south-port`,
+        to: joinId, toPort: `${joinId}-n${inv}-north-port`,
+      });
       if (b.data.ts === TaskStatus.COMPLETED) done.add(b.id);
     }
 
@@ -1126,6 +1172,7 @@ export function AgentExecutionDiagram({ agentRun, activeTurn, onSelectTurn, sele
           direction="DOWN"
           layoutOptions={{
             "org.eclipse.elk.spacing.nodeNode": "18",
+            "org.eclipse.elk.spacing.edgeEdge": "8",
             "elk.layered.spacing.nodeNodeBetweenLayers": "24",
             "org.eclipse.elk.padding": "[top=60,left=60,bottom=60,right=60]",
           }}

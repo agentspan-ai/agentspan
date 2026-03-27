@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '3.3.5'
     id 'io.spring.dependency-management' version '1.1.7'
+    id 'com.gradleup.shadow' version '8.3.6'
 }
 
 java {
@@ -13,6 +14,10 @@ java {
 repositories {
     mavenCentral()
     mavenLocal()
+}
+
+springBoot {
+    mainClass = 'dev.agentspan.runtime.AgentRuntime'
 }
 
 dependencies {
@@ -117,4 +122,51 @@ configurations.all {
 
 test {
     useJUnitPlatform()
+}
+
+tasks.named('bootJar') {
+    archiveFileName = 'agentspan-runtime.jar'
+}
+
+tasks.named('shadowJar') {
+    archiveFileName = 'agentspan-runtime-shaded.jar'
+    zip64 true
+
+    manifest {
+        attributes(
+            'Main-Class': 'dev.agentspan.runtime.AgentRuntime',
+            'Multi-Release': 'true'
+        )
+    }
+
+    mergeServiceFiles()
+    append 'META-INF/spring/aot.factories'
+    append 'META-INF/spring.handlers'
+    append 'META-INF/spring.schemas'
+    append 'META-INF/spring.tooling'
+    append 'META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports'
+    append 'META-INF/spring/org.springframework.boot.actuate.autoconfigure.web.ManagementContextConfiguration.imports'
+    transform(com.github.jengelman.gradle.plugins.shadow.transformers.PropertiesFileTransformer) {
+        paths = ['META-INF/spring.factories']
+        mergeStrategy = 'append'
+    }
+    transform(com.github.jengelman.gradle.plugins.shadow.transformers.Log4j2PluginsCacheFileTransformer)
+
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+
+    // Keep framework/runtime modules that are heavily reflection-driven.
+    // The remainder of the graph is eligible for bytecode minimization.
+    minimize {
+        exclude(dependency('org.springframework.boot:.*:.*'))
+        exclude(dependency('org.springframework:.*:.*'))
+        exclude(dependency('org.apache.tomcat.embed:.*:.*'))
+        exclude(dependency('org.conductoross:.*:.*'))
+        exclude(dependency('org.apache.logging.log4j:.*:.*'))
+        exclude(dependency('org.slf4j:.*:.*'))
+        exclude(dependency('com.fasterxml.jackson.core:.*:.*'))
+        exclude(dependency('com.fasterxml.jackson.dataformat:.*:.*'))
+        exclude(dependency('com.fasterxml.jackson.datatype:.*:.*'))
+        exclude(dependency('com.fasterxml.jackson.module:.*:.*'))
+        exclude(dependency('org.xerial:sqlite-jdbc:.*'))
+    }
 }

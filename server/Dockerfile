@@ -31,7 +31,10 @@ COPY server/src/ src/
 # Copy the Vite dist output there before building the JAR so it gets packaged in.
 COPY --from=ui-builder /ui/dist/ src/main/resources/static/
 
-RUN ./gradlew --no-daemon bootJar
+ARG GRADLE_TASK=bootJar
+ARG RUNTIME_JAR=agentspan-runtime.jar
+RUN ./gradlew --no-daemon "${GRADLE_TASK}"
+RUN cp "build/libs/${RUNTIME_JAR}" /build/runtime.jar
 
 # ─── Stage 3: Runtime image ───────────────────────────────────────────────────
 FROM eclipse-temurin:21-jre
@@ -42,7 +45,7 @@ LABEL org.opencontainers.image.licenses="MIT"
 
 WORKDIR /app
 
-COPY --from=builder /build/build/libs/agentspan-runtime.jar app.jar
+COPY --from=builder /build/runtime.jar app.jar
 
 EXPOSE 8080
 
