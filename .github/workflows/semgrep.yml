@@ -1,0 +1,43 @@
+name: Semgrep
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.13'
+          cache: pip
+
+      - name: Install Semgrep
+        run: python -m pip install --upgrade pip semgrep==1.156.0
+
+      - name: Run Semgrep
+        env:
+          SEMGREP_SEND_METRICS: off
+        run: |
+          semgrep scan \
+            --config p/default \
+            --error \
+            --disable-version-check \
+            --baseline-commit "${{ github.event.pull_request.base.sha }}" \
+            .

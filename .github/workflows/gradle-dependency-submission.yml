@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+    paths:
+      - server/**
+      - .github/workflows/gradle-dependency-submission.yml
 
 permissions:
   contents: write
@@ -31,5 +34,4 @@ jobs:
         with:
           build-root-directory: server
           dependency-graph: generate-and-submit
-          cache-disabled: true
           validate-wrappers: true
