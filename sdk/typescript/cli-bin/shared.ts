@@ -9,15 +9,23 @@ export interface DiscoveredAgent {
   framework: string;
 }
 
+/** Directories that should never be scanned during discovery. */
+const SKIP_DIRS = new Set([
+  'node_modules', '.git', 'dist', 'build', '.next', '.venv', 'venv',
+  '__pycache__', '.tox', '.eggs', 'coverage', '.nyc_output',
+]);
+
 /**
  * Recursively collect all .ts/.js file paths under a directory.
+ * Skips common dependency / build / cache directories and symlinks.
  */
 function collectFiles(dir: string): string[] {
   const results: string[] = [];
   const entries = readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
+    if (entry.name.startsWith('.') || SKIP_DIRS.has(entry.name)) continue;
     const fullPath = join(dir, entry.name);
-    if (entry.isDirectory()) {
+    if (entry.isDirectory() && !entry.isSymbolicLink()) {
       results.push(...collectFiles(fullPath));
     } else if (entry.isFile()) {
       const ext = extname(entry.name);
