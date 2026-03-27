@@ -36,63 +36,15 @@ jobs:
         id: semgrep
         env:
           SEMGREP_SEND_METRICS: off
-        run: |
-          set +e
-          semgrep scan \
-            --config p/default \
-            --error \
-            --disable-version-check \
-            --baseline-commit "${{ github.event.pull_request.base.sha }}" \
-            --json \
-            --output semgrep.json \
-            .
-          status=$?
-          if [ -f semgrep.json ]; then
-            findings=$(jq '.results | length' semgrep.json)
-          else
-            findings=0
-            echo '{"results":[]}' > semgrep.json
-          fi
-          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
-          echo "findings=$findings" >> "$GITHUB_OUTPUT"
-          exit 0
-
-      - name: Build Semgrep report
-        if: always()
-        run: |
-          changed_files=$(git diff --name-only "${{ github.event.pull_request.base.sha }}"...HEAD | wc -l | tr -d ' ')
-          findings="${{ steps.semgrep.outputs.findings }}"
-
-          {
-            echo "## Semgrep Results"
-            echo ""
-            echo "- Findings in changed files: $findings"
-            echo "- Changed files in pull request: $changed_files"
-            echo "- Baseline commit: \`${{ github.event.pull_request.base.sha }}\`"
-            if [ "${{ steps.semgrep.outputs.exit_code }}" = "0" ]; then
-              echo "- Status: no blocking findings"
-            else
-              echo "- Status: blocking findings detected"
-            fi
-            echo ""
-
-            if [ "$findings" -gt 0 ]; then
-              echo "### Findings"
-              jq -r --arg repo "${{ github.repository }}" --arg sha "${{ github.event.pull_request.head.sha }}" '
-                .results[:10][] |
-                "- [`\(.path):\(.start.line)`](https://github.com/\($repo)/blob/\($sha)/\(.path)#L\(.start.line)) - **\(.check_id)**: \(.extra.message // "Semgrep finding")"
-              ' semgrep.json
-
-              if [ "$findings" -gt 10 ]; then
-                echo ""
-                echo "_Showing first 10 findings. Full report is attached as \`semgrep-results\`._"
-              fi
-            else
-              echo "No Semgrep findings were introduced in the files changed by this pull request."
-            fi
-          } > semgrep-comment.md
-
-          cat semgrep-comment.md >> "$GITHUB_STEP_SUMMARY"
+        run: >-
+          python scripts/ci/semgrep_ci.py
+          --repo "${{ github.repository }}"
+          --head-sha "${{ github.event.pull_request.head.sha }}"
+          --base-sha "${{ github.event.pull_request.base.sha }}"
+          --report semgrep.json
+          --comment semgrep-comment.md
+          --github-output "$GITHUB_OUTPUT"
+          --job-summary "$GITHUB_STEP_SUMMARY"
 
       - name: Comment on pull request
         if: always()
