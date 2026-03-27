@@ -60,9 +60,15 @@ def discover_from_path(directory: str) -> list:
                 if attr_name.startswith("_"):
                     continue
                 obj = getattr(mod, attr_name, None)
-                if isinstance(obj, Agent) and obj.name not in seen_names:
+                if obj is None:
+                    continue
+                # Native Agent or framework agent (OpenAI, LangChain, ADK, etc.)
+                is_native = isinstance(obj, Agent)
+                is_framework = (not is_native) and detect_framework(obj) is not None
+                name = getattr(obj, "name", None)
+                if (is_native or is_framework) and name and name not in seen_names:
                     discovered.append(obj)
-                    seen_names.add(obj.name)
+                    seen_names.add(name)
     finally:
         sys.stdout = real_stdout
 
