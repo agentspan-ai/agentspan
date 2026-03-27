@@ -40,6 +40,8 @@ agent = Agent(
     instructions="You are a weather reporter. Get the weather and provide a recommendation.",
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(agent, "What's the weather in NYC?")
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(agent, "What's the weather in NYC?")
+        result.print_result()

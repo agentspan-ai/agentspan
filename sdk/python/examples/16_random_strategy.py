@@ -52,9 +52,11 @@ brainstorm = Agent(
     max_turns=6,
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        brainstorm,
-        "How should we approach building an AI-powered customer service platform?",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
+            brainstorm,
+            "How should we approach building an AI-powered customer service platform?",
+        )
+        result.print_result()

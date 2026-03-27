@@ -33,24 +33,26 @@ agent = Agent(
     ),
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        agent,
-        "Calculate the compound interest on $10,000 at 5% annual rate "
-        "compounded monthly for 3 years.",
-    )
-    result.print_result()
 
-    # Token usage is automatically extracted from the workflow
-    if result.token_usage:
-        print("Token Usage Summary:")
-        print(f"  Prompt tokens:     {result.token_usage.prompt_tokens}")
-        print(f"  Completion tokens: {result.token_usage.completion_tokens}")
-        print(f"  Total tokens:      {result.token_usage.total_tokens}")
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
+            agent,
+            "Calculate the compound interest on $10,000 at 5% annual rate "
+            "compounded monthly for 3 years.",
+        )
+        result.print_result()
 
-        # Estimate cost (example pricing — adjust for your model)
-        prompt_cost = result.token_usage.prompt_tokens * 0.0025 / 1000
-        completion_cost = result.token_usage.completion_tokens * 0.01 / 1000
-        print(f"\n  Estimated cost: ${prompt_cost + completion_cost:.4f}")
-    else:
-        print("(Token usage not available from workflow)")
+        # Token usage is automatically extracted from the workflow
+        if result.token_usage:
+            print("Token Usage Summary:")
+            print(f"  Prompt tokens:     {result.token_usage.prompt_tokens}")
+            print(f"  Completion tokens: {result.token_usage.completion_tokens}")
+            print(f"  Total tokens:      {result.token_usage.total_tokens}")
+
+            # Estimate cost (example pricing — adjust for your model)
+            prompt_cost = result.token_usage.prompt_tokens * 0.0025 / 1000
+            completion_cost = result.token_usage.completion_tokens * 0.01 / 1000
+            print(f"\n  Estimated cost: ${prompt_cost + completion_cost:.4f}")
+        else:
+            print("(Token usage not available from workflow)")

@@ -80,29 +80,30 @@ support = Agent(
 )
 
 
-with AgentRuntime() as runtime:
-    # ── Scenario 1: Billing question → billing specialist uses check_balance
-    print("=" * 60)
-    print("  Scenario 1: Billing question (swarm → billing + tool)")
-    print("=" * 60)
-    result = runtime.run(support, "What's the balance on account ACC-456?")
-    result.print_result()
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # ── Scenario 1: Billing question → billing specialist uses check_balance
+        print("=" * 60)
+        print("  Scenario 1: Billing question (swarm → billing + tool)")
+        print("=" * 60)
+        result = runtime.run(support, "What's the balance on account ACC-456?")
+        result.print_result()
 
-    output = str(result.output)
-    if "5432" in output:
-        print("[OK] Billing specialist used check_balance tool")
-    else:
-        print("[WARN] Expected balance amount in output")
+        output = str(result.output)
+        if "5432" in output:
+            print("[OK] Billing specialist used check_balance tool")
+        else:
+            print("[WARN] Expected balance amount in output")
 
-    # ── Scenario 2: Order question → order specialist uses lookup_order
-    print("\n" + "=" * 60)
-    print("  Scenario 2: Order question (swarm → order + tool)")
-    print("=" * 60)
-    result2 = runtime.run(support, "Where is my order ORD-789?")
-    result2.print_result()
+        # ── Scenario 2: Order question → order specialist uses lookup_order
+        print("\n" + "=" * 60)
+        print("  Scenario 2: Order question (swarm → order + tool)")
+        print("=" * 60)
+        result2 = runtime.run(support, "Where is my order ORD-789?")
+        result2.print_result()
 
-    output2 = str(result2.output)
-    if "shipped" in output2.lower():
-        print("[OK] Order specialist used lookup_order tool")
-    else:
-        print("[WARN] Expected shipping status in output")
+        output2 = str(result2.output)
+        if "shipped" in output2.lower():
+            print("[OK] Order specialist used lookup_order tool")
+        else:
+            print("[WARN] Expected shipping status in output")

@@ -76,12 +76,14 @@ sandboxed_coder = Agent(
 #     ),
 # )
 
-# ── Run ─────────────────────────────────────────────────────────────
 
-with AgentRuntime() as runtime:
-    print("--- Local Code Execution ---")
-    result = runtime.run(
-        coder,
-        "Write a Python function to find the first 10 Fibonacci numbers and print them.",
-    )
-    result.print_result()
+if __name__ == "__main__":
+    # ── Run ─────────────────────────────────────────────────────────────
+
+    with AgentRuntime() as runtime:
+        print("--- Local Code Execution ---")
+        result = runtime.run(
+            coder,
+            "Write a Python function to find the first 10 Fibonacci numbers and print them.",
+        )
+        result.print_result()

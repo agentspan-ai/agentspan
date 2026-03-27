@@ -21,15 +21,16 @@ agent = Agent(
     instructions="You are a haiku poet. Write a single haiku.",
 )
 
-print("Streaming agent execution:")
-print("-" * 40)
+if __name__ == "__main__":
+    print("Streaming agent execution:")
+    print("-" * 40)
 
-with AgentRuntime() as runtime:
-    for event in runtime.stream(agent, "Write a haiku about Python programming"):
-        if event.type == "done":
-            print(f"\nResult: {event.output}")
-            print(f"Workflow: {event.workflow_id}")
-        elif event.type == "waiting":
-            print("[Waiting...]")
-        elif event.type == "error":
-            print(f"[Error: {event.content}]")
+    with AgentRuntime() as runtime:
+        for event in runtime.stream(agent, "Write a haiku about Python programming"):
+            if event.type == "done":
+                print(f"\nResult: {event.output}")
+                print(f"Workflow: {event.workflow_id}")
+            elif event.type == "waiting":
+                print("[Waiting...]")
+            elif event.type == "error":
+                print(f"[Error: {event.content}]")

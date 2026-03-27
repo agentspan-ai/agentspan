@@ -54,9 +54,11 @@ agent = Agent(
     guardrails=[safety_guard],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        agent,
-        "What should I do about persistent headaches?",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
+            agent,
+            "What should I do about persistent headaches?",
+        )
+        result.print_result()

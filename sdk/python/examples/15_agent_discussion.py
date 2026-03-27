@@ -75,11 +75,13 @@ discussion = Agent(
 # Pipe discussion transcript to summarizer
 pipeline = discussion >> summarizer
 
-# ── Run ─────────────────────────────────────────────────────────────
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        pipeline,
-        "Should AI agents be allowed to autonomously make financial decisions for individuals?",
-    )
-    result.print_result()
+if __name__ == "__main__":
+    # ── Run ─────────────────────────────────────────────────────────────
+
+    with AgentRuntime() as runtime:
+        result = runtime.run(
+            pipeline,
+            "Should AI agents be allowed to autonomously make financial decisions for individuals?",
+        )
+        result.print_result()

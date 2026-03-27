@@ -38,7 +38,9 @@ agent = Agent(
     instructions="You are a helpful assistant. Use tools to answer questions.",
 )
 
-with AgentRuntime() as runtime:
-    # The LLM will call get_weather (not get_stock_price)
-    result = runtime.run(agent, "What's the weather like in San Francisco?")
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # The LLM will call get_weather (not get_stock_price)
+        result = runtime.run(agent, "What's the weather like in San Francisco?")
+        result.print_result()

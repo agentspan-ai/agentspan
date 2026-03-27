@@ -63,28 +63,30 @@ agent = Agent(
     ),
 )
 
-with AgentRuntime() as runtime:
-    handle = runtime.start(agent, "I need to file a ticket for Alice about a laptop issue")
-    print(f"Workflow started: {handle.workflow_id}\n")
 
-    for event in handle.stream():
-        if event.type == EventType.THINKING:
-            print(f"  [thinking] {event.content}")
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        handle = runtime.start(agent, "I need to file a ticket for Alice about a laptop issue")
+        print(f"Workflow started: {handle.workflow_id}\n")
 
-        elif event.type == EventType.TOOL_CALL:
-            print(f"  [tool_call] {event.tool_name}({event.args})")
+        for event in handle.stream():
+            if event.type == EventType.THINKING:
+                print(f"  [thinking] {event.content}")
 
-        elif event.type == EventType.TOOL_RESULT:
-            print(f"  [tool_result] {event.tool_name} -> {event.result}")
+            elif event.type == EventType.TOOL_CALL:
+                print(f"  [tool_call] {event.tool_name}({event.args})")
 
-        elif event.type == EventType.WAITING:
-            print("\n--- Human input required ---")
-            response = input("  Your response: ").strip()
-            handle.respond({"response": response})
-            print()
+            elif event.type == EventType.TOOL_RESULT:
+                print(f"  [tool_result] {event.tool_name} -> {event.result}")
 
-        elif event.type == EventType.ERROR:
-            print(f"  [error] {event.content}")
+            elif event.type == EventType.WAITING:
+                print("\n--- Human input required ---")
+                response = input("  Your response: ").strip()
+                handle.respond({"response": response})
+                print()
 
-        elif event.type == EventType.DONE:
-            print(f"\nResult: {event.output}")
+            elif event.type == EventType.ERROR:
+                print(f"  [error] {event.content}")
+
+            elif event.type == EventType.DONE:
+                print(f"\nResult: {event.output}")

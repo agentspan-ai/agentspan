@@ -366,12 +366,14 @@ orchestrator = Agent(
     ),
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        orchestrator,
-        "Produce comprehensive analyses for each of the following 25 technology domains "
-        "by calling deep_analyst ONCE PER DOMAIN, one domain at a time (not in parallel). "
-        "Complete all 25 domains, then summarise cross-domain trends. "
-        "Domains: " + ", ".join(DOMAINS) + ".",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
+            orchestrator,
+            "Produce comprehensive analyses for each of the following 25 technology domains "
+            "by calling deep_analyst ONCE PER DOMAIN, one domain at a time (not in parallel). "
+            "Complete all 25 domains, then summarise cross-domain trends. "
+            "Domains: " + ", ".join(DOMAINS) + ".",
+        )
+        result.print_result()

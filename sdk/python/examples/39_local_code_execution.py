@@ -81,19 +81,21 @@ config_coder = Agent(
 #     instructions="You write Python code that runs in a sandboxed Docker container.",
 # )
 
-# ── Run ─────────────────────────────────────────────────────────────
 
-with AgentRuntime() as runtime:
-    print("--- Simple Code Execution ---")
-    result = runtime.run(
-        simple_coder,
-        "Write a Python function to find the first 10 prime numbers and print them.",
-    )
-    result.print_result()
+if __name__ == "__main__":
+    # ── Run ─────────────────────────────────────────────────────────────
 
-    print("\n--- Restricted Code Execution ---")
-    result = runtime.run(
-        restricted_coder,
-        "List the files in the current directory using bash.",
-    )
-    result.print_result()
+    with AgentRuntime() as runtime:
+        print("--- Simple Code Execution ---")
+        result = runtime.run(
+            simple_coder,
+            "Write a Python function to find the first 10 prime numbers and print them.",
+        )
+        result.print_result()
+
+        print("\n--- Restricted Code Execution ---")
+        result = runtime.run(
+            restricted_coder,
+            "List the files in the current directory using bash.",
+        )
+        result.print_result()

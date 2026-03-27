@@ -106,10 +106,12 @@ ceo = Agent(
     strategy=Strategy.SWARM,
 )
 
-# ── Run ─────────────────────────────────────────────────────────────
 
-with AgentRuntime() as runtime:
-    print("--- Technical question (CEO -> Engineering -> Backend) ---")
-    result = runtime.run(ceo, "Design a REST API for a user management system with authentication "
-                              "and then come up with a marketing campaign for the system")
-    result.print_result()
+if __name__ == "__main__":
+    # ── Run ─────────────────────────────────────────────────────────────
+
+    with AgentRuntime() as runtime:
+        print("--- Technical question (CEO -> Engineering -> Backend) ---")
+        result = runtime.run(ceo, "Design a REST API for a user management system with authentication "
+                                  "and then come up with a marketing campaign for the system")
+        result.print_result()

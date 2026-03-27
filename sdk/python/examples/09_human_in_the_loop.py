@@ -37,34 +37,36 @@ agent = Agent(
     instructions="You are a banking assistant. Help with balance inquiries and transfers.",
 )
 
-with AgentRuntime() as runtime:
-    # start() returns a handle; handle.stream() streams events with HITL support
-    handle = runtime.start(agent, "Transfer $500 from ACC-789 to ACC-456")
-    print(f"Workflow started: {handle.workflow_id}\n")
 
-    for event in handle.stream():
-        if event.type == EventType.THINKING:
-            print(f"  [thinking] {event.content}")
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # start() returns a handle; handle.stream() streams events with HITL support
+        handle = runtime.start(agent, "Transfer $500 from ACC-789 to ACC-456")
+        print(f"Workflow started: {handle.workflow_id}\n")
 
-        elif event.type == EventType.TOOL_CALL:
-            print(f"  [tool_call] {event.tool_name}({event.args})")
+        for event in handle.stream():
+            if event.type == EventType.THINKING:
+                print(f"  [thinking] {event.content}")
 
-        elif event.type == EventType.TOOL_RESULT:
-            print(f"  [tool_result] {event.tool_name} -> {event.result}")
+            elif event.type == EventType.TOOL_CALL:
+                print(f"  [tool_call] {event.tool_name}({event.args})")
 
-        elif event.type == EventType.WAITING:
-            print(f"\n--- Human approval required ---")
-            choice = input("  Approve? (y/n): ").strip().lower()
-            if choice == "y":
-                handle.approve()
-                print("  Approved!\n")
-            else:
-                reason = input("  Rejection reason: ").strip()
-                handle.reject(reason or "Rejected by user")
-                print("  Rejected.\n")
+            elif event.type == EventType.TOOL_RESULT:
+                print(f"  [tool_result] {event.tool_name} -> {event.result}")
 
-        elif event.type == EventType.ERROR:
-            print(f"  [error] {event.content}")
+            elif event.type == EventType.WAITING:
+                print(f"\n--- Human approval required ---")
+                choice = input("  Approve? (y/n): ").strip().lower()
+                if choice == "y":
+                    handle.approve()
+                    print("  Approved!\n")
+                else:
+                    reason = input("  Rejection reason: ").strip()
+                    handle.reject(reason or "Rejected by user")
+                    print("  Rejected.\n")
 
-        elif event.type == EventType.DONE:
-            print(f"\nResult: {event.output}")
+            elif event.type == EventType.ERROR:
+                print(f"  [error] {event.content}")
+
+            elif event.type == EventType.DONE:
+                print(f"\nResult: {event.output}")

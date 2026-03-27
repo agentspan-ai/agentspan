@@ -69,22 +69,24 @@ analysis = Agent(
     strategy=Strategy.PARALLEL,
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        analysis,
-        "Check account ACC-200 balance and look up order ORD-300 status.",
-    )
-    result.print_result()
 
-    output = str(result.output)
-    checks = []
-    if "5432" in output:
-        checks.append("[OK] Financial analyst retrieved balance")
-    else:
-        checks.append("[WARN] Expected balance in output")
-    if "shipped" in output.lower():
-        checks.append("[OK] Order analyst retrieved order status")
-    else:
-        checks.append("[WARN] Expected order status in output")
-    for c in checks:
-        print(c)
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
+            analysis,
+            "Check account ACC-200 balance and look up order ORD-300 status.",
+        )
+        result.print_result()
+
+        output = str(result.output)
+        checks = []
+        if "5432" in output:
+            checks.append("[OK] Financial analyst retrieved balance")
+        else:
+            checks.append("[WARN] Expected balance in output")
+        if "shipped" in output.lower():
+            checks.append("[OK] Order analyst retrieved order status")
+        else:
+            checks.append("[WARN] Expected order status in output")
+        for c in checks:
+            print(c)

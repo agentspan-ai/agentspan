@@ -121,26 +121,27 @@ def setup_templates(runtime: AgentRuntime):
     print("Templates created successfully.\n")
 
 
-# ── Run ──────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    # ── Run ──────────────────────────────────────────────────────────────
 
-with AgentRuntime() as runtime:
-    # Set up templates (idempotent — safe to run multiple times)
-    setup_templates(runtime)
+    with AgentRuntime() as runtime:
+        # Set up templates (idempotent — safe to run multiple times)
+        setup_templates(runtime)
 
-    # --- 1. Template-based instructions ---
-    print("=== Support Agent (template instructions) ===")
-    result = runtime.run(support_agent, "What are your return policies?")
-    result.print_result()
+        # --- 1. Template-based instructions ---
+        print("=== Support Agent (template instructions) ===")
+        result = runtime.run(support_agent, "What are your return policies?")
+        result.print_result()
 
-    # --- 2. Template with tools ---
-    print("\n=== Order Agent (template + tools) ===")
-    result = runtime.run(order_agent, "Can you check order #12345?")
-    result.print_result()
+        # --- 2. Template with tools ---
+        print("\n=== Order Agent (template + tools) ===")
+        result = runtime.run(order_agent, "Can you check order #12345?")
+        result.print_result()
 
-    # --- 3. User prompt from a template ---
-    print("\n=== User Prompt Template ===")
-    result = runtime.run(
-        stable_agent,
-        PromptTemplate("analysis-request", variables={"topic": "Q4 2025 earnings trends"}),
-    )
-    result.print_result()
+        # --- 3. User prompt from a template ---
+        print("\n=== User Prompt Template ===")
+        result = runtime.run(
+            stable_agent,
+            PromptTemplate("analysis-request", variables={"topic": "Q4 2025 earnings trends"}),
+        )
+        result.print_result()

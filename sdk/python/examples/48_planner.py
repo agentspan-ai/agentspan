@@ -68,9 +68,11 @@ agent = Agent(
     planner=True,
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        agent,
-        "Write a brief report on renewable energy and climate change solutions.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
+            agent,
+            "Write a brief report on renewable energy and climate change solutions.",
+        )
+        result.print_result()

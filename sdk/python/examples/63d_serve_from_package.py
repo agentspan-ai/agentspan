@@ -51,11 +51,13 @@ monitoring_agent = Agent(
     instructions="You monitor system health.",
 )
 
-with AgentRuntime() as runtime:
-    # Serve an explicit agent + auto-discover from a package
-    # runtime.serve(monitoring_agent, packages=["myapp.agents"])
 
-    # For this example, just serve the explicit agent
-    print("Serving monitoring agent. Press Ctrl+C to stop.")
-    print("Uncomment the packages= line to also serve discovered agents.")
-    runtime.serve(monitoring_agent)
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Serve an explicit agent + auto-discover from a package
+        # runtime.serve(monitoring_agent, packages=["myapp.agents"])
+
+        # For this example, just serve the explicit agent
+        print("Serving monitoring agent. Press Ctrl+C to stop.")
+        print("Uncomment the packages= line to also serve discovered agents.")
+        runtime.serve(monitoring_agent)

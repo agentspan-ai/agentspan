@@ -53,6 +53,8 @@ analysis = Agent(
     strategy=Strategy.PARALLEL,
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(analysis, "Launching an AI-powered healthcare diagnostic tool in the US market")
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(analysis, "Launching an AI-powered healthcare diagnostic tool in the US market")
+        result.print_result()

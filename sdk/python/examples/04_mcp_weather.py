@@ -42,6 +42,8 @@ agent = Agent(
     ),
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(agent, "What's the weather like in San Francisco (CA) right now?")
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(agent, "What's the weather like in San Francisco (CA) right now?")
+        result.print_result()

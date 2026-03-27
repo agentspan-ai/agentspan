@@ -35,6 +35,8 @@ agent = Agent(
     max_turns=2,  # 1 turn to call the tool, 1 turn to answer
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(agent, "What's the weather in San Francisco?")
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(agent, "What's the weather in San Francisco?")
+        result.print_result()

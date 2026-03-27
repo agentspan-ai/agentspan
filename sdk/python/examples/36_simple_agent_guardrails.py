@@ -87,24 +87,25 @@ agent = Agent(
 )
 
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        agent,
-        "Explain why the sky is blue.",
-    )
-    result.print_result()
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
+            agent,
+            "Explain why the sky is blue.",
+        )
+        result.print_result()
 
-    # Verify guardrails
-    output = str(result.output)
-    has_bullets = any(
-        line.strip().startswith(("-", "*"))
-        for line in output.splitlines()
-    )
-    word_count = len(output.split())
+        # Verify guardrails
+        output = str(result.output)
+        has_bullets = any(
+            line.strip().startswith(("-", "*"))
+            for line in output.splitlines()
+        )
+        word_count = len(output.split())
 
-    if has_bullets:
-        print("[WARN] Output contains bullet points — guardrail may not have fired")
-    elif word_count < 50:
-        print(f"[WARN] Output too short ({word_count} words)")
-    else:
-        print(f"[OK] Prose response, {word_count} words — guardrails passed")
+        if has_bullets:
+            print("[WARN] Output contains bullet points — guardrail may not have fired")
+        elif word_count < 50:
+            print(f"[WARN] Output too short ({word_count} words)")
+        else:
+            print(f"[OK] Prose response, {word_count} words — guardrails passed")

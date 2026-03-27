@@ -52,40 +52,42 @@ conversation = Agent(
     max_turns=4,  # 2 exchanges (human, assistant, human, assistant)
 )
 
-with AgentRuntime() as runtime:
-    # Start async to interact with human tasks
-    handle = runtime.start(
-        conversation,
-        "Let's write a Python function to sort a list of dictionaries by a key.",
-    )
-    print(f"Conversation started: {handle.workflow_id}")
 
-    # Simulate human responses
-    human_messages = [
-        "The function should accept a list of dicts and a key name. "
-        "It should handle missing keys gracefully.",
-        "Looks good! Can you add type hints and a docstring?",
-    ]
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Start async to interact with human tasks
+        handle = runtime.start(
+            conversation,
+            "Let's write a Python function to sort a list of dictionaries by a key.",
+        )
+        print(f"Conversation started: {handle.workflow_id}")
 
-    for i, msg in enumerate(human_messages):
-        # Wait for human task
+        # Simulate human responses
+        human_messages = [
+            "The function should accept a list of dicts and a key name. "
+            "It should handle missing keys gracefully.",
+            "Looks good! Can you add type hints and a docstring?",
+        ]
+
+        for i, msg in enumerate(human_messages):
+            # Wait for human task
+            for _ in range(30):
+                status = handle.get_status()
+                if status.is_waiting or status.is_complete:
+                    break
+                time.sleep(1)
+
+            if status.is_complete:
+                break
+
+            if status.is_waiting:
+                print(f"\n[Human turn {i + 1}]: {msg}")
+                handle.respond({"message": msg})
+
+        # Wait for completion
         for _ in range(30):
             status = handle.get_status()
-            if status.is_waiting or status.is_complete:
+            if status.is_complete:
+                print(f"\nFinal conversation:\n{status.output}")
                 break
             time.sleep(1)
-
-        if status.is_complete:
-            break
-
-        if status.is_waiting:
-            print(f"\n[Human turn {i + 1}]: {msg}")
-            handle.respond({"message": msg})
-
-    # Wait for completion
-    for _ in range(30):
-        status = handle.get_status()
-        if status.is_complete:
-            print(f"\nFinal conversation:\n{status.output}")
-            break
-        time.sleep(1)

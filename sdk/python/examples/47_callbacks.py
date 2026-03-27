@@ -82,6 +82,8 @@ agent = Agent(
     after_model_callback=inspect_after_model,
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(agent, "Tell me interesting facts about AI and space.")
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(agent, "Tell me interesting facts about AI and space.")
+        result.print_result()

@@ -64,9 +64,11 @@ code_review = Agent(
     },
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        code_review,
-        "Write a Python function to validate email addresses using regex.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
+            code_review,
+            "Write a Python function to validate email addresses using regex.",
+        )
+        result.print_result()

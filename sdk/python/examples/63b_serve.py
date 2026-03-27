@@ -71,8 +71,9 @@ ops_bot = Agent(
     instructions="Monitor service health. Use check_status to inspect services.",
 )
 
-# ── Serve: register workers and block ────────────────────────────────
+if __name__ == "__main__":
+    # ── Serve: register workers and block ────────────────────────────────
 
-with AgentRuntime() as runtime:
-    print("Serving workers for doc_assistant + ops_bot. Press Ctrl+C to stop.")
-    runtime.serve(doc_assistant, ops_bot)  # blocks until Ctrl+C / SIGTERM
+    with AgentRuntime() as runtime:
+        print("Serving workers for doc_assistant + ops_bot. Press Ctrl+C to stop.")
+        runtime.serve(doc_assistant, ops_bot)  # blocks until Ctrl+C / SIGTERM

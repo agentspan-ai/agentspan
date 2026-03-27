@@ -92,9 +92,11 @@ agent4 = Agent(
     termination=complex_stop,
 )
 
-# ── Run ─────────────────────────────────────────────────────────────
 
-with AgentRuntime() as runtime:
-    print("--- Simple text mention termination ---")
-    result = runtime.run(agent1, "What are AI agents?")
-    result.print_result()
+if __name__ == "__main__":
+    # ── Run ─────────────────────────────────────────────────────────────
+
+    with AgentRuntime() as runtime:
+        print("--- Simple text mention termination ---")
+        result = runtime.run(agent1, "What are AI agents?")
+        result.print_result()

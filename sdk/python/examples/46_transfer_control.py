@@ -97,9 +97,11 @@ coordinator = Agent(
     },
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        coordinator,
-        "Collect data from the sales database, analyze trends, and write a summary.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
+            coordinator,
+            "Collect data from the sales database, analyze trends, and write a summary.",
+        )
+        result.print_result()

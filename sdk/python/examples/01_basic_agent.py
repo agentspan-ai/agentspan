@@ -16,7 +16,9 @@ from settings import settings
 
 agent = Agent(name="greeter", model=settings.llm_model)
 
-with AgentRuntime() as runtime:
-    result = runtime.run(agent, "Say hello and tell me a fun fact about Python programming.")
-    print(f'agent completed with status: {result.status}')
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(agent, "Say hello and tell me a fun fact about Python programming.")
+        print(f'agent completed with status: {result.status}')
+        result.print_result()

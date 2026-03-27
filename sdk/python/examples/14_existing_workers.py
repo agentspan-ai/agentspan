@@ -69,6 +69,8 @@ agent = Agent(
     ),
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(agent, "Customer C001 is asking about their recent orders. Look them up and summarize.")
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(agent, "Customer C001 is asking about their recent orders. Look them up and summarize.")
+        result.print_result()

@@ -89,6 +89,8 @@ agent = Agent(
     instructions="You have access to weather data, GitHub, and report formatting.",
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(agent, "Get the weather in London and format it as a report.")
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(agent, "Get the weather in London and format it as a report.")
+        result.print_result()
