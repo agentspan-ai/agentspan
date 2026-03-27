@@ -380,21 +380,32 @@ func buildEnv(cfg *config.Config) []string {
 	return env
 }
 
-// findTSBinScript locates a cli-bin script by checking multiple paths.
-// In user projects: node_modules/@agentspan/sdk/cli-bin/<name>
-// In the SDK repo itself: cli-bin/<name>
+// findTSBinScript locates a cli-bin script by walking up from dir
+// to find the project root (where node_modules or cli-bin lives).
 func findTSBinScript(dir, name string) (string, error) {
-	candidates := []string{
-		filepath.Join(dir, "node_modules", "@agentspan", "sdk", "cli-bin", name),
-		filepath.Join(dir, "node_modules", "agentspan", "cli-bin", name),
-		filepath.Join(dir, "cli-bin", name),
-	}
-	for _, p := range candidates {
-		if _, err := os.Stat(p); err == nil {
-			return p, nil
+	absDir, _ := filepath.Abs(dir)
+	var searched []string
+
+	cur := absDir
+	for {
+		candidates := []string{
+			filepath.Join(cur, "node_modules", "@agentspan", "sdk", "cli-bin", name),
+			filepath.Join(cur, "node_modules", "agentspan", "cli-bin", name),
+			filepath.Join(cur, "cli-bin", name),
 		}
+		for _, p := range candidates {
+			if _, err := os.Stat(p); err == nil {
+				return p, nil
+			}
+			searched = append(searched, p)
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			break // reached filesystem root
+		}
+		cur = parent
 	}
-	return "", fmt.Errorf("cannot find %s; looked in:\n  %s", name, strings.Join(candidates, "\n  "))
+	return "", fmt.Errorf("cannot find %s; looked in:\n  %s", name, strings.Join(searched, "\n  "))
 }
 
 // execDiscover runs the language-specific discover subprocess.
