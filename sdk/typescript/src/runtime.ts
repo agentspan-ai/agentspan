@@ -20,6 +20,8 @@ import { AgentStream } from './stream.js';
 import { makeAgentResult } from './result.js';
 import { TERMINAL_STATUSES } from './result.js';
 import type { TerminationCondition } from './termination.js';
+import { OnToolResult, OnTextMention, OnCondition } from './handoff.js';
+import type { HandoffContext } from './handoff.js';
 import { detectFramework } from './frameworks/detect.js';
 import { serializeFrameworkAgent } from './frameworks/serializer.js';
 import { serializeLangGraph } from './frameworks/langgraph-serializer.js';
@@ -575,6 +577,44 @@ export class AgentRuntime {
       }
     }
 
+    // Swarm transfer workers (transfer_to_{peer} for each agent pair)
+    if (agent.agents.length > 0) {
+      // Register transfer workers if any transfer task is needed
+      const allNames = [agent.name, ...agent.agents.map((a) => a.name)];
+      const anyTransferNeeded =
+        requiredWorkers == null ||
+        allNames.some((src) =>
+          allNames.some((dst) => src !== dst && requiredWorkers.has(`${src}_transfer_to_${dst}`)),
+        );
+      if (anyTransferNeeded) {
+        await this._registerSwarmTransferWorkers(agent, requiredWorkers);
+      }
+    }
+
+    // Check transfer worker (detects _transfer_to_ in tool_calls)
+    {
+      const taskName = `${agent.name}_check_transfer`;
+      if (isNeeded(taskName)) {
+        await this._registerCheckTransferWorker(agent.name);
+      }
+    }
+
+    // Handoff check worker (swarm handoff detection)
+    if (agent.handoffs.length > 0 || agent.strategy === 'swarm') {
+      const taskName = `${agent.name}_handoff_check`;
+      if (isNeeded(taskName)) {
+        await this._registerHandoffCheckWorker(agent);
+      }
+    }
+
+    // Process selection worker (manual strategy)
+    if (agent.strategy === 'manual' && agent.agents.length > 0) {
+      const taskName = `${agent.name}_process_selection`;
+      if (isNeeded(taskName)) {
+        await this._registerProcessSelectionWorker(agent);
+      }
+    }
+
     // Recurse into sub-agents
     for (const subAgent of agent.agents) {
       await this._registerSystemWorkers(subAgent, requiredWorkers);
@@ -741,6 +781,204 @@ export class AgentRuntime {
       } catch {
         return { selected_agent: '' };
       }
+    });
+  }
+
+  /**
+   * Register transfer_to_{peer} workers for swarm agents.
+   *
+   * Each agent in the swarm gets transfer tools for its peers.
+   * The transfer tools are no-ops — the actual handoff is detected
+   * by check_transfer which inspects toolCalls output.
+   *
+   * When allowed_transitions is set, transfers to targets that no
+   * agent is allowed to reach return an error message so the LLM
+   * knows to try a different tool.
+   */
+  private async _registerSwarmTransferWorkers(
+    agent: Agent,
+    requiredWorkers?: Set<string> | null,
+  ): Promise<void> {
+    // Build set of all valid transfer targets from allowed_transitions
+    const allowed = agent.allowedTransitions;
+    const validTargets = new Set<string>();
+    if (allowed) {
+      for (const targets of Object.values(allowed)) {
+        for (const t of targets) {
+          validTargets.add(t);
+        }
+      }
+    }
+
+    const allNames = [agent.name, ...agent.agents.map((a) => a.name)];
+    const registered = new Set<string>();
+
+    for (const sourceName of allNames) {
+      for (const peerName of allNames) {
+        if (peerName === sourceName) continue;
+
+        // Prefix with the SOURCE agent name (the one calling transfer)
+        const toolName = `${sourceName}_transfer_to_${peerName}`;
+        if (registered.has(toolName)) continue;
+        registered.add(toolName);
+
+        // Skip if server told us this worker is not needed
+        if (requiredWorkers != null && !requiredWorkers.has(toolName)) continue;
+
+        // If this target is never reachable via allowed_transitions,
+        // return an error message so the LLM knows to stop trying.
+        const isUnreachable = !!allowed && !validTargets.has(peerName);
+
+        if (isUnreachable) {
+          this.workerManager.addWorker(toolName, async () => ({
+            result: `ERROR: ${toolName} is not available. Use a different transfer tool, or if you are done, just provide your final response without calling any transfer tool.`,
+          }));
+        } else {
+          this.workerManager.addWorker(toolName, async () => ({}));
+        }
+      }
+    }
+  }
+
+  /**
+   * Register a check_transfer worker for hybrid handoff agents.
+   * Server dispatches {agent}_check_transfer with {tool_calls}.
+   * Worker scans for _transfer_to_ in tool call names.
+   * Returns {is_transfer, transfer_to}.
+   */
+  private async _registerCheckTransferWorker(agentName: string): Promise<void> {
+    const taskName = `${agentName}_check_transfer`;
+    this.workerManager.addWorker(taskName, async (inputData) => {
+      const toolCalls = Array.isArray(inputData['tool_calls']) ? inputData['tool_calls'] : [];
+      for (const tc of toolCalls) {
+        const name = typeof tc === 'object' && tc !== null ? String((tc as Record<string, unknown>).name ?? '') : '';
+        if (name.includes('_transfer_to_')) {
+          return { is_transfer: true, transfer_to: name.split('_transfer_to_')[1] };
+        }
+      }
+      return { is_transfer: false, transfer_to: '' };
+    });
+  }
+
+  /**
+   * Register a handoff_check worker for swarm strategy.
+   *
+   * Supports dual-mechanism handoffs:
+   * 1. Primary: Transfer tool detected (is_transfer=true, transfer_to=<name>)
+   * 2. Secondary: Condition-based handoffs (OnTextMention, OnCondition, etc.)
+   */
+  private async _registerHandoffCheckWorker(agent: Agent): Promise<void> {
+    const taskName = `${agent.name}_handoff_check`;
+    const handoffConditions = agent.handoffs;
+
+    // Parent agent is "0", sub-agents are "1", "2", ...
+    const nameToIdx: Record<string, string> = { [agent.name]: '0' };
+    agent.agents.forEach((sub, i) => {
+      nameToIdx[sub.name] = String(i + 1);
+    });
+    const idxToName: Record<string, string> = {};
+    for (const [name, idx] of Object.entries(nameToIdx)) {
+      idxToName[idx] = name;
+    }
+
+    const allowed = agent.allowedTransitions;
+    const maxBlockedRetries = 3;
+    const blockedCounts: Record<string, number> = {};
+
+    const isTransferTruthy = (val: unknown): boolean => {
+      if (val === true) return true;
+      if (typeof val === 'string') return val.trim().toLowerCase() === 'true';
+      return false;
+    };
+
+    const isAllowed = (sourceIdx: string, targetName: string): boolean => {
+      if (!allowed) return true;
+      const sourceName = idxToName[sourceIdx] ?? '';
+      return (allowed[sourceName] ?? []).includes(targetName);
+    };
+
+    this.workerManager.addWorker(taskName, async (inputData) => {
+      const result = String(inputData['result'] ?? '');
+      const activeAgent = String(inputData['active_agent'] ?? '0');
+      const conversation = String(inputData['conversation'] ?? '');
+      const isTransfer = inputData['is_transfer'];
+      const transferTo = String(inputData['transfer_to'] ?? '');
+
+      // Priority 1: Transfer tool detected
+      if (isTransferTruthy(isTransfer)) {
+        if (isAllowed(activeAgent, transferTo)) {
+          delete blockedCounts[activeAgent];
+          const targetIdx = nameToIdx[transferTo] ?? activeAgent;
+          if (targetIdx !== activeAgent) {
+            return { active_agent: targetIdx, handoff: true };
+          }
+        } else if (allowed) {
+          // Transfer blocked — give the agent a few retries to self-correct
+          const count = (blockedCounts[activeAgent] ?? 0) + 1;
+          blockedCounts[activeAgent] = count;
+          if (count <= maxBlockedRetries) {
+            return { active_agent: activeAgent, handoff: true };
+          }
+          // Max retries exceeded — exit the loop
+          delete blockedCounts[activeAgent];
+          return { active_agent: activeAgent, handoff: false };
+        }
+      }
+
+      // Priority 2: Condition-based handoffs (fallback)
+      const context: HandoffContext = {
+        result,
+        messages: conversation,
+        toolName: '',
+        toolResult: '',
+      };
+      for (const cond of handoffConditions) {
+        // Check if the condition object supports shouldHandoff evaluation
+        const condObj = cond as { target?: string; shouldHandoff?: (ctx: HandoffContext) => boolean };
+        if (typeof condObj.shouldHandoff === 'function' && condObj.target) {
+          if (condObj.shouldHandoff(context)) {
+            if (isAllowed(activeAgent, condObj.target)) {
+              const targetIdx = nameToIdx[condObj.target] ?? activeAgent;
+              if (targetIdx !== activeAgent) {
+                return { active_agent: targetIdx, handoff: true };
+              }
+            }
+          }
+        }
+      }
+
+      // Neither transfer nor condition matched — loop exits
+      return { active_agent: activeAgent, handoff: false };
+    });
+  }
+
+  /**
+   * Register a process_selection worker for manual strategy.
+   * Server dispatches {agent}_process_selection with {human_output}.
+   * Worker maps agent name to index.
+   * Returns {selected}.
+   */
+  private async _registerProcessSelectionWorker(agent: Agent): Promise<void> {
+    const taskName = `${agent.name}_process_selection`;
+    const nameToIdx: Record<string, string> = {};
+    agent.agents.forEach((sub, i) => {
+      nameToIdx[sub.name] = String(i);
+    });
+
+    this.workerManager.addWorker(taskName, async (inputData) => {
+      const humanOutput = inputData['human_output'];
+      if (humanOutput == null) {
+        return { selected: '0' };
+      }
+      if (typeof humanOutput === 'object' && humanOutput !== null) {
+        const obj = humanOutput as Record<string, unknown>;
+        const selected = String(obj.selected ?? obj.agent ?? '0');
+        if (selected in nameToIdx) {
+          return { selected: nameToIdx[selected] };
+        }
+        return { selected };
+      }
+      return { selected: String(humanOutput) };
     });
   }
 

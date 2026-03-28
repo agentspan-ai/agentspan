@@ -1,3 +1,15 @@
+// ── Handoff context ─────────────────────────────────────
+
+/**
+ * Context passed to handoff condition evaluation.
+ */
+export interface HandoffContext {
+  result: string;
+  toolName?: string;
+  toolResult?: string;
+  messages?: unknown;
+}
+
 // ── Handoff conditions ──────────────────────────────────
 
 /**
@@ -13,6 +25,16 @@ export class OnToolResult {
     this.target = options.target;
     this.toolName = options.toolName;
     this.resultContains = options.resultContains;
+  }
+
+  shouldHandoff(context: HandoffContext): boolean {
+    const calledTool = context.toolName ?? '';
+    if (calledTool !== this.toolName) return false;
+    if (this.resultContains !== undefined) {
+      const toolResult = String(context.toolResult ?? '');
+      return toolResult.includes(this.resultContains);
+    }
+    return true;
   }
 
   toJSON(): object {
@@ -40,6 +62,11 @@ export class OnTextMention {
     this.text = options.text;
   }
 
+  shouldHandoff(context: HandoffContext): boolean {
+    const result = String(context.result ?? '').toLowerCase();
+    return result.includes(this.text.toLowerCase());
+  }
+
   toJSON(): object {
     return {
       target: this.target,
@@ -63,6 +90,14 @@ export class OnCondition {
     this.condition = options.condition;
     const agentName = options.agentName ?? 'agent';
     this.taskName = `${agentName}_handoff_check`;
+  }
+
+  shouldHandoff(context: HandoffContext): boolean {
+    try {
+      return !!this.condition(context);
+    } catch {
+      return false;
+    }
   }
 
   toJSON(): object {
