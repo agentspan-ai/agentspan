@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Basic Claude Agent SDK agent running through agentspan.
+"""Basic Claude Code agent using the Agent(model='claude-code') API.
 
 Prerequisites:
     pip install claude-code-sdk  # or: uv add claude-code-sdk
@@ -10,21 +10,22 @@ Usage:
     uv run python examples/claude_agent_sdk/01_basic_agent.py
 """
 
-from claude_code_sdk import ClaudeCodeOptions
-
-from agentspan.agents import AgentRuntime
+from agentspan.agents import Agent, AgentRuntime
 
 
 def main():
-    options = ClaudeCodeOptions(
-        allowed_tools=["Read", "Glob", "Grep"],
+    reviewer = Agent(
+        name="file_lister",
+        model="claude-code/sonnet",
+        instructions="You are a helpful assistant that explores codebases.",
+        tools=["Read", "Glob", "Grep"],
         max_turns=5,
     )
 
     with AgentRuntime() as runtime:
         result = runtime.run(
-            options,
-            prompt="List the Python files in the current directory and summarize what each one does.",
+            reviewer,
+            prompt="Use Glob to find all .py files in the examples/claude_agent_sdk/ directory.",
         )
         print(f"\n--- Result ---\n{result.output}")
         print(f"\n--- Metadata ---")
