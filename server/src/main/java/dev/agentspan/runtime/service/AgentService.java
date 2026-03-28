@@ -595,6 +595,7 @@ public class AgentService {
         collectAndRegisterTasks(config, registered);
     }
 
+    @SuppressWarnings("unchecked")
     private void collectAndRegisterTasks(AgentConfig config, Set<String> registered) {
         // Register dispatch task for this agent's tools
         if (config.getTools() != null) {
@@ -609,6 +610,15 @@ public class AgentService {
         // Register stop_when worker
         if (config.getStopWhen() != null && config.getStopWhen().getTaskName() != null) {
             String taskName = config.getStopWhen().getTaskName();
+            if (!registered.contains(taskName)) {
+                registerTaskDef(taskName);
+                registered.add(taskName);
+            }
+        }
+
+        // Register termination worker (compiled as SIMPLE task by TerminationCompiler)
+        if (config.getTermination() != null) {
+            String taskName = config.getName() + "_termination";
             if (!registered.contains(taskName)) {
                 registerTaskDef(taskName);
                 registered.add(taskName);
@@ -637,6 +647,39 @@ public class AgentService {
             }
         }
 
+        // Register callable gate workers (text_contains gates are INLINE, no registration needed)
+        if (config.getGate() != null && config.getGate().get("taskName") instanceof String gateTaskName) {
+            if (!registered.contains(gateTaskName)) {
+                registerTaskDef(gateTaskName);
+                registered.add(gateTaskName);
+            }
+        }
+
+        // Register callable instructions worker (_worker_ref in instructions map)
+        if (config.getInstructions() instanceof Map<?, ?> instrMap
+                && instrMap.get("_worker_ref") instanceof String instrTaskName
+                && !instrTaskName.isBlank()) {
+            if (!registered.contains(instrTaskName)) {
+                registerTaskDef(instrTaskName);
+                registered.add(instrTaskName);
+            }
+        }
+
+        // Register worker-based router (WorkerRef with taskName)
+        if (config.getRouter() instanceof Map<?, ?> routerMap
+                && routerMap.get("taskName") instanceof String routerTaskName) {
+            if (!registered.contains(routerTaskName)) {
+                registerTaskDef(routerTaskName);
+                registered.add(routerTaskName);
+            }
+        } else if (config.getRouter() instanceof WorkerRef workerRef
+                && workerRef.getTaskName() != null) {
+            if (!registered.contains(workerRef.getTaskName())) {
+                registerTaskDef(workerRef.getTaskName());
+                registered.add(workerRef.getTaskName());
+            }
+        }
+
         // Register handoff check worker for swarm
         if (config.getHandoffs() != null && !config.getHandoffs().isEmpty()) {
             String taskName = config.getName() + "_handoff_check";
@@ -655,13 +698,54 @@ public class AgentService {
             }
         }
 
-        // Register check_transfer worker for hybrid
+        // Register check_transfer worker for hybrid (has both agents AND tools)
         if (config.getAgents() != null && !config.getAgents().isEmpty() &&
             config.getTools() != null && !config.getTools().isEmpty()) {
             String taskName = config.getName() + "_check_transfer";
             if (!registered.contains(taskName)) {
                 registerTaskDef(taskName);
                 registered.add(taskName);
+            }
+        }
+
+        // Register check_transfer workers for swarm sub-agents
+        // In swarm mode, each sub-agent gets a {name}_check_transfer SIMPLE task
+        if ("swarm".equals(config.getStrategy()) && config.getAgents() != null) {
+            for (AgentConfig sub : config.getAgents()) {
+                String taskName = sub.getName() + "_check_transfer";
+                if (!registered.contains(taskName)) {
+                    registerTaskDef(taskName);
+                    registered.add(taskName);
+                }
+            }
+        }
+
+        // Register graph-structure node workers and router workers
+        if (config.getMetadata() != null
+                && config.getMetadata().get("_graph_structure") instanceof Map<?, ?> graph) {
+            // Node workers
+            if (graph.get("nodes") instanceof List<?> nodes) {
+                for (Object nodeObj : nodes) {
+                    if (nodeObj instanceof Map<?, ?> node
+                            && node.get("_worker_ref") instanceof String workerRef) {
+                        if (!registered.contains(workerRef)) {
+                            registerTaskDef(workerRef);
+                            registered.add(workerRef);
+                        }
+                    }
+                }
+            }
+            // Conditional edge router workers
+            if (graph.get("conditional_edges") instanceof List<?> condEdges) {
+                for (Object ceObj : condEdges) {
+                    if (ceObj instanceof Map<?, ?> ce
+                            && ce.get("_router_ref") instanceof String routerRef) {
+                        if (!registered.contains(routerRef)) {
+                            registerTaskDef(routerRef);
+                            registered.add(routerRef);
+                        }
+                    }
+                }
             }
         }
 
