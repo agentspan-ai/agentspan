@@ -7,7 +7,7 @@ from conftest import (
     assert_task_exists, get_task_output,
 )
 
-pytestmark = pytest.mark.e2e
+pytestmark = pytest.mark.integration
 
 MODEL = "openai/gpt-4o-mini"  # Cheap, fast model for tests
 

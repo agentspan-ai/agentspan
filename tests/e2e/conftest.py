@@ -3,10 +3,19 @@
 Requires a running agentspan server. No mocks.
 Validates workflow output via the server REST API.
 """
+import multiprocessing
 import os
 import time
+
 import pytest
 import requests
+
+# Avoid fork() deprecation warning on macOS with multi-threaded processes
+if hasattr(multiprocessing, "set_start_method"):
+    try:
+        multiprocessing.set_start_method("forkserver")
+    except RuntimeError:
+        pass  # already set
 
 SERVER_URL = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:8080/api")
 BASE_URL = SERVER_URL.rstrip("/").replace("/api", "")
