@@ -11,6 +11,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AgentEvent, AgentRunData, AgentStatus, EventType } from "./types";
 import { formatTokens, formatDuration, getModelIconPath } from "./agentExecutionUtils";
+import { toolCategoryForPanel, type ToolCategory } from "utils/agentTaskCategory";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -241,17 +242,8 @@ function TagList({ items, color, bg, border }: { items: string[]; color: string;
   );
 }
 
-/** Categorise a tool entry by its toolType field */
-type ToolCategory = "agent" | "tool" | "guardrail" | "http" | "mcp" | "rag";
-function toolCategory(t: Record<string, unknown>): ToolCategory {
-  const tt = (t.toolType as string | undefined)?.toLowerCase() ?? "";
-  if (tt === "agent_tool" || tt === "agent") return "agent";
-  if (tt === "guardrail") return "guardrail";
-  if (tt === "http") return "http";
-  if (tt === "mcp") return "mcp";
-  if (tt === "rag") return "rag";
-  return "tool"; // worker, tool, simple, or unknown
-}
+/** Categorise a tool entry by its toolType field — delegates to shared utility */
+const toolCategory = toolCategoryForPanel;
 
 /** Compact card for an agent_tool entry (shows model + nested tools + instructions) */
 function AgentToolCard({ tool }: { tool: Record<string, unknown> }) {
