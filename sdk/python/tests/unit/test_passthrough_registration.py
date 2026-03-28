@@ -32,6 +32,19 @@ class TestSerializeAgentDispatching:
             serialize_agent(executor)
             mock_serialize.assert_called_once_with(executor)
 
+    def test_claude_agent_sdk_dispatches_to_serialize_claude_agent_sdk(self):
+        from agentspan.agents.frameworks.serializer import serialize_agent
+
+        options = MagicMock()
+        type(options).__name__ = "ClaudeCodeOptions"
+
+        with patch(
+            "agentspan.agents.frameworks.claude_agent_sdk.serialize_claude_agent_sdk"
+        ) as mock_serialize:
+            mock_serialize.return_value = ({"name": "test_agent"}, [])
+            serialize_agent(options)
+            mock_serialize.assert_called_once_with(options)
+
 
 class TestPassthroughTaskDef:
     def test_passthrough_task_def_has_600s_timeout(self):
@@ -90,4 +103,29 @@ class TestBuildPassthroughFunc:
 
         mock_worker.assert_called_once_with(
             graph, "test_graph", "http://testserver:8080/api", "my_key", "my_secret"
+        )
+
+    def test_build_passthrough_func_passes_auth_to_claude_agent_sdk_worker(self):
+        from agentspan.agents.runtime.runtime import AgentRuntime
+        from agentspan.agents.runtime.config import AgentConfig
+
+        config = AgentConfig(
+            server_url="http://testserver:8080/api",
+            auth_key="my_key",
+            auth_secret="my_secret",
+        )
+
+        options = MagicMock()
+        type(options).__name__ = "ClaudeCodeOptions"
+
+        with patch(
+            "agentspan.agents.frameworks.claude_agent_sdk.make_claude_agent_sdk_worker"
+        ) as mock_worker:
+            mock_worker.return_value = MagicMock()
+            runtime = AgentRuntime.__new__(AgentRuntime)
+            runtime._config = config
+            runtime._build_passthrough_func(options, "claude_agent_sdk", "test_agent")
+
+        mock_worker.assert_called_once_with(
+            options, "test_agent", "http://testserver:8080/api", "my_key", "my_secret"
         )

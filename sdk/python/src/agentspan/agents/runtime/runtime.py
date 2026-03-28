@@ -2664,6 +2664,10 @@ class AgentRuntime:
             from agentspan.agents.frameworks.langchain import make_langchain_worker
 
             return make_langchain_worker(agent_obj, name, server_url, auth_key, auth_secret)
+        elif framework == "claude_agent_sdk":
+            from agentspan.agents.frameworks.claude_agent_sdk import make_claude_agent_sdk_worker
+
+            return make_claude_agent_sdk_worker(agent_obj, name, server_url, auth_key, auth_secret)
         raise ValueError(f"Unknown passthrough framework: {framework}")
 
     def _run_framework_with_events(
