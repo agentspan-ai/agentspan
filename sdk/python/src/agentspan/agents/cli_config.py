@@ -103,6 +103,10 @@ def _make_cli_tool(
         args: list = [],
         cwd: str = "",
         shell: bool = False,
+        _allowed_commands: list = None,
+        _allow_shell: bool = None,
+        _timeout: int = None,
+        _working_dir: str = None,
     ) -> dict:
         """Run a CLI command."""
         if not command or not isinstance(command, str):
@@ -112,11 +116,17 @@ def _make_cli_tool(
                 "stderr": "No command provided.",
             }
 
+        # Per-task overrides from server take precedence over closure defaults
+        effective_allowed = _allowed_commands if _allowed_commands is not None else allowed_commands
+        effective_allow_shell = _allow_shell if _allow_shell is not None else allow_shell
+        effective_timeout = _timeout if _timeout is not None else timeout
+        effective_working_dir = _working_dir if _working_dir is not None else working_dir
+
         # Validate against whitelist
-        _validate_cli_command(command, allowed_commands)
+        _validate_cli_command(command, effective_allowed)
 
         # Shell gate
-        if shell and not allow_shell:
+        if shell and not effective_allow_shell:
             raise ValueError(
                 "Shell mode is disabled for this agent. "
                 "Do not set shell=True."
@@ -129,7 +139,7 @@ def _make_cli_tool(
             args = [str(args)]
 
         # Resolve working directory
-        effective_cwd = cwd if cwd else working_dir
+        effective_cwd = cwd if cwd else effective_working_dir
 
         try:
             if shell:
@@ -142,7 +152,7 @@ def _make_cli_tool(
                     shell=True,
                     capture_output=True,
                     text=True,
-                    timeout=timeout,
+                    timeout=effective_timeout,
                     cwd=effective_cwd or None,
                 )
             else:
@@ -150,7 +160,7 @@ def _make_cli_tool(
                     [command] + [str(a) for a in args],
                     capture_output=True,
                     text=True,
-                    timeout=timeout,
+                    timeout=effective_timeout,
                     cwd=effective_cwd or None,
                 )
 
@@ -172,7 +182,7 @@ def _make_cli_tool(
             return {
                 "status": "error",
                 "stdout": "",
-                "stderr": f"Command timed out after {timeout}s",
+                "stderr": f"Command timed out after {effective_timeout}s",
             }
         except FileNotFoundError:
             return {
