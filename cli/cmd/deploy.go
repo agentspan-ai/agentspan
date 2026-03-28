@@ -546,11 +546,15 @@ func filterDiscoveredAgents(agents []discoveredAgent, names []string) ([]discove
 	}
 
 	if len(notFound) > 0 {
-		available := make([]string, len(agents))
-		for i, a := range agents {
-			available[i] = a.Name
+		available := make([]string, 0, len(agents))
+		for _, a := range agents {
+			available = append(available, a.Name)
 		}
-		return nil, fmt.Errorf("agent(s) not found: %s (available: %s)", strings.Join(notFound, ", "), strings.Join(available, ", "))
+		availStr := strings.Join(available, ", ")
+		if len(available) > 10 {
+			availStr = strings.Join(available[:10], ", ") + fmt.Sprintf(", ... and %d more", len(available)-10)
+		}
+		return nil, fmt.Errorf("agent(s) not found: %s (available: %s)", strings.Join(notFound, ", "), availStr)
 	}
 
 	return filtered, nil
