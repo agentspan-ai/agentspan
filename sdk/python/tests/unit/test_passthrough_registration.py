@@ -53,7 +53,7 @@ class TestPassthroughTaskDef:
         td = _passthrough_task_def("my_graph")
 
         assert td.timeout_seconds == 0
-        assert td.response_timeout_seconds == 0
+        assert td.response_timeout_seconds == 3600
         assert td.name == "my_graph"
 
 

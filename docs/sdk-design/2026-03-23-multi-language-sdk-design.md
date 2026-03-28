@@ -1080,8 +1080,8 @@ The decorator accepts all the same parameters as the `Agent` constructor. Each S
 | Poll interval | 100ms | How often to check for tasks |
 | Thread count | 1 | Concurrent executions per worker |
 | Daemon mode | true | Kill on SDK shutdown |
-| Timeout | 0 (no timeout) | Task definition timeout — **MUST be 0**. Agent-level `timeout_seconds` controls execution duration, not the task definition. Hardcoded task timeouts cause premature termination of long-running agents. |
-| Response timeout | 0 (no timeout) | Same policy as timeout — **MUST be 0**. |
+| Timeout | 0 (no timeout) | Task definition `timeoutSeconds` — **MUST be 0**. Agent-level `timeout_seconds` controls execution duration, not the task definition. Hardcoded task timeouts cause premature termination of long-running agents. |
+| Response timeout | 3600 (1 hour) | Task definition `responseTimeoutSeconds` — Conductor requires minimum 1s, so we use 3600 (1 hour) as a practical "no timeout". Agent-level timeout takes precedence. |
 | Retry count | 2 | Default retry count |
 | Retry delay | 2s | Delay between retries |
 | Retry policy | LINEAR_BACKOFF | Backoff strategy |

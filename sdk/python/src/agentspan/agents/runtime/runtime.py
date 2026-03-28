@@ -54,7 +54,7 @@ def _default_task_def(name: str) -> Any:
     td.retry_logic = "LINEAR_BACKOFF"
     td.retry_delay_seconds = 2
     td.timeout_seconds = 0
-    td.response_timeout_seconds = 0
+    td.response_timeout_seconds = 3600
     td.timeout_policy = "RETRY"
     return td
 
@@ -72,7 +72,7 @@ def _passthrough_task_def(name: str) -> Any:
     td.retry_logic = "LINEAR_BACKOFF"
     td.retry_delay_seconds = 2
     td.timeout_seconds = 0
-    td.response_timeout_seconds = 0
+    td.response_timeout_seconds = 3600
     td.timeout_policy = "RETRY"
     return td
 
