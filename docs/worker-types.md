@@ -1,298 +1,84 @@
 # AgentSpan Worker Types
 
-Workers are Python functions registered as Conductor tasks via the `@worker_task` decorator.
-They execute locally (SDK-side) while the workflow orchestration happens server-side.
+Workers are functions registered as Conductor task pollers. They execute locally (SDK-side)
+while workflow orchestration happens server-side. Both Python and TypeScript SDKs implement
+all worker types with identical behavior.
 
 ## Quick Reference
 
-| # | Worker Type | Task Name Pattern | Async | Trigger |
-|---|-------------|-------------------|-------|---------|
-| 1 | Tool | `{tool_name}` | No | `agent.tools` with `tool_type == "worker"` |
-| 2 | Output Guardrail (combined) | `{agent_name}_output_guardrail` | Yes | Custom guardrails on agent (local compile path) |
-| 3 | Individual Guardrail | `{guardrail.name}` | Yes | Custom guardrails on agent or tool (server compile path) |
-| 4 | Stop When | `{agent_name}_stop_when` | Yes | `agent.stop_when` is callable |
-| 5 | Gate | `{agent_name}_gate` | Yes | `agent.gate` is callable |
-| 6 | Callback | `{agent_name}_{position}` | Yes | `agent.callbacks` or legacy callback attrs |
-| 7 | Termination | `{agent_name}_termination` | Yes | `agent.termination` is set |
-| 8 | Check Transfer | `{agent_name}_check_transfer` | Yes | Agent has both `tools` and `agents`, or swarm |
-| 9 | Router Function | `{agent_name}_router_fn` | Yes | `strategy == "router"` with callable `agent.router` |
-| 10 | Handoff Check | `{agent_name}_handoff_check` | Yes | `agent.handoffs` is non-empty |
-| 11 | Swarm Transfer Tool | `transfer_to_{peer_name}` | Yes | `strategy == "swarm"` with sub-agents |
-| 12 | Manual Selection | `{agent_name}_process_selection` | Yes | `strategy == "manual"` with sub-agents |
-| 13 | Framework | `{worker.name}` | No | Foreign framework agents with callable workers |
-| 14 | Framework Passthrough | `{worker_name}` | No | Foreign framework agents where model/tools cannot be extracted |
-
-> **Note:** All system-level workers (#2–#12) are async with `thread_count=10`.
-> Tool workers (#1) and framework workers (#13) remain synchronous as they wrap
-> user-defined functions directly. User-provided functions (guardrails, callbacks, etc.)
-> are called via `_call_user_fn()` which handles both sync and async callables.
-
-## Default Configuration (All Workers)
-
-| Setting              | Value          |
-|----------------------|----------------|
-| Poll interval        | 100 ms         |
-| Thread count         | 10 per worker          |
-| Daemon mode          | True           |
-| Task timeout         | 120 s          |
-| Response timeout     | 120 s          |
-| Retry count          | 2              |
-| Retry logic          | LINEAR_BACKOFF |
-| Retry delay          | 2 s            |
-| Timeout policy       | RETRY          |
-
-Source: `_default_task_def()` in `runtime.py`, `WorkerManager.__init__()` in `worker_manager.py`.
-
----
-
-## 1. Tool Worker
-
-| Field          | Value                    |
-|----------------|--------------------------|
-| Task name      | `{tool_name}`            |
-| Async          | No                       |
-| Trigger        | `agent.tools` with `tool_type == "worker"` |
-| Registered by  | `ToolRegistry.register_tool_workers()` |
-
-Executes `@tool`-decorated Python functions. Each tool gets its own Conductor task definition.
-Tool-level guardrails are applied inline by the `make_tool_worker()` wrapper.
-HTTP and MCP tools are server-side and do not get a local worker.
-
----
-
-## 2. Output Guardrail Worker (combined)
-
-| Field          | Value                              |
-|----------------|------------------------------------|
-| Task name      | `{agent_name}_output_guardrail`    |
-| Async          | Yes                                |
-| Trigger        | `agent.guardrails` has custom (non-Regex/LLM/external) functions |
-| Registered by  | `_register_guardrail_worker()`     |
-
-Runs all of an agent's custom guardrails sequentially on agent output.
-Used by the local compilation path. Server-side compilation uses individual guardrail workers instead.
-
----
-
-## 3. Individual Guardrail Worker
-
-| Field          | Value                     |
-|----------------|---------------------------|
-| Task name      | `{guardrail.name}`        |
-| Async          | Yes                       |
-| Trigger        | Each custom guardrail with `func is not None` and not Regex/LLM/external |
-| Registered by  | `_register_single_guardrail_worker()` |
-
-Runs a single guardrail function. Used by server-side compilation where each guardrail is a separate SIMPLE task.
-
-**Inputs:** `content` (object), `iteration` (int)
-**Returns:** `{ passed, message, on_fail, fixed_output, guardrail_name, should_continue }`
-
----
-
-## 4. Stop When Worker
-
-| Field          | Value                        |
-|----------------|------------------------------|
-| Task name      | `{agent_name}_stop_when`     |
-| Async          | Yes                          |
-| Trigger        | `agent.stop_when` is callable |
-| Registered by  | `_register_stop_when_worker()` |
-
-Evaluates a custom stop-condition callback to decide whether iteration should end.
-
-**Inputs:** `result` (str), `iteration` (int)
-**Returns:** `{ should_continue }` (bool)
-
----
-
-## 5. Gate Worker
-
-| Field          | Value                    |
-|----------------|--------------------------|
-| Task name      | `{agent_name}_gate`      |
-| Async          | Yes                      |
-| Trigger        | `agent.gate` is callable  |
-| Registered by  | `_register_gate_worker()` |
-
-Conditional gating for sequential pipelines. Called between stages to decide whether to continue or stop.
-
-**Inputs:** `result` (str)
-**Returns:** `{ decision }` ("continue" or "stop")
-
----
-
-## 6. Callback Workers
-
-| Field          | Value                                |
-|----------------|--------------------------------------|
-| Task name      | `{agent_name}_{position}`            |
-| Async          | Yes                                  |
-| Trigger        | `agent.callbacks` or legacy callback attrs |
-| Registered by  | `_register_callback_worker()`        |
-
-Lifecycle hooks at six execution points:
-
-| Position         | Legacy attribute          |
-|------------------|---------------------------|
-| `before_agent`   | `before_agent_callback`   |
-| `after_agent`    | `after_agent_callback`    |
-| `before_model`   | `before_model_callback`   |
-| `after_model`    | `after_model_callback`    |
-| `before_tool`    | —                         |
-| `after_tool`     | —                         |
-
-Multiple callbacks per position are chained; the first non-empty dict returned wins.
-
----
-
-## 7. Termination Worker
-
-| Field          | Value                            |
-|----------------|----------------------------------|
-| Task name      | `{agent_name}_termination`       |
-| Async          | Yes                              |
-| Trigger        | `agent.termination` is set       |
-| Registered by  | `_register_termination_worker()` |
-
-Evaluates a TerminationCondition to decide if the agent should stop.
-
-**Inputs:** `result` (str), `iteration` (int)
-**Returns:** `{ should_continue, reason }`
-
----
-
-## 8. Check Transfer Worker
-
-| Field          | Value                              |
-|----------------|------------------------------------|
-| Task name      | `{agent_name}_check_transfer`      |
-| Async          | Yes                                |
-| Trigger        | Agent has both `tools` and `agents` (hybrid handoff), or swarm strategy |
-| Registered by  | `_register_check_transfer_worker()` |
-
-Inspects tool calls for `transfer_to_*` function names to detect handoff requests.
-
-**Inputs:** `tool_calls` (list of dicts)
-**Returns:** `{ is_transfer, transfer_to }`
-
-For swarm agents, registered for the parent and every sub-agent.
-
----
-
-## 9. Router Function Worker
-
-| Field          | Value                          |
-|----------------|--------------------------------|
-| Task name      | `{agent_name}_router_fn`       |
-| Async          | Yes                            |
-| Trigger        | `strategy == "router"` and `agent.router` is callable (no `.model` attr) |
-| Registered by  | `_register_router_worker()`    |
-
-Calls a user-provided Python function to select which sub-agent handles the prompt.
-LLM-based routers are server-side and do not get a local worker.
-
-**Inputs:** `prompt` (str)
-**Returns:** `{ selected_agent }` (agent name)
-
----
-
-## 10. Handoff Check Worker
-
-| Field          | Value                            |
-|----------------|----------------------------------|
-| Task name      | `{agent_name}_handoff_check`     |
-| Async          | Yes                              |
-| Trigger        | `agent.handoffs` is non-empty    |
-| Registered by  | `_register_handoff_worker()`     |
-
-Determines if and where to handoff in swarm strategies. Supports two mechanisms:
-
-1. **Transfer tool** — primary: `is_transfer=true, transfer_to=<name>`
-2. **Condition-based** — secondary: `OnTextMention`, `OnCondition`, etc.
-
-Respects `agent.allowed_transitions` constraints and tracks consecutive blocked transfers (max 3).
-
-**Inputs:** `result`, `active_agent`, `conversation`, `is_transfer`, `transfer_to`
-**Returns:** `{ active_agent, handoff }`
-
----
-
-## 11. Swarm Transfer Tools
-
-| Field          | Value                          |
-|----------------|--------------------------------|
-| Task name      | `transfer_to_{peer_name}`      |
-| Async          | Yes                            |
-| Trigger        | `strategy == "swarm"` with sub-agents |
-| Registered by  | `_register_swarm_transfer_workers()` |
-
-No-op tools that let the LLM express a handoff intent. The actual handoff is detected by the check_transfer worker.
-One tool per unique target name across the swarm (deduplicated).
-
-Returns `{}` normally, or an error string if `allowed_transitions` prevents that transfer.
-
----
-
-## 12. Manual Selection Worker
-
-| Field          | Value                                |
-|----------------|--------------------------------------|
-| Task name      | `{agent_name}_process_selection`     |
-| Async          | Yes                                  |
-| Trigger        | `strategy == "manual"` with sub-agents |
-| Registered by  | `_register_manual_selection_worker()` |
-
-Processes human input to select which sub-agent to run.
-
-**Inputs:** `human_output` (object)
-**Returns:** `{ selected }` (agent index as string)
-
----
-
-## 13. Framework Workers
-
-| Field          | Value                     |
-|----------------|---------------------------|
-| Task name      | `{worker.name}`           |
-| Async          | No                        |
-| Trigger        | Foreign framework agents with extractable model + tools |
-| Registered by  | `_register_framework_workers()` |
-
-When the serializer can extract the LLM model and tools from a foreign framework agent
-(e.g. LangGraph `create_agent` with `ChatOpenAI` + tools), each tool is registered as
-an individual Conductor task worker via `make_tool_worker()`. The server creates a proper
-multi-task workflow (AI_MODEL + SIMPLE per tool).
-
----
-
-## 14. Framework Passthrough Worker
-
-| Field          | Value                     |
-|----------------|---------------------------|
-| Task name      | `{worker_name}`           |
-| Async          | No                        |
-| Task timeout   | 600 s                     |
-| Trigger        | Foreign framework agents where model/tools cannot be extracted |
-| Registered by  | `_register_passthrough_worker()` |
-
-Fallback for framework agents where the serializer cannot extract the model or tools
-(e.g. custom LangGraph `StateGraph` with no recognizable LLM). The entire agent runs
-as a single SIMPLE task with an extended 600s timeout. Events are pushed to the SSE
-stream via HTTP from within the worker.
-
-Source: `_passthrough_task_def()` in `runtime.py`.
-
----
+| # | Worker Type | Task Name Pattern | Trigger |
+|---|-------------|-------------------|---------|
+| 1 | Tool | `{tool_name}` | `agent.tools` with `tool_type == "worker"` |
+| 2 | CLI Command | `{agent_name}_run_command` | `agent.cli_commands == True` |
+| 3 | Code Execution | `{agent_name}_execute_code` | `agent.local_code_execution == True` |
+| 4 | Output Guardrail (combined) | `{agent_name}_output_guardrail` | Custom guardrails (local compile path) |
+| 5 | Individual Guardrail | `{guardrail.name}` | Custom guardrails (server compile path) |
+| 6 | Stop When | `{agent_name}_stop_when` | `agent.stop_when` is callable |
+| 7 | Gate | `{agent_name}_gate` | `agent.gate` is callable |
+| 8 | Callback | `{agent_name}_{position}` | `agent.callbacks` |
+| 9 | Termination | `{agent_name}_termination` | `agent.termination` is set |
+| 10 | Check Transfer | `{agent_name}_check_transfer` | Hybrid or swarm agent |
+| 11 | Router Function | `{agent_name}_router_fn` | `strategy == "router"` with callable router |
+| 12 | Handoff Check | `{agent_name}_handoff_check` | `agent.handoffs` is non-empty |
+| 13 | Swarm Transfer | `{source_agent}_transfer_to_{peer}` | `strategy == "swarm"` with sub-agents |
+| 14 | Manual Selection | `{agent_name}_process_selection` | `strategy == "manual"` with sub-agents |
+| 15 | Framework | `{worker.name}` | Foreign framework with extractable tools |
+| 16 | Framework Passthrough | `{worker_name}` | Foreign framework (passthrough) |
+| 17 | Claude Code Passthrough | `{agent_name}` | `model="claude-code/..."` |
+
+## Task Definition Registration
+
+**Task definitions are registered by the server during agent compilation.** SDKs do NOT register
+task definitions — they only poll for tasks. The server returns `requiredWorkers` in the
+start/deploy response so SDKs know exactly which workers to register.
+
+| Setting              | Value          | Source |
+|----------------------|----------------|--------|
+| `timeoutSeconds`     | 0 (no timeout) | `AgentService.registerTaskDef()` |
+| `responseTimeoutSeconds` | 3600 (1 hour) | Conductor requires minimum 1s |
+| Retry count          | 2              | Server-side |
+| Retry logic          | LINEAR_BACKOFF | Server-side |
+| Retry delay          | 2 s            | Server-side |
+
+## Task Name Prefixing Rules
+
+All auto-generated task names MUST be prefixed with the agent name to prevent collisions
+when multiple agents share the same Conductor namespace.
+
+| Category | Pattern | Example |
+|---|---|---|
+| System workers | `{agentName}_{type}` | `my_agent_termination` |
+| CLI tools | `{agentName}_run_command` | `git_fetch_run_command` |
+| Code execution | `{agentName}_execute_code` | `coder_execute_code` |
+| Swarm transfers | `{sourceAgent}_transfer_to_{peer}` | `coder_transfer_to_qa_tester` |
+| User-defined tools | `{tool_name}` (user-controlled) | `get_weather` |
+
+## Credentials
+
+Credentials are always resolved from the server. There is no environment variable fallback.
+
+- **Execution token present** → `POST /api/credentials/resolve` → injected into `process.env`/`os.environ`
+- **No execution token** → `FAILED_WITH_TERMINAL_ERROR` (non-retryable)
+- **Credentials not found on server** → `FAILED_WITH_TERMINAL_ERROR` (non-retryable)
+- **Cleanup** → credentials removed from environment after tool execution
+
+Store credentials with: `agentspan credentials set --name <NAME>`
+
+## TypeScript Parity
+
+Both Python and TypeScript SDKs implement all 17 worker types. The TypeScript SDK includes:
+- All SWARM workers (transfer_to, check_transfer, handoff_check, process_selection)
+- Claude Code agent support (`ClaudeCode` class, `PermissionMode` enum)
+- CLI command execution (`CliConfig`, `makeCliTool()`)
+- Code execution validators (`CommandValidator`)
+- LLM guardrails (`LLMGuardrail` class)
+- Credential resolution and injection (`resolveCredentials`, `injectCredentials`)
 
 ## Worker Lifecycle
 
-1. **Registration** — `_register_workers()` recursively walks the agent tree and calls the appropriate `_register_*_worker()` methods. Each calls `@worker_task` which adds the function to the global `_decorated_functions` dict.
-
-2. **Start** — `WorkerManager.start()` creates a `TaskHandler` with `scan_for_annotated_workers=True`, which reads `_decorated_functions` and forks a process per worker.
-
-3. **Incremental addition** — When new agents introduce new worker types, `_start_new_workers()` injects them into the running TaskHandler without stopping existing workers.
-
-4. **Monitoring** — The TaskHandler monitor thread checks process health every 5 seconds and restarts dead workers with exponential backoff.
-
-5. **Shutdown** — `WorkerManager.stop()` is only called during `AgentRuntime.shutdown()`.
+1. **Server compilation** — Server compiles agent → registers all task definitions → returns `requiredWorkers` list
+2. **SDK registration** — SDK registers workers (poll functions) for task names in `requiredWorkers`
+3. **Polling** — Workers poll Conductor for tasks, execute functions, report results
+4. **Credentials** — Before tool execution, credentials are resolved from server and injected
+5. **Monitoring** — TaskHandler checks process health every 5s and restarts dead workers
+6. **Shutdown** — Workers stopped during `AgentRuntime.shutdown()`
