@@ -259,38 +259,16 @@ export class WorkerManager {
 
   /**
    * Register a task definition with the server.
+   * No-op: task definitions are now registered by the server during
+   * agent compilation. SDKs only poll for tasks.
    */
   async registerTaskDef(
     taskName: string,
     config?: { timeoutSeconds?: number },
   ): Promise<void> {
-    const taskDef = {
-      name: taskName,
-      retryCount: 2,
-      retryLogic: 'LINEAR_BACKOFF',
-      retryDelaySeconds: 2,
-      timeoutSeconds: config?.timeoutSeconds ?? 0,
-      responseTimeoutSeconds: config?.timeoutSeconds ?? 3600,
-    };
-
-    const url = `${this.serverUrl}/metadata/taskdefs`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        ...this.headers,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify([taskDef]),
-    });
-
-    if (!response.ok) {
-      const body = await response.text();
-      throw new AgentAPIError(
-        `Failed to register task def '${taskName}': ${response.status}`,
-        response.status,
-        body,
-      );
-    }
+    // No-op: task definitions are now registered by the server during
+    // agent compilation. SDKs only poll for tasks.
+    return;
   }
 
   /**
