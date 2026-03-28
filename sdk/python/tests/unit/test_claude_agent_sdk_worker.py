@@ -1,6 +1,6 @@
 """Unit tests for the Claude Agent SDK passthrough integration."""
 import asyncio
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 def _make_options(system_prompt="You are a reviewer"):
@@ -368,10 +368,24 @@ class TestMergeHooks:
 
 
 class TestRunQuery:
+    def _mock_sdk_with_messages(self, messages):
+        """Create a mock SDK where ClaudeSDKClient.receive_response yields messages."""
+        async def mock_receive_response():
+            for msg in messages:
+                yield msg
+
+        mock_sdk = MagicMock()
+        mock_client = MagicMock()
+        mock_client.connect = AsyncMock()
+        mock_client.query = AsyncMock()
+        mock_client.receive_response = mock_receive_response
+        mock_client.disconnect = AsyncMock()
+        mock_sdk.ClaudeSDKClient.return_value = mock_client
+        return mock_sdk
+
     def test_run_query_collects_assistant_text(self):
         from agentspan.agents.frameworks.claude_agent_sdk import _run_query
 
-        # Create mock messages
         text_block = MagicMock()
         text_block.text = "Hello world"
         assistant_msg = MagicMock()
@@ -383,17 +397,11 @@ class TestRunQuery:
         result_msg.result = "Final result"
         result_msg.usage = {"input_tokens": 50}
 
-        async def mock_query(**kwargs):
-            for msg in [assistant_msg, result_msg]:
-                yield msg
+        mock_sdk = self._mock_sdk_with_messages([assistant_msg, result_msg])
+        mock_sdk.AssistantMessage = type(assistant_msg)
+        mock_sdk.ResultMessage = type(result_msg)
 
-        with patch("agentspan.agents.frameworks.claude_agent_sdk._import_sdk") as mock_import:
-            mock_sdk = MagicMock()
-            mock_sdk.query = mock_query
-            mock_sdk.AssistantMessage = type(assistant_msg)
-            mock_sdk.ResultMessage = type(result_msg)
-            mock_import.return_value = mock_sdk
-
+        with patch("agentspan.agents.frameworks.claude_agent_sdk._import_sdk", return_value=mock_sdk):
             output, usage = asyncio.run(_run_query("test prompt", MagicMock()))
 
         assert output == "Final result"
@@ -413,17 +421,11 @@ class TestRunQuery:
         result_msg.result = ""
         result_msg.usage = None
 
-        async def mock_query(**kwargs):
-            for msg in [assistant_msg, result_msg]:
-                yield msg
+        mock_sdk = self._mock_sdk_with_messages([assistant_msg, result_msg])
+        mock_sdk.AssistantMessage = type(assistant_msg)
+        mock_sdk.ResultMessage = type(result_msg)
 
-        with patch("agentspan.agents.frameworks.claude_agent_sdk._import_sdk") as mock_import:
-            mock_sdk = MagicMock()
-            mock_sdk.query = mock_query
-            mock_sdk.AssistantMessage = type(assistant_msg)
-            mock_sdk.ResultMessage = type(result_msg)
-            mock_import.return_value = mock_sdk
-
+        with patch("agentspan.agents.frameworks.claude_agent_sdk._import_sdk", return_value=mock_sdk):
             output, usage = asyncio.run(_run_query("test prompt", MagicMock()))
 
         assert output == "Collected text"

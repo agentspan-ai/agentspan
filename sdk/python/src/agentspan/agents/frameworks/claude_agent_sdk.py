@@ -174,9 +174,15 @@ def make_claude_agent_sdk_worker(
 
 
 async def _run_query(prompt: str, options: Any) -> Tuple[str, Any]:
-    """Run claude_code_sdk.query() and collect output."""
+    """Run Claude Agent SDK query via ClaudeSDKClient and collect output.
+
+    Uses ClaudeSDKClient (not the standalone query() function) because
+    hooks require bidirectional streaming mode. The standalone query()
+    with a string prompt runs in non-streaming mode where the control
+    protocol is not initialized, so hook callbacks are never invoked.
+    """
     sdk = _import_sdk()
-    query = sdk.query
+    ClaudeSDKClient = sdk.ClaudeSDKClient
     AssistantMessage = sdk.AssistantMessage
     ResultMessage = sdk.ResultMessage
 
@@ -184,14 +190,26 @@ async def _run_query(prompt: str, options: Any) -> Tuple[str, Any]:
     collected_text: List[str] = []
     token_usage = None
 
-    async for message in query(prompt=prompt, options=options):
-        if isinstance(message, AssistantMessage):
-            for block in message.content:
-                if hasattr(block, "text"):
-                    collected_text.append(block.text)
-        elif isinstance(message, ResultMessage):
-            result_output = getattr(message, "result", "") or ""
-            token_usage = getattr(message, "usage", None)
+    client = ClaudeSDKClient(options=options)
+    logger.debug("ClaudeSDKClient: connecting...")
+    await client.connect()
+    logger.debug("ClaudeSDKClient: connected, sending query...")
+    try:
+        await client.query(prompt)
+        logger.debug("ClaudeSDKClient: query sent, receiving response...")
+        async for message in client.receive_response():
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if hasattr(block, "text"):
+                        collected_text.append(block.text)
+            elif isinstance(message, ResultMessage):
+                result_output = getattr(message, "result", "") or ""
+                token_usage = getattr(message, "usage", None)
+                logger.debug("ClaudeSDKClient: ResultMessage received")
+    finally:
+        logger.debug("ClaudeSDKClient: disconnecting...")
+        await client.disconnect()
+        logger.debug("ClaudeSDKClient: disconnected")
 
     if not result_output and collected_text:
         result_output = "\n".join(collected_text)
