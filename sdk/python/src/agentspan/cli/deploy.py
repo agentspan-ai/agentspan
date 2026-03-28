@@ -59,7 +59,7 @@ def main():
         sys.exit(1)
 
     if args.agents:
-        names = set(args.agents.split(","))
+        names = set(n.strip() for n in args.agents.split(",") if n.strip())
         agents = [a for a in agents if a.name in names]
 
     results = []

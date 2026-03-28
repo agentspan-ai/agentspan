@@ -63,10 +63,11 @@ func runDeployCmd(cmd *cobra.Command, args []string) error {
 	autoYes, _ := cmd.Flags().GetBool("yes")
 	jsonOutput, _ := cmd.Flags().GetBool("json")
 
-	// Filter out empty strings from --agents flag
+	// Trim whitespace and filter out empty strings from --agents flag
 	{
 		clean := agentNames[:0]
 		for _, n := range agentNames {
+			n = strings.TrimSpace(n)
 			if n != "" {
 				clean = append(clean, n)
 			}

@@ -13,7 +13,7 @@ export interface DeployResultEntry {
 
 export function filterAgents<T extends { name: string }>(agents: T[], agentsFlag: string | undefined): T[] {
   if (!agentsFlag) return agents;
-  const names = new Set(agentsFlag.split(','));
+  const names = new Set(agentsFlag.split(',').map(s => s.trim()).filter(Boolean));
   return agents.filter(a => names.has(a.name));
 }
 
