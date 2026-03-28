@@ -11,6 +11,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 /**
  * Response DTO for POST /api/agent/start.
  */
@@ -23,4 +25,7 @@ public class StartResponse {
 
     private String workflowId;
     private String workflowName;
+
+    /** SIMPLE task names the SDK must register workers for. */
+    private List<String> requiredWorkers;
 }

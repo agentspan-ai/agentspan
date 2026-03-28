@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.netflix.conductor.common.metadata.tasks.TaskDef;
 import com.netflix.conductor.common.metadata.workflow.StartWorkflowRequest;
 import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
+import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
 import com.netflix.conductor.common.metadata.tasks.Task;
 import com.netflix.conductor.common.metadata.tasks.TaskResult;
 import com.netflix.conductor.common.run.Workflow;
@@ -105,8 +106,12 @@ public class AgentService {
         stampAgentDef(metadata, request);
         def.setMetadata(metadata);
 
+        List<String> requiredWorkers = new ArrayList<>(collectSimpleTaskNames(def));
         Map<String, Object> defMap = MAPPER.convertValue(def, Map.class);
-        return CompileResponse.builder().workflowDef(defMap).build();
+        return CompileResponse.builder()
+            .workflowDef(defMap)
+            .requiredWorkers(requiredWorkers)
+            .build();
     }
 
     /**
@@ -143,6 +148,7 @@ public class AgentService {
 
         return StartResponse.builder()
             .workflowName(def.getName())
+            .requiredWorkers(new ArrayList<>(collectSimpleTaskNames(def)))
             .build();
     }
 
@@ -233,6 +239,8 @@ public class AgentService {
 
         startReq.setInput(input);
 
+        List<String> requiredWorkers = new ArrayList<>(collectSimpleTaskNames(def));
+
         // Idempotency: use the key as correlationId and check for existing executions
         if (request.getIdempotencyKey() != null && !request.getIdempotencyKey().isEmpty()) {
             startReq.setCorrelationId(request.getIdempotencyKey());
@@ -243,6 +251,7 @@ public class AgentService {
                 return StartResponse.builder()
                     .workflowId(existing)
                     .workflowName(def.getName())
+                    .requiredWorkers(requiredWorkers)
                     .build();
             }
         }
@@ -260,6 +269,7 @@ public class AgentService {
         return StartResponse.builder()
             .workflowId(workflowId)
             .workflowName(def.getName())
+            .requiredWorkers(requiredWorkers)
             .build();
     }
 
@@ -1045,5 +1055,50 @@ public class AgentService {
 
         metadataDAO.createTaskDef(taskDef);
         log.info("Registered task definition: {}", taskName);
+    }
+
+    // ── Utility: collect SIMPLE task names from workflow tree ────────
+
+    /**
+     * Walk a compiled WorkflowDef tree and return the names of every SIMPLE task.
+     * SDKs use this list to know exactly which workers to register.
+     */
+    private Set<String> collectSimpleTaskNames(WorkflowDef workflowDef) {
+        Set<String> names = new LinkedHashSet<>();
+        collectSimpleTaskNamesFromTasks(workflowDef.getTasks(), names);
+        return names;
+    }
+
+    private void collectSimpleTaskNamesFromTasks(List<WorkflowTask> tasks, Set<String> names) {
+        if (tasks == null) return;
+        for (WorkflowTask task : tasks) {
+            if ("SIMPLE".equals(task.getType())) {
+                names.add(task.getName());
+            }
+            // DO_WHILE loop body
+            if (task.getLoopOver() != null) {
+                collectSimpleTaskNamesFromTasks(task.getLoopOver(), names);
+            }
+            // SWITCH / DECISION default case
+            if (task.getDefaultCase() != null) {
+                collectSimpleTaskNamesFromTasks(task.getDefaultCase(), names);
+            }
+            // SWITCH / DECISION named cases
+            if (task.getDecisionCases() != null) {
+                for (List<WorkflowTask> caseTasks : task.getDecisionCases().values()) {
+                    collectSimpleTaskNamesFromTasks(caseTasks, names);
+                }
+            }
+            // FORK branches
+            if (task.getForkTasks() != null) {
+                for (List<WorkflowTask> branch : task.getForkTasks()) {
+                    collectSimpleTaskNamesFromTasks(branch, names);
+                }
+            }
+            // Inline sub-workflows
+            if (task.getSubWorkflowParam() != null && task.getSubWorkflowParam().getWorkflowDef() != null) {
+                collectSimpleTaskNamesFromTasks(task.getSubWorkflowParam().getWorkflowDef().getTasks(), names);
+            }
+        }
     }
 }

@@ -11,6 +11,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -25,4 +26,7 @@ public class CompileResponse {
 
     /** The compiled workflow definition as a JSON map. */
     private Map<String, Object> workflowDef;
+
+    /** SIMPLE task names the SDK must register workers for. */
+    private List<String> requiredWorkers;
 }
