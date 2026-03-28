@@ -720,6 +720,35 @@ public class AgentService {
             }
         }
 
+        // Register transfer_to_ workers for swarm agents
+        // Each agent in the swarm gets {parent}_transfer_to_{peer} worker tasks
+        if ("swarm".equals(config.getStrategy()) && config.getAgents() != null) {
+            List<String> allNames = new ArrayList<>();
+            allNames.add(config.getName());
+            for (AgentConfig sub : config.getAgents()) {
+                allNames.add(sub.getName());
+            }
+            for (String name : allNames) {
+                String taskName = config.getName() + "_transfer_to_" + name;
+                if (!registered.contains(taskName)) {
+                    registerTaskDef(taskName);
+                    registered.add(taskName);
+                }
+            }
+        }
+
+        // Register transfer_to_ workers for hybrid agents (has both tools and sub-agents)
+        if (config.getAgents() != null && !config.getAgents().isEmpty() &&
+            config.getTools() != null && !config.getTools().isEmpty()) {
+            for (AgentConfig sub : config.getAgents()) {
+                String taskName = config.getName() + "_transfer_to_" + sub.getName();
+                if (!registered.contains(taskName)) {
+                    registerTaskDef(taskName);
+                    registered.add(taskName);
+                }
+            }
+        }
+
         // Register graph-structure node workers and router workers
         if (config.getMetadata() != null
                 && config.getMetadata().get("_graph_structure") instanceof Map<?, ?> graph) {

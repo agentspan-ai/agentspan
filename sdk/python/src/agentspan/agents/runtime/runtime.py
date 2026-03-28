@@ -805,6 +805,14 @@ class AgentRuntime:
         if agent.handoffs:
             names.add(f"{agent.name}_handoff_check")
 
+        # Swarm transfer workers
+        if agent.strategy == "swarm" and agent.agents:
+            all_names = [agent.name] + [sub.name for sub in agent.agents]
+            for n in all_names:
+                for peer in all_names:
+                    if peer != n:
+                        names.add(f"{agent.name}_transfer_to_{peer}")
+
         # Manual selection
         if agent.strategy == "manual" and agent.agents:
             names.add(f"{agent.name}_process_selection")
@@ -1243,8 +1251,8 @@ class AgentRuntime:
         async def check_transfer_worker(tool_calls: object = None, _unused: str = "") -> object:
             for tc in tool_calls or []:
                 name = tc.get("name", "")
-                if name.startswith("transfer_to_"):
-                    return {"is_transfer": True, "transfer_to": name[len("transfer_to_") :]}
+                if "_transfer_to_" in name:
+                    return {"is_transfer": True, "transfer_to": name.split("_transfer_to_", 1)[1]}
             return {"is_transfer": False, "transfer_to": ""}
 
         check_transfer_worker.__annotations__ = {
@@ -1404,7 +1412,7 @@ class AgentRuntime:
             for peer_name in all_names:
                 if peer_name == name:
                     continue
-                tool_name = f"transfer_to_{peer_name}"
+                tool_name = f"{agent.name}_transfer_to_{peer_name}"
                 if tool_name in registered:
                     continue
                 registered.add(tool_name)
@@ -1418,7 +1426,7 @@ class AgentRuntime:
 
                         async def transfer_worker() -> str:
                             return (
-                                f"ERROR: transfer_to_{target} is not available. "
+                                f"ERROR: {tn} is not available. "
                                 f"Use a different transfer tool, or if you are "
                                 f"done, just provide your final response without "
                                 f"calling any transfer tool."

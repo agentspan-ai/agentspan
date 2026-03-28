@@ -888,7 +888,7 @@ public class MultiAgentCompiler {
                 ? peer.getDescription()
                 : (peer.getInstructions() instanceof String ? (String) peer.getInstructions() : "Agent: " + peer.getName());
             ToolConfig transferTool = ToolConfig.builder()
-                .name("transfer_to_" + peer.getName())
+                .name(self.getName() + "_transfer_to_" + peer.getName())
                 .description("Transfer the conversation to " + peer.getName() + ". " + peerDesc)
                 .inputSchema(Map.of("type", "object", "properties", Map.of(), "required", List.of()))
                 .toolType("worker")

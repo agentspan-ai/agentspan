@@ -520,7 +520,7 @@ public class AgentCompiler {
                 ? sub.getDescription()
                 : (sub.getInstructions() instanceof String ? (String) sub.getInstructions() : "Agent: " + sub.getName());
             ToolConfig transferTool = ToolConfig.builder()
-                .name("transfer_to_" + sub.getName())
+                .name(config.getName() + "_transfer_to_" + sub.getName())
                 .description("Transfer the conversation to " + sub.getName() + ". " + subDesc)
                 .inputSchema(Map.of("type", "object", "properties", Map.of(), "required", List.of()))
                 .toolType("worker")
