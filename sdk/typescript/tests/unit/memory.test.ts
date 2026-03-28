@@ -161,8 +161,8 @@ describe('SemanticMemory + InMemoryStore', () => {
       const results = memory.search('JavaScript');
       expect(results.length).toBeGreaterThan(0);
       // JavaScript should match the first and third entries
-      expect(results.some((r) => r.content.includes('TypeScript'))).toBe(true);
-      expect(results.some((r) => r.content.includes('browser'))).toBe(true);
+      expect(results.some((r) => r.includes('TypeScript'))).toBe(true);
+      expect(results.some((r) => r.includes('browser'))).toBe(true);
     });
 
     it('returns entries in order of relevance', () => {
@@ -175,7 +175,7 @@ describe('SemanticMemory + InMemoryStore', () => {
 
       const results = memory.search('cat dog friends');
       // 'The cat and dog are friends' should rank highest (3 keyword matches)
-      expect(results[0].content).toBe('The cat and dog are friends');
+      expect(results[0]).toBe('The cat and dog are friends');
     });
 
     it('delete removes a specific entry', () => {
@@ -269,9 +269,9 @@ describe('SemanticMemory + InMemoryStore', () => {
       memory.add('alpha beta gamma'); // 3 matches of 3
 
       const results = memory.search('alpha beta gamma');
-      expect(results[0].content).toBe('alpha beta gamma');
-      expect(results[1].content).toBe('alpha beta');
-      expect(results[2].content).toBe('alpha');
+      expect(results[0]).toBe('alpha beta gamma');
+      expect(results[1]).toBe('alpha beta');
+      expect(results[2]).toBe('alpha');
     });
 
     it('returns no results when no keywords match', () => {

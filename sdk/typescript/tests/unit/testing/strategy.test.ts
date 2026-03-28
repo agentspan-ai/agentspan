@@ -46,11 +46,19 @@ describe('validateStrategy', () => {
   });
 
   it('supports router strategy', () => {
+    const mockRouter = new Agent({ name: 'mock_router' });
     const agent = new Agent({
       name: 'router',
       strategy: 'router',
+      router: mockRouter,
     });
     expect(() => validateStrategy(agent, 'router')).not.toThrow();
+  });
+
+  it('throws when strategy=router without router param', () => {
+    expect(
+      () => new Agent({ name: 'bad_router', strategy: 'router' }),
+    ).toThrow(/no 'router' parameter was provided/);
   });
 
   it('supports swarm strategy', () => {

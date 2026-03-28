@@ -150,6 +150,7 @@ describe('RegexGuardrail', () => {
       patterns: ['\\b\\d{3}-\\d{2}-\\d{4}\\b'],
       mode: 'block',
       message: 'PII detected',
+      maxRetries: 3,
     });
   });
 
@@ -219,6 +220,7 @@ describe('LLMGuardrail', () => {
       guardrailType: 'llm',
       model: 'openai/gpt-4o',
       policy: 'Check bias',
+      maxRetries: 3,
       maxTokens: 100,
     });
   });
