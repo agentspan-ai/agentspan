@@ -12,16 +12,16 @@ Usage:
 
 from agentspan.agents import Agent, AgentRuntime
 
+reviewer = Agent(
+    name="file_lister",
+    model="claude-code/sonnet",
+    instructions="You are a helpful assistant that explores codebases.",
+    tools=["Read", "Glob", "Grep"],
+    max_turns=5,
+)
 
-def main():
-    reviewer = Agent(
-        name="file_lister",
-        model="claude-code/sonnet",
-        instructions="You are a helpful assistant that explores codebases.",
-        tools=["Read", "Glob", "Grep"],
-        max_turns=5,
-    )
 
+if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
             reviewer,
@@ -33,7 +33,3 @@ def main():
         print(f"Status: {result.status}")
         if result.token_usage:
             print(f"Token usage: {result.token_usage}")
-
-
-if __name__ == "__main__":
-    main()
