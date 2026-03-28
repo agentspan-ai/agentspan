@@ -426,10 +426,9 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
                 try:
                     resolved_credentials = fetcher.fetch(token, credential_names)
                 except Exception as cred_err:
-                    # Credential errors are configuration issues, not tool failures.
-                    # Don't count toward circuit breaker — just fail the task.
+                    # Credential errors are configuration issues — non-retryable.
                     logger.error("Credential resolution failed for tool '%s': %s", tool_name, cred_err)
-                    task_result.status = TaskResultStatus.FAILED
+                    task_result.status = TaskResultStatus.FAILED_WITH_TERMINAL_ERROR
                     task_result.reason_for_incompletion = str(cred_err)
                     return task_result
 

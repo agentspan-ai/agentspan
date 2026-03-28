@@ -368,8 +368,10 @@ export class WorkerManager {
   async reportFailure(
     taskId: string,
     workflowInstanceId: string,
-    error: Error,
+    error: Error | string,
+    terminal: boolean = false,
   ): Promise<void> {
+    const message = typeof error === 'string' ? error : error.message;
     const url = `${this.serverUrl}/tasks`;
     const response = await fetch(url, {
       method: 'POST',
@@ -380,8 +382,8 @@ export class WorkerManager {
       body: JSON.stringify({
         taskId,
         workflowInstanceId,
-        status: 'FAILED',
-        reasonForIncompletion: error.message,
+        status: terminal ? 'FAILED_WITH_TERMINAL_ERROR' : 'FAILED',
+        reasonForIncompletion: message,
       }),
     });
 
@@ -437,7 +439,18 @@ export class WorkerManager {
 
       // Resolve and inject credentials into process.env
       let cleanupCredentials: (() => void) | null = null;
-      if (executionToken && worker.credentials?.length) {
+      if (worker.credentials?.length) {
+        if (!executionToken) {
+          // No execution token — fail with non-retryable error
+          await this.reportFailure(
+            task.taskId,
+            task.workflowInstanceId,
+            `Required credentials not found: ${worker.credentials.join(', ')}. ` +
+            `No execution token available. Store credentials on the server with: agentspan credentials set --name <NAME>`,
+            true, // terminal error — non-retryable
+          );
+          return;
+        }
         try {
           const resolved = await resolveCredentials(
             this.serverUrl, this.headers, executionToken, worker.credentials,
@@ -446,9 +459,14 @@ export class WorkerManager {
             this.serverUrl, this.headers, executionToken, resolved,
           );
         } catch (err) {
-          // Credential errors are config issues, not tool failures
-          // But for CLI tools, credentials are required
-          console.warn(`Credential resolution failed for ${worker.taskName}:`, err);
+          // Credential errors are non-retryable config issues
+          await this.reportFailure(
+            task.taskId,
+            task.workflowInstanceId,
+            `Credential resolution failed for ${worker.taskName}: ${err instanceof Error ? err.message : String(err)}`,
+            true, // terminal error — non-retryable
+          );
+          return;
         }
       }
 
