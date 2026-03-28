@@ -114,3 +114,31 @@ class TestNegative:
                 Agent(name="dup", model=MODEL),
                 Agent(name="dup", model=MODEL),
             ])
+
+    def test_credential_fails_without_token(self):
+        """Credential resolution without execution token raises non-retryable error."""
+        from agentspan.agents.runtime.credentials.fetcher import WorkerCredentialFetcher
+        from agentspan.agents.runtime.credentials.types import CredentialNotFoundError
+        fetcher = WorkerCredentialFetcher()
+        with pytest.raises(CredentialNotFoundError, match="No execution token"):
+            fetcher.fetch(None, ["GITHUB_TOKEN"])
+
+    def test_cli_tools_prefixed_per_agent(self):
+        """Multiple agents with CLI tools get unique prefixed names."""
+        a = Agent(name="fetcher", model=MODEL, cli_commands=True, cli_allowed_commands=["gh", "git"])
+        b = Agent(name="pusher", model=MODEL, cli_commands=True, cli_allowed_commands=["gh"])
+        a_names = [t._tool_def.name for t in a.tools if hasattr(t, "_tool_def")]
+        b_names = [t._tool_def.name for t in b.tools if hasattr(t, "_tool_def")]
+        assert "fetcher_run_command" in a_names
+        assert "pusher_run_command" in b_names
+        assert set(a_names).isdisjoint(set(b_names))  # No collision
+
+    def test_code_exec_prefixed_per_agent(self):
+        """Multiple agents with code execution get unique prefixed names."""
+        a = Agent(name="coder", model=MODEL, local_code_execution=True)
+        b = Agent(name="tester", model=MODEL, local_code_execution=True)
+        a_names = [t._tool_def.name for t in a.tools if hasattr(t, "_tool_def")]
+        b_names = [t._tool_def.name for t in b.tools if hasattr(t, "_tool_def")]
+        assert "coder_execute_code" in a_names
+        assert "tester_execute_code" in b_names
+        assert set(a_names).isdisjoint(set(b_names))
