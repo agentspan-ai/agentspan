@@ -2,7 +2,7 @@
  * Advanced Orchestration -- agent orchestrating a complex multi-step pipeline.
  *
  * Demonstrates:
- *   - Combining multiple LangChain patterns: structured output, prompt templates, output parsers
+ *   - Combining structured output, prompt templates, and output parsers
  *   - A pipeline agent that decomposes tasks, assigns subtasks, and aggregates results
  *   - Tools that themselves invoke LLM chains (nested LLM calls)
  *   - Practical use case: automated business report generation from raw data inputs
