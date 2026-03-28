@@ -369,7 +369,9 @@ class AgentRuntime:
         with _workflow_credentials_lock:
             _workflow_credentials[workflow_id] = list(credentials)
 
-    def _clear_workflow_credentials(self, workflow_id: str, credentials: Optional[List[str]]) -> None:
+    def _clear_workflow_credentials(
+        self, workflow_id: str, credentials: Optional[List[str]]
+    ) -> None:
         """Clear request-scoped credential names after workflow completion."""
         if not credentials:
             return
@@ -804,7 +806,11 @@ class AgentRuntime:
 
         # Recurse into sub-agents
         for sub in agent.agents:
-            names.update(self._collect_worker_names(sub))
+            if getattr(sub, "is_claude_code", False):
+                # Claude-code sub-agents register their own passthrough worker
+                names.add(sub.name)
+            else:
+                names.update(self._collect_worker_names(sub))
         return names
 
     def _register_workers(self, agent: Agent) -> None:
@@ -915,7 +921,37 @@ class AgentRuntime:
 
         # Recurse into sub-agents
         for sub in agent.agents:
-            if not sub.external:
+            if getattr(sub, "is_claude_code", False):
+                # Register passthrough worker for claude-code sub-agent
+                from agentspan.agents.frameworks.claude_agent_sdk import (
+                    agent_to_claude_code_options,
+                    make_claude_agent_sdk_worker,
+                )
+                from agentspan.agents.frameworks.serializer import WorkerInfo
+
+                cc_options = agent_to_claude_code_options(sub)
+                worker_func = make_claude_agent_sdk_worker(
+                    cc_options,
+                    sub.name,
+                    self._config.server_url,
+                    self._config.auth_key or "",
+                    self._config.auth_secret or "",
+                )
+                worker = WorkerInfo(
+                    name=sub.name,
+                    description=f"Claude Agent SDK passthrough worker for {sub.name}",
+                    input_schema={
+                        "type": "object",
+                        "properties": {
+                            "prompt": {"type": "string"},
+                            "session_id": {"type": "string"},
+                        },
+                    },
+                    func=worker_func,
+                    _pre_wrapped=True,
+                )
+                self._register_passthrough_worker(worker)
+            elif not sub.external:
                 self._register_workers(sub)
 
     # ── Worker registration helpers ────────────────────────────────
@@ -1658,6 +1694,9 @@ class AgentRuntime:
         ``LLMGuardrail`` (LlmChatComplete), and external guardrails
         (SimpleTask) do not need workers.
         """
+        # Claude-code agents always need a passthrough worker
+        if getattr(agent, "is_claude_code", False):
+            return True
         from agentspan.agents.guardrail import LLMGuardrail, RegexGuardrail
         from agentspan.agents.tool import get_tool_def
 
@@ -2619,9 +2658,7 @@ class AgentRuntime:
                 wrapped = make_llm_finish_worker(w.func, w.name, llm_var_name)
             elif w.name in router_refs:
                 is_dynamic = extra.get("is_dynamic_fanout", False)
-                wrapped = make_router_worker(
-                    w.func, w.name, is_dynamic_fanout=is_dynamic
-                )
+                wrapped = make_router_worker(w.func, w.name, is_dynamic_fanout=is_dynamic)
             else:
                 wrapped = make_node_worker(w.func, w.name)
 
@@ -2665,9 +2702,20 @@ class AgentRuntime:
 
             return make_langchain_worker(agent_obj, name, server_url, auth_key, auth_secret)
         elif framework == "claude_agent_sdk":
-            from agentspan.agents.frameworks.claude_agent_sdk import make_claude_agent_sdk_worker
+            from agentspan.agents.frameworks.claude_agent_sdk import (
+                agent_to_claude_code_options,
+                make_claude_agent_sdk_worker,
+            )
 
-            return make_claude_agent_sdk_worker(agent_obj, name, server_url, auth_key, auth_secret)
+            from agentspan.agents.agent import Agent as AgentClass
+
+            # CRITICAL: convert Agent → ClaudeCodeOptions before passing to worker
+            if isinstance(agent_obj, AgentClass):
+                options = agent_to_claude_code_options(agent_obj)
+            else:
+                options = agent_obj  # Already ClaudeCodeOptions
+
+            return make_claude_agent_sdk_worker(options, name, server_url, auth_key, auth_secret)
         raise ValueError(f"Unknown passthrough framework: {framework}")
 
     def _run_framework_with_events(

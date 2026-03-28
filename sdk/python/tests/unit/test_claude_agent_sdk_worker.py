@@ -1,4 +1,5 @@
 """Unit tests for the Claude Agent SDK passthrough integration."""
+
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -68,8 +69,10 @@ class TestMakeClaudeAgentSdkWorker:
         options = _make_options()
         task = _make_task(prompt="Review the code")
 
-        with patch("agentspan.agents.frameworks.claude_agent_sdk.asyncio") as mock_asyncio, \
-             patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"):
+        with (
+            patch("agentspan.agents.frameworks.claude_agent_sdk.asyncio") as mock_asyncio,
+            patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
+        ):
             mock_asyncio.run.return_value = ("The code looks good", None)
             worker_fn = make_claude_agent_sdk_worker(
                 options, "test_agent", "http://localhost:8080", "key", "secret"
@@ -85,8 +88,10 @@ class TestMakeClaudeAgentSdkWorker:
         options = _make_options()
         task = _make_task()
 
-        with patch("agentspan.agents.frameworks.claude_agent_sdk.asyncio") as mock_asyncio, \
-             patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"):
+        with (
+            patch("agentspan.agents.frameworks.claude_agent_sdk.asyncio") as mock_asyncio,
+            patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
+        ):
             mock_asyncio.run.side_effect = RuntimeError("SDK error")
             worker_fn = make_claude_agent_sdk_worker(
                 options, "test_agent", "http://localhost:8080", "key", "secret"
@@ -102,8 +107,10 @@ class TestMakeClaudeAgentSdkWorker:
         options = _make_options()
         task = _make_task()
 
-        with patch("agentspan.agents.frameworks.claude_agent_sdk.asyncio") as mock_asyncio, \
-             patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"):
+        with (
+            patch("agentspan.agents.frameworks.claude_agent_sdk.asyncio") as mock_asyncio,
+            patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
+        ):
             mock_asyncio.run.return_value = ("result", {"input_tokens": 100})
             worker_fn = make_claude_agent_sdk_worker(
                 options, "test_agent", "http://localhost:8080", "key", "secret"
@@ -122,8 +129,10 @@ class TestMakeClaudeAgentSdkWorker:
         options = _make_options()
         task = _make_task(cwd="/tmp/project")
 
-        with patch("agentspan.agents.frameworks.claude_agent_sdk.asyncio") as mock_asyncio, \
-             patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"):
+        with (
+            patch("agentspan.agents.frameworks.claude_agent_sdk.asyncio") as mock_asyncio,
+            patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
+        ):
             mock_asyncio.run.return_value = ("done", None)
             worker_fn = make_claude_agent_sdk_worker(
                 options, "test_agent", "http://localhost:8080", "key", "secret"
@@ -370,6 +379,7 @@ class TestMergeHooks:
 class TestRunQuery:
     def _mock_sdk_with_messages(self, messages):
         """Create a mock SDK where ClaudeSDKClient.receive_response yields messages."""
+
         async def mock_receive_response():
             for msg in messages:
                 yield msg
@@ -401,7 +411,9 @@ class TestRunQuery:
         mock_sdk.AssistantMessage = type(assistant_msg)
         mock_sdk.ResultMessage = type(result_msg)
 
-        with patch("agentspan.agents.frameworks.claude_agent_sdk._import_sdk", return_value=mock_sdk):
+        with patch(
+            "agentspan.agents.frameworks.claude_agent_sdk._import_sdk", return_value=mock_sdk
+        ):
             output, usage = asyncio.run(_run_query("test prompt", MagicMock()))
 
         assert output == "Final result"
@@ -425,7 +437,174 @@ class TestRunQuery:
         mock_sdk.AssistantMessage = type(assistant_msg)
         mock_sdk.ResultMessage = type(result_msg)
 
-        with patch("agentspan.agents.frameworks.claude_agent_sdk._import_sdk", return_value=mock_sdk):
+        with patch(
+            "agentspan.agents.frameworks.claude_agent_sdk._import_sdk", return_value=mock_sdk
+        ):
             output, usage = asyncio.run(_run_query("test prompt", MagicMock()))
 
         assert output == "Collected text"
+
+
+class TestClaudeCodeConfig:
+    def test_claude_code_model_resolution(self):
+        from agentspan.agents.claude_code import resolve_claude_code_model
+
+        assert resolve_claude_code_model("opus") == "claude-opus-4-6"
+        assert resolve_claude_code_model("sonnet") == "claude-sonnet-4-6"
+        assert resolve_claude_code_model("haiku") == "claude-haiku-4-5"
+        assert resolve_claude_code_model("") is None
+        assert resolve_claude_code_model("claude-opus-4-6") == "claude-opus-4-6"
+
+    def test_claude_code_to_model_string(self):
+        from agentspan.agents.claude_code import ClaudeCode
+
+        assert ClaudeCode("opus").to_model_string() == "claude-code/opus"
+        assert ClaudeCode().to_model_string() == "claude-code"
+
+    def test_agent_with_claude_code_model_string(self):
+        from agentspan.agents import Agent
+
+        agent = Agent(name="test", model="claude-code/opus", instructions="test", tools=["Read"])
+        assert agent.is_claude_code
+        assert agent.model == "claude-code/opus"
+
+    def test_agent_with_claude_code_config(self):
+        from agentspan.agents import Agent, ClaudeCode
+
+        agent = Agent(name="test", model=ClaudeCode("opus"), instructions="test", tools=["Read"])
+        assert agent.is_claude_code
+        assert agent.model == "claude-code/opus"
+        assert agent._claude_code_config is not None
+
+    def test_agent_claude_code_rejects_callable_tools(self):
+        import pytest
+
+        from agentspan.agents import Agent
+
+        def my_tool():
+            pass
+
+        with pytest.raises(ValueError, match="Claude Code agents only support"):
+            Agent(name="test", model="claude-code", instructions="test", tools=[my_tool])
+
+    def test_agent_claude_code_allows_string_tools(self):
+        from agentspan.agents import Agent
+
+        agent = Agent(
+            name="test", model="claude-code", instructions="test", tools=["Read", "Edit", "Bash"]
+        )
+        assert agent.tools == ["Read", "Edit", "Bash"]
+
+    def test_detect_framework_returns_claude_for_agent(self):
+        from agentspan.agents import Agent
+        from agentspan.agents.frameworks.serializer import detect_framework
+
+        agent = Agent(name="test", model="claude-code/opus", instructions="test", tools=["Read"])
+        assert detect_framework(agent) == "claude_agent_sdk"
+
+    def test_detect_framework_returns_none_for_normal_agent(self):
+        from agentspan.agents import Agent
+        from agentspan.agents.frameworks.serializer import detect_framework
+
+        agent = Agent(name="test", model="openai/gpt-4o", instructions="test")
+        assert detect_framework(agent) is None
+
+    def test_agent_to_claude_code_options(self):
+        from agentspan.agents import Agent, ClaudeCode
+        from agentspan.agents.frameworks.claude_agent_sdk import agent_to_claude_code_options
+
+        agent = Agent(
+            name="reviewer",
+            model=ClaudeCode("opus", permission_mode=ClaudeCode.PermissionMode.BYPASS),
+            instructions="Review code",
+            tools=["Read", "Grep"],
+            max_turns=5,
+        )
+        options = agent_to_claude_code_options(agent)
+
+        assert options.system_prompt == "Review code"
+        assert options.allowed_tools == ["Read", "Grep"]
+        assert options.max_turns == 5
+        assert options.model == "claude-opus-4-6"
+        assert options.permission_mode == "bypassPermissions"
+
+    def test_serialize_agent_dispatches_for_claude_code_agent(self):
+        from agentspan.agents import Agent
+        from agentspan.agents.frameworks.serializer import serialize_agent
+
+        agent = Agent(name="test", model="claude-code/opus", instructions="test", tools=["Read"])
+        raw_config, workers = serialize_agent(agent)
+
+        assert raw_config["name"] == "test"
+        assert raw_config["_worker_name"] == "test"
+        assert len(workers) == 1
+        assert workers[0].func is None
+
+    def test_agent_is_not_external_when_claude_code(self):
+        from agentspan.agents import Agent
+
+        agent = Agent(name="test", model="claude-code", instructions="test")
+        assert not agent.external
+        assert agent.is_claude_code
+
+    def test_agent_decorator_with_claude_code_model(self):
+        from agentspan.agents import agent as agent_decorator
+        from agentspan.agents.agent import _resolve_agent
+        from agentspan.agents.claude_code import ClaudeCode
+
+        @agent_decorator(model=ClaudeCode("opus"), tools=["Read"])
+        def reviewer():
+            """Review code quality."""
+
+        resolved = _resolve_agent(reviewer)
+        assert resolved.is_claude_code
+        assert resolved.model == "claude-code/opus"
+
+    def test_config_serializer_emits_passthrough_for_claude_code(self):
+        from agentspan.agents import Agent
+        from agentspan.agents.config_serializer import AgentConfigSerializer
+
+        agent = Agent(
+            name="reviewer",
+            model="claude-code/opus",
+            instructions="Review code",
+            tools=["Read"],
+        )
+        serializer = AgentConfigSerializer()
+        config = serializer.serialize(agent)
+
+        assert config["name"] == "reviewer"
+        assert config["model"] == "claude-code/opus"
+        assert config["metadata"]["_framework_passthrough"] is True
+        assert len(config["tools"]) == 1
+        assert config["tools"][0]["toolType"] == "worker"
+
+    def test_config_serializer_parent_with_claude_code_sub_agent(self):
+        from agentspan.agents import Agent
+        from agentspan.agents.config_serializer import AgentConfigSerializer
+
+        sub = Agent(
+            name="reviewer",
+            model="claude-code/opus",
+            instructions="Review code",
+            tools=["Read"],
+        )
+        parent = Agent(
+            name="pipeline",
+            model="openai/gpt-4o",
+            instructions="Run pipeline",
+            agents=[sub],
+            strategy="sequential",
+        )
+        serializer = AgentConfigSerializer()
+        config = serializer.serialize(parent)
+
+        # Parent should be normal
+        assert config["name"] == "pipeline"
+        assert "metadata" not in config or "_framework_passthrough" not in config.get(
+            "metadata", {}
+        )
+
+        # Sub-agent should be passthrough
+        sub_config = config["agents"][0]
+        assert sub_config["metadata"]["_framework_passthrough"] is True

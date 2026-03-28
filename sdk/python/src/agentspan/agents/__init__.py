@@ -34,6 +34,9 @@ from agentspan.agents.agent import (
     scatter_gather,
 )
 
+# Claude Code configuration
+from agentspan.agents.claude_code import ClaudeCode
+
 # Callback handlers
 from agentspan.agents.callback import CallbackHandler
 from agentspan.agents.cli_config import CliConfig
@@ -146,6 +149,7 @@ def resolve_credentials(input_data: dict, names: list) -> dict:
     fetcher = WorkerCredentialFetcher(server_url=config.server_url)
     return fetcher.fetch(token, names)
 
+
 # Agent discovery
 from agentspan.agents.runtime.discovery import discover_agents
 
@@ -189,6 +193,7 @@ __all__ = [
     # Core
     "Agent",
     "AgentDef",
+    "ClaudeCode",
     "PromptTemplate",
     "Strategy",
     "agent",

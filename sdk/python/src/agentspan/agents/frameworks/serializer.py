@@ -38,10 +38,12 @@ def detect_framework(agent_obj: Any) -> Optional[str]:
     ``"langgraph"``, ``"langchain"``, ``"google_adk"``) or ``None`` for native
     Conductor Agents.
     """
-    # Native Agent — no normalization needed
+    # Native Agent — check for claude-code model first
     from agentspan.agents.agent import Agent
 
     if isinstance(agent_obj, Agent):
+        if getattr(agent_obj, "model", "").startswith("claude-code"):
+            return "claude_agent_sdk"
         return None
 
     # Precise type-name check for LangGraph (avoid fragile module prefix matching
@@ -53,6 +55,10 @@ def detect_framework(agent_obj: Any) -> Optional[str]:
     # LangChain AgentExecutor
     if type_name == "AgentExecutor":
         return "langchain"
+
+    # Claude Agent SDK (claude-code-sdk package)
+    if type_name in ("ClaudeCodeOptions", "ClaudeAgentOptions"):
+        return "claude_agent_sdk"
 
     # Existing module-prefix fallback for openai and google_adk
     module = type(agent_obj).__module__ or ""
@@ -102,6 +108,10 @@ def serialize_agent(agent_obj: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
         from agentspan.agents.frameworks.langchain import serialize_langchain
 
         return serialize_langchain(agent_obj)
+    if framework == "claude_agent_sdk":
+        from agentspan.agents.frameworks.claude_agent_sdk import serialize_claude_agent_sdk
+
+        return serialize_claude_agent_sdk(agent_obj)
 
     workers: List[WorkerInfo] = []
     seen: Set[int] = set()  # Prevent infinite recursion on circular refs

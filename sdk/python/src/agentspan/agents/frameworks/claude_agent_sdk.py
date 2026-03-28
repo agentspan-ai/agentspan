@@ -30,12 +30,17 @@ _EVENT_PUSH_POOL = ThreadPoolExecutor(
 )
 
 
-def serialize_claude_agent_sdk(options: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
-    """Serialize Claude Agent SDK options into (raw_config, [WorkerInfo]).
+def serialize_claude_agent_sdk(agent_or_options: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
+    """Serialize Claude Agent SDK options or Agent into (raw_config, [WorkerInfo]).
 
     Always produces a passthrough config — the entire query() runs in one worker.
     """
-    name = _extract_name(options)
+    from agentspan.agents.agent import Agent
+
+    if isinstance(agent_or_options, Agent):
+        name = agent_or_options.name
+    else:
+        name = _extract_name(agent_or_options)
     logger.info("Claude Agent SDK '%s': passthrough", name)
 
     raw_config: Dict[str, Any] = {"name": name, "_worker_name": name}
@@ -78,6 +83,55 @@ def _import_sdk():
 
 
 # ---------------------------------------------------------------------------
+# Agent → ClaudeCodeOptions conversion
+# ---------------------------------------------------------------------------
+
+
+def agent_to_claude_code_options(agent: Any) -> Any:
+    """Convert an Agent(model='claude-code/...') to a ClaudeCodeOptions dataclass.
+
+    This is CRITICAL: make_claude_agent_sdk_worker requires a ClaudeCodeOptions
+    dataclass because _merge_hooks calls dataclasses.replace().
+    """
+    from claude_code_sdk import ClaudeCodeOptions
+
+    from agentspan.agents.claude_code import resolve_claude_code_model
+
+    # Resolve model alias from "claude-code/opus" → "claude-opus-4-6"
+    model_str = getattr(agent, "model", "") or ""
+    _, _, alias = model_str.partition("/")
+    resolved_model = resolve_claude_code_model(alias) if alias else None
+
+    # Get permission_mode from _claude_code_config if present
+    cc_config = getattr(agent, "_claude_code_config", None)
+    permission_mode = None
+    if cc_config is not None:
+        pm = getattr(cc_config, "permission_mode", None)
+        if pm is not None:
+            permission_mode = pm.value if hasattr(pm, "value") else str(pm)
+
+    # Resolve instructions to string
+    instructions = getattr(agent, "instructions", None)
+    if callable(instructions):
+        try:
+            instructions = instructions()
+        except TypeError:
+            # Function expects arguments — use docstring as fallback
+            instructions = getattr(instructions, "__doc__", None) or ""
+
+    # Get tools as strings
+    tools = [str(t) for t in agent.tools] if agent.tools else []
+
+    return ClaudeCodeOptions(
+        allowed_tools=tools,
+        system_prompt=str(instructions) if instructions else None,
+        max_turns=getattr(agent, "max_turns", None),
+        model=resolved_model,
+        permission_mode=permission_mode or "acceptEdits",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Passthrough worker
 # ---------------------------------------------------------------------------
 
@@ -112,9 +166,7 @@ def make_claude_agent_sdk_worker(
         try:
             _injected_cred_keys = _inject_credentials(task, workflow_id)
         except Exception as _cred_err:
-            logger.warning(
-                "Failed to resolve credentials for Claude Agent SDK: %s", _cred_err
-            )
+            logger.warning("Failed to resolve credentials for Claude Agent SDK: %s", _cred_err)
 
         try:
             # Build agentspan instrumentation hooks
@@ -133,9 +185,7 @@ def make_claude_agent_sdk_worker(
                     merged_options.cwd = cwd
 
             # Run the async query
-            result_output, token_usage = asyncio.run(
-                _run_query(prompt, merged_options)
-            )
+            result_output, token_usage = asyncio.run(_run_query(prompt, merged_options))
 
             output_data: Dict[str, Any] = {
                 "result": result_output,
@@ -153,9 +203,7 @@ def make_claude_agent_sdk_worker(
                 output_data=output_data,
             )
         except Exception as exc:
-            logger.error(
-                "Claude Agent SDK worker error (workflow_id=%s): %s", workflow_id, exc
-            )
+            logger.error("Claude Agent SDK worker error (workflow_id=%s): %s", workflow_id, exc)
             return TaskResult(
                 task_id=task.task_id,
                 workflow_instance_id=workflow_id,
@@ -237,9 +285,7 @@ def _build_agentspan_hooks(
     from claude_code_sdk.types import HookMatcher as SdkHookMatcher
 
     # -- PreToolUse hook: track tool calls and push events --
-    async def _pre_tool_use(
-        input_data: dict, tool_use_id: str | None, context: Any
-    ) -> dict:
+    async def _pre_tool_use(input_data: dict, tool_use_id: str | None, context: Any) -> dict:
         try:
             tool_name = input_data.get("tool_name", "")
             metadata["tool_call_count"] += 1
@@ -256,9 +302,7 @@ def _build_agentspan_hooks(
         return {}
 
     # -- PostToolUse hook: push tool result events --
-    async def _post_tool_use(
-        input_data: dict, tool_use_id: str | None, context: Any
-    ) -> dict:
+    async def _post_tool_use(input_data: dict, tool_use_id: str | None, context: Any) -> dict:
         try:
             tool_name = input_data.get("tool_name", "")
             _push_event_nonblocking(
@@ -277,9 +321,7 @@ def _build_agentspan_hooks(
         return {}
 
     # -- SubagentStop hook: track subagent completions --
-    async def _subagent_stop(
-        input_data: dict, tool_use_id: str | None, context: Any
-    ) -> dict:
+    async def _subagent_stop(input_data: dict, tool_use_id: str | None, context: Any) -> dict:
         try:
             metadata["subagent_count"] += 1
             _push_event_nonblocking(
@@ -294,9 +336,7 @@ def _build_agentspan_hooks(
         return {}
 
     # -- Stop hook: signal agent completion --
-    async def _stop(
-        input_data: dict, tool_use_id: str | None, context: Any
-    ) -> dict:
+    async def _stop(input_data: dict, tool_use_id: str | None, context: Any) -> dict:
         try:
             _push_event_nonblocking(
                 workflow_id,

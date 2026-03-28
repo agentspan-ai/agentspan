@@ -41,6 +41,22 @@ class AgentConfigSerializer:
     def _serialize_agent(self, agent: "Agent") -> dict:
         from agentspan.agents.agent import PromptTemplate
 
+        # Claude-code agents emit a passthrough stub — all config is consumed
+        # by the worker closure, not sent to the server.
+        if getattr(agent, "is_claude_code", False):
+            return {
+                "name": agent.name,
+                "model": agent.model,
+                "metadata": {"_framework_passthrough": True},
+                "tools": [
+                    {
+                        "name": agent.name,
+                        "toolType": "worker",
+                        "description": "Claude Agent SDK passthrough worker",
+                    }
+                ],
+            }
+
         config: Dict[str, Any] = {
             "name": agent.name,
             "model": agent.model or None,
@@ -187,9 +203,9 @@ class AgentConfigSerializer:
         # Agent-level credentials
         if hasattr(agent, "credentials") and agent.credentials:
             from agentspan.agents.runtime.credentials.types import CredentialFile
+
             config["credentials"] = [
-                c if isinstance(c, str) else c.env_var
-                for c in agent.credentials
+                c if isinstance(c, str) else c.env_var for c in agent.credentials
             ]
 
         # Remove None values for cleaner JSON
@@ -232,10 +248,7 @@ class AgentConfigSerializer:
         # Credentials — must be in config so the server includes them in
         # the execution token's declared_names (bounds credential resolution).
         if td.credentials:
-            cred_names = [
-                c if isinstance(c, str) else c.env_var
-                for c in td.credentials
-            ]
+            cred_names = [c if isinstance(c, str) else c.env_var for c in td.credentials]
             if "config" not in result:
                 result["config"] = {}
             result["config"]["credentials"] = cred_names

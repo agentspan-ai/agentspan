@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Union
 
+from agentspan.agents.claude_code import ClaudeCode
+
 _VALID_NAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_-]*$")
 
 
@@ -88,7 +90,7 @@ class AgentDef:
     """
 
     name: str
-    model: str = ""
+    model: Union[str, Any] = ""
     instructions: Any = ""
     tools: List[Any] = field(default_factory=list)
     guardrails: List[Any] = field(default_factory=list)
@@ -116,7 +118,7 @@ def agent(
     func: Optional[Callable[..., Any]] = None,
     *,
     name: Optional[str] = None,
-    model: str = "",
+    model: Union[str, Any] = "",
     tools: Optional[List[Any]] = None,
     guardrails: Optional[List[Any]] = None,
     agents: Optional[List[Any]] = None,
@@ -217,7 +219,11 @@ def _resolve_agent(obj: Any, parent_model: str = "") -> "Agent":
         return obj
     if callable(obj) and hasattr(obj, "_agent_def"):
         ad: AgentDef = obj._agent_def
-        resolved_model = ad.model or parent_model
+        # Handle ClaudeCode: don't inherit parent model for claude-code agents
+        if isinstance(ad.model, ClaudeCode):
+            resolved_model = ad.model
+        else:
+            resolved_model = ad.model or parent_model
         return Agent(
             name=ad.name,
             model=resolved_model,
@@ -316,7 +322,7 @@ class Agent:
     def __init__(
         self,
         name: str,
-        model: str = "",
+        model: Union[str, "ClaudeCode", Any] = "",
         instructions: Union[str, Callable[..., str], PromptTemplate] = "",
         tools: Optional[List[Any]] = None,
         agents: Optional[List[Any]] = None,
@@ -374,10 +380,29 @@ class Agent:
             raise ValueError(f"max_turns must be >= 1, got {max_turns}")
 
         self.name = name
-        self.model = model
+
+        # Handle ClaudeCode config object
+        self._claude_code_config: Optional[Any] = None
+        if isinstance(model, ClaudeCode):
+            self._claude_code_config = model
+            self.model = model.to_model_string()
+        else:
+            self.model = model
+
         self.instructions = instructions
         self.tools: List[Any] = list(tools) if tools else []
-        self.agents: List[Agent] = [_resolve_agent(a, model) for a in agents] if agents else []
+
+        # Validate claude-code tools are all strings
+        if self.is_claude_code and self.tools:
+            for t in self.tools:
+                if not isinstance(t, str):
+                    raise ValueError(
+                        "Claude Code agents only support built-in string tools like "
+                        "'Read', 'Edit', 'Bash'. Custom @tool functions are not "
+                        "supported yet (Phase 2)."
+                    )
+
+        self.agents: List[Agent] = [_resolve_agent(a, self.model) for a in agents] if agents else []
         # Validate sub-agent name uniqueness
         if self.agents:
             seen: Dict[str, int] = {}
@@ -505,6 +530,7 @@ class Agent:
         # looks at tool_def.credentials, not agent-level credentials).
         if self.credentials:
             from agentspan.agents.tool import get_tool_def
+
             for t in self.tools:
                 td = getattr(t, "_tool_def", None)
                 if td is not None and not td.credentials and td.tool_type in ("cli", "code"):
@@ -549,6 +575,13 @@ class Agent:
                 allow_shell=cfg.allow_shell,
             )
         )
+
+    # ── Claude Code detection ──────────────────────────────────────────
+
+    @property
+    def is_claude_code(self) -> bool:
+        """True if this agent uses the Claude Agent SDK runtime."""
+        return isinstance(self.model, str) and self.model.startswith("claude-code")
 
     # ── External detection ────────────────────────────────────────────
 
