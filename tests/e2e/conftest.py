@@ -3,19 +3,20 @@
 Requires a running agentspan server. No mocks.
 Validates workflow output via the server REST API.
 """
-import multiprocessing
 import os
 import time
+import warnings
 
 import pytest
 import requests
 
-# Avoid fork() deprecation warning on macOS with multi-threaded processes
-if hasattr(multiprocessing, "set_start_method"):
-    try:
-        multiprocessing.set_start_method("forkserver")
-    except RuntimeError:
-        pass  # already set
+# macOS fork() warning is expected — Conductor workers use fork-based multiprocessing
+warnings.filterwarnings("ignore", message=".*fork.*", category=DeprecationWarning)
+
+
+def pytest_configure(config):
+    """Register custom markers."""
+    config.addinivalue_line("markers", "integration: e2e tests requiring a live server")
 
 SERVER_URL = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:8080/api")
 BASE_URL = SERVER_URL.rstrip("/").replace("/api", "")
