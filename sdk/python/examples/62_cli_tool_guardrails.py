@@ -89,6 +89,8 @@ if __name__ == "__main__":
 
 
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.62_cli_tool_guardrails
         runtime.deploy(ops_agent)
         runtime.serve(ops_agent)
 

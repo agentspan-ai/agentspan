@@ -88,6 +88,8 @@ support_agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.33_external_workers
         runtime.deploy(support_agent)
         runtime.serve(support_agent)
 

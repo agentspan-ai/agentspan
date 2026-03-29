@@ -303,6 +303,8 @@ const prompt = `Investigate Zendesk ticket #${ticketId} and provide a full analy
 async function main() {
   const runtime = new AgentRuntime();
   try {
+    // Deploy to server. CLI alternative (recommended for CI/CD):
+    //   agentspan deploy <module>
     await runtime.deploy(ceSupportAgent);
     await runtime.serve(ceSupportAgent);
 

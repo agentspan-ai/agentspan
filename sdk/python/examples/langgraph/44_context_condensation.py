@@ -347,6 +347,8 @@ if __name__ == "__main__":
     print()
 
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.44_context_condensation
         runtime.deploy(graph)
         runtime.serve(graph)
 

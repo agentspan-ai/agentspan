@@ -70,6 +70,8 @@ def main():
     )
 
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.adk.15_global_instruction
         runtime.deploy(agent)
         runtime.serve(agent)
 

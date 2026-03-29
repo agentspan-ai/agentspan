@@ -141,6 +141,8 @@ graph = create_agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.12_code_agent
         runtime.deploy(graph)
         runtime.serve(graph)
 

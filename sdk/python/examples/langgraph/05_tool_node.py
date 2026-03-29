@@ -87,6 +87,8 @@ graph = builder.compile(name="tool_node_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.05_tool_node
         runtime.deploy(graph)
         runtime.serve(graph)
 

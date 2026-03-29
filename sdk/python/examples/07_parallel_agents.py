@@ -56,6 +56,8 @@ analysis = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.07_parallel_agents
         runtime.deploy(analysis)
         runtime.serve(analysis)
 

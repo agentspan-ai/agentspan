@@ -55,6 +55,8 @@ brainstorm = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.16_random_strategy
         runtime.deploy(brainstorm)
         runtime.serve(brainstorm)
 

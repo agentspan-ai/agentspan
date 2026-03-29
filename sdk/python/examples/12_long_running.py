@@ -32,6 +32,8 @@ if __name__ == "__main__":
     # Start agent asynchronously (returns immediately)
 
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.12_long_running
         runtime.deploy(agent)
         runtime.serve(agent)
 

@@ -76,6 +76,8 @@ graph = create_react_agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.42_react_agent_system_prompt
         runtime.deploy(graph)
         runtime.serve(graph)
 

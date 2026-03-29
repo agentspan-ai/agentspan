@@ -119,6 +119,8 @@ graph = builder.compile(name="planner_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.20_planner_agent
         runtime.deploy(graph)
         runtime.serve(graph)
 

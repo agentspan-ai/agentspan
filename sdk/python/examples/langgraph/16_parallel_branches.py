@@ -91,6 +91,8 @@ graph = builder.compile(name="parallel_analysis")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.16_parallel_branches
         runtime.deploy(graph)
         runtime.serve(graph)
 

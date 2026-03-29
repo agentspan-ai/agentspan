@@ -125,6 +125,8 @@ pipeline = SequentialAgent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.adk.25_camel_security
         runtime.deploy(pipeline)
         runtime.serve(pipeline)
 

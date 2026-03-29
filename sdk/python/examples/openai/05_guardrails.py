@@ -122,6 +122,8 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.openai.05_guardrails
         runtime.deploy(agent)
         runtime.serve(agent)
 

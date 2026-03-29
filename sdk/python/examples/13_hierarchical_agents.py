@@ -112,6 +112,8 @@ if __name__ == "__main__":
 
 
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.13_hierarchical_agents
         runtime.deploy(ceo)
         runtime.serve(ceo)
 

@@ -146,6 +146,8 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.adk.09_multi_tool_agent
         runtime.deploy(agent)
         runtime.serve(agent)
 

@@ -98,6 +98,8 @@ if __name__ == "__main__":
 
 
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.19_composable_termination
         runtime.deploy(agent1)
         runtime.serve(agent1)
 

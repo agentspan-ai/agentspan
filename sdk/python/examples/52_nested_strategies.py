@@ -62,6 +62,8 @@ pipeline = parallel_research >> summarizer
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.52_nested_strategies
         runtime.deploy(pipeline)
         runtime.serve(pipeline)
 

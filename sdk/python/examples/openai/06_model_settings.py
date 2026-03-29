@@ -53,6 +53,8 @@ precise_agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.openai.06_model_settings
         runtime.deploy(creative_agent)
         runtime.serve(creative_agent)
 

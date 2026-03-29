@@ -114,6 +114,8 @@ graph = builder.compile(name="output_validator_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.33_output_validator
         runtime.deploy(graph)
         runtime.serve(graph)
 

@@ -313,6 +313,8 @@ if __name__ == "__main__":
 
 
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.38_tech_trends
         runtime.deploy(pipeline)
         runtime.serve(pipeline)
 

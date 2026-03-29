@@ -133,6 +133,8 @@ github_agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.71_api_tool
         runtime.deploy(pet_agent)
         runtime.serve(pet_agent)
 

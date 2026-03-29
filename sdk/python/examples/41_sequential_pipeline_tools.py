@@ -200,6 +200,8 @@ pipeline = concept_developer >> scriptwriter >> visual_director >> audio_designe
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.41_sequential_pipeline_tools
         runtime.deploy(pipeline)
         runtime.serve(pipeline)
 

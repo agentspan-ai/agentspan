@@ -106,6 +106,8 @@ triage.handoffs = [doc_specialist, code_specialist]
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.openai.10_multi_model
         runtime.deploy(triage)
         runtime.serve(triage)
 

@@ -56,6 +56,8 @@ if __name__ == "__main__":
     # is compiled into prep/LLM_CHAT_COMPLETE/finish tasks.
     # session_id provides per-user isolation on the server side.
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.27_persistent_memory
         runtime.deploy(graph)
         runtime.serve(graph)
 

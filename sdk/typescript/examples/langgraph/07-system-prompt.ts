@@ -54,6 +54,8 @@ const PROMPT = 'I want to understand why 1 + 1 = 2. Can you just tell me?';
 async function main() {
   const runtime = new AgentRuntime();
   try {
+    // Deploy to server. CLI alternative (recommended for CI/CD):
+    //   agentspan deploy <module>
     await runtime.deploy(graph);
     await runtime.serve(graph);
 

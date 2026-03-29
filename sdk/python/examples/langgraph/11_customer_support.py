@@ -127,6 +127,8 @@ graph = builder.compile(name="customer_support")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.11_customer_support
         runtime.deploy(graph)
         runtime.serve(graph)
 

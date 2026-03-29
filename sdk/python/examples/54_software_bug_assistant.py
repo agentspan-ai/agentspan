@@ -256,6 +256,8 @@ software_assistant = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.54_software_bug_assistant
         runtime.deploy(software_assistant)
         runtime.serve(software_assistant)
 

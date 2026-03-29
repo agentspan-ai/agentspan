@@ -49,6 +49,8 @@ if __name__ == "__main__":
 
 
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.28_gpt_assistant_agent
         runtime.deploy(data_analyst)
         runtime.serve(data_analyst)
 

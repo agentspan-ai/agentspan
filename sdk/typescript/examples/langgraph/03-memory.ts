@@ -32,6 +32,8 @@ const graph = createReactAgent({ llm, tools: [], checkpointer });
 async function main() {
   const runtime = new AgentRuntime();
   try {
+    // Deploy to server. CLI alternative (recommended for CI/CD):
+    //   agentspan deploy <module>
     await runtime.deploy(graph);
     await runtime.serve(graph);
 

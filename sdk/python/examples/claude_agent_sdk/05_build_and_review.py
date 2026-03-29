@@ -75,6 +75,8 @@ build_review_swarm = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.claude_agent_sdk.05_build_and_review
         runtime.deploy(build_review_swarm)
         runtime.serve(build_review_swarm)
 

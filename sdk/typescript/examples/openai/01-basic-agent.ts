@@ -30,6 +30,8 @@ const prompt = 'Say hello and tell me a fun fact about the TypeScript programmin
 async function main() {
   const runtime = new AgentRuntime();
   try {
+    // Deploy to server. CLI alternative (recommended for CI/CD):
+    //   agentspan deploy <module>
     await runtime.deploy(agent);
     await runtime.serve(agent);
 

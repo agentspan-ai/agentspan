@@ -100,6 +100,8 @@ graph = builder.compile(name="reflection_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.32_reflection_agent
         runtime.deploy(graph)
         runtime.serve(graph)
 

@@ -49,6 +49,8 @@ const PROMPT = 'Write a review for the movie Inception (2010).';
 async function main() {
   const runtime = new AgentRuntime();
   try {
+    // Deploy to server. CLI alternative (recommended for CI/CD):
+    //   agentspan deploy <module>
     await runtime.deploy(graph);
     await runtime.serve(graph);
 

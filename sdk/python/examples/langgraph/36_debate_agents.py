@@ -113,6 +113,8 @@ graph = builder.compile(name="debate_agents")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.36_debate_agents
         runtime.deploy(graph)
         runtime.serve(graph)
 

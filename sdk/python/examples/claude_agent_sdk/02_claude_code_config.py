@@ -21,6 +21,8 @@ def main():
     )
 
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.claude_agent_sdk.02_claude_code_config
         runtime.deploy(reviewer)
         runtime.serve(reviewer)
 

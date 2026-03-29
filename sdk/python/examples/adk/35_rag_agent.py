@@ -189,6 +189,8 @@ rag_agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.adk.35_rag_agent
         runtime.deploy(rag_agent)
         runtime.serve(rag_agent)
 

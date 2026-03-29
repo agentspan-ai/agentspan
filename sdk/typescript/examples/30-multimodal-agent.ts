@@ -116,6 +116,8 @@ const SAMPLE_IMAGE_2 = 'https://orkes.io/icons/hero-section-workflow_updated.png
 async function main() {
   const runtime = new AgentRuntime();
   try {
+    // Deploy to server. CLI alternative (recommended for CI/CD):
+    //   agentspan deploy <module>
     await runtime.deploy(visionAgent);
     await runtime.serve(visionAgent);
 

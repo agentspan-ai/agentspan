@@ -51,6 +51,8 @@ creative_agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.adk.05_generation_config
         runtime.deploy(factual_agent)
         runtime.serve(factual_agent)
 

@@ -128,6 +128,8 @@ if __name__ == "__main__":
     ]
 
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.30_code_interpreter
         runtime.deploy(graph)
         runtime.serve(graph)
 

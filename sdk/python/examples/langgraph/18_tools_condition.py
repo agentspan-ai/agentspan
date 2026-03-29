@@ -86,6 +86,8 @@ graph = builder.compile(name="weather_timezone_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.18_tools_condition
         runtime.deploy(graph)
         runtime.serve(graph)
 

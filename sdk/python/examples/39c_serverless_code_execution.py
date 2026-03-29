@@ -91,6 +91,8 @@ if __name__ == "__main__":
 
 
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.39c_serverless_code_execution
         runtime.deploy(serverless_coder)
         runtime.serve(serverless_coder)
 

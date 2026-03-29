@@ -55,6 +55,8 @@ def main():
     )
 
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.adk.11_sequential_agent
         runtime.deploy(pipeline)
         runtime.serve(pipeline)
 

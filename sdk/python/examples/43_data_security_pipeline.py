@@ -130,6 +130,8 @@ pipeline = collector >> validator >> responder
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.43_data_security_pipeline
         runtime.deploy(pipeline)
         runtime.serve(pipeline)
 

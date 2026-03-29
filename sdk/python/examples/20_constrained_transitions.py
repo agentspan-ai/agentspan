@@ -67,6 +67,8 @@ code_review = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.20_constrained_transitions
         runtime.deploy(code_review)
         runtime.serve(code_review)
 

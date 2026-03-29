@@ -75,6 +75,8 @@ if __name__ == "__main__":
 
 
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.40_media_generation_agent
         runtime.deploy(media_agent)
         runtime.serve(media_agent)
 

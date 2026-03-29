@@ -82,6 +82,8 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.32_human_guardrail
         runtime.deploy(agent)
         runtime.serve(agent)
 

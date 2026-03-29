@@ -202,6 +202,8 @@ movie_pipeline = SequentialAgent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.adk.28_movie_pipeline
         runtime.deploy(movie_pipeline)
         runtime.serve(movie_pipeline)
 

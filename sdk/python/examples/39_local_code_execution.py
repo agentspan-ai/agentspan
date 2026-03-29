@@ -87,6 +87,8 @@ if __name__ == "__main__":
 
 
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.39_local_code_execution
         runtime.deploy(simple_coder)
         runtime.serve(simple_coder)
 

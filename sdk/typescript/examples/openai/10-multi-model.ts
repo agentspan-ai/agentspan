@@ -114,6 +114,8 @@ const prompt = 'I need a Python code example for authenticating with the API.';
 async function main() {
   const runtime = new AgentRuntime();
   try {
+    // Deploy to server. CLI alternative (recommended for CI/CD):
+    //   agentspan deploy <module>
     await runtime.deploy(triage);
     await runtime.serve(triage);
 

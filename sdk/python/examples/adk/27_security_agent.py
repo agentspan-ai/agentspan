@@ -129,6 +129,8 @@ security_test = SequentialAgent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.adk.27_security_agent
         runtime.deploy(security_test)
         runtime.serve(security_test)
 

@@ -102,6 +102,8 @@ const prompt = `Create a comprehensive profile for each of the ${COUNTRIES.lengt
 async function main() {
   const runtime = new AgentRuntime();
   try {
+    // Deploy to server. CLI alternative (recommended for CI/CD):
+    //   agentspan deploy <module>
     await runtime.deploy(coordinator);
     await runtime.serve(coordinator);
 

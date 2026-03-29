@@ -98,6 +98,8 @@ SAMPLE_IMAGE_2 = "https://orkes.io/icons/hero-section-workflow_updated.png"
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.30_multimodal_agent
         runtime.deploy(vision_agent)
         runtime.serve(vision_agent)
 

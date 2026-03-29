@@ -58,6 +58,8 @@ graph = create_react_agent(llm, tools=[calculate, count_words, reverse_string], 
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.41_react_agent_basic
         runtime.deploy(graph)
         runtime.serve(graph)
 

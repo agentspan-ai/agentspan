@@ -55,6 +55,8 @@ conversation = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.27_user_proxy_agent
         runtime.deploy(conversation)
         runtime.serve(conversation)
 

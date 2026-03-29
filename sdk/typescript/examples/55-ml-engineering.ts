@@ -176,6 +176,8 @@ const mlPipeline = dataAnalyst
 async function main() {
   const runtime = new AgentRuntime();
   try {
+    // Deploy to server. CLI alternative (recommended for CI/CD):
+    //   agentspan deploy <module>
     await runtime.deploy(mlPipeline);
     await runtime.serve(mlPipeline);
 

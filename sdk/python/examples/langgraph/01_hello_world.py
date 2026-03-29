@@ -24,6 +24,8 @@ graph = create_agent(llm, tools=[], name="hello_world_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.01_hello_world
         runtime.deploy(graph)
         runtime.serve(graph)
 

@@ -109,6 +109,8 @@ graph = builder.compile(name="map_reduce_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.24_map_reduce
         runtime.deploy(graph)
         runtime.serve(graph)
 

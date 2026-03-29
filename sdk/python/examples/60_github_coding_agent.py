@@ -384,6 +384,8 @@ if __name__ == "__main__":
 
 
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.60_github_coding_agent
         runtime.deploy(coding_team)
         runtime.serve(coding_team)
 

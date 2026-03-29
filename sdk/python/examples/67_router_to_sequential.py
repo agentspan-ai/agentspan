@@ -90,6 +90,8 @@ team = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.67_router_to_sequential
         runtime.deploy(team)
         runtime.serve(team)
 

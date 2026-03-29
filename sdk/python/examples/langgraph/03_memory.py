@@ -35,6 +35,8 @@ if __name__ == "__main__":
     SESSION_ID = "user-session-001"
 
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.03_memory
         runtime.deploy(graph)
         runtime.serve(graph)
 

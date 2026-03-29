@@ -133,6 +133,8 @@ pipeline = red_team >> target >> evaluator
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.42_security_testing
         runtime.deploy(pipeline)
         runtime.serve(pipeline)
 

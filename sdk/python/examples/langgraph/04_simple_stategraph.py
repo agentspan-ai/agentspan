@@ -71,6 +71,8 @@ graph = builder.compile(name="query_pipeline")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.04_simple_stategraph
         runtime.deploy(graph)
         runtime.serve(graph)
 

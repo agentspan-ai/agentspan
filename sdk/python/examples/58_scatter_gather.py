@@ -126,6 +126,8 @@ if __name__ == "__main__":
 
 
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.58_scatter_gather
         runtime.deploy(coordinator)
         runtime.serve(coordinator)
 

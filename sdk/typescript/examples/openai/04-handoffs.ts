@@ -111,6 +111,8 @@ const prompt = "I'd like a refund for order ORD-002, the product arrived damaged
 async function main() {
   const runtime = new AgentRuntime();
   try {
+    // Deploy to server. CLI alternative (recommended for CI/CD):
+    //   agentspan deploy <module>
     await runtime.deploy(triageAgent);
     await runtime.serve(triageAgent);
 

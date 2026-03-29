@@ -141,6 +141,8 @@ if __name__ == "__main__":
 
 
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.16c_credentials_cli_tools
         runtime.deploy(github_aws_agent)
         runtime.serve(github_aws_agent)
 

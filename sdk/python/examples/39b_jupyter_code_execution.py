@@ -39,6 +39,8 @@ jupyter_coder = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.39b_jupyter_code_execution
         runtime.deploy(jupyter_coder)
         runtime.serve(jupyter_coder)
 

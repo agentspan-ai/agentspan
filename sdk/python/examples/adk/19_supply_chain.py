@@ -124,6 +124,8 @@ def main():
     )
 
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.adk.19_supply_chain
         runtime.deploy(coordinator)
         runtime.serve(coordinator)
 

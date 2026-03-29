@@ -66,6 +66,8 @@ pipeline = SequentialAgent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.adk.32_nested_strategies
         runtime.deploy(pipeline)
         runtime.serve(pipeline)
 

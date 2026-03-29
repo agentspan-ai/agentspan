@@ -80,6 +80,8 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.51_shared_state
         runtime.deploy(agent)
         runtime.serve(agent)
 
