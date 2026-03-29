@@ -1,5 +1,8 @@
 import fastDeepEqual from "fast-deep-equal";
-import { DefinitionMachineContext } from "pages/definition/state/types";
+import {
+  DefinitionMachineContext,
+  ImportSummary,
+} from "pages/definition/state/types";
 import {
   addLocalCopyTime,
   extractKeyFromContext,
@@ -7,35 +10,16 @@ import {
 import { fetchContextNonHook, fetchWithContext } from "plugins/fetch";
 import { queryClient } from "queryClient";
 import { WorkflowDef } from "types/WorkflowDef";
-import {
-  fetchCloudTemplatesPreferCached,
-  fetchWorkflowWithDependencies,
-  ImportSummary,
-} from "utils/cloudTemplates";
 import { logger } from "utils/logger";
 import { getErrors } from "utils/utils";
 import { getEnvVariables } from "../commonService";
 
-export { fetchCloudTemplatesPreferCached };
-
 const fetchContext = fetchContextNonHook();
 
 export const fetchForImportedTemplateImportSummary = async (
-  context: DefinitionMachineContext,
+  _context: DefinitionMachineContext,
 ): Promise<ImportSummary | null> => {
-  const { successfullyImportedWorkflowId: showImportSuccessfulDialog } =
-    context;
-  if (!showImportSuccessfulDialog) {
-    return null;
-  }
-  const templates = await fetchCloudTemplatesPreferCached();
-  const importedTemplate = templates.cloudTemplates.find(
-    (t) => t.id === showImportSuccessfulDialog,
-  );
-  if (importedTemplate != null) {
-    const importSummary = await fetchWorkflowWithDependencies(importedTemplate);
-    return importSummary;
-  }
+  // Cloud templates have been removed; this always returns null now.
   return null;
 };
 

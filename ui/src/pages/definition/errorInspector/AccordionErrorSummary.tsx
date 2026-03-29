@@ -70,7 +70,7 @@ export const AccordionErrorSummary: FunctionComponent<
             size="small"
             sx={{
               backgroundColor:
-                title === "Workflow errors" ? "#f44336" : "#ff9800",
+                title === "Agent errors" ? "#f44336" : "#ff9800",
               color: "white",
               fontSize: "0.7rem",
               height: 20,

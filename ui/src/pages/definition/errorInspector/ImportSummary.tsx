@@ -19,7 +19,7 @@ const ImportSummaryComponent = ({
         {importSummary?.workflowResponse.length > 0 && (
           <ListItem>
             <Typography variant="body1" sx={{ fontSize: "1.1rem" }}>
-              ⚡ Workflows: {importSummary.workflowResponse.length}
+              Agents: {importSummary.workflowResponse.length}
             </Typography>
           </ListItem>
         )}

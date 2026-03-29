@@ -9,8 +9,6 @@ import { SnackbarMessage } from "components/SnackbarMessage";
 import { ColumnCustomType, LegacyColumn } from "components/DataTable/types";
 import NoDataComponent from "components/NoDataComponent";
 import { colors } from "theme/tokens/variables";
-import { usePushHistory } from "utils/hooks/usePushHistory";
-import { WORKFLOW_EXPLORER_URL } from "utils/constants/route";
 
 const LinearIndeterminate = () => {
   return (
@@ -28,18 +26,18 @@ const executionFields: LegacyColumn[] = [
     label: "Start Time",
     minWidth: "120px",
     sortable: true,
-    tooltip: "The time the workflow was started.",
+    tooltip: "The time the execution was started.",
   },
   {
     id: "workflowId",
     name: "workflowId",
-    label: "Workflow Id",
+    label: "Execution Id",
     grow: 2,
     renderer: (workflowId) => (
       <NavLink path={`/execution/${workflowId}`}>{workflowId}</NavLink>
     ),
     sortable: true,
-    tooltip: "The unique identifier for the workflow execution.",
+    tooltip: "The unique identifier for the execution.",
   },
   {
     id: "workflowType",
@@ -47,7 +45,7 @@ const executionFields: LegacyColumn[] = [
     label: "Agent Name",
     grow: 2,
     sortable: true,
-    tooltip: "The name of the workflow.",
+    tooltip: "The name of the agent.",
   },
   {
     id: "version",
@@ -55,7 +53,7 @@ const executionFields: LegacyColumn[] = [
     label: "Version",
     grow: 0.5,
     sortable: false,
-    tooltip: "The version of the workflow.",
+    tooltip: "The version of the agent.",
   },
   {
     id: "correlationId",
@@ -63,7 +61,7 @@ const executionFields: LegacyColumn[] = [
     label: "Correlation Id",
     grow: 2,
     sortable: false,
-    tooltip: "The correlation id for the workflow.",
+    tooltip: "The correlation id for the execution.",
   },
   {
     id: "idempotencyKey",
@@ -71,7 +69,7 @@ const executionFields: LegacyColumn[] = [
     label: "Idempotency Key",
     grow: 2,
     sortable: false,
-    tooltip: "The idempotency key for the workflow.",
+    tooltip: "The idempotency key for the execution.",
   },
   {
     id: "updateTime",
@@ -79,7 +77,7 @@ const executionFields: LegacyColumn[] = [
     label: "Updated Time",
     type: ColumnCustomType.DATE,
     sortable: true,
-    tooltip: "The time the workflow was last updated.",
+    tooltip: "The time the execution was last updated.",
   },
   {
     id: "endTime",
@@ -88,7 +86,7 @@ const executionFields: LegacyColumn[] = [
     type: ColumnCustomType.DATE,
     minWidth: "120px",
     sortable: true,
-    tooltip: "The time the workflow was completed.",
+    tooltip: "The time the execution was completed.",
   },
   {
     id: "status",
@@ -97,7 +95,7 @@ const executionFields: LegacyColumn[] = [
     sortable: true,
     minWidth: "150px",
     renderer: (status) => <StatusBadge status={status} />,
-    tooltip: "The status of the workflow.",
+    tooltip: "The status of the execution.",
   },
   {
     id: "input",
@@ -106,7 +104,7 @@ const executionFields: LegacyColumn[] = [
     grow: 2,
     wrap: true,
     sortable: false,
-    tooltip: "The input for the workflow.",
+    tooltip: "The input for the execution.",
   },
   {
     id: "output",
@@ -114,14 +112,14 @@ const executionFields: LegacyColumn[] = [
     label: "Output",
     grow: 2,
     sortable: false,
-    tooltip: "The output for the workflow.",
+    tooltip: "The output for the execution.",
   },
   {
     id: "reasonForIncompletion",
     name: "reasonForIncompletion",
     label: "Reason For Incompletion",
     sortable: false,
-    tooltip: "The reason the workflow was not completed.",
+    tooltip: "The reason the execution was not completed.",
   },
   {
     id: "executionTime",
@@ -135,14 +133,14 @@ const executionFields: LegacyColumn[] = [
       }
     },
     sortable: false,
-    tooltip: "The time it took to execute the workflow.",
+    tooltip: "The time it took to execute the agent.",
   },
   {
     id: "event",
     name: "event",
     label: "Event",
     sortable: false,
-    tooltip: "The event that triggered this workflow.",
+    tooltip: "The event that triggered this execution.",
   },
   {
     id: "failedReferenceTaskNames",
@@ -171,7 +169,7 @@ const executionFields: LegacyColumn[] = [
     name: "priority",
     label: "Priority",
     sortable: false,
-    tooltip: "The priority of the workflow.",
+    tooltip: "The priority of the execution.",
   },
 
   {
@@ -179,7 +177,7 @@ const executionFields: LegacyColumn[] = [
     name: "createdBy",
     label: "Created By",
     sortable: false,
-    tooltip: "The user who created the workflow.",
+    tooltip: "The user who created the execution.",
   },
 ];
 
@@ -219,7 +217,6 @@ export default function ResultsTable({
 }: ResultsTableProps) {
   const [selectedRows, setSelectedRows] = useState<string[]>([]);
   const [toggleCleared, setToggleCleared] = useState(false);
-  const pushHistory = usePushHistory();
 
   const getErrorMessage = (error: any) => {
     return error?.message || error?.statusText;
@@ -230,9 +227,6 @@ export default function ResultsTable({
     setToggleCleared((t) => !t);
   }, [resultObj]);
 
-  const handleClickBrowseTemplates = () => {
-    pushHistory(WORKFLOW_EXPLORER_URL);
-  };
   const handleClickClearSearch = () => {
     handleReset();
   };
@@ -332,10 +326,7 @@ export default function ResultsTable({
               id="no-data-component-without-filters"
               title="Empty"
               titleBg={colors.warningTag}
-              description="Here you’ll see any executed workflows, regardless
-              of its status. Let’s define a new workflow!"
-              buttonText="BROWSE TEMPLATES"
-              buttonHandler={handleClickBrowseTemplates}
+              description="No executions found."
             />
           )
         }

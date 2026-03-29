@@ -2,9 +2,9 @@
  * Core (OSS) sidebar menu items for Conductor UI.
  *
  * These items are merged with plugin-registered items in UiSidebar.
- * - Executions submenu (Workflow, Queue Monitor)
- * - Run Workflow button
- * - Definitions submenu (Workflow, Task, Event Handler)
+ * - Executions submenu (Agent, Queue Monitor)
+ * - Run Agent button
+ * - Definitions submenu (Agent, Task, Event Handler)
  * - Help menu
  * - API Docs
  */
@@ -15,18 +15,15 @@ import PlaylistPlayIcon from "@mui/icons-material/PlaylistPlay";
 import SettingsIcon from "@mui/icons-material/Settings";
 import SupportIcon from "@mui/icons-material/Support";
 import WebhookOutlinedIcon from "@mui/icons-material/WebhookOutlined";
-import RunWorkflowButton from "components/Sidebar/RunWorkflowButton";
+import RunAgentButton from "components/Sidebar/RunAgentButton";
 import { MenuItemType } from "components/Sidebar/types";
 import { FEATURES, featureFlags } from "utils";
 import {
   CREDENTIALS_URL,
-  EVENT_HANDLERS_URL,
-  NEW_TASK_DEF_URL,
-  RUN_WORKFLOW_URL,
-  TASK_DEF_URL,
+  RUN_AGENT_URL,
   TASK_QUEUE_URL,
-  WORKFLOW_DEFINITION_URL,
-  WORKFLOW_EXECUTION_URL,
+  AGENT_DEFINITION_URL,
+  AGENT_EXECUTION_URL,
 } from "utils/constants/route";
 
 const isPlayground = featureFlags.isEnabled(FEATURES.PLAYGROUND);
@@ -55,8 +52,6 @@ const CORE_SIDEBAR_POSITIONS = {
   // Definitions submenu children
   DEFINITIONS: {
     workflowDefItem: 100,
-    taskDefItem: 200,
-    eventHandlerDefItem: 300,
   },
   // Help submenu children
   HELP: {
@@ -94,7 +89,7 @@ export function getCoreSidebarItems(open: boolean): MenuItemType[] {
           title: "Agents",
           icon: null,
           linkTo: "/executions",
-          activeRoutes: [WORKFLOW_EXECUTION_URL.WF_ID_TASK_ID],
+          activeRoutes: [AGENT_EXECUTION_URL.WF_ID_TASK_ID],
           shortcuts: [],
           hotkeys: "",
           hidden: false,
@@ -117,11 +112,11 @@ export function getCoreSidebarItems(open: boolean): MenuItemType[] {
       id: "runWorkflow",
       title: "Run Agent",
       icon: <PlayIcon />,
-      linkTo: RUN_WORKFLOW_URL,
+      linkTo: RUN_AGENT_URL,
       shortcuts: [],
       hidden: true,
       position: R.runWorkflow,
-      component: <RunWorkflowButton open={open} />,
+      component: <RunAgentButton open={open} />,
     },
     // Definitions submenu - core items only
     {
@@ -138,26 +133,14 @@ export function getCoreSidebarItems(open: boolean): MenuItemType[] {
           id: "workflowDefItem",
           title: "Agent",
           icon: null,
-          linkTo: WORKFLOW_DEFINITION_URL.BASE,
+          linkTo: AGENT_DEFINITION_URL.BASE,
           activeRoutes: [
-            WORKFLOW_DEFINITION_URL.NEW,
-            WORKFLOW_DEFINITION_URL.NAME_VERSION,
+            AGENT_DEFINITION_URL.NAME_VERSION,
           ],
           shortcuts: [],
           hotkeys: "",
           hidden: false,
           position: D.workflowDefItem,
-        },
-        {
-          id: "taskDefItem",
-          title: "Tools",
-          icon: null,
-          linkTo: TASK_DEF_URL.BASE,
-          activeRoutes: [NEW_TASK_DEF_URL, TASK_DEF_URL.NAME],
-          shortcuts: [],
-          hotkeys: "",
-          hidden: false,
-          position: D.taskDefItem,
         },
       ],
     },

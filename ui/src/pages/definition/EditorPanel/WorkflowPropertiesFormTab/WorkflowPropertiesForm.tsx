@@ -51,7 +51,7 @@ export interface WorkflowPropertiesFormProps {
 const minWidthTimeout = "170px";
 const timeoutPolicies = [
   {
-    label: "Timeout Workflow",
+    label: "Timeout Agent",
     value: "TIME_OUT_WF",
   },
   {
@@ -298,7 +298,7 @@ export const WorkflowPropertiesForm: FunctionComponent<
                               someKey={someKey}
                               label="Key"
                               addButtonLabel="Add parameter"
-                              emptyListMessage="These values serve as an indicator of what inputs this workflow expects."
+                              emptyListMessage="These values serve as an indicator of what inputs this agent expects."
                               compact
                             />
                           )}
@@ -322,7 +322,7 @@ export const WorkflowPropertiesForm: FunctionComponent<
                               addItemLabel="Add parameter"
                               onChange={onChange}
                               someKey={someKey}
-                              emptyListMessage="These values serve as an indicator of what outputs this workflow will produce."
+                              emptyListMessage="These values serve as an indicator of what outputs this agent will produce."
                               compact
                             />
                           )}
@@ -374,7 +374,7 @@ export const WorkflowPropertiesForm: FunctionComponent<
                                   }
                                 />
                               }
-                              label="Enable workflow status listener"
+                              label="Enable agent status listener"
                             />
                           )}
                         </ActorToHandlerValue>
@@ -389,7 +389,7 @@ export const WorkflowPropertiesForm: FunctionComponent<
                                 onChange={onChange}
                                 value={workflowListenerSink}
                                 otherOptions={workflowListenerSinkSuggestions}
-                                label="Workflow listener sink"
+                                label="Agent listener sink"
                               />
                             )}
                           </ActorToHandlerValue>
@@ -470,13 +470,13 @@ export const WorkflowPropertiesForm: FunctionComponent<
                                   }
                                 />
                               }
-                              label="Allow workflow restarts"
+                              label="Allow agent restarts"
                             />
                           )}
                         </ActorToHandlerValue>
                         <Box pt={2} style={{ opacity: 0.5 }} mb={3}>
-                          When enabled, completed workflows can be restarted.
-                          Disable this option if restarting a workflow could
+                          When enabled, completed agents can be restarted.
+                          Disable this option if restarting an agent could
                           cause side effects.
                         </Box>
                       </Box>
@@ -494,14 +494,14 @@ export const WorkflowPropertiesForm: FunctionComponent<
                               onChange={onChange}
                               value={failureWorkflow}
                               otherOptions={wfNameOptions}
-                              label="Failure/Compensation workflow name"
+                              label="Failure/Compensation agent name"
                               onFocus={fetch}
                             />
                           )}
                         </ActorToHandlerValue>
                         <Box pt={2} style={{ opacity: 0.5 }}>
-                          If present, this workflow will be triggered upon a
-                          failure of the execution of this workflow.
+                          If present, this agent will be triggered upon a
+                          failure of the execution of this agent.
                         </Box>
                       </Box>
                     </Grid>

@@ -210,7 +210,7 @@ export default function SchedulerExecutions() {
   return (
     <>
       <Helmet>
-        <title>Scheduled Workflow Executions</title>
+        <title>Scheduled Agent Executions</title>
       </Helmet>
       {showCodeDialog && (
         <SchedulerApiSearchModal
@@ -226,7 +226,7 @@ export default function SchedulerExecutions() {
       )}
       <SectionHeader
         _deprecate_marginTop={0}
-        title="Scheduled Workflow Executions"
+        title="Scheduled Agent Executions"
       />
       <SectionContainer>
         <Paper variant="outlined" sx={{ marginBottom: 6 }}>
@@ -260,7 +260,7 @@ export default function SchedulerExecutions() {
             >
               <ConductorAutoComplete
                 fullWidth
-                label="Workflow name"
+                label="Agent name"
                 options={workflowNames}
                 multiple
                 freeSolo

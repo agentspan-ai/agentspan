@@ -12,7 +12,7 @@ export const roleLabel: { [key: string]: string } = {
   [Role.ADMIN]: "Admin",
   [Role.USER]: "User",
   [Role.METADATA_MANAGER]: "Metadata manager",
-  [Role.WORKFLOW_MANAGER]: "Workflow manager",
+  [Role.WORKFLOW_MANAGER]: "Agent manager",
   [Role.USER_READ_ONLY]: "Read only user",
 };
 

@@ -255,7 +255,7 @@ export default function ReactJson({
               )}
             </>
           )}
-          <Tooltip title="Download workflow JSON">
+          <Tooltip title="Download JSON">
             <Button
               variant="text"
               color="inherit"

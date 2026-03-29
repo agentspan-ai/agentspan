@@ -3,7 +3,7 @@ import { ConductorAutoComplete } from "components/v1";
 import { ConductorCodeBlockInput } from "components/v1/ConductorCodeBlockInput";
 import ConductorInput from "components/v1/ConductorInput";
 import { SMALL_EDITOR_DEFAULT_OPTIONS } from "utils/constants";
-import { IdempotencyValuesProp } from "../../definition/RunWorkflow/state";
+import { IdempotencyValuesProp } from "../../definition/RunAgent/state";
 import IdempotencyForm from "../../runWorkflow/IdempotencyForm";
 
 interface WorkflowConfigSectionProps {
@@ -46,7 +46,7 @@ export function WorkflowConfigSection({
         <ConductorAutoComplete
           fullWidth
           required
-          label="Workflow name"
+          label="Agent name"
           options={workflowNames}
           onChange={(__, val: any) => setWorkflowType(val)}
           value={workflowType}
@@ -58,13 +58,13 @@ export function WorkflowConfigSection({
         <ConductorAutoComplete
           fullWidth
           disableClearable
-          label="Workflow version"
+          label="Agent version"
           options={[...workflowVersions, "Latest version"]}
           onChange={(_, val: any) => setWorkflowVersion(val)}
           value={workflowVersion === "" ? "Latest version" : workflowVersion}
           conductorInputProps={{
             tooltip: {
-              title: "Workflow version",
+              title: "Agent version",
               content: "Optional, by default the latest version is triggered",
             },
           }}

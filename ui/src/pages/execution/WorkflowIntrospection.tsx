@@ -795,7 +795,7 @@ export const WorkflowIntrospection: FunctionComponent<
             padding: "10px",
           }}
         >
-          <p style={{ margin: 0, fontWeight: "bold" }}>Workflow Duration:</p>
+          <p style={{ margin: 0, fontWeight: "bold" }}>Execution Duration:</p>
           <p style={{ margin: 0 }}>
             {formatDetailedTime(detailedFullDuration)}
           </p>

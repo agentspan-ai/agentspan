@@ -86,7 +86,7 @@ export const WorkflowMetaBar: FunctionComponent<WorkflowMetaBarProps> = ({
   );
 
   const breadcrumbItems = [
-    { label: "Agent Definitions", to: "/workflowDef" },
+    { label: "Agent Definitions", to: "/agentDef" },
     { label: name, to: "" },
   ];
 

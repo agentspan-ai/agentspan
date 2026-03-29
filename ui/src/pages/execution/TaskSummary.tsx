@@ -136,7 +136,7 @@ export default function TaskSummary({ taskResult }: TaskSummaryProps) {
       label: "Subworkflow definition",
       value: (
         <NavLink
-          path={`/workflowDef/${encodeURIComponent(
+          path={`/agentDef/${encodeURIComponent(
             taskResult.inputData?.subWorkflowName ?? "",
           )}`}
         >
@@ -188,7 +188,7 @@ export default function TaskSummary({ taskResult }: TaskSummaryProps) {
       data.push({
         label: "Subworkflow definition",
         value: (
-          <NavLink path={`/workflowDef/${subWorkflowName}`}>
+          <NavLink path={`/agentDef/${subWorkflowName}`}>
             {subWorkflowName}
           </NavLink>
         ),

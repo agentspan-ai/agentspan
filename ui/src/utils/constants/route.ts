@@ -17,16 +17,9 @@ export const METADATA_MIGRATION_REQUEST_URL = {
   BASE: "/migrationRequest",
 };
 
-export const NEW_TASK_DEF_URL = "/newTaskDef";
-export const TASK_DEF_URL = {
-  BASE: "/taskDef",
-  NAME: "/taskDef/:name",
-};
-
-export const WORKFLOW_DEFINITION_URL = {
-  BASE: "/workflowDef",
-  NAME_VERSION: "/workflowDef/:name/:version?",
-  NEW: "/newWorkflowDef",
+export const AGENT_DEFINITION_URL = {
+  BASE: "/agentDef",
+  NAME_VERSION: "/agentDef/:name/:version?",
 };
 
 export const SCHEDULER_DEFINITION_URL = {
@@ -79,12 +72,6 @@ export const ROLE_MANAGEMENT_URL = {
   EDIT: "/roleManagement/roles/:id",
 };
 
-export const EVENT_HANDLERS_URL = {
-  BASE: "/eventHandlerDef",
-  NAME: "/eventHandlerDef/:name",
-  NEW: "/newEventHandlerDef",
-};
-
 export const TASK_QUEUE_URL = {
   BASE: "/taskQueue",
   NAME: "/taskQueue/:name?",
@@ -94,7 +81,7 @@ export const SECRETS_URL = {
   BASE: "/secrets",
 };
 
-export const RUN_WORKFLOW_URL = "/runWorkflow";
+export const RUN_AGENT_URL = "/runAgent";
 
 export const HUMAN_TASK_URL = {
   BASE: "/human",
@@ -133,11 +120,11 @@ export const AUTHENTICATION_URL = "/authentication";
 
 export const ERROR_URL = "/error";
 
-export const WORKFLOW_EXPLORER_URL = "/workflowExplorer";
+export const AGENT_EXPLORER_URL = "/agentExplorer";
 
 export const OIDC_CALLBACK_ROUTE = "/login/oidc/callback";
 
-export const WORKFLOW_EXECUTION_URL = {
+export const AGENT_EXECUTION_URL = {
   BASE: "/execution",
   WF_ID_TASK_ID: "/execution/:id/:taskId?",
 };
@@ -150,17 +137,8 @@ export const ENV_VARIABLES_URL = {
   BASE: "/environment",
 };
 
-export const EVENT_MONITOR_URL = {
-  BASE: "/eventMonitor",
-  NAME: "/eventMonitor/:name",
-};
-
 export const WORKERS_URL = {
   BASE: "/workers",
-};
-
-export const TAGS_DASHBOARD_URL = {
-  BASE: "/tags-dashboard",
 };
 
 export const API_REFERENCE_URL = {

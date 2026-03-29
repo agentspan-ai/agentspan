@@ -97,18 +97,18 @@ export const WORKFLOW_SCHEMA = {
       $id: "#/properties/name",
       default: "",
       description:
-        "Workflow Name - should be without spaces or special characters. Underscores are allowed.",
+        "Agent Name - should be without spaces or special characters. Underscores are allowed.",
       examples: ["first_sample_workflow"],
       maxLength: 100,
       pattern: "(^\\w+$)|(^\\w[\\w|-]+\\w$)",
-      title: "Workflow Name",
+      title: "Agent Name",
       type: "string",
     },
     description: {
       $id: "#/properties/description",
       type: "string",
-      title: "Workflow Description",
-      description: "An brief description of your workflow for reference.",
+      title: "Agent Description",
+      description: "A brief description of your agent for reference.",
       default: "",
       examples: ["First Sample Workflow"],
     },
@@ -124,8 +124,8 @@ export const WORKFLOW_SCHEMA = {
     tasks: {
       $id: "#/properties/tasks",
       type: "array",
-      title: "Workflow Tasks",
-      description: "This list holds the tasks for your workflow.",
+      title: "Agent Tasks",
+      description: "This list holds the tasks for your agent.",
       default: [],
       examples: [
         [
@@ -152,7 +152,7 @@ export const WORKFLOW_SCHEMA = {
             $id: "#/properties/tasks/items/anyOf/0",
             type: "object",
             title: "The first anyOf schema",
-            description: "Workflow task details",
+            description: "Agent task details",
             default: {
               name: "",
               taskReferenceName: "",
@@ -189,7 +189,7 @@ export const WORKFLOW_SCHEMA = {
                 type: "string",
                 title: "Task Reference Name",
                 description:
-                  "A unique task reference name for this task in the entire workflow",
+                  "A unique task reference name for this task in the entire agent",
                 default: "",
                 examples: ["get_population_data"],
               },
@@ -228,7 +228,7 @@ export const WORKFLOW_SCHEMA = {
     inputParameters: {
       $id: "#/properties/inputParameters",
       type: "array",
-      title: "Workflow Input Parameters",
+      title: "Agent Input Parameters",
       description: "An explanation about the purpose of this instance.",
       default: [],
       examples: [[]],
@@ -264,8 +264,8 @@ export const WORKFLOW_SCHEMA = {
     restartable: {
       $id: "#/properties/restartable",
       type: "boolean",
-      title: "Workflow restartable",
-      description: "Specify if the workflow is restartable.",
+      title: "Agent restartable",
+      description: "Specify if the agent is restartable.",
       default: true,
       examples: [true, false],
     },
@@ -304,8 +304,8 @@ export const WORKFLOW_SCHEMA = {
     failureWorkflow: {
       $id: "#/properties/failureWorkflow",
       type: "string",
-      title: "Failue Workflow Name",
-      description: "Specify the Failure Workflow Name.",
+      title: "Failure Agent Name",
+      description: "Specify the Failure Agent Name.",
       default: "",
       examples: ["shipping_failure"],
     },

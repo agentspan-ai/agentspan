@@ -34,10 +34,8 @@ export const useSearchMachine = (): [HookState, HookActions] => {
   );
 
   // Core OSS data from machine context
-  const taskDefinitions = state.context.taskDefinitions;
   const workflowDefinitions = state.context.workflowDefinitions;
   const scheduler = state.context.schedulers;
-  const events = state.context.events;
 
   // Fetch data from plugin-registered search providers
   const [pluginData, setPluginData] = useState<Record<string, any[]>>({});
@@ -77,10 +75,8 @@ export const useSearchMachine = (): [HookState, HookActions] => {
   const searchResults = useMemo(() => {
     // Core OSS search results
     const coreResults = searchResultExtractor({
-      taskDefinitions,
       workflowDefinitions,
       scheduler,
-      events,
       searchTerm,
       maxSearchResults,
     });
@@ -109,10 +105,8 @@ export const useSearchMachine = (): [HookState, HookActions] => {
         (subB?.length ?? 0) - (subA?.length ?? 0),
     ) as typeof coreResults;
   }, [
-    taskDefinitions,
     workflowDefinitions,
     scheduler,
-    events,
     searchTerm,
     maxSearchResults,
     pluginData,

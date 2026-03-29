@@ -18,7 +18,18 @@ import {
   SavedCancelledEvent,
   SavedSuccessfulEvent,
 } from "../confirmSave/state";
-import { ImportSummary } from "utils/cloudTemplates";
+/**
+ * Summary of an imported cloud template's dependencies.
+ * Previously defined in utils/cloudTemplates.ts.
+ */
+export type ImportSummary = {
+  workflowResponse: any[];
+  taskResponse: any[];
+  userFormsResponse: any[];
+  schemasResponse: any[];
+  integrationsAndModelsResponse: any[];
+  promptsResponse: any[];
+};
 
 type ImportantMessage = {
   text?: string;

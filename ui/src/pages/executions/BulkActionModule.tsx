@@ -205,7 +205,7 @@ export default function BulkActionModule({
                       {
                         id: "workflowId",
                         name: "workflowId",
-                        label: "Workflow Id",
+                        label: "Execution Id",
                       },
                     ]}
                     data={results.bulkSuccessfulResults}
@@ -221,7 +221,7 @@ export default function BulkActionModule({
                       {
                         id: "workflowId",
                         name: "workflowId",
-                        label: "Workflow Id",
+                        label: "Execution Id",
                       },
                       {
                         id: "message",

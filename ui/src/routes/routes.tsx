@@ -5,14 +5,10 @@
  * while enterprise routes are registered via the plugin system.
  *
  * Core routes (OSS):
- * - Workflow definitions and executions
- * - Task definitions
- * - Event handlers
+ * - Agent definitions and executions
  * - Scheduler definitions and executions
  * - Queue monitor
- * - Event monitor
  * - API reference
- * - Tags dashboard
  * - Credentials management
  *
  * Enterprise routes (registered via plugins):
@@ -34,53 +30,36 @@ import { App } from "components/App";
 import DefaultAuthGuard from "components/auth/AuthGuard";
 import ApiReferencePage from "pages/apiDocs/ApiReferencePage";
 import { CredentialsPage } from "pages/credentials";
-import { CreatorFlags } from "pages/creatorFlags/CreatorFlags";
-import { TaskDefinition } from "pages/definition/task";
 import WorkflowDefinition from "pages/definition/WorkflowDefinition";
 import {
-  EventHandler as EventHandlerDefinitions,
   Schedules as ScheduleDefinitions,
-  Task as TaskDefinitions,
-  Workflow as WorkflowDefinitions,
+  Agent as AgentDefinitions,
 } from "pages/definitions";
 import ErrorPage from "pages/error/ErrorPage";
-import { EventMonitor } from "pages/eventMonitor/EventMonitor";
-import { EventMonitorDetail } from "pages/eventMonitor/EventMonitorDetail/EventMonitorDetail";
-import { SchedulerExecutions, WorkflowSearch } from "pages/executions";
+import { SchedulerExecutions, AgentSearch } from "pages/executions";
 import { pluginRegistry } from "plugins/registry";
 import { featureFlags, FEATURES } from "utils";
 import {
   API_REFERENCE_URL,
   CREDENTIALS_URL,
-  EVENT_HANDLERS_URL,
-  EVENT_MONITOR_URL,
-  NEW_TASK_DEF_URL,
-  RUN_WORKFLOW_URL,
+  RUN_AGENT_URL,
   SCHEDULER_DEFINITION_URL,
-  TAGS_DASHBOARD_URL,
-  TASK_DEF_URL,
   TASK_QUEUE_URL,
-  WORKFLOW_DEFINITION_URL,
+  AGENT_DEFINITION_URL,
 } from "utils/constants/route";
-import EventHandlerDefinition from "../pages/definition/EventHandler/EventHandler";
 import Execution from "../pages/execution/Execution";
-import Examples from "../pages/kitchensink/Examples";
-import Gantt from "../pages/kitchensink/Gantt";
-import KitchenSink from "../pages/kitchensink/KitchenSink";
-import ThemeSampler from "../pages/kitchensink/ThemeSampler";
 import TaskQueue from "../pages/queueMonitor/TaskQueue";
 import { Schedule } from "../pages/scheduler";
-import TagsDashboard from "pages/tags/TagsDashboard";
 
 /**
  * Core authenticated routes (OSS)
  * These are the fundamental Conductor UI features available in open source.
  */
 const getCoreAuthenticatedRoutes = () => [
-  // Workflow Executions
+  // Agent Executions
   {
     path: "/executions",
-    element: <WorkflowSearch />,
+    element: <AgentSearch />,
   },
   {
     path: "/schedulerExecs",
@@ -91,56 +70,20 @@ const getCoreAuthenticatedRoutes = () => [
     element: <Execution />,
   },
 
-  // Workflow Definitions
+  // Agent Definitions
   {
-    path: WORKFLOW_DEFINITION_URL.BASE,
-    element: <WorkflowDefinitions />,
+    path: AGENT_DEFINITION_URL.BASE,
+    element: <AgentDefinitions />,
   },
   {
-    path: WORKFLOW_DEFINITION_URL.NAME_VERSION,
+    path: AGENT_DEFINITION_URL.NAME_VERSION,
     element: <WorkflowDefinition />,
-  },
-  {
-    path: WORKFLOW_DEFINITION_URL.NEW,
-    element: <WorkflowDefinition />,
-  },
-  {
-    path: "/workFlowTemplate/:templateId",
-    element: <WorkflowDefinition />,
-  },
-
-  // Task Definitions
-  {
-    path: NEW_TASK_DEF_URL,
-    element: <TaskDefinition />,
-  },
-  {
-    path: TASK_DEF_URL.BASE,
-    element: <TaskDefinitions />,
-  },
-  {
-    path: TASK_DEF_URL.NAME,
-    element: <TaskDefinition />,
   },
 
   // Credentials
   {
     path: CREDENTIALS_URL,
     element: <CredentialsPage />,
-  },
-
-  // Event Handlers
-  {
-    path: EVENT_HANDLERS_URL.BASE,
-    element: <EventHandlerDefinitions />,
-  },
-  {
-    path: EVENT_HANDLERS_URL.NAME,
-    element: <EventHandlerDefinition />,
-  },
-  {
-    path: EVENT_HANDLERS_URL.NEW,
-    element: <EventHandlerDefinition />,
   },
 
   // Scheduler Definitions
@@ -163,49 +106,12 @@ const getCoreAuthenticatedRoutes = () => [
     element: <TaskQueue />,
   },
 
-  // Event Monitor
-  {
-    path: EVENT_MONITOR_URL.BASE,
-    element: <EventMonitor />,
-  },
-  {
-    path: EVENT_MONITOR_URL.NAME,
-    element: <EventMonitorDetail />,
-  },
-
-  // Tags Dashboard
-  {
-    path: TAGS_DASHBOARD_URL.BASE,
-    element: <TagsDashboard />,
-  },
-
   // API Reference
   {
     path: API_REFERENCE_URL.BASE,
     element: <ApiReferencePage />,
   },
 
-  // Dev/Debug pages (Kitchen Sink)
-  {
-    path: "/kitchen",
-    element: <KitchenSink />,
-  },
-  {
-    path: "/kitchen/examples",
-    element: <Examples />,
-  },
-  {
-    path: "/kitchen/gantt",
-    element: <Gantt />,
-  },
-  {
-    path: "/kitchen/theme",
-    element: <ThemeSampler />,
-  },
-  {
-    path: "/flags",
-    element: <CreatorFlags />,
-  },
 ];
 
 /**
@@ -218,7 +124,7 @@ const getIndexRoute = (isPlayground: boolean) => {
   }
   return {
     index: true,
-    element: <WorkflowSearch />,
+    element: <AgentSearch />,
   };
 };
 
@@ -238,7 +144,7 @@ export const getRoutes = () => {
   // Core authenticated routes
   const coreRoutes = getCoreAuthenticatedRoutes();
 
-  // Build the index route (either core WorkflowSearch or from playground plugin)
+  // Build the index route (either core AgentSearch or from playground plugin)
   const indexRoute = getIndexRoute(isPlayground);
 
   // Combine all authenticated routes
@@ -261,7 +167,7 @@ export const getRoutes = () => {
 
         // Special route for runWorkflow (has special AuthGuard behavior)
         {
-          path: RUN_WORKFLOW_URL,
+          path: RUN_AGENT_URL,
           element: <AuthGuard runWorkflow={true} />,
         },
 

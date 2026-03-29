@@ -140,7 +140,7 @@ export const QueryProcessorTaskForm = ({ task, onChange }: TaskFormProps) => {
           <Grid container sx={{ width: "100%" }} spacing={3} mt={1}>
             <Grid size={12}>
               <ConductorValueInput
-                valueLabel="Workflow names"
+                valueLabel="Agent names"
                 value={workflowNames}
                 onChangeValue={(val: string) => {
                   changeWorkflowNames(val);

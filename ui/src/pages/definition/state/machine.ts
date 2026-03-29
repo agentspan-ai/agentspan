@@ -16,7 +16,7 @@ import {
   CodeMachineEventTypes,
 } from "../EditorPanel/CodeEditorTab/state";
 import { formMachine } from "../EditorPanel/TaskFormTab/state";
-import { IdempotencyStrategyEnum, runMachine } from "../RunWorkflow/state";
+import { IdempotencyStrategyEnum, runMachine } from "../RunAgent/state";
 import { workflowMetadataMachine } from "../WorkflowMetadata/state";
 import {
   saveMachine,
@@ -839,7 +839,9 @@ export const workflowDefinitionMachine = createMachine<
                     },
                   ],
                   [DefinitionMachineEventTypes.HANDLE_SAVE_AND_RUN]: {
-                    actions: ["fireSaveEvent"],
+                    target:
+                      "#workflowDefinitionMachine.ready.rightPanel.opened.runWorkflow",
+                    actions: ["fireChangeToRunTab"],
                   },
                   [DefinitionMachineEventTypes.HANDLE_SAVE_AND_CREATE_NEW]: {
                     actions: [
@@ -902,8 +904,9 @@ export const workflowDefinitionMachine = createMachine<
                     target: "opened",
                   },
                   [DefinitionMachineEventTypes.HANDLE_SAVE_AND_RUN]: {
-                    actions: ["raiseSaveAndRunEvent"],
-                    target: "opened",
+                    target:
+                      "#workflowDefinitionMachine.ready.rightPanel.opened.runWorkflow",
+                    actions: ["fireChangeToRunTab"],
                   },
                   [DefinitionMachineEventTypes.HANDLE_SAVE_AND_CREATE_NEW]: {
                     actions: [

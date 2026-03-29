@@ -36,11 +36,6 @@ public class AgentController {
     private final AgentService agentService;
     private final AgentDagService agentDagService;
 
-    @GetMapping
-    public String hello() {
-        return "Hello, Agent!";
-    }
-
     /**
      * Compile an agent configuration into a Conductor workflow definition.
      * Does not register or execute — useful for inspecting the compiled workflow.

@@ -5,8 +5,7 @@ type PathFlagMap = {
 };
 
 const pathFlagMap: PathFlagMap = {
-  "/workflowDef": true,
-  "/taskDef": true,
+  "/agentDef": true,
   "/get-started": featureFlags.isEnabled(FEATURES.SHOW_GET_STARTED_PAGE),
   "/scheduleDef": featureFlags.isEnabled(FEATURES.SCHEDULER),
   "/schedulerExecs": featureFlags.isEnabled(FEATURES.SCHEDULER),

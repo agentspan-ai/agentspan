@@ -23,7 +23,7 @@ const executionFields: LegacyColumn[] = [
     label: "Scheduled time",
     grow: 0.7,
     sortable: true,
-    tooltip: "The time the workflow was scheduled to run.",
+    tooltip: "The time the agent was scheduled to run.",
   },
   {
     id: "executionTime",
@@ -32,7 +32,7 @@ const executionFields: LegacyColumn[] = [
     label: "Execution time",
     grow: 0.7,
     sortable: true,
-    tooltip: "The time the workflow was executed.",
+    tooltip: "The time the agent was executed.",
   },
   {
     id: "executionId",
@@ -56,15 +56,15 @@ const executionFields: LegacyColumn[] = [
   {
     id: "workflowName",
     name: "workflowName",
-    label: "Workflow name",
+    label: "Agent name",
     grow: 0.7,
     sortable: true,
-    tooltip: "The name of the workflow.",
+    tooltip: "The name of the agent.",
   },
   {
     id: "workflowId",
     name: "workflowId",
-    label: "Workflow id",
+    label: "Execution id",
     grow: 1.5,
     sortable: true,
     renderer: (workflowId) => {
@@ -77,7 +77,7 @@ const executionFields: LegacyColumn[] = [
         </ClipboardCopy>
       );
     },
-    tooltip: "The unique identifier for the workflow execution.",
+    tooltip: "The unique identifier for the execution.",
   },
   {
     id: "state",

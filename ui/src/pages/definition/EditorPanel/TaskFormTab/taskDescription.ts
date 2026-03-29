@@ -14,12 +14,12 @@ export const taskDescriptions: TaskDescriptions = {
   [TaskType.JSON_JQ_TRANSFORM]:
     "The JSON_JQ_TRANSFORM task is a System task that allows the processing of JSON data that is supplied to the task by using the popular JQ processing tool’s query expression language.",
   [TaskType.INLINE]:
-    "The inline task helps execute necessary logic at the workflow run-time using an evaluator. The two supported evaluator types are javascript and graaljs.",
+    "The inline task helps execute necessary logic at the agent run-time using an evaluator. The two supported evaluator types are javascript and graaljs.",
   [TaskType.BUSINESS_RULE]:
     "Business rule task helps evaluate business rules compiled in spreadsheets.",
   [TaskType.SENDGRID]: "Send email using sendgrid",
   [TaskType.START_WORKFLOW]:
-    "Start Workflow is an operator task used to start another workflow from an existing workflow. Unlike a sub-workflow task, a start workflow task doesn’t create a relationship between the current workflow and the newly started workflow. That means it doesn’t wait for the started workflow to get completed.",
+    "Start Workflow is an operator task used to start another agent from an existing agent. Unlike a sub-workflow task, a start workflow task doesn’t create a relationship between the current agent and the newly started agent. That means it doesn’t wait for the started agent to get completed.",
   [TaskType.WAIT_FOR_WEBHOOK]:
     "Webhook is an HTTP-based callback function that facilitates the communication between the Conductor and other third-party systems. It can be used to receive data from other applications to the Conductor.",
   [TaskType.UPDATE_SECRET]:
@@ -37,23 +37,23 @@ export const taskDescriptions: TaskDescriptions = {
   [TaskType.FORK_JOIN_DYNAMIC]:
     "A Fork/Join task can be used when you need to run tasks in parallel. It contains two components, the fork, and the join part. A fork operation lets you run a specified list of tasks in parallel. A fork task is followed by a join operation that waits on the forked tasks to finish. The JOIN task also collects outputs from each of the forked tasks.",
   [TaskType.DYNAMIC]:
-    "The dynamic task allows us to execute one of the registered tasks dynamically at run-time. This means that you can run a task not fixed at the time of the workflow’s execution. The task name could even be supplied as part of the workflow’s input and be mapped to the dynamic task input.",
+    "The dynamic task allows us to execute one of the registered tasks dynamically at run-time. This means that you can run a task not fixed at the time of the agent’s execution. The task name could even be supplied as part of the agent’s input and be mapped to the dynamic task input.",
   [TaskType.TERMINATE]:
-    "The Terminate task is a task that can terminate the current workflow with a termination status and reason.",
+    "The Terminate task is a task that can terminate the current execution with a termination status and reason.",
   [TaskType.SET_VARIABLE]:
-    "Set Variable allows us to set the workflow variables by creating or updating them with new values. Think of these as a temporary state, which you can set in any step and refer back to any steps that execute after setting the value.",
+    "Set Variable allows us to set the agent variables by creating or updating them with new values. Think of these as a temporary state, which you can set in any step and refer back to any steps that execute after setting the value.",
   [TaskType.SUB_WORKFLOW]:
-    "Sub Workflow allows executing another workflow from within the current workflow.",
+    "Sub Workflow allows executing another agent from within the current agent.",
   [TaskType.JOIN]:
     "A JOIN task is used in conjunction with a FORK_JOIN or FORK_JOIN_DYNAMIC task to join all the tasks within the forks.",
   [TaskType.WAIT]:
-    "The Wait task is used when the workflow needs to be paused for an external signal to continue. It is used when the workflow needs to wait and pause for external signals, such as a human intervention (like manual approval) or an event coming from an external source, such as Kafka or SQS.",
+    "The Wait task is used when the agent needs to be paused for an external signal to continue. It is used when the agent needs to wait and pause for external signals, such as a human intervention (like manual approval) or an event coming from an external source, such as Kafka or SQS.",
   [TaskType.TERMINATE_WORKFLOW]:
-    "The Terminate Workflow task is used to terminate other workflows using their workflow IDs.",
+    "The Terminate Workflow task is used to terminate other executions using their execution IDs.",
   [TaskType.HUMAN]:
-    "Human tasks are used when you need to wait your workflow for an interaction with a human. When your workflow reaches the human task, it waits for a manual interaction to proceed with the workflow. It can be leveraged when you need manual approval from a human, such as when a form needs to be approved within an application, such as approval workflows.",
+    "Human tasks are used when you need to pause your agent for an interaction with a human. When your agent reaches the human task, it waits for a manual interaction to proceed. It can be leveraged when you need manual approval from a human, such as when a form needs to be approved within an application.",
   [TaskType.GET_WORKFLOW]:
-    "Get Workflow task is used to retrieve detail of workflow using workflow ID.",
+    "Get Workflow task is used to retrieve detail of an execution using its execution ID.",
 
   // worker
   [TaskType.JDBC]:
@@ -63,7 +63,7 @@ export const taskDescriptions: TaskDescriptions = {
 
   // alerting
   [TaskType.OPS_GENIE]:
-    "A system task to send alerts to Opsgenie in the event of workflow failures. This task can be used in conjunction with the Query Processor task, which fetches metadata details to trigger alerts to Opsgenie as required.",
+    "A system task to send alerts to Opsgenie in the event of agent failures. This task can be used in conjunction with the Query Processor task, which fetches metadata details to trigger alerts to Opsgenie as required.",
 
   // ai/llm
 

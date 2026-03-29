@@ -164,7 +164,7 @@ const columns = [
   {
     id: "startWorkflowRequest",
     name: "startWorkflowRequest",
-    label: "Workflow",
+    label: "Agent",
     sortable: true,
     grow: 1.5,
     searchableFunc: (workflow: IStartWorkflowRequest) =>
@@ -238,11 +238,11 @@ const columns = [
     id: "workflowExecutionsLink",
     name: "name",
     selector: (row: IScheduleDto) => row.name,
-    label: "Workflow executions",
+    label: "Executions",
     searchable: false,
     grow: 1,
     sortable: false,
-    tooltip: "The workflow executions associated with the schedule",
+    tooltip: "The executions associated with the schedule",
     renderer: (name: string, rec: IScheduleDto) => (
       <NavLink
         style={{
@@ -250,7 +250,7 @@ const columns = [
         }}
         path={`/executions?freeText=${rec.name}&workflowType=${rec?.startWorkflowRequest?.name}`}
       >
-        Workflow query
+        Execution query
       </NavLink>
     ),
   },
@@ -610,7 +610,7 @@ export default function ScheduleDefinitions() {
   return (
     <>
       <Helmet>
-        <title>Workflow Scheduler Definitions</title>
+        <title>Agent Scheduler Definitions</title>
       </Helmet>
       {errorMessage && (
         <SnackbarMessage
@@ -689,7 +689,7 @@ export default function ScheduleDefinitions() {
         />
       )}
       <SectionHeader
-        title="Workflow Scheduler Definitions"
+        title="Agent Scheduler Definitions"
         _deprecate_marginTop={0}
         actions={
           <SectionHeaderActions

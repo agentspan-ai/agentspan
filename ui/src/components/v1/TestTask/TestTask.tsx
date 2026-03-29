@@ -13,7 +13,7 @@ import {
 import CircularProgress from "@mui/material/CircularProgress";
 import MuiButton from "components/MuiButton";
 import MuiTypography from "components/MuiTypography";
-import WorkflowStatusBadge from "components/WorkflowStatusBadge";
+import AgentStatusBadge from "components/AgentStatusBadge";
 import _assoc from "lodash/fp/assoc";
 import { ChangeEvent, FunctionComponent, useMemo, useState } from "react";
 import {
@@ -330,7 +330,7 @@ const TestOutput: FunctionComponent<TestOutputProps> = ({
         }}
       >
         <Box id="test-status">
-          <WorkflowStatusBadge status={status} />
+          <AgentStatusBadge status={status} />
         </Box>
         <Box sx={{ textAlign: "right" }}>
           <MuiTypography

@@ -84,18 +84,15 @@ export { getCoreSidebarItems } from "./components/Sidebar/sidebarCoreItems";
 // =============================================================================
 // Core Pages (for customization/extension)
 // =============================================================================
-export { WorkflowSearch, SchedulerExecutions } from "./pages/executions";
+export { AgentSearch, WorkflowSearch, SchedulerExecutions } from "./pages/executions";
 export { default as WorkflowDefinition } from "./pages/definition/WorkflowDefinition";
-export { TaskDefinition } from "./pages/definition/task";
-export { EventMonitor } from "./pages/eventMonitor/EventMonitor";
 export { default as TaskQueue } from "./pages/queueMonitor/TaskQueue";
 export { default as ErrorPage } from "./pages/error/ErrorPage";
 
 // Definition pages
 export {
+  Agent as AgentDefinitions,
   Workflow as WorkflowDefinitions,
-  Task as TaskDefinitions,
-  EventHandler as EventHandlerDefinitions,
   Schedules as ScheduleDefinitions,
 } from "./pages/definitions";
 
@@ -162,17 +159,12 @@ export {
 // =============================================================================
 export {
   API_REFERENCE_URL,
-  EVENT_HANDLERS_URL,
-  EVENT_MONITOR_URL,
-  NEW_TASK_DEF_URL,
-  RUN_WORKFLOW_URL,
+  RUN_AGENT_URL,
   SCHEDULER_DEFINITION_URL,
   SCHEDULER_EXECUTION_URL,
-  TAGS_DASHBOARD_URL,
-  TASK_DEF_URL,
   TASK_QUEUE_URL,
-  WORKFLOW_DEFINITION_URL,
-  WORKFLOW_EXECUTION_URL,
+  AGENT_DEFINITION_URL,
+  AGENT_EXECUTION_URL,
   // Enterprise route constants (used by enterprise plugins)
   WEBHOOK_ROUTE_URL,
   USER_MANAGEMENT_URL,

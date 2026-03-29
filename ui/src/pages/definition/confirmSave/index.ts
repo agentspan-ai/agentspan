@@ -1,3 +1,3 @@
 export * from "./ConfirmSaveButtonGroup";
 export * from "./ConfirmSaveDiffEditor";
-export * from "./ConfirmWorkflowOverride";
+export * from "./ConfirmAgentOverride";

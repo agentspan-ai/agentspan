@@ -39,6 +39,7 @@ import {
   DeleteRequestEvent,
   DONT_SHOW_IMPORT_SUCCESSFUL_DIALOG_TUTORIAL_AGAIN,
   HandleLeftPanelExpandedEvent,
+  ImportSummary,
   HandleSaveAndCreateNewEvent,
   HandleSaveAndRunEvent,
   LeftPaneTabs,
@@ -61,7 +62,6 @@ import { JsonSchema } from "@jsonforms/core";
 import { crumbsToTask } from "components/flow/nodes";
 import _isEmpty from "lodash/isEmpty";
 import { CommonTaskDef } from "types/TaskType";
-import { ImportSummary } from "utils/cloudTemplates";
 import { SWITCH_CASE_PREFIX } from "utils/constants/switch";
 import {
   LocalCopyMachineEventTypes,
@@ -73,7 +73,7 @@ import {
   FormMachineActionTypes,
   TaskFormEvents,
 } from "../EditorPanel/TaskFormTab/state";
-import { RunMachineEvents, RunMachineEventsTypes } from "../RunWorkflow/state";
+import { RunMachineEvents, RunMachineEventsTypes } from "../RunAgent/state";
 import {
   WorkflowMetadataEvents,
   WorkflowMetadataMachineEventTypes,

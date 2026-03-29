@@ -128,12 +128,6 @@ vi.mock("utils/constants/route", () => ({
   APPLICATION_MANAGEMENT_URL: { BASE: "/applications" },
   AUTHENTICATION_URL: "/authentication",
   ENV_VARIABLES_URL: { BASE: "/env-variables" },
-  EVENT_HANDLERS_URL: {
-    BASE: "/eventHandlers",
-    NAME: "/eventHandlers/:name",
-    NEW: "/eventHandlers/new",
-  },
-  EVENT_MONITOR_URL: { BASE: "/event-monitor", NAME: "/event-monitor/:name" },
   GROUP_MANAGEMENT_URL: { BASE: "/groups" },
   ROLE_MANAGEMENT_URL: {
     BASE: "/roleManagement",
@@ -149,13 +143,12 @@ vi.mock("utils/constants/route", () => ({
     TASK_INBOX: "/human/inbox",
   },
   INTEGRATIONS_MANAGEMENT_URL: { BASE: "/integrations" },
-  NEW_TASK_DEF_URL: "/taskDef/new",
   REMOTE_SERVICES_URL: {
     BASE: "/remote-services",
     NEW: "/remote-services/new",
     EDIT: "/remote-services/:id/edit",
   },
-  RUN_WORKFLOW_URL: "/runWorkflow",
+  RUN_AGENT_URL: "/runAgent",
   SCHEDULER_DEFINITION_URL: {
     BASE: "/scheduleDef",
     NAME: "/scheduleDef/:name",
@@ -172,7 +165,6 @@ vi.mock("utils/constants/route", () => ({
     ROUTE_DETAILS: "/services/:serviceId/routes/:routeId",
     ROUTE_EDIT: "/services/:serviceId/routes/:routeId/edit",
   },
-  TASK_DEF_URL: { BASE: "/taskDef", NAME: "/taskDef/:name" },
   TASK_EXECUTION_URL: { LIST: "/taskExecution" },
   TASK_QUEUE_URL: { BASE: "/taskQueue" },
   USER_MANAGEMENT_URL: { BASE: "/users" },
@@ -181,16 +173,16 @@ vi.mock("utils/constants/route", () => ({
     ID: "/webhook/:id",
     LIST: "/webhooks",
   },
-  WORKFLOW_DEFINITION_URL: {
-    BASE: "/workflowDef",
-    NAME_VERSION: "/workflowDef/:name/:version",
-    NEW: "/workflowDef/new",
+  AGENT_DEFINITION_URL: {
+    BASE: "/agentDef",
+    NAME_VERSION: "/agentDef/:name/:version",
+    NEW: "/agentDef/new",
   },
-  WORKFLOW_EXPLORER_URL: "/workflow-explorer",
+  AGENT_EXPLORER_URL: "/agentExplorer",
   WORKERS_URL: {
     BASE: "/workers",
   },
-  TAGS_DASHBOARD_URL: { BASE: "/tags-dashboard" },
+  CREDENTIALS_URL: "/credentials",
 }));
 
 // Mock all page components with factory functions
@@ -216,20 +208,16 @@ vi.mock("enterprise/pages/aiPrompts/AiPromptsManagement", () => ({
 vi.mock("enterprise/pages/Authentication/AuthListing", () => ({
   default: () => ({ type: "AuthListing" }),
 }));
-vi.mock("pages/creatorFlags/CreatorFlags", () => ({
-  CreatorFlags: () => ({ type: "CreatorFlags" }),
-}));
-vi.mock("pages/definition/task", () => ({
-  TaskDefinition: () => ({ type: "TaskDefinition" }),
+vi.mock("pages/credentials", () => ({
+  CredentialsPage: () => ({ type: "CredentialsPage" }),
 }));
 vi.mock("pages/definition/WorkflowDefinition", () => ({
   default: () => ({ type: "WorkflowDefinition" }),
 }));
 vi.mock("pages/definitions", () => ({
-  EventHandler: () => ({ type: "EventHandler" }),
   Schedules: () => ({ type: "Schedules" }),
-  Task: () => ({ type: "Task" }),
-  Workflow: () => ({ type: "Workflow" }),
+  Agent: () => ({ type: "Agent" }),
+  Workflow: () => ({ type: "Agent" }),
 }));
 vi.mock("enterprise/pages/envVariables/EnvVariables", () => ({
   EnvVariables: () => ({ type: "EnvVariables" }),
@@ -237,16 +225,11 @@ vi.mock("enterprise/pages/envVariables/EnvVariables", () => ({
 vi.mock("pages/error/ErrorPage", () => ({
   default: () => ({ type: "ErrorPage" }),
 }));
-vi.mock("pages/eventMonitor/EventMonitor", () => ({
-  EventMonitor: () => ({ type: "EventMonitor" }),
-}));
-vi.mock("pages/eventMonitor/EventMonitorDetail/EventMonitorDetail", () => ({
-  EventMonitorDetail: () => ({ type: "EventMonitorDetail" }),
-}));
 vi.mock("pages/executions", () => ({
   SchedulerExecutions: () => ({ type: "SchedulerExecutions" }),
   TaskSearch: () => ({ type: "TaskSearch" }),
-  WorkflowSearch: () => ({ type: "WorkflowSearch" }),
+  AgentSearch: () => ({ type: "AgentSearch" }),
+  WorkflowSearch: () => ({ type: "AgentSearch" }),
 }));
 vi.mock("enterprise/pages/getStarted/GetStarted", () => ({
   default: () => ({ type: "GetStarted" }),
@@ -327,23 +310,8 @@ vi.mock("shared/auth/oidc/OidcRedirectEndpoint", () => ({
 vi.mock("enterprise/pages/auth/Login", () => ({
   default: () => ({ type: "Login" }),
 }));
-vi.mock("../pages/definition/EventHandler/EventHandler", () => ({
-  default: () => ({ type: "EventHandlerDefinition" }),
-}));
 vi.mock("../pages/execution/Execution", () => ({
   default: () => ({ type: "Execution" }),
-}));
-vi.mock("../pages/kitchensink/Examples", () => ({
-  default: () => ({ type: "Examples" }),
-}));
-vi.mock("../pages/kitchensink/Gantt", () => ({
-  default: () => ({ type: "Gantt" }),
-}));
-vi.mock("../pages/kitchensink/KitchenSink", () => ({
-  default: () => ({ type: "KitchenSink" }),
-}));
-vi.mock("../pages/kitchensink/ThemeSampler", () => ({
-  default: () => ({ type: "ThemeSampler" }),
 }));
 vi.mock("../pages/queueMonitor/TaskQueue", () => ({
   default: () => ({ type: "TaskQueue" }),
@@ -411,7 +379,7 @@ describe("router", () => {
       // OSS core: error catch-all and runWorkflow; login/callbacks come from plugins
       const errorRoute = children?.find((child: any) => child.path === "*");
       const runWorkflowRoute = children?.find(
-        (child: any) => child.path === "/runWorkflow",
+        (child: any) => child.path === "/runAgent",
       );
 
       expect(errorRoute).toBeDefined();
@@ -434,7 +402,7 @@ describe("router", () => {
       // The routes structure might have AuthGuard routes or the routes might be structured differently
       // Let's check if we have the expected authentication-related routes instead
       const runWorkflowRoute = children?.find(
-        (child: any) => child.path === "/runWorkflow",
+        (child: any) => child.path === "/runAgent",
       );
       expect(runWorkflowRoute).toBeDefined();
 
@@ -474,17 +442,10 @@ describe("router", () => {
       // Check workflow definition route
       const workflowDefRoute = allRoutes.find(
         (route) =>
-          route.path && route.path.includes("/workflowDef/:name/:version"),
+          route.path && route.path.includes("/agentDef/:name/:version"),
       );
       expect(workflowDefRoute).toBeDefined();
       expect(workflowDefRoute?.element).toBeDefined();
-
-      // Check task definition route
-      const taskDefRoute = allRoutes.find(
-        (route) => route.path && route.path.includes("/taskDef/:name"),
-      );
-      expect(taskDefRoute).toBeDefined();
-      expect(taskDefRoute?.element).toBeDefined();
 
       // Verify dynamic routes have proper parameter patterns
       const parameterRoutes = dynamicRoutes.filter((route) => {
@@ -495,7 +456,7 @@ describe("router", () => {
           path.includes(":version")
         );
       });
-      expect(parameterRoutes.length).toBeGreaterThan(5);
+      expect(parameterRoutes.length).toBeGreaterThan(1);
     });
 
     it("should have wildcard routes for nested routing", () => {
@@ -522,61 +483,6 @@ describe("router", () => {
       expect(wildcardRoutes.length).toBeGreaterThan(0);
     });
 
-    it("should have kitchen sink development routes with correct elements", () => {
-      const routes = getRoutes();
-
-      // Flatten all routes
-      const allRoutes: any[] = [];
-      const flattenRoutes = (routeList: any[]) => {
-        routeList.forEach((route) => {
-          allRoutes.push(route);
-          if (route.children) {
-            flattenRoutes(route.children);
-          }
-        });
-      };
-
-      flattenRoutes(routes);
-
-      const kitchenRoutes = allRoutes.filter(
-        (route) => route.path && route.path.includes("/kitchen"),
-      );
-
-      expect(kitchenRoutes.length).toBeGreaterThan(0);
-
-      // Check for specific kitchen routes with their elements
-      const kitchenSinkRoute = allRoutes.find(
-        (route) => route.path === "/kitchen",
-      );
-      const examplesRoute = allRoutes.find(
-        (route) => route.path === "/kitchen/examples",
-      );
-      const ganttRoute = allRoutes.find(
-        (route) => route.path === "/kitchen/gantt",
-      );
-      const themeRoute = allRoutes.find(
-        (route) => route.path === "/kitchen/theme",
-      );
-
-      expect(kitchenSinkRoute).toBeDefined();
-      expect(kitchenSinkRoute?.element).toBeDefined();
-
-      expect(examplesRoute).toBeDefined();
-      expect(examplesRoute?.element).toBeDefined();
-
-      expect(ganttRoute).toBeDefined();
-      expect(ganttRoute?.element).toBeDefined();
-
-      expect(themeRoute).toBeDefined();
-      expect(themeRoute?.element).toBeDefined();
-
-      // Verify all kitchen routes have elements
-      kitchenRoutes.forEach((route) => {
-        expect(route.element).toBeDefined();
-        expect(route.path).toContain("/kitchen");
-      });
-    });
-
     it("should have a substantial number of routes", () => {
       const routes = getRoutes();
 
@@ -594,7 +500,7 @@ describe("router", () => {
       countRoutes(routes);
 
       // OSS core only (no plugins): still a substantial set of routes
-      expect(totalRoutes).toBeGreaterThan(25);
+      expect(totalRoutes).toBeGreaterThan(15);
     });
 
     it("should have valid route structure with no duplicate paths at same level", () => {
@@ -717,7 +623,7 @@ describe("router", () => {
       // OSS core routes
       expect(allPaths).toContain("*");
       expect(allPaths).toContain("/executions");
-      expect(allPaths).toContain("/runWorkflow");
+      expect(allPaths).toContain("/runAgent");
     });
 
     it("should not change route count for SHOW_GET_STARTED_PAGE in OSS", () => {

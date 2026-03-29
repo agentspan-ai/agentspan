@@ -2,7 +2,7 @@ import ConfirmChoiceDialog from "components/ConfirmChoiceDialog";
 import { ActorRef } from "xstate";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { ConfirmLocalCopyDialog } from "../ConfirmLocalCopyDialog/ConfirmLocalCopyDialog";
-import { ConfirmWorkflowOverride } from "../confirmSave";
+import { ConfirmAgentOverride } from "../confirmSave";
 
 interface ConfirmationDialogsProps {
   isConfirmReset: boolean;
@@ -59,7 +59,7 @@ export const ConfirmationDialogs = ({
         <ConfirmLocalCopyDialog localCopyActor={localCopyActor} />
       )}
       {isSaveRequest && saveChangesActor && (
-        <ConfirmWorkflowOverride saveChangesActor={saveChangesActor} />
+        <ConfirmAgentOverride saveChangesActor={saveChangesActor} />
       )}
     </>
   );

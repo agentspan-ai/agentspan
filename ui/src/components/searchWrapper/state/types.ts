@@ -30,10 +30,8 @@ export enum SearchMachineStates {
   INIT = "INIT",
   FETCHER = "FETCHER",
   // Core OSS fetchers
-  FETCH_TASK_DEFINITIONS = "FETCH_TASK_DEFINITIONS",
   FETCH_WF_DEFINITIONS = "FETCH_WF_DEFINITIONS",
   FETCH_SCHEDULERS = "FETCH_SCHEDULERS",
-  FETCH_EVENTS = "FETCH_EVENTS",
   // Plugin-provided data
   FETCH_PLUGIN_DATA = "FETCH_PLUGIN_DATA",
   FILTER = "FILTER",
@@ -49,10 +47,8 @@ type Error = {
 export interface SearchMachineContext {
   authHeaders?: AuthHeaders;
   // Core OSS searchable data
-  taskDefinitions: CommonDef[];
   workflowDefinitions: WorkflowDef[];
   schedulers: string[];
-  events: string[];
   // Plugin-contributed searchable data: keyed by provider id
   pluginData: Record<string, any[]>;
   searchTerm: string;

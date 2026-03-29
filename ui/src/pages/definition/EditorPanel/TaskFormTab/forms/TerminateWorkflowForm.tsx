@@ -32,11 +32,11 @@ export const TerminateWorkflowForm = (props: TaskFormProps) => {
 
   return (
     <Box padding={1} width="100%">
-      <TaskFormSection title="Workflow ids:">
+      <TaskFormSection title="Execution ids:">
         <Grid container sx={{ width: "100%" }} spacing={1}>
           <Grid size={12}>
             <AutocompleteArrayField
-              label="Workflow id"
+              label="Execution id"
               value={workFlowIds}
               onChange={handleWorkFlowIds}
               taskType={TaskType.TERMINATE_WORKFLOW}

@@ -1,6 +1,9 @@
-import WorkflowSearch from "./WorkflowSearch";
+import AgentSearch from "./AgentSearch";
 import SchedulerExecutions from "./SchedulerExecutions";
 
-export { SchedulerExecutions, WorkflowSearch };
+export { SchedulerExecutions, AgentSearch };
+
+/** @deprecated Use AgentSearch instead */
+export const WorkflowSearch = AgentSearch;
 
 export * from "./TaskSearch";

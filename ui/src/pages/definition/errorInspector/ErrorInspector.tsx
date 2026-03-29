@@ -7,7 +7,7 @@ import { ServerErrorsDisplayer } from "./ServerErrorDisplayer";
 import { useErrorInspectorActor } from "./state/hook";
 import { ErrorInspectorMachineEvents } from "./state/types";
 import { TaskErrorsDisplayer } from "./TaskErrorsDisplayer";
-import { WorkflowErrorsDisplayer } from "./WorkflowErrorDisplayer";
+import { AgentErrorsDisplayer } from "./AgentErrorDisplayer";
 
 interface ErrorInspectorProps {
   errorInspectorActor: ActorRef<ErrorInspectorMachineEvents>;
@@ -226,7 +226,7 @@ const ErrorInspector = ({ errorInspectorActor }: ErrorInspectorProps) => {
             />
           ) : null}
           {workflowErrors.length > 0 ? (
-            <WorkflowErrorsDisplayer
+            <AgentErrorsDisplayer
               expanded={workflowErrorsExpanded}
               onToggleExpand={() => handleToggleWorkflowErrors!()}
               workflowErrors={workflowErrors}
@@ -252,11 +252,11 @@ const ErrorInspector = ({ errorInspectorActor }: ErrorInspectorProps) => {
             />
           ) : null}
           {workflowReferenceErrors.length > 0 ? (
-            <WorkflowErrorsDisplayer
+            <AgentErrorsDisplayer
               expanded={referenceWorkflowErrorsExpanded}
               onToggleExpand={() => handleToggleWorkflowReferenceErrors!()}
               workflowErrors={workflowReferenceErrors}
-              title="Workflow missing references"
+              title="Agent missing references"
               onClickReference={handleOnClickReference}
             />
           ) : null}

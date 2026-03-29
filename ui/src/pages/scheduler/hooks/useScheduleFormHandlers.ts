@@ -1,5 +1,5 @@
 import React, { useCallback } from "react";
-import { IdempotencyValuesProp } from "../../definition/RunWorkflow/state";
+import { IdempotencyValuesProp } from "../../definition/RunAgent/state";
 import { IdempotencyStrategyEnum } from "../../runWorkflow/types";
 import { ScheduleType } from "../Schedule";
 

@@ -218,7 +218,7 @@ export const computeWorkflowStringErrors = (
 
 const getJSONParseErrorHint = (errorMessage?: string): string => {
   const DEFAULT_ERROR_MESSAGE =
-    "Workflow definition contains JSON syntax errors. Please check the code tab.";
+    "Agent definition contains JSON syntax errors. Please check the code tab.";
   if (!errorMessage) {
     return DEFAULT_ERROR_MESSAGE;
   }
@@ -227,33 +227,33 @@ const getJSONParseErrorHint = (errorMessage?: string): string => {
 
   const errorPatterns = {
     "unexpected end":
-      "Workflow definition is incomplete. Please check for missing closing brackets (}) or braces (]) in your JSON.",
+      "Agent definition is incomplete. Please check for missing closing brackets (}) or braces (]) in your JSON.",
     "expected property name":
-      "Malformed workflow definition. Please ensure all property names are properly quoted and check for trailing commas.",
+      "Malformed agent definition. Please ensure all property names are properly quoted and check for trailing commas.",
     "trailing comma":
-      "Workflow definition contains invalid trailing commas. Please remove them from objects or arrays.",
+      "Agent definition contains invalid trailing commas. Please remove them from objects or arrays.",
     "bad control character":
-      "Invalid character sequence detected in workflow definition. Please check special characters in your JSON strings.",
+      "Invalid character sequence detected in agent definition. Please check special characters in your JSON strings.",
     "invalid escape":
-      "Invalid character sequence detected in workflow definition. Please check special characters in your JSON strings.",
+      "Invalid character sequence detected in agent definition. Please check special characters in your JSON strings.",
     "duplicate key":
-      "Workflow definition contains duplicate property names. Each property name in a JSON object must be unique.",
+      "Agent definition contains duplicate property names. Each property name in a JSON object must be unique.",
     "unexpected number":
-      "Unexpected number format in workflow definition. Please check for missing quotes around property names or values.",
+      "Unexpected number format in agent definition. Please check for missing quotes around property names or values.",
     "expected double-quoted property name":
-      "Property names in workflow definition must be enclosed in double quotes. Please check your JSON syntax.",
+      "Property names in agent definition must be enclosed in double quotes. Please check your JSON syntax.",
     "unterminated string":
-      "Workflow definition contains an unterminated string. Please check for missing closing quotes in your JSON.",
+      "Agent definition contains an unterminated string. Please check for missing closing quotes in your JSON.",
     "unexpected character":
-      "Unexpected character in workflow definition. Please check for invalid syntax or characters in your JSON.",
+      "Unexpected character in agent definition. Please check for invalid syntax or characters in your JSON.",
   };
 
   if (LOWER_ERROR.includes("unexpected token") && LOWER_ERROR.includes("'<'")) {
-    return "Invalid character detected in workflow definition. Please ensure your workflow is defined in valid JSON format.";
+    return "Invalid character detected in agent definition. Please ensure your agent is defined in valid JSON format.";
   }
 
   if (LOWER_ERROR.includes("unexpected token")) {
-    return "Syntax error detected in workflow definition. Please check for missing commas, colons, or invalid characters.";
+    return "Syntax error detected in agent definition. Please check for missing commas, colons, or invalid characters.";
   }
 
   for (const [pattern, hint] of Object.entries(errorPatterns)) {

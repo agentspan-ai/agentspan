@@ -83,7 +83,7 @@ export default function LeftPanelTabs({
   // Add Workflow Introspection tab only if the feature flag is enabled
   if (isWorkflowIntrospectionEnabled) {
     leftPanelTabItems.splice(4 /* After the timeline tab */, 0, {
-      label: "Workflow Introspection",
+      label: "Execution Introspection",
       onClick: () => onChangeExecutionTab(ExecutionTabs.WORKFLOW_INTROSPECTION),
       value: ExecutionTabs.WORKFLOW_INTROSPECTION,
     });

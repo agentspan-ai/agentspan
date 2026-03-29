@@ -285,7 +285,7 @@ export default function BasicSearch({
         if (error) {
           getErrors(error as Response).then((result) => {
             if (result?.["workflowName"] === "must not be empty") {
-              setErrorMessage({ message: "Workflow name should not be empty" });
+              setErrorMessage({ message: "Agent name should not be empty" });
             } else {
               setErrorMessage(result);
             }
@@ -441,7 +441,7 @@ export default function BasicSearch({
                   tooltip: {
                     title: "Partial Name Search",
                     content:
-                      "Search workflows by partial names with a wildcard * in your keyword. Then hit ENTER, and now you can click SEARCH. i.e. Workfl* or *orkfl*w",
+                      "Search agents by partial names with a wildcard * in your keyword. Then hit ENTER, and now you can click SEARCH. i.e. my-agen* or *bot*",
                     placement: "top",
                     showInitial: !tooltipFlags.executionSearch ? true : false,
                     initialTimeout: 2000,
@@ -461,7 +461,7 @@ export default function BasicSearch({
               <ConductorInput
                 id="workflow-search-id"
                 fullWidth
-                label="Workflow id"
+                label="Execution id"
                 value={workflowId}
                 onTextInputChange={setWorkflowId}
                 showClearButton
@@ -499,7 +499,7 @@ export default function BasicSearch({
                   tooltip: {
                     title: "Get Agents by Correlation ID",
                     content:
-                      "Search workflows by Correlation ID. This field has support for multiple values, so please remember to press 'Enter' for each value to apply the search.",
+                      "Search executions by Correlation ID. This field has support for multiple values, so please remember to press 'Enter' for each value to apply the search.",
                   },
                   error: correlationIdHasError,
                 }}
@@ -536,9 +536,9 @@ export default function BasicSearch({
                 error={idempotencyKeyHasError}
                 conductorInputProps={{
                   tooltip: {
-                    title: "Get Workflows by Idempotency key",
+                    title: "Get Executions by Idempotency key",
                     content:
-                      "Search workflows by Idempotency key. This field has support for multiple values, so please remember to press 'Enter' for each value to apply the search.",
+                      "Search executions by Idempotency key. This field has support for multiple values, so please remember to press 'Enter' for each value to apply the search.",
                   },
                   error: idempotencyKeyHasError,
                 }}
@@ -598,9 +598,9 @@ export default function BasicSearch({
                 setEndOpenDatePicker={setEndOpenDatePicker}
                 recentSearches={recentSearches}
                 startDialogTitle="Execution Start Time"
-                startDialogHelpText="Select a date range within which the Workflow Execution has started."
+                startDialogHelpText="Select a date range within which the Execution has started."
                 endDialogTitle="Execution End Time"
-                endDialogHelpText="Select a date range within which the Workflow Execution has ended."
+                endDialogHelpText="Select a date range within which the Execution has ended."
                 startTimeLabel="Execution Start Time"
                 endTimeLabel="Execution End Time"
               />

@@ -1,8 +1,7 @@
 /**
  * Core OSS search service fetchers.
  *
- * These fetch workflow definitions, task definitions, schedulers, and event
- * handlers — all of which are core OSS features.
+ * These fetch workflow definitions and schedulers — core OSS features.
  *
  * Enterprise search categories (users, groups, applications, webhooks,
  * integrations, prompts, user forms) are registered by enterprise plugins
@@ -19,30 +18,6 @@ import { SearchMachineContext } from "./types";
 const fetchContext = fetchContextNonHook();
 
 const ACCESS = "READ";
-
-export const fetchForTaskNames = async ({
-  authHeaders: headers,
-  taskDefinitions,
-}: SearchMachineContext) => {
-  if (!_isEmpty(taskDefinitions)) {
-    return taskDefinitions;
-  }
-
-  const path = `/metadata/taskdefs?access=${ACCESS}`;
-  try {
-    const response = await queryClient.fetchQuery(
-      [fetchContext.stack, path],
-      () => fetchWithContext(path, fetchContext, { headers }),
-    );
-    return _uniq(
-      response.map(({ name, description }: any) => {
-        return { name, description };
-      }),
-    ).sort();
-  } catch {
-    return Promise.reject("Error fetching tasks ");
-  }
-};
 
 export const fetchForWorkflowDef = async ({
   authHeaders: headers,
@@ -81,25 +56,5 @@ export const fetchForScheduleNames = async ({
     return _uniq(response.map(({ name }: any) => name)).sort();
   } catch {
     return Promise.reject("Error fetching schedules ");
-  }
-};
-
-export const fetchForEventNames = async ({
-  authHeaders: headers,
-  events,
-}: SearchMachineContext) => {
-  if (!_isEmpty(events)) {
-    return events;
-  }
-
-  const path = `/event`;
-  try {
-    const response = await queryClient.fetchQuery(
-      [fetchContext.stack, path],
-      () => fetchWithContext(path, fetchContext, { headers }),
-    );
-    return _uniq(response.map(({ name }: any) => name)).sort();
-  } catch {
-    return Promise.reject("Error fetching events ");
   }
 };

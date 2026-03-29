@@ -37,4 +37,4 @@ export const DEPENDENCIES_TAB = 4;
 export const SEVERITY_ERROR = "error";
 
 export const WORKFLOW_DOES_NOT_EXIST_MESSAGE =
-  "Workflow definition does not exist, or you don't have permissions to view it.";
+  "Agent definition does not exist, or you don't have permissions to view it.";

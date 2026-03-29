@@ -1,8 +1,8 @@
 import { Box } from "@mui/material";
 import { FEATURES, featureFlags } from "utils";
 import { ActorRef, EventObject } from "xstate";
-import { RunWorkFlowForm } from "../RunWorkflow";
-import { RunMachineEvents } from "../RunWorkflow/state/types";
+import { RunWorkFlowForm } from "../RunAgent";
+import { RunMachineEvents } from "../RunAgent/state/types";
 import {
   CODE_TAB,
   DEPENDENCIES_TAB,

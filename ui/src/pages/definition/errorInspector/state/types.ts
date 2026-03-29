@@ -1,7 +1,7 @@
 import { NodeTaskData } from "components/flow/nodes/mapper";
 import { NodeData } from "reaflow";
 import { TaskDef, WorkflowDef, Crumb, CrumbMap, AuthHeaders } from "types";
-import { ImportSummary } from "utils/cloudTemplates";
+import { ImportSummary } from "pages/definition/state/types";
 
 export enum ErrorSeverity {
   WARNING = "WARNING",

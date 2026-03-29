@@ -3,7 +3,7 @@ import _path from "lodash/fp/path";
 import _update from "lodash/fp/update";
 import _keys from "lodash/keys";
 import _nth from "lodash/nth";
-import { IdempotencyValuesProp } from "pages/definition/RunWorkflow/state";
+import { IdempotencyValuesProp } from "pages/definition/RunAgent/state";
 import { IdempotencyStrategyEnum } from "pages/runWorkflow/types";
 import { MutableRefObject } from "react";
 import {

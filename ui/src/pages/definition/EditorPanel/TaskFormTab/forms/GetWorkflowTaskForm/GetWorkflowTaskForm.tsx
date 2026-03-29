@@ -17,7 +17,7 @@ export const GetWorkflowTaskForm = ({ task, onChange }: TaskFormProps) => {
           <Grid size={12}>
             <ConductorAutocompleteVariables
               value={task?.inputParameters?.id ?? ""}
-              label="Workflow ID"
+              label="Execution ID"
               onChange={(value) =>
                 onChange(updateField(GET_WORKFLOW_ID_PATH, value, task))
               }

@@ -114,7 +114,7 @@ test.describe("Credentials page", () => {
     await mockCredentialApis(page);
     await goToCredentials(page);
 
-    const searchBox = page.getByPlaceholder("Search credentials…");
+    const searchBox = page.getByPlaceholder("Search credentials");
     await searchBox.fill("GITHUB");
 
     await expect(page.getByText("GITHUB_TOKEN")).toBeVisible();
@@ -125,7 +125,7 @@ test.describe("Credentials page", () => {
     await mockCredentialApis(page);
     await goToCredentials(page);
 
-    const searchBox = page.getByPlaceholder("Search credentials…");
+    const searchBox = page.getByPlaceholder("Search credentials");
     await searchBox.fill("GITHUB");
     await searchBox.clear();
 
@@ -133,12 +133,13 @@ test.describe("Credentials page", () => {
     await expect(page.getByText("OPENAI_KEY")).toBeVisible();
   });
 
-  test("no-match search shows empty state message", async ({ page }) => {
+  test("no-match search shows empty state", async ({ page }) => {
     await mockCredentialApis(page);
     await goToCredentials(page);
 
-    await page.getByPlaceholder("Search credentials…").fill("ZZZNOMATCH");
-    await expect(page.getByText(/No credentials match/)).toBeVisible();
+    await page.getByPlaceholder("Search credentials").fill("ZZZNOMATCH");
+    // When no results match, the table shows "0 results" and the empty state component
+    await expect(page.getByText(/0 results/)).toBeVisible();
   });
 
   test("expands binding row and shows binding chips", async ({ page }) => {
@@ -222,11 +223,20 @@ test.describe("Credentials page", () => {
     // Dialog should appear
     await expect(page.getByRole("dialog")).toBeVisible();
 
-    await page.getByLabel(/Name/i).fill("MY_API_KEY");
-    await page.getByLabel(/Value/i).fill("super-secret-value");
+    // ConductorInput fields — find by label text within dialog
+    const dialog = page.getByRole("dialog");
+    const nameInput = dialog.locator("input").first();
+    // The "Name" input is the second input (first is the quick-select autocomplete)
+    // Find by the label text "Name" near an input
+    const nameField = dialog.locator('input[required]').first();
+    await nameField.fill("MY_API_KEY");
 
-    // Submit
-    await page.getByRole("button", { name: /^(add|save|submit|create)/i }).click();
+    // Value field — find the second required input or password input
+    const valueField = dialog.locator('input[required]').nth(1);
+    await valueField.fill("super-secret-value");
+
+    // Submit — button says "Save"
+    await dialog.getByRole("button", { name: /save/i }).click();
 
     await expect(page.getByText("Credential added.")).toBeVisible();
   });
@@ -236,11 +246,16 @@ test.describe("Credentials page", () => {
     await goToCredentials(page);
 
     await page.getByRole("button", { name: /Add Credential/i }).click();
-    await page.getByLabel(/Value/i).fill("some-value");
-    await page.getByRole("button", { name: /^(add|save|submit|create)/i }).click();
+    const dialog = page.getByRole("dialog");
 
-    // Should show validation error
-    await expect(page.getByText(/required/i)).toBeVisible();
+    // Fill only value, leave name empty
+    const valueField = dialog.locator('input[required]').nth(1);
+    await valueField.fill("some-value");
+
+    // Submit — should show validation error
+    await dialog.getByRole("button", { name: /save/i }).click();
+
+    await expect(dialog.getByText(/required/i)).toBeVisible();
   });
 
   test("Edit credential opens dialog with name read-only", async ({ page }) => {
@@ -249,10 +264,11 @@ test.describe("Credentials page", () => {
 
     await page.getByTestId("edit-GITHUB_TOKEN").click();
 
-    await expect(page.getByRole("dialog")).toBeVisible();
-    const nameInput = page.getByLabel(/Name/i);
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    // In edit mode, the name input is read-only and pre-filled
+    const nameInput = dialog.locator("input[readonly]");
     await expect(nameInput).toHaveValue("GITHUB_TOKEN");
-    await expect(nameInput).toHaveAttribute("readonly", "");
   });
 
   test("Edit credential submits PUT and shows success toast", async ({ page }) => {
@@ -260,8 +276,13 @@ test.describe("Credentials page", () => {
     await goToCredentials(page);
 
     await page.getByTestId("edit-GITHUB_TOKEN").click();
-    await page.getByLabel(/Value/i).fill("new-secret-value");
-    await page.getByRole("button", { name: /^(save|update|submit)/i }).click();
+    const dialog = page.getByRole("dialog");
+
+    // Value field — in edit mode it's the second input (first is read-only name)
+    const valueField = dialog.locator('input[required]').nth(1);
+    await valueField.fill("new-secret-value");
+
+    await dialog.getByRole("button", { name: /save/i }).click();
 
     await expect(page.getByText("Credential updated.")).toBeVisible();
   });

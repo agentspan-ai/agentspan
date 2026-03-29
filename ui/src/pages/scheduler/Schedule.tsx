@@ -173,7 +173,7 @@ export function Schedule() {
         setErrors(errors);
         if (response.status === 403) {
           setErrorMessage(
-            `Error - You don't have permissions to schedule the selected workflow.`,
+            `Error - You don't have permissions to schedule the selected agent.`,
           );
         } else {
           if (errors.message) {

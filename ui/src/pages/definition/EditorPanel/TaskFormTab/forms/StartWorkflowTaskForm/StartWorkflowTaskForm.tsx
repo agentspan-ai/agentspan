@@ -14,7 +14,7 @@ import IdempotencyForm from "pages/runWorkflow/IdempotencyForm";
 import { IdempotencyStrategyEnum } from "pages/runWorkflow/types";
 import { useMemo } from "react";
 import { TaskType } from "types/common";
-import { WORKFLOW_DEFINITION_URL } from "utils/constants/route";
+import { AGENT_DEFINITION_URL } from "utils/constants/route";
 import { updateField } from "utils/fieldHelpers";
 import { openInNewTab } from "utils/helpers";
 import { useAuthHeaders } from "utils/query";
@@ -116,7 +116,7 @@ export const StartWorkflowTaskForm = ({ task, onChange }: TaskFormProps) => {
     <Box width="100%">
       <TaskFormSection
         accordionAdditionalProps={{ defaultExpanded: true }}
-        title="Workflow Parameters"
+        title="Agent Parameters"
       >
         <Grid
           container
@@ -154,7 +154,7 @@ export const StartWorkflowTaskForm = ({ task, onChange }: TaskFormProps) => {
                   }}
                   value={task?.inputParameters?.startWorkflow?.name}
                   otherOptions={options}
-                  label="Workflow name"
+                  label="Agent name"
                 />
               </Grid>
               <Grid
@@ -202,7 +202,7 @@ export const StartWorkflowTaskForm = ({ task, onChange }: TaskFormProps) => {
                   sx={{ fontSize: "12px" }}
                   onClick={() => {
                     openInNewTab(
-                      `${WORKFLOW_DEFINITION_URL.BASE}/${
+                      `${AGENT_DEFINITION_URL.BASE}/${
                         encodeURIComponent(
                           task?.inputParameters?.startWorkflow?.name,
                         ) ?? ""

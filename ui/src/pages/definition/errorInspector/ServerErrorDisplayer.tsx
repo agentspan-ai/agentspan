@@ -20,9 +20,9 @@ interface ServerErrorsDisplayerProps {
 const titleForServerErrorType = (type: ErrorTypes) => {
   switch (type) {
     case ErrorTypes.WORKFLOW:
-      return "Workflow was not saved";
+      return "Agent was not saved";
     case ErrorTypes.RUN_ERROR:
-      return "Could not run workflow";
+      return "Could not run agent";
     default:
       return "Error";
   }

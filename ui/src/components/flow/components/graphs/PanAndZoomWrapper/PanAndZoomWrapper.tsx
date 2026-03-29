@@ -272,7 +272,7 @@ const PanAndZoomWrapper: FunctionComponent<PanAndZoomWrapperProps> = ({
             resetPosition,
             isInconsistent,
             fitToScreen,
-            printScreen: () => printScreen(workflowName || "workflow_diagram"),
+            printScreen: () => printScreen(workflowName || "agent_diagram"),
           }}
           togglePan={handleTogglePan}
           panEnabled={panEnabled}
