@@ -54,39 +54,44 @@ team = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Start async so we can interact with the human tasks
-        handle = runtime.start(
-            team,
-            "Write a short paragraph about the history of artificial intelligence.",
-        )
-        print(f"Started workflow: {handle.workflow_id}")
+        runtime.deploy(team)
+        runtime.serve(team)
 
-        # In a real app, a UI would show the agent options and the human would pick.
-        # Here we simulate by selecting agents programmatically:
-        selections = ["writer", "editor", "fact_checker"]
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # # Start async so we can interact with the human tasks
+        # handle = runtime.start(
+        #     team,
+        #     "Write a short paragraph about the history of artificial intelligence.",
+        # )
+        # print(f"Started workflow: {handle.workflow_id}")
 
-        for i, agent_name in enumerate(selections):
-            # Wait for the workflow to pause at the HumanTask
-            for _ in range(30):
-                status = handle.get_status()
-                if status.is_waiting:
-                    break
-                if status.is_complete:
-                    break
-                time.sleep(1)
+        # # In a real app, a UI would show the agent options and the human would pick.
+        # # Here we simulate by selecting agents programmatically:
+        # selections = ["writer", "editor", "fact_checker"]
 
-            if status.is_complete:
-                print(f"Workflow completed after {i} turns")
-                break
+        # for i, agent_name in enumerate(selections):
+        #     # Wait for the workflow to pause at the HumanTask
+        #     for _ in range(30):
+        #         status = handle.get_status()
+        #         if status.is_waiting:
+        #             break
+        #         if status.is_complete:
+        #             break
+        #         time.sleep(1)
 
-            if status.is_waiting:
-                print(f"Turn {i + 1}: Selecting '{agent_name}'")
-                handle.respond({"selected": agent_name})
+        #     if status.is_complete:
+        #         print(f"Workflow completed after {i} turns")
+        #         break
 
-        # Wait for final completion
-        for _ in range(30):
-            status = handle.get_status()
-            if status.is_complete:
-                print(f"\nFinal output:\n{status.output}")
-                break
-            time.sleep(1)
+        #     if status.is_waiting:
+        #         print(f"Turn {i + 1}: Selecting '{agent_name}'")
+        #         handle.respond({"selected": agent_name})
+
+        # # Wait for final completion
+        # for _ in range(30):
+        #     status = handle.get_status()
+        #     if status.is_complete:
+        #         print(f"\nFinal output:\n{status.output}")
+        #         break
+        #     time.sleep(1)
+

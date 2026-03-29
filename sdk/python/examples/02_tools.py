@@ -62,38 +62,43 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.stream(
-            agent, "send email to developer@orkes.io with current weather details in SF"
-        )
-        print(f"Workflow started: {result.workflow_id}\n")
+        runtime.deploy(agent)
+        runtime.serve(agent)
 
-        for event in result:
-            if event.type == EventType.THINKING:
-                print(f"  [thinking] {event.content}")
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.stream(
+        #     agent, "send email to developer@orkes.io with current weather details in SF"
+        # )
+        # print(f"Workflow started: {result.workflow_id}\n")
 
-            elif event.type == EventType.TOOL_CALL:
-                print(f"  [tool_call] {event.tool_name}({event.args})")
+        # for event in result:
+        #     if event.type == EventType.THINKING:
+        #         print(f"  [thinking] {event.content}")
 
-            elif event.type == EventType.TOOL_RESULT:
-                print(f"  [tool_result] {event.tool_name} -> {event.result}")
+        #     elif event.type == EventType.TOOL_CALL:
+        #         print(f"  [tool_call] {event.tool_name}({event.args})")
 
-            elif event.type == EventType.WAITING:
-                print(f"\n--- Human approval required for send_email ---")
-                choice = input("  Approve? (y/n): ").strip().lower()
-                if choice == "y":
-                    result.approve()
-                    print("  Approved!\n")
-                else:
-                    reason = input("  Rejection reason: ").strip()
-                    result.reject(reason or "Rejected by user")
-                    print("  Rejected.\n")
+        #     elif event.type == EventType.TOOL_RESULT:
+        #         print(f"  [tool_result] {event.tool_name} -> {event.result}")
 
-            elif event.type == EventType.ERROR:
-                print(f"  [error] {event.content}")
+        #     elif event.type == EventType.WAITING:
+        #         print(f"\n--- Human approval required for send_email ---")
+        #         choice = input("  Approve? (y/n): ").strip().lower()
+        #         if choice == "y":
+        #             result.approve()
+        #             print("  Approved!\n")
+        #         else:
+        #             reason = input("  Rejection reason: ").strip()
+        #             result.reject(reason or "Rejected by user")
+        #             print("  Rejected.\n")
 
-            elif event.type == EventType.DONE:
-                print(f"\nResult: {event.output}")
+        #     elif event.type == EventType.ERROR:
+        #         print(f"  [error] {event.content}")
 
-        final = result.get_result()
-        print(f"\nTool calls: {len(final.tool_calls)}")
-        print(f"Status: {final.status}")
+        #     elif event.type == EventType.DONE:
+        #         print(f"\nResult: {event.output}")
+
+        # final = result.get_result()
+        # print(f"\nTool calls: {len(final.tool_calls)}")
+        # print(f"Status: {final.status}")
+

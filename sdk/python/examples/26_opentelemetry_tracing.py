@@ -60,15 +60,21 @@ agent = Agent(
 if __name__ == "__main__":
     # ── Manual tracing (works even alongside automatic runtime tracing) ──
 
+
     with AgentRuntime() as runtime:
-        # The runtime automatically creates spans if OTel is configured.
-        # You can also create manual spans for custom instrumentation:
-        with trace_agent_run("traced_agent", "Who created Python?", model=settings.llm_model) as span:
-            result = runtime.run(agent, "Who created Python?")
-            if span:
-                span.set_attribute("agent.output_length", len(str(result.output)))
+        runtime.deploy(agent)
+        runtime.serve(agent)
 
-        result.print_result()
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # # The runtime automatically creates spans if OTel is configured.
+        # # You can also create manual spans for custom instrumentation:
+        # with trace_agent_run("traced_agent", "Who created Python?", model=settings.llm_model) as span:
+        #     result = runtime.run(agent, "Who created Python?")
+        #     if span:
+        #         span.set_attribute("agent.output_length", len(str(result.output)))
 
-        if result.token_usage:
-            print(f"Tokens: {result.token_usage.total_tokens}")
+        # result.print_result()
+
+        # if result.token_usage:
+        #     print(f"Tokens: {result.token_usage.total_tokens}")
+

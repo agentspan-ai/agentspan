@@ -89,12 +89,19 @@ serverless_coder = Agent(
 if __name__ == "__main__":
     # ── Run ───────────────────────────────────────────────────────────────
 
-    with AgentRuntime() as runtime:
-        print("--- Serverless Code Execution ---")
-        result = runtime.run(
-            serverless_coder,
-            "Calculate 2**100 and print the result.",
-        )
-        result.print_result()
 
-    mock_server.shutdown()
+    with AgentRuntime() as runtime:
+        runtime.deploy(serverless_coder)
+        runtime.serve(serverless_coder)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # print("--- Serverless Code Execution ---")
+        # result = runtime.run(
+        #     serverless_coder,
+        #     "Calculate 2**100 and print the result.",
+        # )
+        # result.print_result()
+
+
+        # mock_server.shutdown()
+

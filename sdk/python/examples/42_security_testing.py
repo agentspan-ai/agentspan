@@ -133,9 +133,14 @@ pipeline = red_team >> target >> evaluator
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            pipeline,
-            "Run a security test: attempt a prompt injection attack on the "
-            "target customer service agent.",
-        )
-        result.print_result()
+        runtime.deploy(pipeline)
+        runtime.serve(pipeline)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        #     pipeline,
+        #     "Run a security test: attempt a prompt injection attack on the "
+        #     "target customer service agent.",
+        # )
+        # result.print_result()
+

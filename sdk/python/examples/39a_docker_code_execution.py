@@ -37,9 +37,14 @@ docker_coder = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        print("--- Docker Sandboxed Code Execution ---")
-        result = runtime.run(
-            docker_coder,
-            "Print Python's version and the container's hostname.",
-        )
-        result.print_result()
+        runtime.deploy(docker_coder)
+        runtime.serve(docker_coder)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # print("--- Docker Sandboxed Code Execution ---")
+        # result = runtime.run(
+        #     docker_coder,
+        #     "Print Python's version and the container's hostname.",
+        # )
+        # result.print_result()
+

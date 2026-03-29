@@ -53,5 +53,10 @@ team = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(team, "Write a Python function to validate email addresses using regex")
-        result.print_result()
+        runtime.deploy(team)
+        runtime.serve(team)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(team, "Write a Python function to validate email addresses using regex")
+        # result.print_result()
+

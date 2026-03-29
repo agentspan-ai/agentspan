@@ -74,9 +74,14 @@ support = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        print("--- Refund scenario ---")
-        result = runtime.run(
-            support,
-            "I bought a product last week and it arrived damaged. I want my money back.",
-        )
-        result.print_result()
+        runtime.deploy(support)
+        runtime.serve(support)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # print("--- Refund scenario ---")
+        # result = runtime.run(
+        #     support,
+        #     "I bought a product last week and it arrived damaged. I want my money back.",
+        # )
+        # result.print_result()
+

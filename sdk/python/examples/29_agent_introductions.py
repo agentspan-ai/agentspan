@@ -77,9 +77,14 @@ design_review = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            design_review,
-            "We need to design a new user authentication system for our SaaS platform. "
-            "Should we use OAuth 2.0, SAML, or build our own JWT-based system?",
-        )
-        result.print_result()
+        runtime.deploy(design_review)
+        runtime.serve(design_review)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        #     design_review,
+        #     "We need to design a new user authentication system for our SaaS platform. "
+        #     "Should we use OAuth 2.0, SAML, or build our own JWT-based system?",
+        # )
+        # result.print_result()
+

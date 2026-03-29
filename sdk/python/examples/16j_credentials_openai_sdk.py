@@ -46,12 +46,18 @@ def create_openai_agent():
 if __name__ == "__main__":
     agent = create_openai_agent()
 
+
     with AgentRuntime() as runtime:
-        # credentials=["GITHUB_TOKEN"] resolves from server credential store
-        # and injects into os.environ for the agent's tools
-        result = runtime.run(
-            agent,
-            "Is GitHub authentication available?",
-            credentials=["GITHUB_TOKEN"],
-        )
-        result.print_result()
+        runtime.deploy(agent)
+        runtime.serve(agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # # credentials=["GITHUB_TOKEN"] resolves from server credential store
+        # # and injects into os.environ for the agent's tools
+        # result = runtime.run(
+        #     agent,
+        #     "Is GitHub authentication available?",
+        #     credentials=["GITHUB_TOKEN"],
+        # )
+        # result.print_result()
+

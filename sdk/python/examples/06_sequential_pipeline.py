@@ -53,16 +53,21 @@ pipeline = researcher >> writer >> editor
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(pipeline, "The impact of AI agents on software development in 2025")
-        result.print_result()
+        runtime.deploy(pipeline)
+        runtime.serve(pipeline)
 
-    # ── Option 2: Using strategy parameter (equivalent) ────────────────
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(pipeline, "The impact of AI agents on software development in 2025")
+        # result.print_result()
 
-    # pipeline = Agent(
-    #     name="content_pipeline",
-    #     model=settings.llm_model,
-    #     agents=[researcher, writer, editor],
-    #     strategy=Strategy.SEQUENTIAL,
-    # )
-    # with AgentRuntime() as runtime:
-    #     result = runtime.run(pipeline, "The impact of AI agents on software development in 2025")
+        # # ── Option 2: Using strategy parameter (equivalent) ────────────────
+
+        # # pipeline = Agent(
+        # #     name="content_pipeline",
+        # #     model=settings.llm_model,
+        # #     agents=[researcher, writer, editor],
+        # #     strategy=Strategy.SEQUENTIAL,
+        # # )
+        # # with AgentRuntime() as runtime:
+        # #     result = runtime.run(pipeline, "The impact of AI agents on software development in 2025")
+

@@ -88,13 +88,18 @@ support_agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        print("=== External Worker Tools ===")
-        print("Agent has 1 local tool + 3 external worker references.\n")
+        runtime.deploy(support_agent)
+        runtime.serve(support_agent)
 
-        result = runtime.run(
-            support_agent,
-            "Customer C-1234 wants to cancel order ORD-5678. "
-            "Look up the customer, check if we have the product in stock, "
-            "and process the cancellation.",
-        )
-        result.print_result()
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # print("=== External Worker Tools ===")
+        # print("Agent has 1 local tool + 3 external worker references.\n")
+
+        # result = runtime.run(
+        #     support_agent,
+        #     "Customer C-1234 wants to cancel order ORD-5678. "
+        #     "Look up the customer, check if we have the product in stock, "
+        #     "and process the cancellation.",
+        # )
+        # result.print_result()
+

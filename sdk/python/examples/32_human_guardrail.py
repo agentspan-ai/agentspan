@@ -82,35 +82,40 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Start the agent (async — doesn't block)
-        handle = runtime.start(
-            agent,
-            "Look up AAPL and explain whether it's a good investment. "
-            "Include your opinion on potential returns.",
-        )
-        print(f"Workflow started: {handle.workflow_id}")
+        runtime.deploy(agent)
+        runtime.serve(agent)
 
-        # Poll for status
-        for i in range(60):
-            status = handle.get_status()
-            print(f"  Status: {status.status} (waiting={status.is_waiting})")
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # # Start the agent (async — doesn't block)
+        # handle = runtime.start(
+        #     agent,
+        #     "Look up AAPL and explain whether it's a good investment. "
+        #     "Include your opinion on potential returns.",
+        # )
+        # print(f"Workflow started: {handle.workflow_id}")
 
-            if status.is_waiting:
-                print("\n--- Workflow paused for human review ---")
-                print("The guardrail flagged the response for compliance review.")
-                print("Options: approve(), reject(reason), or respond(output)")
+        # # Poll for status
+        # for i in range(60):
+        #     status = handle.get_status()
+        #     print(f"  Status: {status.status} (waiting={status.is_waiting})")
 
-                # In a real app, a human would review in the Conductor UI.
-                # Here we auto-approve for the demo.
-                print("Auto-approving for demo...")
-                runtime.reject(handle.workflow_id, "bad idea")
-                print("Approved! Resuming workflow...\n")
+        #     if status.is_waiting:
+        #         print("\n--- Workflow paused for human review ---")
+        #         print("The guardrail flagged the response for compliance review.")
+        #         print("Options: approve(), reject(reason), or respond(output)")
 
-            if status.is_complete:
-                print(f"\nFinal output: {status.output}")
-                break
+        #         # In a real app, a human would review in the Conductor UI.
+        #         # Here we auto-approve for the demo.
+        #         print("Auto-approving for demo...")
+        #         runtime.reject(handle.workflow_id, "bad idea")
+        #         print("Approved! Resuming workflow...\n")
 
-            time.sleep(1)
-        else:
-            print("Timed out waiting for workflow to complete")
-            runtime.cancel(handle.workflow_id)
+        #     if status.is_complete:
+        #         print(f"\nFinal output: {status.output}")
+        #         break
+
+        #     time.sleep(1)
+        # else:
+        #     print("Timed out waiting for workflow to complete")
+        #     runtime.cancel(handle.workflow_id)
+

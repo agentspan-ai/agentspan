@@ -54,26 +54,32 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        print("--- Query 1: Billing question ---")
-        result = runtime.run(
-            agent,
-            "I have a question about my billing — is there an issue with my account?",
-        )
-        result.print_result()
+        runtime.deploy(agent)
+        runtime.serve(agent)
 
-        print("\n--- Query 2: Plan question ---")
-        result2 = runtime.run(
-            agent,
-            "What plan am I on and when did I sign up?",
-        )
-        result2.print_result()
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # print("--- Query 1: Billing question ---")
+        # result = runtime.run(
+        #     agent,
+        #     "I have a question about my billing — is there an issue with my account?",
+        # )
+        # result.print_result()
 
-    # ── Direct memory operations ─────────────────────────────────────────
+        # print("\n--- Query 2: Plan question ---")
+        # result2 = runtime.run(
+        #     agent,
+        #     "What plan am I on and when did I sign up?",
+        # )
+        # result2.print_result()
 
-    print("\n--- Memory contents ---")
-    for entry in memory.list_all():
-        print(f"  [{entry.id[:8]}] {entry.content}")
+        # # ── Direct memory operations ─────────────────────────────────────────
 
-    print(f"\n--- Search for 'billing' ---")
-    for result in memory.search("billing invoice"):
-        print(f"  → {result}")
+
+        # print("\n--- Memory contents ---")
+        # for entry in memory.list_all():
+        #     print(f"  [{entry.id[:8]}] {entry.content}")
+
+        # print(f"\n--- Search for 'billing' ---")
+        # for result in memory.search("billing invoice"):
+        #     print(f"  → {result}")
+

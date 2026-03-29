@@ -72,5 +72,10 @@ support = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(support, "What's the balance on account ACC-123?")
-        result.print_result()
+        runtime.deploy(support)
+        runtime.serve(support)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(support, "What's the balance on account ACC-123?")
+        # result.print_result()
+

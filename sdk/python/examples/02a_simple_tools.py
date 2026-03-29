@@ -41,6 +41,11 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # The LLM will call get_weather (not get_stock_price)
-        result = runtime.run(agent, "What's the weather like in San Francisco?")
-        result.print_result()
+        runtime.deploy(agent)
+        runtime.serve(agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # # The LLM will call get_weather (not get_stock_price)
+        # result = runtime.run(agent, "What's the weather like in San Francisco?")
+        # result.print_result()
+

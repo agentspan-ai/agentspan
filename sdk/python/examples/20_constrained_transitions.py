@@ -67,8 +67,13 @@ code_review = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            code_review,
-            "Write a Python function to validate email addresses using regex.",
-        )
-        result.print_result()
+        runtime.deploy(code_review)
+        runtime.serve(code_review)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        #     code_review,
+        #     "Write a Python function to validate email addresses using regex.",
+        # )
+        # result.print_result()
+

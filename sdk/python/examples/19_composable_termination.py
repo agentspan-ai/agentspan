@@ -96,7 +96,13 @@ agent4 = Agent(
 if __name__ == "__main__":
     # ── Run ─────────────────────────────────────────────────────────────
 
+
     with AgentRuntime() as runtime:
-        print("--- Simple text mention termination ---")
-        result = runtime.run(agent1, "What are AI agents?")
-        result.print_result()
+        runtime.deploy(agent1)
+        runtime.serve(agent1)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # print("--- Simple text mention termination ---")
+        # result = runtime.run(agent1, "What are AI agents?")
+        # result.print_result()
+

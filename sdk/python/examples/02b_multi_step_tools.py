@@ -79,9 +79,14 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            agent,
-            "How much has alice@example.com spent recently? "
-            "Get her last 3 transactions and give me the total.",
-        )
-        result.print_result()
+        runtime.deploy(agent)
+        runtime.serve(agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        #     agent,
+        #     "How much has alice@example.com spent recently? "
+        #     "Get her last 3 transactions and give me the total.",
+        # )
+        # result.print_result()
+

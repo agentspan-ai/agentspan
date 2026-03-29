@@ -200,9 +200,14 @@ pipeline = concept_developer >> scriptwriter >> visual_director >> audio_designe
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            pipeline,
-            "Create a 3-scene short film about a robot discovering music "
-            "for the first time in a post-apocalyptic world.",
-        )
-        result.print_result()
+        runtime.deploy(pipeline)
+        runtime.serve(pipeline)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        #     pipeline,
+        #     "Create a 3-scene short film about a robot discovering music "
+        #     "for the first time in a post-apocalyptic world.",
+        # )
+        # result.print_result()
+

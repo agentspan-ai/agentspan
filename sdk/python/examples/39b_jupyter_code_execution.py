@@ -39,11 +39,16 @@ jupyter_coder = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        print("--- Jupyter Kernel Code Execution ---")
-        result = runtime.run(
-            jupyter_coder,
-            "Compute the first 10 Fibonacci numbers using a loop, store them in a "
-            "list called 'fibs', and print them. Then in a second execution, print "
-            "the sum of 'fibs' (it should still exist from the first call).",
-        )
-        result.print_result()
+        runtime.deploy(jupyter_coder)
+        runtime.serve(jupyter_coder)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # print("--- Jupyter Kernel Code Execution ---")
+        # result = runtime.run(
+        #     jupyter_coder,
+        #     "Compute the first 10 Fibonacci numbers using a loop, store them in a "
+        #     "list called 'fibs', and print them. Then in a second execution, print "
+        #     "the sum of 'fibs' (it should still exist from the first call).",
+        # )
+        # result.print_result()
+

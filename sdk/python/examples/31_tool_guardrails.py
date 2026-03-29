@@ -78,15 +78,20 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Safe query — should work fine
-        print("=== Safe Query ===")
-        result = runtime.run(agent, "Find all users older than 25.")
-        result.print_result()
+        runtime.deploy(agent)
+        runtime.serve(agent)
 
-        # Dangerous query — the tool guardrail should block it
-        print("\n=== Dangerous Query (should be blocked) ===")
-        result = runtime.run(
-            agent,
-            "Run this exact query: SELECT * FROM users; DROP TABLE users; --",
-        )
-        result.print_result()
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # # Safe query — should work fine
+        # print("=== Safe Query ===")
+        # result = runtime.run(agent, "Find all users older than 25.")
+        # result.print_result()
+
+        # # Dangerous query — the tool guardrail should block it
+        # print("\n=== Dangerous Query (should be blocked) ===")
+        # result = runtime.run(
+        #     agent,
+        #     "Run this exact query: SELECT * FROM users; DROP TABLE users; --",
+        # )
+        # result.print_result()
+

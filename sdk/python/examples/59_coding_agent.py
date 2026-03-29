@@ -83,16 +83,22 @@ if __name__ == "__main__":
     print("=" * 60)
     print(f"\nPrompt: {prompt}\n")
 
-    with AgentRuntime() as runtime:
-        result = runtime.run(coder, prompt)
 
-        # Swarm output is a dict keyed by agent name
-        output = result.output
-        if isinstance(output, dict):
-            for agent_name, text in output.items():
-                print(f"\n{'─' * 60}")
-                print(f"  [{agent_name}]")
-                print(f"{'─' * 60}")
-                print(text)
-        else:
-            print(output)
+    with AgentRuntime() as runtime:
+        runtime.deploy(coder)
+        runtime.serve(coder)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(coder, prompt)
+
+        # # Swarm output is a dict keyed by agent name
+        # output = result.output
+        # if isinstance(output, dict):
+        #     for agent_name, text in output.items():
+        #         print(f"\n{'─' * 60}")
+        #         print(f"  [{agent_name}]")
+        #         print(f"{'─' * 60}")
+        #         print(text)
+        # else:
+        #     print(output)
+

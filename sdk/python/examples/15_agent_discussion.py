@@ -79,9 +79,15 @@ pipeline = discussion >> summarizer
 if __name__ == "__main__":
     # ── Run ─────────────────────────────────────────────────────────────
 
+
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            pipeline,
-            "Should AI agents be allowed to autonomously make financial decisions for individuals?",
-        )
-        result.print_result()
+        runtime.deploy(pipeline)
+        runtime.serve(pipeline)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        #     pipeline,
+        #     "Should AI agents be allowed to autonomously make financial decisions for individuals?",
+        # )
+        # result.print_result()
+

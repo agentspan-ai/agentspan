@@ -87,6 +87,12 @@ if __name__ == "__main__":
     print("=" * 60)
     print(f"\nPrompt: {prompt}\n")
 
+
     with AgentRuntime() as runtime:
-        result = runtime.run(ops_agent, prompt)
-        result.print_result()
+        runtime.deploy(ops_agent)
+        runtime.serve(ops_agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(ops_agent, prompt)
+        # result.print_result()
+

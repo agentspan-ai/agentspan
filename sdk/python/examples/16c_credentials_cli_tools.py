@@ -139,6 +139,12 @@ if __name__ == "__main__":
         "Who am I in AWS, and list my S3 buckets?"
     )
 
+
     with AgentRuntime() as runtime:
-        result = runtime.run(github_aws_agent, task)
-        result.print_result()
+        runtime.deploy(github_aws_agent)
+        runtime.serve(github_aws_agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(github_aws_agent, task)
+        # result.print_result()
+

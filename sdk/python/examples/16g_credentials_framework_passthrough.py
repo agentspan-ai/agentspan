@@ -56,13 +56,19 @@ def create_langgraph_agent():
 if __name__ == "__main__":
     graph = create_langgraph_agent()
 
+
     with AgentRuntime() as runtime:
-        # credentials=["GITHUB_TOKEN"] tells the runtime to resolve
-        # GITHUB_TOKEN from the server and inject it into os.environ
-        # before the graph executes.
-        result = runtime.run(
-            graph,
-            "Check if GitHub authentication is available",
-            credentials=["GITHUB_TOKEN"],
-        )
-        result.print_result()
+        runtime.deploy(graph)
+        runtime.serve(graph)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # # credentials=["GITHUB_TOKEN"] tells the runtime to resolve
+        # # GITHUB_TOKEN from the server and inject it into os.environ
+        # # before the graph executes.
+        # result = runtime.run(
+        #     graph,
+        #     "Check if GitHub authentication is available",
+        #     credentials=["GITHUB_TOKEN"],
+        # )
+        # result.print_result()
+

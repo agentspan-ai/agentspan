@@ -133,12 +133,17 @@ github_agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Example 1: Petstore
-        print("=== Petstore API ===")
-        result = runtime.run(pet_agent, "List all available pets with status 'available'")
-        result.print_result()
+        runtime.deploy(pet_agent)
+        runtime.serve(pet_agent)
 
-        # Example 3: Mixed tools
-        print("\n=== Mixed Tools ===")
-        result = runtime.run(multi_tool_agent, "What's sqrt(144)? Also find pets named 'doggie'.")
-        result.print_result()
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # # Example 1: Petstore
+        # print("=== Petstore API ===")
+        # result = runtime.run(pet_agent, "List all available pets with status 'available'")
+        # result.print_result()
+
+        # # Example 3: Mixed tools
+        # print("\n=== Mixed Tools ===")
+        # result = runtime.run(multi_tool_agent, "What's sqrt(144)? Also find pets named 'doggie'.")
+        # result.print_result()
+

@@ -382,22 +382,28 @@ if __name__ == "__main__":
     print("=" * 60)
     print(f"\nPrompt: {prompt}\n")
 
+
     with AgentRuntime() as runtime:
-        result = runtime.run(coding_team, prompt)
+        runtime.deploy(coding_team)
+        runtime.serve(coding_team)
 
-        # Display output
-        output = result.output
-        skip_keys = {"finishReason", "rejectionReason", "is_transfer", "transfer_to"}
-        if isinstance(output, dict):
-            for key, text in output.items():
-                if key in skip_keys or not text:
-                    continue
-                print(f"\n{'─' * 60}")
-                print(f"  [{key}]")
-                print(f"{'─' * 60}")
-                print(text)
-        else:
-            print(output)
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(coding_team, prompt)
 
-        print(f"\nFinish reason: {result.finish_reason}")
-        print(f"Workflow ID: {result.workflow_id}")
+        # # Display output
+        # output = result.output
+        # skip_keys = {"finishReason", "rejectionReason", "is_transfer", "transfer_to"}
+        # if isinstance(output, dict):
+        #     for key, text in output.items():
+        #         if key in skip_keys or not text:
+        #             continue
+        #         print(f"\n{'─' * 60}")
+        #         print(f"  [{key}]")
+        #         print(f"{'─' * 60}")
+        #         print(text)
+        # else:
+        #     print(output)
+
+        # print(f"\nFinish reason: {result.finish_reason}")
+        # print(f"Workflow ID: {result.workflow_id}")
+

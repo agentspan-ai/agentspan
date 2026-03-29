@@ -72,5 +72,10 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(agent, "Customer C001 is asking about their recent orders. Look them up and summarize.")
-        result.print_result()
+        runtime.deploy(agent)
+        runtime.serve(agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(agent, "Customer C001 is asking about their recent orders. Look them up and summarize.")
+        # result.print_result()
+

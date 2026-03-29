@@ -55,8 +55,13 @@ brainstorm = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            brainstorm,
-            "How should we approach building an AI-powered customer service platform?",
-        )
-        result.print_result()
+        runtime.deploy(brainstorm)
+        runtime.serve(brainstorm)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        #     brainstorm,
+        #     "How should we approach building an AI-powered customer service platform?",
+        # )
+        # result.print_result()
+

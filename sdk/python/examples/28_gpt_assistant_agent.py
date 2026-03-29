@@ -47,10 +47,16 @@ data_analyst = GPTAssistantAgent(
 if __name__ == "__main__":
     # ── Run ─────────────────────────────────────────────────────────────
 
+
     with AgentRuntime() as runtime:
-        print("--- GPT Assistant with Code Interpreter ---")
-        result = runtime.run(
-            data_analyst,
-            "Calculate the standard deviation of these numbers: 4, 8, 15, 16, 23, 42",
-        )
-        result.print_result()
+        runtime.deploy(data_analyst)
+        runtime.serve(data_analyst)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # print("--- GPT Assistant with Code Interpreter ---")
+        # result = runtime.run(
+        #     data_analyst,
+        #     "Calculate the standard deviation of these numbers: 4, 8, 15, 16, 23, 42",
+        # )
+        # result.print_result()
+

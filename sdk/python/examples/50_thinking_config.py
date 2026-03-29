@@ -50,9 +50,14 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            agent,
-            "If a train travels 120 km in 2 hours, then speeds up by 50% for "
-            "the next 3 hours, what is the total distance traveled?",
-        )
-        result.print_result()
+        runtime.deploy(agent)
+        runtime.serve(agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        #     agent,
+        #     "If a train travels 120 km in 2 hours, then speeds up by 50% for "
+        #     "the next 3 hours, what is the total distance traveled?",
+        # )
+        # result.print_result()
+

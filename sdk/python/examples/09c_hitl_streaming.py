@@ -53,52 +53,57 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # stream() starts the workflow and returns an AgentStream —
-        # iterable for events, with HITL controls built in.
-        result = runtime.stream(
-            agent,
-            "The payments service is down. Check it, restart it, and clear its stale cache data.",
-        )
-        print(f"Workflow started: {result.workflow_id}\n")
+        runtime.deploy(agent)
+        runtime.serve(agent)
 
-        for event in result:
-            if event.type == EventType.THINKING:
-                print(f"  [thinking] {event.content}")
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # # stream() starts the workflow and returns an AgentStream —
+        # # iterable for events, with HITL controls built in.
+        # result = runtime.stream(
+        #     agent,
+        #     "The payments service is down. Check it, restart it, and clear its stale cache data.",
+        # )
+        # print(f"Workflow started: {result.workflow_id}\n")
 
-            elif event.type == EventType.TOOL_CALL:
-                print(f"  [tool_call] {event.tool_name}({event.args})")
+        # for event in result:
+        #     if event.type == EventType.THINKING:
+        #         print(f"  [thinking] {event.content}")
 
-            elif event.type == EventType.TOOL_RESULT:
-                print(f"  [tool_result] {event.tool_name} -> {event.result}")
+        #     elif event.type == EventType.TOOL_CALL:
+        #         print(f"  [tool_call] {event.tool_name}({event.args})")
 
-            elif event.type == EventType.WAITING:
-                print(f"\n--- Approval required ---")
-                choice = input("  Approve? (y/n/message): ").strip().lower()
-                if choice == "y":
-                    result.approve()
-                    print("  Approved!\n")
-                elif choice == "n":
-                    reason = input("  Rejection reason: ").strip()
-                    result.reject(reason or "Rejected by operator")
-                    print("  Rejected.\n")
-                else:
-                    # Anything else is treated as feedback
-                    result.send(choice)
-                    print("  Feedback sent.\n")
+        #     elif event.type == EventType.TOOL_RESULT:
+        #         print(f"  [tool_result] {event.tool_name} -> {event.result}")
 
-            elif event.type == EventType.GUARDRAIL_PASS:
-                print(f"  [guardrail] {event.guardrail_name} passed")
+        #     elif event.type == EventType.WAITING:
+        #         print(f"\n--- Approval required ---")
+        #         choice = input("  Approve? (y/n/message): ").strip().lower()
+        #         if choice == "y":
+        #             result.approve()
+        #             print("  Approved!\n")
+        #         elif choice == "n":
+        #             reason = input("  Rejection reason: ").strip()
+        #             result.reject(reason or "Rejected by operator")
+        #             print("  Rejected.\n")
+        #         else:
+        #             # Anything else is treated as feedback
+        #             result.send(choice)
+        #             print("  Feedback sent.\n")
 
-            elif event.type == EventType.GUARDRAIL_FAIL:
-                print(f"  [guardrail] {event.guardrail_name} FAILED: {event.content}")
+        #     elif event.type == EventType.GUARDRAIL_PASS:
+        #         print(f"  [guardrail] {event.guardrail_name} passed")
 
-            elif event.type == EventType.ERROR:
-                print(f"  [error] {event.content}")
+        #     elif event.type == EventType.GUARDRAIL_FAIL:
+        #         print(f"  [guardrail] {event.guardrail_name} FAILED: {event.content}")
 
-            elif event.type == EventType.DONE:
-                print(f"\n  [done] {event.output}")
+        #     elif event.type == EventType.ERROR:
+        #         print(f"  [error] {event.content}")
 
-        # After iteration, the full result is available
-        final = result.get_result()
-        print(f"\nTool calls made: {len(final.tool_calls)}")
-        print(f"Status: {final.status}")
+        #     elif event.type == EventType.DONE:
+        #         print(f"\n  [done] {event.output}")
+
+        # # After iteration, the full result is available
+        # final = result.get_result()
+        # print(f"\nTool calls made: {len(final.tool_calls)}")
+        # print(f"Status: {final.status}")
+

@@ -90,32 +90,37 @@ team = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # ── Scenario 1: Research task (routes to pipeline)
-        print("=" * 60)
-        print("  Scenario 1: Research task (router → sequential pipeline)")
-        print("=" * 60)
-        result = runtime.run(
-            team,
-            "Research the current state of quantum computing and write a summary.",
-        )
-        result.print_result()
+        runtime.deploy(team)
+        runtime.serve(team)
 
-        if result.status == "COMPLETED":
-            print("[OK] Router → sequential pipeline completed")
-        else:
-            print(f"[WARN] Unexpected status: {result.status}")
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # # ── Scenario 1: Research task (routes to pipeline)
+        # print("=" * 60)
+        # print("  Scenario 1: Research task (router → sequential pipeline)")
+        # print("=" * 60)
+        # result = runtime.run(
+        #     team,
+        #     "Research the current state of quantum computing and write a summary.",
+        # )
+        # result.print_result()
 
-        # ── Scenario 2: Quick question (routes to single agent)
-        print("\n" + "=" * 60)
-        print("  Scenario 2: Quick question (router → single agent)")
-        print("=" * 60)
-        result2 = runtime.run(
-            team,
-            "What is the capital of France?",
-        )
-        result2.print_result()
+        # if result.status == "COMPLETED":
+        #     print("[OK] Router → sequential pipeline completed")
+        # else:
+        #     print(f"[WARN] Unexpected status: {result.status}")
 
-        if result2.status == "COMPLETED":
-            print("[OK] Router → quick answer completed")
-        else:
-            print(f"[WARN] Unexpected status: {result2.status}")
+        # # ── Scenario 2: Quick question (routes to single agent)
+        # print("\n" + "=" * 60)
+        # print("  Scenario 2: Quick question (router → single agent)")
+        # print("=" * 60)
+        # result2 = runtime.run(
+        #     team,
+        #     "What is the capital of France?",
+        # )
+        # result2.print_result()
+
+        # if result2.status == "COMPLETED":
+        #     print("[OK] Router → quick answer completed")
+        # else:
+        #     print(f"[WARN] Unexpected status: {result2.status}")
+

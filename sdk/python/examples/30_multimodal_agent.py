@@ -98,38 +98,43 @@ SAMPLE_IMAGE_2 = "https://orkes.io/icons/hero-section-workflow_updated.png"
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # --- 1. Single image analysis ---
-        print("=== Single Image Analysis ===")
-        result = runtime.run(
-            vision_agent,
-            "What do you see in this image? Describe it in detail.",
-            media=[SAMPLE_IMAGE],
-        )
-        result.print_result()
+        runtime.deploy(vision_agent)
+        runtime.serve(vision_agent)
 
-        # --- 2. Image analysis with tools ---
-        print("\n=== Image Analysis with Tools ===")
-        result = runtime.run(
-            vision_with_tools,
-            "Analyze this image, search for similar ones, and save your findings.",
-            media=[SAMPLE_IMAGE],
-        )
-        result.print_result()
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # # --- 1. Single image analysis ---
+        # print("=== Single Image Analysis ===")
+        # result = runtime.run(
+        #     vision_agent,
+        #     "What do you see in this image? Describe it in detail.",
+        #     media=[SAMPLE_IMAGE],
+        # )
+        # result.print_result()
 
-        # --- 3. Compare multiple images ---
-        print("\n=== Multi-Image Comparison ===")
-        result = runtime.run(
-            comparator,
-            "Compare these two images. What are the key differences?",
-            media=[SAMPLE_IMAGE, SAMPLE_IMAGE_2],
-        )
-        result.print_result()
+        # # --- 2. Image analysis with tools ---
+        # print("\n=== Image Analysis with Tools ===")
+        # result = runtime.run(
+        #     vision_with_tools,
+        #     "Analyze this image, search for similar ones, and save your findings.",
+        #     media=[SAMPLE_IMAGE],
+        # )
+        # result.print_result()
 
-        # --- 4. Creative pipeline from image ---
-        print("\n=== Creative Pipeline (describe → story) ===")
-        result = runtime.run(
-            creative_pipeline,
-            "Create a story inspired by this image.",
-            media=[SAMPLE_IMAGE_2],
-        )
-        result.print_result()
+        # # --- 3. Compare multiple images ---
+        # print("\n=== Multi-Image Comparison ===")
+        # result = runtime.run(
+        #     comparator,
+        #     "Compare these two images. What are the key differences?",
+        #     media=[SAMPLE_IMAGE, SAMPLE_IMAGE_2],
+        # )
+        # result.print_result()
+
+        # # --- 4. Creative pipeline from image ---
+        # print("\n=== Creative Pipeline (describe → story) ===")
+        # result = runtime.run(
+        #     creative_pipeline,
+        #     "Create a story inspired by this image.",
+        #     media=[SAMPLE_IMAGE_2],
+        # )
+        # result.print_result()
+

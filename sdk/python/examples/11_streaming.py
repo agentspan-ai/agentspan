@@ -25,12 +25,18 @@ if __name__ == "__main__":
     print("Streaming agent execution:")
     print("-" * 40)
 
+
     with AgentRuntime() as runtime:
-        for event in runtime.stream(agent, "Write a haiku about Python programming"):
-            if event.type == "done":
-                print(f"\nResult: {event.output}")
-                print(f"Workflow: {event.workflow_id}")
-            elif event.type == "waiting":
-                print("[Waiting...]")
-            elif event.type == "error":
-                print(f"[Error: {event.content}]")
+        runtime.deploy(agent)
+        runtime.serve(agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # for event in runtime.stream(agent, "Write a haiku about Python programming"):
+        #     if event.type == "done":
+        #         print(f"\nResult: {event.output}")
+        #         print(f"Workflow: {event.workflow_id}")
+        #     elif event.type == "waiting":
+        #         print("[Waiting...]")
+        #     elif event.type == "error":
+        #         print(f"[Error: {event.content}]")
+
