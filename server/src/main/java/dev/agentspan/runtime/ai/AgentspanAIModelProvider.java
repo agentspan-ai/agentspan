@@ -26,6 +26,8 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
+import com.netflix.conductor.sdk.workflow.executor.task.TaskContext;
+
 import java.util.List;
 import java.util.Map;
 
@@ -147,8 +149,7 @@ public class AgentspanAIModelProvider extends AIModelProvider {
     @SuppressWarnings("unchecked")
     private String extractUserIdFromTaskContext() {
         try {
-            com.netflix.conductor.sdk.workflow.executor.task.TaskContext ctx =
-                com.netflix.conductor.sdk.workflow.executor.task.TaskContext.get();
+            TaskContext ctx = TaskContext.get();
             if (ctx == null || ctx.getTask() == null) return null;
 
             Object agentspanCtx = ctx.getTask().getInputData().get("__agentspan_ctx__");
