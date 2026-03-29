@@ -100,7 +100,8 @@ class TestServe:
             with patch.object(
                 rt, "_collect_worker_names", return_value={"bot_tool"}
             ):
-                rt.serve(agent, blocking=False)
+                with patch.object(rt._worker_manager, "start"):
+                    rt.serve(agent, blocking=False)
         mock_reg.assert_called_once_with(agent)
 
     def test_serve_multiple_agents(self):
@@ -109,7 +110,8 @@ class TestServe:
         a2 = Agent(name="a2", model="openai/gpt-4o")
         with patch.object(rt, "_register_workers") as mock_reg:
             with patch.object(rt, "_collect_worker_names", return_value=set()):
-                rt.serve(a1, a2, blocking=False)
+                with patch.object(rt._worker_manager, "start"):
+                    rt.serve(a1, a2, blocking=False)
         assert mock_reg.call_count == 2
 
     def test_serve_with_packages(self):
@@ -121,7 +123,8 @@ class TestServe:
         ):
             with patch.object(rt, "_register_workers"):
                 with patch.object(rt, "_collect_worker_names", return_value=set()):
-                    rt.serve(packages=["myapp.agents"], blocking=False)
+                    with patch.object(rt._worker_manager, "start"):
+                        rt.serve(packages=["myapp.agents"], blocking=False)
 
     def test_serve_no_agents_raises(self):
         rt = _make_runtime()
@@ -133,7 +136,9 @@ class TestServe:
         agent = Agent(name="bot", model="openai/gpt-4o")
         with patch.object(rt, "_register_workers"):
             with patch.object(rt, "_collect_worker_names", return_value={"t"}):
-                rt.serve(agent, blocking=False)
+                with patch.object(rt._worker_manager, "start") as mock_start:
+                    rt.serve(agent, blocking=False)
+        mock_start.assert_called_once()
         assert rt._workers_started
 
 

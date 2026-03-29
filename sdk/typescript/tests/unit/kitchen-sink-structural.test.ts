@@ -437,8 +437,8 @@ describe('Stage 7: Publishing Pipeline', () => {
 
 describe('Stage 8: Analytics & Reporting', () => {
   it('analytics agent has correct tool count', () => {
-    // 4 code executors + 4 media + 2 RAG + 1 agent_tool = 11
-    expect(analyticsAgent.tools).toHaveLength(11);
+    // 4 code executors + 4 media + 2 RAG + 1 agent_tool + 1 CLI tool (auto) = 12
+    expect(analyticsAgent.tools).toHaveLength(12);
   });
 
   it('analytics agent has thinking_budget_tokens=2048', () => {
@@ -509,7 +509,7 @@ describe('Stage 8: Analytics & Reporting', () => {
   it('code executor tools have correct count', () => {
     const codeToolDefs = analyticsAgent.tools.filter((t) => {
       const def = getToolDef(t);
-      return def.toolType === 'worker' && ['code_executor', 'run_sandboxed', 'run_notebook', 'run_cloud'].includes(def.name);
+      return def.toolType === 'worker' && ['execute_code', 'run_sandboxed', 'run_notebook', 'run_cloud'].includes(def.name);
     });
     expect(codeToolDefs).toHaveLength(4);
   });

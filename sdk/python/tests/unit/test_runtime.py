@@ -216,7 +216,7 @@ class TestAgentRuntimeInit:
                     api_secret="explicit-secret",
                 )
                 assert rt._config.server_url == "http://explicit/api"
-                assert rt._config.auth_key == "explicit-key"
+                assert rt._config.api_key == "explicit-key"
                 assert rt._config.auth_secret == "explicit-secret"
 
     def test_config_object(self):

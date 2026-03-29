@@ -132,7 +132,7 @@ describe('LocalCodeExecutor', () => {
       const executor = new LocalCodeExecutor();
       const toolDef = executor.asTool();
 
-      expect(toolDef.name).toBe('code_executor');
+      expect(toolDef.name).toBe('execute_code');
       expect(toolDef.description).toBe('Execute code and return the result');
       expect(toolDef.toolType).toBe('worker');
       expect(toolDef.inputSchema).toBeDefined();
