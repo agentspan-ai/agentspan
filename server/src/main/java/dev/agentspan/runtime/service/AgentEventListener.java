@@ -208,7 +208,24 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
 
     @Override
     public void onWorkflowStartedIfEnabled(WorkflowModel workflow) {
-        // No SSE event — client already knows (they started it)
+        // For sub-workflows: register alias so child events forward to parent,
+        // and emit a HANDOFF event on the parent stream.
+        // (onTaskScheduled is not called for system tasks like SUB_WORKFLOW,
+        //  so we detect handoffs here instead.)
+        String parentId = workflow.getParentWorkflowId();
+        if (parentId == null || parentId.isEmpty()) return;
+
+        String childId = workflow.getWorkflowId();
+        String childName = workflow.getWorkflowName();
+
+        // Register alias so future events from this child appear on the parent stream
+        streamRegistry.registerAlias(childId, parentId);
+
+        // Emit HANDOFF on the parent — extract agent name from sub-workflow name
+        // Child workflow names follow patterns like: support_orchestrator_router_wf, tech_support_wf, etc.
+        String target = extractHandoffTarget(childName.replaceAll("_wf$", ""));
+        logger.debug("Sub-workflow started: child={}, parent={}, target={}", childId, parentId, target);
+        emit(parentId, AgentSSEEvent.handoff(parentId, target));
     }
 
     @Override
@@ -227,6 +244,16 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
         String wfId = workflow.getWorkflowId();
         logger.info("onWorkflowCompleted: wfId={}", wfId);
         recordWorkflowAIMetrics(workflow);
+
+        // For sub-workflows (children), do NOT emit DONE on the parent stream.
+        // DONE is only emitted for the root (parent) workflow so the SSE client doesn't
+        // close the stream prematurely when an intermediate sub-agent finishes.
+        String parentId = workflow.getParentWorkflowId();
+        if (parentId != null && !parentId.isEmpty()) {
+            streamRegistry.complete(wfId);
+            return;
+        }
+
         Map<String, Object> output = workflow.getOutput();
         emit(wfId, AgentSSEEvent.done(wfId, output));
         if (executionTokenService != null) {

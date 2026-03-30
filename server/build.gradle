@@ -202,6 +202,10 @@ tasks.named('check') {
     dependsOn 'spotlessCheck', 'checkNoInlineFQN'
 }
 
+bootRun {
+    environment System.getenv()
+}
+
 test {
     useJUnitPlatform()
 }

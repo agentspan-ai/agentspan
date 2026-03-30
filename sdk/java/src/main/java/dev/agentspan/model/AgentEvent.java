@@ -5,7 +5,11 @@ package dev.agentspan.model;
 
 import dev.agentspan.enums.EventType;
 
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * A single event from a streaming agent execution.
@@ -55,6 +59,11 @@ public class AgentEvent {
     /**
      * Create an AgentEvent from a raw map (as parsed from SSE JSON).
      */
+    /** Internal keys injected by the server that should not be shown as tool arguments. */
+    private static final Set<String> INTERNAL_KEYS = new HashSet<>(Arrays.asList(
+        "__agentspan_ctx__", "_agent_state", "method"
+    ));
+
     @SuppressWarnings("unchecked")
     public static AgentEvent fromMap(Map<String, Object> data) {
         String typeStr = (String) data.get("type");
@@ -75,11 +84,23 @@ public class AgentEvent {
             }
         }
 
+        // Strip internal server keys from tool call args
+        Map<String, Object> rawArgs = (Map<String, Object>) data.get("args");
+        Map<String, Object> cleanArgs = null;
+        if (rawArgs != null) {
+            cleanArgs = new LinkedHashMap<>();
+            for (Map.Entry<String, Object> entry : rawArgs.entrySet()) {
+                if (!INTERNAL_KEYS.contains(entry.getKey())) {
+                    cleanArgs.put(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+
         return new AgentEvent(
             type,
             (String) data.get("content"),
             (String) data.get("toolName"),
-            (Map<String, Object>) data.get("args"),
+            cleanArgs,
             data.get("result"),
             data.get("output"),
             (String) data.getOrDefault("workflowId", ""),

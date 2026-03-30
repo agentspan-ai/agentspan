@@ -56,14 +56,47 @@ public class AgentResult {
     /**
      * Convert the output to the given type using Jackson.
      *
+     * <p>Handles structured output from the server, which may be wrapped in a
+     * {@code {"result": ...}} envelope or returned as a flat JSON string.
+     *
      * @param cls the target class
      * @param <T> the target type
-     * @return the output converted to the given type
+     * @return the output converted to the given type, or null if conversion fails
      */
+    @SuppressWarnings("unchecked")
     public <T> T getOutput(Class<T> cls) {
         if (output == null) return null;
         ObjectMapper mapper = JsonMapper.get();
-        return mapper.convertValue(output, cls);
+
+        Object target = output;
+
+        // Unwrap {"result": ...} envelope if the map has a "result" key
+        // (server may also include other metadata keys like "finishReason")
+        if (target instanceof Map) {
+            Map<String, Object> m = (Map<String, Object>) target;
+            if (m.containsKey("result")) {
+                Object inner = m.get("result");
+                if (inner != null) target = inner;
+            }
+        }
+
+        // If target is already the right type, return it
+        if (cls.isInstance(target)) {
+            return cls.cast(target);
+        }
+
+        // Serialize to JSON string, then deserialize to the target class
+        try {
+            String json;
+            if (target instanceof String) {
+                json = (String) target;
+            } else {
+                json = mapper.writeValueAsString(target);
+            }
+            return mapper.readValue(json, cls);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to deserialize output to " + cls.getSimpleName(), e);
+        }
     }
 
     /**

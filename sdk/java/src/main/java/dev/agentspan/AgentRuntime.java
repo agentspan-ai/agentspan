@@ -14,9 +14,11 @@ import dev.agentspan.model.ToolDef;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
 
 /**
  * Main runtime for executing agents.
@@ -151,7 +153,7 @@ public class AgentRuntime implements AutoCloseable {
 
         return startAsync(agent, prompt).thenApply(handle -> {
             String workflowId = handle.getWorkflowId();
-            String sseUrl = config.getServerUrl() + "/agent/" + workflowId + "/stream";
+            String sseUrl = config.getServerUrl() + "/api/agent/stream/" + workflowId;
 
             SseClient sseClient = new SseClient(sseUrl, config, httpApi.getHttpClient());
             sseClient.connect();
@@ -190,15 +192,43 @@ public class AgentRuntime implements AutoCloseable {
             }
         }
 
-        // Register guardrail workers
-        for (dev.agentspan.model.GuardrailDef guardrail : agent.getGuardrails()) {
-            if (guardrail.getFunc() != null) {
-                String taskName = guardrail.getName() + "_guardrail";
-                workerManager.register(taskName, inputData -> {
-                    String content = (String) inputData.getOrDefault("content", "");
-                    return guardrail.getFunc().apply(content);
-                });
-            }
+        // Register combined guardrail worker per agent (matches Python: {agent_name}_output_guardrail)
+        List<dev.agentspan.model.GuardrailDef> customGuardrails = agent.getGuardrails().stream()
+            .filter(g -> g.getFunc() != null)
+            .collect(java.util.stream.Collectors.toList());
+        if (!customGuardrails.isEmpty()) {
+            String taskName = agent.getName() + "_output_guardrail";
+            workerManager.register(taskName, inputData -> {
+                Object rawContent = inputData.get("content");
+                String content = rawContent != null ? rawContent.toString() : "";
+                int iteration = inputData.get("iteration") instanceof Number
+                    ? ((Number) inputData.get("iteration")).intValue() : 0;
+                for (dev.agentspan.model.GuardrailDef g : customGuardrails) {
+                    dev.agentspan.model.GuardrailResult result = g.getFunc().apply(content);
+                    if (!result.isPassed()) {
+                        String onFail = g.getOnFail().toJsonValue();
+                        String fixedOutput = result.getFixedOutput();
+                        if ("retry".equals(onFail) && iteration >= g.getMaxRetries()) onFail = "raise";
+                        if ("fix".equals(onFail) && fixedOutput == null) onFail = "raise";
+                        Map<String, Object> out = new java.util.LinkedHashMap<>();
+                        out.put("passed", false);
+                        out.put("message", result.getMessage() != null ? result.getMessage() : "");
+                        out.put("on_fail", onFail);
+                        out.put("fixed_output", fixedOutput);
+                        out.put("guardrail_name", g.getName());
+                        out.put("should_continue", "retry".equals(onFail));
+                        return out;
+                    }
+                }
+                Map<String, Object> out = new java.util.LinkedHashMap<>();
+                out.put("passed", true);
+                out.put("message", "");
+                out.put("on_fail", "pass");
+                out.put("fixed_output", null);
+                out.put("guardrail_name", "");
+                out.put("should_continue", false);
+                return out;
+            });
         }
 
         // Recurse into sub-agents
@@ -213,8 +243,11 @@ public class AgentRuntime implements AutoCloseable {
     }
 
     private String extractWorkflowId(Map<String, Object> response) {
-        // Try several possible keys
-        Object id = response.get("workflowId");
+        // Try several possible keys — server renamed workflowId → executionId
+        Object id = response.get("executionId");
+        if (id != null) return id.toString();
+
+        id = response.get("workflowId");
         if (id != null) return id.toString();
 
         id = response.get("id");

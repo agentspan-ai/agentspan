@@ -18,6 +18,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Stream;
 
 /**
  * Server-Sent Events (SSE) client for streaming agent events.
@@ -99,6 +100,9 @@ public class SseClient implements AutoCloseable {
     }
 
     private void streamLoop() {
+        StringBuilder dataBuffer = new StringBuilder();
+        String[] eventTypeHolder = {null};
+
         try {
             HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(url))
@@ -115,7 +119,8 @@ public class SseClient implements AutoCloseable {
             }
 
             HttpRequest request = requestBuilder.build();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<Stream<String>> response = httpClient.send(
+                request, HttpResponse.BodyHandlers.ofLines());
 
             if (response.statusCode() >= 400) {
                 logger.error("SSE connection failed with status {}", response.statusCode());
@@ -123,9 +128,46 @@ public class SseClient implements AutoCloseable {
                 return;
             }
 
-            String body = response.body();
-            if (body != null) {
-                parseSSEBody(body);
+            try { response.body().forEach(rawLine -> {
+                if (closed.get()) return;
+
+                // Remove trailing \r if present
+                String line = rawLine.endsWith("\r") ? rawLine.substring(0, rawLine.length() - 1) : rawLine;
+
+                if (line.isEmpty()) {
+                    // Blank line: dispatch accumulated event
+                    String data = dataBuffer.toString().trim();
+                    if (!data.isEmpty()) {
+                        dispatchEvent(eventTypeHolder[0], data);
+                    }
+                    dataBuffer.setLength(0);
+                    eventTypeHolder[0] = null;
+                    return;
+                }
+
+                if (line.startsWith(":")) {
+                    // Comment / heartbeat — skip
+                    return;
+                }
+
+                if (line.startsWith("event:")) {
+                    eventTypeHolder[0] = line.substring(6).trim();
+                } else if (line.startsWith("id:")) {
+                    // Last event ID — tracked but not used currently
+                } else if (line.startsWith("data:")) {
+                    String dataChunk = line.substring(5);
+                    if (dataChunk.startsWith(" ")) dataChunk = dataChunk.substring(1);
+                    if (dataBuffer.length() > 0) dataBuffer.append("\n");
+                    dataBuffer.append(dataChunk);
+                }
+            }); } catch (java.io.UncheckedIOException ignored) {
+                // Stream closed while reading — expected on shutdown
+            }
+
+            // Dispatch any remaining buffered data
+            String data = dataBuffer.toString().trim();
+            if (!data.isEmpty()) {
+                dispatchEvent(eventTypeHolder[0], data);
             }
 
         } catch (Exception e) {
@@ -134,56 +176,6 @@ public class SseClient implements AutoCloseable {
             }
         } finally {
             eventQueue.offer(DONE_SENTINEL);
-        }
-    }
-
-    /**
-     * Parse the full SSE response body into events.
-     * This handles the case where we get the complete body at once (non-chunked).
-     */
-    private void parseSSEBody(String body) {
-        String[] lines = body.split("\n");
-        StringBuilder dataBuffer = new StringBuilder();
-        String eventType = null;
-
-        for (String rawLine : lines) {
-            if (closed.get()) break;
-
-            // Remove trailing \r if present
-            String line = rawLine.endsWith("\r") ? rawLine.substring(0, rawLine.length() - 1) : rawLine;
-
-            if (line.isEmpty()) {
-                // Blank line: dispatch accumulated event
-                String data = dataBuffer.toString().trim();
-                if (!data.isEmpty()) {
-                    dispatchEvent(eventType, data);
-                }
-                dataBuffer.setLength(0);
-                eventType = null;
-                continue;
-            }
-
-            if (line.startsWith(":")) {
-                // Comment / heartbeat — skip
-                continue;
-            }
-
-            if (line.startsWith("event:")) {
-                eventType = line.substring(6).trim();
-            } else if (line.startsWith("id:")) {
-                // Last event ID — tracked but not used currently
-            } else if (line.startsWith("data:")) {
-                String dataChunk = line.substring(5);
-                if (dataChunk.startsWith(" ")) dataChunk = dataChunk.substring(1);
-                if (dataBuffer.length() > 0) dataBuffer.append("\n");
-                dataBuffer.append(dataChunk);
-            }
-        }
-
-        // Dispatch any remaining data
-        String data = dataBuffer.toString().trim();
-        if (!data.isEmpty()) {
-            dispatchEvent(eventType, data);
         }
     }
 
