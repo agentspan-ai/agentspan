@@ -14,6 +14,7 @@ import dev.agentspan.model.ToolDef;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -231,6 +232,12 @@ public class AgentRuntime implements AutoCloseable {
             });
         }
 
+        // Register SWARM transfer workers
+        if (dev.agentspan.enums.Strategy.SWARM.equals(agent.getStrategy())
+                && !agent.getAgents().isEmpty()) {
+            registerSwarmWorkers(agent);
+        }
+
         // Recurse into sub-agents
         for (Agent subAgent : agent.getAgents()) {
             prepareWorkers(subAgent);
@@ -240,6 +247,114 @@ public class AgentRuntime implements AutoCloseable {
         if (agent.getRouter() != null) {
             prepareWorkers(agent.getRouter());
         }
+    }
+
+    /**
+     * Register SWARM transfer, check_transfer, and handoff_check workers for the given agent.
+     *
+     * <p>The server creates these worker tasks for SWARM agents:
+     * <ul>
+     *   <li>{@code {source}_transfer_to_{peer}} — LLM-called transfer tool (complete with empty output)</li>
+     *   <li>{@code {name}_check_transfer} — detects if LLM tool_calls contain a transfer</li>
+     *   <li>{@code {name}_handoff_check} — determines the next active_agent and whether to loop</li>
+     * </ul>
+     */
+    private void registerSwarmWorkers(Agent swarmAgent) {
+        // Collect all participant names: the SWARM orchestrator (case "0") + sub-agents (cases "1", "2", ...)
+        List<String> allNames = new ArrayList<>();
+        allNames.add(swarmAgent.getName());
+        for (Agent sub : swarmAgent.getAgents()) {
+            allNames.add(sub.getName());
+        }
+
+        // Register {source}_transfer_to_{peer} workers — just complete with empty output
+        for (String source : allNames) {
+            for (String peer : allNames) {
+                if (!source.equals(peer)) {
+                    final String taskName = source + "_transfer_to_" + peer;
+                    workerManager.register(taskName, input -> java.util.Collections.emptyMap());
+                }
+            }
+        }
+
+        // Register {name}_check_transfer workers for each participant.
+        // Input: tool_calls (list of LLM tool calls)
+        // Output: is_transfer (boolean), transfer_to (target agent name)
+        for (String agentName : allNames) {
+            final String prefix = agentName + "_transfer_to_";
+            final String taskName = agentName + "_check_transfer";
+            workerManager.register(taskName, input -> {
+                Object toolCallsRaw = input.get("tool_calls");
+                Map<String, Object> out = new java.util.LinkedHashMap<>();
+                out.put("is_transfer", false);
+                out.put("transfer_to", "");
+                if (toolCallsRaw instanceof List) {
+                    @SuppressWarnings("unchecked")
+                    List<Object> toolCalls = (List<Object>) toolCallsRaw;
+                    for (Object tc : toolCalls) {
+                        String name = null;
+                        if (tc instanceof Map) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> tcMap = (Map<String, Object>) tc;
+                            name = tcMap.get("name") instanceof String ? (String) tcMap.get("name") : null;
+                            if (name == null && tcMap.get("function") instanceof Map) {
+                                @SuppressWarnings("unchecked")
+                                Map<String, Object> fn = (Map<String, Object>) tcMap.get("function");
+                                name = fn.get("name") instanceof String ? (String) fn.get("name") : null;
+                            }
+                        }
+                        if (name != null && name.startsWith(prefix)) {
+                            String target = name.substring(prefix.length());
+                            out.put("is_transfer", true);
+                            out.put("transfer_to", target);
+                            break;
+                        }
+                    }
+                }
+                return out;
+            });
+        }
+
+        // Register {swarmAgent.name}_handoff_check worker.
+        // Determines the next active_agent index (string: "0"=parent, "1"=first sub, etc.)
+        // and whether to continue looping (handoff=true).
+        // Input: is_transfer (bool), transfer_to (agent name), active_agent (string index)
+        final List<String> subNames = new ArrayList<>();
+        for (Agent sub : swarmAgent.getAgents()) {
+            subNames.add(sub.getName());
+        }
+        final String handoffTaskName = swarmAgent.getName() + "_handoff_check";
+        workerManager.register(handoffTaskName, input -> {
+            Object isTransferRaw = input.get("is_transfer");
+            boolean isTransfer = Boolean.TRUE.equals(isTransferRaw)
+                || "true".equalsIgnoreCase(isTransferRaw != null ? isTransferRaw.toString() : "");
+            String transferTo = input.get("transfer_to") instanceof String
+                ? (String) input.get("transfer_to") : "";
+            String currentAgent = input.get("active_agent") instanceof String
+                ? (String) input.get("active_agent") : "0";
+
+            Map<String, Object> out = new java.util.LinkedHashMap<>();
+            if (isTransfer && !transferTo.isEmpty()) {
+                // Find the case index for the target agent
+                int targetIdx = subNames.indexOf(transferTo);
+                if (targetIdx >= 0) {
+                    // Sub-agents are cases "1".."N"
+                    out.put("active_agent", String.valueOf(targetIdx + 1));
+                    out.put("handoff", true);
+                } else if (transferTo.equals(swarmAgent.getName())) {
+                    // Transfer back to parent (case "0")
+                    out.put("active_agent", "0");
+                    out.put("handoff", true);
+                } else {
+                    out.put("active_agent", currentAgent);
+                    out.put("handoff", false);
+                }
+            } else {
+                out.put("active_agent", currentAgent);
+                out.put("handoff", false);
+            }
+            return out;
+        });
     }
 
     private String extractWorkflowId(Map<String, Object> response) {
