@@ -6,7 +6,6 @@ on:
       project_key:
         description: Orca Shift Left project key
         required: false
-        default: agentspan
         type: string
 
 permissions:
@@ -14,12 +13,30 @@ permissions:
   security-events: write
 
 env:
-  ORCA_PROJECT_KEY: ${{ vars.ORCA_PROJECT_KEY || github.event.inputs.project_key || 'agentspan' }}
+  ORCA_PROJECT_KEY: ${{ vars.ORCA_PROJECT_KEY || github.event.inputs.project_key }}
 
 jobs:
+  validate-config:
+    name: Validate Orca Config
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate required Orca settings
+        env:
+          ORCA_SECURITY_API_TOKEN: ${{ secrets.ORCA_SECURITY_API_TOKEN }}
+        run: |
+          test -n "${ORCA_PROJECT_KEY}" || {
+            echo "Set repo variable ORCA_PROJECT_KEY or provide the workflow_dispatch project_key input."
+            exit 1
+          }
+          test -n "${ORCA_SECURITY_API_TOKEN}" || {
+            echo "Set repo secret ORCA_SECURITY_API_TOKEN."
+            exit 1
+          }
+
   image-scan:
     name: Orca Image Scan
     runs-on: ubuntu-latest
+    needs: validate-config
     steps:
       - uses: actions/checkout@v4
 
@@ -46,11 +63,12 @@ jobs:
         continue-on-error: true
         env:
           ORCA_SECURITY_API_TOKEN: ${{ secrets.ORCA_SECURITY_API_TOKEN }}
-        run: orca-cli -p "imagescan" image scan agentspan/server:orca-scan
+        run: orca-cli -p "${ORCA_PROJECT_KEY}" image scan agentspan/server:orca-scan
 
   sast:
     name: Orca SAST
     runs-on: ubuntu-latest
+    needs: validate-config
     steps:
       - uses: actions/checkout@v4
         with:
@@ -76,6 +94,7 @@ jobs:
   fs-scan:
     name: Orca FS Scan
     runs-on: ubuntu-latest
+    needs: validate-config
     steps:
       - uses: actions/checkout@v4
         with:
