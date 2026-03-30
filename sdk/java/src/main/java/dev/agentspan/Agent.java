@@ -54,6 +54,7 @@ public class Agent {
     private final boolean planner;
     private final String includeContents;
     private final Integer thinkingBudgetTokens;
+    private final String introduction;
 
     private Agent(Builder builder) {
         this.name = builder.name;
@@ -75,6 +76,7 @@ public class Agent {
         this.planner = builder.planner;
         this.includeContents = builder.includeContents;
         this.thinkingBudgetTokens = builder.thinkingBudgetTokens;
+        this.introduction = builder.introduction;
     }
 
     /**
@@ -134,6 +136,7 @@ public class Agent {
     public boolean isPlanner() { return planner; }
     public String getIncludeContents() { return includeContents; }
     public Integer getThinkingBudgetTokens() { return thinkingBudgetTokens; }
+    public String getIntroduction() { return introduction; }
 
     public static Builder builder() {
         return new Builder();
@@ -175,6 +178,7 @@ public class Agent {
         private boolean planner = false;
         private String includeContents;
         private Integer thinkingBudgetTokens;
+        private String introduction;
 
         /** Set the agent name (required). Must match {@code ^[a-zA-Z_][a-zA-Z0-9_-]*$}. */
         public Builder name(String name) {
@@ -312,6 +316,17 @@ public class Agent {
          */
         public Builder thinkingBudgetTokens(int thinkingBudgetTokens) {
             this.thinkingBudgetTokens = thinkingBudgetTokens;
+            return this;
+        }
+
+        /**
+         * Set an introduction for this agent. In multi-agent discussions
+         * (ROUND_ROBIN, RANDOM, SWARM), the introduction is prepended to
+         * the conversation transcript so other agents know who they're
+         * collaborating with.
+         */
+        public Builder introduction(String introduction) {
+            this.introduction = introduction;
             return this;
         }
 
