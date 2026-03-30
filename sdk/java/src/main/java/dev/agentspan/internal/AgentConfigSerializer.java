@@ -79,11 +79,16 @@ public class AgentConfigSerializer {
             agentMap.put("agents", agentsList);
         }
 
+        // Router agent (for ROUTER strategy)
+        if (agent.getRouter() != null) {
+            agentMap.put("router", serializeAgent(agent.getRouter()));
+        }
+
         // Guardrails
         if (agent.getGuardrails() != null && !agent.getGuardrails().isEmpty()) {
             List<Map<String, Object>> guardrailsList = new ArrayList<>();
             for (GuardrailDef g : agent.getGuardrails()) {
-                guardrailsList.add(serializeGuardrail(g));
+                guardrailsList.add(serializeGuardrail(g, agent.getName()));
             }
             agentMap.put("guardrails", guardrailsList);
         }
@@ -139,7 +144,7 @@ public class AgentConfigSerializer {
         return toolMap;
     }
 
-    private Map<String, Object> serializeGuardrail(GuardrailDef g) {
+    private Map<String, Object> serializeGuardrail(GuardrailDef g, String agentName) {
         Map<String, Object> gMap = new LinkedHashMap<>();
         gMap.put("name", g.getName());
         gMap.put("position", g.getPosition().toJsonValue());
@@ -148,7 +153,8 @@ public class AgentConfigSerializer {
         gMap.put("guardrailType", g.getGuardrailType() != null ? g.getGuardrailType() : "custom");
 
         if (g.getFunc() != null) {
-            gMap.put("taskName", g.getName());
+            // Python uses {agent_name}_output_guardrail as the combined worker task name
+            gMap.put("taskName", agentName + "_output_guardrail");
         }
 
         if (g.getConfig() != null && !g.getConfig().isEmpty()) {

@@ -120,13 +120,16 @@ public class WorkerManager {
             }
             if (taskId == null) return;
 
+            String workflowInstanceId = (String) task.get("workflowInstanceId");
+
             @SuppressWarnings("unchecked")
             Map<String, Object> inputData = (Map<String, Object>) task.getOrDefault("inputData", Map.of());
 
             logger.debug("Executing task {} ({})", taskName, taskId);
 
             final String finalTaskId = taskId;
-            executeTask(taskName, finalTaskId, handler, inputData);
+            final String finalWorkflowId = workflowInstanceId;
+            executeTask(taskName, finalTaskId, finalWorkflowId, handler, inputData);
 
         } catch (Exception e) {
             logger.error("Error in poll loop for task {}: {}", taskName, e.getMessage(), e);
@@ -136,6 +139,7 @@ public class WorkerManager {
     private void executeTask(
             String taskName,
             String taskId,
+            String workflowInstanceId,
             Function<Map<String, Object>, Object> handler,
             Map<String, Object> inputData) {
 
@@ -143,11 +147,11 @@ public class WorkerManager {
             try {
                 Object result = handler.apply(inputData);
                 Map<String, Object> output = buildOutput(result);
-                httpApi.completeTask(taskId, output);
+                httpApi.completeTask(taskId, workflowInstanceId, output);
                 logger.debug("Completed task {} ({})", taskName, taskId);
             } catch (Exception e) {
                 logger.error("Task {} ({}) failed: {}", taskName, taskId, e.getMessage(), e);
-                httpApi.failTask(taskId, e.getMessage());
+                httpApi.failTask(taskId, workflowInstanceId, e.getMessage());
             }
         };
 

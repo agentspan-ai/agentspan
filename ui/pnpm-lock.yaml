@@ -337,6 +337,9 @@ importers:
       jsdom:
         specifier: ^26.1.0
         version: 26.1.0
+      moment:
+        specifier: ^2.30.1
+        version: 2.30.1
       monaco-editor:
         specifier: ^0.55.1
         version: 0.55.1
@@ -10747,7 +10750,7 @@ snapshots:
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
       uuid: 7.0.3
-      vis-data: 6.6.1(moment@2.30.1)(uuid@8.3.2)(vis-util@4.3.4)
+      vis-data: 6.6.1(moment@2.30.1)(uuid@7.0.3)(vis-util@4.3.4)
       vis-timeline: 7.3.6(@egjs/hammerjs@2.0.17)(component-emitter@1.3.1)(keycharm@0.3.1)(moment@2.30.1)(propagating-hammerjs@1.5.0)(uuid@7.0.3)(vis-data@6.6.1(moment@2.30.1)(uuid@7.0.3)(vis-util@4.3.4))(vis-util@4.3.4)
       vis-util: 4.3.4
 
@@ -11661,10 +11664,10 @@ snapshots:
       d3-time: 3.1.0
       d3-timer: 3.0.1
 
-  vis-data@6.6.1(moment@2.30.1)(uuid@8.3.2)(vis-util@4.3.4):
+  vis-data@6.6.1(moment@2.30.1)(uuid@7.0.3)(vis-util@4.3.4):
     dependencies:
       moment: 2.30.1
-      uuid: 8.3.2
+      uuid: 7.0.3
       vis-util: 4.3.4
 
   vis-timeline@7.3.6(@egjs/hammerjs@2.0.17)(component-emitter@1.3.1)(keycharm@0.3.1)(moment@2.30.1)(propagating-hammerjs@1.5.0)(uuid@7.0.3)(vis-data@6.6.1(moment@2.30.1)(uuid@7.0.3)(vis-util@4.3.4))(vis-util@4.3.4):
@@ -11675,7 +11678,7 @@ snapshots:
       moment: 2.30.1
       propagating-hammerjs: 1.5.0
       uuid: 7.0.3
-      vis-data: 6.6.1(moment@2.30.1)(uuid@8.3.2)(vis-util@4.3.4)
+      vis-data: 6.6.1(moment@2.30.1)(uuid@7.0.3)(vis-util@4.3.4)
       vis-util: 4.3.4
 
   vis-util@4.3.4: {}

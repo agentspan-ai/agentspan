@@ -52,7 +52,7 @@ public class HttpApi {
             body.put("sessionId", sessionId);
         }
 
-        return post("/agent/start", body);
+        return post("/api/agent/start", body);
     }
 
     /**
@@ -62,7 +62,7 @@ public class HttpApi {
      * @return status response map
      */
     public Map<String, Object> getAgentStatus(String workflowId) {
-        return get("/agent/" + workflowId + "/status");
+        return get("/api/agent/" + workflowId + "/status");
     }
 
     /**
@@ -78,7 +78,7 @@ public class HttpApi {
         if (reason != null && !reason.isEmpty()) {
             body.put("reason", reason);
         }
-        post("/agent/" + workflowId + "/respond", body);
+        post("/api/agent/" + workflowId + "/respond", body);
     }
 
     /**
@@ -90,7 +90,7 @@ public class HttpApi {
     @SuppressWarnings("unchecked")
     public Map<String, Object> pollTask(String taskType) {
         try {
-            String url = config.getServerUrl() + "/tasks/poll/" + taskType;
+            String url = config.getServerUrl() + "/api/tasks/poll/" + taskType;
             HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .timeout(Duration.ofSeconds(10))
@@ -128,12 +128,13 @@ public class HttpApi {
      * @param taskId the task ID
      * @param output the output map
      */
-    public void completeTask(String taskId, Map<String, Object> output) {
+    public void completeTask(String taskId, String workflowInstanceId, Map<String, Object> output) {
         Map<String, Object> body = new HashMap<>();
         body.put("taskId", taskId);
+        if (workflowInstanceId != null) body.put("workflowInstanceId", workflowInstanceId);
         body.put("status", "COMPLETED");
         body.put("outputData", output);
-        post("/tasks/" + taskId, body);
+        post("/api/tasks", body);
     }
 
     /**
@@ -142,13 +143,14 @@ public class HttpApi {
      * @param taskId       the task ID
      * @param errorMessage the error message
      */
-    public void failTask(String taskId, String errorMessage) {
+    public void failTask(String taskId, String workflowInstanceId, String errorMessage) {
         Map<String, Object> body = new HashMap<>();
         body.put("taskId", taskId);
+        if (workflowInstanceId != null) body.put("workflowInstanceId", workflowInstanceId);
         body.put("status", "FAILED");
         body.put("reasonForIncompletion", errorMessage);
         try {
-            post("/tasks/" + taskId, body);
+            post("/api/tasks", body);
         } catch (Exception e) {
             logger.warn("Failed to report task failure for {}: {}", taskId, e.getMessage());
         }
@@ -164,7 +166,7 @@ public class HttpApi {
         taskDef.put("name", taskName);
         taskDef.put("timeoutSeconds", 300);
         taskDef.put("responseTimeoutSeconds", 300);
-        post("/metadata/taskdefs", List.of(taskDef));
+        post("/api/metadata/taskdefs", List.of(taskDef));
     }
 
     // ── Internal helpers ─────────────────────────────────────────────────
