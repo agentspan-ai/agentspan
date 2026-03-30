@@ -80,7 +80,7 @@ export class AgentConfig {
     const rawUrl =
       options?.serverUrl ??
       env.AGENTSPAN_SERVER_URL ??
-      'http://localhost:8080/api';
+      'http://localhost:6767/api';
 
     this.serverUrl = normalizeServerUrl(rawUrl);
 

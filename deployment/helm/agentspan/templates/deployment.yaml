@@ -47,7 +47,7 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           ports:
             - name: http
-              containerPort: 8080
+              containerPort: 6767
               protocol: TCP
           env:
             - name: JAVA_TOOL_OPTIONS

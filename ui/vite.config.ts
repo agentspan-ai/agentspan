@@ -102,15 +102,15 @@ export default defineConfig(({ mode }) => {
       port: 1234,
       proxy: {
         "/api": {
-          target: env.VITE_WF_SERVER || "http://localhost:8080",
+          target: env.VITE_WF_SERVER || "http://localhost:6767",
           changeOrigin: true,
         },
         "/swagger-ui": {
-          target: env.VITE_WF_SERVER || "http://localhost:8080",
+          target: env.VITE_WF_SERVER || "http://localhost:6767",
           changeOrigin: true,
         },
         "/api-docs": {
-          target: env.VITE_WF_SERVER || "http://localhost:8080",
+          target: env.VITE_WF_SERVER || "http://localhost:6767",
           changeOrigin: true,
         },
       },

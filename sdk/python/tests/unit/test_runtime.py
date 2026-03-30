@@ -277,7 +277,7 @@ class TestAgentConfig:
         from agentspan.agents.runtime.config import AgentConfig
 
         config = AgentConfig()
-        assert config.server_url == "http://localhost:8080/api"
+        assert config.server_url == "http://localhost:6767/api"
         assert config.llm_retry_count == 3
         assert config.worker_poll_interval_ms == 100
 

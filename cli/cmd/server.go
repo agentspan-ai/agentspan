@@ -58,7 +58,7 @@ var serverLogsCmd = &cobra.Command{
 }
 
 func init() {
-	serverStartCmd.Flags().StringVarP(&serverPort, "port", "p", "8080", "Server port")
+	serverStartCmd.Flags().StringVarP(&serverPort, "port", "p", "6767", "Server port")
 	serverStartCmd.Flags().StringVarP(&serverModel, "model", "m", "", "Default LLM model (e.g. openai/gpt-4o)")
 	serverStartCmd.Flags().StringVar(&serverVersion, "version", "", "Specific server version to download (e.g. 0.1.0)")
 	serverStartCmd.Flags().StringVar(&serverJar, "jar", "", "Path to a local JAR file to use directly")
@@ -158,7 +158,7 @@ func runServerStart(cmd *cobra.Command, args []string) error {
 	javaArgs := []string{"-jar", jarPath}
 
 	env := os.Environ()
-	if serverPort != "8080" {
+	if serverPort != "6767" {
 		env = append(env, "SERVER_PORT="+serverPort)
 	}
 	if serverModel != "" {

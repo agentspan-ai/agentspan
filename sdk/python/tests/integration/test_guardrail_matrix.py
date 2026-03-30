@@ -13,7 +13,7 @@ Run:
 
 Requirements:
     - Conductor server running
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - AGENT_LLM_MODEL set (default: openai/gpt-4o-mini)
 """
 

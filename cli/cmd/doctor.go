@@ -238,7 +238,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	}
 
 	// Port availability
-	port := "8080"
+	port := "6767"
 	if serverPort != "" {
 		port = serverPort
 	}
