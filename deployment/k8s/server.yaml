@@ -28,7 +28,7 @@ spec:
           image: agentspan/server:latest
           imagePullPolicy: Always
           ports:
-            - containerPort: 8080
+            - containerPort: 6767
               name: http
           # Pass JVM options as JAVA_TOOL_OPTIONS so the JVM picks them up
           # without needing to modify the Dockerfile ENTRYPOINT.
@@ -158,7 +158,7 @@ spec:
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
-              port: 8080
+              port: 6767
             initialDelaySeconds: 45
             periodSeconds: 10
             timeoutSeconds: 5
@@ -166,7 +166,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
-              port: 8080
+              port: 6767
             initialDelaySeconds: 60
             periodSeconds: 20
             timeoutSeconds: 5
@@ -174,7 +174,7 @@ spec:
           startupProbe:
             httpGet:
               path: /actuator/health
-              port: 8080
+              port: 6767
             initialDelaySeconds: 30
             periodSeconds: 10
             failureThreshold: 12   # Allow up to 2 min for startup
@@ -193,8 +193,8 @@ spec:
   selector:
     app: agentspan-server
   ports:
-    - port: 8080
-      targetPort: 8080
+    - port: 6767
+      targetPort: 6767
       protocol: TCP
       name: http
 

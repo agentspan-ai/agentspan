@@ -59,7 +59,7 @@ def configure(config=None, **kwargs):
             are ignored.
         **kwargs: Individual config fields to override on top of
             :meth:`AgentConfig.from_env` defaults (e.g.
-            ``server_url="https://prod:8080/api"``,
+            ``server_url="https://prod:6767/api"``,
             ``auto_start_server=False``).
 
     Raises:
@@ -71,7 +71,7 @@ def configure(config=None, **kwargs):
 
         import agentspan.agents as ag
 
-        ag.configure(server_url="https://prod:8080/api", auto_start_server=False)
+        ag.configure(server_url="https://prod:6767/api", auto_start_server=False)
         result = ag.run(agent, "Hello!")
     """
     global _default_config, _default_runtime

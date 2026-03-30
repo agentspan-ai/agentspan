@@ -29,13 +29,13 @@ class WorkerCredentialFetcher:
     """Fetches credentials for a worker task execution.
 
     Args:
-        server_url: Base URL of the agentspan server API (e.g. ``"http://localhost:8080/api"``).
+        server_url: Base URL of the agentspan server API (e.g. ``"http://localhost:6767/api"``).
         api_key: Optional Bearer token or API key for the Authorization header.
     """
 
     def __init__(
         self,
-        server_url: str = "http://localhost:8080/api",
+        server_url: str = "http://localhost:6767/api",
         strict_mode: bool = False,
         api_key: Optional[str] = None,
     ) -> None:

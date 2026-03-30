@@ -5,7 +5,7 @@ import threading
 import httpx
 import pytest
 
-SERVER = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:8080")
+SERVER = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:6767")
 API = f"{SERVER}/api"
 CRED_NAME = "_E2E_FW_CRED"
 CRED_VALUE = "framework-secret-12345"

@@ -18,7 +18,7 @@ def pytest_configure(config):
     """Register custom markers."""
     config.addinivalue_line("markers", "integration: e2e tests requiring a live server")
 
-SERVER_URL = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:8080/api")
+SERVER_URL = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:6767/api")
 BASE_URL = SERVER_URL.rstrip("/").replace("/api", "")
 
 @pytest.fixture(scope="session", autouse=True)
