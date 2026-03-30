@@ -4178,7 +4178,7 @@ class AgentRuntime:
     def get_status(self, workflow_id: str) -> AgentStatus:
         """Get the current status of an agent workflow.
 
-        Fetches from ``/api/agent/{workflowId}/status``.
+        Fetches from ``/api/agent/{executionId}/status``.
 
         Args:
             workflow_id: The Conductor workflow ID.
@@ -4222,7 +4222,7 @@ class AgentRuntime:
         human-in-the-loop pause.  ``approve()``, ``reject()``, and
         ``send_message()`` are convenience wrappers around this.
 
-        Posts to ``/api/agent/{workflowId}/respond``.
+        Posts to ``/api/agent/{executionId}/respond``.
 
         Args:
             workflow_id: The Conductor workflow ID.

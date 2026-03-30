@@ -84,7 +84,7 @@ func printSSEEvent(evt client.SSEEvent) {
 			fmt.Print(content)
 		}
 	case "waiting":
-		color.New(color.FgYellow, color.Bold).Printf("  [waiting] Human input required (execution: %s)\n", dataStr(data, "workflowId"))
+		color.New(color.FgYellow, color.Bold).Printf("  [waiting] Human input required (execution: %s)\n", dataStr(data, "executionId"))
 	case "guardrail_pass":
 		color.New(color.FgGreen).Printf("  [guardrail] PASS %s\n", dataStr(data, "guardrailName"))
 	case "guardrail_fail":

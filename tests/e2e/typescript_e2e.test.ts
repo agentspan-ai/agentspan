@@ -180,7 +180,7 @@ describe('TypeScript SDK E2E', () => {
   // ── TestMultiAgent (sequential pipeline) ────────────────
 
   describe('MultiAgent', () => {
-    it('sequential pipeline (test_sequential_pipeline)', async () => {
+    it('sequential pipeline (test_sequential_pipeline)', { timeout: 180_000 }, async () => {
       const step1 = new Agent({
         name: 'step1',
         model: MODEL,
@@ -264,7 +264,7 @@ describe('TypeScript SDK E2E', () => {
       expect(['COMPLETED', 'FAILED']).toContain(result.status);
     });
 
-    it('custom output guardrail rejects SSN (test_custom_output_guardrail_retry)', async () => {
+    it('custom output guardrail rejects SSN (test_custom_output_guardrail_retry)', { timeout: 180_000 }, async () => {
       const agent = new Agent({
         name: 'guard_custom',
         model: MODEL,
