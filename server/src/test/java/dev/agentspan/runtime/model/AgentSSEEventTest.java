@@ -106,7 +106,7 @@ class AgentSSEEventTest {
 
         var node = MAPPER.readTree(json);
         assertThat(node.get("type").asText()).isEqualTo("thinking");
-        assertThat(node.get("workflowId").asText()).isEqualTo("wf-1");
+        assertThat(node.get("executionId").asText()).isEqualTo("wf-1");
         assertThat(node.get("content").asText()).isEqualTo("llm_task");
         assertThat(node.get("id").asLong()).isEqualTo(5);
         // Null fields should be absent
