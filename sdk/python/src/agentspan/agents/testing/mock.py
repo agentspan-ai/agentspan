@@ -178,7 +178,7 @@ def mock_run(
 
     return AgentResult(
         output=output,
-        workflow_id="mock",
+        execution_id="mock",
         tool_calls=tool_calls,
         status=status,
         events=processed,

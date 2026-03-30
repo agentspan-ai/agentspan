@@ -133,7 +133,7 @@ agentspan agent get mybot --version 2
 agentspan agent delete mybot
 agentspan agent delete mybot --version 1
 
-# Compile agent config to workflow definition (inspect only)
+# Compile agent config to agent definition (inspect only)
 agentspan agent compile mybot.yaml
 ```
 

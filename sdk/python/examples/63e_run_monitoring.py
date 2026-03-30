@@ -20,5 +20,5 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         print("Running monitoring agent by name...")
         result = runtime.run("monitoring", "Is everything healthy? Run a full check.")
-        print(f"Workflow ID: {result.workflow_id}")
+        print(f"Workflow ID: {result.execution_id}")
         print(f"Output: {result.output}")

@@ -28,6 +28,6 @@ public class InjectTaskRequest {
     public static class SubWorkflowParam {
         private String name;
         private Integer version;
-        private String workflowId; // pre-created tracking workflow ID
+        private String executionId; // pre-created tracking execution ID
     }
 }

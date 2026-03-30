@@ -32,7 +32,7 @@ if __name__ == "__main__":
         # ── Start by name (fire-and-forget, returns handle) ──────────────
         print("Starting ops_bot by name...")
         handle = runtime.start("agent_ops_bot", "Check the status of the API gateway")
-        print(f"Started workflow: {handle.workflow_id}")
+        print(f"Started workflow: {handle.execution_id}")
 
         # Wait for it to complete
         status = handle.get_status()

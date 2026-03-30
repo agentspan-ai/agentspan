@@ -69,5 +69,5 @@ python 72_client_reconnect.py status
 - The local Python SDK process can die abruptly
 - The workflow remains durable on the server
 - A fresh process can re-register the tool worker
-- A fresh process can reconnect later by `workflow_id`
+- A fresh process can reconnect later by `execution_id`
 - The same workflow continues and completes after approval is sent

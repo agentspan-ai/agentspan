@@ -4,7 +4,7 @@
 
 **Goal:** Add support for running LangGraph `CompiledStateGraph` and LangChain `AgentExecutor` objects on Agentspan as black-box passthrough workers with SSE streaming.
 
-**Architecture:** LangGraph/LangChain manage their own LLM calls internally, so they cannot use the existing OpenAI/ADK path that extracts tools and uses `LLM_CHAT_COMPLETE` tasks. Instead, each graph/executor becomes a single Conductor SIMPLE task (a "passthrough workflow"). Intermediate node events are pushed non-blocking via HTTP POST to `POST /api/agent/events/{workflowId}`, which fans them out to SSE clients.
+**Architecture:** LangGraph/LangChain manage their own LLM calls internally, so they cannot use the existing OpenAI/ADK path that extracts tools and uses `LLM_CHAT_COMPLETE` tasks. Instead, each graph/executor becomes a single Conductor SIMPLE task (a "passthrough execution"). Intermediate node events are pushed non-blocking via HTTP POST to `POST /api/agent/events/{executionId}`, which fans them out to SSE clients.
 
 **Tech Stack:** Python (langgraph, langchain), Java 17 / Spring Boot, Netflix Conductor, SSE (SseEmitter), pytest, JUnit 5 + AssertJ.
 
@@ -594,8 +594,8 @@ class EventPushEndpointTest {
     @LocalServerPort
     private int port;
 
-    private int postEvent(String workflowId, Map<String, Object> body) throws Exception {
-        URI uri = URI.create("http://localhost:" + port + "/api/agent/events/" + workflowId);
+    private int postEvent(String executionId, Map<String, Object> body) throws Exception {
+        URI uri = URI.create("http://localhost:" + port + "/api/agent/events/" + executionId);
         HttpURLConnection conn = (HttpURLConnection) uri.toURL().openConnection();
         conn.setRequestMethod("POST");
         conn.setRequestProperty("Content-Type", "application/json");
@@ -644,21 +644,21 @@ Expected: FAIL — 404 (endpoint does not exist yet).
 
 - [ ] **Step 3: Add endpoint to `AgentController.java`**
 
-Add after the existing endpoints (e.g., after the `/{workflowId}/respond` endpoint):
+Add after the existing endpoints (e.g., after the `/{executionId}/respond` endpoint):
 
 ```java
 /**
  * Receive an SSE event pushed by a framework worker (LangGraph/LangChain).
- * Always returns 200 — unknown workflowIds are silently dropped.
+ * Always returns 200 — unknown executionIds are silently dropped.
  *
  * <p>Body: {@code {"type": "thinking|tool_call|tool_result", "content": "...",
  * "toolName": "...", "args": {...}, "result": "..."}}</p>
  */
-@PostMapping("/events/{workflowId}")
+@PostMapping("/events/{executionId}")
 public void pushFrameworkEvent(
-        @PathVariable String workflowId,
+        @PathVariable String executionId,
         @RequestBody Map<String, Object> event) {
-    agentService.pushFrameworkEvent(workflowId, event);
+    agentService.pushFrameworkEvent(executionId, event);
 }
 ```
 
@@ -679,29 +679,29 @@ Then add to `AgentService.java`:
  *
  * <p>Silently ignored if no clients are connected (streamRegistry drops it).</p>
  */
-public void pushFrameworkEvent(String workflowId, Map<String, Object> event) {
+public void pushFrameworkEvent(String executionId, Map<String, Object> event) {
     String type = event.getOrDefault("type", "").toString();
     AgentSSEEvent sseEvent = switch (type) {
-        case "thinking" -> AgentSSEEvent.thinking(workflowId,
+        case "thinking" -> AgentSSEEvent.thinking(executionId,
             event.getOrDefault("content", "").toString());
-        case "tool_call" -> AgentSSEEvent.toolCall(workflowId,
+        case "tool_call" -> AgentSSEEvent.toolCall(executionId,
             event.getOrDefault("toolName", "").toString(),
             event.get("args"));
-        case "tool_result" -> AgentSSEEvent.toolResult(workflowId,
+        case "tool_result" -> AgentSSEEvent.toolResult(executionId,
             event.getOrDefault("toolName", "").toString(),
             event.getOrDefault("result", "").toString());
         default -> {
-            log.debug("Unknown framework event type '{}' for workflow {}", type, workflowId);
+            log.debug("Unknown framework event type '{}' for execution {}", type, executionId);
             yield null;
         }
     };
     if (sseEvent != null) {
-        streamRegistry.send(workflowId, sseEvent);
+        streamRegistry.send(executionId, sseEvent);
     }
 }
 ```
 
-> Note: After reading `AgentSSEEvent.java`, adjust the factory method calls to match the actual method signatures. The spec says `thinking(workflowId, content)`, `toolCall(workflowId, toolName, args)`, `toolResult(workflowId, toolName, content)`.
+> Note: After reading `AgentSSEEvent.java`, adjust the factory method calls to match the actual method signatures. The spec says `thinking(executionId, content)`, `toolCall(executionId, toolName, args)`, `toolResult(executionId, toolName, content)`.
 
 - [ ] **Step 5: Run endpoint test**
 
@@ -726,7 +726,7 @@ git add server/src/main/java/dev/agentspan/runtime/controller/AgentController.ja
         server/src/main/java/dev/agentspan/runtime/service/AgentService.java \
         server/src/test/java/dev/agentspan/runtime/controller/EventPushEndpointTest.java \
         server/src/test/java/dev/agentspan/runtime/service/AgentServicePushEventTest.java
-git commit -m "feat(server): add POST /api/agent/events/{workflowId} for framework event push"
+git commit -m "feat(server): add POST /api/agent/events/{executionId} for framework event push"
 ```
 
 ---
@@ -921,11 +921,11 @@ def _make_fake_graph(stream_chunks=None, input_schema=None):
     return graph
 
 
-def _make_task(prompt="Hello", session_id="", workflow_id="wf-123"):
+def _make_task(prompt="Hello", session_id="", execution_id="wf-123"):
     from conductor.client.http.models.task import Task
     task = MagicMock(spec=Task)
     task.input_data = {"prompt": prompt, "session_id": session_id}
-    task.workflow_instance_id = workflow_id
+    task.workflow_instance_id = execution_id
     return task
 
 
@@ -1139,7 +1139,7 @@ def make_langgraph_worker(
     from conductor.client.http.models.task_result_status import TaskResultStatus
 
     def tool_worker(task: Task) -> TaskResult:
-        workflow_id = task.workflow_instance_id
+        execution_id = task.workflow_instance_id
         prompt = task.input_data.get("prompt", "")
         session_id = (task.input_data.get("session_id") or "").strip()
 
@@ -1152,23 +1152,23 @@ def make_langgraph_worker(
             final_state = None
             for mode, chunk in graph.stream(graph_input, config, stream_mode=["updates", "values"]):
                 if mode == "updates":
-                    _process_updates_chunk(chunk, workflow_id, server_url, auth_key, auth_secret)
+                    _process_updates_chunk(chunk, execution_id, server_url, auth_key, auth_secret)
                 elif mode == "values":
                     final_state = chunk
 
             output = _extract_output(final_state)
             return TaskResult(
                 task_id=task.task_id,
-                workflow_instance_id=workflow_id,
+                workflow_instance_id=execution_id,
                 status=TaskResultStatus.COMPLETED,
                 output_data={"result": output},
             )
 
         except Exception as exc:
-            logger.error("LangGraph worker error (workflow_id=%s): %s", workflow_id, exc)
+            logger.error("LangGraph worker error (execution_id=%s): %s", execution_id, exc)
             return TaskResult(
                 task_id=task.task_id,
-                workflow_instance_id=workflow_id,
+                workflow_instance_id=execution_id,
                 status=TaskResultStatus.FAILED,
                 reason_for_incompletion=str(exc),
             )
@@ -1197,7 +1197,7 @@ def _build_input(graph: Any, prompt: str) -> Dict[str, Any]:
 
 def _process_updates_chunk(
     chunk: Dict[str, Any],
-    workflow_id: str,
+    execution_id: str,
     server_url: str,
     auth_key: str,
     auth_secret: str,
@@ -1206,7 +1206,7 @@ def _process_updates_chunk(
     for node_name, state_updates in chunk.items():
         # Always emit a thinking event for each node execution
         _push_event_nonblocking(
-            workflow_id,
+            execution_id,
             {"type": "thinking", "content": node_name},
             server_url, auth_key, auth_secret,
         )
@@ -1214,12 +1214,12 @@ def _process_updates_chunk(
         # Check for tool calls and tool results in messages
         messages = state_updates.get("messages", []) if isinstance(state_updates, dict) else []
         for msg in (messages if isinstance(messages, list) else []):
-            _emit_message_events(msg, workflow_id, server_url, auth_key, auth_secret)
+            _emit_message_events(msg, execution_id, server_url, auth_key, auth_secret)
 
 
 def _emit_message_events(
     msg: Any,
-    workflow_id: str,
+    execution_id: str,
     server_url: str,
     auth_key: str,
     auth_secret: str,
@@ -1232,7 +1232,7 @@ def _emit_message_events(
         name = getattr(msg, "name", None) or (msg.get("name", "") if isinstance(msg, dict) else "")
         content = getattr(msg, "content", "") or (msg.get("content", "") if isinstance(msg, dict) else "")
         _push_event_nonblocking(
-            workflow_id,
+            execution_id,
             {"type": "tool_result", "toolName": name, "result": str(content)},
             server_url, auth_key, auth_secret,
         )
@@ -1245,7 +1245,7 @@ def _emit_message_events(
             tc_name = getattr(tc, "name", None) or (tc.get("name", "") if isinstance(tc, dict) else "")
             tc_args = getattr(tc, "args", {}) or (tc.get("args", {}) if isinstance(tc, dict) else {})
             _push_event_nonblocking(
-                workflow_id,
+                execution_id,
                 {"type": "tool_call", "toolName": tc_name, "args": tc_args},
                 server_url, auth_key, auth_secret,
             )
@@ -1275,17 +1275,17 @@ def _extract_output(final_state: Optional[Dict[str, Any]]) -> str:
 
 
 def _push_event_nonblocking(
-    workflow_id: str,
+    execution_id: str,
     event: Dict[str, Any],
     server_url: str,
     auth_key: str,
     auth_secret: str,
 ) -> None:
-    """Fire-and-forget HTTP POST to /api/agent/events/{workflowId}."""
+    """Fire-and-forget HTTP POST to /api/agent/events/{executionId}."""
     def _do_push():
         try:
             import requests
-            url = f"{server_url}/api/agent/events/{workflow_id}"
+            url = f"{server_url}/api/agent/events/{execution_id}"
             headers = {}
             if auth_key:
                 headers["X-Auth-Key"] = auth_key
@@ -1293,7 +1293,7 @@ def _push_event_nonblocking(
                 headers["X-Auth-Secret"] = auth_secret
             requests.post(url, json=event, headers=headers, timeout=5)
         except Exception as exc:
-            logger.debug("Event push failed (workflow_id=%s): %s", workflow_id, exc)
+            logger.debug("Event push failed (execution_id=%s): %s", execution_id, exc)
 
     _EVENT_PUSH_POOL.submit(_do_push)
 ```
@@ -1354,11 +1354,11 @@ def _make_executor(output="answer"):
     return executor
 
 
-def _make_task(prompt="Hello", session_id="", workflow_id="wf-456"):
+def _make_task(prompt="Hello", session_id="", execution_id="wf-456"):
     from conductor.client.http.models.task import Task
     task = MagicMock(spec=Task)
     task.input_data = {"prompt": prompt, "session_id": session_id}
-    task.workflow_instance_id = workflow_id
+    task.workflow_instance_id = execution_id
     return task
 
 
@@ -1435,7 +1435,7 @@ class TestMakeLangchainWorker:
         from agentspan.agents.frameworks.langchain import make_langchain_worker, AgentspanCallbackHandler
 
         executor = _make_executor()
-        task = _make_task(workflow_id="wf-push-test")
+        task = _make_task(execution_id="wf-push-test")
 
         pushed_events = []
 
@@ -1518,24 +1518,24 @@ def make_langchain_worker(
     from conductor.client.http.models.task_result_status import TaskResultStatus
 
     def tool_worker(task: Task) -> TaskResult:
-        workflow_id = task.workflow_instance_id
+        execution_id = task.workflow_instance_id
         prompt = task.input_data.get("prompt", "")
 
         try:
-            handler = AgentspanCallbackHandler(workflow_id, server_url, auth_key, auth_secret)
+            handler = AgentspanCallbackHandler(execution_id, server_url, auth_key, auth_secret)
             result = executor.invoke({"input": prompt}, config={"callbacks": [handler]})
             output = result.get("output", "") if isinstance(result, dict) else str(result)
             return TaskResult(
                 task_id=task.task_id,
-                workflow_instance_id=workflow_id,
+                workflow_instance_id=execution_id,
                 status=TaskResultStatus.COMPLETED,
                 output_data={"result": output},
             )
         except Exception as exc:
-            logger.error("LangChain worker error (workflow_id=%s): %s", workflow_id, exc)
+            logger.error("LangChain worker error (execution_id=%s): %s", execution_id, exc)
             return TaskResult(
                 task_id=task.task_id,
-                workflow_instance_id=workflow_id,
+                workflow_instance_id=execution_id,
                 status=TaskResultStatus.FAILED,
                 reason_for_incompletion=str(exc),
             )
@@ -1550,9 +1550,9 @@ class AgentspanCallbackHandler(BaseCallbackHandler):
     recognises it as a valid callback. Plain classes are rejected at runtime.
     """
 
-    def __init__(self, workflow_id: str, server_url: str, auth_key: str, auth_secret: str):
+    def __init__(self, execution_id: str, server_url: str, auth_key: str, auth_secret: str):
         super().__init__()
-        self._workflow_id = workflow_id
+        self._execution_id = execution_id
         self._server_url = server_url
         self._auth_key = auth_key
         self._auth_secret = auth_secret
@@ -1560,7 +1560,7 @@ class AgentspanCallbackHandler(BaseCallbackHandler):
 
     def on_llm_start(self, serialized, prompts, **kwargs):
         _push_event_nonblocking(
-            self._workflow_id,
+            self._execution_id,
             {"type": "thinking", "content": "llm"},
             self._server_url, self._auth_key, self._auth_secret,
         )
@@ -1569,14 +1569,14 @@ class AgentspanCallbackHandler(BaseCallbackHandler):
         tool_name = serialized.get("name", "") if isinstance(serialized, dict) else ""
         self._current_tool_name = tool_name
         _push_event_nonblocking(
-            self._workflow_id,
+            self._execution_id,
             {"type": "tool_call", "toolName": tool_name, "args": {"input": input_str}},
             self._server_url, self._auth_key, self._auth_secret,
         )
 
     def on_tool_end(self, output, **kwargs):
         _push_event_nonblocking(
-            self._workflow_id,
+            self._execution_id,
             {"type": "tool_result", "toolName": self._current_tool_name or "", "result": str(output)},
             self._server_url, self._auth_key, self._auth_secret,
         )
@@ -1584,7 +1584,7 @@ class AgentspanCallbackHandler(BaseCallbackHandler):
 
     def on_tool_error(self, error, **kwargs):
         _push_event_nonblocking(
-            self._workflow_id,
+            self._execution_id,
             {"type": "tool_result", "toolName": self._current_tool_name or "", "result": f"ERROR: {error}"},
             self._server_url, self._auth_key, self._auth_secret,
         )
@@ -1592,17 +1592,17 @@ class AgentspanCallbackHandler(BaseCallbackHandler):
 
 
 def _push_event_nonblocking(
-    workflow_id: str,
+    execution_id: str,
     event: Dict[str, Any],
     server_url: str,
     auth_key: str,
     auth_secret: str,
 ) -> None:
-    """Fire-and-forget HTTP POST to /api/agent/events/{workflowId}."""
+    """Fire-and-forget HTTP POST to /api/agent/events/{executionId}."""
     def _do_push():
         try:
             import requests
-            url = f"{server_url}/api/agent/events/{workflow_id}"
+            url = f"{server_url}/api/agent/events/{execution_id}"
             headers = {}
             if auth_key:
                 headers["X-Auth-Key"] = auth_key
@@ -1610,7 +1610,7 @@ def _push_event_nonblocking(
                 headers["X-Auth-Secret"] = auth_secret
             requests.post(url, json=event, headers=headers, timeout=5)
         except Exception as exc:
-            logger.debug("Event push failed (workflow_id=%s): %s", workflow_id, exc)
+            logger.debug("Event push failed (execution_id=%s): %s", execution_id, exc)
 
     _EVENT_PUSH_POOL.submit(_do_push)
 ```

@@ -284,7 +284,7 @@ def query_database(query: str, context: ToolContext) -> dict:
 | Field | Type | Description |
 |---|---|---|
 | `session_id` | `str` | Session ID for the current execution |
-| `workflow_id` | `str` | Conductor workflow ID |
+| `execution_id` | `str` | Execution ID |
 | `agent_name` | `str` | Name of the executing agent |
 | `metadata` | `Dict` | Metadata from the agent |
 | `dependencies` | `Dict` | User-provided dependencies |
@@ -317,7 +317,7 @@ Blocks until the agent completes. Simplest way to run an agent.
 ```python
 result = run(agent, "What's the weather?")
 result.output          # Final answer
-result.workflow_id     # Conductor workflow ID
+result.execution_id    # Execution ID
 result.messages        # Conversation history
 result.tool_calls      # Tool invocations
 result.status          # "COMPLETED", "FAILED", etc.
@@ -338,7 +338,7 @@ Returns immediately with a handle. For long-running or human-in-the-loop agents.
 
 ```python
 handle = start(agent, "Analyze Q4 reports and get approval")
-handle.workflow_id     # Track in Conductor UI
+handle.execution_id    # Track in Conductor UI
 
 # Later, from any process, even after restarts:
 status = handle.get_status()
@@ -384,17 +384,17 @@ Returned by `run()` and `run_async()`.
 | Field | Type | Description |
 |---|---|---|
 | `output` | `Any` | Final answer (or typed Pydantic model if `output_type` set) |
-| `workflow_id` | `str` | Conductor workflow ID |
+| `execution_id` | `str` | Execution ID |
 | `correlation_id` | `Optional[str]` | Session/correlation ID |
 | `messages` | `List[Dict]` | Full conversation history |
 | `tool_calls` | `List[Dict]` | All tool invocations with inputs/outputs |
 | `status` | `str` | `"COMPLETED"`, `"FAILED"`, etc. |
 | `token_usage` | `Optional[TokenUsage]` | Aggregated token usage across all LLM calls |
-| `metadata` | `Dict` | Extra workflow metadata |
+| `metadata` | `Dict` | Extra execution metadata |
 
 ### AgentHandle
 
-Returned by `start()`. A handle to a running workflow.
+Returned by `start()`. A handle to a running execution.
 
 | Method | Description |
 |---|---|
@@ -402,10 +402,10 @@ Returned by `start()`. A handle to a running workflow.
 | `approve()` | Approve a pending human-in-the-loop task |
 | `reject(reason)` | Reject with reason |
 | `send(message)` | Send a message to the agent (multi-turn) |
-| `pause()` | Pause the workflow |
-| `resume()` | Resume a paused workflow |
-| `cancel(reason)` | Cancel the workflow |
-| `workflow_id` | The Conductor workflow ID (attribute) |
+| `pause()` | Pause the execution |
+| `resume()` | Resume a paused execution |
+| `cancel(reason)` | Cancel the execution |
+| `execution_id` | The execution ID (attribute) |
 
 ### AgentStatus
 
@@ -413,7 +413,7 @@ Returned by `handle.get_status()`.
 
 | Field | Type | Description |
 |---|---|---|
-| `workflow_id` | `str` | Conductor workflow ID |
+| `execution_id` | `str` | Execution ID |
 | `is_complete` | `bool` | Reached terminal state |
 | `is_running` | `bool` | Still executing |
 | `is_waiting` | `bool` | Paused for human input |
@@ -435,7 +435,7 @@ Yielded by `stream()`.
 | `result` | `Any` | Tool result (tool_result) |
 | `target` | `Optional[str]` | Agent name (handoff) |
 | `output` | `Any` | Final output (done) |
-| `workflow_id` | `str` | Conductor workflow ID |
+| `execution_id` | `str` | Execution ID |
 | `guardrail_name` | `Optional[str]` | Guardrail name (guardrail_pass, guardrail_fail) |
 
 **Event types:** `thinking`, `tool_call`, `tool_result`, `handoff`, `waiting`, `message`, `error`, `done`, `guardrail_pass`, `guardrail_fail`
@@ -444,7 +444,7 @@ Yielded by `stream()`.
 
 ## Human-in-the-Loop
 
-Tools with `approval_required=True` pause the workflow until a human approves or rejects.
+Tools with `approval_required=True` pause the execution until a human approves or rejects.
 
 ```python
 @tool(approval_required=True)
@@ -455,7 +455,7 @@ def transfer_funds(from_acct: str, to_acct: str, amount: float) -> dict:
 agent = Agent(name="banker", model="openai/gpt-4o", tools=[check_balance, transfer_funds])
 
 handle = start(agent, "Transfer $5000 from checking to savings")
-# Workflow pauses when transfer_funds is about to execute
+# Execution pauses when transfer_funds is about to execute
 
 # Hours or days later, from any process, any machine:
 status = handle.get_status()
@@ -464,7 +464,7 @@ if status.is_waiting:
     # or: handle.reject("Amount exceeds daily limit")
 ```
 
-**How it works:** `approval_required=True` inserts a Conductor `WaitTask` before the tool's worker task. The workflow pauses until the task is completed via the API. There is no timeout — the workflow waits indefinitely.
+**How it works:** `approval_required=True` inserts a Conductor `WaitTask` before the tool's worker task. The execution pauses until the task is completed via the API. There is no timeout — the execution waits indefinitely.
 
 ### Multi-Turn Conversations
 
@@ -496,7 +496,7 @@ Guardrails validate agent input or output. On failure with `on_fail="retry"`, fe
 ```python
 class OnFail(str, Enum):
     RETRY = "retry"    # Append feedback, re-run LLM
-    RAISE = "raise"    # Fail the workflow immediately
+    RAISE = "raise"    # Fail the execution immediately
     FIX   = "fix"      # Use guardrail's fixed_output
     HUMAN = "human"    # Pause for human review (HumanTask)
 ```
@@ -561,7 +561,7 @@ The `external` property is `True` when `func is None`.
 
 **`on_fail`:**
 - `OnFail.RETRY` / `"retry"` — Append the guardrail's message to the conversation and call the LLM again
-- `OnFail.RAISE` / `"raise"` — Fail the workflow immediately
+- `OnFail.RAISE` / `"raise"` — Fail the execution immediately
 - `OnFail.FIX` / `"fix"` — Use the guardrail's `fixed_output`
 - `OnFail.HUMAN` / `"human"` — Pause for human review via Conductor HumanTask
 
@@ -1040,7 +1040,7 @@ The SDK reads configuration from environment variables:
 | `AGENTSPAN_SERVER_URL` | Agentspan server API URL | `http://localhost:6767/api` |
 | `AGENTSPAN_AUTH_KEY` | Auth key (Orkes Cloud) | None |
 | `AGENTSPAN_AUTH_SECRET` | Auth secret (Orkes Cloud) | None |
-| `AGENTSPAN_AGENT_TIMEOUT` | Default workflow timeout (seconds) | 300 |
+| `AGENTSPAN_AGENT_TIMEOUT` | Default execution timeout (seconds) | 300 |
 | `AGENTSPAN_LLM_RETRY_COUNT` | LLM task retry count | 3 |
 | `AGENTSPAN_WORKER_POLL_INTERVAL` | Worker poll interval (ms) | 100 |
 | `AGENTSPAN_WORKER_THREADS` | Worker threads per tool | 1 |

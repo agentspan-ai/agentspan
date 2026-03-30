@@ -64,7 +64,7 @@ async function main() {
     // agent,
     // 'Write a short blog post about the benefits of code review',
     // );
-    // console.log(`Workflow started: ${streamHandle.workflowId}\n`);
+    // console.log(`Execution started: ${streamHandle.executionId}\n`);
 
     // for await (const event of streamHandle) {
     // console.log(`event type: ${event.type} --> ${event.content}`);

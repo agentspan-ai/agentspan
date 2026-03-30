@@ -122,7 +122,7 @@ For framework agents (LangGraph, LangChain, OpenAI, Google ADK, Vercel AI SDK):
 **Response:**
 ```json
 {
-  "workflowId": "uuid-string",
+  "executionId": "uuid-string",
   "workflowName": "agent_name"
 }
 ```
@@ -152,14 +152,14 @@ Registers the workflow and task definitions for later execution. CI/CD operation
 }
 ```
 
-Note: Unlike `/start`, deploy does NOT return a `workflowId` because no execution is started.
+Note: Unlike `/start`, deploy does NOT return an `executionId` because no execution is started.
 
-#### GET /agent/{workflowId}/status — Poll Status
+#### GET /agent/{executionId}/status — Poll Status
 
 **Response:**
 ```json
 {
-  "workflowId": "...",
+  "executionId": "...",
   "status": "RUNNING|COMPLETED|FAILED|TERMINATED|TIMED_OUT|PAUSED",
   "isComplete": true,
   "isRunning": false,
@@ -176,7 +176,7 @@ Note: Unlike `/start`, deploy does NOT return a `workflowId` because no executio
 }
 ```
 
-#### POST /agent/{workflowId}/respond — HITL Response
+#### POST /agent/{executionId}/respond — HITL Response
 
 **Request:**
 ```json
@@ -191,7 +191,7 @@ or
 { "message": "Please revise the introduction" }
 ```
 
-#### GET /agent/stream/{workflowId} — SSE Event Stream
+#### GET /agent/stream/{executionId} — SSE Event Stream
 
 Returns `text/event-stream`. Supports reconnection via `Last-Event-ID` header.
 
@@ -199,21 +199,21 @@ Returns `text/event-stream`. Supports reconnection via `Last-Event-ID` header.
 ```
 id: 1
 event: thinking
-data: {"type":"thinking","content":"Let me analyze...","workflowId":"...","timestamp":1234567890}
+data: {"type":"thinking","content":"Let me analyze...","executionId":"...","timestamp":1234567890}
 
 id: 2
 event: tool_call
-data: {"type":"tool_call","toolName":"search","args":{"query":"..."},"workflowId":"...","timestamp":1234567890}
+data: {"type":"tool_call","toolName":"search","args":{"query":"..."},"executionId":"...","timestamp":1234567890}
 
 id: 3
 event: tool_result
-data: {"type":"tool_result","toolName":"search","result":{"items":[...]},"workflowId":"...","timestamp":1234567890}
+data: {"type":"tool_result","toolName":"search","result":{"items":[...]},"executionId":"...","timestamp":1234567890}
 
 :heartbeat
 
 id: 4
 event: done
-data: {"type":"done","output":{"result":"..."},"workflowId":"...","timestamp":1234567890}
+data: {"type":"done","output":{"result":"..."},"executionId":"...","timestamp":1234567890}
 ```
 
 **Event Types:**
@@ -240,14 +240,14 @@ These may appear on the SSE stream but are not part of the SDK's EventType enum.
 | Type | Fields | Description |
 |------|--------|-------------|
 | `context_condensed` | content | Context window condensation |
-| `subagent_start` | workflowId | Sub-agent workflow started |
-| `subagent_stop` | workflowId | Sub-agent workflow completed |
+| `subagent_start` | executionId | Sub-agent execution started |
+| `subagent_stop` | executionId | Sub-agent execution completed |
 
 **Heartbeat:** Comment lines (`:heartbeat`) every 15 seconds. Not real events — used to keep connection alive.
 
 **Reconnection:** Client sends `Last-Event-ID: <last_id>` header. Server replays missed events from buffer (200 events, 5-min retention).
 
-#### POST /agent/{workflowId}/events — Framework Worker Event Push
+#### POST /agent/{executionId}/events — Framework Worker Event Push
 
 For framework agent workers to push intermediate events back to the server for SSE forwarding.
 
@@ -269,7 +269,7 @@ For framework agent workers to push intermediate events back to the server for S
 
 **Query params:** `agentName`, `status`, `sessionId`
 
-#### GET /agent/execution/{workflowId} — Detailed Execution
+#### GET /agent/execution/{executionId} — Detailed Execution
 
 Full workflow with task list, token usage, sub-workflow details.
 
@@ -509,7 +509,7 @@ The single orchestration primitive. Every agent — simple or complex — is an 
 | `max_turns` | int | 25 | Max LLM call turns |
 | `max_tokens` | int | null | Max tokens per LLM call |
 | `temperature` | float | null | LLM temperature |
-| `timeout_seconds` | int | 0 | Workflow timeout (0 = no timeout) |
+| `timeout_seconds` | int | 0 | Execution timeout (0 = no timeout) |
 | `external` | bool | false | True if this agent runs elsewhere |
 | `stop_when` | callable | null | Custom stop condition |
 | `termination` | TerminationCondition | null | Composable stop condition |
@@ -604,7 +604,7 @@ When a tool function declares a `ToolContext` parameter, the SDK injects executi
 | Field | Type | Description |
 |-------|------|-------------|
 | `session_id` | string | Session identifier |
-| `workflow_id` | string | Conductor workflow ID |
+| `execution_id` | string | Execution ID |
 | `agent_name` | string | Calling agent's name |
 | `metadata` | map | Agent metadata |
 | `dependencies` | map | Injected dependencies |
@@ -682,7 +682,7 @@ Guardrails with `external=True` — the SDK emits just the task name. A remote g
 
 ```
 RETRY — Re-run the LLM with the guardrail feedback
-RAISE — Fail the workflow
+RAISE — Fail the execution
 FIX   — Use guardrail's fixed_output as the result
 HUMAN — Pause for human review
 ```
@@ -701,7 +701,7 @@ OUTPUT — Validate after LLM call
 | Field | Type | Description |
 |-------|------|-------------|
 | `output` | any (dict) | Final output — always dict with `result` key |
-| `workflow_id` | string | Conductor workflow ID |
+| `execution_id` | string | Execution ID |
 | `correlation_id` | string | Optional correlation ID |
 | `messages` | Message[] | Full conversation history |
 | `tool_calls` | ToolCall[] | All tool invocations |
@@ -755,7 +755,7 @@ Every method must have both sync and async variants.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `workflow_id` | string | Conductor workflow ID |
+| `execution_id` | string | Execution ID |
 | `is_complete` | bool | Terminal state reached |
 | `is_running` | bool | Still executing |
 | `is_waiting` | bool | Paused (HITL) |
@@ -777,7 +777,7 @@ Every method must have both sync and async variants.
 | `result` | any | Tool result |
 | `target` | string | Handoff target |
 | `output` | any | Final output (done event) |
-| `workflow_id` | string | Workflow ID |
+| `execution_id` | string | Execution ID |
 | `guardrail_name` | string | Guardrail name |
 
 #### EventType Enum
@@ -1394,7 +1394,7 @@ This is the core mechanism for distributed agent systems.
 ### 6.1 SSE Client Requirements
 
 Every SDK must implement an SSE client that:
-1. Connects to `GET /agent/stream/{workflowId}` with `Accept: text/event-stream`
+1. Connects to `GET /agent/stream/{executionId}` with `Accept: text/event-stream`
 2. Parses SSE wire format (event, id, data fields)
 3. Handles heartbeat comments (`:` prefix lines)
 4. Reconnects on connection drop with `Last-Event-ID` header
@@ -1467,7 +1467,7 @@ A single mega-workflow that processes an article request through a complete publ
 
 - Parallel agents: web researcher (HTTP tools + credentials), data analyst (native `@tool`), fact checker (MCP tools)
 - `scatter_gather()` collects results
-- Native tools demonstrate `ToolContext` injection (session_id, workflow_id)
+- Native tools demonstrate `ToolContext` injection (session_id, execution_id)
 - HTTP tool hits an API with credential-based auth headers
 - MCP tool connects to an MCP server
 - External tool references a remote research worker (by-reference, no local implementation)
@@ -1531,7 +1531,7 @@ A single mega-workflow that processes an article request through a complete publ
 #### Stage 9 — Deployment & Execution Modes
 **Features:** deploy, serve, plan, run/run_async, start/start_async, stream/stream_async
 
-- `deploy()` registers the workflow
+- `deploy()` registers the agent definition
 - `plan()` compile-only dry-run preview
 - `run()` synchronous execution
 - `run_async()` asynchronous execution
@@ -1540,7 +1540,7 @@ A single mega-workflow that processes an article request through a complete publ
 
 ### 8.3 Cross-Cutting Concerns
 
-Exercised throughout the workflow:
+Exercised throughout the execution:
 
 - **All credential modes:** isolated subprocess, in-process `get_credential()`, CLI injection, HTTP header injection, MCP credential injection, framework agent workers, external worker credentials
 - **CliConfig:** CLI tool allowlisting for git/gh commands
@@ -2158,7 +2158,7 @@ When `idempotencyKey` is provided:
 1. Server maps it to Conductor's `correlationId`
 2. Server searches for existing workflow with same agent name + correlationId
 3. Search scope: **RUNNING or COMPLETED** workflows only (not FAILED)
-4. If found: returns existing `workflowId` without re-execution
+4. If found: returns existing `executionId` without re-execution
 5. If not found: creates new execution with `correlationId = idempotencyKey`
 
 **Key behavior:** Failed workflows are NOT deduplicated — a new execution is created.
@@ -2186,7 +2186,7 @@ When a tool modifies `ToolContext.state`, the SDK captures mutations and appends
 
 ### 14.7 Framework Event Push Wire Format
 
-Framework agent workers push events to `POST /agent/{workflowId}/events`:
+Framework agent workers push events to `POST /agent/{executionId}/events`:
 
 ```json
 [
@@ -2194,8 +2194,8 @@ Framework agent workers push events to `POST /agent/{workflowId}/events`:
   {"type": "tool_call", "toolName": "search", "args": {"input": "query"}},
   {"type": "tool_result", "toolName": "search", "result": "result text"},
   {"type": "context_condensed", "trigger": "reason", "messagesBefore": 50, "messagesAfter": 20},
-  {"type": "subagent_start", "subWorkflowId": "uuid", "prompt": "text"},
-  {"type": "subagent_stop", "subWorkflowId": "uuid", "result": "text"}
+  {"type": "subagent_start", "subExecutionId": "uuid", "prompt": "text"},
+  {"type": "subagent_stop", "subExecutionId": "uuid", "result": "text"}
 ]
 ```
 
@@ -2303,7 +2303,7 @@ Workers extract the execution token from task input for credential resolution:
   "tool_arg_1": "value",
   "__agentspan_ctx__": {
     "execution_token": "base64url.payload.signature",
-    "workflow_id": "uuid",
+    "execution_id": "uuid",
     "session_id": "optional"
   }
 }

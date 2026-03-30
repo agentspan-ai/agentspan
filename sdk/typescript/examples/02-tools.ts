@@ -110,7 +110,7 @@ async function main() {
     // agent,
     // 'send email to developer@orkes.io with current weather details in SF',
     // );
-    // console.log(`Workflow started: ${streamHandle.workflowId}\n`);
+    // console.log(`Execution started: ${streamHandle.executionId}\n`);
 
     // for await (const event of streamHandle) {
     // switch (event.type) {

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `agentspan-sdk` SDK defines Python `Agent` objects that are compiled into durable Conductor workflows by the server-side Java compiler. This document describes the internal architecture, compilation model, and key design decisions.
+The `agentspan-sdk` SDK defines Python `Agent` objects that are compiled into durable Conductor workflows by the server-side Java compiler. This document describes the internal architecture, compilation model, and key design decisions. Each agent compiles to a Conductor workflow; at the user-facing level these are called "executions".
 
 ## Design Principles
 
@@ -97,7 +97,7 @@ Workers are started once and run until process exit (not stopped after each call
 
 ---
 
-## Compiled Workflow Structures
+## Compiled Agent Structures
 
 ### Single Agent with Tools (DoWhile Loop)
 
@@ -356,7 +356,7 @@ Every module uses `logging.getLogger("agentspan.agents.xxx")`:
 
 | Logger | Key Events |
 |---|---|
-| `agentspan.agents.runtime` | Workflow start/complete, worker start/stop, guardrail pass/fail |
+| `agentspan.agents.runtime` | Execution start/complete, worker start/stop, guardrail pass/fail |
 | `agentspan.agents.dispatch` | Tool calls, tool results, circuit breaker, approval signals |
 | `agentspan.agents.runtime.tool_registry` | Tool registration, approval flags |
 | `agentspan.agents.runtime.mcp_discovery` | MCP tool discovery |

@@ -31,11 +31,11 @@ def _make_fake_graph(stream_chunks=None, input_schema=None):
     return graph
 
 
-def _make_task(prompt="Hello", session_id="", workflow_id="wf-123"):
+def _make_task(prompt="Hello", session_id="", execution_id="wf-123"):
     from conductor.client.http.models.task import Task
     task = MagicMock(spec=Task)
     task.input_data = {"prompt": prompt, "session_id": session_id}
-    task.workflow_instance_id = workflow_id
+    task.workflow_instance_id = execution_id
     return task
 
 

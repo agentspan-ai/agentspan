@@ -45,21 +45,21 @@ runtime.run(options, prompt)
     │                                  ├─ AgentCompiler.compileFrameworkPassthrough()
     │                                  │   Produces: WorkflowDef with single SIMPLE task
     │                                  │
-    │                                  └─ Start workflow ──────────────────► Conductor
+    │                                  └─ Start execution ─────────────────► Conductor
     │                                                                          │
     │                                                                    Worker polls task
     │                                                                          │
     │   ┌──────────────────────────────────────────────────────────────────────┘
     │   │
     │   ▼ tool_worker(task) runs:
-    │   1. Inject workflow credentials → os.environ
+    │   1. Inject execution credentials → os.environ
     │   2. Create metadata dict
-    │   3. Build agentspan hooks (close over metadata + workflow_id)
+    │   3. Build agentspan hooks (close over metadata + execution_id)
     │   4. Merge user hooks + agentspan hooks (user first)
     │   5. asyncio.run(_run_query(prompt, merged_options))
     │      └─ async for message in query(prompt, options):
     │         ├─ Hooks fire: PreToolUse, PostToolUse, SubagentStart, etc.
-    │         │   ├─ Push stream events via HTTP POST /api/agent/events/{wfId}
+    │         │   ├─ Push stream events via HTTP POST /api/agent/events/{executionId}
     │         │   └─ Mutate metadata dict (tool counts, tools_used, etc.)
     │         └─ Collect ResultMessage → result text + token usage
     │   6. Return TaskResult with {result, ...metadata}
@@ -124,9 +124,9 @@ def make_claude_agent_sdk_worker(
 Returns a pre-wrapped `tool_worker(task: Task) -> TaskResult` closure (already in `Task → TaskResult` form, bypasses `make_tool_worker` via `_register_passthrough_worker`) that:
 
 1. **Extracts cwd**: Gets `cwd` from `task.input_data.get("cwd")`. If present, sets it on the merged options so the Claude Agent SDK executes file operations in the correct directory.
-2. **Injects credentials**: Same pattern as LangChain worker — resolves workflow-level credentials from `_workflow_credentials` registry via execution token, injects into `os.environ`, cleans up in `finally`.
+2. **Injects credentials**: Same pattern as LangChain worker — resolves execution-level credentials from `_workflow_credentials` registry via execution token, injects into `os.environ`, cleans up in `finally`.
 3. **Creates metadata dict**: `{tool_call_count, tool_error_count, subagent_count, tools_used (set)}` — shared with hooks via closure.
-4. **Builds agentspan hooks**: `_build_agentspan_hooks(workflow_id, server_url, auth_key, auth_secret, metadata)` — returns a dict of hook event → list of HookMatcher.
+4. **Builds agentspan hooks**: `_build_agentspan_hooks(execution_id, server_url, auth_key, auth_secret, metadata)` — returns a dict of hook event → list of HookMatcher.
 5. **Merges hooks**: User hooks run first, agentspan hooks appended after. Uses duck-typed copy of options (handles dict, Pydantic, dataclass, or plain object).
 6. **Runs query**: `asyncio.run(_run_query(prompt, merged_options))` — drives the async generator in a new event loop.
 7. **Returns TaskResult on success**: `output_data = {"result": result_text, "tools_used": sorted(metadata["tools_used"]), ...metadata, "token_usage": ...}`
@@ -225,7 +225,7 @@ async def code_review(prompt: str) -> str:
 Works today with no additional framework changes. The `@tool` runs in a Conductor worker task. Limitation: no SUB_WORKFLOW in Conductor, no streaming events from the inner agent.
 
 **Phase 2 (follow-up):** Add `runtime.register(options, name="...")` method that:
-1. Serializes + sends to `/api/agent/compile` to register the workflow by name
+1. Serializes + sends to `/api/agent/compile` to register the agent by name
 2. Parent agents reference by name in handoffs: `HandoffCondition(target="claude_reviewer")`
 3. Full SUB_WORKFLOW composition with streaming events
 
@@ -237,7 +237,7 @@ Works today with no additional framework changes. The `@tool` runs in a Conducto
 | Hooks for observability | Claude Agent SDK's hook system provides the exact instrumentation points we need. Hooks are additive (don't replace user hooks) and defensive (never crash the agent). |
 | `asyncio.run()` in sync worker | Conductor workers are sync functions in ThreadPoolExecutor threads. `asyncio.run()` creates a new event loop — safe because worker threads don't have existing loops. Documented limitation: doesn't work from within an already-running async context (e.g., Jupyter). |
 | Options in closure, not JSON | `ClaudeAgentOptions` may contain callables (hooks, custom tools). These can't be JSON-serialized. The closure pattern (same as LangGraph/LangChain) keeps the object in memory. |
-| Phase 1 `@tool` for use case C | HandoffCondition.target is a string (agent name), and Agent.agents only accepts Agent instances. A `runtime.register()` method is needed for native sub-workflow composition — deferred to Phase 2. |
+| Phase 1 `@tool` for use case C | HandoffCondition.target is a string (agent name), and Agent.agents only accepts Agent instances. A `runtime.register()` method is needed for native sub-agent composition — deferred to Phase 2. |
 | User hooks run first | Agentspan hooks are appended after user hooks in each event's matcher list. User logic takes priority. |
 
 ## Files Changed

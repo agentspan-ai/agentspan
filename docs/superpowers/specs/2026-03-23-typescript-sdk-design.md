@@ -349,7 +349,7 @@ export interface TokenUsage {
 
 export interface ToolContext {
   sessionId: string;
-  workflowId: string;
+  executionId: string;
   agentName: string;
   metadata: Record<string, unknown>;
   dependencies: Record<string, unknown>;
@@ -394,14 +394,14 @@ export interface AgentEvent {
   result?: unknown;
   target?: string;
   output?: unknown;
-  workflowId?: string;
+  executionId?: string;
   guardrailName?: string;
   timestamp?: number;
 }
 
 export interface AgentResult {
   output: Record<string, unknown>;
-  workflowId: string;
+  executionId: string;
   correlationId?: string;
   messages: unknown[];
   toolCalls: unknown[];
@@ -435,7 +435,7 @@ These are internal Conductor fields that must not leak to user-facing event stre
 
 ```typescript
 export interface AgentStatus {
-  workflowId: string;
+  executionId: string;
   isComplete: boolean;
   isRunning: boolean;
   isWaiting: boolean;
@@ -448,9 +448,8 @@ export interface AgentStatus {
 }
 
 export interface DeploymentInfo {
-  workflowName: string;
   agentName: string;
-  workflowDef?: object;  // Included in deploy() response
+  workflowDef?: object;  // Included in deploy() response (Conductor WorkflowDef)
 }
 
 export interface PromptTemplate {
@@ -921,7 +920,7 @@ export function scatterGather(options: {
 ### 8.1 Credential Resolution Flow
 
 1. Tool declares credentials in config
-2. Server mints scoped execution token at workflow start
+2. Server mints scoped execution token at execution start
 3. Worker extracts token from `__agentspan_ctx__` in task input
 4. Worker calls `POST /api/credentials/resolve` with token + credential names
 5. Resolved values injected into execution context
@@ -1063,7 +1062,7 @@ export class AgentRuntime {
   // Stream events as they happen
   async stream(agent: unknown, prompt: string, options?: RunOptions): Promise<AgentStream>;
 
-  // Compile + register workflow (no execution)
+  // Compile + register agent (no execution)
   async deploy(agent: unknown): Promise<DeploymentInfo>;
 
   // Compile-only dry-run preview
@@ -1095,7 +1094,7 @@ export interface RunOptions {
 
 ```typescript
 export interface AgentHandle {
-  readonly workflowId: string;
+  readonly executionId: string;
   readonly correlationId: string;   // Auto-generated UUID per run/start/stream call (base spec §14.8)
 
   getStatus(): Promise<AgentStatus>;
@@ -1115,7 +1114,7 @@ export interface AgentHandle {
 
 ```typescript
 export class AgentStream implements AsyncIterable<AgentEvent> {
-  readonly workflowId: string;
+  readonly executionId: string;
   readonly events: AgentEvent[];
 
   // HITL methods
@@ -1158,7 +1157,7 @@ All use a lazily-initialized singleton `AgentRuntime`.
 Uses native `fetch` with custom headers (supports `Authorization` which native `EventSource` does not).
 
 **Parsing:**
-1. Connect to `GET /agent/stream/{workflowId}` with `Accept: text/event-stream`
+1. Connect to `GET /agent/stream/{executionId}` with `Accept: text/event-stream`
 2. Read `ReadableStream` chunks, buffer partial lines
 3. Parse SSE fields: `event:`, `id:`, `data:`
 4. Blank line → dispatch event
@@ -1344,7 +1343,7 @@ function makeVercelAIWorker(
   headers: Record<string, string>
 ): WorkerFunction {
   return async (task: ConductorTask) => {
-    const workflowId = task.workflowInstanceId;
+    const executionId = task.workflowInstanceId;
     const prompt = task.inputData.prompt ?? '';
 
     const result = await agent.generate({
@@ -1352,16 +1351,16 @@ function makeVercelAIWorker(
       onStepFinish: ({ text, toolCalls, toolResults }) => {
         if (toolCalls?.length) {
           for (const tc of toolCalls) {
-            pushEvent(workflowId, { type: 'tool_call', toolName: tc.toolName, args: tc.args }, serverUrl, headers);
+            pushEvent(executionId, { type: 'tool_call', toolName: tc.toolName, args: tc.args }, serverUrl, headers);
           }
         }
         if (toolResults?.length) {
           for (const tr of toolResults) {
-            pushEvent(workflowId, { type: 'tool_result', toolName: tr.toolName, result: tr.result }, serverUrl, headers);
+            pushEvent(executionId, { type: 'tool_result', toolName: tr.toolName, result: tr.result }, serverUrl, headers);
           }
         }
         if (text) {
-          pushEvent(workflowId, { type: 'thinking', content: text }, serverUrl, headers);
+          pushEvent(executionId, { type: 'thinking', content: text }, serverUrl, headers);
         }
       },
     });
@@ -1421,13 +1420,13 @@ Shared utility used by all framework workers:
 ```typescript
 // frameworks/event-push.ts
 export function pushEvent(
-  workflowId: string,
+  executionId: string,
   event: object,
   serverUrl: string,
   headers: Record<string, string>
 ): void {
   // Fire-and-forget — do not await
-  fetch(`${serverUrl}/agent/${workflowId}/events`, {
+  fetch(`${serverUrl}/agent/${executionId}/events`, {
     method: 'POST',
     headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify([event]),
@@ -1802,7 +1801,7 @@ Per base spec §12, with TypeScript-specific additions:
 
 ## 22. Kitchen Sink Acceptance Test
 
-The kitchen sink (`examples/kitchen-sink.ts`) exercises all 89 features from the traceability matrix in a single mega-workflow — a content publishing pipeline processing an article through 9 stages.
+The kitchen sink (`examples/kitchen-sink.ts`) exercises all 89 features from the traceability matrix in a single mega-pipeline — a content publishing pipeline processing an article through 9 stages.
 
 Per `docs/sdk-design/kitchen-sink.md`, the SDK passes when:
 
@@ -1891,7 +1890,7 @@ const techClassifier = agent(() => '', { name: 'tech_classifier', model: 'openai
 
 ### 24.3 Status Type Clarification
 
-The `Status` type represents **terminal** workflow states only:
+The `Status` type represents **terminal** execution states only:
 
 ```typescript
 export type Status = 'COMPLETED' | 'FAILED' | 'TERMINATED' | 'TIMED_OUT';
@@ -1909,7 +1908,7 @@ function extractExecutionToken(task: ConductorTask): string | null {
   const ctx = task.inputData?.['__agentspan_ctx__'] as Record<string, unknown> | undefined;
   if (ctx?.executionToken) return ctx.executionToken as string;
 
-  // Fallback: from workflow input (for sub-workflows)
+  // Fallback: from workflow input (for sub-agents in Conductor SUB_WORKFLOW)
   const wfCtx = task.workflowInput?.['__agentspan_ctx__'] as Record<string, unknown> | undefined;
   if (wfCtx?.executionToken) return wfCtx.executionToken as string;
 
@@ -1921,12 +1920,12 @@ function extractExecutionToken(task: ConductorTask): string | null {
 
 When `RunOptions.idempotencyKey` is provided:
 1. Maps to Conductor's `correlationId` in the start request
-2. Server searches for existing workflow with same agent name + correlationId
-3. Search scope: **RUNNING or COMPLETED** workflows only (not FAILED)
-4. If found: returns existing `workflowId` without re-execution
+2. Server searches for existing execution with same agent name + correlationId
+3. Search scope: **RUNNING or COMPLETED** executions only (not FAILED)
+4. If found: returns existing `executionId` without re-execution
 5. If not found: creates new execution with `correlationId = idempotencyKey`
 
-Failed workflows are NOT deduplicated — a new execution is always created.
+Failed executions are NOT deduplicated — a new execution is always created.
 
 `AgentHandle.correlationId` is auto-generated as a UUID for every `run()`/`start()`/`stream()` call (base spec §14.8).
 
@@ -2131,8 +2130,8 @@ The SSE stream may include server-only event types not in the `EventType` enum. 
 | Server-Only Type | Fields | Description |
 |-----------------|--------|-------------|
 | `context_condensed` | `content`, `trigger`, `messagesBefore`, `messagesAfter` | Context window condensation |
-| `subagent_start` | `workflowId`, `prompt` | Sub-agent workflow started |
-| `subagent_stop` | `workflowId`, `result` | Sub-agent workflow completed |
+| `subagent_start` | `executionId`, `prompt` | Sub-agent execution started |
+| `subagent_stop` | `executionId`, `result` | Sub-agent execution completed |
 
 ### 24.12 Gate Worker Response Format
 

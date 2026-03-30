@@ -48,7 +48,7 @@ if __name__ == "__main__":
         # Quick test: uncomment below (and comment out serve) to run directly.
         # # start() returns a handle; handle.stream() streams events with HITL support
         # handle = runtime.start(agent, "Transfer $500 from ACC-789 to ACC-456")
-        # print(f"Workflow started: {handle.workflow_id}\n")
+        # print(f"Workflow started: {handle.execution_id}\n")
 
         # for event in handle.stream():
         #     if event.type == EventType.THINKING:

@@ -73,7 +73,7 @@ if __name__ == "__main__":
 
         # Quick test: uncomment below (and comment out serve) to run directly.
         # handle = runtime.start(agent, "I need to file a ticket for Alice about a laptop issue")
-        # print(f"Workflow started: {handle.workflow_id}\n")
+        # print(f"Workflow started: {handle.execution_id}\n")
 
         # for event in handle.stream():
         #     if event.type == EventType.THINKING:

@@ -18,7 +18,7 @@ class _FakeAgent:
 def _make_result(**kwargs):
     defaults = dict(
         output="Hello",
-        workflow_id="test",
+        execution_id="test",
         status="COMPLETED",
         tool_calls=[],
         events=[],

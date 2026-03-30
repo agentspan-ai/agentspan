@@ -228,7 +228,7 @@ public class AgentService {
                         RequestContextHolder.get().map(ctx -> ctx.getUser()).orElse(null);
                 if (currentUser != null) {
                     String token = executionTokenService.mint(
-                            currentUser.getId(), null /* workflowId not known yet */, declaredNames, timeoutSeconds);
+                            currentUser.getId(), null /* executionId not known yet */, declaredNames, timeoutSeconds);
                     Map<String, Object> agentCtx = new LinkedHashMap<>();
                     agentCtx.put("execution_token", token);
                     input.put("__agentspan_ctx__", agentCtx);
@@ -259,18 +259,18 @@ public class AgentService {
             }
         }
 
-        String workflowId = workflowExecutor.startWorkflow(new StartWorkflowInput(startReq));
-        log.info("Started workflow: {} (id={})", def.getName(), workflowId);
+        String executionId = workflowExecutor.startWorkflow(new StartWorkflowInput(startReq));
+        log.info("Started workflow: {} (id={})", def.getName(), executionId);
 
         // Validate provider AFTER start — workflow is captured for replay
         Optional<String> validationError = validateModelProvider(config);
         if (validationError.isPresent()) {
             log.warn("Provider not configured for agent '{}': {}", config.getName(), validationError.get());
-            workflowService.terminateWorkflow(workflowId, validationError.get());
+            workflowService.terminateWorkflow(executionId, validationError.get());
         }
 
         return StartResponse.builder()
-                .executionId(workflowId)
+                .executionId(executionId)
                 .agentName(def.getName())
                 .requiredWorkers(requiredWorkers)
                 .build();
@@ -962,7 +962,7 @@ public class AgentService {
     public Map<String, Object> getStatus(String executionId) {
         Workflow workflow = executionService.getExecutionStatus(executionId, true);
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("workflowId", executionId);
+        result.put("executionId", executionId);
         result.put("status", workflow.getStatus().name());
 
         boolean isComplete = workflow.getStatus().isTerminal();

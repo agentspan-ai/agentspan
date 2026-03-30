@@ -107,7 +107,7 @@ const DOCUMENTS: Document[] = [
       'completion via WAIT tasks. Configure event handlers with action types: ' +
       'complete_task, fail_task, or update_variables. Event payloads are matched ' +
       'by event name and optionally filtered by expression. For real-time updates, ' +
-      'use the streaming API (SSE) at /api/agent/stream/{workflowId}. Events ' +
+      'use the streaming API (SSE) at /api/agent/stream/{executionId}. Events ' +
       'include: tool_start, tool_end, llm_start, llm_end, agent_start, agent_end, ' +
       'and token events for incremental output.',
   },

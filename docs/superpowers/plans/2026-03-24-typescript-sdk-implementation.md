@@ -262,7 +262,7 @@ Implement `WorkerManager`:
 - `registerTaskDef(taskName, config?)` — POST /api/metadata/taskdefs with retry config (retryCount:2, LINEAR_BACKOFF, retryDelay:2s, timeout:120s).
 - `startPolling()` / `stopPolling()` — setInterval-based polling per worker.
 - `pollTask(taskType)` — GET /api/tasks/poll/{taskType}.
-- `reportSuccess(taskId, workflowId, result)` / `reportFailure(...)` — POST /api/tasks.
+- `reportSuccess(taskId, executionId, result)` / `reportFailure(...)` — POST /api/tasks.
 - Type coercion rules (spec §13.4, base spec §14.1): null check → optional unwrap → type match → string↔object JSON parse/stringify → string→number/bool → fallback. All silent.
 - Circuit breaker (spec §13.5): 10 failures → disable, reset on success.
 - ToolContext extraction from `__agentspan_ctx__`.
@@ -300,7 +300,7 @@ Implement:
 - [ ] **Step 1: Write stream.ts**
 
 Implement `AgentStream`:
-- Constructor: `url`, `headers`, `workflowId`, `runtime` reference.
+- Constructor: `url`, `headers`, `executionId`, `runtime` reference.
 - `[Symbol.asyncIterator]()` — SSE parsing via fetch ReadableStream. Line buffering, event/id/data field parsing, heartbeat filtering, JSON parse.
 - Reconnection: Last-Event-ID header, max 5 retries, exponential backoff.
 - Polling fallback: if no real events for 15s, switch to GET /agent/{id}/status every 500ms.
@@ -478,7 +478,7 @@ Test: individual conditions toJSON, composition (and/or nesting), TextGate toJSO
 
 - [ ] **Step 2: Write event-push.ts**
 
-`pushEvent(workflowId, event, serverUrl, headers)` — fire-and-forget fetch POST to `/agent/{workflowId}/events`. Errors logged at debug only, never thrown.
+`pushEvent(executionId, event, serverUrl, headers)` — fire-and-forget fetch POST to `/agent/{executionId}/events`. Errors logged at debug only, never thrown.
 
 - [ ] **Step 3: Write tests**
 

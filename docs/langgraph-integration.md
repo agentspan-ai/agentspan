@@ -1,6 +1,6 @@
 # LangGraph → AgentSpan Integration
 
-How LangGraph workflows are translated and executed through the AgentSpan platform.
+How LangGraph graphs are translated and executed through the AgentSpan platform.
 
 ## Overview
 
@@ -284,7 +284,7 @@ def review(state):
 
 **Conductor:** Compiled as a HUMAN system task pipeline:
 ```
-HUMAN task (pauses workflow, waits for external input via API/UI)
+HUMAN task (pauses execution, waits for external input via API/UI)
   ↓
 validation (INLINE) — validates human response format
   ↓
@@ -534,7 +534,7 @@ These LangGraph features are **not implemented** and will either error or silent
 | Private state channels | `PrivateAttr`, channel-level access control | Not implemented | Conductor state is a flat JSON dict. |
 | `InputState` / `OutputState` distinction | Separate TypedDict for input vs output | Not implemented | AgentSpan treats graph state as a single schema. Input validation and output filtering are not enforced. |
 | Time travel / replay | `get_state_history()`, replay from checkpoint | Not implemented | No checkpoint storage. |
-| Cross-thread persistence | `BaseStore`, `InMemoryStore` | Not implemented | No cross-workflow memory store. |
+| Cross-thread persistence | `BaseStore`, `InMemoryStore` | Not implemented | No cross-execution memory store. |
 | `InjectedState` / `InjectedStore` | Tool parameter injection | Not implemented | Tools receive explicit inputs only. |
 | `ValidationNode` | Built-in validation node type | Not implemented | Use regular nodes with validation logic. |
 | Middleware | Request/response middleware hooks | Not implemented | No equivalent in Conductor. |

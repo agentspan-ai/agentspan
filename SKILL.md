@@ -98,7 +98,7 @@ result = rt.run(agent, "prompt")
 result.output            # Dict: {"result": "..."} or agent-specific shape
 result.output["result"]  # The text output (string)
 result.status            # "COMPLETED", "FAILED", "TERMINATED", "TIMED_OUT"
-result.workflow_id       # Conductor workflow ID
+result.execution_id      # Execution ID
 result.error             # Error message if failed, else None
 result.token_usage       # {"input_tokens": N, "output_tokens": N, ...}
 result.finish_reason     # "stop", "length", "error", "cancelled", "timeout", "guardrail"
@@ -150,11 +150,11 @@ from agentspan.agents import tool, ToolContext
 @tool
 def lookup(query: str, context: ToolContext) -> str:
     """Search with context."""
-    wf_id = context.workflow_id
+    wf_id = context.execution_id
     session = context.session_id
     state = context.state          # Mutable dict shared across tool calls
     deps = context.dependencies    # From Agent(dependencies={...})
-    return f"Found in workflow {wf_id}"
+    return f"Found in execution {wf_id}"
 ```
 
 ### Server-side tools (no local worker needed)
@@ -496,7 +496,7 @@ with AgentRuntime() as rt:
 
     # ── Non-blocking ───────────────────────────────────────
     handle = rt.start(agent, "prompt")                  # Returns immediately
-    status = rt.get_status(handle.workflow_id)           # Poll status
+    status = rt.get_status(handle.execution_id)           # Poll status
     handle.pause()                                       # Pause execution
     handle.resume()                                      # Resume
     handle.cancel("no longer needed")                    # Cancel

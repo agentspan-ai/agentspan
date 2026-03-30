@@ -50,7 +50,7 @@ The workflow processes this through 9 stages, each targeting a specific feature 
 - `#10` Native `@tool` functions with `ToolContext` injection
 - `#11` `http_tool()` with credential header substitution (`${SEARCH_API_KEY}`)
 - `#12` `mcp_tool()` with credentials
-- `#18` `ToolContext` (session_id, workflow_id accessible in tool)
+- `#18` `ToolContext` (session_id, execution_id accessible in tool)
 - `#19` Tool-level credentials (`@tool(credentials=[...])`)
 - `#21` External tool (`@tool(external=True)` — no local worker)
 - `#52` Isolated credential mode (default — subprocess with env vars)
@@ -63,7 +63,7 @@ The workflow processes this through 9 stages, each targeting a specific feature 
 **Expected behavior:**
 - `scatter_gather()` creates a coordinator that dispatches parallel research workers
 - `research_team` runs `research_coordinator` and `data_analyst` in parallel
-- `research_database` tool receives `ToolContext` with valid `session_id` and `workflow_id`
+- `research_database` tool receives `ToolContext` with valid `session_id` and `execution_id`
 - `analyze_trends` tool runs in-process (not isolated) and calls `get_credential()`
 - `web_search` HTTP tool has `Authorization: Bearer ${SEARCH_API_KEY}` header
 - `mcp_fact_checker` connects to MCP server with credentials
@@ -300,8 +300,8 @@ The workflow processes this through 9 stages, each targeting a specific feature 
 **Assertions:**
 - `deployments` is a list with at least one `DeploymentInfo`
 - `execution_plan` compiles without error
-- `agent_stream.workflow_id` is non-empty
-- `handle.workflow_id` is non-empty
+- `agent_stream.execution_id` is non-empty
+- `handle.execution_id` is non-empty
 - `status.is_running or status.is_complete` is True
 
 ---

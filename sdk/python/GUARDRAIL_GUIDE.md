@@ -81,9 +81,9 @@ A guardrail is a function `(content: str) -> GuardrailResult` that checks conten
 2. Each guardrail runs against that content in order.
 3. On the first failure, the `on_fail` strategy determines what happens:
    - **retry** — feedback is appended to messages and the LLM tries again.
-   - **raise** — the workflow terminates with `FAILED` status.
+   - **raise** — the execution terminates with `FAILED` status.
    - **fix** — the guardrail's corrected output replaces the original.
-   - **human** — the workflow pauses for a human to approve, reject, or edit.
+   - **human** — the execution pauses for a human to approve, reject, or edit.
 
 For agents with tools, guardrails compile into the Conductor DoWhile loop as real workflow tasks. This means retries happen inside the loop (not by re-executing the entire workflow), and the guardrail check is visible as a task in the Conductor UI.
 
@@ -209,14 +209,14 @@ Guardrail(no_pii, on_fail="retry", max_retries=3)
 
 ### raise
 
-The workflow terminates immediately with `FAILED` status.
+The execution terminates immediately with `FAILED` status.
 
 ```python
 Guardrail(always_block, on_fail="raise")
 ```
 
 **What happens:**
-1. Guardrail fails → workflow terminates.
+1. Guardrail fails → execution terminates.
 2. `result.status` will be `"FAILED"` or `"TERMINATED"`.
 3. The guardrail message is included in the termination reason.
 
@@ -252,22 +252,22 @@ Guardrail(redact_ssn, on_fail="fix")
 
 ### human
 
-The workflow pauses for human review. A human can approve, reject, or edit the response.
+The execution pauses for human review. A human can approve, reject, or edit the response.
 
 ```python
 Guardrail(compliance_check, on_fail="human")
 ```
 
-> **Restriction:** `on_fail="human"` only works with `position="output"`. Input guardrails are client-side and cannot pause a workflow.
+> **Restriction:** `on_fail="human"` only works with `position="output"`. Input guardrails are client-side and cannot pause an execution.
 
 **What happens:**
 1. Guardrail fails → a HumanTask is created in Conductor.
-2. The workflow pauses (`status == "PAUSED"`).
+2. The execution pauses (`status == "PAUSED"`).
 3. A human reviews the output via the Conductor UI or API.
 4. Three possible actions:
-   - **Approve:** `runtime.approve(workflow_id)` — output is accepted as-is.
-   - **Reject:** `runtime.reject(workflow_id, reason="...")` — workflow terminates `FAILED`.
-   - **Edit:** `runtime.respond(workflow_id, {"edited_output": "..."})` — edited text replaces the output.
+   - **Approve:** `runtime.approve(execution_id)` — output is accepted as-is.
+   - **Reject:** `runtime.reject(execution_id, reason="...")` — execution terminates `FAILED`.
+   - **Edit:** `runtime.respond(execution_id, {"edited_output": "..."})` — edited text replaces the output.
 
 **Usage with `start()`:**
 
@@ -275,13 +275,13 @@ Guardrail(compliance_check, on_fail="human")
 with AgentRuntime() as runtime:
     handle = runtime.start(agent, "Give me investment advice.")
 
-    # Poll until the workflow pauses
+    # Poll until the execution pauses
     import time
     while True:
         status = handle.get_status()
         if status.is_waiting:
             print("Paused for human review")
-            runtime.approve(handle.workflow_id)
+            runtime.approve(handle.execution_id)
             break
         if status.is_complete:
             break
@@ -535,7 +535,7 @@ agent = Agent(
     ],
 )
 
-# Use start() since the workflow may pause
+# Use start() since the execution may pause
 with AgentRuntime() as runtime:
     handle = runtime.start(agent, "Should I invest in tech stocks?")
     # ... poll status, approve/reject when waiting ...
@@ -570,7 +570,7 @@ def run_query(query: str) -> str:
 ```python
 class OnFail(str, Enum):
     RETRY = "retry"    # Ask the LLM to try again with feedback
-    RAISE = "raise"    # Fail the workflow immediately
+    RAISE = "raise"    # Fail the execution immediately
     FIX   = "fix"      # Use GuardrailResult.fixed_output
     HUMAN = "human"    # Pause for human review (output only)
 

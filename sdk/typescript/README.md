@@ -45,7 +45,7 @@ One import change. Your code stays identical.
 +import { generateText } from '@agentspan/sdk/vercel-ai';
 ```
 
-That's it. `generateText` and `streamText` are intercepted, compiled to an agent workflow, and run on Agentspan. Tools, model, prompt, result shape -- all unchanged.
+That's it. `generateText` and `streamText` are intercepted, compiled to an agent execution, and run on Agentspan. Tools, model, prompt, result shape -- all unchanged.
 
 When you need Agentspan-specific features (guardrails, termination, multi-agent handoff), switch to the Agent API. See [`examples/vercel-ai/README.md`](examples/vercel-ai/README.md) for the full before/after.
 

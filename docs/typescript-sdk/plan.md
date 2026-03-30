@@ -149,7 +149,7 @@ runtime.run(agent, prompt)
   │
   ├─2─ POST /api/agent/start  { agentConfig, prompt, sessionId, media }
   │        Server compiles → Conductor workflow
-  │        Returns { workflowId }
+  │        Returns { executionId }
   │
   ├─3─ WorkerManager.registerAll(agent.tools)
   │        For each @tool with a JS func:
@@ -159,8 +159,8 @@ runtime.run(agent, prompt)
   │                ↕
   │          Conductor polls ← worker executes JS fn → result
   │
-  └─4─ Poll GET /api/agent/{workflowId}/status (500ms interval)
-           OR stream SSE  GET /api/agent/stream/{workflowId}
+  └─4─ Poll GET /api/agent/{executionId}/status (500ms interval)
+           OR stream SSE  GET /api/agent/stream/{executionId}
            Until COMPLETED / FAILED / TERMINATED / TIMED_OUT
            → AgentResult
 ```

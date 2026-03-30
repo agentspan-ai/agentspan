@@ -58,7 +58,7 @@ if (process.argv[1]?.endsWith('27-user-proxy-agent.ts') || process.argv[1]?.ends
       conversation,
       "Let's write a Python function to sort a list of dictionaries by a key.",
     );
-    console.log(`Conversation started: ${handle.workflowId}`);
+    console.log(`Conversation started: ${handle.executionId}`);
 
     // Simulate human responses
     const humanMessages = [

@@ -74,7 +74,7 @@ async function main() {
     // agent,
     // 'How do I authenticate with the API?',
     // );
-    // console.log(`Workflow started: ${streamHandle.workflowId}\n`);
+    // console.log(`Execution started: ${streamHandle.executionId}\n`);
     // console.log('Events:');
 
     // for await (const event of streamHandle) {

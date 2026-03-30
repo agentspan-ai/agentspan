@@ -20,7 +20,7 @@ Add support for running LangGraph `CompiledStateGraph` and LangChain `AgentExecu
 
 ### Execution Model
 
-LangGraph and LangChain manage their own LLM calls, tool routing, and state internally. Agentspan wraps the entire graph/executor as a single Conductor SIMPLE task — a "passthrough workflow":
+LangGraph and LangChain manage their own LLM calls, tool routing, and state internally. Agentspan wraps the entire graph/executor as a single Conductor SIMPLE task — a "passthrough execution":
 
 ```
 User prompt
@@ -33,7 +33,7 @@ Conductor dispatches SIMPLE task
     │
     ▼
 Python Worker (SDK side)
-    ├── graph.stream() ──events (non-blocking)──▶ POST /agent/events/{workflowId}
+    ├── graph.stream() ──events (non-blocking)──▶ POST /agent/events/{executionId}
     │                                                  │
     │                                                  ▼
     │                                          AgentStreamRegistry.send()
@@ -47,7 +47,7 @@ This is different from the existing OpenAI/ADK framework support, where tools ar
 
 ### `done` Event Responsibility
 
-The `done` SSE event is fired by the **existing `AgentEventListener`** when the Conductor workflow transitions to COMPLETED, exactly as it does for native agents. The Python LangGraph/LangChain worker does NOT push a `done` event. The worker only pushes intermediate events: `thinking`, `tool_call`, and `tool_result`.
+The `done` SSE event is fired by the **existing `AgentEventListener`** when the Conductor execution transitions to COMPLETED, exactly as it does for native agents. The Python LangGraph/LangChain worker does NOT push a `done` event. The worker only pushes intermediate events: `thinking`, `tool_call`, and `tool_result`.
 
 ### Contrast with OpenAI/ADK Support
 
@@ -55,7 +55,7 @@ The `done` SSE event is fired by the **existing `AgentEventListener`** when the 
 |---------|-----------|---------------------|
 | LLM call | Conductor `LLM_CHAT_COMPLETE` task | Managed internally by framework |
 | Tool calls | Each tool = separate Conductor SIMPLE task | Tools run inside framework, invisible to Conductor |
-| Compilation | Full `AgentConfig` → LLM+tool loop workflow | Passthrough workflow: one SIMPLE task |
+| Compilation | Full `AgentConfig` → LLM+tool loop execution | Passthrough execution: one SIMPLE task |
 | Worker count | One per tool | One per graph/executor |
 | Visibility | Per-task granularity | Node-level events via HTTP push |
 
@@ -68,7 +68,7 @@ The LangGraph/LangChain worker is **pre-wrapped**: `make_langgraph_worker` retur
 The worker function signature is:
 ```python
 def tool_worker(task: Task) -> TaskResult:
-    workflow_id = task.workflow_instance_id
+    execution_id = task.workflow_instance_id  # Conductor's workflowInstanceId maps to our executionId
     prompt = task.input_data.get("prompt", "")
     session_id = task.input_data.get("session_id", "") or ""
     # ... run graph.stream(), push events, return result
@@ -87,10 +87,10 @@ Provides:
 - `make_langgraph_worker(graph, name, server_url, auth_key, auth_secret)` — builds the `tool_worker(task)` function
 
 The worker function:
-1. Extracts `prompt`, `session_id` from `task.input_data`; gets `workflow_id = task.workflow_instance_id`
+1. Extracts `prompt`, `session_id` from `task.input_data`; gets `execution_id = task.workflow_instance_id`
 2. Auto-detects input format from `graph.get_input_jsonschema()`
 3. Calls `graph.stream(input, config, stream_mode="updates")` in a loop
-4. For each chunk, fires a **non-blocking** HTTP POST (using a background thread) to `POST /agent/events/{workflowId}`
+4. For each chunk, fires a **non-blocking** HTTP POST (using a background thread) to `POST /agent/events/{executionId}`
 5. Accumulates the final state from the last chunk
 6. Extracts the output from the accumulated state
 7. Returns `TaskResult(status=COMPLETED, output_data={"result": output})`
@@ -240,17 +240,17 @@ This prevents the listener from emitting a spurious `tool_call`/`tool_result` pa
 New endpoint in `AgentController` (controller is mapped to `/api/agent`):
 
 ```
-POST /api/agent/events/{workflowId}
+POST /api/agent/events/{executionId}
 Headers: X-Auth-Key, X-Auth-Secret (same auth as all other /api/agent/* endpoints)
 Body: { "type": "thinking|tool_call|tool_result", "content": "...", "toolName": "...", "args": {...}, "result": "..." }
-Response: 200 OK always (even if workflowId has no listeners — events are silently dropped
+Response: 200 OK always (even if executionId has no listeners — events are silently dropped
          by AgentStreamRegistry when no emitters are registered, which is correct behavior
          for the case where no client has connected to the SSE stream yet)
 ```
 
-The Python worker constructs the URL as `{server_url}/api/agent/events/{workflow_id}` using the same `server_url` already available to the worker process (via `AgentConfig` env vars or the SDK runtime config).
+The Python worker constructs the URL as `{server_url}/api/agent/events/{execution_id}` using the same `server_url` already available to the worker process (via `AgentConfig` env vars or the SDK runtime config).
 
-`AgentService.pushFrameworkEvent(workflowId, eventMap)` translates the map to the appropriate `AgentSSEEvent` factory and calls `streamRegistry.send(workflowId, event)`.
+`AgentService.pushFrameworkEvent(executionId, eventMap)` translates the map to the appropriate `AgentSSEEvent` factory and calls `streamRegistry.send(executionId, event)`.
 
 Auth note: same `X-Auth-Key`/`X-Auth-Secret` header validation applied to all `/agent/*` endpoints is applied here. In the current implementation, auth validation is permissive (warn-only) when no keys are configured, consistent with the rest of the API.
 
@@ -294,10 +294,10 @@ LangChain `AgentExecutor` has no checkpointing; `session_id` is unused on that p
 
 | LangGraph stream chunk | Agentspan SSE event |
 |------------------------|---------------------|
-| Any node starts (node_name key appears) | `thinking(workflowId, node_name)` |
-| `messages` contains `AIMessage` with `tool_calls` | `tool_call(workflowId, tool_name, args)` per call |
-| `messages` contains `ToolMessage` | `tool_result(workflowId, tool_name, content)` |
-| Final `AIMessage` with content and no tool_calls | `thinking(workflowId, "agent")` with content |
+| Any node starts (node_name key appears) | `thinking(executionId, node_name)` |
+| `messages` contains `AIMessage` with `tool_calls` | `tool_call(executionId, tool_name, args)` per call |
+| `messages` contains `ToolMessage` | `tool_result(executionId, tool_name, content)` |
+| Final `AIMessage` with content and no tool_calls | `thinking(executionId, "agent")` with content |
 
 The `done` event is **not** emitted by the Python worker. It is emitted by the existing `AgentEventListener` when the Conductor workflow reaches COMPLETED status.
 
@@ -307,9 +307,9 @@ LangChain callback handlers fire synchronously during `AgentExecutor.invoke()`. 
 
 | LangChain callback | Agentspan SSE event |
 |--------------------|---------------------|
-| `on_tool_start(tool, input)` | `tool_call(workflowId, tool, input)` |
-| `on_tool_end(output)` | `tool_result(workflowId, tool, output)` |
-| `on_llm_start` | `thinking(workflowId, "llm")` |
+| `on_tool_start(tool, input)` | `tool_call(executionId, tool, input)` |
+| `on_tool_end(output)` | `tool_result(executionId, tool, output)` |
+| `on_llm_start` | `thinking(executionId, "llm")` |
 
 ## Test-First Implementation Strategy
 
@@ -323,7 +323,7 @@ Implementation proceeds example by example, test written first:
 For each example:
 - Python SDK test: creates graph/executor, calls `runtime.run()`, asserts on output
 - SSE event test: verifies intermediate `thinking`/`tool_call`/`tool_result` events are pushed
-- Server-side unit test: `POST /agent/events/{workflowId}` endpoint → `AgentStreamRegistry.send()` → SSE client receives event
+- Server-side unit test: `POST /agent/events/{executionId}` endpoint → `AgentStreamRegistry.send()` → SSE client receives event
 
 ## File Changes
 
@@ -344,7 +344,7 @@ For each example:
 | `normalizer/LangGraphNormalizer.java` | New — rawConfig → passthrough AgentConfig |
 | `normalizer/LangChainNormalizer.java` | New — same for LangChain |
 | `compiler/AgentCompiler.java` | Add passthrough guard as first check in `compile()`; add `compileFrameworkPassthrough()` |
-| `controller/AgentController.java` | Add `POST /api/agent/events/{workflowId}` |
+| `controller/AgentController.java` | Add `POST /api/agent/events/{executionId}` |
 | `service/AgentService.java` | Add `pushFrameworkEvent()` |
 | `service/AgentEventListener.java` | Add `_fw_` prefix check to `isToolTask()` |
 

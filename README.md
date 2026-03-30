@@ -57,7 +57,7 @@ with AgentRuntime() as runtime:
     result.print_result()
 ```
 
-That's it. The server auto-starts workers, compiles your agent to a durable workflow, and executes it. Open `http://localhost:6767` to see the visual workflow UI.
+That's it. The server auto-starts workers, compiles your agent to a durable execution, and executes it. Open `http://localhost:6767` to see the visual execution UI.
 
 <details><summary>Alternative install methods</summary>
 
@@ -100,11 +100,11 @@ agentspan doctor
 
 ## Why Agentspan?
 
-Every other agent SDK runs agents in-memory. When the process dies, the agent dies. Agentspan compiles your agents to durable workflows that execute on a server — giving you reliability, observability, and distributed scaling out of the box.
+Every other agent SDK runs agents in-memory. When the process dies, the agent dies. Agentspan compiles your agents to durable executions that execute on a server — giving you reliability, observability, and distributed scaling out of the box.
 
 | | CrewAI | LangChain | AutoGen | OpenAI Agents | **Agentspan** |
 |---|---|---|---|---|---|
-| **Execution model** | In-memory | Checkpoints | In-memory | Client-side loop | **Server-side workflows** |
+| **Execution model** | In-memory | Checkpoints | In-memory | Client-side loop | **Server-side executions** |
 | **Crash recovery** | Manual replay | Checkpointer (Postgres) | None | None | **Automatic resume** |
 | **Tool scaling** | Single process | Single process | Distributed | Single process | **Distributed workers (any language)** |
 | **Human approval** | Stdin-blocking | `interrupt()` + checkpointer | Stdin-blocking | In-process | **Durable pause (days, any machine)** |
@@ -116,21 +116,21 @@ Every other agent SDK runs agents in-memory. When the process dies, the agent di
 
 <details><summary>What makes it different (detailed)</summary>
 
-1. **True durable execution** — Your agent compiles to a server-side workflow. Kill the process — the agent keeps running. Poll for results from anywhere.
+1. **True durable execution** — Your agent compiles to a server-side execution. Kill the process — the agent keeps running. Poll for results from anywhere.
 
-2. **Cross-process agent access** — Every agent has a workflow ID. Check status, stream events, approve tool calls, pause, resume, or cancel from any process, any machine.
+2. **Cross-process agent access** — Every agent has an execution ID. Check status, stream events, approve tool calls, pause, resume, or cancel from any process, any machine.
 
 3. **Distributed workers in any language** — Tools execute as distributed tasks. Write workers in Python, Java, Go, or any language. Scale each tool independently.
 
 4. **One primitive** — Everything is an `Agent`. Single agents, multi-agent teams, nested hierarchies — one class.
 
-5. **Real human-in-the-loop** — `@tool(approval_required=True)` pauses the workflow durably. Approve days later, from any machine.
+5. **Real human-in-the-loop** — `@tool(approval_required=True)` pauses the execution durably. Approve days later, from any machine.
 
 6. **Production guardrails** — Custom functions, regex, or LLM judges. Four failure modes: retry, raise, fix, or human escalation.
 
 7. **Server-side tools** — HTTP endpoints and MCP servers execute as server-side tasks. No worker needed. MCP auto-discovered at compile time.
 
-8. **Full observability** — OpenTelemetry, Prometheus, visual workflow UI, execution history, token/cost tracking.
+8. **Full observability** — OpenTelemetry, Prometheus, visual execution UI, execution history, token/cost tracking.
 
 9. **Framework compatible** — Works with Google ADK, OpenAI Agents SDK, LangChain, and LangGraph. [180+ examples](sdk/python/examples/).
 
@@ -255,7 +255,7 @@ api = http_tool(
 github = mcp_tool(server_url="http://localhost:3001/mcp", credentials=["GITHUB_TOKEN"])
 ```
 
-No credentials leave the server unencrypted. Workers resolve them via scoped execution tokens that expire with the workflow. See the [11 credential examples](sdk/python/examples/) (`16_*.py` through `16k_*.py`) for every mode: isolated subprocess, in-process, CLI tools, HTTP headers, MCP, and framework passthrough.
+No credentials leave the server unencrypted. Workers resolve them via scoped execution tokens that expire with the execution. See the [11 credential examples](sdk/python/examples/) (`16_*.py` through `16k_*.py`) for every mode: isolated subprocess, in-process, CLI tools, HTTP headers, MCP, and framework passthrough.
 
 ### Multi-Agent Handoffs
 
@@ -530,7 +530,7 @@ Execution order: `on_agent_start` → (`on_model_start` → LLM → `on_model_en
 | [`06_sequential_pipeline.py`](sdk/python/examples/06_sequential_pipeline.py) | `agent >> agent >> agent` |
 | [`07_parallel_agents.py`](sdk/python/examples/07_parallel_agents.py) | Fan-out / fan-in |
 | [`08_router_agent.py`](sdk/python/examples/08_router_agent.py) | LLM routing to specialists |
-| [`09_human_in_the_loop.py`](sdk/python/examples/09_human_in_the_loop.py) | Approval workflows |
+| [`09_human_in_the_loop.py`](sdk/python/examples/09_human_in_the_loop.py) | Approval patterns |
 | [`09b_hitl_with_feedback.py`](sdk/python/examples/09b_hitl_with_feedback.py) | Custom feedback (respond API) |
 | [`09c_hitl_streaming.py`](sdk/python/examples/09c_hitl_streaming.py) | Streaming + HITL approval |
 | [`10_guardrails.py`](sdk/python/examples/10_guardrails.py) | Output validation + retry |
@@ -707,7 +707,7 @@ The server auto-enables LLM providers when their API key is set. No manual integ
 │   ├── k8s/              # Kubernetes manifests
 │   ├── helm/             # Helm chart
 │   └── docker-compose/   # Compose stack (single node)
-├── ui/                   # React workflow UI (served at localhost:6767)
+├── ui/                   # React execution UI (served at localhost:6767)
 ├── sdk/
 │   ├── python/           # Python SDK
 │   │   ├── src/agentspan/agents/

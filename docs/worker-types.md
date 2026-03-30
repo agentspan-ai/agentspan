@@ -1,7 +1,7 @@
 # AgentSpan Worker Types
 
 Workers are functions registered as Conductor task pollers. They execute locally (SDK-side)
-while workflow orchestration happens server-side. Both Python and TypeScript SDKs implement
+while execution orchestration happens server-side. Both Python and TypeScript SDKs implement
 all worker types with identical behavior.
 
 ## Quick Reference

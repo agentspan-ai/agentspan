@@ -392,7 +392,7 @@ import java.time.Instant;
 @AllArgsConstructor
 public class RequestContext {
     private String  requestId;      // UUID per HTTP request
-    private String  workflowId;     // populated when request is workflow-scoped
+    private String  executionId;    // populated when request is execution-scoped
     private String  executionToken; // minted execution token, if present
     private User    user;
     private Instant createdAt;
@@ -2413,7 +2413,7 @@ git commit -m "feat: add CredentialResolutionService — three-step pipeline (bi
 
 **Token format:** `base64url(header).base64url(payload).base64url(hmacSha256Signature)`
 - Header: `{"alg":"HS256","typ":"JWT"}`
-- Payload: `{"jti":"...","sub":"userId","wid":"workflowId","iat":123,"exp":456,"scope":"credentials","declared_names":["GITHUB_TOKEN"]}`
+- Payload: `{"jti":"...","sub":"userId","wid":"executionId","iat":123,"exp":456,"scope":"credentials","declared_names":["GITHUB_TOKEN"]}`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2447,7 +2447,7 @@ class ExecutionTokenServiceTest {
         ExecutionTokenService.TokenPayload payload = service.validate(token);
 
         assertThat(payload.userId()).isEqualTo("user-123");
-        assertThat(payload.workflowId()).isEqualTo("wf-456");
+        assertThat(payload.executionId()).isEqualTo("wf-456");
         assertThat(payload.declaredNames()).containsExactly("GITHUB_TOKEN");
     }
 
@@ -2559,7 +2559,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>jti deny-list: in-memory ConcurrentHashMap (jti → expiryEpochSecond).
  * Self-pruning via scheduled cleanup. In OSS, the deny-list is lost on restart
- * (bounded risk: tokens expire with workflow TTL).</p>
+ * (bounded risk: tokens expire with execution TTL).</p>
  */
 @Service
 public class ExecutionTokenService {
@@ -2583,21 +2583,21 @@ public class ExecutionTokenService {
      * Mint a new execution token.
      *
      * @param userId         the authenticated user's ID
-     * @param workflowId     the Conductor workflow ID
-     * @param declaredNames  credential names declared by the workflow (bounds resolution)
-     * @param workflowTimeoutSeconds workflow timeout; TTL = max(3600, workflowTimeoutSeconds)
+     * @param executionId    the execution ID
+     * @param declaredNames  credential names declared by the agent (bounds resolution)
+     * @param executionTimeoutSeconds execution timeout; TTL = max(3600, executionTimeoutSeconds)
      * @return signed token string
      */
-    public String mint(String userId, String workflowId,
-                       List<String> declaredNames, long workflowTimeoutSeconds) {
+    public String mint(String userId, String executionId,
+                       List<String> declaredNames, long executionTimeoutSeconds) {
         long now = Instant.now().getEpochSecond();
-        long ttl = Math.max(ONE_HOUR_SECONDS, workflowTimeoutSeconds);
+        long ttl = Math.max(ONE_HOUR_SECONDS, executionTimeoutSeconds);
         long exp = now + ttl;
 
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("jti", UUID.randomUUID().toString());
         payload.put("sub", userId);
-        payload.put("wid", workflowId);
+        payload.put("wid", executionId);
         payload.put("iat", now);
         payload.put("exp", exp);
         payload.put("scope", SCOPE);
@@ -2724,7 +2724,7 @@ public class ExecutionTokenService {
     public record TokenPayload(
         String jti,
         String userId,
-        String workflowId,
+        String executionId,
         long   exp,
         List<String> declaredNames
     ) {}
@@ -3105,8 +3105,8 @@ public class CredentialController {
         }
 
         // Audit log
-        log.info("AUDIT resolve: userId={} workflowId={} names={} resolved={}",
-            payload.userId(), payload.workflowId(), requested, result.keySet());
+        log.info("AUDIT resolve: userId={} executionId={} names={} resolved={}",
+            payload.userId(), payload.executionId(), requested, result.keySet());
 
         return ResponseEntity.ok(ResolveResponse.builder().credentials(result).build());
     }
@@ -3288,7 +3288,7 @@ git commit -m "test: add /resolve rate limit, name bounding, and revocation inte
 
 ---
 
-### Task 15: AgentService — mint execution token at workflow start
+### Task 15: AgentService — mint execution token at execution start
 
 **Files:**
 - Modify: `server/src/main/java/dev/agentspan/runtime/service/AgentService.java`
@@ -3438,7 +3438,7 @@ if (executionTokenService != null) {
             .orElse(null);
         if (currentUser != null) {
             String token = executionTokenService.mint(
-                currentUser.getId(), null /* workflowId not known yet */, declaredNames, timeoutSeconds);
+                currentUser.getId(), null /* executionId not known yet */, declaredNames, timeoutSeconds);
             Map<String, Object> agentCtx = new LinkedHashMap<>();
             agentCtx.put("execution_token", token);
             input.put("__agentspan_ctx__", agentCtx);
@@ -4022,9 +4022,9 @@ AgentEventListener(AgentStreamRegistry streamRegistry, ExecutionTokenService tok
 In `handleWorkflowTerminated()`, before calling `streamRegistry.complete(wfId)`, add:
 
 ```java
-// Revoke execution token on workflow termination
+// Revoke execution token on execution termination
 if (executionTokenService != null) {
-    revokeWorkflowToken(workflow);
+    revokeExecutionToken(workflow);
 }
 ```
 
@@ -4032,7 +4032,7 @@ Add the helper method:
 
 ```java
 @SuppressWarnings("unchecked")
-private void revokeWorkflowToken(WorkflowModel workflow) {
+private void revokeExecutionToken(WorkflowModel workflow) {
     try {
         Object ctx = workflow.getVariables() != null
             ? workflow.getVariables().get("__agentspan_ctx__") : null;
@@ -4041,9 +4041,9 @@ private void revokeWorkflowToken(WorkflowModel workflow) {
         if (!(tokenObj instanceof String token)) return;
         ExecutionTokenService.TokenPayload payload = executionTokenService.validate(token);
         executionTokenService.revoke(payload.jti(), payload.exp());
-        logger.info("Execution token revoked for terminated workflow {}", workflow.getWorkflowId());
+        logger.info("Execution token revoked for terminated execution {}", workflow.getWorkflowId());
     } catch (Exception e) {
-        logger.debug("Could not revoke execution token for workflow {}: {}",
+        logger.debug("Could not revoke execution token for execution {}: {}",
             workflow.getWorkflowId(), e.getMessage());
     }
 }
@@ -4197,7 +4197,7 @@ git commit --allow-empty -m "chore: server credential module implementation comp
 
 ### Critical Files for Implementation
 
-- `/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/server/src/main/java/dev/agentspan/runtime/service/AgentService.java` — Core service to modify for execution token minting at workflow start; understand the `start()` method's input map construction and the `workflowExecutor.startWorkflow()` call site
+- `/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/server/src/main/java/dev/agentspan/runtime/service/AgentService.java` — Core service to modify for execution token minting at execution start; understand the `start()` method's input map construction and the `workflowExecutor.startWorkflow()` call site
 - `/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/server/src/main/java/dev/agentspan/runtime/ai/AgentChatCompleteTaskMapper.java` — Override point for per-user LLM key injection; the `getMappedTask()` method is where task input data is finalized before Conductor dispatches to the AI provider
 - `/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/server/src/main/java/org/conductoross/conductor/AgentRuntime.java` — Entry point; the `@SpringBootApplication(exclude = {DataSourceAutoConfiguration.class})` annotation is the reason a separate `CredentialDataSourceConfig` bean is required rather than using Spring Boot's auto-configured DataSource
 - `/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/server/src/main/resources/schema-credentials.sql` — New file; must use SQLite-compatible DDL with `IF NOT EXISTS` guards and TEXT for UUID columns (SQLite has no native UUID type)

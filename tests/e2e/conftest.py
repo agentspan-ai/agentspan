@@ -30,36 +30,36 @@ def verify_server():
     except Exception as e:
         pytest.skip(f"Server not available: {e}")
 
-def get_workflow(workflow_id: str) -> dict:
+def get_workflow(execution_id: str) -> dict:
     """Fetch full workflow details from server API."""
-    resp = requests.get(f"{BASE_URL}/api/workflow/{workflow_id}", timeout=10)
+    resp = requests.get(f"{BASE_URL}/api/workflow/{execution_id}", timeout=10)
     resp.raise_for_status()
     return resp.json()
 
-def get_task_output(workflow_id: str, task_name: str) -> dict:
+def get_task_output(execution_id: str, task_name: str) -> dict:
     """Get output of a specific task in a workflow."""
-    wf = get_workflow(workflow_id)
+    wf = get_workflow(execution_id)
     for task in wf.get("tasks", []):
         if task.get("taskDefName") == task_name:
             return task.get("outputData", {})
     return {}
 
-def assert_workflow_completed(workflow_id: str):
+def assert_workflow_completed(execution_id: str):
     """Assert workflow completed successfully."""
-    wf = get_workflow(workflow_id)
-    assert wf["status"] == "COMPLETED", f"Workflow {workflow_id} status: {wf['status']}, reason: {wf.get('reasonForIncompletion', '')}"
+    wf = get_workflow(execution_id)
+    assert wf["status"] == "COMPLETED", f"Workflow {execution_id} status: {wf['status']}, reason: {wf.get('reasonForIncompletion', '')}"
 
-def assert_workflow_failed(workflow_id: str, error_contains: str = ""):
+def assert_workflow_failed(execution_id: str, error_contains: str = ""):
     """Assert workflow failed (for negative tests)."""
-    wf = get_workflow(workflow_id)
+    wf = get_workflow(execution_id)
     assert wf["status"] in ("FAILED", "TERMINATED"), f"Expected failure but got: {wf['status']}"
     if error_contains:
         reason = wf.get("reasonForIncompletion", "")
         assert error_contains.lower() in reason.lower(), f"Expected '{error_contains}' in reason: {reason}"
 
-def assert_task_exists(workflow_id: str, task_name: str):
+def assert_task_exists(execution_id: str, task_name: str):
     """Assert a task with the given name exists in the workflow."""
-    wf = get_workflow(workflow_id)
+    wf = get_workflow(execution_id)
     task_names = [t.get("taskDefName", "") for t in wf.get("tasks", [])]
     assert task_name in task_names, f"Task '{task_name}' not found. Tasks: {task_names}"
 

@@ -147,7 +147,7 @@ async function main() {
     // }
 
     // console.log(`\nFinish reason: ${result.finishReason}`);
-    // console.log(`Workflow ID: ${result.workflowId}`);
+    // console.log(`Execution ID: ${result.executionId}`);
   } finally {
     await runtime.shutdown();
     // }

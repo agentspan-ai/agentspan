@@ -71,7 +71,7 @@ if __name__ == "__main__":
         # result = runtime.stream(
         #     agent, "send email to developer@orkes.io with current weather details in SF"
         # )
-        # print(f"Workflow started: {result.workflow_id}\n")
+        # print(f"Workflow started: {result.execution_id}\n")
 
         # for event in result:
         #     if event.type == EventType.THINKING:

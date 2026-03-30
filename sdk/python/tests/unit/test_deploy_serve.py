@@ -186,7 +186,7 @@ class TestRunByName:
 
     def test_stream_with_string(self):
         rt = _make_runtime()
-        mock_handle = MagicMock(workflow_id="wf-123")
+        mock_handle = MagicMock(execution_id="wf-123")
         mock_stream_iter = iter([])
         with patch.object(rt, "_start_by_name", return_value=mock_handle):
             with patch.object(
