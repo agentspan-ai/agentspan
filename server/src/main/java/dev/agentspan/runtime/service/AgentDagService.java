@@ -30,11 +30,11 @@ public class AgentDagService {
 
     private final ExecutionDAO executionDAO;
 
-    public InjectTaskResponse injectTask(String workflowId, InjectTaskRequest req) {
-        WorkflowModel workflow = executionDAO.getWorkflow(workflowId, true);
+    public InjectTaskResponse injectTask(String executionId, InjectTaskRequest req) {
+        WorkflowModel workflow = executionDAO.getWorkflow(executionId, true);
         if (workflow == null) {
             // NotFoundException is mapped to HTTP 404 by Conductor's ApplicationExceptionMapper
-            throw new NotFoundException("Workflow not found: " + workflowId);
+            throw new NotFoundException("Execution not found: " + executionId);
         }
 
         TaskModel task = new TaskModel();
@@ -43,7 +43,7 @@ public class AgentDagService {
         task.setReferenceTaskName(req.getReferenceTaskName());
         task.setTaskType(req.getType());
         task.setStatus(TaskModel.Status.IN_PROGRESS);
-        task.setWorkflowInstanceId(workflowId);
+        task.setWorkflowInstanceId(executionId);
         task.setWorkflowType(workflow.getWorkflowName());
         task.setInputData(req.getInputData() != null ? req.getInputData() : Collections.emptyMap());
         task.setSeq(workflow.getTasks().size() + 1);

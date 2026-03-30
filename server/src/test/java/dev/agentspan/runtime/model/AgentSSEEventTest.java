@@ -22,7 +22,7 @@ class AgentSSEEventTest {
         AgentSSEEvent event = AgentSSEEvent.thinking("wf-1", "agent_llm");
 
         assertThat(event.getType()).isEqualTo("thinking");
-        assertThat(event.getWorkflowId()).isEqualTo("wf-1");
+        assertThat(event.getExecutionId()).isEqualTo("wf-1");
         assertThat(event.getContent()).isEqualTo("agent_llm");
         assertThat(event.getTimestamp()).isGreaterThan(0);
     }
@@ -138,7 +138,7 @@ class AgentSSEEventTest {
         AgentSSEEvent event = new AgentSSEEvent();
         event.setId(42);
         event.setType("custom");
-        event.setWorkflowId("wf-99");
+        event.setExecutionId("wf-99");
         event.setContent("msg");
         event.setToolName("tool");
         event.setArgs("argval");
@@ -151,7 +151,7 @@ class AgentSSEEventTest {
 
         assertThat(event.getId()).isEqualTo(42);
         assertThat(event.getType()).isEqualTo("custom");
-        assertThat(event.getWorkflowId()).isEqualTo("wf-99");
+        assertThat(event.getExecutionId()).isEqualTo("wf-99");
         assertThat(event.getContent()).isEqualTo("msg");
         assertThat(event.getToolName()).isEqualTo("tool");
         assertThat(event.getArgs()).isEqualTo("argval");

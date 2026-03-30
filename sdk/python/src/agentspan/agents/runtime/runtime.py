@@ -434,7 +434,7 @@ class AgentRuntime:
         except req_lib.exceptions.HTTPError as exc:
             _raise_api_error(exc, url=url)
         data = resp.json()
-        workflow_id = data["workflowId"]
+        workflow_id = data.get("executionId", "")
         required_workers: Optional[set] = None
         if "requiredWorkers" in data:
             required_workers = set(data["requiredWorkers"])
@@ -477,7 +477,7 @@ class AgentRuntime:
             payload["credentials"] = credentials
 
         data = await self._http.start_agent(payload)
-        workflow_id = data["workflowId"]
+        workflow_id = data.get("executionId", "")
         required_workers: Optional[set] = None
         if "requiredWorkers" in data:
             required_workers = set(data["requiredWorkers"])
@@ -514,7 +514,7 @@ class AgentRuntime:
             payload["credentials"] = credentials
 
         data = await self._http.start_agent(payload)
-        workflow_id = data["workflowId"]
+        workflow_id = data.get("executionId", "")
         logger.info(
             "Started %s framework agent via server (workflow_id=%s)",
             framework,
@@ -1952,7 +1952,8 @@ class AgentRuntime:
             resp.raise_for_status()
         except req_lib.exceptions.HTTPError as exc:
             _raise_api_error(exc, url=url)
-        return resp.json()["workflowName"]
+        deploy_data = resp.json()
+        return deploy_data.get("agentName", "")
 
     async def _deploy_via_server_async(self, agent: Any, *, framework: Optional[str] = None) -> str:
         """Async version of :meth:`_deploy_via_server`."""
@@ -1971,7 +1972,7 @@ class AgentRuntime:
             payload = {"agentConfig": serializer.serialize(agent)}
 
         data = await self._http.deploy_agent(payload)
-        return data["workflowName"]
+        return data.get("agentName", "")
 
     # ── Serve (runtime worker service) ─────────────────────────────
 
@@ -2633,7 +2634,7 @@ class AgentRuntime:
         except req_lib.exceptions.HTTPError as exc:
             _raise_api_error(exc, url=url)
         data = resp.json()
-        workflow_id = data["workflowId"]
+        workflow_id = data.get("executionId", "")
         logger.info(
             "Started %s framework agent via server (workflow_id=%s)",
             framework,
@@ -3036,7 +3037,7 @@ class AgentRuntime:
     def _stream_sse(self, workflow_id: str) -> Iterator[AgentEvent]:
         """Consume SSE event stream from the server.
 
-        Connects to ``GET /api/agent/stream/{workflowId}`` and yields
+        Connects to ``GET /api/agent/stream/{executionId}`` and yields
         :class:`AgentEvent` objects as they arrive.  Auto-reconnects with
         ``Last-Event-ID`` if the connection drops.
 
@@ -3181,7 +3182,7 @@ class AgentRuntime:
             result=data.get("result"),
             target=data.get("target"),
             output=data.get("output"),
-            workflow_id=data.get("workflowId", workflow_id),
+            workflow_id=data.get("executionId", workflow_id),
             guardrail_name=data.get("guardrailName"),
         )
 
@@ -4354,7 +4355,7 @@ class AgentRuntime:
             executions = resp.json().get("results", [])
 
             for execution in executions:
-                wf_id = execution.get("workflowId")
+                wf_id = execution.get("executionId")
                 if not wf_id:
                     continue
                 wf = self._workflow_client.get_workflow(wf_id, include_tasks=False)

@@ -35,7 +35,7 @@ export const fetchForWorkflowDef = async ({
     );
     return _uniq(response).sort();
   } catch {
-    return Promise.reject("Error fetching workflows ");
+    return Promise.reject("Error fetching agents ");
   }
 };
 

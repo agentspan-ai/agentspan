@@ -107,7 +107,7 @@ export function RunWorkflow() {
         }
       }
 
-      // Start the agent — response is JSON { workflowId, workflowName }
+      // Start the agent — response is JSON { executionId, agentName }
       const result = await fetchWithContext(
         "/agent/start",
         fetchContext,
@@ -118,7 +118,7 @@ export function RunWorkflow() {
         },
       );
 
-      const executionId = result?.workflowId || result;
+      const executionId = result?.executionId || result;
       setLastExecutionId(
         typeof executionId === "string" ? executionId.trim() : executionId,
       );

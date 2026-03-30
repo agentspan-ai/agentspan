@@ -20,10 +20,10 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import dev.agentspan.runtime.model.AgentSSEEvent;
 
 /**
- * Manages SSE emitters and event buffers per workflow execution.
+ * Manages SSE emitters and event buffers per agent execution.
  *
- * <p>Each workflow ID maps to a list of connected {@link SseEmitter} instances
- * (multiple clients can watch the same workflow). Events are buffered for
+ * <p>Each execution ID maps to a list of connected {@link SseEmitter} instances
+ * (multiple clients can watch the same execution). Events are buffered for
  * reconnection replay via {@code Last-Event-ID}.</p>
  */
 @Component
@@ -34,36 +34,36 @@ public class AgentStreamRegistry {
     private static final long BUFFER_RETENTION_MS = 5 * 60 * 1000; // 5 minutes
     private static final long HEARTBEAT_INTERVAL_MS = 15_000; // 15 seconds
 
-    /** Connected SSE emitters per workflow ID. */
+    /** Connected SSE emitters per execution ID. */
     private final ConcurrentHashMap<String, CopyOnWriteArrayList<SseEmitter>> emitters = new ConcurrentHashMap<>();
 
-    /** Event buffer per workflow ID (for replay on reconnect). */
+    /** Event buffer per execution ID (for replay on reconnect). */
     private final ConcurrentHashMap<String, BoundedEventBuffer> buffers = new ConcurrentHashMap<>();
 
-    /** Child workflow → parent workflow aliases (for sub-workflow event forwarding). */
+    /** Child execution → parent execution aliases (for sub-workflow event forwarding). */
     private final ConcurrentHashMap<String, String> aliases = new ConcurrentHashMap<>();
 
-    /** Per-workflow monotonic event ID sequence. */
+    /** Per-execution monotonic event ID sequence. */
     private final ConcurrentHashMap<String, AtomicLong> sequences = new ConcurrentHashMap<>();
 
-    /** Completed workflows with their completion timestamp (for buffer cleanup). */
+    /** Completed executions with their completion timestamp (for buffer cleanup). */
     private final ConcurrentHashMap<String, Long> completedAt = new ConcurrentHashMap<>();
 
     // ── Registration ─────────────────────────────────────────────────
 
     /**
-     * Register a new SSE emitter for a workflow. Replays missed events
+     * Register a new SSE emitter for an execution. Replays missed events
      * if {@code lastEventId} is provided (reconnection scenario).
      */
-    public SseEmitter register(String workflowId, Long lastEventId) {
-        // No timeout — lifecycle controlled by workflow completion
+    public SseEmitter register(String executionId, Long lastEventId) {
+        // No timeout — lifecycle controlled by execution completion
         SseEmitter emitter = new SseEmitter(0L);
 
-        emitters.computeIfAbsent(workflowId, k -> new CopyOnWriteArrayList<>()).add(emitter);
+        emitters.computeIfAbsent(executionId, k -> new CopyOnWriteArrayList<>()).add(emitter);
 
-        emitter.onCompletion(() -> removeEmitter(workflowId, emitter));
-        emitter.onTimeout(() -> removeEmitter(workflowId, emitter));
-        emitter.onError(e -> removeEmitter(workflowId, emitter));
+        emitter.onCompletion(() -> removeEmitter(executionId, emitter));
+        emitter.onTimeout(() -> removeEmitter(executionId, emitter));
+        emitter.onError(e -> removeEmitter(executionId, emitter));
 
         // Send an initial comment to flush the HTTP response headers immediately.
         // Without this, some servlet containers buffer the response until the
@@ -71,11 +71,11 @@ public class AgentStreamRegistry {
         try {
             emitter.send(SseEmitter.event().comment("connected"));
         } catch (Exception e) {
-            logger.warn("Failed to send initial SSE comment for workflow {}: {}", workflowId, e.getMessage());
+            logger.warn("Failed to send initial SSE comment for execution {}: {}", executionId, e.getMessage());
         }
 
         // Replay missed events — on reconnect (lastEventId given) or first connect (replay all)
-        BoundedEventBuffer buffer = buffers.get(workflowId);
+        BoundedEventBuffer buffer = buffers.get(executionId);
         if (buffer != null) {
             long sinceId = (lastEventId != null) ? lastEventId : 0;
             for (AgentSSEEvent event : buffer.eventsSince(sinceId)) {
@@ -83,28 +83,28 @@ public class AgentStreamRegistry {
             }
         }
 
-        logger.debug("Registered SSE emitter for workflow {}", workflowId);
+        logger.debug("Registered SSE emitter for execution {}", executionId);
         return emitter;
     }
 
     /**
-     * Register a child workflow as an alias for a parent workflow.
+     * Register a child execution as an alias for a parent execution.
      * Events from the child will be forwarded to the parent's SSE stream.
      */
-    public void registerAlias(String childWorkflowId, String parentWorkflowId) {
-        aliases.put(childWorkflowId, parentWorkflowId);
-        logger.debug("Registered alias: {} → {}", childWorkflowId, parentWorkflowId);
+    public void registerAlias(String childExecutionId, String parentExecutionId) {
+        aliases.put(childExecutionId, parentExecutionId);
+        logger.debug("Registered alias: {} → {}", childExecutionId, parentExecutionId);
     }
 
     // ── Event dispatch ───────────────────────────────────────────────
 
     /**
-     * Send an event to all connected emitters for a workflow.
+     * Send an event to all connected emitters for an execution.
      * Also buffers the event for reconnection replay.
      */
-    public void send(String workflowId, AgentSSEEvent event) {
+    public void send(String executionId, AgentSSEEvent event) {
         // Resolve alias (child → parent)
-        String targetId = aliases.getOrDefault(workflowId, workflowId);
+        String targetId = aliases.getOrDefault(executionId, executionId);
 
         // Assign monotonic sequence ID
         long seqId = sequences.computeIfAbsent(targetId, k -> new AtomicLong(0)).incrementAndGet();
@@ -124,11 +124,11 @@ public class AgentStreamRegistry {
     }
 
     /**
-     * Mark a workflow as complete. Completes all emitters and schedules
+     * Mark an execution as complete. Completes all emitters and schedules
      * buffer cleanup.
      */
-    public void complete(String workflowId) {
-        String targetId = aliases.getOrDefault(workflowId, workflowId);
+    public void complete(String executionId) {
+        String targetId = aliases.getOrDefault(executionId, executionId);
 
         CopyOnWriteArrayList<SseEmitter> list = emitters.remove(targetId);
         if (list != null) {
@@ -143,17 +143,17 @@ public class AgentStreamRegistry {
         // Mark for buffer cleanup after retention period
         completedAt.put(targetId, System.currentTimeMillis());
 
-        // Clean up aliases pointing to this workflow
+        // Clean up aliases pointing to this execution
         aliases.entrySet().removeIf(e -> e.getValue().equals(targetId));
 
-        logger.debug("Completed SSE stream for workflow {}", targetId);
+        logger.debug("Completed SSE stream for execution {}", targetId);
     }
 
     /**
-     * Check if any emitters are registered for a workflow.
+     * Check if any emitters are registered for an execution.
      */
-    public boolean hasListeners(String workflowId) {
-        String targetId = aliases.getOrDefault(workflowId, workflowId);
+    public boolean hasListeners(String executionId) {
+        String targetId = aliases.getOrDefault(executionId, executionId);
         CopyOnWriteArrayList<SseEmitter> list = emitters.get(targetId);
         return list != null && !list.isEmpty();
     }
@@ -181,17 +181,17 @@ public class AgentStreamRegistry {
 
     /**
      * Periodically clean up stale event buffers and sequences for
-     * workflows that completed more than {@code BUFFER_RETENTION_MS} ago.
+     * executions that completed more than {@code BUFFER_RETENTION_MS} ago.
      */
     @Scheduled(fixedRate = 60_000) // every minute
     public void cleanupStaleBuffers() {
         long now = System.currentTimeMillis();
         completedAt.entrySet().removeIf(entry -> {
             if (now - entry.getValue() > BUFFER_RETENTION_MS) {
-                String wfId = entry.getKey();
-                buffers.remove(wfId);
-                sequences.remove(wfId);
-                logger.debug("Cleaned up buffer for workflow {}", wfId);
+                String execId = entry.getKey();
+                buffers.remove(execId);
+                sequences.remove(execId);
+                logger.debug("Cleaned up buffer for execution {}", execId);
                 return true;
             }
             return false;
@@ -219,12 +219,12 @@ public class AgentStreamRegistry {
 
     // ── Internal ─────────────────────────────────────────────────────
 
-    private void removeEmitter(String workflowId, SseEmitter emitter) {
-        CopyOnWriteArrayList<SseEmitter> list = emitters.get(workflowId);
+    private void removeEmitter(String executionId, SseEmitter emitter) {
+        CopyOnWriteArrayList<SseEmitter> list = emitters.get(executionId);
         if (list != null) {
             list.remove(emitter);
             if (list.isEmpty()) {
-                emitters.remove(workflowId);
+                emitters.remove(executionId);
             }
         }
     }

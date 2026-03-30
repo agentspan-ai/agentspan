@@ -126,7 +126,7 @@ export interface TokenUsage {
  */
 export interface ToolContext {
   sessionId: string;
-  workflowId: string;
+  executionId: string;
   agentName: string;
   metadata: Record<string, unknown>;
   dependencies: Record<string, unknown>;
@@ -155,7 +155,7 @@ export interface AgentEvent {
   result?: unknown;
   target?: string;
   output?: unknown;
-  workflowId?: string;
+  executionId?: string;
   guardrailName?: string;
   timestamp?: number;
 }
@@ -164,7 +164,7 @@ export interface AgentEvent {
  * Live status of a running agent workflow.
  */
 export interface AgentStatus {
-  workflowId: string;
+  executionId: string;
   isComplete: boolean;
   isRunning: boolean;
   isWaiting: boolean;
@@ -180,7 +180,7 @@ export interface AgentStatus {
  * Information returned after deploying an agent workflow.
  */
 export interface DeploymentInfo {
-  workflowName: string;
+  executionId: string;
   agentName: string;
   /** Included in deploy() response — the compiled workflow definition. */
   workflowDef?: object;
@@ -274,7 +274,7 @@ export interface ToolDef {
  */
 export interface AgentResult {
   output: Record<string, unknown>;
-  workflowId: string;
+  executionId: string;
   correlationId?: string;
   messages: unknown[];
   toolCalls: unknown[];
@@ -296,7 +296,7 @@ export interface AgentResult {
  */
 export function createAgentResult(data: {
   output: Record<string, unknown>;
-  workflowId: string;
+  executionId: string;
   correlationId?: string;
   messages?: unknown[];
   toolCalls?: unknown[];
@@ -310,7 +310,7 @@ export function createAgentResult(data: {
 }): AgentResult {
   const result: AgentResult = {
     output: data.output,
-    workflowId: data.workflowId,
+    executionId: data.executionId,
     correlationId: data.correlationId,
     messages: data.messages ?? [],
     toolCalls: data.toolCalls ?? [],
@@ -336,7 +336,7 @@ export function createAgentResult(data: {
 
     printResult(): void {
       const statusIcon = result.isSuccess ? '[OK]' : '[FAIL]';
-      console.log(`${statusIcon} Agent Result (${result.workflowId})`);
+      console.log(`${statusIcon} Agent Result (${result.executionId})`);
       console.log(`  Status: ${result.status}`);
       console.log(`  Finish Reason: ${result.finishReason}`);
       if (result.error) {

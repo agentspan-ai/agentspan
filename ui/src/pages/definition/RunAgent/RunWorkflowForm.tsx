@@ -89,7 +89,7 @@ export const RunWorkFlowForm = ({
         }
       }
 
-      // Start the agent — response is JSON { workflowId, workflowName }
+      // Start the agent — response is JSON { executionId, agentName }
       const result = await fetchWithContext(
         "/agent/start",
         fetchContext,
@@ -100,7 +100,7 @@ export const RunWorkFlowForm = ({
         },
       );
 
-      const executionId = result?.workflowId || result;
+      const executionId = result?.executionId || result;
       navigate(
         `/execution/${typeof executionId === "string" ? executionId.trim() : executionId}`,
       );

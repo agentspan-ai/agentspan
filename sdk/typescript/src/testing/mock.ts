@@ -66,7 +66,7 @@ export async function mockRun(
   });
 
   return makeAgentResult({
-    workflowId: 'mock-' + Date.now(),
+    executionId: 'mock-' + Date.now(),
     output: {
       result: `Mock execution of ${agent.name} with prompt: ${prompt}`,
     },

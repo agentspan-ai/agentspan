@@ -46,7 +46,7 @@ const CALLBACK_POSITION_MAP: Record<string, string> = {
  * Returned by `start()` for async interaction.
  */
 export interface AgentHandle {
-  readonly workflowId: string;
+  readonly executionId: string;
   readonly correlationId: string;
   getStatus(): Promise<AgentStatus>;
   wait(pollIntervalMs?: number): Promise<AgentResult>;
@@ -124,7 +124,7 @@ export class AgentRuntime {
       options?.signal,
     );
 
-    const workflowId = startResponse.workflowId as string;
+    const executionId = startResponse.executionId as string;
     const requiredWorkers = this._parseRequiredWorkers(startResponse);
 
     // Register system workers filtered by server-provided list
@@ -133,12 +133,12 @@ export class AgentRuntime {
 
     try {
       // Create SSE stream
-      const sseUrl = `${this.config.serverUrl}/agent/stream/${workflowId}`;
+      const sseUrl = `${this.config.serverUrl}/agent/stream/${executionId}`;
       const agentStream = new AgentStream(
         sseUrl,
         this.authHeaders,
-        workflowId,
-        async (body) => this._respond(workflowId, body, options?.signal),
+        executionId,
+        async (body) => this._respond(executionId, body, options?.signal),
         this.config.serverUrl,
       );
 
@@ -151,7 +151,7 @@ export class AgentRuntime {
       // Get final status for token usage
       let tokenUsage;
       try {
-        const status = await this._getStatus(workflowId, options?.signal);
+        const status = await this._getStatus(executionId, options?.signal);
         tokenUsage = (status as unknown as Record<string, unknown>).tokenUsage as
           | AgentResult['tokenUsage']
           | undefined;
@@ -211,7 +211,7 @@ export class AgentRuntime {
       options?.signal,
     );
 
-    const workflowId = startResponse.workflowId as string;
+    const executionId = startResponse.executionId as string;
     const requiredWorkers = this._parseRequiredWorkers(startResponse);
 
     // Register system workers filtered by server-provided list
@@ -219,18 +219,18 @@ export class AgentRuntime {
     this.workerManager.startPolling();
 
     const handle: AgentHandle = {
-      workflowId,
+      executionId,
       correlationId,
 
-      getStatus: () => this._getStatus(workflowId, options?.signal),
+      getStatus: () => this._getStatus(executionId, options?.signal),
 
       wait: async (pollIntervalMs = 500) => {
         while (true) {
-          const status = await this._getStatus(workflowId, options?.signal);
+          const status = await this._getStatus(executionId, options?.signal);
           if (TERMINAL_STATUSES.has(status.status)) {
             return makeAgentResult({
               output: status.output,
-              workflowId,
+              executionId,
               correlationId,
               status: status.status,
             });
@@ -239,42 +239,42 @@ export class AgentRuntime {
         }
       },
 
-      respond: (output) => this._respond(workflowId, output, options?.signal),
+      respond: (output) => this._respond(executionId, output, options?.signal),
 
       approve: (output?) =>
-        this._respond(workflowId, { approved: true, ...output }, options?.signal),
+        this._respond(executionId, { approved: true, ...output }, options?.signal),
 
       reject: (reason?) =>
-        this._respond(workflowId, { approved: false, reason }, options?.signal),
+        this._respond(executionId, { approved: false, reason }, options?.signal),
 
       send: (message) =>
-        this._respond(workflowId, { message }, options?.signal),
+        this._respond(executionId, { message }, options?.signal),
 
       pause: () =>
-        this._httpRequest('PUT', `/agent/${workflowId}/pause`, undefined, options?.signal).then(
+        this._httpRequest('PUT', `/agent/${executionId}/pause`, undefined, options?.signal).then(
           () => {},
         ),
 
       resume: () =>
-        this._httpRequest('PUT', `/agent/${workflowId}/resume`, undefined, options?.signal).then(
+        this._httpRequest('PUT', `/agent/${executionId}/resume`, undefined, options?.signal).then(
           () => {},
         ),
 
       cancel: () =>
         this._httpRequest(
           'DELETE',
-          `/agent/${workflowId}/cancel`,
+          `/agent/${executionId}/cancel`,
           undefined,
           options?.signal,
         ).then(() => {}),
 
       stream: () => {
-        const sseUrl = `${this.config.serverUrl}/agent/stream/${workflowId}`;
+        const sseUrl = `${this.config.serverUrl}/agent/stream/${executionId}`;
         return new AgentStream(
           sseUrl,
           this.authHeaders,
-          workflowId,
-          async (body) => this._respond(workflowId, body, options?.signal),
+          executionId,
+          async (body) => this._respond(executionId, body, options?.signal),
           this.config.serverUrl,
         );
       },
@@ -423,10 +423,10 @@ export class AgentRuntime {
   /**
    * Get agent status.
    */
-  private async _getStatus(workflowId: string, signal?: AbortSignal): Promise<AgentStatus> {
+  private async _getStatus(executionId: string, signal?: AbortSignal): Promise<AgentStatus> {
     const response = await this._httpRequest(
       'GET',
-      `/agent/${workflowId}/status`,
+      `/agent/${executionId}/status`,
       undefined,
       signal,
     );
@@ -436,8 +436,8 @@ export class AgentRuntime {
   /**
    * Send a respond payload to a waiting agent.
    */
-  private async _respond(workflowId: string, body: unknown, signal?: AbortSignal): Promise<void> {
-    await this._httpRequest('POST', `/agent/${workflowId}/respond`, body, signal);
+  private async _respond(executionId: string, body: unknown, signal?: AbortSignal): Promise<void> {
+    await this._httpRequest('POST', `/agent/${executionId}/respond`, body, signal);
   }
 
   /**
@@ -1086,15 +1086,15 @@ export class AgentRuntime {
         options?.signal,
       );
 
-      const workflowId = startResponse.workflowId as string;
+      const executionId = startResponse.executionId as string;
 
       // Create SSE stream to drain events and wait for completion
-      const sseUrl = `${this.config.serverUrl}/agent/stream/${workflowId}`;
+      const sseUrl = `${this.config.serverUrl}/agent/stream/${executionId}`;
       const agentStream = new AgentStream(
         sseUrl,
         this.authHeaders,
-        workflowId,
-        async (body) => this._respond(workflowId, body, options?.signal),
+        executionId,
+        async (body) => this._respond(executionId, body, options?.signal),
         this.config.serverUrl,
       );
 
@@ -1160,21 +1160,21 @@ export class AgentRuntime {
       options?.signal,
     );
 
-    const workflowId = startResponse.workflowId as string;
+    const executionId = startResponse.executionId as string;
 
     const handle: AgentHandle = {
-      workflowId,
+      executionId,
       correlationId,
 
-      getStatus: () => this._getStatus(workflowId, options?.signal),
+      getStatus: () => this._getStatus(executionId, options?.signal),
 
       wait: async (pollIntervalMs = 500) => {
         while (true) {
-          const status = await this._getStatus(workflowId, options?.signal);
+          const status = await this._getStatus(executionId, options?.signal);
           if (TERMINAL_STATUSES.has(status.status)) {
             return makeAgentResult({
               output: status.output,
-              workflowId,
+              executionId,
               correlationId,
               status: status.status,
             });
@@ -1183,42 +1183,42 @@ export class AgentRuntime {
         }
       },
 
-      respond: (output) => this._respond(workflowId, output, options?.signal),
+      respond: (output) => this._respond(executionId, output, options?.signal),
 
       approve: (output?) =>
-        this._respond(workflowId, { approved: true, ...output }, options?.signal),
+        this._respond(executionId, { approved: true, ...output }, options?.signal),
 
       reject: (reason?) =>
-        this._respond(workflowId, { approved: false, reason }, options?.signal),
+        this._respond(executionId, { approved: false, reason }, options?.signal),
 
       send: (message) =>
-        this._respond(workflowId, { message }, options?.signal),
+        this._respond(executionId, { message }, options?.signal),
 
       pause: () =>
-        this._httpRequest('PUT', `/agent/${workflowId}/pause`, undefined, options?.signal).then(
+        this._httpRequest('PUT', `/agent/${executionId}/pause`, undefined, options?.signal).then(
           () => {},
         ),
 
       resume: () =>
-        this._httpRequest('PUT', `/agent/${workflowId}/resume`, undefined, options?.signal).then(
+        this._httpRequest('PUT', `/agent/${executionId}/resume`, undefined, options?.signal).then(
           () => {},
         ),
 
       cancel: () =>
         this._httpRequest(
           'DELETE',
-          `/agent/${workflowId}/cancel`,
+          `/agent/${executionId}/cancel`,
           undefined,
           options?.signal,
         ).then(() => {}),
 
       stream: () => {
-        const sseUrl = `${this.config.serverUrl}/agent/stream/${workflowId}`;
+        const sseUrl = `${this.config.serverUrl}/agent/stream/${executionId}`;
         return new AgentStream(
           sseUrl,
           this.authHeaders,
-          workflowId,
-          async (body) => this._respond(workflowId, body, options?.signal),
+          executionId,
+          async (body) => this._respond(executionId, body, options?.signal),
           this.config.serverUrl,
         );
       },

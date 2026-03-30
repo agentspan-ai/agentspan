@@ -57,7 +57,7 @@ export const FinishReasons = {
 
 export interface MakeAgentResultData {
   output?: unknown;
-  workflowId?: string;
+  executionId?: string;
   correlationId?: string;
   messages?: unknown[];
   toolCalls?: unknown[];
@@ -90,7 +90,7 @@ export function makeAgentResult(data: MakeAgentResultData): AgentResult {
 
   return createAgentResult({
     output,
-    workflowId: data.workflowId ?? '',
+    executionId: data.executionId ?? '',
     correlationId: data.correlationId,
     messages: data.messages ?? [],
     toolCalls: data.toolCalls ?? [],

@@ -16,5 +16,5 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class CreateTrackingWorkflowResponse {
-    private String workflowId;
+    private String executionId;
 }

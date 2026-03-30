@@ -19,7 +19,7 @@ import lombok.NoArgsConstructor;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class AgentExecutionSummary {
 
-    private String workflowId;
+    private String executionId;
     private String agentName;
     private int version;
     private String status;

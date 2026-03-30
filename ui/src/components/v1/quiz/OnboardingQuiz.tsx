@@ -45,7 +45,7 @@ const goals = [
 const purposes = [
   { id: 1, label: "Microservices based applications" },
   { id: 2, label: "Data pipelines" },
-  { id: 3, label: "Gen-AI powered workflows" },
+  { id: 3, label: "Gen-AI powered agents" },
   {
     id: 4,
     label: (

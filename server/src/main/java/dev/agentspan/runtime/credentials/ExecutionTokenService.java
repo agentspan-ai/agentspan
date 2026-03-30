@@ -52,20 +52,20 @@ public class ExecutionTokenService {
      * Mint a new execution token.
      *
      * @param userId         the authenticated user's ID (or username for login tokens)
-     * @param workflowId     the Conductor workflow ID (or "login" for login tokens)
-     * @param declaredNames  credential names declared by the workflow (bounds resolution)
-     * @param workflowTimeoutSeconds workflow timeout; TTL = max(3600, workflowTimeoutSeconds)
+     * @param executionId    the execution ID (or "login" for login tokens)
+     * @param declaredNames  credential names declared by the agent (bounds resolution)
+     * @param executionTimeoutSeconds execution timeout; TTL = max(3600, executionTimeoutSeconds)
      * @return signed token string
      */
-    public String mint(String userId, String workflowId, List<String> declaredNames, long workflowTimeoutSeconds) {
+    public String mint(String userId, String executionId, List<String> declaredNames, long executionTimeoutSeconds) {
         long now = Instant.now().getEpochSecond();
-        long ttl = Math.max(ONE_HOUR_SECONDS, workflowTimeoutSeconds);
+        long ttl = Math.max(ONE_HOUR_SECONDS, executionTimeoutSeconds);
         long exp = now + ttl;
 
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("jti", UUID.randomUUID().toString());
         payload.put("sub", userId);
-        payload.put("wid", workflowId);
+        payload.put("wid", executionId);
         payload.put("iat", now);
         payload.put("exp", exp);
         payload.put("scope", SCOPE);
@@ -128,7 +128,7 @@ public class ExecutionTokenService {
 
     /**
      * Revoke a token by adding its jti to the deny-list.
-     * Called when a workflow is cancelled or terminated.
+     * Called when an execution is cancelled or terminated.
      *
      * @param jti the unique token ID
      * @param exp the token's expiry epoch second (for self-pruning)
@@ -179,7 +179,7 @@ public class ExecutionTokenService {
 
     // ── Value types ───────────────────────────────────────────────────
 
-    public record TokenPayload(String jti, String userId, String workflowId, long exp, List<String> declaredNames) {}
+    public record TokenPayload(String jti, String userId, String executionId, long exp, List<String> declaredNames) {}
 
     public static class TokenInvalidException extends RuntimeException {
         public TokenInvalidException(String msg) {

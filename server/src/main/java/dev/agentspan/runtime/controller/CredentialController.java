@@ -171,7 +171,7 @@ public class CredentialController {
         }
 
         // Reject login tokens — only execution tokens are accepted at /resolve
-        if ("login".equals(payload.workflowId())) {
+        if ("login".equals(payload.executionId())) {
             return ResponseEntity.status(401)
                     .body(Map.of("error", "Execution token required for /resolve — login tokens are not accepted"));
         }
@@ -201,9 +201,9 @@ public class CredentialController {
 
         // Audit log
         log.info(
-                "AUDIT resolve: userId={} workflowId={} names={} resolved={}",
+                "AUDIT resolve: userId={} executionId={} names={} resolved={}",
                 payload.userId(),
-                payload.workflowId(),
+                payload.executionId(),
                 requested,
                 result.keySet());
 

@@ -145,7 +145,7 @@ export const GUIDE_STEPS = [
   {
     id: "startWf",
     title: "Start agent when webhook comes",
-    description: "Start a new workflow when the webhook event comes.",
+    description: "Start a new agent when the webhook event comes.",
   },
   {
     id: "secret",

@@ -49,8 +49,8 @@ func TestStart_ReturnsExecutionIDAndAgentName(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
-			"workflowId":   "exec-123",
-			"workflowName": "my-agent",
+			"executionId": "exec-123",
+			"agentName":   "my-agent",
 		})
 	}))
 

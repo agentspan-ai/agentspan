@@ -54,8 +54,8 @@ class AgentCompileE2ETest {
         return "http://localhost:" + port + "/api/agent/start";
     }
 
-    private String statusUrl(String workflowId) {
-        return "http://localhost:" + port + "/api/agent/" + workflowId + "/status";
+    private String statusUrl(String executionId) {
+        return "http://localhost:" + port + "/api/agent/" + executionId + "/status";
     }
 
     private JsonNode postCompile(Map<String, Object> body) throws Exception {
@@ -806,9 +806,9 @@ class AgentCompileE2ETest {
         Map<String, Object> body = Map.of("agentConfig", config, "prompt", "Hello world");
 
         JsonNode resp = postStart(body);
-        assertThat(resp.get("workflowId")).isNotNull();
-        assertThat(resp.get("workflowId").asText()).isNotEmpty();
-        assertThat(resp.get("workflowName").asText()).isEqualTo("start_e2e");
+        assertThat(resp.get("executionId")).isNotNull();
+        assertThat(resp.get("executionId").asText()).isNotEmpty();
+        assertThat(resp.get("agentName").asText()).isEqualTo("start_e2e");
     }
 
     @Test
@@ -817,10 +817,10 @@ class AgentCompileE2ETest {
         Map<String, Object> body = Map.of("agentConfig", config, "prompt", "Hello");
 
         JsonNode startResp = postStart(body);
-        String workflowId = startResp.get("workflowId").asText();
+        String executionId = startResp.get("executionId").asText();
 
-        // The workflow should be running (waiting on LLM task since AI is disabled)
-        JsonNode statusResp = get(statusUrl(workflowId));
+        // The execution should be running (waiting on LLM task since AI is disabled)
+        JsonNode statusResp = get(statusUrl(executionId));
         assertThat(statusResp.get("status")).isNotNull();
         String status = statusResp.get("status").asText();
         // Could be RUNNING (waiting on LLM) or FAILED (no AI provider) — both are valid
@@ -842,10 +842,10 @@ class AgentCompileE2ETest {
         JsonNode resp2 = postStart(body2);
 
         // Each start should produce a unique workflow ID
-        assertThat(resp1.get("workflowId").asText())
-                .isNotEqualTo(resp2.get("workflowId").asText());
-        assertThat(resp1.get("workflowName").asText()).isEqualTo("multi_e2e");
-        assertThat(resp2.get("workflowName").asText()).isEqualTo("multi_e2e");
+        assertThat(resp1.get("executionId").asText())
+                .isNotEqualTo(resp2.get("executionId").asText());
+        assertThat(resp1.get("agentName").asText()).isEqualTo("multi_e2e");
+        assertThat(resp2.get("agentName").asText()).isEqualTo("multi_e2e");
     }
 
     @Test
@@ -857,9 +857,9 @@ class AgentCompileE2ETest {
         body.put("credentials", List.of("OPENAI_API_KEY"));
 
         JsonNode resp = postStart(body);
-        assertThat(resp.get("workflowId")).isNotNull();
-        assertThat(resp.get("workflowId").asText()).isNotEmpty();
-        assertThat(resp.get("workflowName").asText()).isEqualTo("start_creds_e2e");
+        assertThat(resp.get("executionId")).isNotNull();
+        assertThat(resp.get("executionId").asText()).isNotEmpty();
+        assertThat(resp.get("agentName").asText()).isEqualTo("start_creds_e2e");
     }
 
     // ══════════════════════════════════════════════════════════════════
@@ -1808,7 +1808,7 @@ class AgentCompileE2ETest {
         body.put("prompt", "Hello from Vercel AI");
 
         JsonNode resp = postStart(body);
-        assertThat(resp.get("workflowId")).isNotNull();
-        assertThat(resp.get("workflowId").asText()).isNotEmpty();
+        assertThat(resp.get("executionId")).isNotNull();
+        assertThat(resp.get("executionId").asText()).isNotEmpty();
     }
 }

@@ -36,7 +36,7 @@ export default function ActionModule({
     label: (
       <>
         <RerunIcon style={style.menuIcon} size="16" />
-        Re-run workflow
+        Re-run agent
       </>
     ),
     handler: rerunExecutionWithLatestDefinitions,
@@ -231,7 +231,7 @@ export default function ActionModule({
         label: (
           <>
             <ReplayIcon style={style.menuIcon} size="16" />
-            Retry - resume subworkflow
+            Retry - resume sub-agent
           </>
         ),
         handler: onRetryResumeSubworkflow,

@@ -24,8 +24,9 @@ import lombok.NoArgsConstructor;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class StartResponse {
 
-    private String workflowId;
-    private String workflowName;
+    private String executionId;
+
+    private String agentName;
 
     /** SIMPLE task names the SDK must register workers for. */
     private List<String> requiredWorkers;

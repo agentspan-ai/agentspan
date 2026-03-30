@@ -133,7 +133,7 @@ class AgentDagServiceTest {
 
         assertThatThrownBy(() -> service.injectTask("bad-id", req))
                 .isInstanceOf(NotFoundException.class)
-                .hasMessageContaining("Workflow not found");
+                .hasMessageContaining("Execution not found");
     }
 
     // ── createTrackingWorkflow ───────────────────────────────────────────────
@@ -146,7 +146,7 @@ class AgentDagServiceTest {
 
         CreateTrackingWorkflowResponse resp = service.createTrackingWorkflow(req);
 
-        assertThat(resp.getWorkflowId()).isNotBlank();
+        assertThat(resp.getExecutionId()).isNotBlank();
 
         ArgumentCaptor<WorkflowModel> captor = ArgumentCaptor.forClass(WorkflowModel.class);
         verify(executionDAO).createWorkflow(captor.capture());
@@ -155,7 +155,7 @@ class AgentDagServiceTest {
         assertThat(created.getStatus()).isEqualTo(WorkflowModel.Status.RUNNING);
         assertThat(created.getWorkflowName()).isEqualTo("my-sub-agent");
         assertThat(created.getInput()).containsEntry("prompt", "run the build");
-        assertThat(created.getWorkflowId()).isEqualTo(resp.getWorkflowId());
+        assertThat(created.getWorkflowId()).isEqualTo(resp.getExecutionId());
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────

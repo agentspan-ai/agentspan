@@ -14,7 +14,7 @@ export interface RecordingFixture {
   events: AgentEvent[];
   result: {
     output: Record<string, unknown>;
-    workflowId: string;
+    executionId: string;
     status: string;
     finishReason: string;
     error?: string;
@@ -49,7 +49,7 @@ export async function record(
     events: result.events,
     result: {
       output: result.output,
-      workflowId: result.workflowId,
+      executionId: result.executionId,
       status: result.status,
       finishReason: result.finishReason,
       error: result.error,
@@ -79,7 +79,7 @@ export function replay(fixturePath: string): AgentResult {
 
   return makeAgentResult({
     output: fixture.result.output,
-    workflowId: fixture.result.workflowId,
+    executionId: fixture.result.executionId,
     status: fixture.result.status,
     finishReason: fixture.result.finishReason,
     error: fixture.result.error,

@@ -133,7 +133,7 @@ export default function TaskSummary({ taskResult }: TaskSummaryProps) {
   }
   if (taskResult.workflowTask.type === TaskType.SUB_WORKFLOW) {
     data.push({
-      label: "Subworkflow definition",
+      label: "Sub-agent definition",
       value: (
         <NavLink
           path={`/agentDef/${encodeURIComponent(
@@ -146,7 +146,7 @@ export default function TaskSummary({ taskResult }: TaskSummaryProps) {
     });
     if (_get(taskResult, "outputData.subWorkflowId")) {
       data.push({
-        label: "Subworkflow id",
+        label: "Sub-agent id",
         value: (
           <Link
             href={`${window.location.origin}/execution/${taskResult.outputData?.subWorkflowId}`}
@@ -165,7 +165,7 @@ export default function TaskSummary({ taskResult }: TaskSummaryProps) {
     taskResult.outputData?.workflowId
   ) {
     data.push({
-      label: "Start workflow",
+      label: "Start agent",
       value: (
         <Link
           href={`${window.location.origin}/execution/${taskResult.outputData?.workflowId}`}
@@ -186,7 +186,7 @@ export default function TaskSummary({ taskResult }: TaskSummaryProps) {
 
     if (subWorkflowName) {
       data.push({
-        label: "Subworkflow definition",
+        label: "Sub-agent definition",
         value: (
           <NavLink path={`/agentDef/${subWorkflowName}`}>
             {subWorkflowName}
@@ -196,7 +196,7 @@ export default function TaskSummary({ taskResult }: TaskSummaryProps) {
     }
     if (subWorkflowId) {
       data.push({
-        label: "Subworkflow id",
+        label: "Sub-agent id",
         value: (
           <Link
             href={`${window.location.origin}/execution/${subWorkflowId}`}

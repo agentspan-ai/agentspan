@@ -124,7 +124,7 @@ export function extractToolContext(inputData: Record<string, unknown>): ToolCont
   const raw = ctx as Record<string, unknown>;
   return {
     sessionId: (raw.sessionId as string) ?? '',
-    workflowId: (raw.workflowId as string) ?? '',
+    executionId: (raw.executionId as string) ?? '',
     agentName: (raw.agentName as string) ?? '',
     metadata: (raw.metadata as Record<string, unknown>) ?? {},
     dependencies: (raw.dependencies as Record<string, unknown>) ?? {},

@@ -94,8 +94,8 @@ type StartRequest struct {
 
 // StartResponse from the runtime
 type StartResponse struct {
-	ExecutionID string `json:"workflowId"`
-	AgentName   string `json:"workflowName"`
+	ExecutionID string `json:"executionId"`
+	AgentName   string `json:"agentName"`
 }
 
 // Start compiles, registers, and starts an agent execution
@@ -193,7 +193,7 @@ type ExecutionSearchResult struct {
 
 // AgentExecutionSummary represents one execution in search results
 type AgentExecutionSummary struct {
-	ExecutionID   string `json:"workflowId"`
+	ExecutionID   string `json:"executionId"`
 	AgentName     string `json:"agentName"`
 	Version       int    `json:"version"`
 	Status        string `json:"status"`
@@ -235,7 +235,7 @@ func (c *Client) SearchExecutions(start, size int, agentName, status, freeText s
 
 // ExecutionDetail represents detailed execution status
 type ExecutionDetail struct {
-	ExecutionID string                 `json:"workflowId"`
+	ExecutionID string                 `json:"executionId"`
 	AgentName   string                 `json:"agentName"`
 	Version     int                    `json:"version"`
 	Status      string                 `json:"status"`

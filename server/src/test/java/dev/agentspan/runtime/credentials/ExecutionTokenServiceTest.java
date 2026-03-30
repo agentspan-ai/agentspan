@@ -37,7 +37,7 @@ class ExecutionTokenServiceTest {
         ExecutionTokenService.TokenPayload payload = service.validate(token);
 
         assertThat(payload.userId()).isEqualTo("user-123");
-        assertThat(payload.workflowId()).isEqualTo("wf-456");
+        assertThat(payload.executionId()).isEqualTo("wf-456");
         assertThat(payload.declaredNames()).containsExactly("GITHUB_TOKEN");
     }
 
@@ -101,8 +101,8 @@ class ExecutionTokenServiceTest {
     }
 
     @Test
-    void mint_usesMaxTtl_forLongRunningWorkflow() {
-        // workflow_timeout=6000 → exp should be ~6000s from now, not 1h
+    void mint_usesMaxTtl_forLongRunningExecution() {
+        // execution_timeout=6000 → exp should be ~6000s from now, not 1h
         String token = service.mint("u", "wf", List.of(), 6000);
         ExecutionTokenService.TokenPayload payload = service.validate(token);
 

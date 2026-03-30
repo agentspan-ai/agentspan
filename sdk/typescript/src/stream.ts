@@ -18,7 +18,7 @@ export type RespondFn = (body: unknown) => Promise<void>;
  * Implements AsyncIterable<AgentEvent> for use with `for await...of`.
  */
 export class AgentStream implements AsyncIterable<AgentEvent> {
-  readonly workflowId: string;
+  readonly executionId: string;
   readonly events: AgentEvent[] = [];
 
   private readonly url: string;
@@ -30,13 +30,13 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
   constructor(
     url: string,
     headers: Record<string, string>,
-    workflowId: string,
+    executionId: string,
     respondFn: RespondFn,
     serverUrl?: string,
   ) {
     this.url = url;
     this.headers = headers;
-    this.workflowId = workflowId;
+    this.executionId = executionId;
     this.respondFn = respondFn;
     this.serverUrl = serverUrl ?? '';
   }
@@ -277,7 +277,7 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
         if (status.isWaiting) {
           const waitEvent: AgentEvent = {
             type: 'waiting',
-            workflowId: this.workflowId,
+            executionId: this.executionId,
             timestamp: Date.now(),
           };
           this.events.push(waitEvent);
@@ -288,7 +288,7 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
           const doneEvent: AgentEvent = {
             type: 'done',
             output: status.output,
-            workflowId: this.workflowId,
+            executionId: this.executionId,
             timestamp: Date.now(),
           };
           this.events.push(doneEvent);
@@ -308,7 +308,7 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
    * Get agent status for polling fallback.
    */
   private async _getStatus(): Promise<AgentStatus | null> {
-    const url = `${this.serverUrl}/agent/${this.workflowId}/status`;
+    const url = `${this.serverUrl}/agent/${this.executionId}/status`;
     try {
       const response = await fetch(url, {
         method: 'GET',
@@ -372,9 +372,9 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
     // Poll the server for the real terminal status — the done SSE event
     // signals stream end, NOT workflow success.
     let serverStatus: Record<string, unknown> | null = null;
-    if (this.serverUrl && this.workflowId) {
+    if (this.serverUrl && this.executionId) {
       try {
-        const statusUrl = `${this.serverUrl}/agent/${this.workflowId}/status`;
+        const statusUrl = `${this.serverUrl}/agent/${this.executionId}/status`;
         const resp = await fetch(statusUrl, { headers: this.headers });
         if (resp.ok) {
           serverStatus = await resp.json() as Record<string, unknown>;
@@ -392,7 +392,7 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
 
     return makeAgentResult({
       output,
-      workflowId: this.workflowId,
+      executionId: this.executionId,
       status,
       error,
       events: [...this.events],

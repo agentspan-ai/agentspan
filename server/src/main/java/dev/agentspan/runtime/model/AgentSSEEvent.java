@@ -22,7 +22,7 @@ public class AgentSSEEvent {
 
     private long id;
     private String type;
-    private String workflowId;
+    private String executionId;
     private String content;
     private String toolName;
     private Object args;
@@ -39,75 +39,75 @@ public class AgentSSEEvent {
 
     public AgentSSEEvent() {}
 
-    private AgentSSEEvent(String type, String workflowId) {
+    private AgentSSEEvent(String type, String executionId) {
         this.type = type;
-        this.workflowId = workflowId;
+        this.executionId = executionId;
         this.timestamp = System.currentTimeMillis();
     }
 
     // ── Factory methods ──────────────────────────────────────────────
 
-    public static AgentSSEEvent thinking(String workflowId, String taskRef) {
-        AgentSSEEvent e = new AgentSSEEvent("thinking", workflowId);
+    public static AgentSSEEvent thinking(String executionId, String taskRef) {
+        AgentSSEEvent e = new AgentSSEEvent("thinking", executionId);
         e.content = taskRef;
         return e;
     }
 
-    public static AgentSSEEvent toolCall(String workflowId, String toolName, Object args) {
-        AgentSSEEvent e = new AgentSSEEvent("tool_call", workflowId);
+    public static AgentSSEEvent toolCall(String executionId, String toolName, Object args) {
+        AgentSSEEvent e = new AgentSSEEvent("tool_call", executionId);
         e.toolName = toolName;
         e.args = args;
         return e;
     }
 
-    public static AgentSSEEvent toolResult(String workflowId, String toolName, Object result) {
-        AgentSSEEvent e = new AgentSSEEvent("tool_result", workflowId);
+    public static AgentSSEEvent toolResult(String executionId, String toolName, Object result) {
+        AgentSSEEvent e = new AgentSSEEvent("tool_result", executionId);
         e.toolName = toolName;
         e.result = result;
         return e;
     }
 
-    public static AgentSSEEvent handoff(String workflowId, String target) {
-        AgentSSEEvent e = new AgentSSEEvent("handoff", workflowId);
+    public static AgentSSEEvent handoff(String executionId, String target) {
+        AgentSSEEvent e = new AgentSSEEvent("handoff", executionId);
         e.target = target;
         return e;
     }
 
-    public static AgentSSEEvent waiting(String workflowId, Map<String, Object> pendingTool) {
-        AgentSSEEvent e = new AgentSSEEvent("waiting", workflowId);
+    public static AgentSSEEvent waiting(String executionId, Map<String, Object> pendingTool) {
+        AgentSSEEvent e = new AgentSSEEvent("waiting", executionId);
         e.pendingTool = pendingTool;
         return e;
     }
 
-    public static AgentSSEEvent guardrailPass(String workflowId, String name) {
-        AgentSSEEvent e = new AgentSSEEvent("guardrail_pass", workflowId);
+    public static AgentSSEEvent guardrailPass(String executionId, String name) {
+        AgentSSEEvent e = new AgentSSEEvent("guardrail_pass", executionId);
         e.guardrailName = name;
         return e;
     }
 
-    public static AgentSSEEvent guardrailFail(String workflowId, String name, String message) {
-        AgentSSEEvent e = new AgentSSEEvent("guardrail_fail", workflowId);
+    public static AgentSSEEvent guardrailFail(String executionId, String name, String message) {
+        AgentSSEEvent e = new AgentSSEEvent("guardrail_fail", executionId);
         e.guardrailName = name;
         e.content = message;
         return e;
     }
 
-    public static AgentSSEEvent error(String workflowId, String taskRef, String message) {
-        AgentSSEEvent e = new AgentSSEEvent("error", workflowId);
+    public static AgentSSEEvent error(String executionId, String taskRef, String message) {
+        AgentSSEEvent e = new AgentSSEEvent("error", executionId);
         e.content = message;
         e.toolName = taskRef;
         return e;
     }
 
-    public static AgentSSEEvent done(String workflowId, Object output) {
-        AgentSSEEvent e = new AgentSSEEvent("done", workflowId);
+    public static AgentSSEEvent done(String executionId, Object output) {
+        AgentSSEEvent e = new AgentSSEEvent("done", executionId);
         e.output = output;
         return e;
     }
 
     public static AgentSSEEvent contextCondensed(
-            String workflowId, String trigger, int messagesBefore, int messagesAfter, int exchangesCondensed) {
-        AgentSSEEvent e = new AgentSSEEvent("context_condensed", workflowId);
+            String executionId, String trigger, int messagesBefore, int messagesAfter, int exchangesCondensed) {
+        AgentSSEEvent e = new AgentSSEEvent("context_condensed", executionId);
         e.content = trigger;
         e.messagesBefore = messagesBefore;
         e.messagesAfter = messagesAfter;
@@ -115,15 +115,15 @@ public class AgentSSEEvent {
         return e;
     }
 
-    public static AgentSSEEvent subagentStart(String workflowId, String subagentIdentifier, String prompt) {
-        AgentSSEEvent e = new AgentSSEEvent("subagent_start", workflowId);
+    public static AgentSSEEvent subagentStart(String executionId, String subagentIdentifier, String prompt) {
+        AgentSSEEvent e = new AgentSSEEvent("subagent_start", executionId);
         e.target = subagentIdentifier;
         e.content = prompt != null ? prompt : "";
         return e;
     }
 
-    public static AgentSSEEvent subagentStop(String workflowId, String subagentIdentifier, String result) {
-        AgentSSEEvent e = new AgentSSEEvent("subagent_stop", workflowId);
+    public static AgentSSEEvent subagentStop(String executionId, String subagentIdentifier, String result) {
+        AgentSSEEvent e = new AgentSSEEvent("subagent_stop", executionId);
         e.target = subagentIdentifier;
         e.result = result != null ? result : "";
         return e;
@@ -157,12 +157,12 @@ public class AgentSSEEvent {
         this.type = type;
     }
 
-    public String getWorkflowId() {
-        return workflowId;
+    public String getExecutionId() {
+        return executionId;
     }
 
-    public void setWorkflowId(String workflowId) {
-        this.workflowId = workflowId;
+    public void setExecutionId(String executionId) {
+        this.executionId = executionId;
     }
 
     public String getContent() {

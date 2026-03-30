@@ -66,8 +66,8 @@ const buildJsCode = (
     }),
   });
 
-  const workflowId = await res.text();
-  return workflowId;
+  const { executionId } = await res.json();
+  return executionId;
 }
 
 runAgent();
