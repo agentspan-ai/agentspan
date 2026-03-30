@@ -49,6 +49,8 @@ public class WorkerManager {
     public void register(String taskName, Function<Map<String, Object>, Object> handler) {
         if (handlers.containsKey(taskName)) {
             logger.debug("Re-registering existing handler for task: {}", taskName);
+            handlers.put(taskName, handler);
+            return;
         }
         handlers.put(taskName, handler);
         logger.info("Registered worker for task: {}", taskName);
@@ -58,6 +60,12 @@ public class WorkerManager {
             httpApi.registerTaskDef(taskName);
         } catch (Exception e) {
             logger.debug("Could not register task def {} (may already exist): {}", taskName, e.getMessage());
+        }
+
+        // If the executor is already running, start a polling thread immediately
+        // (workers registered after startAll() would otherwise never get polled)
+        if (scheduledExecutorService != null && !scheduledExecutorService.isShutdown()) {
+            startWorkerForTask(taskName);
         }
     }
 
