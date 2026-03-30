@@ -138,6 +138,11 @@ public class AgentConfigSerializer {
             agentMap.put("thinkingBudgetTokens", agent.getThinkingBudgetTokens());
         }
 
+        // Introduction (prepended to conversation in multi-agent discussions)
+        if (agent.getIntroduction() != null && !agent.getIntroduction().isEmpty()) {
+            agentMap.put("introduction", agent.getIntroduction());
+        }
+
         return agentMap;
     }
 
