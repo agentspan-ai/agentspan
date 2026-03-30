@@ -11,6 +11,7 @@ import dev.agentspan.termination.TerminationCondition;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
@@ -49,6 +50,10 @@ public class Agent {
     private final TerminationCondition termination;
     private final Class<?> outputType;
     private final String sessionId;
+    private final Map<String, List<String>> allowedTransitions;
+    private final boolean planner;
+    private final String includeContents;
+    private final Integer thinkingBudgetTokens;
 
     private Agent(Builder builder) {
         this.name = builder.name;
@@ -66,6 +71,10 @@ public class Agent {
         this.termination = builder.termination;
         this.outputType = builder.outputType;
         this.sessionId = builder.sessionId;
+        this.allowedTransitions = builder.allowedTransitions;
+        this.planner = builder.planner;
+        this.includeContents = builder.includeContents;
+        this.thinkingBudgetTokens = builder.thinkingBudgetTokens;
     }
 
     /**
@@ -121,6 +130,10 @@ public class Agent {
     public TerminationCondition getTermination() { return termination; }
     public Class<?> getOutputType() { return outputType; }
     public String getSessionId() { return sessionId; }
+    public Map<String, List<String>> getAllowedTransitions() { return allowedTransitions; }
+    public boolean isPlanner() { return planner; }
+    public String getIncludeContents() { return includeContents; }
+    public Integer getThinkingBudgetTokens() { return thinkingBudgetTokens; }
 
     public static Builder builder() {
         return new Builder();
@@ -158,6 +171,10 @@ public class Agent {
         private TerminationCondition termination;
         private Class<?> outputType;
         private String sessionId;
+        private Map<String, List<String>> allowedTransitions;
+        private boolean planner = false;
+        private String includeContents;
+        private Integer thinkingBudgetTokens;
 
         /** Set the agent name (required). Must match {@code ^[a-zA-Z_][a-zA-Z0-9_-]*$}. */
         public Builder name(String name) {
@@ -258,6 +275,43 @@ public class Agent {
         /** Set a session ID for multi-turn conversation continuity. */
         public Builder sessionId(String sessionId) {
             this.sessionId = sessionId;
+            return this;
+        }
+
+        /**
+         * Restrict which agents can transfer to which other agents.
+         * Keys are source agent names; values are lists of allowed target names.
+         */
+        public Builder allowedTransitions(Map<String, List<String>> allowedTransitions) {
+            this.allowedTransitions = allowedTransitions;
+            return this;
+        }
+
+        /**
+         * Enable planner mode. The server enhances the system prompt with planning
+         * instructions so the agent creates a step-by-step plan before executing tools.
+         */
+        public Builder planner(boolean planner) {
+            this.planner = planner;
+            return this;
+        }
+
+        /**
+         * Control what context is passed to this sub-agent.
+         * Use {@code "none"} for a clean slate (no parent conversation history).
+         * Default (null) passes all context.
+         */
+        public Builder includeContents(String includeContents) {
+            this.includeContents = includeContents;
+            return this;
+        }
+
+        /**
+         * Enable extended thinking/reasoning with the given token budget.
+         * Only supported by models with extended thinking capability.
+         */
+        public Builder thinkingBudgetTokens(int thinkingBudgetTokens) {
+            this.thinkingBudgetTokens = thinkingBudgetTokens;
             return this;
         }
 
