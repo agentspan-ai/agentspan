@@ -551,7 +551,7 @@ public class AgentService {
 
     /**
      * Search for an existing workflow with the given correlationId (idempotency key).
-     * Returns the workflow ID if a RUNNING or COMPLETED execution exists, null otherwise.
+     * Returns the execution ID if a RUNNING or COMPLETED execution exists, null otherwise.
      */
     private String findExistingExecution(String workflowName, String idempotencyKey) {
         try {

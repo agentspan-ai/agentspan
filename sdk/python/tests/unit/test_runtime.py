@@ -1584,7 +1584,7 @@ class TestStartViaServer:
                 return AgentRuntime(config=config)
 
     def test_start_via_server_returns_execution_id(self, runtime):
-        """_start_via_server returns (workflowId, requiredWorkers) tuple."""
+        """_start_via_server returns (executionId, requiredWorkers) tuple."""
         agent = Agent(name="test", model="openai/gpt-4o")
 
         with patch("requests.post", _mock_requests_post({"executionId": "wf-server-1"})):

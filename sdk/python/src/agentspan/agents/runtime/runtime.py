@@ -6,7 +6,7 @@
 This is the core orchestrator that:
 1. Sends agent config to the server for compilation into a Conductor workflow.
 2. Registers and starts tool workers with Conductor.
-3. Executes the workflow and manages the lifecycle.
+3. Executes the agent and manages the lifecycle.
 4. Converts Conductor workflow results back into AgentResult/AgentHandle.
 """
 
@@ -377,7 +377,7 @@ class AgentRuntime:
     def _clear_workflow_credentials(
         self, execution_id: str, credentials: Optional[List[str]]
     ) -> None:
-        """Clear request-scoped credential names after workflow completion."""
+        """Clear request-scoped credential names after execution completion."""
         if not credentials:
             return
         from agentspan.agents.runtime._dispatch import (
@@ -402,10 +402,10 @@ class AgentRuntime:
         """Start an agent via the server's /api/agent/start endpoint.
 
         Sends the agent config + prompt to the server, which compiles,
-        registers, and starts the workflow in one call.
+        registers, and starts the execution in one call.
 
         Returns:
-            The workflow ID.
+            The execution ID.
         """
         import requests as req_lib
 
@@ -648,7 +648,7 @@ class AgentRuntime:
         return wf
 
     def prepare(self, agent: Any) -> None:
-        """Pre-register workers for an agent without starting workflows.
+        """Pre-register workers for an agent without starting executions.
 
         Call this for every agent *before* the first :meth:`start` when you
         know all agents up-front (e.g. a test matrix).  This ensures all
@@ -663,7 +663,7 @@ class AgentRuntime:
             for agent in agents:
                 runtime.prepare(agent)
 
-            # Then start workflows — all workers poll from the start
+            # Then start executions — all workers poll from the start
             for agent, prompt in work:
                 handle = runtime.start(agent, prompt)
         """
@@ -2052,7 +2052,7 @@ class AgentRuntime:
     # ── Input guardrail pre-flight ─────────────────────────────────
 
     def _check_input_guardrails(self, agent: Agent, prompt: str) -> str:
-        """Run input guardrails before workflow execution.
+        """Run input guardrails before execution.
 
         Returns the (possibly modified) prompt.  Raises :class:`ValueError`
         for ``on_fail="raise"`` failures.
@@ -2107,16 +2107,16 @@ class AgentRuntime:
         """Execute an agent synchronously and return the result.
 
         Accepts native :class:`Agent` objects, foreign framework agents
-        (e.g. OpenAI Agent SDK, Google ADK), or a **workflow name string**
+        (e.g. OpenAI Agent SDK, Google ADK), or an **agent name string**
         to run a pre-deployed agent by name.
 
         Args:
             agent: The agent to execute — a native :class:`Agent`, a
-                foreign framework agent object, or a ``str`` workflow name
+                foreign framework agent object, or a ``str`` agent name
                 for a pre-deployed agent.
             prompt: The user's input message — a string or a
                 :class:`PromptTemplate` referencing a server-side template.
-            version: Workflow version (only used when *agent* is a string).
+            version: Agent version (only used when *agent* is a string).
             media: Optional list of media URLs (images, video, audio) to
                 include with the prompt.  Each URL is passed as part of
                 the user message to vision-capable models.
@@ -2127,12 +2127,12 @@ class AgentRuntime:
                 calls ``on_event(event)`` as events arrive.  The full
                 :class:`AgentResult` (with messages, token_usage, etc.)
                 is still returned after completion.
-            **kwargs: Additional workflow input parameters.
+            **kwargs: Additional input parameters.
 
         Returns:
             An :class:`AgentResult`.
         """
-        # Run by name — pre-deployed workflow
+        # Run by name — pre-deployed agent
         if isinstance(agent, str):
             return self._run_by_name(
                 agent,
@@ -2222,7 +2222,7 @@ class AgentRuntime:
         raw_status = status.status
 
         if raw_status in ("FAILED", "TERMINATED"):
-            logger.warning("Agent '%s' workflow %s", agent.name, raw_status)
+            logger.warning("Agent '%s' execution %s", agent.name, raw_status)
             # Surface the termination reason when no output is available
             has_output = output and not (
                 isinstance(output, dict) and all(v is None for v in output.values())
@@ -2233,7 +2233,7 @@ class AgentRuntime:
         # Normalize output to always be a dict
         output = self._normalize_output(output, raw_status, status.reason)
 
-        # Fetch full workflow execution to populate tool_calls, messages,
+        # Fetch full execution to populate tool_calls, messages,
         # and token_usage — these are not available from the status endpoint.
         tool_calls: List[Dict[str, Any]] = []
         messages: List[Dict[str, Any]] = []
@@ -2247,7 +2247,7 @@ class AgentRuntime:
             messages = self._extract_messages(wf)
             token_usage = self._extract_token_usage(execution_id)
         except Exception as exc:
-            logger.debug("Could not fetch workflow details for %s: %s", execution_id, exc)
+            logger.debug("Could not fetch execution details for %s: %s", execution_id, exc)
 
         logger.info("Agent '%s' completed (execution_id=%s)", agent.name, execution_id)
         return AgentResult(
@@ -2263,7 +2263,7 @@ class AgentRuntime:
             sub_results=self._extract_sub_results(output),
         )
 
-    # ── Run-by-name (pre-deployed workflows) ─────────────────────────
+    # ── Run-by-name (pre-deployed agents) ──────────────────────────
 
     def _run_by_name(
         self,
@@ -2278,7 +2278,7 @@ class AgentRuntime:
         timeout: Optional[int] = None,
         **kwargs: Any,
     ) -> AgentResult:
-        """Execute a pre-registered workflow by name."""
+        """Execute a pre-deployed agent by name."""
         from conductor.client.http.models import StartWorkflowRequest
 
         req = StartWorkflowRequest()
@@ -2322,7 +2322,7 @@ class AgentRuntime:
             messages = self._extract_messages(wf)
             token_usage = self._extract_token_usage(execution_id)
         except Exception as exc:
-            logger.debug("Could not fetch workflow details: %s", exc)
+            logger.debug("Could not fetch execution details: %s", exc)
 
         return AgentResult(
             output=output,
@@ -2347,7 +2347,7 @@ class AgentRuntime:
         idempotency_key: Optional[str] = None,
         **kwargs: Any,
     ) -> AgentHandle:
-        """Start a pre-registered workflow by name (fire-and-forget)."""
+        """Start a pre-deployed agent by name (fire-and-forget)."""
         from conductor.client.http.models import StartWorkflowRequest
 
         req = StartWorkflowRequest()
@@ -2420,7 +2420,7 @@ class AgentRuntime:
             messages = self._extract_messages(wf)
             token_usage = self._extract_token_usage(execution_id)
         except Exception as exc:
-            logger.debug("Could not fetch workflow details: %s", exc)
+            logger.debug("Could not fetch execution details: %s", exc)
 
         return AgentResult(
             output=output,
@@ -2540,7 +2540,7 @@ class AgentRuntime:
             raw_status = status.status
 
             if raw_status in ("FAILED", "TERMINATED"):
-                logger.warning("Framework agent '%s' workflow %s", agent_name, raw_status)
+                logger.warning("Framework agent '%s' execution %s", agent_name, raw_status)
                 has_output = output and not (
                     isinstance(output, dict) and all(v is None for v in output.values())
                 )
@@ -2855,12 +2855,12 @@ class AgentRuntime:
             sub_results=self._extract_sub_results(output),
         )
 
-    # ── Workflow execution helpers ──────────────────────────────────
+    # ── Execution helpers ─────────────────────────────────────────
 
     def _poll_status_until_complete(
         self, execution_id: str, *, timeout: Optional[int] = None
     ) -> AgentStatus:
-        """Poll ``/api/agent/{id}/status`` until the workflow completes."""
+        """Poll ``/api/agent/{id}/status`` until the execution completes."""
         effective_timeout = timeout if timeout and timeout > 0 else 30000
         poll_interval = 1
         elapsed = 0
@@ -2873,7 +2873,7 @@ class AgentRuntime:
             elapsed += poll_interval
 
         logger.warning(
-            "Workflow %s did not complete within %ds.",
+            "Execution %s did not complete within %ds.",
             execution_id,
             effective_timeout,
         )
@@ -2895,7 +2895,7 @@ class AgentRuntime:
             elapsed += poll_interval
 
         logger.warning(
-            "Workflow %s did not complete within %ds.",
+            "Execution %s did not complete within %ds.",
             execution_id,
             effective_timeout,
         )
@@ -2916,9 +2916,9 @@ class AgentRuntime:
     ) -> AgentResult:
         """Run an agent with real-time event callbacks, then return full result.
 
-        Starts the workflow asynchronously, streams events via SSE (with
+        Starts the execution asynchronously, streams events via SSE (with
         polling fallback), calls ``on_event(event)`` for each event, then
-        fetches the full workflow to build a complete :class:`AgentResult`
+        fetches the full execution to build a complete :class:`AgentResult`
         with messages, token_usage, etc.
         """
         handle = self.start(
@@ -3202,17 +3202,17 @@ class AgentRuntime:
         """Start an agent asynchronously and return a handle.
 
         Accepts native :class:`Agent` objects, foreign framework agents
-        (e.g. OpenAI Agent SDK, Google ADK), or a **workflow name string**.
+        (e.g. OpenAI Agent SDK, Google ADK), or an **agent name string**.
 
         Args:
             agent: The agent to execute — a native :class:`Agent`, a
-                foreign framework agent object, or a ``str`` workflow name.
+                foreign framework agent object, or a ``str`` agent name.
             prompt: The user's input message.
-            version: Workflow version (only used when *agent* is a string).
+            version: Agent version (only used when *agent* is a string).
             media: Optional list of media URLs (images, video, audio).
             session_id: Optional session ID.
             idempotency_key: Optional idempotency key.
-            **kwargs: Additional workflow input parameters.
+            **kwargs: Additional input parameters.
 
         Returns:
             An :class:`AgentHandle`.
@@ -3245,7 +3245,7 @@ class AgentRuntime:
 
         resolved_prompt = self._resolve_prompt(prompt)
 
-        # Run input guardrails before workflow submission
+        # Run input guardrails before submission
         resolved_prompt = self._check_input_guardrails(agent, resolved_prompt)
 
         correlation_id = str(uuid.uuid4())
@@ -3282,25 +3282,25 @@ class AgentRuntime:
 
         Can be called in three ways:
 
-        1. **New workflow:** ``stream(agent, prompt)`` — starts a new
-           workflow and streams events from it.
-        2. **Existing workflow:** ``stream(handle=handle)`` — streams
-           events from an already-running workflow.
-        3. **By name:** ``stream("workflow_name", prompt)`` — starts a
-           pre-deployed workflow by name.
+        1. **New execution:** ``stream(agent, prompt)`` — starts a new
+           execution and streams events from it.
+        2. **Existing execution:** ``stream(handle=handle)`` — streams
+           events from an already-running execution.
+        3. **By name:** ``stream("agent_name", prompt)`` — starts a
+           pre-deployed agent by name.
 
         Returns an :class:`AgentStream` — iterable (yields events), with
         HITL convenience methods and access to the final :class:`AgentResult`.
 
         Args:
             agent: The agent to execute (required unless *handle* is given).
-                Can be a ``str`` workflow name for pre-deployed agents.
+                Can be a ``str`` agent name for pre-deployed agents.
             prompt: The user's input message (required unless *handle* is given).
-            version: Workflow version (only used when *agent* is a string).
+            version: Agent version (only used when *agent* is a string).
             handle: An existing :class:`AgentHandle` to stream from.
             media: Optional list of media URLs (images, video, audio).
             session_id: Optional session ID.
-            **kwargs: Additional workflow input parameters.
+            **kwargs: Additional input parameters.
 
         Returns:
             An :class:`AgentStream`.
@@ -3319,7 +3319,7 @@ class AgentRuntime:
         return AgentStream(handle=handle, event_iterator=event_iter)
 
     def _stream_workflow(self, execution_id: str) -> Iterator[AgentEvent]:
-        """Stream events for a workflow, with SSE-to-polling fallback.
+        """Stream events for an execution, with SSE-to-polling fallback.
 
         Tries SSE first (server-push, lower latency).  If SSE is
         unavailable, falls back to polling.
@@ -3338,7 +3338,7 @@ class AgentRuntime:
     def _stream_polling(self, execution_id: str) -> Iterator[AgentEvent]:
         """Poll-based event streaming fallback.
 
-        Polls the workflow status and tasks, yielding typed events for
+        Polls the execution status and tasks, yielding typed events for
         new/changed tasks.  Detects HUMAN tasks (IN_PROGRESS) as WAITING
         events for human-in-the-loop scenarios.
         """
@@ -3353,7 +3353,7 @@ class AgentRuntime:
                     include_tasks=True,
                 )
             except Exception as e:
-                logger.error("Error fetching workflow status: %s", e)
+                logger.error("Error fetching execution status: %s", e)
                 yield AgentEvent(
                     type=EventType.ERROR,
                     content=str(e),
@@ -3460,7 +3460,7 @@ class AgentRuntime:
                                 execution_id=execution_id,
                             )
 
-            # Detect HUMAN tasks waiting for input (workflow stays RUNNING)
+            # Detect HUMAN tasks waiting for input (execution stays RUNNING)
             has_waiting_human = False
             if hasattr(wf, "tasks") and wf.tasks:
                 for task in wf.tasks:
@@ -3505,7 +3505,7 @@ class AgentRuntime:
                 else:
                     reason = getattr(wf, "reason", None)
                     error_msg = (
-                        reason if isinstance(reason, str) and reason else f"Workflow {raw_status}"
+                        reason if isinstance(reason, str) and reason else f"Execution {raw_status}"
                     )
                     yield AgentEvent(
                         type=EventType.ERROR,
@@ -3539,18 +3539,18 @@ class AgentRuntime:
     ) -> AgentResult:
         """Execute an agent asynchronously (async-first implementation).
 
-        Accepts native agents, foreign framework agents, or a workflow
+        Accepts native agents, foreign framework agents, or an agent
         name string for pre-deployed agents.
 
         Args:
-            agent: The agent to execute, or a ``str`` workflow name.
+            agent: The agent to execute, or a ``str`` agent name.
             prompt: The user's input message.
-            version: Workflow version (only used when *agent* is a string).
+            version: Agent version (only used when *agent* is a string).
             media: Optional list of media URLs (images, video, audio).
             session_id: Optional session ID.
             idempotency_key: Optional idempotency key.
             on_event: Optional callback invoked for each streaming event.
-            **kwargs: Additional workflow input parameters.
+            **kwargs: Additional input parameters.
 
         Returns:
             An :class:`AgentResult`.
@@ -3643,7 +3643,7 @@ class AgentRuntime:
         raw_status = status.status
 
         if raw_status in ("FAILED", "TERMINATED"):
-            logger.warning("Agent '%s' workflow %s", agent.name, raw_status)
+            logger.warning("Agent '%s' execution %s", agent.name, raw_status)
             has_output = output and not (
                 isinstance(output, dict) and all(v is None for v in output.values())
             )
@@ -3653,7 +3653,7 @@ class AgentRuntime:
         # Normalize output to always be a dict
         output = self._normalize_output(output, raw_status, status.reason)
 
-        # Fetch full workflow execution to populate tool_calls, messages,
+        # Fetch full execution to populate tool_calls, messages,
         # and token_usage — these are not available from the status endpoint.
         tool_calls: List[Dict[str, Any]] = []
         messages: List[Dict[str, Any]] = []
@@ -3671,7 +3671,7 @@ class AgentRuntime:
             messages = self._extract_messages(wf)
             token_usage = self._extract_token_usage(execution_id)
         except Exception as exc:
-            logger.debug("Could not fetch workflow details for %s: %s", execution_id, exc)
+            logger.debug("Could not fetch execution details for %s: %s", execution_id, exc)
 
         logger.info("Agent '%s' completed (execution_id=%s)", agent.name, execution_id)
         return AgentResult(
@@ -3701,13 +3701,13 @@ class AgentRuntime:
         """Start an agent asynchronously and return a handle (async version).
 
         Args:
-            agent: The agent to execute, or a ``str`` workflow name.
+            agent: The agent to execute, or a ``str`` agent name.
             prompt: The user's input message.
-            version: Workflow version (only used when *agent* is a string).
+            version: Agent version (only used when *agent* is a string).
             media: Optional list of media URLs.
             session_id: Optional session ID.
             idempotency_key: Optional idempotency key.
-            **kwargs: Additional workflow input parameters.
+            **kwargs: Additional input parameters.
 
         Returns:
             An :class:`AgentHandle`.
@@ -3772,21 +3772,21 @@ class AgentRuntime:
 
         Can be called in three ways:
 
-        1. ``await stream_async(agent, prompt)`` — starts a new workflow.
-        2. ``await stream_async(handle=handle)`` — streams from existing workflow.
-        3. ``await stream_async("workflow_name", prompt)`` — starts by name.
+        1. ``await stream_async(agent, prompt)`` — starts a new execution.
+        2. ``await stream_async(handle=handle)`` — streams from existing execution.
+        3. ``await stream_async("agent_name", prompt)`` — starts by name.
 
         Returns an :class:`AsyncAgentStream` — async-iterable that yields
         :class:`AgentEvent` objects.
 
         Args:
-            agent: The agent to execute, or a ``str`` workflow name.
+            agent: The agent to execute, or a ``str`` agent name.
             prompt: The user's input message (required unless *handle* is given).
-            version: Workflow version (only used when *agent* is a string).
+            version: Agent version (only used when *agent* is a string).
             handle: An existing :class:`AgentHandle` to stream from.
             media: Optional list of media URLs.
             session_id: Optional session ID.
-            **kwargs: Additional workflow input parameters.
+            **kwargs: Additional input parameters.
 
         Returns:
             An :class:`AsyncAgentStream`.
@@ -3848,7 +3848,7 @@ class AgentRuntime:
                     ),
                 )
             except Exception as e:
-                logger.error("Error fetching workflow status: %s", e)
+                logger.error("Error fetching execution status: %s", e)
                 yield AgentEvent(
                     type=EventType.ERROR,
                     content=str(e),
@@ -3984,7 +3984,7 @@ class AgentRuntime:
                 else:
                     reason = getattr(wf, "reason", None)
                     error_msg = (
-                        reason if isinstance(reason, str) and reason else f"Workflow {raw_status}"
+                        reason if isinstance(reason, str) and reason else f"Execution {raw_status}"
                     )
                     yield AgentEvent(
                         type=EventType.ERROR,
@@ -4082,7 +4082,7 @@ class AgentRuntime:
             raw_status = status.status
 
             if raw_status in ("FAILED", "TERMINATED"):
-                logger.warning("Framework agent '%s' workflow %s", agent_name, raw_status)
+                logger.warning("Framework agent '%s' execution %s", agent_name, raw_status)
                 has_output = output and not (
                     isinstance(output, dict) and all(v is None for v in output.values())
                 )
@@ -4176,12 +4176,12 @@ class AgentRuntime:
     # ── Status / interaction ────────────────────────────────────────
 
     def get_status(self, execution_id: str) -> AgentStatus:
-        """Get the current status of an agent workflow.
+        """Get the current status of an agent execution.
 
         Fetches from ``/api/agent/{executionId}/status``.
 
         Args:
-            execution_id: The Conductor workflow ID.
+            execution_id: The execution ID.
 
         Returns:
             An :class:`AgentStatus`.
@@ -4225,7 +4225,7 @@ class AgentRuntime:
         Posts to ``/api/agent/{executionId}/respond``.
 
         Args:
-            execution_id: The Conductor workflow ID.
+            execution_id: The execution ID.
             output: Any JSON-serialisable value to pass as the task output.
         """
         import requests as req_lib
@@ -4237,7 +4237,7 @@ class AgentRuntime:
             resp.raise_for_status()
         except req_lib.exceptions.HTTPError as exc:
             _raise_api_error(exc, url=url)
-        logger.info("Responded to workflow %s", execution_id)
+        logger.info("Responded to execution %s", execution_id)
 
     def approve(self, execution_id: str) -> None:
         """Approve a pending human-in-the-loop task."""
@@ -4252,15 +4252,15 @@ class AgentRuntime:
         self.respond(execution_id, {"message": message})
 
     def pause(self, execution_id: str) -> None:
-        """Pause an agent workflow."""
+        """Pause an agent execution."""
         self._workflow_client.pause_workflow(execution_id)
 
     def resume(self, execution_id: str) -> None:
-        """Resume a paused agent workflow."""
+        """Resume a paused agent execution."""
         self._workflow_client.resume_workflow(execution_id)
 
     def cancel(self, execution_id: str, reason: str = "") -> None:
-        """Cancel an agent workflow."""
+        """Cancel an agent execution."""
         self._workflow_client.terminate_workflow(execution_id=execution_id, reason=reason)
 
     # ── Async status / interaction ───────────────────────────────────
@@ -4292,7 +4292,7 @@ class AgentRuntime:
         """Async version of :meth:`respond`."""
         body = output if isinstance(output, dict) else {"output": output}
         await self._http.respond(execution_id, body)
-        logger.info("Responded to workflow %s (async)", execution_id)
+        logger.info("Responded to execution %s (async)", execution_id)
 
     async def approve_async(self, execution_id: str) -> None:
         """Async version of :meth:`approve`."""
@@ -4426,7 +4426,7 @@ class AgentRuntime:
 
     @staticmethod
     def _derive_finish_reason(raw_status: str, output: Any) -> FinishReason:
-        """Derive a :class:`FinishReason` from workflow status and output."""
+        """Derive a :class:`FinishReason` from execution status and output."""
         if raw_status == "COMPLETED":
             if isinstance(output, dict):
                 fr = output.get("finishReason")
@@ -4446,7 +4446,7 @@ class AgentRuntime:
         return FinishReason.STOP
 
     def _extract_finish_reason(self, workflow_run: Any) -> Optional[str]:
-        """Extract finishReason from workflow output, with a descriptive message for LENGTH."""
+        """Extract finishReason from execution output, with a descriptive message for LENGTH."""
         if hasattr(workflow_run, "output") and isinstance(workflow_run.output, dict):
             fr = workflow_run.output.get("finishReason")
             if fr in ("LENGTH", "MAX_TOKENS"):
@@ -4458,7 +4458,7 @@ class AgentRuntime:
         return None
 
     def _extract_output(self, workflow_run: Any, agent: Agent) -> Any:
-        """Extract the final output from a workflow run."""
+        """Extract the final output from an execution."""
         import json as _json
 
         if hasattr(workflow_run, "output") and workflow_run.output:
@@ -4515,7 +4515,7 @@ class AgentRuntime:
         return non_null
 
     def _extract_messages(self, workflow_run: Any) -> List[Dict[str, Any]]:
-        """Extract conversation messages from workflow variables."""
+        """Extract conversation messages from execution variables."""
         if hasattr(workflow_run, "variables") and workflow_run.variables:
             return workflow_run.variables.get("messages", [])
         return []
@@ -4544,7 +4544,7 @@ class AgentRuntime:
     )
 
     def _extract_tool_calls(self, workflow_run: Any) -> List[Dict[str, Any]]:
-        """Extract tool call history from workflow tasks.
+        """Extract tool call history from execution tasks.
 
         Tool tasks are identified by their reference task name starting with
         ``call_`` (the pattern the compiler uses for all tool invocations).
@@ -4581,7 +4581,7 @@ class AgentRuntime:
         return tool_calls
 
     def _fetch_agent_workflow(self, execution_id: str) -> Optional[dict]:
-        """Fetch a workflow with its full task list from GET /api/agent/execution/{id}."""
+        """Fetch an execution with its full task list from GET /api/agent/execution/{id}."""
         import requests
 
         try:
@@ -4593,7 +4593,7 @@ class AgentRuntime:
             return None
 
     def _extract_token_usage(self, execution_id: str) -> Optional[TokenUsage]:
-        """Extract aggregated token usage from the full workflow tree.
+        """Extract aggregated token usage from the full execution tree.
 
         Calls GET /api/agent/{id} to fetch tasks, then recursively traverses
         sub-workflows (sub-agents) via their subWorkflowId to aggregate tokens
@@ -4616,7 +4616,7 @@ class AgentRuntime:
         """Recursively collect token counts via GET /api/agent/{id}.
 
         Returns ``(prompt, completion, total, found_any)`` tuple.
-        The server pre-computes ``tokenUsage`` for each workflow level; this
+        The server pre-computes ``tokenUsage`` for each execution level; this
         method reads that field and recurses into SUB_WORKFLOW tasks so the
         full agent tree is covered.
         """
@@ -4633,7 +4633,7 @@ class AgentRuntime:
         total_total = 0
         found_any = False
 
-        # Use server-computed token usage for this workflow level
+        # Use server-computed token usage for this execution level
         token_usage = data.get("tokenUsage")
         if token_usage:
             p = int(token_usage.get("promptTokens", 0))

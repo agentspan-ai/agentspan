@@ -124,7 +124,7 @@ class MockSSEServer:
 
 
 def _java_event(event_type: str, execution_id: str = "test-wf", **fields) -> dict:
-    data = {"type": event_type, "workflowId": execution_id}
+    data = {"type": event_type, "executionId": execution_id}
     data.update(fields)
     return data
 

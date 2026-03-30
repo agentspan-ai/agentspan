@@ -281,7 +281,7 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
     """Create a Conductor worker wrapper for a @tool function.
 
     The wrapper accepts a ``Task`` object so it can extract metadata
-    (workflow ID) for ``ToolContext`` injection, then maps the task's
+    (execution ID) for ``ToolContext`` injection, then maps the task's
     ``inputParameters`` to the tool function's arguments.
     On failure the exception propagates so Conductor marks the task FAILED.
 

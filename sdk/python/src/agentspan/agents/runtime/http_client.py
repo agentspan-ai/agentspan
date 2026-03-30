@@ -71,7 +71,7 @@ class AgentHttpClient:
     # ── Agent API endpoints ──────────────────────────────────────────
 
     async def start_agent(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """POST /agent/start — start an agent workflow."""
+        """POST /agent/start — start an agent execution."""
         client = await self._get_client()
         url = self._url("/start")
         resp = await client.post(url, json=payload)
@@ -93,7 +93,7 @@ class AgentHttpClient:
         return resp.json()
 
     async def compile_agent(self, config_json: Dict[str, Any]) -> Dict[str, Any]:
-        """POST /agent/compile — compile agent config to workflow def."""
+        """POST /agent/compile — compile agent config to agent def."""
         client = await self._get_client()
         url = self._url("/compile")
         resp = await client.post(url, json=config_json)
@@ -104,7 +104,7 @@ class AgentHttpClient:
         return resp.json()
 
     async def get_status(self, execution_id: str) -> Dict[str, Any]:
-        """GET /agent/{id}/status — fetch workflow status."""
+        """GET /agent/{id}/status — fetch execution status."""
         client = await self._get_client()
         url = self._url(f"/{execution_id}/status")
         resp = await client.get(url)
