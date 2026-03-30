@@ -118,6 +118,26 @@ public class AgentConfigSerializer {
             agentMap.put("sessionId", agent.getSessionId());
         }
 
+        // Allowed transitions (constrained handoff paths)
+        if (agent.getAllowedTransitions() != null && !agent.getAllowedTransitions().isEmpty()) {
+            agentMap.put("allowedTransitions", agent.getAllowedTransitions());
+        }
+
+        // Planner mode
+        if (agent.isPlanner()) {
+            agentMap.put("planner", true);
+        }
+
+        // Include contents (context passed to sub-agent)
+        if (agent.getIncludeContents() != null && !agent.getIncludeContents().isEmpty()) {
+            agentMap.put("includeContents", agent.getIncludeContents());
+        }
+
+        // Thinking budget (extended reasoning)
+        if (agent.getThinkingBudgetTokens() != null) {
+            agentMap.put("thinkingBudgetTokens", agent.getThinkingBudgetTokens());
+        }
+
         return agentMap;
     }
 
