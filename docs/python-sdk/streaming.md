@@ -35,7 +35,7 @@ Python SDK (client)                   Java Runtime (embedded Conductor)
 ───────────────────                   ────────────────────────────────
 
 POST /api/agent/start          →      compile + register + startWorkflow()
-  ← {"workflowId": "abc-123"}            │
+  ← {"executionId": "abc-123"}            │
                                           ↓
 GET /api/agent/stream/abc-123  →      SseEmitter registered in AgentStreamRegistry
   ← SSE: thinking                         │
@@ -66,26 +66,26 @@ POST /api/agent/abc-123/respond →
 | `error` | Task failed or workflow terminated | `content` (reason), `toolName` (task ref) |
 | `done` | Workflow completed | `output` (final result) |
 
-Every event includes: `id` (monotonic sequence), `type`, `workflowId`, `timestamp`.
+Every event includes: `id` (monotonic sequence), `type`, `executionId`, `timestamp`.
 
 ## SSE Wire Format
 
 ```
 id:1
 event:thinking
-data:{"id":1,"type":"thinking","workflowId":"abc-123","content":"my_agent_llm","timestamp":1709721234000}
+data:{"id":1,"type":"thinking","executionId":"abc-123","content":"my_agent_llm","timestamp":1709721234000}
 
 id:2
 event:tool_call
-data:{"id":2,"type":"tool_call","workflowId":"abc-123","toolName":"get_weather","args":{"city":"NYC"},"timestamp":1709721234567}
+data:{"id":2,"type":"tool_call","executionId":"abc-123","toolName":"get_weather","args":{"city":"NYC"},"timestamp":1709721234567}
 
 id:3
 event:tool_result
-data:{"id":3,"type":"tool_result","workflowId":"abc-123","toolName":"get_weather","result":"72F sunny","timestamp":1709721235123}
+data:{"id":3,"type":"tool_result","executionId":"abc-123","toolName":"get_weather","result":"72F sunny","timestamp":1709721235123}
 
 id:4
 event:done
-data:{"id":4,"type":"done","workflowId":"abc-123","output":{"result":"The weather in NYC is 72F and sunny.","finishReason":"STOP"},"timestamp":1709721236000}
+data:{"id":4,"type":"done","executionId":"abc-123","output":{"result":"The weather in NYC is 72F and sunny.","finishReason":"STOP"},"timestamp":1709721236000}
 ```
 
 Heartbeats are sent as SSE comments (`: heartbeat\n\n`) every 15 seconds to prevent proxy idle timeouts.
@@ -105,15 +105,15 @@ Manages the lifecycle of SSE connections and event buffers.
 **File:** `runtime/.../service/AgentStreamRegistry.java`
 
 **Data structures:**
-- `ConcurrentHashMap<workflowId, CopyOnWriteArrayList<SseEmitter>>` — connected clients per workflow. Multiple clients can watch the same workflow.
-- `ConcurrentHashMap<workflowId, BoundedEventBuffer>` — ring buffer (200 events) per workflow for reconnection replay.
+- `ConcurrentHashMap<executionId, CopyOnWriteArrayList<SseEmitter>>` — connected clients per workflow. Multiple clients can watch the same workflow.
+- `ConcurrentHashMap<executionId, BoundedEventBuffer>` — ring buffer (200 events) per workflow for reconnection replay.
 - `ConcurrentHashMap<childWfId, parentWfId>` — aliases for sub-workflow event forwarding in multi-agent workflows.
-- `ConcurrentHashMap<workflowId, AtomicLong>` — monotonic event ID sequence per workflow.
+- `ConcurrentHashMap<executionId, AtomicLong>` — monotonic event ID sequence per workflow.
 
 **Key operations:**
-- `register(workflowId, lastEventId)` — creates `SseEmitter(0L)` (no timeout), replays missed events if `lastEventId` is provided.
-- `send(workflowId, event)` — resolves aliases, assigns sequence ID, buffers event, broadcasts to all connected emitters.
-- `complete(workflowId)` — completes all emitters, schedules buffer cleanup after 5 minutes.
+- `register(executionId, lastEventId)` — creates `SseEmitter(0L)` (no timeout), replays missed events if `lastEventId` is provided.
+- `send(executionId, event)` — resolves aliases, assigns sequence ID, buffers event, broadcasts to all connected emitters.
+- `complete(executionId)` — completes all emitters, schedules buffer cleanup after 5 minutes.
 - `registerAlias(childWfId, parentWfId)` — forwards child workflow events to parent's stream.
 
 **Scheduled tasks:**
@@ -154,9 +154,9 @@ Implements both `TaskStatusListener` and `WorkflowStatusListener`. Annotated `@C
 Three new endpoints added to the existing `/api/agent` controller:
 
 ```
-GET  /api/agent/stream/{workflowId}      SSE event stream
-POST /api/agent/{workflowId}/respond      HITL response
-GET  /api/agent/{workflowId}/status       Polling fallback
+GET  /api/agent/stream/{executionId}      SSE event stream
+POST /api/agent/{executionId}/respond      HITL response
+GET  /api/agent/{executionId}/status       Polling fallback
 ```
 
 **Stream endpoint:** Returns `SseEmitter`. Supports `Last-Event-ID` header for reconnection. No `produces` annotation — `SseEmitter` handles content-type negotiation internally (adding `produces = "text/event-stream"` causes `HttpMediaTypeNotAcceptableException` with Conductor's `ApplicationExceptionMapper`).
@@ -170,9 +170,9 @@ GET  /api/agent/{workflowId}/status       Polling fallback
 **File:** `runtime/.../service/AgentService.java`
 
 Three new methods:
-- `openStream(workflowId, lastEventId)` — delegates to `AgentStreamRegistry.register()`.
-- `respond(workflowId, output)` — finds pending HUMAN task via `executionService.getExecutionStatus()`, creates `TaskResult`, calls `executionService.updateTask()`.
-- `getStatus(workflowId)` — returns `{workflowId, status, isComplete, isRunning, isWaiting, output, pendingTool}`.
+- `openStream(executionId, lastEventId)` — delegates to `AgentStreamRegistry.register()`.
+- `respond(executionId, output)` — finds pending HUMAN task via `executionService.getExecutionStatus()`, creates `TaskResult`, calls `executionService.updateTask()`.
+- `getStatus(executionId)` — returns `{executionId, status, isComplete, isRunning, isWaiting, output, pendingTool}`.
 
 ### Configuration
 
@@ -194,11 +194,11 @@ Setting these to `agent` disables Conductor's default stub listeners (which have
 
 Three new methods on `AgentRuntime`:
 
-**`_stream_sse(workflow_id)`** — Core SSE consumer. Opens a streaming HTTP GET to `/api/agent/stream/{workflowId}` using the `requests` library. Auto-reconnects with `Last-Event-ID` header on connection drops. Yields `AgentEvent` objects. Terminates on `done` or `error` events.
+**`_stream_sse(execution_id)`** — Core SSE consumer. Opens a streaming HTTP GET to `/api/agent/stream/{executionId}` using the `requests` library. Auto-reconnects with `Last-Event-ID` header on connection drops. Yields `AgentEvent` objects. Terminates on `done` or `error` events.
 
 ```python
 # Connection setup
-url = f"{server_url}/agent/stream/{workflow_id}"
+url = f"{server_url}/agent/stream/{execution_id}"
 headers = {"Accept": "text/event-stream"}
 requests.get(url, headers=headers, stream=True, timeout=(5, None))
 ```
@@ -210,7 +210,7 @@ requests.get(url, headers=headers, stream=True, timeout=(5, None))
 
 **`_parse_sse(lines)`** — Static method. Parses the SSE wire format from an iterator of lines. Handles `event:`, `id:`, `data:` fields and `:comment` lines (heartbeats). Yields dicts of `{event, id, data}`.
 
-**`_sse_to_agent_event(sse_event, workflow_id)`** — Static method. Converts a parsed SSE event dict into an `AgentEvent` dataclass, mapping camelCase JSON fields to Python attributes.
+**`_sse_to_agent_event(sse_event, execution_id)`** — Static method. Converts a parsed SSE event dict into an `AgentEvent` dataclass, mapping camelCase JSON fields to Python attributes.
 
 ### Graceful Fallback
 
@@ -219,7 +219,7 @@ The `stream()` method tries SSE first and falls back to the existing polling imp
 ```python
 if self._config.streaming_enabled:
     try:
-        yield from self._stream_sse(handle.workflow_id)
+        yield from self._stream_sse(handle.execution_id)
         return
     except _SSEUnavailableError:
         logger.info("SSE unavailable, falling back to polling")
@@ -244,7 +244,7 @@ streaming_enabled: bool = True  # default
 ```python
 class AgentHandle:
     def stream(self) -> Iterator[AgentEvent]:
-        return self._runtime._stream_sse(self.workflow_id)
+        return self._runtime._stream_sse(self.execution_id)
 ```
 
 ## Reconnection Protocol

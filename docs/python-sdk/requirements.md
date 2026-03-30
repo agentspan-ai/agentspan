@@ -73,7 +73,7 @@ The `agentspan-sdk` Python SDK enables developers to build AI agents backed by d
 
 | ID | Requirement | Status |
 |---|---|---|
-| FR-30 | `AgentResult`: output, workflow_id, messages, tool_calls, status | Done |
+| FR-30 | `AgentResult`: output, execution_id, messages, tool_calls, status | Done |
 | FR-31 | `AgentHandle`: get_status, approve, reject, send, pause, resume, cancel | Done |
 | FR-32 | `AgentStatus`: is_complete, is_running, is_waiting, output | Done |
 | FR-33 | `AgentEvent`: typed events (THINKING, TOOL_CALL, TOOL_RESULT, HANDOFF, WAITING, MESSAGE, ERROR, DONE) | Done |
