@@ -11,6 +11,12 @@ import dev.agentspan.model.AgentHandle;
 import dev.agentspan.model.AgentResult;
 import dev.agentspan.model.AgentStream;
 import dev.agentspan.model.ToolDef;
+import dev.agentspan.termination.AndTermination;
+import dev.agentspan.termination.MaxMessageTermination;
+import dev.agentspan.termination.OrTermination;
+import dev.agentspan.termination.TerminationCondition;
+import dev.agentspan.termination.TextMentionTermination;
+import dev.agentspan.termination.TokenUsageTermination;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -232,6 +238,23 @@ public class AgentRuntime implements AutoCloseable {
             });
         }
 
+        // Register termination condition worker for agents that have one
+        if (agent.getTermination() != null) {
+            final TerminationCondition termination = agent.getTermination();
+            final String taskName = agent.getName() + "_termination";
+            workerManager.register(taskName, input -> {
+                String result = input.get("result") instanceof String
+                    ? (String) input.get("result") : (input.get("result") != null ? input.get("result").toString() : "");
+                int iteration = input.get("iteration") instanceof Number
+                    ? ((Number) input.get("iteration")).intValue() : 0;
+                boolean shouldContinue = evaluateTermination(termination, result, iteration);
+                Map<String, Object> out = new java.util.LinkedHashMap<>();
+                out.put("should_continue", shouldContinue);
+                out.put("reason", shouldContinue ? "" : "Termination condition met");
+                return out;
+            });
+        }
+
         // Register SWARM transfer workers
         if (dev.agentspan.enums.Strategy.SWARM.equals(agent.getStrategy())
                 && !agent.getAgents().isEmpty()) {
@@ -247,6 +270,39 @@ public class AgentRuntime implements AutoCloseable {
         if (agent.getRouter() != null) {
             prepareWorkers(agent.getRouter());
         }
+    }
+
+    /**
+     * Evaluate a termination condition given the current LLM result and iteration count.
+     *
+     * @return {@code true} if the agent should continue (condition NOT met),
+     *         {@code false} if the agent should stop (condition IS met)
+     */
+    private boolean evaluateTermination(TerminationCondition condition, String result, int iteration) {
+        if (condition instanceof TextMentionTermination) {
+            String text = ((TextMentionTermination) condition).getText();
+            boolean found = result != null && result.contains(text);
+            return !found; // should_continue = false when text found (stop)
+        } else if (condition instanceof MaxMessageTermination) {
+            int max = ((MaxMessageTermination) condition).getMaxMessages();
+            return iteration < max; // should_continue = false when iteration >= max
+        } else if (condition instanceof TokenUsageTermination) {
+            // Token counts are not easily available from result text; always continue
+            return true;
+        } else if (condition instanceof AndTermination) {
+            AndTermination and = (AndTermination) condition;
+            boolean leftContinue = evaluateTermination(and.getLeft(), result, iteration);
+            boolean rightContinue = evaluateTermination(and.getRight(), result, iteration);
+            // AND: stop only when BOTH conditions say stop
+            return leftContinue || rightContinue;
+        } else if (condition instanceof OrTermination) {
+            OrTermination or = (OrTermination) condition;
+            boolean leftContinue = evaluateTermination(or.getLeft(), result, iteration);
+            boolean rightContinue = evaluateTermination(or.getRight(), result, iteration);
+            // OR: stop when EITHER condition says stop
+            return leftContinue && rightContinue;
+        }
+        return true; // unknown condition type — keep going
     }
 
     /**
