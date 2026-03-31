@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agentspan/agentspan/cli/client"
+	"github.com/agentspan-ai/agentspan/cli/client"
 )
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
