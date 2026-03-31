@@ -112,6 +112,21 @@ func (c *Client) Start(req *StartRequest) (*StartResponse, error) {
 	return &result, nil
 }
 
+// StartFramework starts a framework agent (skill, openai, etc.) with a raw payload.
+// Framework agents use top-level "framework" + "rawConfig" instead of "agentConfig".
+func (c *Client) StartFramework(payload map[string]interface{}) (*StartResponse, error) {
+	resp, err := c.doRequest("POST", "/api/agent/start", payload)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var result StartResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	return &result, nil
+}
+
 // Compile compiles an agent config to an execution plan
 func (c *Client) Compile(agentConfig map[string]interface{}) (map[string]interface{}, error) {
 	body := map[string]interface{}{"agentConfig": agentConfig}

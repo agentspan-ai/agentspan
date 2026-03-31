@@ -1,0 +1,501 @@
+// Copyright (c) 2025 AgentSpan
+// Licensed under the MIT License. See LICENSE file in the project root for details.
+
+package cmd
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/agentspan/agentspan/cli/client"
+	"github.com/fatih/color"
+	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
+)
+
+// ── Flags ───────────────────────────────────────────────────────────────────
+
+var (
+	skillModel       string
+	skillAgentModels []string
+	skillSearchPaths []string
+	skillTimeout     int
+	skillStream      bool
+)
+
+// ── Commands ────────────────────────────────────────────────────────────────
+
+var skillCmd = &cobra.Command{
+	Use:   "skill",
+	Short: "Run, load, or serve an agentskills.io skill directory",
+}
+
+var skillRunCmd = &cobra.Command{
+	Use:   "run <path> <prompt>",
+	Short: "Run a skill directory with a prompt (ephemeral execution)",
+	Long: `Read a skill directory, package its contents, and start an ephemeral
+agent execution on the server. Streams events by default.`,
+	Args: cobra.MinimumNArgs(2),
+	RunE: runSkillRun,
+}
+
+var skillLoadCmd = &cobra.Command{
+	Use:   "load <path>",
+	Short: "Deploy a skill definition to the server",
+	Long: `Read a skill directory, package its contents, and compile it on the
+server for later execution via 'agentspan agent run --name <skill>'.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runSkillLoad,
+}
+
+var skillServeCmd = &cobra.Command{
+	Use:   "serve <path>",
+	Short: "Start workers for a skill's scripts (placeholder)",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSkillServe,
+}
+
+func init() {
+	// skill run flags
+	skillRunCmd.Flags().StringVar(&skillModel, "model", "", "Orchestrator and default model (required)")
+	skillRunCmd.Flags().StringArrayVar(&skillAgentModels, "agent-model", nil, "Sub-agent model override (name=model, repeatable)")
+	skillRunCmd.Flags().StringArrayVar(&skillSearchPaths, "search-path", nil, "Cross-skill search directory (repeatable)")
+	skillRunCmd.Flags().IntVar(&skillTimeout, "timeout", 300, "Execution timeout in seconds")
+	skillRunCmd.Flags().BoolVar(&skillStream, "stream", false, "Stream SSE events in real-time")
+
+	// skill load flags
+	skillLoadCmd.Flags().StringVar(&skillModel, "model", "", "Orchestrator and default model (required)")
+	skillLoadCmd.Flags().StringArrayVar(&skillAgentModels, "agent-model", nil, "Sub-agent model override (name=model, repeatable)")
+	skillLoadCmd.Flags().StringArrayVar(&skillSearchPaths, "search-path", nil, "Cross-skill search directory (repeatable)")
+
+	// Wire up command tree
+	skillCmd.AddCommand(skillRunCmd)
+	skillCmd.AddCommand(skillLoadCmd)
+	skillCmd.AddCommand(skillServeCmd)
+	rootCmd.AddCommand(skillCmd)
+}
+
+// ── Run ─────────────────────────────────────────────────────────────────────
+
+func runSkillRun(cmd *cobra.Command, args []string) error {
+	skillPath := args[0]
+	prompt := strings.Join(args[1:], " ")
+
+	if skillModel == "" {
+		return fmt.Errorf("--model is required for skill run")
+	}
+
+	payload, skillName, err := buildSkillPayload(skillPath)
+	if err != nil {
+		return err
+	}
+
+	// Add prompt to payload
+	payload["prompt"] = prompt
+
+	bold := color.New(color.Bold)
+	bold.Printf("Starting skill: %s\n", skillName)
+
+	cfg := getConfig()
+	c := newClient(cfg)
+
+	// Framework agents use top-level "framework" + "rawConfig", not "agentConfig"
+	startPayload := map[string]interface{}{
+		"framework": "skill",
+		"rawConfig": payload["config"],
+		"prompt":    prompt,
+	}
+
+	resp, err := c.StartFramework(startPayload)
+	if err != nil {
+		return fmt.Errorf("failed to start skill: %w", err)
+	}
+
+	fmt.Printf("Skill: %s (Execution: %s)\n", resp.AgentName, resp.ExecutionID)
+
+	if skillStream {
+		fmt.Println()
+		return streamExecution(c, resp.ExecutionID, "")
+	}
+
+	// Poll for completion
+	return pollExecution(c, resp.ExecutionID, time.Duration(skillTimeout)*time.Second)
+}
+
+// ── Load ────────────────────────────────────────────────────────────────────
+
+func runSkillLoad(cmd *cobra.Command, args []string) error {
+	skillPath := args[0]
+
+	if skillModel == "" {
+		return fmt.Errorf("--model is required for skill load")
+	}
+
+	payload, skillName, err := buildSkillPayload(skillPath)
+	if err != nil {
+		return err
+	}
+
+	bold := color.New(color.Bold)
+	bold.Printf("Loading skill: %s\n", skillName)
+
+	cfg := getConfig()
+	c := newClient(cfg)
+
+	agentConfig := map[string]interface{}{
+		"framework": "skill",
+		"rawConfig": payload["config"],
+	}
+
+	result, err := c.Compile(agentConfig)
+	if err != nil {
+		return fmt.Errorf("failed to load skill: %w", err)
+	}
+
+	color.Green("Skill %s loaded successfully.", skillName)
+	printJSON(result)
+	return nil
+}
+
+// ── Serve ───────────────────────────────────────────────────────────────────
+
+func runSkillServe(cmd *cobra.Command, args []string) error {
+	skillPath := args[0]
+
+	absPath, err := filepath.Abs(skillPath)
+	if err != nil {
+		return fmt.Errorf("resolve path: %w", err)
+	}
+
+	// Verify it's a valid skill directory
+	if _, err := os.Stat(filepath.Join(absPath, "SKILL.md")); os.IsNotExist(err) {
+		return fmt.Errorf("directory %q is not a valid skill: SKILL.md not found", absPath)
+	}
+
+	fmt.Println("Workers for skill scripts must be started via the SDK:")
+	fmt.Printf("  from agentspan.agents import skill; rt.serve(skill('%s'))\n", absPath)
+	return nil
+}
+
+// ── Poll ────────────────────────────────────────────────────────────────────
+
+func pollExecution(c *client.Client, executionID string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	interval := 2 * time.Second
+
+	for {
+		if time.Now().After(deadline) {
+			return fmt.Errorf("execution %s timed out after %v", executionID, timeout)
+		}
+
+		status, err := c.Status(executionID)
+		if err != nil {
+			return fmt.Errorf("failed to get status: %w", err)
+		}
+
+		statusStr, _ := status["status"].(string)
+		switch statusStr {
+		case "COMPLETED":
+			color.Green("Execution %s completed.", executionID)
+			if output, ok := status["output"]; ok {
+				fmt.Println()
+				printJSON(output)
+			}
+			return nil
+		case "FAILED", "TERMINATED", "TIMED_OUT":
+			color.Red("Execution %s %s.", executionID, strings.ToLower(statusStr))
+			if output, ok := status["output"]; ok {
+				printJSON(output)
+			}
+			return fmt.Errorf("execution %s", strings.ToLower(statusStr))
+		case "PAUSED":
+			color.Yellow("Execution %s is paused (waiting for input).", executionID)
+			fmt.Println("Respond with: agentspan agent respond", executionID, "--approve")
+			return nil
+		default:
+			// RUNNING or other transient state — keep polling
+			time.Sleep(interval)
+		}
+	}
+}
+
+// ── Skill Directory Reading ─────────────────────────────────────────────────
+
+// buildSkillPayload reads a skill directory and returns the packaged JSON
+// payload and the skill name. The payload matches the raw config format:
+//
+//	{"config": {...}, "prompt": "..."}
+func buildSkillPayload(skillPath string) (map[string]interface{}, string, error) {
+	absPath, err := filepath.Abs(skillPath)
+	if err != nil {
+		return nil, "", fmt.Errorf("resolve path: %w", err)
+	}
+
+	// 1. Read and parse SKILL.md
+	skillMdContent, err := os.ReadFile(filepath.Join(absPath, "SKILL.md"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, "", fmt.Errorf("directory %q is not a valid skill: SKILL.md not found", absPath)
+		}
+		return nil, "", fmt.Errorf("read SKILL.md: %w", err)
+	}
+
+	frontmatter, err := parseFrontmatter(string(skillMdContent))
+	if err != nil {
+		return nil, "", fmt.Errorf("parse SKILL.md frontmatter: %w", err)
+	}
+
+	skillName, _ := frontmatter["name"].(string)
+	if skillName == "" {
+		return nil, "", fmt.Errorf("SKILL.md missing required 'name' field in frontmatter")
+	}
+
+	// 2. Discover *-agent.md files
+	agentFiles, err := discoverAgentFiles(absPath)
+	if err != nil {
+		return nil, "", fmt.Errorf("discover agent files: %w", err)
+	}
+
+	// 3. Discover scripts
+	scripts, err := discoverScripts(absPath)
+	if err != nil {
+		return nil, "", fmt.Errorf("discover scripts: %w", err)
+	}
+
+	// 4. Collect resource files
+	resourceFiles, err := collectResourceFiles(absPath)
+	if err != nil {
+		return nil, "", fmt.Errorf("collect resource files: %w", err)
+	}
+
+	// 5. Parse agent model overrides
+	agentModels, err := parseAgentModelFlags(skillAgentModels)
+	if err != nil {
+		return nil, "", err
+	}
+
+	// 6. Build config
+	config := map[string]interface{}{
+		"model":          skillModel,
+		"agentModels":    agentModels,
+		"skillMd":        string(skillMdContent),
+		"agentFiles":     agentFiles,
+		"scripts":        scripts,
+		"resourceFiles":  resourceFiles,
+		"crossSkillRefs": map[string]interface{}{},
+	}
+
+	payload := map[string]interface{}{
+		"config": config,
+	}
+
+	return payload, skillName, nil
+}
+
+// parseFrontmatter extracts YAML frontmatter from a SKILL.md string.
+// Returns the parsed frontmatter fields as a map. The frontmatter is
+// delimited by "---" on its own line.
+func parseFrontmatter(content string) (map[string]interface{}, error) {
+	content = strings.TrimSpace(content)
+	if !strings.HasPrefix(content, "---") {
+		return nil, fmt.Errorf("SKILL.md does not start with YAML frontmatter (---)")
+	}
+
+	// Find the closing ---
+	rest := content[3:] // skip opening ---
+	rest = strings.TrimPrefix(rest, "\n")
+	endIdx := strings.Index(rest, "\n---")
+	if endIdx < 0 {
+		return nil, fmt.Errorf("SKILL.md frontmatter not closed (missing second ---)")
+	}
+
+	yamlStr := rest[:endIdx]
+
+	var result map[string]interface{}
+	if err := yaml.Unmarshal([]byte(yamlStr), &result); err != nil {
+		return nil, fmt.Errorf("invalid YAML in frontmatter: %w", err)
+	}
+
+	if result == nil {
+		result = make(map[string]interface{})
+	}
+
+	return result, nil
+}
+
+// extractBody returns the markdown body after the frontmatter.
+func extractBody(content string) string {
+	content = strings.TrimSpace(content)
+	if !strings.HasPrefix(content, "---") {
+		return content
+	}
+
+	rest := content[3:]
+	rest = strings.TrimPrefix(rest, "\n")
+	endIdx := strings.Index(rest, "\n---")
+	if endIdx < 0 {
+		return content
+	}
+
+	body := rest[endIdx+4:] // skip \n---
+	return strings.TrimPrefix(body, "\n")
+}
+
+// discoverAgentFiles globs *-agent.md files in the skill directory and
+// returns a map of agent name -> file contents.
+func discoverAgentFiles(skillDir string) (map[string]string, error) {
+	result := make(map[string]string)
+
+	pattern := filepath.Join(skillDir, "*-agent.md")
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return nil, fmt.Errorf("glob agent files: %w", err)
+	}
+
+	for _, match := range matches {
+		base := filepath.Base(match)
+		agentName := strings.TrimSuffix(base, "-agent.md")
+
+		content, err := os.ReadFile(match)
+		if err != nil {
+			return nil, fmt.Errorf("read %s: %w", base, err)
+		}
+
+		result[agentName] = string(content)
+	}
+
+	return result, nil
+}
+
+// scriptInfo holds metadata about a discovered script file.
+type scriptInfo struct {
+	Filename string `json:"filename"`
+	Language string `json:"language"`
+}
+
+// discoverScripts lists executable files in the scripts/ directory and
+// returns a map of tool name -> script info.
+func discoverScripts(skillDir string) (map[string]scriptInfo, error) {
+	result := make(map[string]scriptInfo)
+
+	scriptsDir := filepath.Join(skillDir, "scripts")
+	entries, err := os.ReadDir(scriptsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return result, nil // scripts/ is optional
+		}
+		return nil, fmt.Errorf("read scripts directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		filename := entry.Name()
+		ext := filepath.Ext(filename)
+		toolName := strings.TrimSuffix(filename, ext)
+		if toolName == "" {
+			toolName = filename // no extension
+		}
+
+		result[toolName] = scriptInfo{
+			Filename: filename,
+			Language: detectScriptLanguage(filename),
+		}
+	}
+
+	return result, nil
+}
+
+// detectScriptLanguage maps a filename to its script language based on
+// the file extension. No extension defaults to "bash".
+func detectScriptLanguage(filename string) string {
+	ext := strings.ToLower(filepath.Ext(filename))
+	switch ext {
+	case ".py":
+		return "python"
+	case ".sh":
+		return "bash"
+	case ".js", ".mjs":
+		return "node"
+	case ".ts":
+		return "node"
+	case ".rb":
+		return "ruby"
+	case ".go":
+		return "go"
+	default:
+		return "bash"
+	}
+}
+
+// collectResourceFiles lists files in references/, examples/, assets/,
+// and other root files (excluding SKILL.md and *-agent.md) as relative paths.
+func collectResourceFiles(skillDir string) ([]string, error) {
+	var result []string
+
+	// Scan resource subdirectories
+	for _, subdir := range []string{"references", "examples", "assets"} {
+		dir := filepath.Join(skillDir, subdir)
+		if _, err := os.Stat(dir); os.IsNotExist(err) {
+			continue
+		}
+		err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				return nil
+			}
+			rel, err := filepath.Rel(skillDir, path)
+			if err != nil {
+				return err
+			}
+			result = append(result, rel)
+			return nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("walk %s: %w", subdir, err)
+		}
+	}
+
+	// Collect other root files (excluding SKILL.md, *-agent.md, and scripts/)
+	entries, err := os.ReadDir(skillDir)
+	if err != nil {
+		return nil, fmt.Errorf("read skill directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if name == "SKILL.md" {
+			continue
+		}
+		if strings.HasSuffix(name, "-agent.md") {
+			continue
+		}
+		result = append(result, name)
+	}
+
+	return result, nil
+}
+
+// parseAgentModelFlags parses --agent-model flags in "name=model" format
+// into a map.
+func parseAgentModelFlags(flags []string) (map[string]string, error) {
+	result := make(map[string]string)
+	for _, flag := range flags {
+		parts := strings.SplitN(flag, "=", 2)
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			return nil, fmt.Errorf("invalid --agent-model value %q: expected name=model", flag)
+		}
+		result[parts[0]] = parts[1]
+	}
+	return result, nil
+}
