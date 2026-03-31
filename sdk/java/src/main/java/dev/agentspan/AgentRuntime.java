@@ -254,9 +254,12 @@ public class AgentRuntime implements AutoCloseable {
                     for (CallbackHandler handler : activeHandlers) {
                         try {
                             java.lang.reflect.Method m = handler.getClass().getMethod(mName, Map.class);
+                            m.setAccessible(true); // allow invocation on package-private inner classes
                             Map<String, Object> result = (Map<String, Object>) m.invoke(handler, inputData);
                             if (result != null && !result.isEmpty()) return result;
-                        } catch (Exception ignored) {}
+                        } catch (Exception e) {
+                            logger.warn("CallbackHandler {} failed for {}: {}", mName, taskName, e.getMessage());
+                        }
                     }
                     return java.util.Collections.emptyMap();
                 });
