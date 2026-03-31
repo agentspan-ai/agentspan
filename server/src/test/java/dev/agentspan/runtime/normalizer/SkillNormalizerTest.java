@@ -93,6 +93,50 @@ class SkillNormalizerTest {
         assertEquals("agent_tool", gilfoyle.getToolType());
     }
 
+    @SuppressWarnings("unchecked")
+    @Test
+    void dgSkillSubAgentToolHasInputSchemaWithRequestField() throws Exception {
+        AgentConfig config = normalizer.normalize(loadFixture("dg-skill"));
+        ToolConfig gilfoyle = config.getTools().stream()
+                .filter(t -> t.getName().contains("gilfoyle"))
+                .findFirst()
+                .orElseThrow();
+
+        Map<String, Object> schema = gilfoyle.getInputSchema();
+        assertNotNull(schema, "agent_tool should have an inputSchema");
+        assertEquals("object", schema.get("type"));
+
+        Map<String, Object> props = (Map<String, Object>) schema.get("properties");
+        assertNotNull(props, "inputSchema should have properties");
+        assertTrue(props.containsKey("request"), "inputSchema properties should include 'request'");
+
+        Map<String, Object> requestProp = (Map<String, Object>) props.get("request");
+        assertEquals("string", requestProp.get("type"));
+
+        List<String> required = (List<String>) schema.get("required");
+        assertNotNull(required, "inputSchema should have required list");
+        assertTrue(required.contains("request"), "request should be required");
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void dgSkillAllSubAgentToolsHaveInputSchema() throws Exception {
+        AgentConfig config = normalizer.normalize(loadFixture("dg-skill"));
+        List<ToolConfig> agentTools = config.getTools().stream()
+                .filter(t -> "agent_tool".equals(t.getToolType()))
+                .toList();
+
+        assertFalse(agentTools.isEmpty(), "Should have agent_tool entries");
+        for (ToolConfig tool : agentTools) {
+            Map<String, Object> schema = tool.getInputSchema();
+            assertNotNull(schema, "agent_tool '" + tool.getName() + "' should have inputSchema");
+            Map<String, Object> props = (Map<String, Object>) schema.get("properties");
+            assertNotNull(props, "agent_tool '" + tool.getName() + "' inputSchema should have properties");
+            assertTrue(props.containsKey("request"),
+                    "agent_tool '" + tool.getName() + "' should have 'request' in properties");
+        }
+    }
+
     @Test
     void dgSkillSubAgentHasInstructions() throws Exception {
         AgentConfig config = normalizer.normalize(loadFixture("dg-skill"));
@@ -286,6 +330,46 @@ class SkillNormalizerTest {
         String instructions = (String) config.getInstructions();
         assertFalse(instructions.contains("Available sections"),
                 "Small conductor-skill fixture should NOT be split");
+    }
+
+    // --- Cross-skill reference tests ---
+
+    @Test
+    void crossSkillRefCreatesAgentTool() throws Exception {
+        AgentConfig config = normalizer.normalize(loadFixture("crossref-skill"));
+        List<ToolConfig> tools = config.getTools();
+        assertNotNull(tools);
+
+        ToolConfig refTool = tools.stream()
+                .filter(t -> "writing-plans".equals(t.getName()))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("agent_tool", refTool.getToolType());
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void crossSkillRefToolHasInputSchemaWithRequestField() throws Exception {
+        AgentConfig config = normalizer.normalize(loadFixture("crossref-skill"));
+        ToolConfig refTool = config.getTools().stream()
+                .filter(t -> "writing-plans".equals(t.getName()))
+                .findFirst()
+                .orElseThrow();
+
+        Map<String, Object> schema = refTool.getInputSchema();
+        assertNotNull(schema, "cross-skill agent_tool should have an inputSchema");
+        assertEquals("object", schema.get("type"));
+
+        Map<String, Object> props = (Map<String, Object>) schema.get("properties");
+        assertNotNull(props, "inputSchema should have properties");
+        assertTrue(props.containsKey("request"), "inputSchema properties should include 'request'");
+
+        Map<String, Object> requestProp = (Map<String, Object>) props.get("request");
+        assertEquals("string", requestProp.get("type"));
+
+        List<String> required = (List<String>) schema.get("required");
+        assertNotNull(required, "inputSchema should have required list");
+        assertTrue(required.contains("request"), "request should be required");
     }
 
     @Test

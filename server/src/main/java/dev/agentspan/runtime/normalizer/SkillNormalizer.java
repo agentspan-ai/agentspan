@@ -109,9 +109,26 @@ public class SkillNormalizer implements AgentConfigNormalizer {
             Map<String, Object> toolConfig = new LinkedHashMap<>();
             toolConfig.put("agentConfig", subAgent);
 
+            // inputSchema must include "request" property so the LLM sends its
+            // message under that key — the enrichToolsScript reads
+            // tc.inputParameters.request to populate the sub-workflow prompt.
+            Map<String, Object> agentInputSchema = new LinkedHashMap<>();
+            agentInputSchema.put("type", "object");
+            agentInputSchema.put(
+                    "properties",
+                    Map.of(
+                            "request",
+                            Map.of(
+                                    "type",
+                                    "string",
+                                    "description",
+                                    "The request or question to send to the " + agentName + " agent")));
+            agentInputSchema.put("required", List.of("request"));
+
             tools.add(ToolConfig.builder()
                     .name(namespacedName)
                     .description("Invoke the " + agentName + " agent")
+                    .inputSchema(agentInputSchema)
                     .toolType("agent_tool")
                     .config(toolConfig)
                     .build());
@@ -201,9 +218,26 @@ public class SkillNormalizer implements AgentConfigNormalizer {
                 Map<String, Object> refToolConfig = new LinkedHashMap<>();
                 refToolConfig.put("agentConfig", refAgent);
 
+                // inputSchema must include "request" property — same as sub-agent
+                // tools — so the enrichToolsScript can extract the prompt.
+                Map<String, Object> refInputSchema = new LinkedHashMap<>();
+                refInputSchema.put("type", "object");
+                refInputSchema.put(
+                        "properties",
+                        Map.of(
+                                "request",
+                                Map.of(
+                                        "type",
+                                        "string",
+                                        "description",
+                                        "The request or question to send to the "
+                                                + refAgent.getName() + " agent")));
+                refInputSchema.put("required", List.of("request"));
+
                 tools.add(ToolConfig.builder()
                         .name(refAgent.getName())
                         .description(refAgent.getDescription())
+                        .inputSchema(refInputSchema)
                         .toolType("agent_tool")
                         .config(refToolConfig)
                         .build());
