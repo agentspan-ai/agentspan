@@ -7,6 +7,7 @@ FROM --platform=$BUILDPLATFORM node:22-alpine AS ui-builder
 
 WORKDIR /ui
 RUN corepack enable && corepack prepare pnpm@latest --activate
+ENV NODE_OPTIONS=--max-old-space-size=4096
 
 # Layer-cache dependencies separately from source
 COPY ui/package.json ui/pnpm-lock.yaml ./

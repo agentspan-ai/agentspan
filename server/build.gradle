@@ -13,6 +13,10 @@ def buildUiEnabled = buildUiProperty != null && (
     buildUiProperty.toString().trim().isEmpty() ||
     buildUiProperty.toString().toBoolean()
 )
+def nodeOptionsWithMoreHeap = {
+    def current = System.getenv('NODE_OPTIONS')
+    current ? "${current} --max-old-space-size=4096" : '--max-old-space-size=4096'
+}
 def shellCommand = { String command ->
     org.gradle.internal.os.OperatingSystem.current().isWindows()
         ? ['cmd', '/c', command]
@@ -224,6 +228,7 @@ tasks.register('buildUi', Exec) {
     workingDir uiDir
     commandLine shellCommand(pnpmCommand('build'))
     environment 'CI', 'true'
+    environment 'NODE_OPTIONS', nodeOptionsWithMoreHeap()
     inputs.files(
         file("${uiDir}/package.json"),
         file("${uiDir}/pnpm-lock.yaml"),
