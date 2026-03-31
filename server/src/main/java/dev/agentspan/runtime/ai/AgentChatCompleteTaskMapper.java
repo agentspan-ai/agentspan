@@ -328,7 +328,21 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
                             resultObj = ((Map<?, ?>) resultObj).get("response");
                         }
                     }
-                    var msg = new ChatMessage(role, String.valueOf(resultObj));
+                    String text = String.valueOf(resultObj);
+
+                    // When a prior LLM turn hit MAX_TOKENS, its partial text would
+                    // become an assistant message. Claude rejects conversations ending
+                    // with assistant messages ("assistant message prefill"). Convert
+                    // the partial assistant text to a user continuation message instead.
+                    String finishReason = response.getFinishReason();
+                    boolean hitTokenLimit = "MAX_TOKENS".equals(finishReason)
+                            || "LENGTH".equals(finishReason);
+                    ChatMessage.Role msgRole = hitTokenLimit ? ChatMessage.Role.user : role;
+                    String msgText = hitTokenLimit && text != null && !text.isBlank()
+                            ? "You were saying:\n\n" + text + "\n\nPlease continue where you left off."
+                            : text;
+
+                    var msg = new ChatMessage(msgRole, msgText);
                     if (response.getMedia() != null) {
                         msg.setMedia(response.getMedia().stream()
                                 .map(Media::getLocation)
