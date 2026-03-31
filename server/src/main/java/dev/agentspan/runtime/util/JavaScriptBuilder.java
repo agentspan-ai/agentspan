@@ -1102,4 +1102,266 @@ public class JavaScriptBuilder {
         sb.append("})()");
         return sb.toString();
     }
+
+    /**
+     * Pre-LLM signal intake script (Section 4.1 of agent-signals-design.md).
+     * Reads _pending_signals, moves them to processing (evaluate) or processed (auto_accept),
+     * and builds _signal_injection payloads for the task mapper.
+     */
+    public static String signalIntakeScript(String signalMode) {
+        // Return the IIFE from design doc Section 4.1.
+        // The script reads $.pending, $.processing, $.processed, $.signalMode, $.signalCounts
+        // and returns {noop, newPending, newProcessing, newProcessed, newSignalCounts,
+        //              injectionMessages, injectionTools, newDispositions}
+        return """
+(function() {
+    var pending = $.pending || [];
+    var processing = $.processing || [];
+    var processed = $.processed || [];
+    var signalMode = $.signalMode || 'evaluate';
+    var signalCounts = $.signalCounts || {lifetime: 0, pending: 0};
+
+    if (pending.length === 0) {
+        return {
+            noop: true,
+            newPending: pending,
+            newProcessing: processing,
+            newProcessed: processed,
+            newSignalCounts: signalCounts,
+            injectionMessages: [],
+            injectionTools: [],
+            newDispositions: []
+        };
+    }
+
+    var messages = [];
+    var tools = [];
+
+    if (signalMode === 'auto_accept') {
+        for (var i = 0; i < pending.length; i++) {
+            var sig = pending[i];
+            messages.push({
+                role: 'user',
+                message: '[SIGNAL_START id=' + sig.signalId + ']\\n' +
+                         '[Signal from ' + (sig.sender || 'unknown') + ']: ' + sig.message + '\\n' +
+                         '[SIGNAL_END]'
+            });
+            sig.disposition = 'accepted';
+            sig.processedAt = Date.now();
+            sig.deliveredAt = Date.now();
+            processed.push(sig);
+        }
+        var events = [];
+        for (var j = 0; j < pending.length; j++) {
+            events.push({type: 'signal_accepted', signalId: pending[j].signalId, sender: pending[j].sender});
+        }
+        signalCounts.pending = 0;
+        return {
+            noop: false,
+            newPending: [],
+            newProcessing: processing,
+            newProcessed: processed,
+            newSignalCounts: signalCounts,
+            injectionMessages: messages,
+            injectionTools: [],
+            newDispositions: events
+        };
+    }
+
+    // Evaluate mode
+    for (var i = 0; i < pending.length; i++) {
+        var sig = pending[i];
+        sig.deliveredAt = Date.now();
+        messages.push({
+            role: 'user',
+            message: '[SIGNAL_START id=' + sig.signalId + ']\\n' +
+                     '[Signal from ' + (sig.sender || 'unknown') + ']: ' + sig.message + '\\n' +
+                     '[SIGNAL_END]\\n\\n' +
+                     'Use accept_signal("' + sig.signalId + '") if relevant to your task, ' +
+                     'or reject_signal("' + sig.signalId + '", "reason") if not.'
+        });
+        processing.push(sig);
+    }
+    tools = [
+        {name: 'accept_signal',
+         description: 'Accept a signal as relevant to your current task',
+         inputSchema: {type: 'object', properties: {signal_id: {type: 'string'}}, required: ['signal_id']}},
+        {name: 'reject_signal',
+         description: 'Reject a signal as irrelevant',
+         inputSchema: {type: 'object', properties: {signal_id: {type: 'string'}, reason: {type: 'string'}}, required: ['signal_id', 'reason']}},
+        {name: 'accept_all_signals',
+         description: 'Accept all pending signals at once',
+         inputSchema: {type: 'object', properties: {}}}
+    ];
+    signalCounts.pending = 0;
+    return {
+        noop: false,
+        newPending: [],
+        newProcessing: processing,
+        newProcessed: processed,
+        newSignalCounts: signalCounts,
+        injectionMessages: messages,
+        injectionTools: tools,
+        newDispositions: []
+    };
+})()""";
+    }
+
+    /**
+     * Disposition INLINE script for accept_signal, reject_signal, or accept_all_signals
+     * (Section 5.2 of agent-signals-design.md).
+     */
+    public static String signalDispositionScript(String action) {
+        return switch (action) {
+            case "accept_signal" -> """
+(function() {
+    var processing = $.processing || [];
+    var processed = $.already_processed || [];
+    var signalId = $.signal_id;
+    for (var i = 0; i < processed.length; i++) {
+        if (processed[i].signalId === signalId) {
+            return {status: 'already_' + processed[i].disposition, disposition: processed[i].disposition};
+        }
+    }
+    var found = -1;
+    for (var i = 0; i < processing.length; i++) {
+        if (processing[i].signalId === signalId) { found = i; break; }
+    }
+    if (found < 0) return {error: 'invalid_signal_id', message: 'Signal ' + signalId + ' not found'};
+    var signal = processing.splice(found, 1)[0];
+    signal.disposition = 'accepted';
+    signal.processedAt = Date.now();
+    processed.push(signal);
+    return {
+        status: 'accepted', signalId: signalId,
+        _signal_event: 'signal_accepted',
+        updatedProcessing: processing,
+        updatedProcessed: processed
+    };
+})()""";
+            case "reject_signal" -> """
+(function() {
+    var processing = $.processing || [];
+    var processed = $.already_processed || [];
+    var signalData = $.signal_data || {};
+    var signalId = $.signal_id;
+    var reason = $.reason || '';
+    for (var i = 0; i < processed.length; i++) {
+        if (processed[i].signalId === signalId) {
+            return {status: 'already_' + processed[i].disposition, disposition: processed[i].disposition};
+        }
+    }
+    var found = -1;
+    for (var i = 0; i < processing.length; i++) {
+        if (processing[i].signalId === signalId) { found = i; break; }
+    }
+    if (found < 0) return {error: 'invalid_signal_id', message: 'Signal ' + signalId + ' not found'};
+    var signal = processing.splice(found, 1)[0];
+    signal.disposition = 'rejected';
+    signal.rejectionReason = reason;
+    signal.processedAt = Date.now();
+    processed.push(signal);
+    delete signalData[signalId];
+    return {
+        status: 'rejected', signalId: signalId, reason: reason,
+        _signal_event: 'signal_rejected',
+        updatedProcessing: processing,
+        updatedProcessed: processed,
+        updatedSignalData: signalData
+    };
+})()""";
+            case "accept_all_signals" -> """
+(function() {
+    var processing = $.processing || [];
+    var processed = $.already_processed || [];
+    if (processing.length === 0) return {status: 'none_pending', count: 0};
+    var events = [];
+    for (var i = 0; i < processing.length; i++) {
+        processing[i].disposition = 'accepted';
+        processing[i].processedAt = Date.now();
+        events.push({type: 'signal_accepted', signalId: processing[i].signalId, sender: processing[i].sender});
+        processed.push(processing[i]);
+    }
+    return {
+        status: 'accepted', count: events.length,
+        _signal_events: events,
+        updatedProcessing: [],
+        updatedProcessed: processed
+    };
+})()""";
+            default -> throw new IllegalArgumentException("Unknown signal action: " + action);
+        };
+    }
+
+    /**
+     * Implicit acceptance script — runs at end of each iteration to disposition
+     * any signals the LLM didn't explicitly accept/reject (Section 5.3).
+     */
+    public static String implicitAcceptScript() {
+        return """
+(function() {
+    var processing = $.processing || [];
+    var processed = $.already_processed || [];
+    if (processing.length === 0) return {noop: true, processing: processing, processed: processed, newDispositions: []};
+    var events = [];
+    for (var i = 0; i < processing.length; i++) {
+        processing[i].disposition = 'accepted_implicit';
+        processing[i].processedAt = Date.now();
+        events.push({type: 'signal_accepted', signalId: processing[i].signalId, sender: processing[i].sender, implicit: true});
+        processed.push(processing[i]);
+    }
+    return {
+        processing: [],
+        processed: processed,
+        newDispositions: events
+    };
+})()""";
+    }
+
+    /**
+     * Post-JOIN signal state merge script (Section 5.2.1).
+     * Scans all forked task outputs for signal disposition results and merges them.
+     */
+    public static String signalStateMergeScript() {
+        return """
+(function() {
+    var joinOutput = $.joinOutput || {};
+    var processing = $.currentProcessing || [];
+    var processed = $.currentProcessed || [];
+    var signalData = $.currentSignalData || {};
+    var newDispositions = [];
+
+    for (var key in joinOutput) {
+        var taskOut = joinOutput[key];
+        var result = taskOut && taskOut.result ? taskOut.result : taskOut;
+        if (!result) continue;
+
+        // accept/reject_signal output
+        if (result.updatedProcessing !== undefined && result.updatedProcessed !== undefined) {
+            processing = result.updatedProcessing;
+            processed = result.updatedProcessed;
+            if (result.updatedSignalData !== undefined) signalData = result.updatedSignalData;
+            if (result._signal_event) {
+                newDispositions.push({type: result._signal_event, signalId: result.signalId,
+                                      reason: result.reason || null});
+            }
+        }
+        // accept_all_signals output
+        if (result._signal_events && Array.isArray(result._signal_events)) {
+            processing = result.updatedProcessing || [];
+            processed = result.updatedProcessed || processed;
+            for (var i = 0; i < result._signal_events.length; i++) {
+                newDispositions.push(result._signal_events[i]);
+            }
+        }
+    }
+
+    return {
+        processing: processing,
+        processed: processed,
+        signalData: signalData,
+        newDispositions: newDispositions
+    };
+})()""";
+    }
 }
