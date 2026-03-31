@@ -69,9 +69,11 @@ public class Example13HierarchicalAgents {
             .instructions(
                 "You are the engineering lead. Route technical questions to the right specialist: "
                 + "backend_dev for APIs/databases/servers, "
-                + "frontend_dev for UI/UX/client-side.")
+                + "frontend_dev for UI/UX/client-side. "
+                + "Hand off immediately — do not answer yourself.")
             .agents(backendDev, frontendDev)
             .strategy(Strategy.HANDOFF)
+            .maxTurns(5)
             .build();
 
         Agent marketingLead = Agent.builder()
@@ -80,9 +82,11 @@ public class Example13HierarchicalAgents {
             .instructions(
                 "You are the marketing lead. Route marketing questions to the right specialist: "
                 + "content_writer for blog posts/copy, "
-                + "seo_specialist for SEO/keywords/rankings.")
+                + "seo_specialist for SEO/keywords/rankings. "
+                + "Hand off immediately — do not answer yourself.")
             .agents(contentWriter, seoSpecialist)
             .strategy(Strategy.HANDOFF)
+            .maxTurns(5)
             .build();
 
         // ── Level 1: CEO orchestrator ────────────────────────────────────
@@ -93,9 +97,12 @@ public class Example13HierarchicalAgents {
             .instructions(
                 "You are the CEO. Route requests to the right department: "
                 + "engineering_lead for technical/development questions, "
-                + "marketing_lead for marketing/content/SEO questions.")
+                + "marketing_lead for marketing/content/SEO questions. "
+                + "Hand off immediately — do not answer yourself.")
             .agents(engineeringLead, marketingLead)
             .strategy(Strategy.HANDOFF)
+            .maxTurns(5)
+            .timeoutSeconds(600)
             .build();
 
         // Run: technical question → CEO → Engineering Lead → Backend Dev
