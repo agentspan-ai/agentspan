@@ -3209,6 +3209,27 @@ class AgentRuntime:
         if event_type is None:
             return None
 
+        # Signal events carry structured data in the ``data`` field.
+        signal_data: Optional[Dict[str, Any]] = None
+        if event_type == "signal_received":
+            signal_data = {
+                "signalId": data.get("signalId"),
+                "message": data.get("content"),
+                "sender": data.get("sender"),
+                "priority": data.get("priority"),
+            }
+        elif event_type == "signal_accepted":
+            signal_data = {
+                "signalId": data.get("signalId"),
+                "sender": data.get("sender"),
+            }
+        elif event_type == "signal_rejected":
+            signal_data = {
+                "signalId": data.get("signalId"),
+                "sender": data.get("sender"),
+                "rejectionReason": data.get("rejectionReason"),
+            }
+
         return AgentEvent(
             type=event_type,
             content=data.get("content"),
@@ -3219,6 +3240,7 @@ class AgentRuntime:
             output=data.get("output"),
             execution_id=data.get("executionId", execution_id),
             guardrail_name=data.get("guardrailName"),
+            data=signal_data,
         )
 
     # ── Fire-and-forget execution ───────────────────────────────────
@@ -4365,6 +4387,136 @@ class AgentRuntime:
             lambda: self._workflow_client.terminate_workflow(
                 execution_id=execution_id,
                 reason=reason,
+            ),
+        )
+
+    # ── Signal methods ───────────────────────────────────────────────
+
+    def signal(
+        self,
+        *,
+        execution_id: Optional[str] = None,
+        agent_name: Optional[str] = None,
+        message: str,
+        priority: str = "normal",
+        data: Optional[Dict[str, Any]] = None,
+        sender: Optional[str] = None,
+        propagate: bool = True,
+        correlation_id: Optional[str] = None,
+    ) -> "SignalReceipt":
+        """Send a signal to a running agent execution.
+
+        Args:
+            execution_id: Target execution ID (UUID). Use this or agent_name.
+            agent_name: Target agent name — signals all matching RUNNING executions.
+            message: Natural language message (max 4096 chars).
+            priority: "normal" (default) or "urgent".
+            data: Optional structured payload dict.
+            sender: Optional attribution string (e.g. your agent name).
+            propagate: Whether to propagate to active sub-workflows (default True).
+            correlation_id: Optional correlation ID for filtering by agent_name.
+
+        Returns:
+            :class:`SignalReceipt` confirming the signal was queued.
+        """
+        import requests as req_lib
+
+        from agentspan.agents.signal import SignalReceipt
+
+        payload: Dict[str, Any] = {
+            "message": message,
+            "priority": priority,
+            "propagate": propagate,
+        }
+        if data is not None:
+            payload["data"] = data
+        if sender is not None:
+            payload["sender"] = sender
+
+        if execution_id is not None:
+            url = self._agent_api_url(f"/{execution_id}/signal")
+        elif agent_name is not None:
+            params = f"?agentName={agent_name}"
+            if correlation_id:
+                params += f"&correlationId={correlation_id}"
+            url = self._agent_api_url(f"/signal{params}")
+        else:
+            raise ValueError("Either execution_id or agent_name must be provided")
+
+        resp = req_lib.post(url, json=payload, headers=self._agent_api_headers(), timeout=30)
+        try:
+            resp.raise_for_status()
+        except req_lib.exceptions.HTTPError as exc:
+            _raise_api_error(exc, url=url)
+        resp_data = resp.json()
+        return SignalReceipt(
+            signal_id=resp_data["signalId"],
+            execution_id=resp_data.get("executionId", execution_id or ""),
+            status=resp_data.get("status", "queued"),
+        )
+
+    def broadcast(
+        self,
+        *,
+        execution_ids: List[str],
+        message: str,
+        priority: str = "normal",
+        **kwargs: Any,
+    ) -> "List[SignalReceipt]":
+        """Send the same signal to multiple executions.
+
+        Returns a list of :class:`SignalReceipt` objects (one per execution).
+        """
+        return [
+            self.signal(execution_id=wf_id, message=message, priority=priority, **kwargs)
+            for wf_id in execution_ids
+        ]
+
+    def get_signal_status(self, signal_id: str) -> "SignalStatus":
+        """Poll for signal disposition.
+
+        Args:
+            signal_id: The signal ID from :class:`SignalReceipt`.
+
+        Returns:
+            :class:`SignalStatus` reflecting current disposition.
+        """
+        import requests as req_lib
+
+        from agentspan.agents.signal import SignalStatus
+
+        url = self._agent_api_url(f"/signal/{signal_id}/status")
+        resp = req_lib.get(url, headers=self._agent_api_headers(content_type=""), timeout=30)
+        try:
+            resp.raise_for_status()
+        except req_lib.exceptions.HTTPError as exc:
+            _raise_api_error(exc, url=url)
+        resp_data = resp.json()
+        return SignalStatus(
+            signal_id=resp_data["signalId"],
+            execution_id=resp_data["executionId"],
+            delivered=resp_data.get("delivered", False),
+            disposition=resp_data.get("disposition", "pending"),
+            rejection_reason=resp_data.get("rejectionReason"),
+        )
+
+    async def signal_async(
+        self,
+        *,
+        execution_id: Optional[str] = None,
+        agent_name: Optional[str] = None,
+        message: str,
+        **kwargs: Any,
+    ) -> "SignalReceipt":
+        """Async version of :meth:`signal`."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None,
+            lambda: self.signal(
+                execution_id=execution_id,
+                agent_name=agent_name,
+                message=message,
+                **kwargs,
             ),
         )
 

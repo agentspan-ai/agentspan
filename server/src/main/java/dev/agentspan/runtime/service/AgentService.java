@@ -9,6 +9,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.*;
 import java.util.Optional;
+import java.util.NoSuchElementException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -32,6 +34,8 @@ import com.netflix.conductor.common.run.WorkflowSummary;
 import com.netflix.conductor.core.execution.StartWorkflowInput;
 import com.netflix.conductor.core.execution.WorkflowExecutor;
 import com.netflix.conductor.dao.MetadataDAO;
+import com.netflix.conductor.model.TaskModel;
+import com.netflix.conductor.model.WorkflowModel;
 import com.netflix.conductor.service.ExecutionService;
 import com.netflix.conductor.service.WorkflowService;
 
@@ -64,6 +68,9 @@ public class AgentService {
 
     @Autowired(required = false)
     private ExecutionTokenService executionTokenService;
+
+    // Per-workflow lock for serializing concurrent signal writes (Section 17.2 of design doc)
+    private final ConcurrentHashMap<String, Object> signalLocks = new ConcurrentHashMap<>();
 
     /** Package-private constructor for testing with ExecutionTokenService */
     AgentService(
@@ -1179,5 +1186,144 @@ public class AgentService {
 
     public List<TaskExecLog> getTaskLogs(String taskId) {
         return executionService.getTaskLogs(taskId);
+    }
+
+    // ── Signal support ───────────────────────────────────────────────
+
+    /**
+     * Send a signal to a running workflow. Stores the signal in _pending_signals
+     * via updateVariables. For urgent signals, sets _urgent_pause_requested flag.
+     *
+     * @throws IllegalArgumentException if the workflow is not in RUNNING/PAUSED state
+     * @throws IllegalStateException if signal limits are exceeded (100 lifetime, 10 pending)
+     */
+    @SuppressWarnings("unchecked")
+    public SignalReceipt signal(String executionId, SignalRequest request) {
+        Objects.requireNonNull(request.getMessage(), "Signal message is required");
+        if (request.getMessage().length() > 4096) {
+            throw new IllegalArgumentException("Signal message exceeds 4096 characters");
+        }
+
+        WorkflowModel workflow = workflowExecutor.getWorkflow(executionId, false);
+        if (workflow == null) {
+            throw new NoSuchElementException("Workflow not found: " + executionId);
+        }
+        WorkflowModel.Status status = workflow.getStatus();
+        if (status != WorkflowModel.Status.RUNNING && status != WorkflowModel.Status.PAUSED) {
+            throw new IllegalStateException("Workflow " + executionId + " is in " + status + " state and cannot receive signals");
+        }
+
+        String signalId = UUID.randomUUID().toString();
+        long now = System.currentTimeMillis();
+
+        synchronized (signalLocks.computeIfAbsent(executionId, k -> new Object())) {
+            // Re-read under lock for fresh variable state
+            WorkflowModel wf = workflowExecutor.getWorkflow(executionId, false);
+            Map<String, Object> vars = wf.getVariables() != null ? wf.getVariables() : Map.of();
+
+            List<Map<String, Object>> pending = (List<Map<String, Object>>)
+                vars.getOrDefault("_pending_signals", new ArrayList<>());
+            Map<String, Object> counts = (Map<String, Object>)
+                vars.getOrDefault("_signal_counts", new LinkedHashMap<>(Map.of("lifetime", 0, "pending", 0)));
+
+            int lifetime = ((Number) counts.getOrDefault("lifetime", 0)).intValue();
+            int pendingCount = ((Number) counts.getOrDefault("pending", 0)).intValue();
+
+            if (lifetime >= 100) throw new IllegalStateException("Signal lifetime limit (100) exceeded for workflow " + executionId);
+            if (pendingCount >= 10) throw new IllegalStateException("Too many pending signals (10 max) for workflow " + executionId);
+
+            // Build signal entry
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("signalId", signalId);
+            entry.put("message", request.getMessage());
+            entry.put("sender", request.getSender() != null ? request.getSender() : "unknown");
+            entry.put("priority", request.getPriority() != null ? request.getPriority() : "normal");
+            entry.put("timestamp", now);
+
+            List<Map<String, Object>> newPending = new ArrayList<>(pending);
+            newPending.add(entry);
+
+            Map<String, Object> newCounts = new LinkedHashMap<>(counts);
+            newCounts.put("lifetime", lifetime + 1);
+            newCounts.put("pending", pendingCount + 1);
+
+            Map<String, Object> updates = new LinkedHashMap<>();
+            updates.put("_pending_signals", newPending);
+            updates.put("_signal_counts", newCounts);
+
+            // Store structured data if provided
+            if (request.getData() != null) {
+                Map<String, Object> signalData = new LinkedHashMap<>(
+                    (Map<String, Object>) vars.getOrDefault("_signal_data", new LinkedHashMap<>()));
+                signalData.put(signalId, request.getData());
+                updates.put("_signal_data", signalData);
+            }
+
+            // Urgent: set pause flag INSIDE the lock
+            if ("urgent".equals(request.getPriority())) {
+                updates.put("_urgent_pause_requested", true);
+            }
+
+            workflowExecutor.updateVariables(executionId, updates);
+        }
+
+        // Emit SSE (outside lock — best-effort)
+        streamRegistry.send(executionId, AgentSSEEvent.signalReceived(
+            executionId, signalId, request.getMessage(),
+            request.getSender(), request.getPriority()));
+
+        // Propagation to active sub-workflows (best-effort)
+        if (request.isPropagate()) {
+            propagateSignal(executionId, request);
+        }
+
+        return new SignalReceipt(signalId, executionId, "queued");
+    }
+
+    private void propagateSignal(String executionId, SignalRequest request) {
+        try {
+            WorkflowModel wf = workflowExecutor.getWorkflow(executionId, true);
+            if (wf == null || wf.getTasks() == null) return;
+            for (TaskModel task : wf.getTasks()) {
+                if ("SUB_WORKFLOW".equals(task.getTaskType())
+                        && task.getStatus() == TaskModel.Status.IN_PROGRESS
+                        && task.getSubWorkflowId() != null) {
+                    SignalRequest childReq = new SignalRequest();
+                    childReq.setMessage(request.getMessage());
+                    childReq.setData(request.getData());
+                    childReq.setPriority(request.getPriority());
+                    childReq.setSender(request.getSender());
+                    childReq.setPropagate(true);
+                    try {
+                        signal(task.getSubWorkflowId(), childReq);
+                    } catch (Exception e) {
+                        log.debug("Failed to propagate signal to sub-workflow {}: {}", task.getSubWorkflowId(), e.getMessage());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Signal propagation failed for {}: {}", executionId, e.getMessage());
+        }
+    }
+
+    /**
+     * Find signal by ID across _pending, _processing, _processed lists.
+     * Returns null if not found.
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getSignalStatus(String signalId) {
+        // This requires a signalId→executionId index for efficiency.
+        // Simple implementation: caller must provide executionId via query param.
+        // For now, throw UnsupportedOperationException — full implementation in Task 8.
+        throw new UnsupportedOperationException("Signal status lookup not yet implemented");
+    }
+
+    public List<String> findRunningExecutionIds(String agentName, String correlationId) {
+        // Use existing workflowService.searchWorkflows() with status=RUNNING and freeText matching agentName
+        SearchResult<WorkflowSummary> results = workflowService.searchWorkflows(
+            0, 100, null, "*", "workflowType = '" + agentName + "' AND status = 'RUNNING'");
+        return results.getResults().stream()
+            .map(WorkflowSummary::getWorkflowId)
+            .collect(Collectors.toList());
     }
 }

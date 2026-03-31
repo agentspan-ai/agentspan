@@ -235,6 +235,53 @@ def http_tool(
     )
 
 
+def signal_tool(
+    name: str = "signal_agent",
+    description: str = "Send a signal to another running agent to provide context or redirect.",
+) -> "ToolDef":
+    """Create a tool that sends a signal to another running agent.
+
+    The compiled tool makes an HTTP call to the server's signal endpoint.
+    The target can be an execution ID (UUID) or an agent name.
+
+    Usage::
+
+        agent = Agent(
+            name="supervisor",
+            model="openai/gpt-4o",
+            tools=[signal_tool()],
+        )
+
+    Args:
+        name: Tool name exposed to the LLM.
+        description: Tool description exposed to the LLM.
+    """
+    return ToolDef(
+        name=name,
+        description=description,
+        tool_type="signal",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "target": {
+                    "type": "string",
+                    "description": "Execution ID (UUID) or agent name to signal",
+                },
+                "message": {
+                    "type": "string",
+                    "description": "Natural language message to send",
+                },
+                "priority": {
+                    "type": "string",
+                    "enum": ["normal", "urgent"],
+                    "default": "normal",
+                },
+            },
+            "required": ["target", "message"],
+        },
+    )
+
+
 def api_tool(
     url: str,
     name: Optional[str] = None,

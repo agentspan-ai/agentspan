@@ -122,6 +122,37 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
                 history.add(new ChatMessage(ChatMessage.Role.user, chatCompletion.getUserInput()));
             }
             getHistory(workflowModel, taskModel, chatCompletion);
+            // Read _signal_injection written by the pre-LLM signal intake SET_VARIABLE
+            Map<String, Object> vars = workflowModel.getVariables();
+            if (vars != null) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> signalInjection = (Map<String, Object>) vars.get("_signal_injection");
+                if (signalInjection != null) {
+                    // Append signal messages AFTER conversation history
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> signalMessages =
+                        (List<Map<String, Object>>) signalInjection.get("messages");
+                    if (signalMessages != null && !signalMessages.isEmpty()) {
+                        List<ChatMessage> messages = chatCompletion.getMessages();
+                        for (Map<String, Object> sm : signalMessages) {
+                            messages.add(new ChatMessage(
+                                ChatMessage.Role.user, (String) sm.get("message")));
+                        }
+                    }
+                    // Append ephemeral signal tools (only in evaluate mode, when signals are pending)
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> signalTools =
+                        (List<Map<String, Object>>) signalInjection.get("tools");
+                    if (signalTools != null && !signalTools.isEmpty()) {
+                        List<Object> tools = chatCompletion.getTools();
+                        if (tools == null) {
+                            tools = new ArrayList<>();
+                            chatCompletion.setTools(tools);
+                        }
+                        tools.addAll(signalTools);
+                    }
+                }
+            }
             condenseIfNeeded(chatCompletion, taskModel, workflowModel);
             ensureEndsWithUserMessage(chatCompletion, taskModel);
             updateTaskModel(chatCompletion, taskModel);

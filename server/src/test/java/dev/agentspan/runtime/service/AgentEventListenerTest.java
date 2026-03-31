@@ -6,14 +6,18 @@
 package dev.agentspan.runtime.service;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import com.netflix.conductor.core.execution.WorkflowExecutor;
 import com.netflix.conductor.model.TaskModel;
 import com.netflix.conductor.model.WorkflowModel;
 
@@ -27,11 +31,13 @@ class AgentEventListenerTest {
     private AgentStreamRegistry streamRegistry;
     private MeterRegistry meterRegistry;
     private AgentEventListener listener;
+    private WorkflowExecutor mockWorkflowExecutor;
 
     @BeforeEach
     void setUp() {
         streamRegistry = mock(AgentStreamRegistry.class);
         meterRegistry = new SimpleMeterRegistry();
+        mockWorkflowExecutor = mock(WorkflowExecutor.class);
         listener = new AgentEventListener(streamRegistry, meterRegistry);
     }
 
@@ -638,5 +644,83 @@ class AgentEventListenerTest {
         ArgumentCaptor<AgentSSEEvent> captor = ArgumentCaptor.forClass(AgentSSEEvent.class);
         verify(streamRegistry, times(2)).send(eq("wf-tool"), captor.capture());
         assertThat(captor.getAllValues().get(1).getType()).isEqualTo("tool_result");
+    }
+
+    // ── Urgent pause ─────────────────────────────────────────────────
+
+    @Test
+    void onTaskCompleted_urgentPauseFlag_pausesAndSchedulesResume() throws Exception {
+        // Arrange: mock workflowExecutor.getWorkflow() to return workflow with _urgent_pause_requested=true
+        AgentEventListener wfListener = new AgentEventListener(streamRegistry, mockWorkflowExecutor);
+
+        WorkflowModel wf = new WorkflowModel();
+        wf.setVariables(new LinkedHashMap<>(Map.of("_urgent_pause_requested", true)));
+        wf.setWorkflowId("wf-123");
+        when(mockWorkflowExecutor.getWorkflow("wf-123", false)).thenReturn(wf);
+
+        TaskModel task = new TaskModel();
+        task.setWorkflowInstanceId("wf-123");
+        task.setTaskType("SIMPLE");
+
+        // Act
+        wfListener.onTaskCompleted(task);
+
+        // Assert: updateVariables called to clear flag, then pauseWorkflow called
+        verify(mockWorkflowExecutor).updateVariables(eq("wf-123"),
+            argThat(m -> Boolean.FALSE.equals(m.get("_urgent_pause_requested"))));
+        verify(mockWorkflowExecutor).pauseWorkflow("wf-123");
+    }
+
+    @Test
+    void onTaskCompleted_internalTask_doesNotPauseEvenIfFlagSet() {
+        AgentEventListener wfListener = new AgentEventListener(streamRegistry, mockWorkflowExecutor);
+
+        WorkflowModel wf = new WorkflowModel();
+        wf.setVariables(new LinkedHashMap<>(Map.of("_urgent_pause_requested", true)));
+        wf.setWorkflowId("wf-456");
+        when(mockWorkflowExecutor.getWorkflow("wf-456", false)).thenReturn(wf);
+
+        TaskModel task = new TaskModel();
+        task.setWorkflowInstanceId("wf-456");
+        task.setTaskType("INLINE");  // internal — not a natural pause point
+
+        wfListener.onTaskCompleted(task);
+
+        verify(mockWorkflowExecutor, never()).pauseWorkflow(any());
+    }
+
+    @Test
+    void onTaskCompleted_signalIntakeSet_emitsSseEvents() {
+        AgentEventListener wfListener = new AgentEventListener(streamRegistry, mockWorkflowExecutor);
+
+        // Arrange: SET_VARIABLE task with ref name *_signal_intake_set
+        // and a preceding INLINE task whose output contains newDispositions
+        TaskModel inlineTask = new TaskModel();
+        inlineTask.setWorkflowInstanceId("wf-789");
+        inlineTask.setTaskType("INLINE");
+        inlineTask.setReferenceTaskName("greeter_signal_intake");
+        inlineTask.setOutputData(Map.of("result", Map.of(
+            "newDispositions", List.of(
+                Map.of("type", "signal_accepted", "signalId", "uuid-1", "sender", "user")))));
+
+        WorkflowModel wf = new WorkflowModel();
+        wf.setWorkflowId("wf-789");
+        wf.setTasks(List.of(inlineTask));
+        when(mockWorkflowExecutor.getWorkflow("wf-789", true)).thenReturn(wf);
+
+        TaskModel setVarTask = makeTask("wf-789", "SET_VARIABLE", "greeter_signal_intake_set");
+
+        wfListener.onTaskCompleted(setVarTask);
+
+        // Verify signal_accepted SSE event was emitted
+        verify(streamRegistry).send(eq("wf-789"),
+            argThat(e -> "signal_accepted".equals(e.getType())));
+    }
+
+    private TaskModel buildSignalSetTask(String refName, List<Map<String, Object>> dispositions) {
+        TaskModel task = new TaskModel();
+        task.setTaskType("SET_VARIABLE");
+        task.setReferenceTaskName(refName);
+        return task;
     }
 }
