@@ -3,7 +3,7 @@ package cmd
 import (
 	"testing"
 
-	"github.com/agentspan/agentspan/cli/config"
+	"github.com/agentspan-ai/agentspan/cli/config"
 )
 
 // newTempHome points HOME at a temp dir so config reads/writes are isolated.

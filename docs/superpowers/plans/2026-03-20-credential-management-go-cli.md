@@ -47,7 +47,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/agentspan/agentspan/cli/config"
+	"github.com/agentspan-ai/agentspan/cli/config"
 )
 
 func TestIsLocalhost(t *testing.T) {
@@ -295,7 +295,7 @@ package cmd
 import (
     "testing"
 
-    "github.com/agentspan/agentspan/cli/config"
+    "github.com/agentspan-ai/agentspan/cli/config"
 )
 
 // newTempHome points HOME at a temp dir so config reads/writes are isolated.
@@ -336,7 +336,7 @@ import (
     "net/http/httptest"
     "testing"
 
-    "github.com/agentspan/agentspan/cli/config"
+    "github.com/agentspan-ai/agentspan/cli/config"
 )
 
 func TestLogoutClearsAPIKey(t *testing.T) {
@@ -457,8 +457,8 @@ import (
     "strings"
     "syscall"
 
-    "github.com/agentspan/agentspan/cli/client"
-    "github.com/agentspan/agentspan/cli/config"
+    "github.com/agentspan-ai/agentspan/cli/client"
+    "github.com/agentspan-ai/agentspan/cli/config"
     "github.com/fatih/color"
     "github.com/spf13/cobra"
     "golang.org/x/term"
@@ -892,8 +892,8 @@ import (
     "fmt"
     "text/tabwriter"
 
-    "github.com/agentspan/agentspan/cli/client"
-    "github.com/agentspan/agentspan/cli/config"
+    "github.com/agentspan-ai/agentspan/cli/client"
+    "github.com/agentspan-ai/agentspan/cli/config"
     "github.com/fatih/color"
     "github.com/spf13/cobra"
 )

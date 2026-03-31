@@ -2,7 +2,7 @@
 
 These examples demonstrate running agents written with the [OpenAI Agents SDK](https://github.com/openai/openai-agents-python) (`openai-agents`) on the Conductor agent runtime.
 
-The agents are defined using standard OpenAI SDK classes and decorators — the Conductor runtime auto-detects the framework, serializes the agent generically, and the server normalizes the config into a Conductor workflow. **Zero translation code in the SDK.**
+The agents are defined using standard OpenAI SDK classes and decorators — the Conductor runtime auto-detects the framework, serializes the agent generically, and the server normalizes the config into a Conductor agent execution. **Zero translation code in the SDK.**
 
 ## Prerequisites
 
@@ -66,5 +66,5 @@ Generic serializer → JSON dict + callable extraction
 Server OpenAINormalizer → AgentConfig → Conductor WorkflowDef
   │
   ▼
-Conductor runtime executes the workflow
+Conductor runtime executes the agent
 ```

@@ -244,10 +244,10 @@ npx tsx examples/langgraph/02-react-with-tools.ts
 
 ## Contributing
 
-We welcome contributions! Please open an issue or PR on [GitHub](https://github.com/agentspan/agentspan).
+We welcome contributions! Please open an issue or PR on [GitHub](https://github.com/agentspan-ai/agentspan).
 
 ```bash
-git clone https://github.com/agentspan/agentspan.git
+git clone https://github.com/agentspan-ai/agentspan.git
 cd agentspan/sdk/typescript
 npm install
 npm test        # unit tests (no server needed)

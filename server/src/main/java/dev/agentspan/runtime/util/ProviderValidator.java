@@ -18,7 +18,7 @@ public class ProviderValidator {
 
     private final AIModelProvider aiModelProvider;
 
-    private static final String DOCS_URL = "https://github.com/agentspan/agentspan/blob/main/docs/ai-models.md";
+    private static final String DOCS_URL = "https://github.com/agentspan-ai/agentspan/blob/main/docs/ai-models.md";
 
     /**
      * Returns Optional.empty() if the provider is configured,

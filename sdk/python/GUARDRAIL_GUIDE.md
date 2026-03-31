@@ -1,6 +1,6 @@
 # Guardrails Guide
 
-Guardrails validate agent inputs and outputs, preventing unsafe, non-compliant, or malformed content from reaching users. They integrate directly into the Conductor workflow so retries, escalations, and fixes are **durable**, **visible in the Conductor UI**, and work with every execution mode (`run()`, `start()`, `stream()`).
+Guardrails validate agent inputs and outputs, preventing unsafe, non-compliant, or malformed content from reaching users. They integrate directly into the Conductor execution so retries, escalations, and fixes are **durable**, **visible in the Conductor UI**, and work with every execution mode (`run()`, `start()`, `stream()`).
 
 ---
 
@@ -61,7 +61,7 @@ agent = Agent(
     ],
 )
 
-# 4. Run — the guardrail retries automatically inside the workflow
+# 4. Run — the guardrail retries automatically inside the execution
 with AgentRuntime() as runtime:
     result = runtime.run(agent, "Show me customer CUST-7's full profile.")
     print(result.output)  # Credit card number will be redacted
@@ -85,7 +85,7 @@ A guardrail is a function `(content: str) -> GuardrailResult` that checks conten
    - **fix** — the guardrail's corrected output replaces the original.
    - **human** — the execution pauses for a human to approve, reject, or edit.
 
-For agents with tools, guardrails compile into the Conductor DoWhile loop as real workflow tasks. This means retries happen inside the loop (not by re-executing the entire workflow), and the guardrail check is visible as a task in the Conductor UI.
+For agents with tools, guardrails compile into the Conductor DoWhile loop as real tasks. This means retries happen inside the loop (not by re-executing the entire agent), and the guardrail check is visible as a task in the Conductor UI.
 
 ---
 
@@ -369,7 +369,7 @@ Guardrails behave differently depending on whether the agent has tools.
 
 ### Agents with tools (compiled guardrails)
 
-Output guardrails are compiled into the Conductor DoWhile loop as workflow tasks:
+Output guardrails are compiled into the Conductor DoWhile loop as tasks:
 
 ```
 DoWhile Loop:
@@ -379,7 +379,7 @@ DoWhile Loop:
 - **Guardrail Worker**: A single worker task that runs all output guardrails sequentially. Returns pass/fail, the failure mode, and any fixed output.
 - **Guardrail Switch**: A SwitchTask that routes based on the guardrail result to the appropriate handler (retry, raise, fix, or human).
 - **Retry**: Appends feedback to messages and continues the loop. The LLM sees the feedback on the next iteration.
-- **No full re-execution**: Retries are loop iterations, not new workflow runs.
+- **No full re-execution**: Retries are loop iterations, not new execution runs.
 
 This means guardrails are:
 - **Durable** — retries survive worker restarts.
@@ -388,17 +388,17 @@ This means guardrails are:
 
 ### Simple agents (no tools, client-side)
 
-Without tools there is no DoWhile loop, so output guardrails run client-side in the runtime after each workflow execution:
+Without tools there is no DoWhile loop, so output guardrails run client-side in the runtime after each agent execution:
 
-1. Execute workflow.
+1. Execute agent.
 2. Check output guardrails.
-3. If retry needed, modify the prompt and re-execute the entire workflow.
+3. If retry needed, modify the prompt and re-execute the entire agent.
 
 This is simpler but less efficient (full re-execution per retry).
 
 ### Input guardrails (always client-side)
 
-Input guardrails (`position="input"`) always run client-side before the workflow starts. Only `on_fail="raise"` is meaningful for input guardrails — there is no LLM to retry against.
+Input guardrails (`position="input"`) always run client-side before the agent starts. Only `on_fail="raise"` is meaningful for input guardrails — there is no LLM to retry against.
 
 ---
 

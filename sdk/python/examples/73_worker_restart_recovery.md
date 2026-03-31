@@ -1,6 +1,6 @@
 # Worker Restart Recovery Demo
 
-This demo proves that a workflow survives worker-service outage and continues after the worker service comes back.
+This demo proves that an agent execution survives worker-service outage and continues after the worker service comes back.
 
 ## Prerequisites
 
@@ -52,13 +52,13 @@ python 73_worker_restart_recovery.py kill-worker
 
 This sends `SIGKILL` to the worker process group, including the polling child processes.
 
-## Terminal 4: Start the workflow while workers are down
+## Terminal 4: Start the agent while workers are down
 
 ```bash
 python 73_worker_restart_recovery.py start
 ```
 
-You should see the workflow stay `RUNNING` with `attempts=none` because no worker service is available to execute the tool.
+You should see the agent stay `RUNNING` with `attempts=none` because no worker service is available to execute the tool.
 
 ## Terminal 5: Restart the worker service
 
@@ -80,6 +80,6 @@ The attempt history file at `/tmp/agentspan_worker_restart.attempts.json` should
 ## What this proves
 
 - Agent definitions can be deployed separately from worker processes
-- The workflow remains durable while the worker service is down
-- After the worker returns, the queued tool task runs and the same workflow finishes
-- Recovery is from durable workflow state, not from keeping the original Python process alive
+- The agent execution remains durable while the worker service is down
+- After the worker returns, the queued tool task runs and the same execution finishes
+- Recovery is from durable execution state, not from keeping the original Python process alive

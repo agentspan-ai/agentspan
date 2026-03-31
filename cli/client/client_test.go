@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agentspan/agentspan/cli/config"
+	"github.com/agentspan-ai/agentspan/cli/config"
 )
 
 // newTestServer creates an httptest server and a Client pointing at it.
