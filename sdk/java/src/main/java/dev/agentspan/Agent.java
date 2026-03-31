@@ -5,6 +5,7 @@ package dev.agentspan;
 
 import dev.agentspan.enums.Strategy;
 import dev.agentspan.model.GuardrailDef;
+import dev.agentspan.model.PromptTemplate;
 import dev.agentspan.model.ToolDef;
 import dev.agentspan.termination.TerminationCondition;
 
@@ -12,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 
 /**
@@ -55,6 +57,9 @@ public class Agent {
     private final String includeContents;
     private final Integer thinkingBudgetTokens;
     private final String introduction;
+    private final PromptTemplate instructionsTemplate;
+    private final Function<Map<String, Object>, Map<String, Object>> beforeModelCallback;
+    private final Function<Map<String, Object>, Map<String, Object>> afterModelCallback;
 
     private Agent(Builder builder) {
         this.name = builder.name;
@@ -77,6 +82,9 @@ public class Agent {
         this.includeContents = builder.includeContents;
         this.thinkingBudgetTokens = builder.thinkingBudgetTokens;
         this.introduction = builder.introduction;
+        this.instructionsTemplate = builder.instructionsTemplate;
+        this.beforeModelCallback = builder.beforeModelCallback;
+        this.afterModelCallback = builder.afterModelCallback;
     }
 
     /**
@@ -137,6 +145,9 @@ public class Agent {
     public String getIncludeContents() { return includeContents; }
     public Integer getThinkingBudgetTokens() { return thinkingBudgetTokens; }
     public String getIntroduction() { return introduction; }
+    public PromptTemplate getInstructionsTemplate() { return instructionsTemplate; }
+    public Function<Map<String, Object>, Map<String, Object>> getBeforeModelCallback() { return beforeModelCallback; }
+    public Function<Map<String, Object>, Map<String, Object>> getAfterModelCallback() { return afterModelCallback; }
 
     public static Builder builder() {
         return new Builder();
@@ -179,6 +190,9 @@ public class Agent {
         private String includeContents;
         private Integer thinkingBudgetTokens;
         private String introduction;
+        private PromptTemplate instructionsTemplate;
+        private Function<Map<String, Object>, Map<String, Object>> beforeModelCallback;
+        private Function<Map<String, Object>, Map<String, Object>> afterModelCallback;
 
         /** Set the agent name (required). Must match {@code ^[a-zA-Z_][a-zA-Z0-9_-]*$}. */
         public Builder name(String name) {
@@ -327,6 +341,33 @@ public class Agent {
          */
         public Builder introduction(String introduction) {
             this.introduction = introduction;
+            return this;
+        }
+
+        /**
+         * Set a server-side prompt template for agent instructions.
+         * Takes precedence over {@link #instructions(String)} if both are set.
+         */
+        public Builder instructionsTemplate(PromptTemplate instructionsTemplate) {
+            this.instructionsTemplate = instructionsTemplate;
+            return this;
+        }
+
+        /**
+         * Register a callback invoked before each LLM call.
+         * Receives the current messages list and may return an override response map.
+         */
+        public Builder beforeModelCallback(Function<Map<String, Object>, Map<String, Object>> beforeModelCallback) {
+            this.beforeModelCallback = beforeModelCallback;
+            return this;
+        }
+
+        /**
+         * Register a callback invoked after each LLM call.
+         * Receives the LLM result and may return an override response map.
+         */
+        public Builder afterModelCallback(Function<Map<String, Object>, Map<String, Object>> afterModelCallback) {
+            this.afterModelCallback = afterModelCallback;
             return this;
         }
 

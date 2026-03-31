@@ -3,6 +3,8 @@
 
 package dev.agentspan.model;
 
+import dev.agentspan.Agent;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +25,8 @@ public class ToolDef {
     private final String toolType;
     private final Map<String, Object> config;
     private final List<String> credentials;
+    /** For {@code agent_tool} type: the child Agent whose workers must be registered. Not serialized directly. */
+    private final Agent agentRef;
 
     private ToolDef(Builder builder) {
         this.name = builder.name;
@@ -34,6 +38,7 @@ public class ToolDef {
         this.toolType = builder.toolType;
         this.config = builder.config;
         this.credentials = builder.credentials != null ? builder.credentials : new ArrayList<>();
+        this.agentRef = builder.agentRef;
     }
 
     public String getName() { return name; }
@@ -45,6 +50,7 @@ public class ToolDef {
     public String getToolType() { return toolType; }
     public Map<String, Object> getConfig() { return config; }
     public List<String> getCredentials() { return credentials; }
+    public Agent getAgentRef() { return agentRef; }
 
     public static Builder builder() {
         return new Builder();
@@ -60,6 +66,7 @@ public class ToolDef {
         private String toolType = "worker";
         private Map<String, Object> config;
         private List<String> credentials;
+        private Agent agentRef;
 
         public Builder name(String name) { this.name = name; return this; }
         public Builder description(String description) { this.description = description; return this; }
@@ -70,6 +77,7 @@ public class ToolDef {
         public Builder toolType(String toolType) { this.toolType = toolType; return this; }
         public Builder config(Map<String, Object> config) { this.config = config; return this; }
         public Builder credentials(List<String> credentials) { this.credentials = credentials; return this; }
+        public Builder agentRef(Agent agentRef) { this.agentRef = agentRef; return this; }
 
         public ToolDef build() {
             if (name == null || name.isEmpty()) {
