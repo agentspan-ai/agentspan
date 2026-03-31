@@ -77,18 +77,21 @@ jobs:
     needs: [server-tests]
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'corretto'
       - name: Build server JAR
         working-directory: server
-        run: ./gradlew shadowJar -x test
+        run: ./gradlew bootJar -x test
       - name: Upload server JAR
         uses: actions/upload-artifact@v4
         with:
           name: server-jar
-          path: server/build/libs/agentspan-runtime-shaded.jar
+          path: server/build/libs/agentspan-runtime.jar
           retention-days: 1
 
   # ── Python E2E Tests ───────────────────────────────────────────────
@@ -115,7 +118,7 @@ jobs:
 
       - name: Start server
         run: |
-          java -jar server/build/libs/agentspan-runtime-shaded.jar &
+          java -jar server/build/libs/agentspan-runtime.jar &
           for i in $(seq 1 30); do curl -sf http://localhost:6767/health && break; sleep 2; done
 
       - name: Install Python SDK
@@ -152,7 +155,7 @@ jobs:
 
       - name: Start server
         run: |
-          java -jar server/build/libs/agentspan-runtime-shaded.jar &
+          java -jar server/build/libs/agentspan-runtime.jar &
           for i in $(seq 1 30); do curl -sf http://localhost:6767/health && break; sleep 2; done
 
       - name: Install TypeScript SDK

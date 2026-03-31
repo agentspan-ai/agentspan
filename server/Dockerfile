@@ -35,10 +35,8 @@ COPY server/src/ src/
 # Copy the Vite dist output there before building the JAR so it gets packaged in.
 COPY --from=ui-builder /ui/dist/ src/main/resources/static/
 
-ARG GRADLE_TASK=bootJar
-ARG RUNTIME_JAR=agentspan-runtime.jar
-RUN ./gradlew --no-daemon "${GRADLE_TASK}"
-RUN cp "build/libs/${RUNTIME_JAR}" /build/runtime.jar
+RUN ./gradlew --no-daemon bootJar
+RUN cp build/libs/agentspan-runtime.jar /build/runtime.jar
 
 # ─── Stage 3: Runtime image ───────────────────────────────────────────────────
 FROM eclipse-temurin:21-jre
