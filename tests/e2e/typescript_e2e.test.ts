@@ -146,15 +146,23 @@ describe('TypeScript SDK E2E', () => {
     });
 
     it('tool metadata tracked (test_tool_metadata_tracked)', async () => {
+      // Verify tool metadata is attached and agent completes with echo tool
       const agent = new Agent({
         name: 'ts_echoer',
         model: MODEL,
         instructions: 'Use echo tool.',
         tools: [echo],
       });
+      // Verify tool def is properly attached before running
+      const def = getToolDef(echo);
+      expect(def.name).toBe('echo');
+      expect(def.description).toBe('Echo back the message');
+      expect(def.inputSchema).toBeDefined();
+
       const rt = new AgentRuntime();
-      const result = await rt.run(agent, "Echo 'hello world'", { timeoutSeconds: 60 });
+      const result = await rt.run(agent, "Echo 'hello world'", { timeoutSeconds: 30 });
       expect(result.status).toBe('COMPLETED');
+      expect(JSON.stringify(result.output)).toContain('Echo');
     });
 
     it('CLI tool names are agent-prefixed (test_agent_prefixed_task_names)', () => {
@@ -324,7 +332,7 @@ describe('TypeScript SDK E2E', () => {
       });
       const rt = new AgentRuntime();
       const result = await rt.run(agent, 'What is the weather in Berlin?', {
-        timeout: 60000,
+        timeoutSeconds: 60,
       });
       expect(result.status).toBe('COMPLETED');
     });
@@ -606,7 +614,7 @@ describe('TypeScript SDK E2E', () => {
       });
       const rt = new AgentRuntime();
       const result = await rt.run(agent, 'Run the failing tool now.', {
-        timeout: 60000,
+        timeoutSeconds: 60,
       });
       // The tool raises — workflow should complete but report error,
       // or the agent may recover. Either outcome is acceptable.
