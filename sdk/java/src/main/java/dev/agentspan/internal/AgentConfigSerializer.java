@@ -156,7 +156,7 @@ public class AgentConfigSerializer {
             agentMap.put("introduction", agent.getIntroduction());
         }
 
-        // Callbacks (before/after model hooks)
+        // Callbacks (before/after model hooks — legacy single-function style)
         List<Map<String, Object>> callbacks = new ArrayList<>();
         if (agent.getBeforeModelCallback() != null) {
             Map<String, Object> cb = new LinkedHashMap<>();
@@ -169,6 +169,43 @@ public class AgentConfigSerializer {
             cb.put("position", "after_model");
             cb.put("taskName", agent.getName() + "_after_model");
             callbacks.add(cb);
+        }
+        // CallbackHandler list — emit a task entry for each position that any handler overrides
+        if (agent.getCallbacks() != null && !agent.getCallbacks().isEmpty()) {
+            String[][] positionMethods = {
+                {"before_agent", "onAgentStart"},
+                {"after_agent",  "onAgentEnd"},
+                {"before_model", "onModelStart"},
+                {"after_model",  "onModelEnd"},
+                {"before_tool",  "onToolStart"},
+                {"after_tool",   "onToolEnd"},
+            };
+            for (String[] pm : positionMethods) {
+                String position = pm[0];
+                String methodName = pm[1];
+                // Check if any handler overrides this method
+                boolean hasOverride = false;
+                for (dev.agentspan.CallbackHandler h : agent.getCallbacks()) {
+                    try {
+                        java.lang.reflect.Method m = h.getClass().getMethod(methodName, Map.class);
+                        if (!m.getDeclaringClass().equals(dev.agentspan.CallbackHandler.class)) {
+                            hasOverride = true;
+                            break;
+                        }
+                    } catch (NoSuchMethodException ignored) {}
+                }
+                if (hasOverride) {
+                    // Only add if not already present from legacy callbacks
+                    boolean alreadyAdded = callbacks.stream()
+                        .anyMatch(c -> position.equals(c.get("position")));
+                    if (!alreadyAdded) {
+                        Map<String, Object> cb = new LinkedHashMap<>();
+                        cb.put("position", position);
+                        cb.put("taskName", agent.getName() + "_" + position);
+                        callbacks.add(cb);
+                    }
+                }
+            }
         }
         if (!callbacks.isEmpty()) {
             agentMap.put("callbacks", callbacks);

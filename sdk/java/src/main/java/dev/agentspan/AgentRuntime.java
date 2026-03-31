@@ -203,7 +203,7 @@ public class AgentRuntime implements AutoCloseable {
             }
         }
 
-        // Register callback workers
+        // Register callback workers (legacy single-function style)
         if (agent.getBeforeModelCallback() != null) {
             final java.util.function.Function<Map<String, Object>, Map<String, Object>> beforeCb = agent.getBeforeModelCallback();
             workerManager.register(agent.getName() + "_before_model", inputData -> {
@@ -217,6 +217,50 @@ public class AgentRuntime implements AutoCloseable {
                 Map<String, Object> result = afterCb.apply(inputData);
                 return result != null ? result : java.util.Collections.emptyMap();
             });
+        }
+
+        // Register CallbackHandler list workers — chain all handlers per position
+        if (agent.getCallbacks() != null && !agent.getCallbacks().isEmpty()) {
+            final List<CallbackHandler> handlers = agent.getCallbacks();
+            final String agentName = agent.getName();
+            String[][] positionMethods = {
+                {"before_agent", "onAgentStart"},
+                {"after_agent",  "onAgentEnd"},
+                {"before_model", "onModelStart"},
+                {"after_model",  "onModelEnd"},
+                {"before_tool",  "onToolStart"},
+                {"after_tool",   "onToolEnd"},
+            };
+            for (String[] pm : positionMethods) {
+                String position = pm[0];
+                String methodName = pm[1];
+                // Find handlers that override this method
+                List<CallbackHandler> active = new ArrayList<>();
+                for (CallbackHandler h : handlers) {
+                    try {
+                        java.lang.reflect.Method m = h.getClass().getMethod(methodName, Map.class);
+                        if (!m.getDeclaringClass().equals(CallbackHandler.class)) {
+                            active.add(h);
+                        }
+                    } catch (NoSuchMethodException ignored) {}
+                }
+                if (active.isEmpty()) continue;
+
+                // Only register if not already registered via legacy callbacks
+                final List<CallbackHandler> activeHandlers = active;
+                final String taskName = agentName + "_" + position;
+                final String mName = methodName;
+                workerManager.register(taskName, inputData -> {
+                    for (CallbackHandler handler : activeHandlers) {
+                        try {
+                            java.lang.reflect.Method m = handler.getClass().getMethod(mName, Map.class);
+                            Map<String, Object> result = (Map<String, Object>) m.invoke(handler, inputData);
+                            if (result != null && !result.isEmpty()) return result;
+                        } catch (Exception ignored) {}
+                    }
+                    return java.util.Collections.emptyMap();
+                });
+            }
         }
 
         // Register combined guardrail worker per agent (matches Python: {agent_name}_output_guardrail)

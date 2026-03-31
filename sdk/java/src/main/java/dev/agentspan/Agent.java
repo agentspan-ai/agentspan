@@ -60,6 +60,7 @@ public class Agent {
     private final PromptTemplate instructionsTemplate;
     private final Function<Map<String, Object>, Map<String, Object>> beforeModelCallback;
     private final Function<Map<String, Object>, Map<String, Object>> afterModelCallback;
+    private final List<CallbackHandler> callbacks;
 
     private Agent(Builder builder) {
         this.name = builder.name;
@@ -85,6 +86,7 @@ public class Agent {
         this.instructionsTemplate = builder.instructionsTemplate;
         this.beforeModelCallback = builder.beforeModelCallback;
         this.afterModelCallback = builder.afterModelCallback;
+        this.callbacks = builder.callbacks != null ? new ArrayList<>(builder.callbacks) : new ArrayList<>();
     }
 
     /**
@@ -148,6 +150,7 @@ public class Agent {
     public PromptTemplate getInstructionsTemplate() { return instructionsTemplate; }
     public Function<Map<String, Object>, Map<String, Object>> getBeforeModelCallback() { return beforeModelCallback; }
     public Function<Map<String, Object>, Map<String, Object>> getAfterModelCallback() { return afterModelCallback; }
+    public List<CallbackHandler> getCallbacks() { return callbacks; }
 
     public static Builder builder() {
         return new Builder();
@@ -193,6 +196,7 @@ public class Agent {
         private PromptTemplate instructionsTemplate;
         private Function<Map<String, Object>, Map<String, Object>> beforeModelCallback;
         private Function<Map<String, Object>, Map<String, Object>> afterModelCallback;
+        private List<CallbackHandler> callbacks;
 
         /** Set the agent name (required). Must match {@code ^[a-zA-Z_][a-zA-Z0-9_-]*$}. */
         public Builder name(String name) {
@@ -368,6 +372,21 @@ public class Agent {
          */
         public Builder afterModelCallback(Function<Map<String, Object>, Map<String, Object>> afterModelCallback) {
             this.afterModelCallback = afterModelCallback;
+            return this;
+        }
+
+        /**
+         * Register composable {@link CallbackHandler} instances for lifecycle hooks.
+         * Multiple handlers run in list order; first non-empty return short-circuits.
+         */
+        public Builder callbacks(List<CallbackHandler> callbacks) {
+            this.callbacks = callbacks;
+            return this;
+        }
+
+        /** Varargs convenience for callbacks. */
+        public Builder callbacks(CallbackHandler... callbacks) {
+            this.callbacks = Arrays.asList(callbacks);
             return this;
         }
 
