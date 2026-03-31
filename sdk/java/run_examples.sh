@@ -36,6 +36,8 @@ is_skip() {
     Example09HumanInTheLoop) return 0 ;;
     Example16CredentialsTool) return 0 ;;
     Example33ExternalWorkers) return 0 ;;
+    Example18ManualSelection) return 0 ;;   # requires human to pick agent each turn
+    Example32HumanGuardrail) return 0 ;;    # requires human approval in Conductor UI
     *) return 1 ;;
   esac
 }
