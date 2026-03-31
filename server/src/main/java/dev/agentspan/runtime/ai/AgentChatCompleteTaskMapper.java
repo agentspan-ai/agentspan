@@ -526,7 +526,10 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         boolean needsContinuation = !"user".equalsIgnoreCase(roleStr) && !"tool".equalsIgnoreCase(roleStr);
 
         if (needsContinuation) {
-            log.info("Appending user continuation message (last role was '{}', total messages: {})", roleStr, messages.size());
+            log.info(
+                    "Appending user continuation message (last role was '{}', total messages: {})",
+                    roleStr,
+                    messages.size());
             messages.add(new ChatMessage(ChatMessage.Role.user, "Please continue where you left off."));
         }
     }
