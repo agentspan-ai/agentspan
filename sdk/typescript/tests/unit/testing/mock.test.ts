@@ -199,10 +199,10 @@ describe('mockRun', () => {
     expect(result.status).toBe('COMPLETED');
   });
 
-  it('generates a workflowId starting with mock-', async () => {
+  it('generates a executionId starting with mock-', async () => {
     const agent = new Agent({ name: 'test' });
     const result = await mockRun(agent, 'hi');
 
-    expect(result.workflowId).toMatch(/^mock-\d+$/);
+    expect(result.executionId).toMatch(/^mock-\d+$/);
   });
 });

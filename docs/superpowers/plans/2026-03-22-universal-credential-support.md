@@ -7,7 +7,7 @@
 **Architecture:** Two resolution paths based on execution model:
 - **HTTP tools (server system task):** Custom `CredentialAwareHttpTask` extends Conductor's `HttpTask`, resolves `${NAME}` patterns in headers via `CredentialResolutionService` before HTTP execution. Registered as `@Primary @Bean("HTTP")`.
 - **MCP tools (worker task):** `CALL_MCP_TOOL` is a Conductor SDK worker, not a system task. Resolve `${NAME}` in MCP headers in `AgentEventListener.onTaskScheduled()` before the worker picks up the task.
-- **SDK-side tools (framework passthrough, extracted tools):** Credentials via `WorkerCredentialFetcher` with a workflow-level fallback registry.
+- **SDK-side tools (framework passthrough, extracted tools):** Credentials via `WorkerCredentialFetcher` with an execution-level fallback registry.
 
 Every change is test-first with e2e tests against a real server. No mocks.
 
@@ -536,10 +536,10 @@ git commit -m "feat: resolve credential headers for MCP tasks on scheduling"
 - [ ] **Step 1: Restart server with all changes, run all tests**
 
 ```bash
-cd server && lsof -ti :8080 | xargs kill -9 2>/dev/null; sleep 2
+cd server && lsof -ti :6767 | xargs kill -9 2>/dev/null; sleep 2
 ./gradlew clean bootRun > /tmp/agentspan_server.log 2>&1 &
 # Wait for ready
-for i in $(seq 1 30); do curl -sf http://localhost:8080/api/credentials > /dev/null 2>&1 && break; sleep 1; done
+for i in $(seq 1 30); do curl -sf http://localhost:6767/api/credentials > /dev/null 2>&1 && break; sleep 1; done
 
 cd ../sdk/python && uv pip install -e .
 uv run python -m pytest tests/e2e/ tests/unit/credentials/ -v
@@ -625,7 +625,7 @@ import os
 import httpx
 import pytest
 
-SERVER = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:8080")
+SERVER = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:6767")
 API = f"{SERVER}/api"
 CRED_NAME = "_E2E_FW_CRED"
 CRED_VALUE = "framework-secret-12345"
@@ -679,7 +679,7 @@ In `runtime.py`, add `credentials: Optional[List[str]] = None` to `run()` (line 
 Pass through all internal paths:
 - `_start_via_server()`: add `credentials` to input payload
 - `_start_framework_via_server()`: same
-- After workflow starts, populate `_workflow_credentials[workflow_id]`
+- After execution starts, populate `_workflow_credentials[execution_id]`
 - In `_poll_status_until_complete()`, clean up in `finally`
 
 - [ ] **Step 4: Run test — verify it passes**
@@ -704,7 +704,7 @@ git commit -m "feat: run()/start()/stream() accept credentials kwarg"
 
 - [ ] **Step 1: Write the failing test**
 
-Verify that when workflow input contains `"credentials": ["KEY1", "KEY2"]`, the execution token's `declared_names` includes them.
+Verify that when execution input contains `"credentials": ["KEY1", "KEY2"]`, the execution token's `declared_names` includes them.
 
 - [ ] **Step 2: Implement**
 
@@ -988,9 +988,9 @@ git commit -m "docs: credential support for all tool types"
 - [ ] **Step 1: Restart server with all changes**
 
 ```bash
-cd server && lsof -ti :8080 | xargs kill -9 2>/dev/null; sleep 2
+cd server && lsof -ti :6767 | xargs kill -9 2>/dev/null; sleep 2
 ./gradlew clean bootRun > /tmp/agentspan_server.log 2>&1 &
-for i in $(seq 1 30); do curl -sf http://localhost:8080/api/credentials > /dev/null 2>&1 && break; sleep 1; done
+for i in $(seq 1 30); do curl -sf http://localhost:6767/api/credentials > /dev/null 2>&1 && break; sleep 1; done
 ```
 
 - [ ] **Step 2: Run ALL Python tests**

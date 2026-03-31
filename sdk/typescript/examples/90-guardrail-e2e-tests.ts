@@ -28,7 +28,7 @@ interface TestResult {
   num: number;
   testId: string;
   passed: boolean;
-  workflowId: string;
+  executionId: string;
   details: string;
 }
 
@@ -48,7 +48,7 @@ class TestRunner {
   ): TestResult {
     const output = opts.result.output != null ? String(opts.result.output) : '';
     const status = String(opts.result.status ?? 'UNKNOWN');
-    const wfId = String(opts.result.workflowId ?? '');
+    const wfId = String(opts.result.executionId ?? '');
     const failures: string[] = [];
 
     if (opts.expectStatus && status !== opts.expectStatus) {
@@ -66,7 +66,7 @@ class TestRunner {
 
     const passed = failures.length === 0;
     const details = passed ? 'OK' : failures.join('; ');
-    const tr: TestResult = { num, testId, passed, workflowId: wfId, details };
+    const tr: TestResult = { num, testId, passed, executionId: wfId, details };
     this.results.push(tr);
 
     const mark = passed ? 'PASS' : 'FAIL';

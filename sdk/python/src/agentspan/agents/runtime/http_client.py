@@ -71,7 +71,7 @@ class AgentHttpClient:
     # ── Agent API endpoints ──────────────────────────────────────────
 
     async def start_agent(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """POST /agent/start — start an agent workflow."""
+        """POST /agent/start — start an agent execution."""
         client = await self._get_client()
         url = self._url("/start")
         resp = await client.post(url, json=payload)
@@ -93,7 +93,7 @@ class AgentHttpClient:
         return resp.json()
 
     async def compile_agent(self, config_json: Dict[str, Any]) -> Dict[str, Any]:
-        """POST /agent/compile — compile agent config to workflow def."""
+        """POST /agent/compile — compile agent config to agent def."""
         client = await self._get_client()
         url = self._url("/compile")
         resp = await client.post(url, json=config_json)
@@ -103,10 +103,10 @@ class AgentHttpClient:
             _raise_api_error(exc, url=url)
         return resp.json()
 
-    async def get_status(self, workflow_id: str) -> Dict[str, Any]:
-        """GET /agent/{id}/status — fetch workflow status."""
+    async def get_status(self, execution_id: str) -> Dict[str, Any]:
+        """GET /agent/{id}/status — fetch execution status."""
         client = await self._get_client()
-        url = self._url(f"/{workflow_id}/status")
+        url = self._url(f"/{execution_id}/status")
         resp = await client.get(url)
         try:
             resp.raise_for_status()
@@ -114,24 +114,24 @@ class AgentHttpClient:
             _raise_api_error(exc, url=url)
         return resp.json()
 
-    async def respond(self, workflow_id: str, body: Dict[str, Any]) -> None:
+    async def respond(self, execution_id: str, body: Dict[str, Any]) -> None:
         """POST /agent/{id}/respond — complete a pending human task."""
         client = await self._get_client()
-        url = self._url(f"/{workflow_id}/respond")
+        url = self._url(f"/{execution_id}/respond")
         resp = await client.post(url, json=body)
         try:
             resp.raise_for_status()
         except httpx.HTTPStatusError as exc:
             _raise_api_error(exc, url=url)
 
-    async def stream_sse(self, workflow_id: str) -> AsyncIterator[Dict[str, Any]]:
+    async def stream_sse(self, execution_id: str) -> AsyncIterator[Dict[str, Any]]:
         """GET /agent/stream/{id} — consume SSE events.
 
         Yields parsed event dicts. Auto-reconnects with ``Last-Event-ID``
         on connection drops. Raises :class:`SSEUnavailableError` if the
         server doesn't support SSE or sends only heartbeats.
         """
-        url = f"{self._server_url}/agent/stream/{workflow_id}"
+        url = f"{self._server_url}/agent/stream/{execution_id}"
         headers = {**self._base_headers(), "Accept": "text/event-stream"}
 
         last_event_id: Optional[str] = None

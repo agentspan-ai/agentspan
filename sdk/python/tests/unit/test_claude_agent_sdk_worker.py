@@ -13,12 +13,12 @@ def _make_options(system_prompt="You are a reviewer"):
     return options
 
 
-def _make_task(prompt="Hello", session_id="", workflow_id="wf-123", cwd=""):
+def _make_task(prompt="Hello", session_id="", execution_id="wf-123", cwd=""):
     from conductor.client.http.models.task import Task
 
     task = MagicMock(spec=Task)
     task.input_data = {"prompt": prompt, "session_id": session_id, "cwd": cwd}
-    task.workflow_instance_id = workflow_id
+    task.workflow_instance_id = execution_id
     task.task_id = "task-456"
     return task
 
@@ -199,7 +199,7 @@ class TestAgentspanHooks:
             "tools_used": set(),
         }
 
-        def capture_push(wf_id, event, *args):
+        def capture_push(exec_id, event, *args):
             pushed.append(event)
 
         with patch(
@@ -232,7 +232,7 @@ class TestAgentspanHooks:
             "tools_used": set(),
         }
 
-        def capture_push(wf_id, event, *args):
+        def capture_push(exec_id, event, *args):
             pushed.append(event)
 
         with patch(
@@ -282,7 +282,7 @@ class TestAgentspanHooks:
             "tools_used": set(),
         }
 
-        def capture_push(wf_id, event, *args):
+        def capture_push(exec_id, event, *args):
             pushed.append(event)
 
         with patch(

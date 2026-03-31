@@ -26,7 +26,7 @@ pip install agentspan
 Set the server URL and model:
 
 ```bash
-export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+export AGENTSPAN_SERVER_URL=http://localhost:6767/api
 export AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini
 ```
 
@@ -69,5 +69,5 @@ python 72_client_reconnect.py status
 - The local Python SDK process can die abruptly
 - The workflow remains durable on the server
 - A fresh process can re-register the tool worker
-- A fresh process can reconnect later by `workflow_id`
+- A fresh process can reconnect later by `execution_id`
 - The same workflow continues and completes after approval is sent

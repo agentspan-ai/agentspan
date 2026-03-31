@@ -32,7 +32,7 @@ if (process.argv[1]?.endsWith('12-long-running.ts') || process.argv[1]?.endsWith
       agent,
       'What are the key metrics to track for a SaaS product?',
     );
-    console.log(`Agent started: ${handle.workflowId}`);
+    console.log(`Agent started: ${handle.executionId}`);
 
     // Poll for completion
     let completed = false;
@@ -49,7 +49,7 @@ if (process.argv[1]?.endsWith('12-long-running.ts') || process.argv[1]?.endsWith
 
     if (!completed) {
       console.log('\nAgent still running. Check the Conductor UI:');
-      console.log(`  http://localhost:8080/execution/${handle.workflowId}`);
+      console.log(`  http://localhost:8080/execution/${handle.executionId}`);
     }
   } finally {
     await runtime.shutdown();

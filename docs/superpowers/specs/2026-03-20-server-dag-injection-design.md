@@ -9,18 +9,18 @@
 
 The SDK's `_AgentDagClient` calls two endpoints that don't exist on the Agentspan server:
 
-- `POST /api/agent/{workflowId}/tasks` — inject a display task into a running workflow
-- `POST /api/agent/workflow` — create a bare tracking workflow for subagent display
+- `POST /api/agent/{executionId}/tasks` — inject a display task into a running execution
+- `POST /api/agent/workflow` — create a bare tracking workflow for sub-agent display
 
-Without these, the Dynamic DAG feature is a no-op: hooks fire, HTTP calls fail silently, and the Conductor workflow DAG shows only the single top-level `_fw_claude_*` task.
+Without these, the Dynamic DAG feature is a no-op: hooks fire, HTTP calls fail silently, and the Conductor DAG shows only the single top-level `_fw_claude_*` task.
 
 ---
 
 ## Architecture
 
-Two new endpoints in `AgentController` backed by a new `AgentDagService`. `AgentDagService` injects `ExecutionDAO` directly to mutate live workflow and task state, bypassing the `WorkflowExecutor` decide loop.
+Two new endpoints in `AgentController` backed by a new `AgentDagService`. `AgentDagService` injects `ExecutionDAO` directly to mutate live execution and task state, bypassing the `WorkflowExecutor` decide loop.
 
-**Why `ExecutionDAO` directly?** `ExecutionService.updateTask()` triggers `decide()` which tries to advance the workflow according to its `WorkflowDef`. Injected tasks have no counterpart in the `WorkflowDef` — they are display-only. Using `ExecutionDAO` directly skips `decide()` and just persists the task to storage. `ExecutionDAO` is a Spring bean provided by Conductor's persistence module (`conductor-sqlite-persistence` / `conductor-postgres-persistence`).
+**Why `ExecutionDAO` directly?** `ExecutionService.updateTask()` triggers `decide()` which tries to advance the execution according to its `WorkflowDef`. Injected tasks have no counterpart in the `WorkflowDef` — they are display-only. Using `ExecutionDAO` directly skips `decide()` and just persists the task to storage. `ExecutionDAO` is a Spring bean provided by Conductor's persistence module (`conductor-sqlite-persistence` / `conductor-postgres-persistence`).
 
 **Why not `ExecutionDAOFacade`?** `ExecutionDAOFacade` adds external payload storage logic. Our task `inputData` is always small (tool arguments) — no need for that layer.
 
@@ -41,10 +41,10 @@ public class AgentDagService {
 ### Method: `injectTask`
 
 ```java
-public InjectTaskResponse injectTask(String workflowId, InjectTaskRequest req)
+public InjectTaskResponse injectTask(String executionId, InjectTaskRequest req)
 ```
 
-1. Load `WorkflowModel workflow = executionDAO.getWorkflow(workflowId, true)`
+1. Load `WorkflowModel workflow = executionDAO.getWorkflow(executionId, true)`
    - Throw `ResponseStatusException(404)` if null
 2. Build `TaskModel`:
    - `taskId = UUID.randomUUID().toString()`
@@ -52,20 +52,20 @@ public InjectTaskResponse injectTask(String workflowId, InjectTaskRequest req)
    - `referenceTaskName = req.getReferenceTaskName()`
    - `taskType = req.getType()` (`"SIMPLE"` or `"SUB_WORKFLOW"`)
    - `status = TaskModel.Status.IN_PROGRESS`
-   - `workflowInstanceId = workflowId`
+   - `workflowInstanceId = executionId`
    - `workflowType = workflow.getWorkflowName()`
    - `inputData = req.getInputData()`
    - `seq = workflow.getTasks().size() + 1`
    - `scheduledTime = startTime = System.currentTimeMillis()`
-   - If `req.getSubWorkflowParam() != null`: set `subWorkflowId = req.getSubWorkflowParam().getWorkflowId()`
+   - If `req.getSubWorkflowParam() != null`: set `subWorkflowId = req.getSubWorkflowParam().getExecutionId()`
 3. `executionDAO.createTasks(List.of(task))`
 4. Return `InjectTaskResponse(taskId)`
 
-The task is linked to the workflow via `workflowInstanceId`. `executionService.getExecutionStatus(workflowId, true)` loads tasks from the `task` table indexed by `workflowInstanceId` — the injected task appears in the response without needing to update the in-memory `WorkflowModel`.
+The task is linked to the execution via `workflowInstanceId`. `executionService.getExecutionStatus(executionId, true)` loads tasks from the `task` table indexed by `workflowInstanceId` — the injected task appears in the response without needing to update the in-memory `WorkflowModel`.
 
 **Concurrency note:** `seq` is derived from `workflow.getTasks().size() + 1` at the time of the call. Under concurrent hook invocations, two calls could assign the same `seq`. This is safe — Conductor's SQLite/Postgres task storage does not enforce `seq` uniqueness as a constraint. Duplicate `seq` values on display-only tasks are cosmetically harmless.
 
-When the SDK later calls native `POST /api/task` to complete/fail the task: Conductor marks the task COMPLETED/FAILED and runs `decide()`. Since the main Claude worker task (`_fw_claude_*`) is still `IN_PROGRESS`, the workflow stays `RUNNING` — no disruption to the agent.
+When the SDK later calls native `POST /api/task` to complete/fail the task: Conductor marks the task COMPLETED/FAILED and runs `decide()`. Since the main Claude worker task (`_fw_claude_*`) is still `IN_PROGRESS`, the execution stays `RUNNING` — no disruption to the agent.
 
 ### Method: `createTrackingWorkflow`
 
@@ -74,7 +74,7 @@ public CreateTrackingWorkflowResponse createTrackingWorkflow(CreateTrackingWorkf
 ```
 
 1. Build a minimal `WorkflowDef`:
-   - `name = req.getWorkflowName()`
+   - `name = req.getAgentName()`
    - `version = 1`
    - `tasks = emptyList()`
    - `inputParameters = List.of("prompt")`
@@ -84,22 +84,22 @@ public CreateTrackingWorkflowResponse createTrackingWorkflow(CreateTrackingWorkf
    - `status = WorkflowModel.Status.RUNNING`
    - `input = req.getInput()`
    - `createTime = System.currentTimeMillis()`
-   - `workflowName = req.getWorkflowName()`  (via `workflow.getWorkflowName()` getter)
+   - `workflowName = req.getAgentName()`  (via `workflow.getWorkflowName()` getter)
 3. `executionDAO.createWorkflow(workflow)` — errors propagate as HTTP 500 via Spring's default error handling; no custom `ResponseStatusException` needed
-4. Return `CreateTrackingWorkflowResponse(workflowId)`
+4. Return `CreateTrackingWorkflowResponse(executionId)`
 
-**Known limitation:** Tracking workflows stay `RUNNING` permanently — they are never auto-completed. They appear in the execution list with their injected tasks visible. Completing tracking workflows is deferred to a future enhancement.
+**Known limitation:** Tracking executions stay `RUNNING` permanently — they are never auto-completed. They appear in the execution list with their injected tasks visible. Completing tracking executions is deferred to a future enhancement.
 
 ---
 
 ## Component 2: New Endpoints in `AgentController`
 
 ```java
-@PostMapping("/{workflowId}/tasks")
+@PostMapping("/{executionId}/tasks")
 public InjectTaskResponse injectTask(
-        @PathVariable String workflowId,
+        @PathVariable String executionId,
         @RequestBody InjectTaskRequest req) {
-    return agentDagService.injectTask(workflowId, req);
+    return agentDagService.injectTask(executionId, req);
 }
 
 // Note: Spring MVC resolves static segments before dynamic ones,
@@ -133,7 +133,7 @@ public class InjectTaskRequest {
     public static class SubWorkflowParam {
         private String name;
         private Integer version;
-        private String workflowId;           // pre-created tracking workflow ID
+        private String executionId;           // pre-created tracking execution ID
     }
 }
 ```
@@ -153,7 +153,7 @@ public class InjectTaskResponse {
 ```java
 @Data
 public class CreateTrackingWorkflowRequest {
-    private String workflowName;
+    private String agentName;
     private Map<String, Object> input;
 }
 ```
@@ -164,7 +164,7 @@ public class CreateTrackingWorkflowRequest {
 @Data
 @AllArgsConstructor
 public class CreateTrackingWorkflowResponse {
-    private String workflowId;
+    private String executionId;
 }
 ```
 
@@ -189,17 +189,17 @@ public class CreateTrackingWorkflowResponse {
 
 - `injectTask` — mock `executionDAO`, verify `createTasks()` called with correct `TaskModel` fields
 - `injectTask` with `SUB_WORKFLOW` type — verify `subWorkflowId` set on `TaskModel`
-- `injectTask` unknown workflow — verify 404 thrown
+- `injectTask` unknown execution — verify 404 thrown
 - `createTrackingWorkflow` — verify `createWorkflow()` called with `RUNNING` status and correct name/input
 
 ### Smoke test
 
-Run the hello world example, fetch `GET /api/agent/execution/{workflowId}`, assert `tasks.length > 1` (at least one injected tool task alongside the main worker task).
+Run the hello world example, fetch `GET /api/agent/execution/{executionId}`, assert `tasks.length > 1` (at least one injected tool task alongside the main worker task).
 
 ---
 
 ## What Is NOT Covered
 
-- Completing tracking workflows (stays `RUNNING` permanently)
+- Completing tracking executions (stays `RUNNING` permanently)
 - Task definition registration (injected tasks use task def names like `"Bash"`, `"Read"` — these may not be registered in Conductor's `MetadataDAO`, but that's fine for display-only tasks)
 - Permission/HUMAN task injection (PermissionRequest hook not yet in SDK 0.1.26)

@@ -49,7 +49,7 @@ public class AgentRuntime implements ApplicationRunner {
         String dbType = environment.getProperty("conductor.db.type", "memory");
         String queueType = environment.getProperty("conductor.queue.type", "memory");
         String indexingType = environment.getProperty("conductor.indexing.type", "memory");
-        String port = environment.getProperty("server.port", "8080");
+        String port = environment.getProperty("server.port", "6767");
         String contextPath = environment.getProperty("server.servlet.context-path", "");
 
         String hostname;

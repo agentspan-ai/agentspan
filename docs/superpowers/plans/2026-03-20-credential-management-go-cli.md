@@ -56,9 +56,9 @@ func TestIsLocalhost(t *testing.T) {
 		url      string
 		expected bool
 	}{
-		{"localhost with port", "http://localhost:8080", true},
+		{"localhost with port", "http://localhost:6767", true},
 		{"localhost no port", "http://localhost", true},
-		{"127.0.0.1 with port", "http://127.0.0.1:8080", true},
+		{"127.0.0.1 with port", "http://127.0.0.1:6767", true},
 		{"127.0.0.1 no port", "http://127.0.0.1", true},
 		{"remote http", "http://team.agentspan.io", false},
 		{"remote https", "https://team.agentspan.io", false},

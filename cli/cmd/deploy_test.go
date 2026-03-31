@@ -271,10 +271,10 @@ func TestParseDiscoveryResult_InvalidJSON(t *testing.T) {
 // ---------- parseDeployResult ----------
 
 func TestParseDeployResult(t *testing.T) {
-	wfName := "agent1_workflow"
+	regName := "agent1_registered"
 	data := []byte(`[
-		{"agent_name":"agent1","workflow_name":"agent1_workflow","success":true,"error":null},
-		{"agent_name":"agent2","workflow_name":null,"success":false,"error":"connection refused"}
+		{"agent_name":"agent1","registered_name":"agent1_registered","success":true,"error":null},
+		{"agent_name":"agent2","registered_name":null,"success":false,"error":"connection refused"}
 	]`)
 
 	results, err := parseDeployResult(data)
@@ -287,8 +287,8 @@ func TestParseDeployResult(t *testing.T) {
 	if !results[0].Success || results[0].AgentName != "agent1" {
 		t.Errorf("result[0] = %+v, want success=true agent_name=agent1", results[0])
 	}
-	if results[0].RegisteredName == nil || *results[0].RegisteredName != wfName {
-		t.Errorf("result[0].RegisteredName = %v, want %q", results[0].RegisteredName, wfName)
+	if results[0].RegisteredName == nil || *results[0].RegisteredName != regName {
+		t.Errorf("result[0].RegisteredName = %v, want %q", results[0].RegisteredName, regName)
 	}
 	if results[1].Success || results[1].Error == nil || *results[1].Error != "connection refused" {
 		t.Errorf("result[1] = %+v, want success=false error='connection refused'", results[1])

@@ -239,7 +239,7 @@ public record Agent(
 ```java
 public record ToolContext(
     String sessionId,
-    String workflowId,
+    String executionId,
     String agentName,
     Map<String, Object> metadata,
     Map<String, Object> dependencies,
@@ -247,7 +247,7 @@ public record ToolContext(
 ) {}
 ```
 
-**POJO:** Same fields as record, with `private final` fields, all-args constructor, and standard getters (`getSessionId()`, `getWorkflowId()`, etc.). Null maps default to `Collections.emptyMap()`.
+**POJO:** Same fields as record, with `private final` fields, all-args constructor, and standard getters (`getSessionId()`, `getExecutionId()`, etc.). Null maps default to `Collections.emptyMap()`.
 
 #### AgentResult
 
@@ -255,7 +255,7 @@ public record ToolContext(
 ```java
 public record AgentResult(
     Object output,
-    String workflowId,
+    String executionId,
     @Nullable String correlationId,
     List<Map<String, Object>> messages,
     List<Map<String, Object>> toolCalls,
@@ -653,7 +653,7 @@ public class AgentRuntime implements AutoCloseable {
 
 ```java
 public class AgentStream implements Iterable<AgentEvent>, AutoCloseable {
-    private final String workflowId;
+    private final String executionId;
     private final SseClient sseClient;
     private final List<AgentEvent> events = new ArrayList<>();
 
@@ -849,9 +849,9 @@ public class SseClient implements AutoCloseable {
     private volatile boolean closed = false;
     private final ObjectMapper mapper = JsonMapper.create();
 
-    public SseClient(String serverUrl, String workflowId, Map<String, String> authHeaders) {
+    public SseClient(String serverUrl, String executionId, Map<String, String> authHeaders) {
         this.httpClient = HttpClient.newHttpClient();
-        this.streamUrl = serverUrl + "/agent/stream/" + workflowId;
+        this.streamUrl = serverUrl + "/agent/stream/" + executionId;
         this.headers = authHeaders;
     }
 
@@ -1319,7 +1319,7 @@ try (AgentRuntime runtime = new AgentRuntime()) {
 
     // Deploy
     DeploymentInfo deployment = runtime.deploy(fullPipeline);
-    System.out.println("Deployed: " + deployment.workflowName());
+    System.out.println("Deployed: " + deployment.registeredName());
 
     // Plan (dry-run)
     ExecutionPlan plan = runtime.plan(fullPipeline);
@@ -1327,7 +1327,7 @@ try (AgentRuntime runtime = new AgentRuntime()) {
 
     // Stream with HITL
     try (AgentStream agentStream = runtime.stream(fullPipeline, PROMPT)) {
-        System.out.println("Workflow: " + agentStream.getWorkflowId());
+        System.out.println("Execution: " + agentStream.getExecutionId());
 
         int feedbackCount = 0, rejectedCount = 0, approvedCount = 0;
 

@@ -205,11 +205,11 @@ const intakeRouter = new Agent({
 const researchDatabase = tool(
   async (args: { query: string }, ctx?: ToolContext) => {
     const session = ctx?.sessionId ?? 'unknown';
-    const workflow = ctx?.workflowId ?? 'unknown';
+    const execution = ctx?.executionId ?? 'unknown';
     return {
       query: args.query,
       sessionId: session,
-      workflowId: workflow,
+      executionId: execution,
       results: MOCK_RESEARCH_DATA['quantum_computing'] ?? {},
     };
   },
@@ -844,7 +844,7 @@ async function main() {
   // ── Feature #43: stream (sync SSE + HITL) ──────────────
   console.log('\n=== Stream Execution ===');
   const agentStream = await runtime.stream(fullPipeline, PROMPT);
-  console.log(`  Workflow: ${agentStream.workflowId}\n`);
+  console.log(`  Execution: ${agentStream.executionId}\n`);
 
   const hitlState = { approved: 0, rejected: 0, feedback: 0 };
 
@@ -915,7 +915,7 @@ async function main() {
   // ── Feature #48: start + polling ───────────────────────
   console.log('\n=== Start + Polling ===');
   const handle = await runtime.start(fullPipeline, PROMPT);
-  console.log(`  Started: ${handle.workflowId}`);
+  console.log(`  Started: ${handle.executionId}`);
   const status = await handle.getStatus();
   console.log(`  Status: ${status.status}, Running: ${status.isRunning}`);
 

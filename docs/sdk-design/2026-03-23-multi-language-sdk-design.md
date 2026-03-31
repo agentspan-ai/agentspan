@@ -91,7 +91,7 @@ Two supported modes:
 
 ### 2.2 REST API Endpoints
 
-Base URL: `{server_url}/agent` (server_url defaults to `http://localhost:8080/api`)
+Base URL: `{server_url}/agent` (server_url defaults to `http://localhost:6767/api`)
 
 #### POST /agent/start — Start Agent Execution
 
@@ -122,8 +122,8 @@ For framework agents (LangGraph, LangChain, OpenAI, Google ADK, Vercel AI SDK):
 **Response:**
 ```json
 {
-  "workflowId": "uuid-string",
-  "workflowName": "agent_name"
+  "executionId": "uuid-string",
+  "registeredName": "agent_name"
 }
 ```
 
@@ -147,19 +147,19 @@ Registers the workflow and task definitions for later execution. CI/CD operation
 **Response:**
 ```json
 {
-  "workflowName": "agent_name",
+  "registeredName": "agent_name",
   "workflowDef": { ... }
 }
 ```
 
-Note: Unlike `/start`, deploy does NOT return a `workflowId` because no execution is started.
+Note: Unlike `/start`, deploy does NOT return an `executionId` because no execution is started.
 
-#### GET /agent/{workflowId}/status — Poll Status
+#### GET /agent/{executionId}/status — Poll Status
 
 **Response:**
 ```json
 {
-  "workflowId": "...",
+  "executionId": "...",
   "status": "RUNNING|COMPLETED|FAILED|TERMINATED|TIMED_OUT|PAUSED",
   "isComplete": true,
   "isRunning": false,
@@ -176,7 +176,7 @@ Note: Unlike `/start`, deploy does NOT return a `workflowId` because no executio
 }
 ```
 
-#### POST /agent/{workflowId}/respond — HITL Response
+#### POST /agent/{executionId}/respond — HITL Response
 
 **Request:**
 ```json
@@ -191,7 +191,7 @@ or
 { "message": "Please revise the introduction" }
 ```
 
-#### GET /agent/stream/{workflowId} — SSE Event Stream
+#### GET /agent/stream/{executionId} — SSE Event Stream
 
 Returns `text/event-stream`. Supports reconnection via `Last-Event-ID` header.
 
@@ -199,21 +199,21 @@ Returns `text/event-stream`. Supports reconnection via `Last-Event-ID` header.
 ```
 id: 1
 event: thinking
-data: {"type":"thinking","content":"Let me analyze...","workflowId":"...","timestamp":1234567890}
+data: {"type":"thinking","content":"Let me analyze...","executionId":"...","timestamp":1234567890}
 
 id: 2
 event: tool_call
-data: {"type":"tool_call","toolName":"search","args":{"query":"..."},"workflowId":"...","timestamp":1234567890}
+data: {"type":"tool_call","toolName":"search","args":{"query":"..."},"executionId":"...","timestamp":1234567890}
 
 id: 3
 event: tool_result
-data: {"type":"tool_result","toolName":"search","result":{"items":[...]},"workflowId":"...","timestamp":1234567890}
+data: {"type":"tool_result","toolName":"search","result":{"items":[...]},"executionId":"...","timestamp":1234567890}
 
 :heartbeat
 
 id: 4
 event: done
-data: {"type":"done","output":{"result":"..."},"workflowId":"...","timestamp":1234567890}
+data: {"type":"done","output":{"result":"..."},"executionId":"...","timestamp":1234567890}
 ```
 
 **Event Types:**
@@ -240,14 +240,14 @@ These may appear on the SSE stream but are not part of the SDK's EventType enum.
 | Type | Fields | Description |
 |------|--------|-------------|
 | `context_condensed` | content | Context window condensation |
-| `subagent_start` | workflowId | Sub-agent workflow started |
-| `subagent_stop` | workflowId | Sub-agent workflow completed |
+| `subagent_start` | executionId | Sub-agent execution started |
+| `subagent_stop` | executionId | Sub-agent execution completed |
 
 **Heartbeat:** Comment lines (`:heartbeat`) every 15 seconds. Not real events — used to keep connection alive.
 
 **Reconnection:** Client sends `Last-Event-ID: <last_id>` header. Server replays missed events from buffer (200 events, 5-min retention).
 
-#### POST /agent/{workflowId}/events — Framework Worker Event Push
+#### POST /agent/{executionId}/events — Framework Worker Event Push
 
 For framework agent workers to push intermediate events back to the server for SSE forwarding.
 
@@ -269,7 +269,7 @@ For framework agent workers to push intermediate events back to the server for S
 
 **Query params:** `agentName`, `status`, `sessionId`
 
-#### GET /agent/execution/{workflowId} — Detailed Execution
+#### GET /agent/execution/{executionId} — Detailed Execution
 
 Full workflow with task list, token usage, sub-workflow details.
 
@@ -281,7 +281,7 @@ SDKs must support configuration via environment variables:
 
 | Environment Variable | Default | Description |
 |---------------------|---------|-------------|
-| `AGENTSPAN_SERVER_URL` | `http://localhost:8080/api` | Server API URL |
+| `AGENTSPAN_SERVER_URL` | `http://localhost:6767/api` | Server API URL |
 | `AGENTSPAN_API_KEY` | — | Bearer token / API key |
 | `AGENTSPAN_AUTH_KEY` | — | Legacy auth key |
 | `AGENTSPAN_AUTH_SECRET` | — | Legacy auth secret |
@@ -509,7 +509,7 @@ The single orchestration primitive. Every agent — simple or complex — is an 
 | `max_turns` | int | 25 | Max LLM call turns |
 | `max_tokens` | int | null | Max tokens per LLM call |
 | `temperature` | float | null | LLM temperature |
-| `timeout_seconds` | int | 0 | Workflow timeout (0 = no timeout) |
+| `timeout_seconds` | int | 0 | Execution timeout (0 = no timeout) |
 | `external` | bool | false | True if this agent runs elsewhere |
 | `stop_when` | callable | null | Custom stop condition |
 | `termination` | TerminationCondition | null | Composable stop condition |
@@ -563,7 +563,7 @@ The TypeScript SDK is a **superset** — it accepts both Vercel AI SDK-style too
 
 This means a user can do:
 ```typescript
-import { tool } from '@agentspan/sdk';
+import { tool } from '@agentspan-ai/sdk';
 import { tool as aiTool } from 'ai';
 import { z } from 'zod';
 
@@ -604,7 +604,7 @@ When a tool function declares a `ToolContext` parameter, the SDK injects executi
 | Field | Type | Description |
 |-------|------|-------------|
 | `session_id` | string | Session identifier |
-| `workflow_id` | string | Conductor workflow ID |
+| `execution_id` | string | Execution ID |
 | `agent_name` | string | Calling agent's name |
 | `metadata` | map | Agent metadata |
 | `dependencies` | map | Injected dependencies |
@@ -682,7 +682,7 @@ Guardrails with `external=True` — the SDK emits just the task name. A remote g
 
 ```
 RETRY — Re-run the LLM with the guardrail feedback
-RAISE — Fail the workflow
+RAISE — Fail the execution
 FIX   — Use guardrail's fixed_output as the result
 HUMAN — Pause for human review
 ```
@@ -701,7 +701,7 @@ OUTPUT — Validate after LLM call
 | Field | Type | Description |
 |-------|------|-------------|
 | `output` | any (dict) | Final output — always dict with `result` key |
-| `workflow_id` | string | Conductor workflow ID |
+| `execution_id` | string | Execution ID |
 | `correlation_id` | string | Optional correlation ID |
 | `messages` | Message[] | Full conversation history |
 | `tool_calls` | ToolCall[] | All tool invocations |
@@ -755,7 +755,7 @@ Every method must have both sync and async variants.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `workflow_id` | string | Conductor workflow ID |
+| `execution_id` | string | Execution ID |
 | `is_complete` | bool | Terminal state reached |
 | `is_running` | bool | Still executing |
 | `is_waiting` | bool | Paused (HITL) |
@@ -777,7 +777,7 @@ Every method must have both sync and async variants.
 | `result` | any | Tool result |
 | `target` | string | Handoff target |
 | `output` | any | Final output (done event) |
-| `workflow_id` | string | Workflow ID |
+| `execution_id` | string | Execution ID |
 | `guardrail_name` | string | Guardrail name |
 
 #### EventType Enum
@@ -800,7 +800,7 @@ Also exposes HITL methods: `respond()`, `approve()`, `reject()`, `send()`
 #### DeploymentInfo
 
 ```
-workflow_name: string, agent_name: string
+registered_name: string, agent_name: string
 ```
 
 ### 4.5 Execution API
@@ -1139,7 +1139,7 @@ The solution: **drop-in import wrappers** that intercept framework function call
 import { generateText } from 'ai';
 
 // AFTER (one import change):
-import { generateText } from '@agentspan/sdk/vercel-ai';
+import { generateText } from '@agentspan-ai/sdk/vercel-ai';
 
 // Everything else UNCHANGED:
 const result = await generateText({
@@ -1151,7 +1151,7 @@ const result = await generateText({
 // Now compiles to: LLM_CHAT_COMPLETE + SIMPLE per tool on Conductor
 ```
 
-`@agentspan/sdk/vercel-ai` re-exports everything from `ai` but wraps `generateText` and `streamText`. The wrapper:
+`@agentspan-ai/sdk/vercel-ai` re-exports everything from `ai` but wraps `generateText` and `streamText`. The wrapper:
 1. Intercepts the options object `{ model, tools, system, maxSteps, prompt }`
 2. Extracts model (provider + model name from the AI SDK model object)
 3. Extracts tools (Zod schemas + execute functions → `ToolConfig[]` with workers)
@@ -1166,7 +1166,7 @@ const result = await generateText({
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 
 // AFTER:
-import { createReactAgent } from '@agentspan/sdk/langgraph';
+import { createReactAgent } from '@agentspan-ai/sdk/langgraph';
 
 // Everything else UNCHANGED:
 const graph = createReactAgent({ llm: new ChatOpenAI({ model: 'gpt-4o-mini' }), tools: [search] });
@@ -1184,7 +1184,7 @@ For custom `StateGraph`, the wrapper intercepts `addNode()` to capture node func
 import { AgentExecutor } from 'langchain/agents';
 
 // AFTER:
-import { AgentExecutor } from '@agentspan/sdk/langchain';
+import { AgentExecutor } from '@agentspan-ai/sdk/langchain';
 
 // Everything else UNCHANGED
 ```
@@ -1225,9 +1225,9 @@ const result = await runtime.run(agent, 'Hello');  // model/tools extracted from
 
 | Wrapper | Intercepts | Captures | Stores On |
 |---------|-----------|----------|-----------|
-| `@agentspan/sdk/vercel-ai` | `generateText`, `streamText` | model, tools, system, maxSteps | Options object → AgentConfig at call time |
-| `@agentspan/sdk/langgraph` | `createReactAgent`, `StateGraph` | llm, tools at creation | Graph object properties |
-| `@agentspan/sdk/langchain` | `AgentExecutor`, chain builders | agent.llm, tools at construction | Executor object properties |
+| `@agentspan-ai/sdk/vercel-ai` | `generateText`, `streamText` | model, tools, system, maxSteps | Options object → AgentConfig at call time |
+| `@agentspan-ai/sdk/langgraph` | `createReactAgent`, `StateGraph` | llm, tools at creation | Graph object properties |
+| `@agentspan-ai/sdk/langchain` | `AgentExecutor`, chain builders | agent.llm, tools at construction | Executor object properties |
 
 #### Detection (duck-typing, no hard imports)
 
@@ -1235,9 +1235,9 @@ SDKs detect framework agents via property/method signatures without importing fr
 
 | Framework | Integration method | Detection |
 |-----------|-------------------|-----------|
-| Vercel AI SDK | Drop-in wrapper (`@agentspan/sdk/vercel-ai`) | N/A — intercepted at call site |
-| LangGraph.js | Drop-in wrapper (`@agentspan/sdk/langgraph`) + duck-typing for wrapped graphs | Has `invoke()` + `_agentspan` metadata (set by wrapper) |
-| LangChain.js | Drop-in wrapper (`@agentspan/sdk/langchain`) + duck-typing for wrapped executors | Has `invoke()` + `_agentspan` metadata (set by wrapper) |
+| Vercel AI SDK | Drop-in wrapper (`@agentspan-ai/sdk/vercel-ai`) | N/A — intercepted at call site |
+| LangGraph.js | Drop-in wrapper (`@agentspan-ai/sdk/langgraph`) + duck-typing for wrapped graphs | Has `invoke()` + `_agentspan` metadata (set by wrapper) |
+| LangChain.js | Drop-in wrapper (`@agentspan-ai/sdk/langchain`) + duck-typing for wrapped executors | Has `invoke()` + `_agentspan` metadata (set by wrapper) |
 | OpenAI Agents SDK | Direct extraction (zero changes) | Has `name` + `instructions` + `model` + `tools` + `handoffs` |
 | Google ADK | Direct extraction (zero changes) | Has `model` + `instruction` + ADK-specific properties |
 
@@ -1245,15 +1245,15 @@ SDKs detect framework agents via property/method signatures without importing fr
 
 | Framework | User changes | What happens |
 |-----------|-------------|-------------|
-| **Vercel AI SDK** | Change 1 import: `from 'ai'` → `from '@agentspan/sdk/vercel-ai'` | `generateText` intercepted, compiled to workflow |
-| **LangGraph** | Change 1 import: `from '@langchain/langgraph/prebuilt'` → `from '@agentspan/sdk/langgraph'` | `createReactAgent` captures llm/tools at creation |
-| **LangChain** | Change 1 import: `from 'langchain/agents'` → `from '@agentspan/sdk/langchain'` | `AgentExecutor` captures agent/tools at construction |
+| **Vercel AI SDK** | Change 1 import: `from 'ai'` → `from '@agentspan-ai/sdk/vercel-ai'` | `generateText` intercepted, compiled to workflow |
+| **LangGraph** | Change 1 import: `from '@langchain/langgraph/prebuilt'` → `from '@agentspan-ai/sdk/langgraph'` | `createReactAgent` captures llm/tools at creation |
+| **LangChain** | Change 1 import: `from 'langchain/agents'` → `from '@agentspan-ai/sdk/langchain'` | `AgentExecutor` captures agent/tools at construction |
 | **OpenAI Agents** | **Zero changes** | Extracted from public properties |
 | **Google ADK** | **Zero changes** | Extracted from public properties |
 
 #### Framework-Specific Extraction: LangGraph
 
-**With wrapper (`@agentspan/sdk/langgraph`):**
+**With wrapper (`@agentspan-ai/sdk/langgraph`):**
 
 The wrapper intercepts `createReactAgent` and captures `llm` + `tools` at creation time — before they enter closures. These are stored as `_agentspan` metadata on the returned graph. When `runtime.run(graph, prompt)` is called, the SDK reads the metadata.
 
@@ -1394,7 +1394,7 @@ This is the core mechanism for distributed agent systems.
 ### 6.1 SSE Client Requirements
 
 Every SDK must implement an SSE client that:
-1. Connects to `GET /agent/stream/{workflowId}` with `Accept: text/event-stream`
+1. Connects to `GET /agent/stream/{executionId}` with `Accept: text/event-stream`
 2. Parses SSE wire format (event, id, data fields)
 3. Handles heartbeat comments (`:` prefix lines)
 4. Reconnects on connection drop with `Last-Event-ID` header
@@ -1467,7 +1467,7 @@ A single mega-workflow that processes an article request through a complete publ
 
 - Parallel agents: web researcher (HTTP tools + credentials), data analyst (native `@tool`), fact checker (MCP tools)
 - `scatter_gather()` collects results
-- Native tools demonstrate `ToolContext` injection (session_id, workflow_id)
+- Native tools demonstrate `ToolContext` injection (session_id, execution_id)
 - HTTP tool hits an API with credential-based auth headers
 - MCP tool connects to an MCP server
 - External tool references a remote research worker (by-reference, no local implementation)
@@ -1531,7 +1531,7 @@ A single mega-workflow that processes an article request through a complete publ
 #### Stage 9 — Deployment & Execution Modes
 **Features:** deploy, serve, plan, run/run_async, start/start_async, stream/stream_async
 
-- `deploy()` registers the workflow
+- `deploy()` registers the agent definition
 - `plan()` compile-only dry-run preview
 - `run()` synchronous execution
 - `run_async()` asynchronous execution
@@ -1540,7 +1540,7 @@ A single mega-workflow that processes an article request through a complete publ
 
 ### 8.3 Cross-Cutting Concerns
 
-Exercised throughout the workflow:
+Exercised throughout the execution:
 
 - **All credential modes:** isolated subprocess, in-process `get_credential()`, CLI injection, HTTP header injection, MCP credential injection, framework agent workers, external worker credentials
 - **CliConfig:** CLI tool allowlisting for git/gh commands
@@ -2158,7 +2158,7 @@ When `idempotencyKey` is provided:
 1. Server maps it to Conductor's `correlationId`
 2. Server searches for existing workflow with same agent name + correlationId
 3. Search scope: **RUNNING or COMPLETED** workflows only (not FAILED)
-4. If found: returns existing `workflowId` without re-execution
+4. If found: returns existing `executionId` without re-execution
 5. If not found: creates new execution with `correlationId = idempotencyKey`
 
 **Key behavior:** Failed workflows are NOT deduplicated — a new execution is created.
@@ -2186,7 +2186,7 @@ When a tool modifies `ToolContext.state`, the SDK captures mutations and appends
 
 ### 14.7 Framework Event Push Wire Format
 
-Framework agent workers push events to `POST /agent/{workflowId}/events`:
+Framework agent workers push events to `POST /agent/{executionId}/events`:
 
 ```json
 [
@@ -2194,8 +2194,8 @@ Framework agent workers push events to `POST /agent/{workflowId}/events`:
   {"type": "tool_call", "toolName": "search", "args": {"input": "query"}},
   {"type": "tool_result", "toolName": "search", "result": "result text"},
   {"type": "context_condensed", "trigger": "reason", "messagesBefore": 50, "messagesAfter": 20},
-  {"type": "subagent_start", "subWorkflowId": "uuid", "prompt": "text"},
-  {"type": "subagent_stop", "subWorkflowId": "uuid", "result": "text"}
+  {"type": "subagent_start", "subExecutionId": "uuid", "prompt": "text"},
+  {"type": "subagent_stop", "subExecutionId": "uuid", "result": "text"}
 ]
 ```
 
@@ -2303,7 +2303,7 @@ Workers extract the execution token from task input for credential resolution:
   "tool_arg_1": "value",
   "__agentspan_ctx__": {
     "execution_token": "base64url.payload.signature",
-    "workflow_id": "uuid",
+    "execution_id": "uuid",
     "session_id": "optional"
   }
 }
@@ -2393,7 +2393,7 @@ For framework integrations (Vercel AI, LangChain, etc.), the ideal onboarding is
 ```typescript
 // Before: import { generateText } from 'ai';
 // After:
-import { generateText } from '@agentspan/sdk/vercel-ai';
+import { generateText } from '@agentspan-ai/sdk/vercel-ai';
 ```
 
 This is better than requiring users to rewrite their agent as `new Agent({...})`. The wrapper internally builds an Agent, runs it, and maps the result back to the framework's format. Reserve the explicit Agent API for when users need agentspan-specific features (guardrails, termination, handoffs, HITL).
@@ -2440,7 +2440,7 @@ Each SDK must provide a deploy entry point that:
 
 1. **Re-discovers agents** (same as discovery) and filters by `--agents` if specified
 2. **Calls `deploy()` per agent** with individual error handling — partial failures must not abort the batch
-3. **Outputs JSON to stdout**: `[{"agent_name": "...", "workflow_name": "...", "success": true/false, "error": null/"..."}]`
+3. **Outputs JSON to stdout**: `[{"agent_name": "...", "registered_name": "...", "success": true/false, "error": null/"..."}]`
 4. **Native agents** (including `claude-code` models) are serialized via `AgentConfigSerializer` and sent as `{"agentConfig": {...}}`
 5. **Framework agents** are serialized via `serialize_agent()` / `_serializeFramework()` and sent as `{"framework": "...", "rawConfig": {...}}`
 

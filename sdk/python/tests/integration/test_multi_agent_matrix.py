@@ -14,7 +14,7 @@ Run:
 
 Requirements:
     - Conductor server running
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - AGENT_LLM_MODEL set (default: openai/gpt-4o-mini)
 """
 
@@ -66,7 +66,7 @@ class Result:
     spec: Spec
     status: str
     output: str
-    workflow_id: str
+    execution_id: str
     agent_result: Optional[AgentResult] = None
 
 
@@ -535,7 +535,7 @@ def _fetch_agent_result(handle, runtime, status) -> Optional[AgentResult]:
         token_usage = None
         try:
             wf = runtime._workflow_client.get_workflow(
-                workflow_id=handle.workflow_id,
+                execution_id=handle.execution_id,
                 include_tasks=True,
             )
             tool_calls = runtime._extract_tool_calls(wf)
@@ -546,7 +546,7 @@ def _fetch_agent_result(handle, runtime, status) -> Optional[AgentResult]:
 
         return AgentResult(
             output=output,
-            workflow_id=handle.workflow_id,
+            execution_id=handle.execution_id,
             status=raw_status,
             finish_reason=runtime._derive_finish_reason(raw_status, status.output),
             error=status.reason if raw_status in ("FAILED", "TERMINATED") else None,
@@ -567,7 +567,7 @@ def matrix_results(runtime):
     for spec in SPECS:
         handle = runtime.start(spec.agent, spec.prompt)
         handles.append((spec, handle))
-        print(f"  Started #{spec.num:2d} {spec.test_id}: wf={handle.workflow_id}")
+        print(f"  Started #{spec.num:2d} {spec.test_id}: wf={handle.execution_id}")
 
     print(f"\n  All {len(SPECS)} workflows started. Polling for completion...\n")
 
@@ -585,7 +585,7 @@ def matrix_results(runtime):
             if status.is_complete:
                 completed_statuses[spec.num] = (handle, status)
                 print(f"  Done #{spec.num:2d} {spec.test_id}: "
-                      f"status={status.status}  wf={handle.workflow_id}")
+                      f"status={status.status}  wf={handle.execution_id}")
             else:
                 still_pending.append(i)
         pending = still_pending
@@ -608,7 +608,7 @@ def matrix_results(runtime):
             spec=spec,
             status=status.status,
             output=str(status.output) if status.output else "",
-            workflow_id=handle.workflow_id,
+            execution_id=handle.execution_id,
             agent_result=agent_result,
         )
 
@@ -617,9 +617,9 @@ def matrix_results(runtime):
         spec, handle = handles[i]
         results[spec.num] = Result(
             spec=spec, status="TIMEOUT", output="",
-            workflow_id=handle.workflow_id,
+            execution_id=handle.execution_id,
         )
-        print(f"  TIMEOUT #{spec.num:2d} {spec.test_id}: wf={handle.workflow_id}")
+        print(f"  TIMEOUT #{spec.num:2d} {spec.test_id}: wf={handle.execution_id}")
 
     completed = sum(1 for r in results.values() if r.status != "TIMEOUT")
     print(f"\n  {completed}/{len(SPECS)} workflows completed.\n")
@@ -634,12 +634,12 @@ def matrix_results(runtime):
 def _check(matrix_results, num):
     """Validate result for matrix cell #num against its spec."""
     r = matrix_results[num]
-    print(f"  wf={r.workflow_id}  status={r.status}")
+    print(f"  wf={r.execution_id}  status={r.status}")
     assert r.status != "TIMEOUT", (
-        f"#{num} {r.spec.test_id}: polling timed out (wf={r.workflow_id})"
+        f"#{num} {r.spec.test_id}: polling timed out (wf={r.execution_id})"
     )
     assert r.status != "TIMED_OUT", (
-        f"#{num} {r.spec.test_id}: workflow timed out on server (wf={r.workflow_id})"
+        f"#{num} {r.spec.test_id}: workflow timed out on server (wf={r.execution_id})"
     )
     assert r.status in r.spec.valid_statuses, (
         f"#{num} {r.spec.test_id}: expected {r.spec.valid_statuses}, got {r.status}"

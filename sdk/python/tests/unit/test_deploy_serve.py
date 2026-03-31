@@ -34,7 +34,7 @@ class TestDeploy:
         with patch.object(rt, "_deploy_via_server", return_value="bot_wf") as mock:
             results = rt.deploy(agent)
         assert len(results) == 1
-        assert results[0].workflow_name == "bot_wf"
+        assert results[0].registered_name == "bot_wf"
         assert results[0].agent_name == "bot"
         mock.assert_called_once()
 
@@ -48,7 +48,7 @@ class TestDeploy:
         ):
             results = rt.deploy(a1, a2, a3)
         assert len(results) == 3
-        assert [r.workflow_name for r in results] == ["a1_wf", "a2_wf", "a3_wf"]
+        assert [r.registered_name for r in results] == ["a1_wf", "a2_wf", "a3_wf"]
 
     def test_deploy_with_packages(self):
         rt = _make_runtime()
@@ -186,7 +186,7 @@ class TestRunByName:
 
     def test_stream_with_string(self):
         rt = _make_runtime()
-        mock_handle = MagicMock(workflow_id="wf-123")
+        mock_handle = MagicMock(execution_id="wf-123")
         mock_stream_iter = iter([])
         with patch.object(rt, "_start_by_name", return_value=mock_handle):
             with patch.object(

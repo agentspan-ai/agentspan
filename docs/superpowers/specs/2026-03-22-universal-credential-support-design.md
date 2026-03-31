@@ -56,7 +56,7 @@ This design extends the existing credential pipeline to cover every tool type un
 http_tool(
     name="github_api",
     url="https://api.github.com/repos",
-    headers={"Authorization": "Bearer sk-hardcoded"},  # static, baked into workflow
+    headers={"Authorization": "Bearer sk-hardcoded"},  # static, baked into agent config
 )
 ```
 
@@ -156,7 +156,7 @@ if (httpCfg[n]) {
 }
 ```
 
-**Security:** Resolved credential values exist only in the in-memory `inputData` during execution. Conductor's `HttpTask` does not persist resolved headers back to the task model. The `${NAME}` placeholders remain in the workflow definition.
+**Security:** Resolved credential values exist only in the in-memory `inputData` during execution. Conductor's `HttpTask` does not persist resolved headers back to the task model. The `${NAME}` placeholders remain in the agent definition.
 
 ### Test
 
@@ -175,7 +175,7 @@ if (httpCfg[n]) {
 # 4. Compile agent via /api/agent/compile — verify ${...} in workflow def
 # 5. Run agent, prompt LLM to call the tool
 # 6. Echo server verifies: received header "X-Test-Auth: Bearer <resolved_value>"
-# 7. Verify workflow output contains the echo response
+# 7. Verify execution output contains the echo response
 # 8. Cleanup: delete test credential
 ```
 
@@ -219,12 +219,12 @@ with AgentRuntime() as runtime:
 ### How It Works
 
 1. **SDK** (`runtime.py`): `run()`, `start()`, and `stream()` accept `credentials` kwarg
-2. **SDK** (`runtime.py`): Credentials included in the workflow start request payload
+2. **SDK** (`runtime.py`): Credentials included in the execution start request payload
 3. **Server** (`AgentService.java`): For framework agents, the start request carries credentials in the input. `AgentService` reads them and includes in execution token `declared_names` — **in addition to** any credentials extracted from the agent config.
-4. **Server**: Token embedded in workflow input as `__agentspan_ctx__` (already done)
+4. **Server**: Token embedded in execution input as `__agentspan_ctx__` (already done)
 5. **SDK passthrough workers**: Before invoking graph/executor:
    - Extract execution token from task input
-   - Read credential names from a workflow-level registry (see Gap 4)
+   - Read credential names from an execution-level registry (see Gap 4)
    - Call `WorkerCredentialFetcher.fetch(token, credential_names)`
    - Inject resolved credentials into `os.environ`
    - Invoke graph/executor
@@ -246,7 +246,7 @@ All four frameworks follow the same pattern. The credential injection point vari
 |-----------|---------------|-----------------|
 | LangGraph | `make_langgraph_worker()` in `frameworks/langgraph.py` | Before `graph.stream()` / `graph.invoke()` |
 | LangChain | `make_langchain_worker()` in `frameworks/langchain.py` | Before `executor.invoke()` |
-| OpenAI Agent SDK | Generic path via `_register_framework_workers()` | In `make_tool_worker()` via workflow credential fallback (Gap 4) |
+| OpenAI Agent SDK | Generic path via `_register_framework_workers()` | In `make_tool_worker()` via execution credential fallback (Gap 4) |
 | Google ADK | Generic path via `_register_framework_workers()` | Same as OpenAI |
 
 ### SDK Changes
@@ -255,7 +255,7 @@ All four frameworks follow the same pattern. The credential injection point vari
 - `runtime.py`: `_start_via_server()` and `_start_framework_via_server()` include credentials in request
 - `frameworks/langgraph.py`: `make_langgraph_worker()` — add credential resolution + env injection
 - `frameworks/langchain.py`: `make_langchain_worker()` — same
-- Server `AgentService.java`: When starting workflow, read `credentials` from start request input, include in token minting
+- Server `AgentService.java`: When starting execution, read `credentials` from start request input, include in token minting
 
 ### Test
 
@@ -276,7 +276,7 @@ When `_register_framework_workers()` extracts individual tools from a framework 
 
 ### Design
 
-Add a workflow-level credential registry. When `credentials=[...]` is passed on `run()`, ALL tools in that workflow inherit those credentials as a fallback.
+Add an execution-level credential registry. When `credentials=[...]` is passed on `run()`, ALL tools in that execution inherit those credentials as a fallback.
 
 ```python
 # In _dispatch.py
@@ -294,21 +294,21 @@ if not credential_names and task.workflow_instance_id:
 
 ### Lifecycle
 
-- **Populate:** `runtime.py` sets `_workflow_credentials[workflow_id] = credentials` after `_start_via_server()` returns the workflow ID
-- **Cleanup:** `runtime.py` deletes the entry in `_poll_status_until_complete()` after workflow finishes (in a `finally` block)
+- **Populate:** `runtime.py` sets `_workflow_credentials[execution_id] = credentials` after `_start_via_server()` returns the execution ID
+- **Cleanup:** `runtime.py` deletes the entry in `_poll_status_until_complete()` after execution finishes (in a `finally` block)
 - **Thread safety:** Protected by `threading.Lock` for read/write
 
 ### SDK Changes
 
 - `_dispatch.py`: Add `_workflow_credentials` dict with lock, use as fallback in credential resolution
-- `runtime.py`: Populate after workflow start, clean up after completion
+- `runtime.py`: Populate after execution start, clean up after completion
 
 ### Test
 
 ```python
 # Extract tools from a framework agent, register as workers
 # Run with credentials=["_TEST_EXTRACTED_CRED"]
-# Verify extracted tool receives the credential via workflow fallback
+# Verify extracted tool receives the credential via execution fallback
 ```
 
 ---
@@ -352,7 +352,7 @@ def resolve_credentials(input_data: dict, names: list) -> dict:
 ```python
 # Store credential on server
 # Create agent with @tool(external=True, credentials=["_TEST_EXT_CRED"])
-# Start workflow
+# Start execution
 # Simulate external worker: fetch task from Conductor API, call resolve_credentials()
 # Verify credential returned
 ```
@@ -368,7 +368,7 @@ Each phase is fully tested before moving to the next.
 | **1** | `http_tool()` credential binding | Server-side Java | Echo HTTP server verifies resolved headers |
 | **2** | `mcp_tool()` credential binding | Server-side Java | Same pattern with MCP headers |
 | **3** | Framework passthrough `run(credentials=[...])` | SDK-side Python | LangGraph/LangChain tool reads resolved env var |
-| **4** | Workflow-level credential fallback | SDK-side Python | OpenAI/ADK extracted tool reads resolved env var |
+| **4** | Execution-level credential fallback | SDK-side Python | OpenAI/ADK extracted tool reads resolved env var |
 | **5** | External worker helper + docs | Documentation + helper | External worker calls resolve API |
 | **6** | Full validation | Both | Run all credential examples against live server |
 
@@ -406,7 +406,7 @@ For every phase:
 | `CredentialAwareHttpTask.java` | NEW — extends `HttpTask`, resolves `${NAME}` in headers before execution |
 | `JavaScriptBuilder.java` | Enrichment script passes `agentspanCtx` to HTTP and MCP task branches |
 | `ToolCompiler.java` | Register `CredentialAwareHttpTask` as HTTP task handler |
-| `AgentService.java` | Read `credentials` from workflow start input for token minting |
+| `AgentService.java` | Read `credentials` from execution start input for token minting |
 
 ### Tests
 
@@ -421,8 +421,8 @@ For every phase:
 
 ## What This Design Does NOT Cover
 
-- **Credential caching** — every resolve call hits the DB. Can add per-workflow caching later.
-- **Credential rotation** — changing a credential mid-workflow requires re-storing it. No hot-reload.
+- **Credential caching** — every resolve call hits the DB. Can add per-execution caching later.
+- **Credential rotation** — changing a credential mid-execution requires re-storing it. No hot-reload.
 - **Vault/KMS backends** — `CredentialStoreProvider` interface supports pluggable backends (enterprise boundary).
 - **Conductor `@worker_task` credential support** — deferred to core Python SDK work.
 - **Multi-threaded passthrough workers** — documented as unsupported with credentials. `thread_count=1` enforced.

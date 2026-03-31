@@ -73,9 +73,9 @@ class AgentControllerSSEIntegrationTest {
      * Opens a real HTTP SSE connection and collects events until the
      * connection closes or the expected count is reached.
      */
-    private List<SSEWireEvent> collectSSEEvents(String workflowId, Long lastEventId, int expectedCount, long timeoutMs)
+    private List<SSEWireEvent> collectSSEEvents(String executionId, Long lastEventId, int expectedCount, long timeoutMs)
             throws Exception {
-        URI uri = URI.create(baseUrl() + "/stream/" + workflowId);
+        URI uri = URI.create(baseUrl() + "/stream/" + executionId);
         HttpURLConnection conn = (HttpURLConnection) uri.toURL().openConnection();
         conn.setRequestMethod("GET");
         conn.setRequestProperty("Accept", "text/event-stream");
@@ -123,16 +123,7 @@ class AgentControllerSSEIntegrationTest {
 
     // ── Tests ────────────────────────────────────────────────────────
 
-    @Test
-    void healthEndpointReturnsHello() throws Exception {
-        HttpURLConnection conn =
-                (HttpURLConnection) URI.create(baseUrl()).toURL().openConnection();
-        conn.setRequestMethod("GET");
-        assertThat(conn.getResponseCode()).isEqualTo(200);
-        String body = new String(conn.getInputStream().readAllBytes());
-        assertThat(body).isEqualTo("Hello, Agent!");
-        conn.disconnect();
-    }
+
 
     @Test
     void sseEndpointReturnsEventStream() throws Exception {

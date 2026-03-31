@@ -552,7 +552,7 @@ from agentspan.agents.runtime.credentials.types import (
 )
 
 
-def _make_fetcher(strict_mode: bool = False, server_url: str = "http://localhost:8080/api"):
+def _make_fetcher(strict_mode: bool = False, server_url: str = "http://localhost:6767/api"):
     return WorkerCredentialFetcher(server_url=server_url, strict_mode=strict_mode)
 
 
@@ -795,14 +795,14 @@ class WorkerCredentialFetcher:
     """Fetches credentials for a worker task execution.
 
     Args:
-        server_url: Base URL of the agentspan server API (e.g. ``"http://localhost:8080/api"``).
+        server_url: Base URL of the agentspan server API (e.g. ``"http://localhost:6767/api"``).
         strict_mode: When ``True``, disables env var fallback entirely.
         api_key: Optional Bearer token or API key for the Authorization header.
     """
 
     def __init__(
         self,
-        server_url: str = "http://localhost:8080/api",
+        server_url: str = "http://localhost:6767/api",
         strict_mode: bool = False,
         api_key: Optional[str] = None,
     ) -> None:
@@ -2150,7 +2150,7 @@ class AgentConfig:
         log_level: Logging level for the agentspan logger.
     """
 
-    server_url: str = "http://localhost:8080/api"
+    server_url: str = "http://localhost:6767/api"
     api_key: Optional[str] = None
     auth_key: Optional[str] = None
     auth_secret: Optional[str] = None
@@ -2185,7 +2185,7 @@ class AgentConfig:
         if isinstance(log_level, str) and log_level.strip() == "":
             log_level = "INFO"
         return cls(
-            server_url=_env("AGENTSPAN_SERVER_URL", "http://localhost:8080/api"),
+            server_url=_env("AGENTSPAN_SERVER_URL", "http://localhost:6767/api"),
             api_key=_env("AGENTSPAN_API_KEY"),
             auth_key=_env("AGENTSPAN_AUTH_KEY"),
             auth_secret=_env("AGENTSPAN_AUTH_SECRET"),

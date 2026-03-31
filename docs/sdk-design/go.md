@@ -227,7 +227,7 @@ const (
 
 type AgentResult struct {
     Output        map[string]any        `json:"output"`
-    WorkflowID    string                `json:"workflowId"`
+    ExecutionID   string                `json:"executionId"`
     CorrelationID string                `json:"correlationId,omitempty"`
     Messages      []map[string]any      `json:"messages,omitempty"`
     ToolCalls     []ToolCall            `json:"toolCalls,omitempty"`
@@ -259,7 +259,7 @@ type TokenUsage struct {
 
 type ToolContext struct {
     SessionID    string         `json:"sessionId"`
-    WorkflowID   string         `json:"workflowId"`
+    ExecutionID  string         `json:"executionId"`
     AgentName    string         `json:"agentName"`
     Metadata     map[string]any `json:"metadata"`
     Dependencies map[string]any `json:"dependencies"`
@@ -301,7 +301,7 @@ type CredentialFile struct {
 // ── DeploymentInfo ──────────────────────────────────────────────────
 
 type DeploymentInfo struct {
-    WorkflowName string `json:"workflowName"`
+    RegisteredName string `json:"registeredName"`
     AgentName    string `json:"agentName"`
 }
 ```
@@ -556,7 +556,7 @@ func (rt *AgentRuntime) Start(ctx context.Context, agent *Agent, prompt string) 
         return nil, err
     }
     return &AgentHandle{
-        WorkflowID: resp.WorkflowID,
+        ExecutionID: resp.ExecutionID,
         runtime:    rt,
     }, nil
 }
@@ -575,11 +575,11 @@ func (rt *AgentRuntime) Stream(ctx context.Context, agent *Agent, prompt string)
 
 ```go
 type AgentHandle struct {
-    WorkflowID string
-    runtime    *AgentRuntime
+    ExecutionID string
+    runtime     *AgentRuntime
 }
 
-// Wait polls until the workflow completes and returns the result.
+// Wait polls until the execution completes and returns the result.
 func (h *AgentHandle) Wait(ctx context.Context) (*AgentResult, error) {
     ticker := time.NewTicker(500 * time.Millisecond)
     defer ticker.Stop()
@@ -599,35 +599,35 @@ func (h *AgentHandle) Wait(ctx context.Context) (*AgentResult, error) {
     }
 }
 
-// GetStatus polls the workflow status once.
+// GetStatus polls the execution status once.
 func (h *AgentHandle) GetStatus(ctx context.Context) (*AgentStatus, error) {
-    return h.runtime.httpClient.GetStatus(ctx, h.WorkflowID)
+    return h.runtime.httpClient.GetStatus(ctx, h.ExecutionID)
 }
 
 // Approve sends HITL approval.
 func (h *AgentHandle) Approve(ctx context.Context) error {
-    return h.runtime.httpClient.Respond(ctx, h.WorkflowID, map[string]any{"approved": true})
+    return h.runtime.httpClient.Respond(ctx, h.ExecutionID, map[string]any{"approved": true})
 }
 
 // Reject sends HITL rejection with a reason.
 func (h *AgentHandle) Reject(ctx context.Context, reason string) error {
-    return h.runtime.httpClient.Respond(ctx, h.WorkflowID, map[string]any{
+    return h.runtime.httpClient.Respond(ctx, h.ExecutionID, map[string]any{
         "approved": false, "reason": reason,
     })
 }
 
 // Send sends a feedback message to a waiting agent.
 func (h *AgentHandle) Send(ctx context.Context, message string) error {
-    return h.runtime.httpClient.Respond(ctx, h.WorkflowID, map[string]any{"message": message})
+    return h.runtime.httpClient.Respond(ctx, h.ExecutionID, map[string]any{"message": message})
 }
 
-// Stream returns a channel-based event stream for this workflow.
+// Stream returns a channel-based event stream for this execution.
 func (h *AgentHandle) Stream(ctx context.Context) (*AgentStream, error) {
     events := make(chan AgentEvent, 64)
     sseClient := h.runtime.sseClient
     go func() {
         defer close(events)
-        sseClient.Connect(ctx, h.WorkflowID, events)
+        sseClient.Connect(ctx, h.ExecutionID, events)
     }()
     return &AgentStream{
         events: events,
@@ -1008,7 +1008,7 @@ func parseEvent(eventType, id, data string) agentspan.AgentEvent {
 
     evt := agentspan.AgentEvent{
         Type:       agentspan.EventType(eventType),
-        WorkflowID: getStr(raw, "workflowId"),
+        ExecutionID: getStr(raw, "executionId"),
     }
     switch evt.Type {
     case agentspan.EventThinking, agentspan.EventMessage, agentspan.EventError:

@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-The `agentspan-sdk` Python SDK enables developers to build AI agents backed by durable Conductor workflows. Agents survive process crashes, tools scale as distributed workers, and human-in-the-loop approvals can pause for days.
+The `agentspan-sdk` Python SDK enables developers to build AI agents backed by durable executions. Agents survive process crashes, tools scale as distributed workers, and human-in-the-loop approvals can pause for days.
 
 ### Target Users
 
@@ -14,7 +14,7 @@ The `agentspan-sdk` Python SDK enables developers to build AI agents backed by d
 
 | Requirement | OpenAI Agents SDK | LangGraph | CrewAI | **Conductor Agents** |
 |---|---|---|---|---|
-| Durability (crash recovery) | No | No | No | **Yes** (workflow-backed) |
+| Durability (crash recovery) | No | No | No | **Yes** (execution-backed) |
 | Cross-process control | No | No | No | **Yes** (AgentHandle) |
 | Human approval (days) | No | Limited | Limited | **Yes** (native WaitTask) |
 | Visual debugging | No | LangSmith | No | **Yes** (Conductor UI) |
@@ -73,7 +73,7 @@ The `agentspan-sdk` Python SDK enables developers to build AI agents backed by d
 
 | ID | Requirement | Status |
 |---|---|---|
-| FR-30 | `AgentResult`: output, workflow_id, messages, tool_calls, status | Done |
+| FR-30 | `AgentResult`: output, execution_id, messages, tool_calls, status | Done |
 | FR-31 | `AgentHandle`: get_status, approve, reject, send, pause, resume, cancel | Done |
 | FR-32 | `AgentStatus`: is_complete, is_running, is_waiting, output | Done |
 | FR-33 | `AgentEvent`: typed events (THINKING, TOOL_CALL, TOOL_RESULT, HANDOFF, WAITING, MESSAGE, ERROR, DONE) | Done |
@@ -98,7 +98,7 @@ The `agentspan-sdk` Python SDK enables developers to build AI agents backed by d
 | FR-42 | Input guardrails: validate before LLM call | Done |
 | FR-43 | Output guardrails: validate after LLM response | Done |
 | FR-44 | `on_fail="retry"`: re-execute with feedback | Done |
-| FR-45 | `on_fail="raise"`: fail workflow immediately | Done |
+| FR-45 | `on_fail="raise"`: fail execution immediately | Done |
 | FR-46 | Compile guardrails into Conductor worker tasks | Done |
 
 ### 2.7 Memory
@@ -129,7 +129,7 @@ The `agentspan-sdk` Python SDK enables developers to build AI agents backed by d
 |---|---|---|
 | NFR-05 | Circuit breaker for failing tools | Done |
 | NFR-06 | Fuzzy JSON parsing handles LLM output variations | Done |
-| NFR-07 | Configurable workflow timeout (default 300s) | Done |
+| NFR-07 | Configurable execution timeout (default 300s) | Done |
 | NFR-08 | Configurable LLM retry count (default 3) | Done |
 
 ### 3.3 Observability
@@ -137,7 +137,7 @@ The `agentspan-sdk` Python SDK enables developers to build AI agents backed by d
 | ID | Requirement | Status |
 |---|---|---|
 | NFR-09 | Structured logging across all modules | Done |
-| NFR-10 | Workflow IDs for Conductor UI debugging | Done |
+| NFR-10 | Execution IDs for Conductor UI debugging | Done |
 | NFR-11 | Streaming events for real-time monitoring | Done |
 | NFR-12 | Tool call history in AgentResult.tool_calls | Done |
 
@@ -235,4 +235,4 @@ ConversationMemory
 | `WaitTask` | Human-in-the-loop approval pauses |
 | `@worker_task` | Register tool functions as distributed workers |
 | `workflow.variables` | Conversation state persistence |
-| `TimeoutPolicy` | Configurable workflow timeouts |
+| `TimeoutPolicy` | Configurable execution timeouts |

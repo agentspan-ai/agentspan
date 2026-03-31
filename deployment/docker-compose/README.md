@@ -23,13 +23,13 @@ docker compose up -d
 ```
 
 Open:
-- UI: `http://localhost:8080`
-- Health: `http://localhost:8080/actuator/health`
+- UI: `http://localhost:6767`
+- Health: `http://localhost:6767/actuator/health`
 
-If `8080` is already in use, set a different host port in `.env`:
+If `6767` is already in use, set a different host port in `.env`:
 
 ```bash
-AGENTSPAN_PORT=18080
+AGENTSPAN_PORT=16767
 ```
 
 ## Validate
@@ -38,7 +38,7 @@ AGENTSPAN_PORT=18080
 docker compose config
 docker compose ps
 docker compose logs --tail=200 agentspan
-curl -fsS http://localhost:8080/actuator/health
+curl -fsS http://localhost:6767/actuator/health
 ```
 
 ## Stop / Cleanup

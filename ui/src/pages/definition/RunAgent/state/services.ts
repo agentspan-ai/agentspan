@@ -35,7 +35,7 @@ export const runWorkflow = async (
       };
       const postBody = JSON.stringify(postObject);
       const result = await fetchWithContext(
-        "/workflow",
+        "/workflow", // TODO: migrate to agent API
         {},
         {
           method: "POST",

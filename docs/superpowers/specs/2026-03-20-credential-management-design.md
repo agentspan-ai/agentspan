@@ -95,8 +95,8 @@ Three layers with clean interfaces between them:
 class RequestContext {
     String requestId;      // UUID per HTTP request — distributed tracing
     String traceId;        // OpenTelemetry trace ID
-    String workflowId;     // = sessionId (existing convention preserved)
-    String executionToken; // minted at workflow start, carried by workers
+    String executionId;    // = sessionId (existing convention preserved)
+    String executionToken; // minted at execution start, carried by workers
     User   user;
     Instant createdAt;
     // enterprise module adds authz context here without modifying User
@@ -147,15 +147,15 @@ Enterprise replaces this filter with OIDC token introspection — same `AuthFilt
 
 ### Execution Token
 
-When a workflow starts, the server mints a short-lived execution token from the RequestContext and embeds it in Conductor workflow variables (`__agentspan_ctx__`). Workers present this token to `/api/credentials/resolve` — they never see the user's JWT or API key.
+When an execution starts, the server mints a short-lived execution token from the RequestContext and embeds it in Conductor workflow variables (`__agentspan_ctx__`). Workers present this token to `/api/credentials/resolve` — they never see the user's JWT or API key.
 
 ```
 Token payload:
   jti:   UUID            (unique token ID — used for revocation deny-list)
   sub:   userId          (credential resolution lookup key)
-  wid:   workflowId      (audit trail)
+  wid:   executionId     (audit trail)
   iat:   issued-at
-  exp:   issued-at + max(workflow_timeout, 1h)  (see token expiry below)
+  exp:   issued-at + max(execution_timeout, 1h)  (see token expiry below)
   scope: "credentials"   (narrow, single purpose)
 
 Signed: HMAC-SHA256 with server master secret
@@ -163,9 +163,9 @@ Signed: HMAC-SHA256 with server master secret
 
 Conductor propagates `__agentspan_ctx__` to every task automatically. Workers extract it from task variables.
 
-**Token expiry for long-running workflows:** The TTL is set to `max(1h, agent.timeout_seconds)` at mint time. Agents with long timeouts (e.g., `timeout_seconds=6000` as in the coding agent example) receive a proportionally longer token. This avoids credential resolution failures mid-execution without requiring a refresh mechanism.
+**Token expiry for long-running executions:** The TTL is set to `max(1h, agent.timeout_seconds)` at mint time. Agents with long timeouts (e.g., `timeout_seconds=6000` as in the coding agent example) receive a proportionally longer token. This avoids credential resolution failures mid-execution without requiring a refresh mechanism.
 
-**Token revocation:** The `jti` claim enables server-side revocation. The server maintains an in-memory deny-list keyed by `jti`, with each entry expiring at the token's `exp` time (so the list is self-pruning). When a workflow is cancelled or terminated, its `jti` is added to the deny-list immediately. All subsequent `/api/credentials/resolve` calls with that token return 401. In OSS the deny-list is in-memory (lost on server restart; bounded risk since tokens expire with the workflow TTL). Enterprise module can persist the deny-list to a durable store.
+**Token revocation:** The `jti` claim enables server-side revocation. The server maintains an in-memory deny-list keyed by `jti`, with each entry expiring at the token's `exp` time (so the list is self-pruning). When an execution is cancelled or terminated, its `jti` is added to the deny-list immediately. All subsequent `/api/credentials/resolve` calls with that token return 401. In OSS the deny-list is in-memory (lost on server restart; bounded risk since tokens expire with the execution TTL). Enterprise module can persist the deny-list to a durable store.
 
 **Conductor access control:** The `__agentspan_ctx__` variable is embedded in Conductor workflow metadata. Conductor must be deployed as an internal-only service with no external access — agentspan-server is the sole entry point for all external callers. In multi-tenant deployments, workers authenticate to Conductor using a shared service account (not user credentials), and the execution token is the only user-scoped material that travels through the system.
 
@@ -271,7 +271,7 @@ DELETE /api/credentials/bindings/{key}     remove
 POST   /api/credentials/resolve            { token, names: ["GITHUB_TOKEN"] }
 ```
 
-The `/api/credentials/resolve` endpoint enforces a per-token rate limit (default: 120 calls/minute, configurable). Additionally, credential names in the resolve request are validated against the names declared by the `@tool` or `Agent` at compile/dispatch time — a token cannot resolve credentials beyond what its workflow declared. This bounds the blast radius of a compromised token.
+The `/api/credentials/resolve` endpoint enforces a per-token rate limit (default: 120 calls/minute, configurable). Additionally, credential names in the resolve request are validated against the names declared by the `@tool` or `Agent` at compile/dispatch time — a token cannot resolve credentials beyond what its execution declared. This bounds the blast radius of a compromised token.
 
 **Partial value format** — consistent with OpenAI, GitHub, AWS. First 4 + `...` + last 4. Value is never returned after creation.
 
@@ -530,7 +530,7 @@ CLI_CREDENTIAL_MAP = {
 ```python
 @dataclass
 class AgentConfig:
-    server_url: str              = "http://localhost:8080/api"
+    server_url: str              = "http://localhost:6767/api"
     api_key: str | None          = None    # Bearer token or static API key (Authorization header)
     auth_key: str | None         = None    # kept for backward compat
     auth_secret: str | None      = None    # kept for backward compat
@@ -576,11 +576,11 @@ agentspan credentials bindings              # logical key → stored name mappin
 
 ### Execution Token
 
-- Scoped to a single workflow execution (`wid` + `jti` in payload)
-- TTL = `max(1h, workflow timeout)` — prevents expiry mid-execution for long-running agents
+- Scoped to a single execution (`wid` + `jti` in payload)
+- TTL = `max(1h, execution timeout)` — prevents expiry mid-execution for long-running agents
 - HMAC-SHA256 signed — server validates on every resolve call
 - Scope claim `"credentials"` — cannot be used for other operations
-- Revocable via `jti` deny-list — added immediately on workflow cancel/terminate
+- Revocable via `jti` deny-list — added immediately on execution cancel/terminate
 - Credential names bounded to those declared at compile time — token cannot resolve undeclared secrets
 
 ### Credential Lifecycle
@@ -609,7 +609,7 @@ strict_mode=true (enterprise default)
 
 Every `/api/credentials/resolve` call logged:
 ```json
-{ "userId": "u123", "workflowId": "wf789", "taskId": "t456",
+{ "userId": "u123", "executionId": "wf789", "taskId": "t456",
   "credentialNames": ["GITHUB_TOKEN"], "timestamp": "...", "ip": "..." }
 ```
 
@@ -622,7 +622,7 @@ OSS writes to server log. Enterprise module persists to a queryable audit store.
 | Worker process compromised | Execution token only — 1h TTL, narrow scope, not the real credential |
 | Concurrent task credential bleed | Subprocess isolation — parent never holds credentials in `os.environ` |
 | `/proc/PID/environ` readable on Linux | Subprocess is short-lived and exits immediately after task; temp HOME deleted synchronously (credential files are gone before any external read is likely). LLM keys are a separate path — they never leave the server at all. |
-| Token replay | `jti` deny-list + `exp` + `wid` — revocable, single-workflow-scoped |
+| Token replay | `jti` deny-list + `exp` + `wid` — revocable, single-execution-scoped |
 | Malicious CLI tool reads temp HOME | Credential files written `0600`; temp dir deleted synchronously after task |
 | Credential exfiltration via tool code | Token scope bounded to declared names; short TTL; revocation on cancel; audit trail |
 | Excessive resolve calls (DoS / enumeration) | Per-token rate limit (default 120/min); names validated against declared set |

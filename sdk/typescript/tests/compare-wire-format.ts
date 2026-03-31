@@ -138,7 +138,7 @@ function classifyKnownDiff(diff: FieldDiff): string | null {
 
 const IGNORE_FIELDS = new Set([
   'correlationId',
-  'workflowId',
+  'executionId',
   'sessionId',
   'prompt',
   'media',

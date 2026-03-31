@@ -1,6 +1,8 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { ThemeProvider } from "@mui/material/styles";
 import { QueryClient, QueryClientProvider } from "react-query";
+import getTheme from "theme/theme";
 import { AddEditCredentialDialog } from "../components/AddEditCredentialDialog";
 
 vi.mock("plugins/fetch", () => ({
@@ -8,9 +10,15 @@ vi.mock("plugins/fetch", () => ({
   useFetchContext: () => ({ stack: "test", ready: true, setMessage: vi.fn() }),
 }));
 
+const theme = getTheme("light");
+
 function wrapper({ children }: { children: React.ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+  return (
+    <ThemeProvider theme={theme}>
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    </ThemeProvider>
+  );
 }
 
 const noop = vi.fn();
@@ -46,7 +54,7 @@ describe("AddEditCredentialDialog — add mode", () => {
     );
     const valueInput = screen.getByLabelText(/^value/i);
     expect(valueInput).toHaveAttribute("type", "password");
-    await userEvent.click(screen.getByRole("button", { name: /show/i }));
+    await userEvent.click(screen.getByRole("button", { name: /toggle secret visibility/i }));
     expect(valueInput).toHaveAttribute("type", "text");
   });
 });

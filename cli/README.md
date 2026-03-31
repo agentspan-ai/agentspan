@@ -4,7 +4,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@agentspan/agentspan"><img src="https://img.shields.io/npm/v/@agentspan/agentspan?color=blue" alt="npm"></a>
+  <a href="https://www.npmjs.com/package/@agentspan-ai/agentspan"><img src="https://img.shields.io/npm/v/@agentspan-ai/agentspan?color=blue" alt="npm"></a>
   <a href="https://github.com/agentspan/agentspan/stargazers"><img src="https://img.shields.io/github/stars/agentspan/agentspan?style=social" alt="Stars"></a>
   <a href="https://github.com/agentspan/agentspan/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
   <a href="https://discord.gg/agentspan"><img src="https://img.shields.io/discord/1234567890?label=Discord&logo=discord&color=5865F2" alt="Discord"></a>
@@ -29,13 +29,13 @@ Command-line interface for managing the Agentspan runtime — start servers, run
 ### Homebrew (macOS / Linux)
 
 ```bash
-brew install agentspan/agentspan/agentspan
+brew install agentspan/agentspan
 ```
 
 ### npm
 
 ```bash
-npm install -g @agentspan/agentspan
+npm install -g @agentspan-ai/agentspan
 ```
 
 ### Shell script
@@ -101,7 +101,7 @@ The server JAR is downloaded from GitHub releases and cached in `~/.agentspan/se
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--port, -p` | Server port | `8080` |
+| `--port, -p` | Server port | `6767` |
 | `--model, -m` | Default LLM model | — |
 | `--version` | Specific server version | latest |
 | `--jar` | Path to local JAR file | — |
@@ -133,7 +133,7 @@ agentspan agent get mybot --version 2
 agentspan agent delete mybot
 agentspan agent delete mybot --version 1
 
-# Compile agent config to workflow definition (inspect only)
+# Compile agent config to agent definition (inspect only)
 agentspan agent compile mybot.yaml
 ```
 
@@ -192,11 +192,11 @@ agentspan doctor
 
 ```bash
 # Set server URL and auth credentials
-agentspan configure --url http://myserver:8080
+agentspan configure --url http://myserver:6767
 agentspan configure --auth-key KEY --auth-secret SECRET
 
 # Override server URL for a single command
-agentspan --server http://other:8080 agent list
+agentspan --server http://other:6767 agent list
 ```
 
 ### `agentspan update` — Self-Update
@@ -213,7 +213,7 @@ Configuration is stored in `~/.agentspan/config.json`. Environment variables tak
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `AGENTSPAN_SERVER_URL` | Server URL | `http://localhost:8080` |
+| `AGENTSPAN_SERVER_URL` | Server URL | `http://localhost:6767` |
 | `AGENTSPAN_AUTH_KEY` | Auth key | — |
 | `AGENTSPAN_AUTH_SECRET` | Auth secret | — |
 

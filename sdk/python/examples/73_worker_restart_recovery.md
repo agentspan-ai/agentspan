@@ -26,7 +26,7 @@ pip install agentspan
 Set the server URL and model:
 
 ```bash
-export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+export AGENTSPAN_SERVER_URL=http://localhost:6767/api
 export AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini
 ```
 

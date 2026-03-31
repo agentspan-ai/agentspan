@@ -33,7 +33,7 @@ async function main() {
     // 'Explain how quantum computers work.',
     // );
 
-    // console.log(`Workflow: ${agentStream.workflowId}\n`);
+    // console.log(`Execution: ${agentStream.executionId}\n`);
 
     // for await (const event of agentStream) {
     // switch (event.type) {

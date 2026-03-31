@@ -140,7 +140,7 @@ async function main() {
     // `Pick the most suitable open issue on ${REPO} and implement a fix.`,
     // );
 
-    // console.log(`Workflow: ${agentStream.workflowId}\n`);
+    // console.log(`Execution: ${agentStream.executionId}\n`);
 
     // for await (const event of agentStream) {
     // switch (event.type) {

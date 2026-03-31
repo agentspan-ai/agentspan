@@ -5,7 +5,7 @@ import threading
 import httpx
 import pytest
 
-SERVER = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:8080")
+SERVER = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:6767")
 API = f"{SERVER}/api"
 CRED_NAME = "_E2E_FW_CRED"
 CRED_VALUE = "framework-secret-12345"
@@ -39,15 +39,15 @@ def test_workflow_credentials_registry_exists():
     assert isinstance(_workflow_credentials, dict)
     assert isinstance(_workflow_credentials_lock, type(threading.Lock()))
 
-    wf_id = "test-wf-registry"
+    exec_id = "test-wf-registry"
     with _workflow_credentials_lock:
-        _workflow_credentials[wf_id] = ["MY_CRED"]
+        _workflow_credentials[exec_id] = ["MY_CRED"]
     try:
         with _workflow_credentials_lock:
-            assert _workflow_credentials[wf_id] == ["MY_CRED"]
+            assert _workflow_credentials[exec_id] == ["MY_CRED"]
     finally:
         with _workflow_credentials_lock:
-            _workflow_credentials.pop(wf_id, None)
+            _workflow_credentials.pop(exec_id, None)
 
 
 def test_dispatch_uses_workflow_credentials_fallback():
@@ -70,17 +70,17 @@ def test_dispatch_uses_workflow_credentials_fallback():
 
     wrapper = make_tool_worker(td.func, td.name, tool_def=td)
 
-    wf_id = "test-wf-dispatch-fallback"
+    exec_id = "test-wf-dispatch-fallback"
     with _workflow_credentials_lock:
-        _workflow_credentials[wf_id] = ["_WF_CRED"]
+        _workflow_credentials[exec_id] = ["_WF_CRED"]
 
     try:
         task = Task()
         task.input_data = {"x": "hello"}
-        task.workflow_instance_id = wf_id
+        task.workflow_instance_id = exec_id
         task.task_id = "test-task"
         result = wrapper(task)
         assert result is not None
     finally:
         with _workflow_credentials_lock:
-            _workflow_credentials.pop(wf_id, None)
+            _workflow_credentials.pop(exec_id, None)

@@ -105,7 +105,7 @@ if (process.argv[1]?.endsWith('09d-human-tool.ts') || process.argv[1]?.endsWith(
       agent,
       'I need to file a ticket for Alice about a laptop issue',
     );
-    console.log(`Workflow started: ${handle.workflowId}\n`);
+    console.log(`Execution started: ${handle.executionId}\n`);
 
     for await (const event of handle.stream()) {
       switch (event.type) {

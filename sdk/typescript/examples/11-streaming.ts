@@ -39,13 +39,13 @@ async function main() {
     // 'Write a haiku about Python programming',
     // );
 
-    // console.log(`Workflow: ${agentStream.workflowId}\n`);
+    // console.log(`Execution: ${agentStream.executionId}\n`);
 
     // for await (const event of agentStream) {
     // switch (event.type) {
     // case EventTypes.DONE:
     // console.log(`\nResult: ${JSON.stringify(event.output)}`);
-    // console.log(`Workflow: ${agentStream.workflowId}`);
+    // console.log(`Execution: ${agentStream.executionId}`);
     // break;
 
     // case EventTypes.WAITING:

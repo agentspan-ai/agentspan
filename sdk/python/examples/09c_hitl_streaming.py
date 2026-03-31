@@ -65,7 +65,7 @@ if __name__ == "__main__":
         #     agent,
         #     "The payments service is down. Check it, restart it, and clear its stale cache data.",
         # )
-        # print(f"Workflow started: {result.workflow_id}\n")
+        # print(f"Workflow started: {result.execution_id}\n")
 
         # for event in result:
         #     if event.type == EventType.THINKING:

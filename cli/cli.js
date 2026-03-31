@@ -15,7 +15,7 @@ const binaryPath = path.join(__dirname, 'bin', binaryName);
 // Check if binary exists
 if (!fs.existsSync(binaryPath)) {
   console.error('Error: Binary not found. Please reinstall the package.');
-  console.error('Run: npm uninstall -g @agentspan/agentspan && npm install -g @agentspan/agentspan');
+  console.error('Run: npm uninstall -g @agentspan-ai/agentspan && npm install -g @agentspan-ai/agentspan');
   process.exit(1);
 }
 

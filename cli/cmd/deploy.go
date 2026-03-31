@@ -29,7 +29,7 @@ type discoveredAgent struct {
 // deployResult represents the outcome of deploying a single agent.
 type deployResult struct {
 	AgentName      string  `json:"agent_name"`
-	RegisteredName *string `json:"workflow_name"`
+	RegisteredName *string `json:"registered_name"`
 	Success        bool    `json:"success"`
 	Error          *string `json:"error"`
 }

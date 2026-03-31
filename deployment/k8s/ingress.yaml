@@ -9,7 +9,7 @@
 # For TLS (recommended), install cert-manager and uncomment the TLS section:
 #   kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
 #
-# All traffic → agentspan-server:8080
+# All traffic → agentspan-server:6767
 #   The server JAR includes the built UI served from / (Spring Boot static resources).
 #   API routes (/api, /swagger-ui, /api-docs) are handled by the same server.
 apiVersion: networking.k8s.io/v1
@@ -36,7 +36,7 @@ spec:
               service:
                 name: agentspan-server
                 port:
-                  number: 8080
+                  number: 6767
   # ── TLS (uncomment when cert-manager is set up) ───────────────────────────
   # tls:
   #   - hosts:

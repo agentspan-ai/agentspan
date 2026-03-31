@@ -64,7 +64,7 @@ describe('makeAgentResult', () => {
     it('normalizes string output to { result: string }', () => {
       const result = makeAgentResult({
         output: 'hello world',
-        workflowId: 'wf-1',
+        executionId: 'wf-1',
         status: 'COMPLETED',
       });
       expect(result.output).toEqual({ result: 'hello world' });
@@ -73,7 +73,7 @@ describe('makeAgentResult', () => {
     it('normalizes null output + COMPLETED to { result: null }', () => {
       const result = makeAgentResult({
         output: null,
-        workflowId: 'wf-1',
+        executionId: 'wf-1',
         status: 'COMPLETED',
       });
       expect(result.output).toEqual({ result: null });
@@ -82,7 +82,7 @@ describe('makeAgentResult', () => {
     it('normalizes null output + FAILED to { error: message }', () => {
       const result = makeAgentResult({
         output: null,
-        workflowId: 'wf-1',
+        executionId: 'wf-1',
         status: 'FAILED',
         error: 'something went wrong',
       });
@@ -92,7 +92,7 @@ describe('makeAgentResult', () => {
     it('normalizes null output + FAILED with no error message', () => {
       const result = makeAgentResult({
         output: null,
-        workflowId: 'wf-1',
+        executionId: 'wf-1',
         status: 'FAILED',
       });
       expect(result.output).toEqual({ error: 'Unknown error' });
@@ -101,7 +101,7 @@ describe('makeAgentResult', () => {
     it('passes object output as-is', () => {
       const result = makeAgentResult({
         output: { key: 'value', nested: { x: 1 } },
-        workflowId: 'wf-1',
+        executionId: 'wf-1',
         status: 'COMPLETED',
       });
       expect(result.output).toEqual({ key: 'value', nested: { x: 1 } });
@@ -109,7 +109,7 @@ describe('makeAgentResult', () => {
 
     it('normalizes undefined output + COMPLETED', () => {
       const result = makeAgentResult({
-        workflowId: 'wf-1',
+        executionId: 'wf-1',
         status: 'COMPLETED',
       });
       expect(result.output).toEqual({ result: null });
@@ -118,7 +118,7 @@ describe('makeAgentResult', () => {
     it('uses errorMessage field as fallback', () => {
       const result = makeAgentResult({
         output: null,
-        workflowId: 'wf-1',
+        executionId: 'wf-1',
         status: 'FAILED',
         errorMessage: 'from errorMessage',
       });
@@ -130,7 +130,7 @@ describe('makeAgentResult', () => {
     it('isSuccess is true for COMPLETED', () => {
       const result = makeAgentResult({
         output: 'ok',
-        workflowId: 'wf-1',
+        executionId: 'wf-1',
         status: 'COMPLETED',
       });
       expect(result.isSuccess).toBe(true);
@@ -140,7 +140,7 @@ describe('makeAgentResult', () => {
     it('isFailed is true for FAILED', () => {
       const result = makeAgentResult({
         output: null,
-        workflowId: 'wf-1',
+        executionId: 'wf-1',
         status: 'FAILED',
         error: 'err',
       });
@@ -151,7 +151,7 @@ describe('makeAgentResult', () => {
     it('isFailed is true for TIMED_OUT', () => {
       const result = makeAgentResult({
         output: null,
-        workflowId: 'wf-1',
+        executionId: 'wf-1',
         status: 'TIMED_OUT',
       });
       expect(result.isFailed).toBe(true);
@@ -161,7 +161,7 @@ describe('makeAgentResult', () => {
     it('isRejected is true for rejected finishReason', () => {
       const result = makeAgentResult({
         output: null,
-        workflowId: 'wf-1',
+        executionId: 'wf-1',
         status: 'FAILED',
         finishReason: 'rejected',
       });
@@ -171,7 +171,7 @@ describe('makeAgentResult', () => {
     it('isRejected is false for non-rejected finishReason', () => {
       const result = makeAgentResult({
         output: 'ok',
-        workflowId: 'wf-1',
+        executionId: 'wf-1',
         status: 'COMPLETED',
         finishReason: 'stop',
       });
@@ -183,7 +183,7 @@ describe('makeAgentResult', () => {
     it('infers stop for COMPLETED', () => {
       const result = makeAgentResult({
         output: 'ok',
-        workflowId: 'wf-1',
+        executionId: 'wf-1',
         status: 'COMPLETED',
       });
       expect(result.finishReason).toBe('stop');
@@ -191,7 +191,7 @@ describe('makeAgentResult', () => {
 
     it('infers error for FAILED', () => {
       const result = makeAgentResult({
-        workflowId: 'wf-1',
+        executionId: 'wf-1',
         status: 'FAILED',
       });
       expect(result.finishReason).toBe('error');
@@ -199,7 +199,7 @@ describe('makeAgentResult', () => {
 
     it('infers cancelled for TERMINATED', () => {
       const result = makeAgentResult({
-        workflowId: 'wf-1',
+        executionId: 'wf-1',
         status: 'TERMINATED',
       });
       expect(result.finishReason).toBe('cancelled');
@@ -207,7 +207,7 @@ describe('makeAgentResult', () => {
 
     it('infers timeout for TIMED_OUT', () => {
       const result = makeAgentResult({
-        workflowId: 'wf-1',
+        executionId: 'wf-1',
         status: 'TIMED_OUT',
       });
       expect(result.finishReason).toBe('timeout');
@@ -216,7 +216,7 @@ describe('makeAgentResult', () => {
     it('uses explicit finishReason when provided', () => {
       const result = makeAgentResult({
         output: 'ok',
-        workflowId: 'wf-1',
+        executionId: 'wf-1',
         status: 'COMPLETED',
         finishReason: 'length',
       });
@@ -226,23 +226,23 @@ describe('makeAgentResult', () => {
 
   describe('default fields', () => {
     it('defaults messages to empty array', () => {
-      const result = makeAgentResult({ workflowId: 'wf-1', status: 'COMPLETED' });
+      const result = makeAgentResult({ executionId: 'wf-1', status: 'COMPLETED' });
       expect(result.messages).toEqual([]);
     });
 
     it('defaults toolCalls to empty array', () => {
-      const result = makeAgentResult({ workflowId: 'wf-1', status: 'COMPLETED' });
+      const result = makeAgentResult({ executionId: 'wf-1', status: 'COMPLETED' });
       expect(result.toolCalls).toEqual([]);
     });
 
     it('defaults events to empty array', () => {
-      const result = makeAgentResult({ workflowId: 'wf-1', status: 'COMPLETED' });
+      const result = makeAgentResult({ executionId: 'wf-1', status: 'COMPLETED' });
       expect(result.events).toEqual([]);
     });
 
-    it('defaults workflowId to empty string', () => {
+    it('defaults executionId to empty string', () => {
       const result = makeAgentResult({ status: 'COMPLETED' });
-      expect(result.workflowId).toBe('');
+      expect(result.executionId).toBe('');
     });
 
     it('defaults status to FAILED', () => {
@@ -256,7 +256,7 @@ describe('makeAgentResult', () => {
       const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
       const result = makeAgentResult({
         output: { answer: 42 },
-        workflowId: 'wf-1',
+        executionId: 'wf-1',
         status: 'COMPLETED',
         tokenUsage: {
           promptTokens: 100,
@@ -279,7 +279,7 @@ describe('makeAgentResult', () => {
       const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
       const result = makeAgentResult({
         output: null,
-        workflowId: 'wf-2',
+        executionId: 'wf-2',
         status: 'FAILED',
         error: 'timeout exceeded',
       });
@@ -296,7 +296,7 @@ describe('makeAgentResult', () => {
   describe('metadata and sub-results', () => {
     it('carries correlationId', () => {
       const result = makeAgentResult({
-        workflowId: 'wf-1',
+        executionId: 'wf-1',
         correlationId: 'corr-123',
         status: 'COMPLETED',
       });
@@ -305,7 +305,7 @@ describe('makeAgentResult', () => {
 
     it('carries metadata', () => {
       const result = makeAgentResult({
-        workflowId: 'wf-1',
+        executionId: 'wf-1',
         status: 'COMPLETED',
         metadata: { source: 'test' },
       });
@@ -314,7 +314,7 @@ describe('makeAgentResult', () => {
 
     it('carries subResults', () => {
       const result = makeAgentResult({
-        workflowId: 'wf-1',
+        executionId: 'wf-1',
         status: 'COMPLETED',
         subResults: { child_agent: { result: 'done' } },
       });

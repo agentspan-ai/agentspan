@@ -154,7 +154,7 @@ There is no mechanism for **providing new context, redirecting priorities, or co
 
 ### FR-1: Send Signal
 
-**FR-1.1:** A signal can be sent to any running workflow by its workflow ID.
+**FR-1.1:** A signal can be sent to any running execution by its execution ID.
 
 **FR-1.2:** A signal consists of:
 - `message` (string, required) — natural language context for the LLM
@@ -163,18 +163,18 @@ There is no mechanism for **providing new context, redirecting priorities, or co
 - `sender` (string, optional) — identifier of the sending agent/user (for attribution)
 
 **FR-1.3:** Signals can be sent from:
-- Python SDK: `runtime.signal(workflow_id="...", message="...")`
-- REST API: `POST /agent/{workflowId}/signal`
+- Python SDK: `runtime.signal(execution_id="...", message="...")`
+- REST API: `POST /agent/{executionId}/signal`
 - Another agent's tool: `@tool` that calls `runtime.signal(...)`
 - Any process, any machine (same as HITL)
 
-**FR-1.4:** Sending a signal to a workflow in any terminal state (COMPLETED, FAILED, TERMINATED, TIMED_OUT) returns an error (not silently ignored). This is a **send-time validation** — the server checks workflow status before queuing. See FR-4.5 for the race condition where a workflow completes between send and delivery.
+**FR-1.4:** Sending a signal to a workflow in any terminal state (COMPLETED, FAILED, TERMINATED, TIMED_OUT) returns an error (not silently ignored). This is a **send-time validation** — the server checks execution status before queuing. See FR-4.5 for the race condition where a workflow completes between send and delivery.
 
 **FR-1.5:** Multiple signals can be sent to the same workflow. They queue in order.
 
 **FR-1.6:** The signal API returns a `SignalReceipt` containing the `signal_id`, enabling the sender to later poll for disposition via `get_signal_status(signal_id)`:
 ```python
-receipt = runtime.signal(workflow_id="...", message="...")
+receipt = runtime.signal(execution_id="...", message="...")
 print(receipt.signal_id)  # "uuid-..."
 
 # Later:
@@ -187,13 +187,13 @@ The REST API returns this as the 202 response body (already specified in Section
 @dataclass
 class SignalReceipt:
     signal_id: str           # Unique ID for this signal instance
-    workflow_id: str         # Target workflow that received the signal
+    execution_id: str        # Target execution that received the signal
     status: str              # Always "queued" at send time
 
 @dataclass
 class SignalStatus:
     signal_id: str           # Unique ID for this signal instance
-    workflow_id: str         # Target workflow
+    execution_id: str        # Target execution
     delivered: bool          # True if the signal was injected into the LLM conversation
     disposition: str         # "pending" | "accepted" | "rejected"
     rejection_reason: str | None  # Reason provided by the LLM (only if disposition == "rejected")
@@ -244,7 +244,7 @@ In both modes, signals are additionally wrapped with `[SIGNAL_START id={signalId
 
 **FR-4.1:** Signals are **at-least-once** delivery while the workflow is active. A signal will be delivered even if the server restarts (durability). If the workflow completes before delivery, the signal is discarded (see FR-4.5).
 
-**FR-4.2:** Signals are delivered in **FIFO order** per workflow (first signal sent = first signal delivered). The server serializes concurrent signal writes to the same workflow (e.g., via optimistic locking on `_pending_signals` or synchronized access per workflow ID) to guarantee deterministic ordering even when two signals arrive simultaneously.
+**FR-4.2:** Signals are delivered in **FIFO order** per workflow (first signal sent = first signal delivered). The server serializes concurrent signal writes to the same workflow (e.g., via optimistic locking on `_pending_signals` or synchronized access per execution ID) to guarantee deterministic ordering even when two signals arrive simultaneously.
 
 **FR-4.3:** Signal delivery is **asynchronous** — the sender does not block waiting for the receiver to process.
 
@@ -267,13 +267,13 @@ In both modes, signals are additionally wrapped with `[SIGNAL_START id={signalId
 **FR-6.1:** An agent can signal another agent via a tool:
 ```python
 @tool
-def signal_agent(workflow_id: str, message: str) -> dict:
+def signal_agent(execution_id: str, message: str) -> dict:
     """Send a signal to another running agent."""
-    runtime.signal(workflow_id=workflow_id, message=message, priority="normal")
+    runtime.signal(execution_id=execution_id, message=message, priority="normal")
     return {"status": "signal_sent"}
 ```
 
-**FR-6.2:** The `workflow_id` of other agents must be discoverable. Options:
+**FR-6.2:** The `execution_id` of other agents must be discoverable. Options:
 - Passed as input to the signaling agent
 - Looked up via `runtime.list_executions()` or agent name
 - Shared via ToolContext.state or workflow variables
@@ -284,7 +284,7 @@ def signal_agent(workflow_id: str, message: str) -> dict:
 
 **FR-7.1:** A broadcast signal can be sent to multiple workflows at once:
 ```python
-runtime.broadcast(workflow_ids=[wf1, wf2, wf3], message="Policy update: ...")
+runtime.broadcast(execution_ids=[wf1, wf2, wf3], message="Policy update: ...")
 ```
 
 **FR-7.2:** Broadcast is equivalent to sending the same signal to each workflow individually.
@@ -391,7 +391,7 @@ Agent(signal_mode="evaluate", ...)     # Default — LLM evaluates each signal
 **Behavior:** Race condition — signal may or may not be delivered. Sender receives success (signal was queued). No error.
 
 ### EC-10: Signal to a sub-workflow within a parent workflow
-**Behavior:** Signals target workflow IDs, not agent names. Sub-workflows have their own IDs and can be signaled independently.
+**Behavior:** Signals target execution IDs, not agent names. Sub-workflows have their own IDs and can be signaled independently.
 
 ### EC-11: Signal to a manually paused workflow (not HITL)
 **Behavior:** Queue the signal. Deliver when the workflow is resumed via `runtime.resume()` or the REST API. Same behavior as EC-3 (HITL pause) — signals always queue when the workflow is not actively running. The signal does NOT auto-resume the workflow (unlike urgent signals during active execution).
@@ -418,8 +418,8 @@ Agent(signal_mode="evaluate", ...)     # Default — LLM evaluates each signal
 def signal(
     self,
     *,
-    workflow_id: str = None,          # Target by workflow ID (mutually exclusive with agent_name)
-    agent_name: str = None,           # Target by agent name (mutually exclusive with workflow_id)
+    execution_id: str = None,         # Target by execution ID (mutually exclusive with agent_name)
+    agent_name: str = None,           # Target by agent name (mutually exclusive with execution_id)
     correlation_id: str = None,       # Filter when using agent_name
     session_id: str = None,           # Filter when using agent_name
     message: str,                     # Natural language context (required, max 4096 chars)
@@ -433,7 +433,7 @@ def signal(
 def broadcast(
     self,
     *,
-    workflow_ids: list[str],
+    execution_ids: list[str],
     message: str,
     data: dict = None,
     priority: str = "normal",
@@ -450,25 +450,25 @@ def get_signal_status(self, signal_id: str) -> SignalStatus: ...
 ```python
 # Send a signal
 runtime.signal(
-    workflow_id="uuid-...",
+    execution_id="uuid-...",
     message="Focus on error correction, not the broader field",
     data={"priority_topic": "quantum error correction"},   # optional
     priority="normal",                                      # "normal" | "urgent"
     sender="supervisor_agent",                              # optional attribution
 )
 
-# Broadcast to multiple workflows
+# Broadcast to multiple executions
 runtime.broadcast(
-    workflow_ids=["uuid-1", "uuid-2", "uuid-3"],
+    execution_ids=["uuid-1", "uuid-2", "uuid-3"],
     message="Policy update: all reports must include citations",
     priority="normal",
 )
 
 # From a tool (agent-to-agent)
 @tool
-def redirect_research(workflow_id: str, new_focus: str) -> dict:
+def redirect_research(execution_id: str, new_focus: str) -> dict:
     """Redirect a running research agent to a new focus area."""
-    runtime.signal(workflow_id=workflow_id, message=f"Redirect: focus on {new_focus}", priority="urgent")
+    runtime.signal(execution_id=execution_id, message=f"Redirect: focus on {new_focus}", priority="urgent")
     return {"status": "redirected"}
 
 # From AgentHandle
@@ -480,7 +480,7 @@ handle.signal("Additional context: the deadline moved to Friday")
 ### REST API
 
 ```
-POST /agent/{workflowId}/signal
+POST /agent/{executionId}/signal
 Content-Type: application/json
 
 {
@@ -494,7 +494,7 @@ Content-Type: application/json
 Response: 202 Accepted
 {
   "signalId": "uuid-...",
-  "workflowId": "uuid-...",
+  "executionId": "uuid-...",
   "status": "queued"
 }
 ```
@@ -511,8 +511,8 @@ Content-Type: application/json
 Response: 202 Accepted
 {
   "signals": [
-    {"signalId": "uuid-1", "workflowId": "uuid-a", "status": "queued"},
-    {"signalId": "uuid-2", "workflowId": "uuid-b", "status": "queued"}
+    {"signalId": "uuid-1", "executionId": "uuid-a", "status": "queued"},
+    {"signalId": "uuid-2", "executionId": "uuid-b", "status": "queued"}
   ]
 }
 ```
@@ -523,7 +523,7 @@ GET /agent/signal/{signalId}/status
 Response: 200 OK
 {
   "signalId": "uuid-...",
-  "workflowId": "uuid-...",
+  "executionId": "uuid-...",
   "delivered": true,
   "disposition": "accepted",
   "rejectionReason": null
@@ -531,7 +531,7 @@ Response: 200 OK
 ```
 
 ```
-GET /agent/{workflowId}/signals/pending
+GET /agent/{executionId}/signals/pending
 
 Response: 200 OK
 {
@@ -547,7 +547,7 @@ Note: The `signals/pending` endpoint is primarily for framework passthrough work
 ```
 event: signal_received
 id: 42
-data: {"type":"signal_received","workflowId":"...","message":"Focus on error correction","sender":"supervisor_agent","priority":"normal","timestamp":1234567890}
+data: {"type":"signal_received","executionId":"...","message":"Focus on error correction","sender":"supervisor_agent","priority":"normal","timestamp":1234567890}
 ```
 
 ### AgentResult
@@ -585,14 +585,14 @@ for event in result.events:
 - The `EventType` enum gains three new values: `SIGNAL_RECEIVED`, `SIGNAL_ACCEPTED`, `SIGNAL_REJECTED`. Existing event-processing code (e.g., `_build_result`, `AgentStream.__iter__`) uses if/elif chains that naturally skip unknown types, so no existing code breaks
 - The `accept_signal`/`reject_signal` ephemeral tools are only injected when signals are pending — agents with no signals never see these tools
 - The `_pending_signals`, `_processed_signals`, and `_signal_data` workflow variable namespaces use underscore prefixes to avoid collision with user-defined variables
-- No existing REST endpoints change. The new `POST /agent/{workflowId}/signal`, `POST /agent/signal` (by agent name), `GET /agent/signal/{signalId}/status`, and `GET /agent/{workflowId}/signals/pending` are all additive
+- No existing REST endpoints change. The new `POST /agent/{executionId}/signal`, `POST /agent/signal` (by agent name), `GET /agent/signal/{signalId}/status`, and `GET /agent/{executionId}/signals/pending` are all additive
 
 ### Signals + Termination Conditions
 - Signals do not affect termination conditions directly
 - However, the LLM may decide to terminate based on signal content (e.g., "stop and summarize")
 
 ### Signals + Sub-workflows
-- Each sub-workflow has its own workflow ID and can be signaled independently
+- Each sub-workflow has its own execution ID and can be signaled independently
 - Signaling a parent workflow **propagates** to all active sub-workflows by default (see FR-11)
 - Set `propagate=False` to signal only the parent without propagation
 - In a `>>` sequential pipeline, only the currently-running stage agent is active — the signal reaches that agent only
@@ -600,7 +600,7 @@ for event in result.events:
 ### Signals + Sequential Pipelines (`>>`)
 - A `>>` pipeline has one parent workflow with sequential sub-workflows
 - At any given time, only ONE stage agent is running (the others are completed or not yet started)
-- A signal to the pipeline's workflow ID reaches the currently-active stage agent only
+- A signal to the pipeline's execution ID reaches the currently-active stage agent only
 - To signal a specific stage by name, use `runtime.signal(agent_name="writer", ...)` — this targets the specific sub-workflow, not the pipeline
 
 ### Signals + Callbacks
@@ -643,10 +643,10 @@ def on_signal_received(
 - Normal signals: **queued** and delivered to the framework worker via a polling mechanism. The worker process periodically checks for pending signals and injects them into the framework's state/memory.
 - Urgent signals: **pause the workflow** after the passthrough task completes (since the whole framework execution is one atomic task, urgent signals cannot interrupt mid-execution)
 - This is a **degraded experience** compared to native agents — signals are less granular for passthrough agents
-- The framework worker SDK must implement a signal polling loop (e.g., check `GET /agent/{workflowId}/signals/pending` every 5 seconds)
+- The framework worker SDK must implement a signal polling loop (e.g., check `GET /agent/{executionId}/signals/pending` every 5 seconds)
 - The pending signals endpoint returns queued signals and atomically marks them as delivered:
 ```
-GET /agent/{workflowId}/signals/pending
+GET /agent/{executionId}/signals/pending
 
 Response: 200 OK
 {
@@ -729,7 +729,7 @@ GET /agent/signal/{signalId}/status
 Response: 200 OK
 {
   "signalId": "uuid-...",
-  "workflowId": "uuid-...",
+  "executionId": "uuid-...",
   "delivered": true,
   "disposition": "accepted",
   "rejectionReason": null
@@ -858,7 +858,7 @@ expect(result) \
 11. Accepted signals are preserved with higher priority during context condensation
 12. Signals are visually distinct in the workflow UI with accept/reject indicators
 13. Testing framework supports mock signals with accept/reject assertions
-14. Signals can be sent by agent name (with optional correlation_id/session_id), not just workflow ID
+14. Signals can be sent by agent name (with optional correlation_id/session_id), not just execution ID
 15. Parent workflow signals propagate to active sub-workflows
 
 ---
@@ -867,7 +867,7 @@ expect(result) \
 
 **Q1: Signal TTL** — **No TTL.** Signals are durable and permanent. They are always delivered. The agent will see them on its next LLM iteration. If the signal is "stale" by then, the LLM is smart enough to discard irrelevant context. Simplifies implementation — no expiry tracking needed.
 
-**Q2: Pull model** — **No** (for native agents). Push-only is sufficient. Signals are injected into conversation context automatically by the task mapper. No `get_pending_signals()` LLM-facing tool needed. Note: Framework passthrough workers do use a pull-based `GET /agent/{workflowId}/signals/pending` endpoint (see Section 7, Signals + Framework Passthrough Agents), but this is a worker-level mechanism, not an LLM-facing tool.
+**Q2: Pull model** — **No** (for native agents). Push-only is sufficient. Signals are injected into conversation context automatically by the task mapper. No `get_pending_signals()` LLM-facing tool needed. Note: Framework passthrough workers do use a pull-based `GET /agent/{executionId}/signals/pending` endpoint (see Section 7, Signals + Framework Passthrough Agents), but this is a worker-level mechanism, not an LLM-facing tool.
 
 **Q3: Built-in `signal_tool()`** — **Yes.** Provide a built-in `signal_tool()` (like `human_tool()`) so any agent can signal other agents without writing custom tool code:
 ```python
@@ -889,10 +889,10 @@ supervisor = Agent(tools=[sig], ...)
 ```
 Rationale: `user` role messages are universally handled well across all LLM providers. `system` role has inconsistent handling (some models ignore late system messages, some treat them differently). The `[Signal from ...]` prefix clearly distinguishes signals from actual user messages, so the LLM won't confuse them.
 
-**Q6: Signal by agent name** — **Yes.** Support signaling by agent name with optional search criteria, not just workflow ID:
+**Q6: Signal by agent name** — **Yes.** Support signaling by agent name with optional search criteria, not just execution ID:
 ```python
-# By workflow ID (exact)
-runtime.signal(workflow_id="uuid-...", message="...")
+# By execution ID (exact)
+runtime.signal(execution_id="uuid-...", message="...")
 
 # By agent name (latest running execution)
 runtime.signal(agent_name="researcher", message="...")
@@ -901,7 +901,7 @@ runtime.signal(agent_name="researcher", message="...")
 runtime.signal(agent_name="researcher", correlation_id="project-42", message="...")
 runtime.signal(agent_name="researcher", session_id="user-session-7", message="...")
 ```
-The server resolves the agent name to workflow ID(s) via search. If multiple matches, signals ALL matching running workflows (broadcast behavior). If no matches, returns error.
+The server resolves the agent name to execution ID(s) via search. If multiple matches, signals ALL matching running workflows (broadcast behavior). If no matches, returns error.
 
 **Q7: Context condensation** — **Summarize with other messages.** Signals are regular conversation messages. When context condensation triggers, old signals are summarized along with everything else. The condensation LLM preserves the key information from signals as it does with any other message.
 
@@ -921,7 +921,7 @@ signal_tool(name="signal_agent", description="Signal another running agent")
 {
   "type": "object",
   "properties": {
-    "target": {"type": "string", "description": "Workflow ID or agent name of the target"},
+    "target": {"type": "string", "description": "Execution ID or agent name of the target"},
     "message": {"type": "string", "description": "Message to send"},
     "priority": {"type": "string", "enum": ["normal", "urgent"], "default": "normal"}
   },
@@ -929,13 +929,13 @@ signal_tool(name="signal_agent", description="Signal another running agent")
 }
 ```
 
-**FR-9.3:** The tool resolves `target` by format: if `target` matches UUID v4 format (`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`), it is treated as a workflow ID; otherwise it is treated as an agent name and resolved via search (FR-10). No fallback between the two — the format determines the resolution path.
+**FR-9.3:** The tool resolves `target` by format: if `target` matches UUID v4 format (`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`), it is treated as an execution ID; otherwise it is treated as an agent name and resolved via search (FR-10). No fallback between the two — the format determines the resolution path.
 
 **FR-9.4:** The tool executes server-side (like `http_tool`) — no worker needed.
 
 ### FR-10: Signal by Agent Name
 
-**FR-10.1:** The signal API accepts `agent_name` as an alternative to `workflow_id`.
+**FR-10.1:** The signal API accepts `agent_name` as an alternative to `execution_id`.
 
 **FR-10.2:** Server resolves agent name to active (non-terminal) workflow(s) by searching:
 - Workflow type = agent_name
@@ -958,8 +958,8 @@ signal_tool(name="signal_agent", description="Signal another running agent")
 
 **FR-11.5:** Propagation defaults to `True`. To signal ONLY the parent (no propagation), set `propagate=False`:
 ```python
-runtime.signal(workflow_id="...", message="...", propagate=False)  # parent only
-runtime.signal(workflow_id="...", message="...")                   # propagates to sub-workflows (default)
+runtime.signal(execution_id="...", message="...", propagate=False)  # parent only
+runtime.signal(execution_id="...", message="...")                   # propagates to sub-workflows (default)
 ```
 
 ### FR-16: Signal Data Accessibility
@@ -1017,4 +1017,4 @@ async def signal(self, message: str, **kwargs) -> SignalReceipt: ...
 
 ### Consolidated API Surface
 
-The full API surface — including `runtime.signal()`, `runtime.broadcast()`, `runtime.get_signal_status()`, REST endpoints (by workflow ID and by agent name), `AgentHandle.signal()`, and SSE events — is defined in **Section 6**. The additional requirements in this section (FR-9 through FR-18) extend but do not duplicate those definitions.
+The full API surface — including `runtime.signal()`, `runtime.broadcast()`, `runtime.get_signal_status()`, REST endpoints (by execution ID and by agent name), `AgentHandle.signal()`, and SSE events — is defined in **Section 6**. The additional requirements in this section (FR-9 through FR-18) extend but do not duplicate those definitions.

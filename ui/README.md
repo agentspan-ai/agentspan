@@ -8,7 +8,7 @@ The open-source React UI for [Conductor](https://github.com/conductor-oss/conduc
 
 - Node.js 22+
 - [pnpm](https://pnpm.io/) 10.32.0 (`corepack use pnpm@10.32.0`)
-- A running Conductor server (default: `http://localhost:8080`)
+- A running Conductor server (default: `http://localhost:6767`)
 
 ### Setup
 
@@ -19,7 +19,7 @@ pnpm install
 Configure the backend URL in `.env` (see `.env` for defaults):
 
 ```bash
-VITE_WF_SERVER=http://localhost:8080
+VITE_WF_SERVER=http://localhost:6767
 ```
 
 ### Start the dev server

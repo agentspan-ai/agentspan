@@ -9,7 +9,7 @@ Exercises the FULL credential pipeline — no mocks anywhere:
   6. Non-isolated tool receives credentials via context var
   7. Config serializer includes credentials in tool config
 
-Requires: agentspan server running at AGENTSPAN_SERVER_URL (default localhost:8080)
+Requires: agentspan server running at AGENTSPAN_SERVER_URL (default localhost:6767)
 """
 
 import os
@@ -17,7 +17,7 @@ import sys
 
 import httpx
 
-SERVER = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:8080")
+SERVER = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:6767")
 API = f"{SERVER}/api"
 CRED_NAME = "_E2E_TEST_CRED"
 CRED_VALUE = "e2e-test-secret-value-12345"

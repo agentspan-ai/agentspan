@@ -123,8 +123,8 @@ class MockSSEServer:
 # ── Helpers ──────────────────────────────────────────────────────────
 
 
-def _java_event(event_type: str, workflow_id: str = "test-wf", **fields) -> dict:
-    data = {"type": event_type, "workflowId": workflow_id}
+def _java_event(event_type: str, execution_id: str = "test-wf", **fields) -> dict:
+    data = {"type": event_type, "executionId": execution_id}
     data.update(fields)
     return data
 
@@ -409,18 +409,18 @@ class TestStreamSSEAuth:
 
 
 class TestStreamSSEWorkflowId:
-    def test_events_carry_workflow_id(self):
+    def test_events_carry_execution_id(self):
         scenario = {
             "events": [
                 {
                     "event": "thinking",
                     "id": "1",
-                    "data": _java_event("thinking", workflow_id="wf-real", content="hi"),
+                    "data": _java_event("thinking", execution_id="wf-real", content="hi"),
                 },
                 {
                     "event": "done",
                     "id": "2",
-                    "data": _java_event("done", workflow_id="wf-real", output="ok"),
+                    "data": _java_event("done", execution_id="wf-real", output="ok"),
                 },
             ],
         }
@@ -430,6 +430,6 @@ class TestStreamSSEWorkflowId:
         try:
             rt = _make_runtime(url)
             events = list(rt._stream_sse("wf-real"))
-            assert all(e.workflow_id == "wf-real" for e in events)
+            assert all(e.execution_id == "wf-real" for e in events)
         finally:
             server.stop()

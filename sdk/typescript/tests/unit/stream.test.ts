@@ -372,7 +372,7 @@ describe('AgentStream', () => {
 
       const result = await stream.getResult();
       expect(result.status).toBe('COMPLETED');
-      expect(result.workflowId).toBe('wf-1');
+      expect(result.executionId).toBe('wf-1');
       expect(result.events.length).toBe(2);
     });
 
@@ -396,15 +396,15 @@ describe('AgentStream', () => {
     });
   });
 
-  describe('workflowId', () => {
-    it('exposes workflowId', () => {
+  describe('executionId', () => {
+    it('exposes executionId', () => {
       const stream = new AgentStream(
         'http://localhost/sse',
         {},
         'wf-123',
         vi.fn(),
       );
-      expect(stream.workflowId).toBe('wf-123');
+      expect(stream.executionId).toBe('wf-123');
     });
   });
 });

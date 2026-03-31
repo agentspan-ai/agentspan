@@ -1,4 +1,4 @@
-// ── Testing framework for @agentspan/sdk ────────────────
+// ── Testing framework for @agentspan-ai/sdk ────────────────
 
 // Mock execution
 export type { MockRunOptions } from './mock.js';

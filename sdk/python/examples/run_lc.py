@@ -59,7 +59,7 @@ class ExampleResult:
     name: str          # e.g. "langgraph/02_react_with_tools.py"
     passed: bool = False
     error: str = ""
-    workflow_ids: List[str] = field(default_factory=list)
+    execution_ids: List[str] = field(default_factory=list)
     duration_s: float = 0.0
     exit_code: int = -1
     stdout: str = ""
@@ -181,9 +181,9 @@ def run_example(path: str, timeout: int) -> ExampleResult:
         result.stdout = proc.stdout
         result.stderr = proc.stderr
 
-        # Parse workflow IDs from output
-        result.workflow_ids = re.findall(
-            r"Workflow ID:\s*([0-9a-f]{8}-[0-9a-f-]{27,35})",
+        # Parse execution IDs from output
+        result.execution_ids = re.findall(
+            r"(?:Workflow|Execution) ID:\s*([0-9a-f]{8}-[0-9a-f-]{27,35})",
             proc.stdout,
         )
 
@@ -260,7 +260,7 @@ def print_report(results: List[ExampleResult]) -> None:
         print(f"\n  {_c(group_prefix.upper(), _CYAN)}")
         for r in group:
             icon   = _c("PASS", _GREEN) if r.passed else _c("FAIL", _RED)
-            wf_ids = ", ".join(r.workflow_ids[:2]) or ""
+            wf_ids = ", ".join(r.execution_ids[:2]) or ""
             detail = r.error if not r.passed else wf_ids
             name   = r.name[len(group_prefix) + 1:]   # strip "langgraph/" prefix
             print(f"  {name:<{name_w - len(group_prefix) - 1}}  [{icon}]  {r.duration_s:>5.1f}s  {detail}")
@@ -341,7 +341,7 @@ def main() -> int:
                 results.append(r)
                 completed_count += 1
                 icon = "PASS" if r.passed else "FAIL"
-                wf   = r.workflow_ids[0][:8] + "…" if r.workflow_ids else ""
+                wf   = r.execution_ids[0][:8] + "…" if r.execution_ids else ""
                 print(
                     f"  [{icon}] {r.name}  ({r.duration_s:.1f}s)  {wf}",
                     flush=True,

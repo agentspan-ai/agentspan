@@ -30,7 +30,7 @@ func (c *Config) IsLocalhost() bool {
 
 func DefaultConfig() *Config {
 	return &Config{
-		ServerURL: "http://localhost:8080",
+		ServerURL: "http://localhost:6767",
 	}
 }
 
@@ -73,7 +73,7 @@ func Load() *Config {
 	}
 	var fileCfg Config
 	if json.Unmarshal(data, &fileCfg) == nil {
-		if cfg.ServerURL == "http://localhost:8080" && fileCfg.ServerURL != "" {
+		if cfg.ServerURL == "http://localhost:6767" && fileCfg.ServerURL != "" {
 			cfg.ServerURL = fileCfg.ServerURL
 		}
 		if cfg.AuthKey == "" && fileCfg.AuthKey != "" {

@@ -8,22 +8,22 @@
 
 ## Overview
 
-Add a Human-in-the-Loop (HITL) registry to the agentspan server so the UI can discover all running workflows that are paused waiting for human input, render a form using the task's embedded JSON Schema and UI Schema, and submit the human response.
+Add a Human-in-the-Loop (HITL) registry to the agentspan server so the UI can discover all running executions that are paused waiting for human input, render a form using the task's embedded JSON Schema and UI Schema, and submit the human response.
 
 ---
 
 ## Background
 
-The agentspan runtime already supports HITL via Conductor's `HUMAN` task type. When a workflow requires human input (tool approval, guardrail review, or manual agent selection), the workflow pauses and a `HUMAN` task enters `IN_PROGRESS` status. Each such task carries:
+The agentspan runtime already supports HITL via Conductor's `HUMAN` task type. When an execution requires human input (tool approval, guardrail review, or manual agent selection), the execution pauses and a `HUMAN` task enters `IN_PROGRESS` status. Each such task carries:
 
 - `response_schema` — JSON Schema describing the required human response
 - `response_ui_schema` — UI Schema with widget hints for form rendering
 - `__humanTaskDefinition` — Conductor metadata including a human-readable `displayName`
 - Context fields — `tool_calls`, `guardrail_message`, `agent_options`, `conversation`, etc.
 
-Currently there is no API to list all workflows waiting for human input. This design adds that missing capability.
+Currently there is no API to list all executions waiting for human input. This design adds that missing capability.
 
-**Constraint: one HUMAN task per workflow at a time.** The agentspan workflow structure (sequential LLM loop with SwitchTask routing) guarantees that at most one HUMAN task is `IN_PROGRESS` for a given `workflowId` at any moment. The registry uses `workflowId` as its primary key, consistent with this guarantee.
+**Constraint: one HUMAN task per execution at a time.** The agentspan execution structure (sequential LLM loop with SwitchTask routing) guarantees that at most one HUMAN task is `IN_PROGRESS` for a given `executionId` at any moment. The registry uses `executionId` as its primary key, consistent with this guarantee.
 
 ---
 
@@ -50,7 +50,7 @@ dev.agentspan.runtime.hitl/
 @NoArgsConstructor
 @AllArgsConstructor
 public class HitlTask {
-    private String workflowId;
+    private String executionId;
     private String taskId;                         // Conductor task ID — used in POST path
     private String agentName;                      // from task.getWorkflowType()
     private String displayName;                    // from __humanTaskDefinition; default: agentName
@@ -63,11 +63,11 @@ public class HitlTask {
     /**
      * Builds a HitlTask from a Conductor task.
      *
-     * workflowId is passed explicitly rather than derived from task.getWorkflowInstanceId()
+     * executionId is passed explicitly rather than derived from task.getWorkflowInstanceId()
      * so the call site is unambiguous across Conductor SDK versions.
      *
      * Steps (in order):
-     *  1. workflowId  ← parameter
+     *  1. executionId ← parameter
      *  2. taskId      ← task.getTaskId()
      *  3. agentName   ← task.getWorkflowType()
      *  4. displayName ← if inputData.get("__humanTaskDefinition") instanceof Map, cast to
@@ -86,7 +86,7 @@ public class HitlTask {
      * Missing or malformed fields: log a warning, use stated defaults.
      * Do NOT throw — registration failure must not fail the Conductor task execution.
      */
-    public static HitlTask fromConductorTask(Task task, String workflowId) { ... }
+    public static HitlTask fromConductorTask(Task task, String executionId) { ... }
 }
 ```
 
@@ -100,8 +100,8 @@ Lombok `@Data` generates getters, setters, `equals`, `hashCode`, `toString`. Jac
 public interface HitlTaskDao {
     void register(HitlTask task);
 
-    /** Remove by workflowId. No-op if not present. */
-    void removeByWorkflowId(String workflowId);
+    /** Remove by executionId. No-op if not present. */
+    void removeByExecutionId(String executionId);
 
     /** Atomic lookup-and-remove by taskId. No-op if not present. */
     void removeByTaskId(String taskId);
@@ -124,49 +124,49 @@ Three maps kept in sync to support O(1) lookup by either key direction:
 @Primary
 public class InMemoryHitlTaskDao implements HitlTaskDao {
 
-    private final Map<String, HitlTask> byWorkflowId  = new HashMap<>();  // workflowId → HitlTask
-    private final Map<String, String>   taskToWorkflow = new HashMap<>();  // taskId     → workflowId
-    private final Map<String, String>   workflowToTask = new HashMap<>();  // workflowId → taskId
+    private final Map<String, HitlTask> byExecutionId  = new HashMap<>();  // executionId → HitlTask
+    private final Map<String, String>   taskToExecution = new HashMap<>();  // taskId      → executionId
+    private final Map<String, String>   executionToTask = new HashMap<>();  // executionId → taskId
 
     // All methods synchronized on `this`. sort in listPending() executes inside
     // the synchronized block so the returned list reflects a consistent snapshot.
 
     @Override
     public synchronized void register(HitlTask task) {
-        byWorkflowId.put(task.getWorkflowId(), task);
-        taskToWorkflow.put(task.getTaskId(), task.getWorkflowId());
-        workflowToTask.put(task.getWorkflowId(), task.getTaskId());
+        byExecutionId.put(task.getExecutionId(), task);
+        taskToExecution.put(task.getTaskId(), task.getExecutionId());
+        executionToTask.put(task.getExecutionId(), task.getTaskId());
     }
 
     @Override
-    public synchronized void removeByWorkflowId(String workflowId) {
-        String taskId = workflowToTask.remove(workflowId);
-        if (taskId != null) taskToWorkflow.remove(taskId);
-        byWorkflowId.remove(workflowId);
+    public synchronized void removeByExecutionId(String executionId) {
+        String taskId = executionToTask.remove(executionId);
+        if (taskId != null) taskToExecution.remove(taskId);
+        byExecutionId.remove(executionId);
     }
 
     @Override
     public synchronized void removeByTaskId(String taskId) {
-        String workflowId = taskToWorkflow.remove(taskId);
-        if (workflowId != null) {
-            byWorkflowId.remove(workflowId);
-            workflowToTask.remove(workflowId);
+        String executionId = taskToExecution.remove(taskId);
+        if (executionId != null) {
+            byExecutionId.remove(executionId);
+            executionToTask.remove(executionId);
         }
     }
 
     @Override
     public synchronized List<HitlTask> listPending() {
         // sort inside synchronized block to return a consistent snapshot
-        return byWorkflowId.values().stream()
+        return byExecutionId.values().stream()
             .sorted(Comparator.comparing(HitlTask::getRegisteredAt))
             .collect(toList());
     }
 
     @Override
     public synchronized Optional<HitlTask> findByTaskId(String taskId) {
-        String workflowId = taskToWorkflow.get(taskId);
-        return workflowId != null
-            ? Optional.ofNullable(byWorkflowId.get(workflowId))
+        String executionId = taskToExecution.get(taskId);
+        return executionId != null
+            ? Optional.ofNullable(byExecutionId.get(executionId))
             : Optional.empty();
     }
 }
@@ -175,6 +175,8 @@ public class InMemoryHitlTaskDao implements HitlTaskDao {
 Plain `HashMap` is used — all access is behind `synchronized`, so `ConcurrentHashMap` provides no additional benefit.
 
 Future DB-backed implementation: add `@Component @Profile("db")` class implementing `HitlTaskDao`; remove `@Primary` from `InMemoryHitlTaskDao` or use `@ConditionalOnProperty`.
+
+Note: The Conductor `WorkflowModel` uses `getWorkflowId()` internally — our `executionId` maps to Conductor's `workflowId` at the boundary.
 
 ---
 
@@ -185,24 +187,24 @@ Future DB-backed implementation: add `@Component @Profile("db")` class implement
 In `AgentHumanTask.execute()`, after emitting the SSE `"waiting"` event via `AgentStreamRegistry`:
 
 ```java
-hitlTaskDao.register(HitlTask.fromConductorTask(task, workflowId));
+hitlTaskDao.register(HitlTask.fromConductorTask(task, executionId));
 ```
 
 ### Evict — New POST Endpoint
 
 The `POST /api/agent/{taskId}` controller calls `hitlTaskDao.removeByTaskId(taskId)` on **both** `200 OK` and `404 Not Found` outcomes. On 404, Conductor does not recognise the task (already completed or never existed); `HitlTask.taskId` is always set from `task.getTaskId()` at registration (step 2 of `fromConductorTask`), so the Conductor `taskId` and registry `taskId` are the same value — evicting on 404 is correct and safe.
 
-On `500 Internal Server Error`, eviction is **skipped** — task state is unknown. `HitlWorkflowStatusListener` handles cleanup when the workflow reaches a terminal state.
+On `500 Internal Server Error`, eviction is **skipped** — task state is unknown. `HitlWorkflowStatusListener` handles cleanup when the execution reaches a terminal state.
 
 ### Evict — Existing Respond Endpoint
 
-`AgentService.respond()` (used by `POST /api/agent/{workflowId}/respond`) already receives `workflowId` as a method parameter — the path variable is passed directly from the controller. Add after the existing task-completion logic succeeds:
+`AgentService.respond()` (used by `POST /api/agent/{executionId}/respond`) already receives `executionId` as a method parameter — the path variable is passed directly from the controller. Add after the existing task-completion logic succeeds:
 
 ```java
-hitlTaskDao.removeByWorkflowId(workflowId);
+hitlTaskDao.removeByExecutionId(executionId);
 ```
 
-### Evict — Workflow Finalisation
+### Evict — Execution Finalisation
 
 ```java
 @Component
@@ -216,12 +218,12 @@ public class HitlWorkflowStatusListener implements WorkflowStatusListener {
 
     @Override
     public void onWorkflowFinalised(Workflow workflow) {
-        hitlTaskDao.removeByWorkflowId(workflow.getWorkflowId());
+        hitlTaskDao.removeByExecutionId(workflow.getWorkflowId());
     }
 }
 ```
 
-`@Component` ensures Spring discovers and registers this bean. Conductor's Spring Boot starter auto-wires all `WorkflowStatusListener` beans. `onWorkflowFinalised` fires on all terminal workflow states: COMPLETED, FAILED, TIMED_OUT, TERMINATED.
+`@Component` ensures Spring discovers and registers this bean. Conductor's Spring Boot starter auto-wires all `WorkflowStatusListener` beans. `onWorkflowFinalised` fires on all terminal execution states: COMPLETED, FAILED, TIMED_OUT, TERMINATED.
 
 All `removeBy*` methods are no-ops on missing keys — safe to call from multiple eviction paths for the same task.
 
@@ -242,7 +244,7 @@ Returns all currently pending HITL tasks sorted by `registeredAt` ascending.
 ```json
 [
   {
-    "workflowId": "abc-123",
+    "executionId": "abc-123",
     "taskId": "t-456",
     "agentName": "support_agent",
     "displayName": "Support Agent Tool Approval",
@@ -295,7 +297,7 @@ Submit a human response for a specific HITL task.
 |--------|-----------|-------------------|
 | `200 OK` | `updateTask()` succeeded | `removeByTaskId(taskId)` called |
 | `404 Not Found` | `updateTask()` throws `NotFoundException` | `removeByTaskId(taskId)` called — task is no longer pending |
-| `500 Internal Server Error` | `updateTask()` throws unexpectedly | Eviction skipped — `HitlWorkflowStatusListener` cleans up on finalisation |
+| `500 Internal Server Error` | `updateTask()` throws unexpectedly | Eviction skipped — `HitlWorkflowStatusListener` cleans up on execution finalisation |
 
 ---
 
@@ -304,7 +306,7 @@ Submit a human response for a specific HITL task.
 | File | Change |
 |------|--------|
 | `AgentHumanTask.java` | Inject `HitlTaskDao`; call `register()` after SSE waiting event |
-| `AgentService.java` | Inject `HitlTaskDao`; call `removeByWorkflowId()` in `respond()` |
+| `AgentService.java` | Inject `HitlTaskDao`; call `removeByExecutionId()` in `respond()` |
 | `AgentController.java` | Add `GET /api/agent/hitl` and `POST /api/agent/{taskId}` routes |
 
 ---
@@ -320,9 +322,9 @@ Submit a human response for a specific HITL task.
 ## Testing
 
 **Unit — `InMemoryHitlTaskDao`:**
-- `register()` populates all three maps; `removeByWorkflowId()` and `removeByTaskId()` clean all three
+- `register()` populates all three maps; `removeByExecutionId()` and `removeByTaskId()` clean all three
 - `listPending()` returns tasks sorted by `registeredAt` ascending (sort is inside synchronized block)
-- Double-remove (same task via `removeByWorkflowId` then `removeByTaskId`, or vice versa) is a no-op on the second call — no map entries remain
+- Double-remove (same task via `removeByExecutionId` then `removeByTaskId`, or vice versa) is a no-op on the second call — no map entries remain
 - `findByTaskId()` returns empty after removal
 
 **Unit — `HitlTask.fromConductorTask()`:**
@@ -334,8 +336,8 @@ Submit a human response for a specific HITL task.
 - Method never throws on missing or malformed inputData
 
 **Unit — `HitlWorkflowStatusListener`:**
-- `onWorkflowFinalised(workflow)` delegates to `hitlTaskDao.removeByWorkflowId(workflow.getWorkflowId())` — verified with a mock `HitlTaskDao`
+- `onWorkflowFinalised(workflow)` delegates to `hitlTaskDao.removeByExecutionId(workflow.getWorkflowId())` — verified with a mock `HitlTaskDao`
 
 **Integration** (requires running Conductor instance):
-- Start a workflow that reaches a HUMAN task → verify it appears in `GET /api/agent/hitl`
-- Submit `POST /api/agent/{taskId}` with valid `TaskResult` → verify entry is removed from list and workflow advances past the HUMAN task
+- Start an execution that reaches a HUMAN task → verify it appears in `GET /api/agent/hitl`
+- Submit `POST /api/agent/{taskId}` with valid `TaskResult` → verify entry is removed from list and execution advances past the HUMAN task

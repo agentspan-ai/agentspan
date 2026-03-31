@@ -433,11 +433,11 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
         }
     }
 
-    private void emit(String workflowId, AgentSSEEvent event) {
+    private void emit(String executionId, AgentSSEEvent event) {
         try {
-            streamRegistry.send(workflowId, event);
+            streamRegistry.send(executionId, event);
         } catch (Exception e) {
-            logger.warn("Failed to emit SSE event for workflow {}: {}", workflowId, e.getMessage());
+            logger.warn("Failed to emit SSE event for execution {}: {}", executionId, e.getMessage());
         }
     }
 

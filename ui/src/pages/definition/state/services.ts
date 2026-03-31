@@ -123,7 +123,7 @@ export const refetchCurrentWorkflowVersionsService = async ({
 
   const url = `/metadata/workflow?includeShared=false&name=${encodeURIComponent(
     workflowName,
-  )}`;
+  )}`; // TODO: migrate to agent API
 
   try {
     const result: WorkflowDef[] = await queryClient.fetchQuery(

@@ -19,7 +19,7 @@ uv pip install langgraph langchain-core langchain-openai agentspan
 ## Quick Start
 
 ```bash
-export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+export AGENTSPAN_SERVER_URL=http://localhost:6767/api
 export OPENAI_API_KEY=sk-...
 
 cd sdk/python

@@ -89,7 +89,7 @@ class TestBasicAgent:
         assert "5" in str(result.output)
 
         # Verify via server API
-        assert_workflow_completed(result.workflow_id)
+        assert_workflow_completed(result.execution_id)
 
     def test_tool_metadata_tracked(self):
         """Verify tool_call events are tracked."""
@@ -120,7 +120,7 @@ class TestMultiAgent:
         with AgentRuntime() as rt:
             result = rt.run(pipeline, "Go", timeout=120000)
         assert result.status == "COMPLETED"
-        assert_workflow_completed(result.workflow_id)
+        assert_workflow_completed(result.execution_id)
 
     def test_swarm_transfer_names(self):
         """Verify SWARM transfer worker names use source agent prefix."""
@@ -300,7 +300,7 @@ class TestCallbacks:
         with AgentRuntime() as rt:
             result = rt.run(agent, "Hi", timeout=60000)
         assert result.status == "COMPLETED"
-        assert_workflow_completed(result.workflow_id)
+        assert_workflow_completed(result.execution_id)
 
     def test_agent_lifecycle_callback_compiles(self):
         """Agent with lifecycle callbacks compiles correctly."""
@@ -320,7 +320,7 @@ class TestCallbacks:
         with AgentRuntime() as rt:
             result = rt.run(agent, "Go", timeout=60000)
         assert result.status == "COMPLETED"
-        assert_workflow_completed(result.workflow_id)
+        assert_workflow_completed(result.execution_id)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -421,7 +421,7 @@ class TestMultiAgentExecution:
                 timeout=60000,
             )
         assert result.status == "COMPLETED"
-        assert_workflow_completed(result.workflow_id)
+        assert_workflow_completed(result.execution_id)
 
     def test_parallel_agents_all_execute(self):
         """Parallel strategy runs all sub-agents."""
@@ -444,7 +444,7 @@ class TestMultiAgentExecution:
         with AgentRuntime() as rt:
             result = rt.run(team, "Remote work", timeout=60000)
         assert result.status == "COMPLETED"
-        assert_workflow_completed(result.workflow_id)
+        assert_workflow_completed(result.execution_id)
 
     def test_router_selects_correct_agent(self):
         """Router function selects the right sub-agent."""
@@ -478,7 +478,7 @@ class TestMultiAgentExecution:
                 timeout=60000,
             )
         assert result.status == "COMPLETED"
-        assert_workflow_completed(result.workflow_id)
+        assert_workflow_completed(result.execution_id)
 
 
 # ═══════════════════════════════════════════════════════════════════════

@@ -1,5 +1,5 @@
 {
-  "name": "@agentspan/sdk",
+  "name": "@agentspan-ai/sdk",
   "version": "1.0.0",
   "description": "TypeScript SDK for building and running AI agents on Agentspan",
   "type": "module",

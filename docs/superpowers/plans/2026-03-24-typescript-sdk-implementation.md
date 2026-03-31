@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the complete `@agentspan/sdk` TypeScript SDK with 89-feature parity, superset tool compatibility (Zod + JSON Schema + Vercel AI SDK), and framework passthrough for 5 frameworks.
+**Goal:** Build the complete `@agentspan-ai/sdk` TypeScript SDK with 89-feature parity, superset tool compatibility (Zod + JSON Schema + Vercel AI SDK), and framework passthrough for 5 frameworks.
 
 **Architecture:** TypeScript-first SDK compiled to ESM+CJS via tsup. Raw `fetch`-based Conductor task polling (no conductor-javascript dependency). Auto-detecting runtime accepts both native agents and framework agents. Zod schemas auto-converted to JSON Schema at serialization time.
 
@@ -76,7 +76,7 @@ Remove all existing files in `sdk/typescript/src/`, `sdk/typescript/decorators/`
 
 - [ ] **Step 2: Create package.json**
 
-Per spec §2.2. Name: `@agentspan/sdk`, version `1.0.0`, type `module`. Dependencies: `zod-to-json-schema`, `dotenv`. Peer deps: `zod` (required), `ai`, `@langchain/core`, `@langchain/langgraph`, `@openai/agents`, `@google/adk` (all optional). Dev deps: `typescript`, `tsup`, `vitest`, `@types/node`, `zod`. Scripts: build, test, test:watch, lint, validate. Engines: `node >=18.0.0`.
+Per spec §2.2. Name: `@agentspan-ai/sdk`, version `1.0.0`, type `module`. Dependencies: `zod-to-json-schema`, `dotenv`. Peer deps: `zod` (required), `ai`, `@langchain/core`, `@langchain/langgraph`, `@openai/agents`, `@google/adk` (all optional). Dev deps: `typescript`, `tsup`, `vitest`, `@types/node`, `zod`. Scripts: build, test, test:watch, lint, validate. Engines: `node >=18.0.0`.
 
 Subpath exports: `.` (core), `./testing`, `./validation`.
 
@@ -262,7 +262,7 @@ Implement `WorkerManager`:
 - `registerTaskDef(taskName, config?)` — POST /api/metadata/taskdefs with retry config (retryCount:2, LINEAR_BACKOFF, retryDelay:2s, timeout:120s).
 - `startPolling()` / `stopPolling()` — setInterval-based polling per worker.
 - `pollTask(taskType)` — GET /api/tasks/poll/{taskType}.
-- `reportSuccess(taskId, workflowId, result)` / `reportFailure(...)` — POST /api/tasks.
+- `reportSuccess(taskId, executionId, result)` / `reportFailure(...)` — POST /api/tasks.
 - Type coercion rules (spec §13.4, base spec §14.1): null check → optional unwrap → type match → string↔object JSON parse/stringify → string→number/bool → fallback. All silent.
 - Circuit breaker (spec §13.5): 10 failures → disable, reset on success.
 - ToolContext extraction from `__agentspan_ctx__`.
@@ -300,7 +300,7 @@ Implement:
 - [ ] **Step 1: Write stream.ts**
 
 Implement `AgentStream`:
-- Constructor: `url`, `headers`, `workflowId`, `runtime` reference.
+- Constructor: `url`, `headers`, `executionId`, `runtime` reference.
 - `[Symbol.asyncIterator]()` — SSE parsing via fetch ReadableStream. Line buffering, event/id/data field parsing, heartbeat filtering, JSON parse.
 - Reconnection: Last-Event-ID header, max 5 retries, exponential backoff.
 - Polling fallback: if no real events for 15s, switch to GET /agent/{id}/status every 500ms.
@@ -478,7 +478,7 @@ Test: individual conditions toJSON, composition (and/or nesting), TextGate toJSO
 
 - [ ] **Step 2: Write event-push.ts**
 
-`pushEvent(workflowId, event, serverUrl, headers)` — fire-and-forget fetch POST to `/agent/{workflowId}/events`. Errors logged at debug only, never thrown.
+`pushEvent(executionId, event, serverUrl, headers)` — fire-and-forget fetch POST to `/agent/{executionId}/events`. Errors logged at debug only, never thrown.
 
 - [ ] **Step 3: Write tests**
 
@@ -678,7 +678,7 @@ Requires running agentspan server. Test: basic run() completes, stream() yields 
 - [ ] **Step 2: Run integration tests (if server available)**
 
 ```bash
-AGENTSPAN_SERVER_URL=http://localhost:8080/api npx vitest run tests/integration/
+AGENTSPAN_SERVER_URL=http://localhost:6767/api npx vitest run tests/integration/
 ```
 
 - [ ] **Step 3: Commit**

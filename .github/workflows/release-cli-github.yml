@@ -1,0 +1,79 @@
+name: Release CLI - GitHub + S3
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (e.g. 0.0.10)"
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish-github:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+
+      - name: Build binaries for all platforms
+        run: |
+          VERSION="${{ inputs.version }}"
+          COMMIT="${GITHUB_SHA}"
+          DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          LDFLAGS="-X github.com/agentspan/agentspan/cli/cmd.Version=${VERSION} -X github.com/agentspan/agentspan/cli/cmd.Commit=${COMMIT} -X github.com/agentspan/agentspan/cli/cmd.Date=${DATE}"
+
+          mkdir -p dist
+
+          GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/agentspan_linux_amd64
+          GOOS=linux GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/agentspan_linux_arm64
+          GOOS=darwin GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/agentspan_darwin_amd64
+          GOOS=darwin GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/agentspan_darwin_arm64
+          GOOS=windows GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/agentspan_windows_amd64.exe
+          GOOS=windows GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/agentspan_windows_arm64.exe
+
+          chmod +x dist/agentspan_*
+
+      - name: Upload CLI binaries to GitHub release (if release exists)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          gh release upload "v${VERSION}" \
+            dist/agentspan_linux_amd64 \
+            dist/agentspan_linux_arm64 \
+            dist/agentspan_darwin_amd64 \
+            dist/agentspan_darwin_arm64 \
+            dist/agentspan_windows_amd64.exe \
+            dist/agentspan_windows_arm64.exe \
+            --repo "${{ github.repository }}" \
+            --clobber 2>/dev/null || echo "No release v${VERSION} found, skipping GitHub release upload"
+
+      - name: Upload CLI binaries to S3 (versioned and latest)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          for binary in dist/agentspan_*; do
+            filename=$(basename "$binary")
+            aws s3 cp "$binary" "s3://agentspan/cli/${VERSION}/${filename}"
+            aws s3 cp "$binary" "s3://agentspan/cli/latest/${filename}"
+          done

@@ -11,7 +11,7 @@ function completedResult(extras?: {
   tokenUsage?: { promptTokens: number; completionTokens: number; totalTokens: number };
 }) {
   return makeAgentResult({
-    workflowId: 'wf-test',
+    executionId: 'wf-test',
     status: 'COMPLETED',
     finishReason: 'stop',
     output: extras?.output ?? { result: 'done' },
@@ -22,7 +22,7 @@ function completedResult(extras?: {
 
 function failedResult(error?: string) {
   return makeAgentResult({
-    workflowId: 'wf-test',
+    executionId: 'wf-test',
     status: 'FAILED',
     finishReason: 'error',
     error: error ?? 'something went wrong',

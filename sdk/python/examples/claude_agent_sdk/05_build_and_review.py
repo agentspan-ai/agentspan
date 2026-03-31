@@ -97,7 +97,7 @@ if __name__ == "__main__":
         # )
         # print(f"\n{'=' * 60}")
         # print(f"Status: {result.status}")
-        # print(f"Workflow ID: {result.workflow_id}")
+        # print(f"Workflow ID: {result.execution_id}")
         # print(f"Output: {result.output}")
         # print(f"{'=' * 60}")
 

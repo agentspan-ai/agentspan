@@ -335,11 +335,11 @@ intake_router = Agent(
 def research_database(query: str, ctx: ToolContext = None) -> dict:
     """Search internal research database."""
     session = ctx.session_id if ctx else "unknown"
-    workflow = ctx.workflow_id if ctx else "unknown"
+    execution = ctx.execution_id if ctx else "unknown"
     return {
         "query": query,
         "session_id": session,
-        "workflow_id": workflow,
+        "execution_id": execution,
         "results": MOCK_RESEARCH_DATA.get("quantum_computing", {}),
     }
 
@@ -869,7 +869,7 @@ if __name__ == "__main__":
         print("=== Deploy ===")
         deployments = runtime.deploy(full_pipeline)
         for dep in deployments:
-            print(f"  Deployed: {dep.workflow_name} ({dep.agent_name})")
+            print(f"  Deployed: {dep.agent_name}")
 
         # ── Feature #51: plan (dry-run, no prompt) ───────────────
         print("\n=== Plan (dry-run) ===")
@@ -879,7 +879,7 @@ if __name__ == "__main__":
         # ── Feature #43: stream (sync SSE with HITL) ─────────────
         print("\n=== Stream Execution ===")
         agent_stream = runtime.stream(full_pipeline, PROMPT)
-        print(f"  Workflow: {agent_stream.workflow_id}\n")
+        print(f"  Execution: {agent_stream.execution_id}\n")
 
         hitl_demo_state = {"approved": 0, "rejected": 0, "feedback": 0}
 
@@ -938,7 +938,7 @@ if __name__ == "__main__":
         # ── Feature #48: start + polling ─────────────────────────
         print("\n=== Start + Polling ===")
         handle = runtime.start(full_pipeline, PROMPT)
-        print(f"  Started: {handle.workflow_id}")
+        print(f"  Started: {handle.execution_id}")
         status = handle.get_status()
         print(f"  Status: {status.status}, Running: {status.is_running}")
         if status.reason:

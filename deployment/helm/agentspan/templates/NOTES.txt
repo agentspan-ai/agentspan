@@ -3,8 +3,8 @@
 {{- if .Values.ingress.enabled }}
   kubectl get ingress {{ include "agentspan.fullname" . }} -n {{ .Release.Namespace }}
 {{- else }}
-  kubectl port-forward svc/{{ include "agentspan.fullname" . }} 8080:{{ .Values.service.port }} -n {{ .Release.Namespace }}
-  echo "Open http://127.0.0.1:8080"
+  kubectl port-forward svc/{{ include "agentspan.fullname" . }} 6767:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+  echo "Open http://127.0.0.1:6767"
 {{- end }}
 
 2. Check rollout status:

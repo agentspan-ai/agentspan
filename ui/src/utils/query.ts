@@ -178,7 +178,7 @@ export function useWorkflowSearch<T = any>(
 ): UseQueryResult<T, FetchError> {
   return useSearch<T>(
     searchObj,
-    "/workflow/search?",
+    "agent/executions/search?",
     queryOption,
     queryOptionOverride,
   );
@@ -256,7 +256,7 @@ export function useTaskSearch({
   const queryClient = useQueryClient();
   const fetchParams = { headers: useAuthHeaders() };
 
-  const pathRoot = "/workflow/search-by-tasks?";
+  const pathRoot = "/workflow/search-by-tasks?"; // @Deprecated - TODO: migrate to agent API
   const key = [fetchContext.stack, pathRoot, searchObj];
 
   const infiniteQuery = useInfiniteQuery<any, FetchError>(
@@ -472,7 +472,7 @@ export function useWorkflowDefsByVersions({
       ? qs.stringify(queryParams, { addQueryPrefix: true })
       : queryParams;
 
-  const { data } = useFetch(`/metadata/workflow${queryString}`, {
+  const { data } = useFetch(`/metadata/workflow${queryString}`, { // TODO: migrate to agent API
     staleTime: STALE_TIME_WORKFLOW_DEFS,
   });
 
@@ -621,7 +621,7 @@ export function useUserPermissions(id: string) {
 export function useWorkflowDefNames(access?: string) {
   const queryParams = access ? `?access=${access}` : "";
   const { data, ...rest } = useFetch<WorkflowDef[]>(
-    `/metadata/workflow${queryParams}&short=true`,
+    `/metadata/workflow${queryParams}&short=true`, // TODO: migrate to agent API
     {
       staleTime: STALE_TIME_WORKFLOW_DEFS,
     },

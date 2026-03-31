@@ -22,7 +22,7 @@ describe('extractExecutionToken', () => {
       arg1: 'value',
       __agentspan_ctx__: {
         executionToken: 'tok-primary',
-        workflowId: 'wf-123',
+        executionId: 'wf-123',
       },
     };
     expect(extractExecutionToken(input)).toBe('tok-primary');
@@ -82,7 +82,7 @@ describe('extractExecutionToken', () => {
   it('returns null when context has no token', () => {
     const input = {
       __agentspan_ctx__: {
-        workflowId: 'wf-123',
+        executionId: 'wf-123',
       },
     };
     expect(extractExecutionToken(input)).toBeNull();

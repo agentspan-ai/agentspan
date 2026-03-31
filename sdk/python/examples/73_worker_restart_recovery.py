@@ -31,7 +31,7 @@ from pathlib import Path
 from agentspan.agents import Agent, AgentRuntime, tool
 from settings import settings
 
-DEFAULT_WORKFLOW_FILE = Path("/tmp/agentspan_worker_restart.workflow_id")
+DEFAULT_WORKFLOW_FILE = Path("/tmp/agentspan_worker_restart.execution_id")
 DEFAULT_WORKER_INFO_FILE = Path("/tmp/agentspan_worker_restart.worker.json")
 DEFAULT_ATTEMPT_FILE = Path("/tmp/agentspan_worker_restart.attempts.json")
 
@@ -123,7 +123,7 @@ def deploy_agent() -> None:
     with AgentRuntime() as runtime:
         results = runtime.deploy(agent)
         for info in results:
-            print(f"Deployed: {info.agent_name} -> {info.workflow_name}")
+            print(f"Deployed: {info.agent_name} -> {info.registered_name}")
 
 
 def serve_workers(worker_info_file: Path) -> None:
@@ -162,15 +162,15 @@ def start_workflow(workflow_file: Path, timeout_seconds: int) -> None:
 
     with AgentRuntime() as runtime:
         handle = runtime.start(WORKFLOW_NAME, "Validate change CHG-901 for production release.")
-        save_text(workflow_file, handle.workflow_id)
+        save_text(workflow_file, handle.execution_id)
 
-        print(f"Workflow ID: {handle.workflow_id}")
+        print(f"Workflow ID: {handle.execution_id}")
         print(f"Saved workflow ID to: {workflow_file}")
         print(f"Attempt state file: {DEFAULT_ATTEMPT_FILE}")
         print("Polling workflow status...")
 
         for second in range(timeout_seconds + 1):
-            status = runtime.get_status(handle.workflow_id)
+            status = runtime.get_status(handle.execution_id)
             print_status(f"  [{second:02d}s]", status)
             if status.is_complete:
                 print("\nFinal output:")
@@ -181,10 +181,10 @@ def start_workflow(workflow_file: Path, timeout_seconds: int) -> None:
         print("\nTimed out waiting for completion.")
 
 
-def show_status(workflow_id: str, timeout_seconds: int) -> None:
+def show_status(execution_id: str, timeout_seconds: int) -> None:
     with AgentRuntime() as runtime:
         for second in range(timeout_seconds + 1):
-            status = runtime.get_status(workflow_id)
+            status = runtime.get_status(execution_id)
             print_status(f"  [{second:02d}s]", status)
             if status.is_complete:
                 print("\nFinal output:")
@@ -219,7 +219,7 @@ def parse_args() -> argparse.Namespace:
         "--file",
         type=Path,
         default=DEFAULT_WORKFLOW_FILE,
-        help="Path to store workflow_id.",
+        help="Path to store execution_id.",
     )
     start.add_argument(
         "--timeout-seconds",
@@ -242,7 +242,7 @@ def parse_args() -> argparse.Namespace:
         "--file",
         type=Path,
         default=DEFAULT_WORKFLOW_FILE,
-        help="Path containing saved workflow_id.",
+        help="Path containing saved execution_id.",
     )
     status.add_argument(
         "--timeout-seconds",
@@ -266,5 +266,5 @@ if __name__ == "__main__":
     elif args.command == "kill-worker":
         kill_worker(args.worker_info_file)
     elif args.command == "status":
-        workflow_id = args.workflow_id or load_text(args.file)
-        show_status(workflow_id, args.timeout_seconds)
+        execution_id = args.execution_id or load_text(args.file)
+        show_status(execution_id, args.timeout_seconds)

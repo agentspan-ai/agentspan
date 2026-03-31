@@ -8,14 +8,14 @@ describe('AgentRuntime', () => {
   const savedEnv: Record<string, string | undefined> = {};
   const envKeys = ['AGENTSPAN_SERVER_URL', 'AGENTSPAN_API_KEY', 'AGENTSPAN_AUTH_KEY', 'AGENTSPAN_AUTH_SECRET'];
 
-  function mockAgentServer(workflowId = 'wf-cred-test', fetchCalls?: string[]) {
+  function mockAgentServer(executionId = 'wf-cred-test', fetchCalls?: string[]) {
     global.fetch = vi.fn().mockImplementation(async (url: string) => {
       fetchCalls?.push(url);
       if (url.includes('/agent/start')) {
         return {
           ok: true,
           status: 200,
-          text: async () => JSON.stringify({ workflowId }),
+          text: async () => JSON.stringify({ executionId }),
         };
       }
       if (url.includes('/agent/stream/')) {
@@ -32,7 +32,7 @@ describe('AgentRuntime', () => {
           }),
         };
       }
-      if (url.includes(`/agent/${workflowId}/status`)) {
+      if (url.includes(`/agent/${executionId}/status`)) {
         return {
           ok: true,
           status: 200,
@@ -70,7 +70,7 @@ describe('AgentRuntime', () => {
     it('creates with default config', () => {
       const runtime = new AgentRuntime();
       expect(runtime.config).toBeInstanceOf(AgentConfig);
-      expect(runtime.config.serverUrl).toBe('http://localhost:8080/api');
+      expect(runtime.config.serverUrl).toBe('http://localhost:6767/api');
     });
 
     it('creates with custom config', () => {
@@ -117,12 +117,12 @@ describe('AgentRuntime', () => {
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
         status: 200,
-        text: async () => '{"workflowId":"wf-1"}',
+        text: async () => '{"executionId":"wf-1"}',
       });
 
       const runtime = new AgentRuntime();
       const result = await runtime._httpRequest('GET', '/test');
-      expect(result).toEqual({ workflowId: 'wf-1' });
+      expect(result).toEqual({ executionId: 'wf-1' });
     });
 
     it('returns empty object for empty response', async () => {
@@ -148,7 +148,7 @@ describe('AgentRuntime', () => {
       await runtime._httpRequest('POST', '/agent/start', { prompt: 'hi' });
 
       expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:8080/api/agent/start',
+        'http://localhost:6767/api/agent/start',
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
@@ -173,7 +173,7 @@ describe('AgentRuntime', () => {
       await runtime._httpRequest('GET', '/test');
 
       expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:8080/api/test',
+        'http://localhost:6767/api/test',
         expect.objectContaining({
           headers: expect.objectContaining({
             'X-Auth-Key': 'my-auth-key',
@@ -221,7 +221,7 @@ describe('AgentRuntime', () => {
   });
 
   describe('SSE URL construction', () => {
-    it('constructs SSE URL as /agent/stream/{workflowId}', async () => {
+    it('constructs SSE URL as /agent/stream/{executionId}', async () => {
       const fetchCalls: string[] = [];
 
       global.fetch = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
@@ -231,7 +231,7 @@ describe('AgentRuntime', () => {
           return {
             ok: true,
             status: 200,
-            text: async () => JSON.stringify({ workflowId: 'wf-sse-test' }),
+            text: async () => JSON.stringify({ executionId: 'wf-sse-test' }),
           };
         }
         if (url.includes('/agent/stream/') || url.includes('/sse')) {
@@ -265,7 +265,7 @@ describe('AgentRuntime', () => {
         return { ok: true, status: 200, text: async () => '{}' };
       });
 
-      const runtime = new AgentRuntime({ serverUrl: 'http://localhost:8080/api' });
+      const runtime = new AgentRuntime({ serverUrl: 'http://localhost:6767/api' });
       const { Agent } = await import('../../src/agent.js');
       const agent = new Agent({ name: 'test_agent', model: 'gpt-4o' });
 
@@ -278,7 +278,7 @@ describe('AgentRuntime', () => {
 
       // Verify SSE URL uses /agent/stream/{id}
       const sseCall = fetchCalls.find((u) => u.includes('/stream/') || u.includes('/sse'));
-      expect(sseCall).toBe('http://localhost:8080/api/agent/stream/wf-sse-test');
+      expect(sseCall).toBe('http://localhost:6767/api/agent/stream/wf-sse-test');
     });
   });
 
@@ -287,7 +287,7 @@ describe('AgentRuntime', () => {
       const fetchCalls: string[] = [];
       mockAgentServer('wf-native-stream', fetchCalls);
 
-      const runtime = new AgentRuntime({ serverUrl: 'http://localhost:8080/api' });
+      const runtime = new AgentRuntime({ serverUrl: 'http://localhost:6767/api' });
       vi.spyOn((runtime as any).workerManager, 'startPolling').mockImplementation(() => {});
 
       const { Agent } = await import('../../src/agent.js');
@@ -298,14 +298,14 @@ describe('AgentRuntime', () => {
 
       expect(result.status).toBe('COMPLETED');
       expect(result.output).toEqual({ result: 'ok' });
-      expect(fetchCalls).toContain('http://localhost:8080/api/agent/stream/wf-native-stream');
+      expect(fetchCalls).toContain('http://localhost:6767/api/agent/stream/wf-native-stream');
     });
 
     it('streams framework agents through the same SSE endpoint', async () => {
       const fetchCalls: string[] = [];
       mockAgentServer('wf-framework-stream', fetchCalls);
 
-      const runtime = new AgentRuntime({ serverUrl: 'http://localhost:8080/api' });
+      const runtime = new AgentRuntime({ serverUrl: 'http://localhost:6767/api' });
       vi.spyOn((runtime as any).workerManager, 'startPolling').mockImplementation(() => {});
 
       const openAiAgent = {
@@ -321,7 +321,7 @@ describe('AgentRuntime', () => {
 
       expect(result.status).toBe('COMPLETED');
       expect(result.output).toEqual({ result: 'ok' });
-      expect(fetchCalls).toContain('http://localhost:8080/api/agent/stream/wf-framework-stream');
+      expect(fetchCalls).toContain('http://localhost:6767/api/agent/stream/wf-framework-stream');
 
       const startCall = (global.fetch as any).mock.calls.find(([url]: [string]) =>
         url.includes('/agent/start'),
@@ -335,7 +335,7 @@ describe('AgentRuntime', () => {
     it('includes credentials in native run start payload', async () => {
       mockAgentServer('wf-native-cred');
 
-      const runtime = new AgentRuntime({ serverUrl: 'http://localhost:8080/api' });
+      const runtime = new AgentRuntime({ serverUrl: 'http://localhost:6767/api' });
       vi.spyOn((runtime as any).workerManager, 'startPolling').mockImplementation(() => {});
       vi.spyOn((runtime as any).workerManager, 'stopPolling').mockImplementation(() => {});
 
@@ -356,7 +356,7 @@ describe('AgentRuntime', () => {
     it('includes credentials in framework run start payload', async () => {
       mockAgentServer('wf-framework-cred');
 
-      const runtime = new AgentRuntime({ serverUrl: 'http://localhost:8080/api' });
+      const runtime = new AgentRuntime({ serverUrl: 'http://localhost:6767/api' });
       vi.spyOn((runtime as any).workerManager, 'startPolling').mockImplementation(() => {});
       vi.spyOn((runtime as any).workerManager, 'stopPolling').mockImplementation(() => {});
 
@@ -383,7 +383,7 @@ describe('AgentRuntime', () => {
     it('includes credentials in framework start payload', async () => {
       mockAgentServer('wf-framework-start-cred');
 
-      const runtime = new AgentRuntime({ serverUrl: 'http://localhost:8080/api' });
+      const runtime = new AgentRuntime({ serverUrl: 'http://localhost:6767/api' });
       vi.spyOn((runtime as any).workerManager, 'startPolling').mockImplementation(() => {});
 
       const openAiAgent = {

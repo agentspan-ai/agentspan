@@ -168,7 +168,7 @@ User Prompt
     │     ├─ pass  → return result
     │     ├─ retry → feedback appended to conversation, LLM retries
     │     ├─ fix   → use corrected output, skip LLM retry
-    │     ├─ raise → terminate workflow with error
+    │     ├─ raise → terminate execution with error
     │     └─ human → pause for human review (approve/edit/reject)
     │
     └─ [Tool Guardrails]         ← validate tool inputs/outputs (Python-level)
@@ -295,8 +295,8 @@ agent = Agent(
 |------|----------|----------|
 | `"retry"` | Feedback message appended to conversation. LLM retries with the feedback. After `max_retries` exhausted, escalates to `"raise"`. | Style issues, format corrections — let the LLM fix it. |
 | `"fix"` | Uses `GuardrailResult.fixed_output` directly. No LLM retry. | Deterministic fixes (PII redaction, truncation, formatting). Faster and cheaper than retry. |
-| `"raise"` | Terminates the workflow with `FAILED` status and the guardrail message. | Hard blocks — content that must never pass through. |
-| `"human"` | Pauses the workflow at a HumanTask. Human can approve, edit, or reject. Only valid for `position="output"`. | Compliance review, sensitive content that needs human judgment. |
+| `"raise"` | Terminates the execution with `FAILED` status and the guardrail message. | Hard blocks — content that must never pass through. |
+| `"human"` | Pauses the execution at a HumanTask. Human can approve, edit, or reject. Only valid for `position="output"`. | Compliance review, sensitive content that needs human judgment. |
 
 ### Retry Escalation
 
@@ -327,7 +327,7 @@ agent = Agent(
 
 ### Human Mode
 
-When `on_fail="human"`, the workflow pauses at a HumanTask. Use `start()` (async) since `run()` would block:
+When `on_fail="human"`, the execution pauses at a HumanTask. Use `start()` (async) since `run()` would block:
 
 ```python
 handle = runtime.start(agent, "...")
@@ -335,9 +335,9 @@ handle = runtime.start(agent, "...")
 # Poll until waiting
 status = handle.get_status()
 if status.is_waiting:
-    runtime.approve(handle.workflow_id)    # approve as-is
-    # or: runtime.reject(handle.workflow_id, "reason")
-    # or: runtime.respond(handle.workflow_id, {"edited_output": "..."})
+    runtime.approve(handle.execution_id)    # approve as-is
+    # or: runtime.reject(handle.execution_id, "reason")
+    # or: runtime.respond(handle.execution_id, {"edited_output": "..."})
 ```
 
 The human review flow compiles to:
@@ -346,7 +346,7 @@ The human review flow compiles to:
 HumanTask → validate → [normalize if needed] → route
   ├─ approve: continue with original output
   ├─ edit: continue with edited output
-  └─ reject: terminate workflow (FAILED)
+  └─ reject: terminate execution (FAILED)
 ```
 
 ---
@@ -358,7 +358,7 @@ HumanTask → validate → [normalize if needed] → route
 | `"output"` | After each LLM response, inside the DoWhile loop | Compiled as Conductor workflow tasks (durable, visible in UI) | Agent-level guardrails |
 | `"input"` | Before tool execution | Python-level wrapping inside the tool worker (not a separate workflow task) | Tool-level guardrails only |
 
-**Note:** `on_fail="human"` is only valid for `position="output"` — input guardrails run inside Python and cannot pause a workflow.
+**Note:** `on_fail="human"` is only valid for `position="output"` — input guardrails run inside Python and cannot pause an execution.
 
 ---
 
@@ -568,8 +568,8 @@ This re-runs the full strategy workflow on retry.
 
 | Aspect | Current State | Assessment |
 |--------|--------------|------------|
-| **Input guardrails** | Client-side, pre-workflow, raise-only | Functional but limited |
-| **Output guardrails** | Client-side, post-workflow, retry/raise | Functional but wasteful |
+| **Input guardrails** | Client-side, pre-execution, raise-only | Functional but limited |
+| **Output guardrails** | Client-side, post-execution, retry/raise | Functional but wasteful |
 | **Tool guardrails** | Not implemented | **Gap** |
 | **Guardrail types** | Guardrail, RegexGuardrail, LLMGuardrail + `@guardrail` decorator | Good coverage |
 | **Failure modes** | retry, raise, fix, human (`OnFail` enum) | ~~Missing: fix, tripwire, redirect, human~~ Implemented |
@@ -585,9 +585,9 @@ This re-runs the full strategy workflow on retry.
 
 Our guardrails run **client-side in the Python process**, but our key differentiator is **server-side durable execution via Conductor**. This means:
 
-1. If the client crashes after the workflow completes but before guardrail checking, guardrails are skipped
+1. If the client crashes after the execution completes but before guardrail checking, guardrails are skipped
 2. Guardrails are invisible in the Conductor UI (no task, no status, no logs)
-3. Output guardrail retry re-submits the **entire workflow** instead of repeating just the LLM call inside the DoWhile loop
+3. Output guardrail retry re-submits the **entire execution** instead of repeating just the LLM call inside the DoWhile loop
 4. `start()` (fire-and-forget) and `stream()` can't run output guardrails at all
 
 The `compile_guardrail_tasks()` method in `agent_compiler.py` was clearly the intended design — compile guardrails as worker tasks inside the workflow — but it was never wired in.
@@ -610,7 +610,7 @@ The `compile_guardrail_tasks()` method in `agent_compiler.py` was clearly the in
 - Output guardrails should be worker tasks INSIDE the agent loop
 - After the LLM responds and before the next iteration, check guardrails
 - If guardrail fails with `retry`: append feedback to messages and continue the loop (no full re-execution)
-- If guardrail fails with `raise`: terminate the workflow with an error
+- If guardrail fails with `raise`: terminate the execution with an error
 - This makes guardrails **durable** and **visible in Conductor UI**
 - The `compile_guardrail_tasks()` method is the starting point
 
@@ -633,7 +633,7 @@ The `compile_guardrail_tasks()` method in `agent_compiler.py` was clearly the in
 - Useful for deterministic corrections (PII redaction, format fixing)
 
 **15e. Add `on_fail="human"` mode**
-- Guardrail failure pauses workflow via Conductor HumanTask
+- Guardrail failure pauses execution via Conductor HumanTask
 - Human reviews and approves/rejects/edits
 - Natural fit for Conductor's existing human-in-the-loop support
 - Major differentiator — no other SDK has durable human escalation for guardrails
@@ -644,7 +644,7 @@ The `compile_guardrail_tasks()` method in `agent_compiler.py` was clearly the in
 - Same pattern as our TerminationCondition composability
 
 **15g. Support guardrails in `start()` and `stream()`**
-- Since guardrails will be compiled into the workflow, they'll automatically work with all execution modes
+- Since guardrails will be compiled into the Conductor workflow, they'll automatically work with all execution modes
 - This is a natural consequence of fixing 15a
 
 ### Tier 3: Nice-to-have
@@ -673,7 +673,7 @@ The `compile_guardrail_tasks()` method in `agent_compiler.py` was clearly the in
 User Input
     |
     v
-[Input Guardrails]          <-- Client-side (fast, pre-workflow)
+[Input Guardrails]          <-- Client-side (fast, pre-execution)
     |                          Positions: "input"
     |                          Modes: raise, human
     v
@@ -703,7 +703,7 @@ Final Output
 ```
 
 ### Key architectural decisions
-1. **Input guardrails stay client-side** — they run once, before the workflow, and don't need durability
+1. **Input guardrails stay client-side** — they run once, before the execution, and don't need durability
 2. **Output guardrails compile into the DoWhile loop** — durable, visible, efficient retry
 3. **Tool guardrails are new** — wrap individual tool executions, highest-risk checkpoint
 4. **`on_fail="human"`** leverages Conductor's HumanTask — unique differentiator

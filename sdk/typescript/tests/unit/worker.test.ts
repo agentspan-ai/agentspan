@@ -239,7 +239,7 @@ describe('extractToolContext', () => {
       someArg: 'value',
       __agentspan_ctx__: {
         sessionId: 'sess-1',
-        workflowId: 'wf-1',
+        executionId: 'wf-1',
         agentName: 'my_agent',
         metadata: { key: 'val' },
         dependencies: { dep: 'service' },
@@ -250,7 +250,7 @@ describe('extractToolContext', () => {
     const ctx = extractToolContext(inputData);
     expect(ctx).not.toBeNull();
     expect(ctx!.sessionId).toBe('sess-1');
-    expect(ctx!.workflowId).toBe('wf-1');
+    expect(ctx!.executionId).toBe('wf-1');
     expect(ctx!.agentName).toBe('my_agent');
     expect(ctx!.metadata).toEqual({ key: 'val' });
     expect(ctx!.dependencies).toEqual({ dep: 'service' });
@@ -272,7 +272,7 @@ describe('extractToolContext', () => {
     const inputData = {
       __agentspan_ctx__: {
         sessionId: '',
-        workflowId: '',
+        executionId: '',
         agentName: '',
         metadata: {},
         dependencies: {},
@@ -292,7 +292,7 @@ describe('extractToolContext', () => {
     });
     expect(ctx).not.toBeNull();
     expect(ctx!.sessionId).toBe('');
-    expect(ctx!.workflowId).toBe('');
+    expect(ctx!.executionId).toBe('');
     expect(ctx!.agentName).toBe('');
     expect(ctx!.metadata).toEqual({});
     expect(ctx!.dependencies).toEqual({});
@@ -547,7 +547,7 @@ describe('WorkerManager', () => {
           arg1: 'value',
           __agentspan_ctx__: {
             executionToken: 'exec-tok-123',
-            workflowId: 'wf-1',
+            executionId: 'wf-1',
           },
         },
       };

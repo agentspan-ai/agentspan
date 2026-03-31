@@ -37,9 +37,9 @@ def _make_sse_lines(*events):
     return lines
 
 
-def _java_event(event_type, workflow_id="wf-1", **fields):
+def _java_event(event_type, execution_id="wf-1", **fields):
     """Construct a dict matching the Java AgentSSEEvent JSON shape."""
-    data = {"type": event_type, "workflowId": workflow_id}
+    data = {"type": event_type, "executionId": execution_id}
     data.update(fields)
     return data
 
@@ -53,7 +53,7 @@ class TestParseSSE:
             {
                 "event": "thinking",
                 "id": "1",
-                "data": {"type": "thinking", "workflowId": "wf-1", "content": "llm"},
+                "data": {"type": "thinking", "executionId": "wf-1", "content": "llm"},
             }
         )
         events = list(AgentRuntime._parse_sse(iter(lines)))
@@ -167,7 +167,7 @@ class TestSSEToAgentEvent:
         ev = AgentRuntime._sse_to_agent_event(sse, "wf-1")
         assert ev.type == "thinking"
         assert ev.content == "agent_llm"
-        assert ev.workflow_id == "wf-1"
+        assert ev.execution_id == "wf-1"
 
     def test_tool_call_event(self):
         sse = {
@@ -247,17 +247,17 @@ class TestSSEToAgentEvent:
         assert ev.type == "message"
         assert ev.content == "Hello"
 
-    def test_workflow_id_from_data(self):
-        """workflowId in data overrides the fallback parameter."""
-        sse = {"event": "thinking", "data": {"type": "thinking", "workflowId": "wf-actual"}}
+    def test_execution_id_from_data(self):
+        """executionId in data overrides the fallback parameter."""
+        sse = {"event": "thinking", "data": {"type": "thinking", "executionId": "wf-actual"}}
         ev = AgentRuntime._sse_to_agent_event(sse, "wf-fallback")
-        assert ev.workflow_id == "wf-actual"
+        assert ev.execution_id == "wf-actual"
 
-    def test_workflow_id_fallback(self):
-        """When data has no workflowId, uses the fallback parameter."""
+    def test_execution_id_fallback(self):
+        """When data has no executionId, uses the fallback parameter."""
         sse = {"event": "thinking", "data": {"type": "thinking"}}
         ev = AgentRuntime._sse_to_agent_event(sse, "wf-fallback")
-        assert ev.workflow_id == "wf-fallback"
+        assert ev.execution_id == "wf-fallback"
 
     def test_returns_none_for_missing_type(self):
         sse = {"data": {"content": "something"}}
@@ -278,14 +278,14 @@ class TestSSEToAgentEvent:
             "event": "tool_call",
             "data": {
                 "type": "tool_call",
-                "workflowId": "wf-123",
+                "executionId": "wf-123",
                 "toolName": "my_tool",
                 "guardrailName": "my_guard",
             },
         }
         ev = AgentRuntime._sse_to_agent_event(sse, "wf-1")
         assert ev.tool_name == "my_tool"
-        assert ev.workflow_id == "wf-123"
+        assert ev.execution_id == "wf-123"
         assert ev.guardrail_name == "my_guard"
 
 

@@ -10,11 +10,11 @@ def _make_executor(output="answer"):
     return executor
 
 
-def _make_task(prompt="Hello", session_id="", workflow_id="wf-456"):
+def _make_task(prompt="Hello", session_id="", execution_id="wf-456"):
     from conductor.client.http.models.task import Task
     task = MagicMock(spec=Task)
     task.input_data = {"prompt": prompt, "session_id": session_id}
-    task.workflow_instance_id = workflow_id
+    task.workflow_instance_id = execution_id
     return task
 
 
@@ -97,7 +97,7 @@ class TestMakeLangchainWorker:
 
         pushed_events = []
 
-        def fake_push(wf_id, event, *args):
+        def fake_push(exec_id, event, *args):
             pushed_events.append(event)
 
         with patch("agentspan.agents.frameworks.langchain._push_event_nonblocking", side_effect=fake_push):

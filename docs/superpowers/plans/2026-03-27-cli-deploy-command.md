@@ -221,8 +221,8 @@ def test_deploy_all_agents_success():
     mock_agent_2 = MagicMock(spec=Agent)
     mock_agent_2.name = "summarizer"
 
-    info1 = DeploymentInfo(workflow_name="wf_researcher", agent_name="researcher")
-    info2 = DeploymentInfo(workflow_name="wf_summarizer", agent_name="summarizer")
+    info1 = DeploymentInfo(registered_name="wf_researcher", agent_name="researcher")
+    info2 = DeploymentInfo(registered_name="wf_summarizer", agent_name="summarizer")
 
     with patch("agentspan.cli.deploy.discover_agents", return_value=[mock_agent_1, mock_agent_2]), \
          patch("agentspan.cli.deploy.deploy", side_effect=[[info1], [info2]]):
@@ -235,8 +235,8 @@ def test_deploy_all_agents_success():
 
         result = json.loads(captured.getvalue())
         assert len(result) == 2
-        assert result[0] == {"agent_name": "researcher", "workflow_name": "wf_researcher", "success": True, "error": None}
-        assert result[1] == {"agent_name": "summarizer", "workflow_name": "wf_summarizer", "success": True, "error": None}
+        assert result[0] == {"agent_name": "researcher", "registered_name": "wf_researcher", "success": True, "error": None}
+        assert result[1] == {"agent_name": "summarizer", "registered_name": "wf_summarizer", "success": True, "error": None}
 
 
 def test_deploy_filters_by_agent_names():
@@ -248,7 +248,7 @@ def test_deploy_filters_by_agent_names():
     mock_agent_2 = MagicMock(spec=Agent)
     mock_agent_2.name = "summarizer"
 
-    info1 = DeploymentInfo(workflow_name="wf_researcher", agent_name="researcher")
+    info1 = DeploymentInfo(registered_name="wf_researcher", agent_name="researcher")
 
     with patch("agentspan.cli.deploy.discover_agents", return_value=[mock_agent_1, mock_agent_2]) as mock_discover, \
          patch("agentspan.cli.deploy.deploy", side_effect=[[info1]]) as mock_deploy:
@@ -275,7 +275,7 @@ def test_deploy_handles_per_agent_failure():
     mock_agent_2 = MagicMock(spec=Agent)
     mock_agent_2.name = "bad_agent"
 
-    info1 = DeploymentInfo(workflow_name="wf_good", agent_name="good_agent")
+    info1 = DeploymentInfo(registered_name="wf_good", agent_name="good_agent")
 
     def deploy_side_effect(agent):
         if agent.name == "bad_agent":
@@ -313,7 +313,7 @@ Expected: FAIL (module not found)
 
 Usage: python -m agentspan.cli.deploy --package <name> [--agents foo,bar]
 
-Prints JSON to stdout: [{"agent_name": "...", "workflow_name": "...", "success": true/false, "error": null/"..."}, ...]
+Prints JSON to stdout: [{"agent_name": "...", "registered_name": "...", "success": true/false, "error": null/"..."}, ...]
 """
 import argparse
 import json
@@ -346,14 +346,14 @@ def main():
             info = infos[0]
             results.append({
                 "agent_name": info.agent_name,
-                "workflow_name": info.workflow_name,
+                "registered_name": info.registered_name,
                 "success": True,
                 "error": None,
             })
         except Exception as e:
             results.append({
                 "agent_name": agent.name,
-                "workflow_name": None,
+                "registered_name": None,
                 "success": False,
                 "error": str(e),
             })
@@ -526,12 +526,12 @@ describe('deploy bin script', () => {
   it('should format successful deployment result', async () => {
     const { formatDeployResult } = await import('../../bin/deploy.js');
 
-    const info: DeploymentInfo = { workflowName: 'wf_researcher', agentName: 'researcher' };
+    const info: DeploymentInfo = { registeredName: 'wf_researcher', agentName: 'researcher' };
     const result = formatDeployResult('researcher', info, null);
 
     expect(result).toEqual({
       agent_name: 'researcher',
-      workflow_name: 'wf_researcher',
+      registered_name: 'wf_researcher',
       success: true,
       error: null,
     });
@@ -544,7 +544,7 @@ describe('deploy bin script', () => {
 
     expect(result).toEqual({
       agent_name: 'bad_agent',
-      workflow_name: null,
+      registered_name: null,
       success: false,
       error: 'connection refused',
     });
@@ -569,7 +569,7 @@ import type { DeploymentInfo } from '../src/types.js';
 
 export interface DeployResultEntry {
   agent_name: string;
-  workflow_name: string | null;
+  registered_name: string | null;
   success: boolean;
   error: string | null;
 }
@@ -588,14 +588,14 @@ export function formatDeployResult(
   if (info) {
     return {
       agent_name: agentName,
-      workflow_name: info.workflowName,
+      registered_name: info.registeredName,
       success: true,
       error: null,
     };
   }
   return {
     agent_name: agentName,
-    workflow_name: null,
+    registered_name: null,
     success: false,
     error,
   };
@@ -1180,8 +1180,8 @@ func TestParseDiscoveryResult_InvalidJSON(t *testing.T) {
 
 func TestParseDeployResult(t *testing.T) {
 	jsonStr := `[
-		{"agent_name":"a","workflow_name":"wf_a","success":true,"error":null},
-		{"agent_name":"b","workflow_name":null,"success":false,"error":"failed"}
+		{"agent_name":"a","registered_name":"wf_a","success":true,"error":null},
+		{"agent_name":"b","registered_name":null,"success":false,"error":"failed"}
 	]`
 	results, err := parseDeployResult([]byte(jsonStr))
 	if err != nil {
@@ -1245,7 +1245,7 @@ type discoveredAgent struct {
 
 type deployResult struct {
 	AgentName    string  `json:"agent_name"`
-	WorkflowName *string `json:"workflow_name"` // nullable
+	RegisteredName *string `json:"registered_name"` // nullable
 	Success      bool    `json:"success"`
 	Error        string  `json:"error"`
 }

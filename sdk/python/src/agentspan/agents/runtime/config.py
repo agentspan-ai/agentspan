@@ -9,7 +9,7 @@ Constructor kwargs allow direct overrides (useful for tests).
 Usage::
 
     config = AgentConfig.from_env()                          # load from env
-    config = AgentConfig(server_url="http://custom:8080/api")  # explicit
+    config = AgentConfig(server_url="http://custom:6767/api")  # explicit
 """
 
 from __future__ import annotations
@@ -66,7 +66,7 @@ class AgentConfig:
         log_level: Logging level for the agentspan logger.
     """
 
-    server_url: str = "http://localhost:8080/api"
+    server_url: str = "http://localhost:6767/api"
     api_key: Optional[str] = None
     auth_key: Optional[str] = None
     auth_secret: Optional[str] = None
@@ -101,7 +101,7 @@ class AgentConfig:
         if isinstance(log_level, str) and log_level.strip() == "":
             log_level = "INFO"
         return cls(
-            server_url=_env("AGENTSPAN_SERVER_URL", "http://localhost:8080/api"),
+            server_url=_env("AGENTSPAN_SERVER_URL", "http://localhost:6767/api"),
             api_key=_env("AGENTSPAN_API_KEY"),
             auth_key=_env("AGENTSPAN_AUTH_KEY"),
             auth_secret=_env("AGENTSPAN_AUTH_SECRET"),

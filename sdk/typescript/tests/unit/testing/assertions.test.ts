@@ -18,7 +18,7 @@ function makeResult(opts: {
   subResults?: Record<string, unknown>;
 }) {
   return makeAgentResult({
-    workflowId: 'wf-test',
+    executionId: 'wf-test',
     status: opts.status ?? 'COMPLETED',
     events: opts.events ?? [],
     subResults: opts.subResults,

@@ -113,7 +113,7 @@ class TestToolContext:
         def tool_with_context(context: ToolContext, query: str) -> str:
             received_ctx["agent"] = context.agent_name
             received_ctx["session"] = context.session_id
-            received_ctx["workflow_id"] = context.workflow_id
+            received_ctx["execution_id"] = context.execution_id
             return f"result for {query}"
 
         _current_context.update(
@@ -131,7 +131,7 @@ class TestToolContext:
         assert result.output_data == {"result": "result for test"}
         assert received_ctx["agent"] == "test_agent"
         assert received_ctx["session"] == "session_123"
-        assert received_ctx["workflow_id"] == "wf-ctx-test"
+        assert received_ctx["execution_id"] == "wf-ctx-test"
 
     def test_no_context_param_via_make_tool_worker(self):
         def plain_tool(x: str) -> str:

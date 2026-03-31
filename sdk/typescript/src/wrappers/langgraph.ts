@@ -8,7 +8,7 @@
  * Usage:
  *   // BEFORE: import { createReactAgent } from '@langchain/langgraph/prebuilt';
  *   // AFTER:
- *   import { createReactAgent } from '@agentspan/sdk/langgraph';
+ *   import { createReactAgent } from '@agentspan-ai/sdk/langgraph';
  *
  * Everything else in user code stays UNCHANGED.
  */
@@ -25,7 +25,7 @@ function _loadLangGraph(): Record<string, unknown> {
     return _lgModule!;
   } catch {
     throw new Error(
-      `The '@langchain/langgraph' package is required by @agentspan/sdk/langgraph but was not found. ` +
+      `The '@langchain/langgraph' package is required by @agentspan-ai/sdk/langgraph but was not found. ` +
       `Install it with: npm install @langchain/langgraph`,
     );
   }

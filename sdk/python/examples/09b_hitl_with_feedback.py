@@ -50,7 +50,7 @@ if __name__ == "__main__":
         # result = runtime.stream(
         #     agent, "Write a short blog post about the benefits of code review"
         # )
-        # print(f"Workflow started: {result.workflow_id}\n")
+        # print(f"Workflow started: {result.execution_id}\n")
 
         # for event in result:
         #     print(f'event type: {event.type} --> {event.content}')
