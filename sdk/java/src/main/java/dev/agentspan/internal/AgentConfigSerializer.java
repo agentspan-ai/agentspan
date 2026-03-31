@@ -141,6 +141,17 @@ public class AgentConfigSerializer {
             agentMap.put("planner", true);
         }
 
+        // Code execution
+        if (agent.isLocalCodeExecution()) {
+            Map<String, Object> codeExec = new LinkedHashMap<>();
+            codeExec.put("enabled", true);
+            List<String> langs = agent.getAllowedLanguages();
+            codeExec.put("allowedLanguages", langs != null && !langs.isEmpty() ? langs : List.of("python"));
+            codeExec.put("allowedCommands", new ArrayList<>());
+            codeExec.put("timeout", agent.getCodeExecutionTimeout() > 0 ? agent.getCodeExecutionTimeout() : 30);
+            agentMap.put("codeExecution", codeExec);
+        }
+
         // Include contents (context passed to sub-agent)
         if (agent.getIncludeContents() != null && !agent.getIncludeContents().isEmpty()) {
             agentMap.put("includeContents", agent.getIncludeContents());

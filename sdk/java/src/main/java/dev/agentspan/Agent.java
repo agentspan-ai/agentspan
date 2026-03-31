@@ -54,6 +54,9 @@ public class Agent {
     private final String sessionId;
     private final Map<String, List<String>> allowedTransitions;
     private final boolean planner;
+    private final boolean localCodeExecution;
+    private final java.util.List<String> allowedLanguages;
+    private final int codeExecutionTimeout;
     private final String includeContents;
     private final Integer thinkingBudgetTokens;
     private final String introduction;
@@ -80,6 +83,9 @@ public class Agent {
         this.sessionId = builder.sessionId;
         this.allowedTransitions = builder.allowedTransitions;
         this.planner = builder.planner;
+        this.localCodeExecution = builder.localCodeExecution;
+        this.allowedLanguages = builder.allowedLanguages != null ? new ArrayList<>(builder.allowedLanguages) : null;
+        this.codeExecutionTimeout = builder.codeExecutionTimeout;
         this.includeContents = builder.includeContents;
         this.thinkingBudgetTokens = builder.thinkingBudgetTokens;
         this.introduction = builder.introduction;
@@ -144,6 +150,9 @@ public class Agent {
     public String getSessionId() { return sessionId; }
     public Map<String, List<String>> getAllowedTransitions() { return allowedTransitions; }
     public boolean isPlanner() { return planner; }
+    public boolean isLocalCodeExecution() { return localCodeExecution; }
+    public java.util.List<String> getAllowedLanguages() { return allowedLanguages; }
+    public int getCodeExecutionTimeout() { return codeExecutionTimeout; }
     public String getIncludeContents() { return includeContents; }
     public Integer getThinkingBudgetTokens() { return thinkingBudgetTokens; }
     public String getIntroduction() { return introduction; }
@@ -190,6 +199,9 @@ public class Agent {
         private String sessionId;
         private Map<String, List<String>> allowedTransitions;
         private boolean planner = false;
+        private boolean localCodeExecution = false;
+        private java.util.List<String> allowedLanguages = null;
+        private int codeExecutionTimeout = 30;
         private String includeContents;
         private Integer thinkingBudgetTokens;
         private String introduction;
@@ -315,6 +327,33 @@ public class Agent {
          */
         public Builder planner(boolean planner) {
             this.planner = planner;
+            return this;
+        }
+
+        /**
+         * Enable local code execution. When true, the agent can execute code locally
+         * using the registered code execution worker.
+         */
+        public Builder localCodeExecution(boolean localCodeExecution) {
+            this.localCodeExecution = localCodeExecution;
+            return this;
+        }
+
+        /**
+         * Set the list of allowed languages for local code execution.
+         * Defaults to ["python"] if not specified.
+         */
+        public Builder allowedLanguages(java.util.List<String> allowedLanguages) {
+            this.allowedLanguages = allowedLanguages;
+            return this;
+        }
+
+        /**
+         * Set the timeout in seconds for local code execution.
+         * Defaults to 30 seconds.
+         */
+        public Builder codeExecutionTimeout(int codeExecutionTimeout) {
+            this.codeExecutionTimeout = codeExecutionTimeout;
             return this;
         }
 

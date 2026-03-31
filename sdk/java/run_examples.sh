@@ -26,6 +26,8 @@ get_timeout() {
     Example38TechTrends)            echo 300 ;;
     Example54SoftwareBugAssistant)  echo 180 ;;
     Example45AgentTool)             echo 180 ;;
+    Example58ScatterGather)         echo 300 ;;
+    Example59CodingAgent)           echo 180 ;;
     *)                              echo "$DEFAULT_TIMEOUT" ;;
   esac
 }

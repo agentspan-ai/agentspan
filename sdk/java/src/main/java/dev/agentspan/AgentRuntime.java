@@ -322,6 +322,19 @@ public class AgentRuntime implements AutoCloseable {
             });
         }
 
+        // Register local code execution worker
+        if (agent.isLocalCodeExecution()) {
+            String taskName = agent.getName() + "_execute_code";
+            workerManager.register(taskName, inputData -> {
+                String language = inputData.get("language") instanceof String
+                    ? (String) inputData.get("language") : "python";
+                String code = inputData.get("code") instanceof String
+                    ? (String) inputData.get("code") : "";
+                int timeout = agent.getCodeExecutionTimeout() > 0 ? agent.getCodeExecutionTimeout() : 30;
+                return executeCode(language, code, timeout);
+            });
+        }
+
         // Register SWARM transfer workers
         if (dev.agentspan.enums.Strategy.SWARM.equals(agent.getStrategy())
                 && !agent.getAgents().isEmpty()) {
@@ -478,6 +491,55 @@ public class AgentRuntime implements AutoCloseable {
             }
             return out;
         });
+    }
+
+    private Map<String, Object> executeCode(String language, String code, int timeoutSeconds) {
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        try {
+            String interpreter;
+            switch (language.toLowerCase()) {
+                case "python": case "python3": interpreter = "python3"; break;
+                case "bash": case "sh": interpreter = "bash"; break;
+                case "node": case "javascript": interpreter = "node"; break;
+                default: interpreter = language;
+            }
+            // Write code to temp file
+            java.io.File tmpFile = java.io.File.createTempFile("agentspan_code_",
+                language.startsWith("python") ? ".py" : ".sh");
+            tmpFile.deleteOnExit();
+            try (java.io.FileWriter fw = new java.io.FileWriter(tmpFile)) {
+                fw.write(code);
+            }
+
+            ProcessBuilder pb = new ProcessBuilder(interpreter, tmpFile.getAbsolutePath());
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+
+            boolean finished = process.waitFor(timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS);
+            String output = new String(process.getInputStream().readAllBytes());
+
+            if (!finished) {
+                process.destroyForcibly();
+                result.put("output", output);
+                result.put("error", "Code execution timed out after " + timeoutSeconds + "s");
+                result.put("exit_code", -1);
+                result.put("success", false);
+            } else {
+                result.put("output", output);
+                result.put("exit_code", process.exitValue());
+                result.put("success", process.exitValue() == 0);
+                if (process.exitValue() != 0) {
+                    result.put("error", "Process exited with code " + process.exitValue());
+                }
+            }
+            tmpFile.delete();
+        } catch (Exception e) {
+            result.put("output", "");
+            result.put("error", e.getMessage());
+            result.put("exit_code", -1);
+            result.put("success", false);
+        }
+        return result;
     }
 
     private String extractWorkflowId(Map<String, Object> response) {
