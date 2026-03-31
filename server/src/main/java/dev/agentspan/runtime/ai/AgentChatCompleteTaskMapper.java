@@ -520,12 +520,13 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
 
         ChatMessage last = messages.get(messages.size() - 1);
         ChatMessage.Role lastRole = last.getRole();
-        // Claude models reject conversations ending with assistant messages.
-        // Also check tool_call role since that's also an assistant-side message.
-        if (lastRole == ChatMessage.Role.assistant
-                || lastRole == ChatMessage.Role.tool_call
-                || "assistant".equalsIgnoreCase(String.valueOf(lastRole))) {
-            log.info("Appending user continuation message (last role was {})", lastRole);
+        String roleStr = lastRole != null ? String.valueOf(lastRole) : "null";
+
+        // Claude models reject conversations not ending with a user or tool message.
+        boolean needsContinuation = !"user".equalsIgnoreCase(roleStr) && !"tool".equalsIgnoreCase(roleStr);
+
+        if (needsContinuation) {
+            log.info("Appending user continuation message (last role was '{}', total messages: {})", roleStr, messages.size());
             messages.add(new ChatMessage(ChatMessage.Role.user, "Please continue where you left off."));
         }
     }
