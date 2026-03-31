@@ -4,7 +4,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@agentspan/agentspan"><img src="https://img.shields.io/npm/v/@agentspan/agentspan?color=blue" alt="npm"></a>
+  <a href="https://www.npmjs.com/package/@agentspan-ai/agentspan"><img src="https://img.shields.io/npm/v/@agentspan-ai/agentspan?color=blue" alt="npm"></a>
   <a href="https://github.com/agentspan/agentspan/stargazers"><img src="https://img.shields.io/github/stars/agentspan/agentspan?style=social" alt="Stars"></a>
   <a href="https://github.com/agentspan/agentspan/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
   <a href="https://discord.gg/agentspan"><img src="https://img.shields.io/discord/1234567890?label=Discord&logo=discord&color=5865F2" alt="Discord"></a>
@@ -35,7 +35,7 @@ brew install agentspan/agentspan/agentspan
 ### npm
 
 ```bash
-npm install -g @agentspan/agentspan
+npm install -g @agentspan-ai/agentspan
 ```
 
 ### Shell script

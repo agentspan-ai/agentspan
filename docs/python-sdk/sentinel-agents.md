@@ -316,7 +316,7 @@ The local process runs:
 
 ```bash
 # 1. Install
-pip install agentspan-sdk   # or: npm install @agentspan/sdk
+pip install agentspan-sdk   # or: npm install @agentspan-ai/sdk
 
 # 2. Write the sentinel (sentinel.py / sentinel.ts)
 #    Define agent + tools + FileWatch trigger

@@ -33,7 +33,7 @@
 
 ```bash
 # 1. Install
-npm install -g @agentspan/agentspan          # installs the CLI
+npm install -g @agentspan-ai/agentspan          # installs the CLI
 pip install agentspan                         # installs the Python SDK
 export OPENAI_API_KEY=sk-...                  # or any supported provider
 

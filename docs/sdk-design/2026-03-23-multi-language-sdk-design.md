@@ -563,7 +563,7 @@ The TypeScript SDK is a **superset** — it accepts both Vercel AI SDK-style too
 
 This means a user can do:
 ```typescript
-import { tool } from '@agentspan/sdk';
+import { tool } from '@agentspan-ai/sdk';
 import { tool as aiTool } from 'ai';
 import { z } from 'zod';
 
@@ -1139,7 +1139,7 @@ The solution: **drop-in import wrappers** that intercept framework function call
 import { generateText } from 'ai';
 
 // AFTER (one import change):
-import { generateText } from '@agentspan/sdk/vercel-ai';
+import { generateText } from '@agentspan-ai/sdk/vercel-ai';
 
 // Everything else UNCHANGED:
 const result = await generateText({
@@ -1151,7 +1151,7 @@ const result = await generateText({
 // Now compiles to: LLM_CHAT_COMPLETE + SIMPLE per tool on Conductor
 ```
 
-`@agentspan/sdk/vercel-ai` re-exports everything from `ai` but wraps `generateText` and `streamText`. The wrapper:
+`@agentspan-ai/sdk/vercel-ai` re-exports everything from `ai` but wraps `generateText` and `streamText`. The wrapper:
 1. Intercepts the options object `{ model, tools, system, maxSteps, prompt }`
 2. Extracts model (provider + model name from the AI SDK model object)
 3. Extracts tools (Zod schemas + execute functions → `ToolConfig[]` with workers)
@@ -1166,7 +1166,7 @@ const result = await generateText({
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 
 // AFTER:
-import { createReactAgent } from '@agentspan/sdk/langgraph';
+import { createReactAgent } from '@agentspan-ai/sdk/langgraph';
 
 // Everything else UNCHANGED:
 const graph = createReactAgent({ llm: new ChatOpenAI({ model: 'gpt-4o-mini' }), tools: [search] });
@@ -1184,7 +1184,7 @@ For custom `StateGraph`, the wrapper intercepts `addNode()` to capture node func
 import { AgentExecutor } from 'langchain/agents';
 
 // AFTER:
-import { AgentExecutor } from '@agentspan/sdk/langchain';
+import { AgentExecutor } from '@agentspan-ai/sdk/langchain';
 
 // Everything else UNCHANGED
 ```
@@ -1225,9 +1225,9 @@ const result = await runtime.run(agent, 'Hello');  // model/tools extracted from
 
 | Wrapper | Intercepts | Captures | Stores On |
 |---------|-----------|----------|-----------|
-| `@agentspan/sdk/vercel-ai` | `generateText`, `streamText` | model, tools, system, maxSteps | Options object → AgentConfig at call time |
-| `@agentspan/sdk/langgraph` | `createReactAgent`, `StateGraph` | llm, tools at creation | Graph object properties |
-| `@agentspan/sdk/langchain` | `AgentExecutor`, chain builders | agent.llm, tools at construction | Executor object properties |
+| `@agentspan-ai/sdk/vercel-ai` | `generateText`, `streamText` | model, tools, system, maxSteps | Options object → AgentConfig at call time |
+| `@agentspan-ai/sdk/langgraph` | `createReactAgent`, `StateGraph` | llm, tools at creation | Graph object properties |
+| `@agentspan-ai/sdk/langchain` | `AgentExecutor`, chain builders | agent.llm, tools at construction | Executor object properties |
 
 #### Detection (duck-typing, no hard imports)
 
@@ -1235,9 +1235,9 @@ SDKs detect framework agents via property/method signatures without importing fr
 
 | Framework | Integration method | Detection |
 |-----------|-------------------|-----------|
-| Vercel AI SDK | Drop-in wrapper (`@agentspan/sdk/vercel-ai`) | N/A — intercepted at call site |
-| LangGraph.js | Drop-in wrapper (`@agentspan/sdk/langgraph`) + duck-typing for wrapped graphs | Has `invoke()` + `_agentspan` metadata (set by wrapper) |
-| LangChain.js | Drop-in wrapper (`@agentspan/sdk/langchain`) + duck-typing for wrapped executors | Has `invoke()` + `_agentspan` metadata (set by wrapper) |
+| Vercel AI SDK | Drop-in wrapper (`@agentspan-ai/sdk/vercel-ai`) | N/A — intercepted at call site |
+| LangGraph.js | Drop-in wrapper (`@agentspan-ai/sdk/langgraph`) + duck-typing for wrapped graphs | Has `invoke()` + `_agentspan` metadata (set by wrapper) |
+| LangChain.js | Drop-in wrapper (`@agentspan-ai/sdk/langchain`) + duck-typing for wrapped executors | Has `invoke()` + `_agentspan` metadata (set by wrapper) |
 | OpenAI Agents SDK | Direct extraction (zero changes) | Has `name` + `instructions` + `model` + `tools` + `handoffs` |
 | Google ADK | Direct extraction (zero changes) | Has `model` + `instruction` + ADK-specific properties |
 
@@ -1245,15 +1245,15 @@ SDKs detect framework agents via property/method signatures without importing fr
 
 | Framework | User changes | What happens |
 |-----------|-------------|-------------|
-| **Vercel AI SDK** | Change 1 import: `from 'ai'` → `from '@agentspan/sdk/vercel-ai'` | `generateText` intercepted, compiled to workflow |
-| **LangGraph** | Change 1 import: `from '@langchain/langgraph/prebuilt'` → `from '@agentspan/sdk/langgraph'` | `createReactAgent` captures llm/tools at creation |
-| **LangChain** | Change 1 import: `from 'langchain/agents'` → `from '@agentspan/sdk/langchain'` | `AgentExecutor` captures agent/tools at construction |
+| **Vercel AI SDK** | Change 1 import: `from 'ai'` → `from '@agentspan-ai/sdk/vercel-ai'` | `generateText` intercepted, compiled to workflow |
+| **LangGraph** | Change 1 import: `from '@langchain/langgraph/prebuilt'` → `from '@agentspan-ai/sdk/langgraph'` | `createReactAgent` captures llm/tools at creation |
+| **LangChain** | Change 1 import: `from 'langchain/agents'` → `from '@agentspan-ai/sdk/langchain'` | `AgentExecutor` captures agent/tools at construction |
 | **OpenAI Agents** | **Zero changes** | Extracted from public properties |
 | **Google ADK** | **Zero changes** | Extracted from public properties |
 
 #### Framework-Specific Extraction: LangGraph
 
-**With wrapper (`@agentspan/sdk/langgraph`):**
+**With wrapper (`@agentspan-ai/sdk/langgraph`):**
 
 The wrapper intercepts `createReactAgent` and captures `llm` + `tools` at creation time — before they enter closures. These are stored as `_agentspan` metadata on the returned graph. When `runtime.run(graph, prompt)` is called, the SDK reads the metadata.
 
@@ -2393,7 +2393,7 @@ For framework integrations (Vercel AI, LangChain, etc.), the ideal onboarding is
 ```typescript
 // Before: import { generateText } from 'ai';
 // After:
-import { generateText } from '@agentspan/sdk/vercel-ai';
+import { generateText } from '@agentspan-ai/sdk/vercel-ai';
 ```
 
 This is better than requiring users to rewrite their agent as `new Agent({...})`. The wrapper internally builds an Agent, runs it, and maps the result back to the framework's format. Reserve the explicit Agent API for when users need agentspan-specific features (guardrails, termination, handoffs, HITL).

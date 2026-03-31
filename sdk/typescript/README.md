@@ -1,6 +1,6 @@
-# @agentspan/sdk
+# @agentspan-ai/sdk
 
-[![npm](https://img.shields.io/npm/v/@agentspan/sdk)](https://www.npmjs.com/package/@agentspan/sdk)
+[![npm](https://img.shields.io/npm/v/@agentspan-ai/sdk)](https://www.npmjs.com/package/@agentspan-ai/sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](../../LICENSE)
 
 TypeScript SDK for building and running AI agents on [Agentspan](https://agentspan.dev). Define agents and tools in TypeScript, run them durably on the platform with crash recovery, distributed workers, and human-in-the-loop approval.
@@ -8,11 +8,11 @@ TypeScript SDK for building and running AI agents on [Agentspan](https://agentsp
 ## Quick Start
 
 ```bash
-npm install @agentspan/sdk zod
+npm install @agentspan-ai/sdk zod
 ```
 
 ```typescript
-import { Agent, AgentRuntime, tool } from '@agentspan/sdk';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
 import { z } from 'zod';
 
 const getWeather = tool(
@@ -42,7 +42,7 @@ One import change. Your code stays identical.
 
 ```diff
 -import { generateText } from 'ai';
-+import { generateText } from '@agentspan/sdk/vercel-ai';
++import { generateText } from '@agentspan-ai/sdk/vercel-ai';
 ```
 
 That's it. `generateText` and `streamText` are intercepted, compiled to an agent execution, and run on Agentspan. Tools, model, prompt, result shape -- all unchanged.
@@ -59,7 +59,7 @@ Pass your existing agent objects directly to `runtime.run()`:
 
 ```typescript
 import { Agent } from '@openai/agents';
-import { AgentRuntime } from '@agentspan/sdk';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const agent = new Agent({
   name: 'helper', model: 'gpt-4o-mini',
@@ -76,7 +76,7 @@ await runtime.run(agent, 'Weather in SF?');
 
 ```typescript
 import { LlmAgent } from '@google/adk';
-import { AgentRuntime } from '@agentspan/sdk';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const agent = new LlmAgent({
   name: 'helper', model: 'gemini-2.5-flash',
@@ -95,7 +95,7 @@ await runtime.run(agent, 'Weather in Tokyo?');
 import { createReactAgent }
   from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
-import { AgentRuntime } from '@agentspan/sdk';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const graph = createReactAgent({
   llm: new ChatOpenAI({ model: 'gpt-4o-mini' }),
@@ -153,7 +153,7 @@ const team = new Agent({ name: 'team', agents: [coder, reviewer], strategy: 'han
 ### Guardrails
 
 ```typescript
-import { guardrail, RegexGuardrail, LLMGuardrail } from '@agentspan/sdk';
+import { guardrail, RegexGuardrail, LLMGuardrail } from '@agentspan-ai/sdk';
 
 const piiBlocker = new RegexGuardrail({
   name: 'pii_blocker',
@@ -189,7 +189,7 @@ const result = await handle.wait();
 ### Termination Conditions
 
 ```typescript
-import { TextMention, MaxMessage } from '@agentspan/sdk';
+import { TextMention, MaxMessage } from '@agentspan-ai/sdk';
 
 const agent = new Agent({
   name: 'analyst',
@@ -201,7 +201,7 @@ const agent = new Agent({
 ### Testing
 
 ```typescript
-import { mockRun, expectResult } from '@agentspan/sdk/testing';
+import { mockRun, expectResult } from '@agentspan-ai/sdk/testing';
 
 const result = await mockRun(agent, 'Write an article', {
   mockTools: { search: async () => ({ results: ['paper1'] }) },

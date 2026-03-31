@@ -10,14 +10,14 @@
 
 ## 1. Overview
 
-The `@agentspan/sdk` TypeScript SDK is a complete rewrite of the existing JavaScript PoC. It provides full 89-feature parity with the Python reference SDK, plus framework integration for running Vercel AI SDK, LangGraph.js, LangChain.js, OpenAI Agents SDK, and Google ADK agents on agentspan's durable runtime.
+The `@agentspan-ai/sdk` TypeScript SDK is a complete rewrite of the existing JavaScript PoC. It provides full 89-feature parity with the Python reference SDK, plus framework integration for running Vercel AI SDK, LangGraph.js, LangChain.js, OpenAI Agents SDK, and Google ADK agents on agentspan's durable runtime.
 
 ### 1.1 Design Principles
 
 | Principle | Decision |
 |-----------|----------|
 | Language | TypeScript-first (`.ts` source, compiled to ESM + CJS) |
-| Package | `@agentspan/sdk` v1.0.0 — clean break from PoC |
+| Package | `@agentspan-ai/sdk` v1.0.0 — clean break from PoC |
 | Runtime | Node.js 18+ (native `fetch`, `AbortController`, `ReadableStream`) |
 | Schema | **Superset** — accepts both Zod schemas and JSON Schema, auto-detecting format |
 | Framework integration | Auto-detecting runtime — `runtime.run()` accepts native agents and framework agents |
@@ -30,7 +30,7 @@ The `@agentspan/sdk` TypeScript SDK is a complete rewrite of the existing JavaSc
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                  @agentspan/sdk (TypeScript)              │
+│                  @agentspan-ai/sdk (TypeScript)              │
 │                                                          │
 │  ┌─────────────┐  ┌──────────────┐  ┌────────────────┐  │
 │  │ Agent + Tool │  │  Serializer  │  │   Framework    │  │
@@ -95,7 +95,7 @@ The `@agentspan/sdk` TypeScript SDK is a complete rewrite of the existing JavaSc
 
 ```json
 {
-  "name": "@agentspan/sdk",
+  "name": "@agentspan-ai/sdk",
   "version": "1.0.0",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -611,7 +611,7 @@ All placeholder names in headers must be declared in the `credentials` array.
 ### 4.6 @Tool Decorator (Class Method Pattern)
 
 ```typescript
-import { Tool, ToolContext } from '@agentspan/sdk';
+import { Tool, ToolContext } from '@agentspan-ai/sdk';
 
 class ResearchTools {
   @Tool({ credentials: [{ envVar: 'RESEARCH_API_KEY' }] })
@@ -1829,7 +1829,7 @@ The TypeScript SDK v1.0 is complete when:
 7. Validation framework runs with HTML report
 8. Framework passthrough works for all 5 frameworks (Vercel AI SDK, LangGraph.js, LangChain.js, OpenAI Agents, Google ADK)
 9. Superset tool compatibility works (Zod, JSON Schema, AI SDK tools in same agent)
-10. Published to npm as `@agentspan/sdk` v1.0.0
+10. Published to npm as `@agentspan-ai/sdk` v1.0.0
 11. Documentation covers all public APIs with examples
 
 ---
@@ -1869,7 +1869,7 @@ The full 89-feature traceability matrix lives in the base spec (§11). This Type
 In addition to `@Tool` and `@Guardrail`, the SDK provides an `@AgentDec` decorator for class-based agent definitions:
 
 ```typescript
-import { AgentDec } from '@agentspan/sdk';
+import { AgentDec } from '@agentspan-ai/sdk';
 
 class Classifiers {
   @AgentDec({ name: 'tech_classifier', model: 'openai/gpt-4o' })
@@ -2180,4 +2180,4 @@ The SDK targets Node.js 18+ as the primary runtime. Browser support is secondary
 - **Worker polling**: Not applicable in browsers — workers are server-side only.
 - **Tool execution**: Not applicable in browsers.
 
-For browser-only use cases (consuming SSE streams, calling REST APIs), the HTTP client and SSE client modules work with browser `fetch` and `EventSource`. The `@agentspan/sdk` package marks Node.js-only modules (worker, credentials, code-execution) with a `node` export condition.
+For browser-only use cases (consuming SSE streams, calling REST APIs), the HTTP client and SSE client modules work with browser `fetch` and `EventSource`. The `@agentspan-ai/sdk` package marks Node.js-only modules (worker, credentials, code-execution) with a `node` export condition.

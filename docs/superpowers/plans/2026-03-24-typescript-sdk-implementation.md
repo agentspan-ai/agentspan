@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the complete `@agentspan/sdk` TypeScript SDK with 89-feature parity, superset tool compatibility (Zod + JSON Schema + Vercel AI SDK), and framework passthrough for 5 frameworks.
+**Goal:** Build the complete `@agentspan-ai/sdk` TypeScript SDK with 89-feature parity, superset tool compatibility (Zod + JSON Schema + Vercel AI SDK), and framework passthrough for 5 frameworks.
 
 **Architecture:** TypeScript-first SDK compiled to ESM+CJS via tsup. Raw `fetch`-based Conductor task polling (no conductor-javascript dependency). Auto-detecting runtime accepts both native agents and framework agents. Zod schemas auto-converted to JSON Schema at serialization time.
 
@@ -76,7 +76,7 @@ Remove all existing files in `sdk/typescript/src/`, `sdk/typescript/decorators/`
 
 - [ ] **Step 2: Create package.json**
 
-Per spec §2.2. Name: `@agentspan/sdk`, version `1.0.0`, type `module`. Dependencies: `zod-to-json-schema`, `dotenv`. Peer deps: `zod` (required), `ai`, `@langchain/core`, `@langchain/langgraph`, `@openai/agents`, `@google/adk` (all optional). Dev deps: `typescript`, `tsup`, `vitest`, `@types/node`, `zod`. Scripts: build, test, test:watch, lint, validate. Engines: `node >=18.0.0`.
+Per spec §2.2. Name: `@agentspan-ai/sdk`, version `1.0.0`, type `module`. Dependencies: `zod-to-json-schema`, `dotenv`. Peer deps: `zod` (required), `ai`, `@langchain/core`, `@langchain/langgraph`, `@openai/agents`, `@google/adk` (all optional). Dev deps: `typescript`, `tsup`, `vitest`, `@types/node`, `zod`. Scripts: build, test, test:watch, lint, validate. Engines: `node >=18.0.0`.
 
 Subpath exports: `.` (core), `./testing`, `./validation`.
 
