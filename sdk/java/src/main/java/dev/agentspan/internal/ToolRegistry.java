@@ -48,8 +48,35 @@ public class ToolRegistry {
             method.setAccessible(true);
             Function<Map<String, Object>, Object> func = inputData -> {
                 try {
-                    Object[] methodArgs = buildMethodArgs(method, inputData, null);
-                    return method.invoke(obj, methodArgs);
+                    // Extract persisted state injected by the server
+                    Map<String, Object> agentState = new java.util.HashMap<>();
+                    if (inputData != null) {
+                        Object stateRaw = inputData.get("_agent_state");
+                        if (stateRaw instanceof Map) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> stateMap = (Map<String, Object>) stateRaw;
+                            agentState.putAll(stateMap);
+                        }
+                    }
+
+                    ToolContext context = new ToolContext(null, null, null, agentState);
+                    Object[] methodArgs = buildMethodArgs(method, inputData, context);
+                    Object result = method.invoke(obj, methodArgs);
+
+                    // If state was mutated, include _state_updates in the output
+                    if (!context.getState().isEmpty()) {
+                        Map<String, Object> output = new java.util.LinkedHashMap<>();
+                        if (result instanceof Map) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> resultMap = (Map<String, Object>) result;
+                            output.putAll(resultMap);
+                        } else if (result != null) {
+                            output.put("result", result);
+                        }
+                        output.put("_state_updates", context.getState());
+                        return output;
+                    }
+                    return result;
                 } catch (Exception e) {
                     throw new RuntimeException("Tool execution failed: " + name, e);
                 }
