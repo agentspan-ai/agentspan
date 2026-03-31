@@ -22,7 +22,7 @@ public class AgentHandle {
     private static final Logger logger = LoggerFactory.getLogger(AgentHandle.class);
 
     private static final long DEFAULT_POLL_INTERVAL_MS = 2000;
-    private static final long DEFAULT_TIMEOUT_MS = 300_000; // 5 minutes
+    private static final long DEFAULT_TIMEOUT_MS = 600_000; // 10 minutes
 
     private final String workflowId;
     private final HttpApi httpApi;

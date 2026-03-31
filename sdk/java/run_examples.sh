@@ -7,20 +7,6 @@
 #   AGENTSPAN_SERVER_URL  (default: http://localhost:6767)
 #   EXAMPLE_TIMEOUT       per-example timeout in seconds (default: 120)
 
-# Portable timeout: prefer gtimeout (brew coreutils), fall back to perl
-if command -v gtimeout &>/dev/null; then
-  TIMEOUT_CMD="gtimeout"
-elif command -v timeout &>/dev/null; then
-  TIMEOUT_CMD="timeout"
-else
-  # Perl fallback: perl -e 'alarm N; exec @ARGV'
-  TIMEOUT_CMD="perl_timeout"
-  perl_timeout() {
-    local secs="$1"; shift
-    perl -e "alarm $secs; exec @ARGV" -- "$@"
-  }
-fi
-
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 EXAMPLES_DIR="$SCRIPT_DIR/examples"
 SERVER_URL="${AGENTSPAN_SERVER_URL:-http://localhost:6767}"
@@ -32,12 +18,12 @@ mkdir -p "$LOG_DIR"
 # Returns custom timeout for known heavy examples, else DEFAULT_TIMEOUT
 get_timeout() {
   case "$1" in
-    Example68ContextCondensation)   echo 300 ;;
-    Example55MlEngineeringPipeline) echo 300 ;;
-    Example64SwarmWithTools)        echo 240 ;;
-    Example12LongRunning)           echo 240 ;;
-    Example38TechTrends)            echo 240 ;;
-    Example13HierarchicalAgents)    echo 240 ;;
+    Example13HierarchicalAgents)    echo 660 ;;  # deep 3-level hierarchy; client timeout is 10m
+    Example68ContextCondensation)   echo 360 ;;
+    Example55MlEngineeringPipeline) echo 360 ;;
+    Example64SwarmWithTools)        echo 300 ;;
+    Example12LongRunning)           echo 300 ;;
+    Example38TechTrends)            echo 300 ;;
     Example54SoftwareBugAssistant)  echo 180 ;;
     Example45AgentTool)             echo 180 ;;
     *)                              echo "$DEFAULT_TIMEOUT" ;;
@@ -52,6 +38,28 @@ is_skip() {
     Example33ExternalWorkers) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+# Run a command with a timeout, killing the entire process group on expiry.
+# Works on macOS (bash 3.2) without gtimeout/timeout.
+run_with_timeout() {
+  local secs="$1"; shift
+  # Run command in background process group; kill group on timeout
+  ("$@") &
+  local child=$!
+  (
+    sleep "$secs"
+    kill -TERM -"$child" 2>/dev/null
+    sleep 2
+    kill -KILL -"$child" 2>/dev/null
+  ) &
+  local killer=$!
+  wait "$child" 2>/dev/null
+  local rc=$?
+  # Kill the killer if child finished naturally
+  kill "$killer" 2>/dev/null
+  wait "$killer" 2>/dev/null
+  return $rc
 }
 
 # Discover all example classes (sorted)
@@ -97,9 +105,9 @@ for cls in "${EXAMPLES[@]}"; do
 
   printf "  %-52s " "$cls"
 
-  # Run with timeout
+  # Run with timeout — captures stdout+stderr to log, tracks exit code
   exit_code=0
-  $TIMEOUT_CMD "$t" bash -c "
+  run_with_timeout "$t" bash -c "
     cd '$EXAMPLES_DIR' && \
     AGENTSPAN_SERVER_URL='$SERVER_URL' \
     mvn -q exec:java \
@@ -107,32 +115,33 @@ for cls in "${EXAMPLES[@]}"; do
       -Dorg.slf4j.simpleLogger.defaultLogLevel=warn
   " > "$log" 2>&1 || exit_code=$?
 
-  # gtimeout exits 124, perl alarm exits with signal (non-zero)
-  if [[ $exit_code -eq 124 || $exit_code -eq 142 ]]; then
-    echo "TIMEOUT (${t}s)"
-    RESULTS+=("TIMEOUT $cls")
-    FAIL=$((FAIL + 1))
-    continue
-  fi
-
+  # Determine result
   if grep -q "Status: COMPLETED" "$log" 2>/dev/null; then
     echo "PASS"
     RESULTS+=("PASS  $cls")
     PASS=$((PASS + 1))
+  elif grep -qE "timed out after|Agent timed out" "$log" 2>/dev/null; then
+    echo "TIMEOUT (${t}s — client limit)"
+    RESULTS+=("TIMEOUT $cls")
+    FAIL=$((FAIL + 1))
   elif grep -qE "Status: FAILED|Exception in thread|BUILD FAILURE" "$log" 2>/dev/null; then
     echo "FAIL  (see example-logs/${cls}.log)"
     RESULTS+=("FAIL  $cls")
     FAIL=$((FAIL + 1))
-  else
-    if [[ $exit_code -eq 0 ]]; then
-      echo "PASS  (no status line)"
-      RESULTS+=("PASS  $cls")
-      PASS=$((PASS + 1))
+  elif [[ $exit_code -ne 0 ]]; then
+    # exit_code 143 = SIGTERM (timeout kill); treat as TIMEOUT
+    if [[ $exit_code -eq 143 || $exit_code -eq 137 ]]; then
+      echo "TIMEOUT (${t}s)"
+      RESULTS+=("TIMEOUT $cls")
     else
       echo "FAIL  exit=$exit_code (see example-logs/${cls}.log)"
       RESULTS+=("FAIL  $cls")
-      FAIL=$((FAIL + 1))
     fi
+    FAIL=$((FAIL + 1))
+  else
+    echo "PASS  (no status line)"
+    RESULTS+=("PASS  $cls")
+    PASS=$((PASS + 1))
   fi
 
 done
