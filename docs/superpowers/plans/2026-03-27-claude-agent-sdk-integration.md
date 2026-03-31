@@ -283,11 +283,11 @@ import asyncio
 from unittest.mock import patch, AsyncMock
 
 
-def _make_task(prompt="Hello", session_id="", workflow_id="wf-123", cwd=""):
+def _make_task(prompt="Hello", session_id="", execution_id="wf-123", cwd=""):
     from conductor.client.http.models.task import Task
     task = MagicMock(spec=Task)
     task.input_data = {"prompt": prompt, "session_id": session_id, "cwd": cwd}
-    task.workflow_instance_id = workflow_id
+    task.workflow_instance_id = execution_id
     task.task_id = "task-456"
     return task
 
@@ -391,13 +391,13 @@ def make_claude_agent_sdk_worker(
     from conductor.client.http.models.task_result_status import TaskResultStatus
 
     def tool_worker(task: Task) -> TaskResult:
-        workflow_id = task.workflow_instance_id
+        execution_id = task.workflow_instance_id
         prompt = task.input_data.get("prompt", "")
         cwd = task.input_data.get("cwd", "")
         _injected_cred_keys: List[str] = []
 
         try:
-            _injected_cred_keys = _inject_credentials(task, workflow_id)
+            _injected_cred_keys = _inject_credentials(task, execution_id)
 
             metadata: Dict[str, Any] = {
                 "tool_call_count": 0,
@@ -407,7 +407,7 @@ def make_claude_agent_sdk_worker(
             }
 
             agentspan_hooks = _build_agentspan_hooks(
-                workflow_id, server_url, auth_key, auth_secret, metadata
+                execution_id, server_url, auth_key, auth_secret, metadata
             )
             merged_options = _merge_hooks(options, agentspan_hooks)
 
@@ -431,19 +431,19 @@ def make_claude_agent_sdk_worker(
 
             return TaskResult(
                 task_id=task.task_id,
-                workflow_instance_id=workflow_id,
+                workflow_instance_id=execution_id,
                 status=TaskResultStatus.COMPLETED,
                 output_data=output_data,
             )
         except Exception as exc:
             logger.error(
-                "Claude Agent SDK worker error (workflow_id=%s): %s",
-                workflow_id,
+                "Claude Agent SDK worker error (execution_id=%s): %s",
+                execution_id,
                 exc,
             )
             return TaskResult(
                 task_id=task.task_id,
-                workflow_instance_id=workflow_id,
+                workflow_instance_id=execution_id,
                 status=TaskResultStatus.FAILED,
                 reason_for_incompletion=str(exc),
             )
@@ -477,8 +477,8 @@ async def _run_query(prompt: str, options: Any) -> Tuple[str, Any]:
     return result_output, token_usage
 
 
-def _inject_credentials(task: Any, workflow_id: str) -> List[str]:
-    """Resolve workflow-level credentials and inject into os.environ."""
+def _inject_credentials(task: Any, execution_id: str) -> List[str]:
+    """Resolve execution-level credentials and inject into os.environ."""
     injected: List[str] = []
     try:
         import os as _os
@@ -490,7 +490,7 @@ def _inject_credentials(task: Any, workflow_id: str) -> List[str]:
             _workflow_credentials_lock,
         )
 
-        wf_id = workflow_id or ""
+        wf_id = execution_id or ""
         with _workflow_credentials_lock:
             cred_names = list(_workflow_credentials.get(wf_id, []))
         if cred_names:
@@ -702,7 +702,7 @@ Append to `sdk/python/src/agentspan/agents/frameworks/claude_agent_sdk.py`:
 
 ```python
 def _build_agentspan_hooks(
-    workflow_id: str,
+    execution_id: str,
     server_url: str,
     auth_key: str,
     auth_secret: str,
@@ -720,7 +720,7 @@ def _build_agentspan_hooks(
             metadata["tool_call_count"] += 1
             metadata["tools_used"].add(tool_name)
             _push_event_nonblocking(
-                workflow_id,
+                execution_id,
                 {"type": "tool_call", "toolName": tool_name, "toolUseId": tool_use_id},
                 server_url,
                 auth_key,
@@ -734,7 +734,7 @@ def _build_agentspan_hooks(
         try:
             tool_name = input_data.get("tool_name", "")
             _push_event_nonblocking(
-                workflow_id,
+                execution_id,
                 {"type": "tool_result", "toolName": tool_name, "toolUseId": tool_use_id},
                 server_url,
                 auth_key,
@@ -750,7 +750,7 @@ def _build_agentspan_hooks(
             error = input_data.get("error", "")
             metadata["tool_error_count"] += 1
             _push_event_nonblocking(
-                workflow_id,
+                execution_id,
                 {"type": "tool_error", "toolName": tool_name, "error": str(error)},
                 server_url,
                 auth_key,
@@ -765,7 +765,7 @@ def _build_agentspan_hooks(
             agent_id = input_data.get("agent_id", "")
             metadata["subagent_count"] += 1
             _push_event_nonblocking(
-                workflow_id,
+                execution_id,
                 {"type": "subagent_start", "agent_id": agent_id},
                 server_url,
                 auth_key,
@@ -779,7 +779,7 @@ def _build_agentspan_hooks(
         try:
             agent_id = input_data.get("agent_id", "")
             _push_event_nonblocking(
-                workflow_id,
+                execution_id,
                 {"type": "subagent_stop", "agent_id": agent_id},
                 server_url,
                 auth_key,
@@ -793,7 +793,7 @@ def _build_agentspan_hooks(
         try:
             message = input_data.get("message", "")
             _push_event_nonblocking(
-                workflow_id,
+                execution_id,
                 {"type": "notification", "message": message},
                 server_url,
                 auth_key,
@@ -806,7 +806,7 @@ def _build_agentspan_hooks(
     async def _stop(input_data: Dict, tool_use_id: Any, context: Any) -> Dict:
         try:
             _push_event_nonblocking(
-                workflow_id,
+                execution_id,
                 {"type": "agent_stop"},
                 server_url,
                 auth_key,
@@ -858,19 +858,19 @@ def _copy_options_with_hooks(options: Any, hooks: Dict) -> Any:
 
 
 def _push_event_nonblocking(
-    workflow_id: str,
+    execution_id: str,
     event: Dict[str, Any],
     server_url: str,
     auth_key: str,
     auth_secret: str,
 ) -> None:
-    """Fire-and-forget HTTP POST to {server_url}/agent/events/{workflowId}."""
+    """Fire-and-forget HTTP POST to {server_url}/agent/events/{executionId}."""
 
     def _do_push():
         try:
             import requests
 
-            url = f"{server_url}/agent/events/{workflow_id}"
+            url = f"{server_url}/agent/events/{execution_id}"
             headers: Dict[str, str] = {}
             if auth_key:
                 headers["X-Auth-Key"] = auth_key
@@ -878,7 +878,7 @@ def _push_event_nonblocking(
                 headers["X-Auth-Secret"] = auth_secret
             requests.post(url, json=event, headers=headers, timeout=5)
         except Exception as exc:
-            logger.debug("Event push failed (workflow_id=%s): %s", workflow_id, exc)
+            logger.debug("Event push failed (execution_id=%s): %s", execution_id, exc)
 
     _EVENT_PUSH_POOL.submit(_do_push)
 ```
@@ -1167,7 +1167,7 @@ def main():
         )
         print(f"\n--- Result ---\n{result.output}")
         print(f"\n--- Metadata ---")
-        print(f"Workflow ID: {result.workflow_id}")
+        print(f"Execution ID: {result.execution_id}")
         print(f"Status: {result.status}")
         if result.token_usage:
             print(f"Token usage: {result.token_usage}")

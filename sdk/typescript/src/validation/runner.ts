@@ -1,5 +1,5 @@
 /**
- * Validation runner — CLI entry point for @agentspan/sdk/validation.
+ * Validation runner — CLI entry point for @agentspan-ai/sdk/validation.
  *
  * Loads runs.toml config, executes examples concurrently, optionally invokes
  * an LLM judge, and generates an HTML report.

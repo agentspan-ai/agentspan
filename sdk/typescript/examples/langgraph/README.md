@@ -59,7 +59,7 @@ import { ChatOpenAI }
 import { DynamicStructuredTool }
   from '@langchain/core/tools';
 import { z } from 'zod';
-import { AgentRuntime } from '@agentspan/sdk';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 // ^^^ add agentspan import
 
 const llm = new ChatOpenAI({
@@ -143,7 +143,7 @@ console.log(result.output);
 import { StateGraph, Annotation,
   START, END }
   from '@langchain/langgraph';
-import { AgentRuntime } from '@agentspan/sdk';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 // ^^^ add agentspan import
 
 const State = Annotation.Root({
@@ -181,7 +181,7 @@ await runtime.shutdown();
 
 | What | Change |
 |------|--------|
-| **Imports** | Add `AgentRuntime` from `@agentspan/sdk` |
+| **Imports** | Add `AgentRuntime` from `@agentspan-ai/sdk` |
 | **Graph** | No changes to construction |
 | **Metadata** | Add `(graph as any)._agentspan = { model, tools, framework: 'langgraph' }` |
 | **Execution** | `graph.invoke({ messages })` → `runtime.run(graph, prompt)` |

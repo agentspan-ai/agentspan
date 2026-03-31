@@ -1,5 +1,5 @@
 {
-  "name": "@agentspan/agentspan",
+  "name": "@agentspan-ai/agentspan",
   "version": "0.0.0",
   "description": "CLI for AgentSpan - Build, run, and manage AI agents",
   "main": "index.js",

@@ -92,7 +92,7 @@ async function main() {
     // agent,
     // 'The payments service is down. Check it, restart it, and clear its stale cache data.',
     // );
-    // console.log(`Workflow started: ${streamHandle.workflowId}\n`);
+    // console.log(`Execution started: ${streamHandle.executionId}\n`);
 
     // for await (const event of streamHandle) {
     // switch (event.type) {

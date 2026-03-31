@@ -30,8 +30,8 @@ class EventPushEndpointTest {
     @LocalServerPort
     private int port;
 
-    private int postEvent(String workflowId, Map<String, Object> body) throws Exception {
-        URI uri = URI.create("http://localhost:" + port + "/api/agent/events/" + workflowId);
+    private int postEvent(String executionId, Map<String, Object> body) throws Exception {
+        URI uri = URI.create("http://localhost:" + port + "/api/agent/events/" + executionId);
         HttpURLConnection conn = (HttpURLConnection) uri.toURL().openConnection();
         conn.setRequestMethod("POST");
         conn.setRequestProperty("Content-Type", "application/json");

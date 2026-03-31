@@ -9,7 +9,7 @@ from .models import RunResult
 
 # Shared regex for extracting agent output from stdout
 AGENT_OUTPUT_RE = re.compile(
-    r"╘═+╛\s*\n(.*?)(?=\nTool calls:|\nTokens:|\nFinish reason:|\nWorkflow ID:|\n\n\n|\Z)",
+    r"╘═+╛\s*\n(.*?)(?=\nTool calls:|\nTokens:|\nFinish reason:|\nExecution ID:|\n\n\n|\Z)",
     re.DOTALL,
 )
 
@@ -27,10 +27,10 @@ def parse_output(
         r.stderr = stderr
         return r
 
-    # Workflow ID
-    m = re.search(r"Workflow ID: (\S+)", stdout)
+    # Execution ID
+    m = re.search(r"Execution ID: (\S+)", stdout)
     if m:
-        r.workflow_id = m.group(1)
+        r.execution_id = m.group(1)
 
     # Tool calls
     m = re.search(r"Tool calls: (\d+)", stdout)

@@ -94,7 +94,7 @@ def make_langchain_worker(
     from conductor.client.http.models.task_result_status import TaskResultStatus
 
     def tool_worker(task: Task) -> TaskResult:
-        workflow_id = task.workflow_instance_id
+        execution_id = task.workflow_instance_id
         prompt = task.input_data.get("prompt", "")
         session_id = (task.input_data.get("session_id") or "").strip()
         if session_id:
@@ -113,9 +113,9 @@ def make_langchain_worker(
                 _workflow_credentials,
                 _workflow_credentials_lock,
             )
-            wf_id = workflow_id or ""
+            exec_id = execution_id or ""
             with _workflow_credentials_lock:
-                cred_names = list(_workflow_credentials.get(wf_id, []))
+                cred_names = list(_workflow_credentials.get(exec_id, []))
             if cred_names:
                 token = _extract_execution_token(task)
                 if token:
@@ -129,20 +129,20 @@ def make_langchain_worker(
             logger.warning("Failed to resolve credentials for LangChain: %s", _cred_err)
 
         try:
-            handler = AgentspanCallbackHandler(workflow_id, server_url, auth_key, auth_secret)
+            handler = AgentspanCallbackHandler(execution_id, server_url, auth_key, auth_secret)
             result = executor.invoke({"input": prompt}, config={"callbacks": [handler]})
             output = result.get("output", "") if isinstance(result, dict) else str(result)
             return TaskResult(
                 task_id=task.task_id,
-                workflow_instance_id=workflow_id,
+                workflow_instance_id=execution_id,
                 status=TaskResultStatus.COMPLETED,
                 output_data={"result": output},
             )
         except Exception as exc:
-            logger.error("LangChain worker error (workflow_id=%s): %s", workflow_id, exc)
+            logger.error("LangChain worker error (execution_id=%s): %s", execution_id, exc)
             return TaskResult(
                 task_id=task.task_id,
-                workflow_instance_id=workflow_id,
+                workflow_instance_id=execution_id,
                 status=TaskResultStatus.FAILED,
                 reason_for_incompletion=str(exc),
             )
@@ -161,9 +161,9 @@ class AgentspanCallbackHandler(BaseCallbackHandler):
     recognises it as a valid callback. Plain classes are rejected at runtime.
     """
 
-    def __init__(self, workflow_id: str, server_url: str, auth_key: str, auth_secret: str):
+    def __init__(self, execution_id: str, server_url: str, auth_key: str, auth_secret: str):
         super().__init__()
-        self._workflow_id = workflow_id
+        self._execution_id = execution_id
         self._server_url = server_url
         self._auth_key = auth_key
         self._auth_secret = auth_secret
@@ -171,7 +171,7 @@ class AgentspanCallbackHandler(BaseCallbackHandler):
 
     def on_llm_start(self, serialized, prompts, **kwargs):
         _push_event_nonblocking(
-            self._workflow_id,
+            self._execution_id,
             {"type": "thinking", "content": "llm"},
             self._server_url,
             self._auth_key,
@@ -184,7 +184,7 @@ class AgentspanCallbackHandler(BaseCallbackHandler):
         if run_id is not None:
             self._tool_names[run_id] = tool_name
         _push_event_nonblocking(
-            self._workflow_id,
+            self._execution_id,
             {"type": "tool_call", "toolName": tool_name, "args": {"input": input_str}},
             self._server_url,
             self._auth_key,
@@ -195,7 +195,7 @@ class AgentspanCallbackHandler(BaseCallbackHandler):
         run_id = kwargs.get("run_id")
         tool_name = self._tool_names.pop(run_id, "") if run_id is not None else ""
         _push_event_nonblocking(
-            self._workflow_id,
+            self._execution_id,
             {"type": "tool_result", "toolName": tool_name, "result": str(output)},
             self._server_url,
             self._auth_key,
@@ -206,7 +206,7 @@ class AgentspanCallbackHandler(BaseCallbackHandler):
         run_id = kwargs.get("run_id")
         tool_name = self._tool_names.pop(run_id, "") if run_id is not None else ""
         _push_event_nonblocking(
-            self._workflow_id,
+            self._execution_id,
             {"type": "tool_result", "toolName": tool_name, "result": f"ERROR: {error}"},
             self._server_url,
             self._auth_key,
@@ -215,19 +215,19 @@ class AgentspanCallbackHandler(BaseCallbackHandler):
 
 
 def _push_event_nonblocking(
-    workflow_id: str,
+    execution_id: str,
     event: Dict[str, Any],
     server_url: str,
     auth_key: str,
     auth_secret: str,
 ) -> None:
-    """Fire-and-forget HTTP POST to {server_url}/agent/events/{workflowId}."""
+    """Fire-and-forget HTTP POST to {server_url}/agent/events/{executionId}."""
 
     def _do_push():
         try:
             import requests
 
-            url = f"{server_url}/agent/events/{workflow_id}"
+            url = f"{server_url}/agent/events/{execution_id}"
             headers = {}
             if auth_key:
                 headers["X-Auth-Key"] = auth_key
@@ -235,6 +235,6 @@ def _push_event_nonblocking(
                 headers["X-Auth-Secret"] = auth_secret
             requests.post(url, json=event, headers=headers, timeout=5)
         except Exception as exc:
-            logger.debug("Event push failed (workflow_id=%s): %s", workflow_id, exc)
+            logger.debug("Event push failed (execution_id=%s): %s", execution_id, exc)
 
     _EVENT_PUSH_POOL.submit(_do_push)

@@ -29,7 +29,7 @@ The SSE system has three layers:
 
 1. **AgentEventListener** — Implements Conductor's `TaskStatusListener` + `WorkflowStatusListener`. Translates Conductor task/workflow state changes into `AgentSSEEvent` DTOs.
 2. **AgentStreamRegistry** — Manages per-workflow `SseEmitter` connections, event buffering (bounded, 200 events), reconnection replay via `Last-Event-ID`, sub-workflow alias forwarding, and heartbeats.
-3. **AgentController** — Exposes `GET /api/agent/stream/{workflowId}` SSE endpoint.
+3. **AgentController** — Exposes `GET /api/agent/stream/{executionId}` SSE endpoint.
 
 **Event types:** `thinking`, `tool_call`, `tool_result`, `handoff`, `waiting`, `guardrail_pass`, `guardrail_fail`, `error`, `done`
 
@@ -40,9 +40,9 @@ The SSE system has three layers:
 | GET | `/api/agent` | Health check |
 | POST | `/api/agent/compile` | Compile AgentConfig → WorkflowDef (no execution) |
 | POST | `/api/agent/start` | Compile + register + execute |
-| GET | `/api/agent/stream/{workflowId}` | SSE event stream |
-| POST | `/api/agent/{workflowId}/respond` | HITL response |
-| GET | `/api/agent/{workflowId}/status` | Polling fallback |
+| GET | `/api/agent/stream/{executionId}` | SSE event stream |
+| POST | `/api/agent/{executionId}/respond` | HITL response |
+| GET | `/api/agent/{executionId}/status` | Polling fallback |
 
 ## Testing
 

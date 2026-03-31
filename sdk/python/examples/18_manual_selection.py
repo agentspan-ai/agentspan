@@ -65,7 +65,7 @@ if __name__ == "__main__":
         #     team,
         #     "Write a short paragraph about the history of artificial intelligence.",
         # )
-        # print(f"Started workflow: {handle.workflow_id}")
+        # print(f"Started workflow: {handle.execution_id}")
 
         # # In a real app, a UI would show the agent options and the human would pick.
         # # Here we simulate by selecting agents programmatically:

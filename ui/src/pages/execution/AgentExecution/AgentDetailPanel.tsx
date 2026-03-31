@@ -725,7 +725,7 @@ function useSubAgentDef(run: AgentRunData | undefined): { data: SubAgentFetchRes
     }
     let cancelled = false;
     setLoading(true);
-    fetch(`/api/workflow/${run.subWorkflowId}?summarize=true`)
+    fetch(`/api/agent/executions/${run.subWorkflowId}/full`)
       .then(r => r.ok ? r.json() : null)
       .then((exec: any) => {
         if (!exec || cancelled) return;

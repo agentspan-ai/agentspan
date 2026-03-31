@@ -30,7 +30,7 @@ if (process.argv[1]?.endsWith('63c-run-by-name.ts') || process.argv[1]?.endsWith
   console.log('  { "name": "agent_ops_bot", "prompt": "Check the status of the API gateway" }');
   console.log('');
   console.log('  // Stream by name');
-  console.log('  GET /api/agent/stream/{workflowId}');
+  console.log('  GET /api/agent/stream/{executionId}');
   console.log('');
   console.log('Or use the Python SDK which supports runtime.run("workflow_name", prompt).');
 }

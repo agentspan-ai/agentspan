@@ -73,9 +73,9 @@ class AgentControllerSSEIntegrationTest {
      * Opens a real HTTP SSE connection and collects events until the
      * connection closes or the expected count is reached.
      */
-    private List<SSEWireEvent> collectSSEEvents(String workflowId, Long lastEventId, int expectedCount, long timeoutMs)
+    private List<SSEWireEvent> collectSSEEvents(String executionId, Long lastEventId, int expectedCount, long timeoutMs)
             throws Exception {
-        URI uri = URI.create(baseUrl() + "/stream/" + workflowId);
+        URI uri = URI.create(baseUrl() + "/stream/" + executionId);
         HttpURLConnection conn = (HttpURLConnection) uri.toURL().openConnection();
         conn.setRequestMethod("GET");
         conn.setRequestProperty("Accept", "text/event-stream");

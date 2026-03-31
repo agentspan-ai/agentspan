@@ -94,7 +94,7 @@ if __name__ == "__main__":
         #     "Look up AAPL and explain whether it's a good investment. "
         #     "Include your opinion on potential returns.",
         # )
-        # print(f"Workflow started: {handle.workflow_id}")
+        # print(f"Workflow started: {handle.execution_id}")
 
         # # Poll for status
         # for i in range(60):
@@ -109,7 +109,7 @@ if __name__ == "__main__":
         #         # In a real app, a human would review in the Conductor UI.
         #         # Here we auto-approve for the demo.
         #         print("Auto-approving for demo...")
-        #         runtime.reject(handle.workflow_id, "bad idea")
+        #         runtime.reject(handle.execution_id, "bad idea")
         #         print("Approved! Resuming workflow...\n")
 
         #     if status.is_complete:
@@ -119,5 +119,5 @@ if __name__ == "__main__":
         #     time.sleep(1)
         # else:
         #     print("Timed out waiting for workflow to complete")
-        #     runtime.cancel(handle.workflow_id)
+        #     runtime.cancel(handle.execution_id)
 

@@ -39,7 +39,7 @@ if __name__ == "__main__":
 
         # Quick test: uncomment below (and comment out serve) to run directly.
         # handle = runtime.start(agent, "What are the key metrics to track for a SaaS product?")
-        # print(f"Agent started: {handle.workflow_id}")
+        # print(f"Agent started: {handle.execution_id}")
 
         # # Poll for completion
         # for i in range(30):
@@ -51,5 +51,5 @@ if __name__ == "__main__":
         #     time.sleep(1)
         # else:
         #     print("\nAgent still running. Check the Conductor UI:")
-        #     print(f"  http://localhost:8080/execution/{handle.workflow_id}")
+        #     print(f"  http://localhost:8080/execution/{handle.execution_id}")
 

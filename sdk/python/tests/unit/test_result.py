@@ -40,7 +40,7 @@ class TestAgentResult:
     def test_defaults(self):
         result = AgentResult()
         assert result.output is None
-        assert result.workflow_id == ""
+        assert result.execution_id == ""
         assert result.messages == []
         assert result.tool_calls == []
         assert result.status == "COMPLETED"
@@ -49,13 +49,13 @@ class TestAgentResult:
     def test_with_values(self):
         result = AgentResult(
             output="Hello!",
-            workflow_id="wf-123",
+            execution_id="wf-123",
             messages=[{"role": "user", "message": "Hi"}],
             tool_calls=[{"name": "test", "input": {}, "output": {}}],
             status="COMPLETED",
         )
         assert result.output == "Hello!"
-        assert result.workflow_id == "wf-123"
+        assert result.execution_id == "wf-123"
         assert len(result.messages) == 1
         assert len(result.tool_calls) == 1
 
@@ -106,7 +106,7 @@ class TestAgentEvent:
         event = AgentEvent(
             type=EventType.DONE,
             output="Final answer",
-            workflow_id="wf-123",
+            execution_id="wf-123",
         )
         assert event.type == "done"
         assert event.output == "Final answer"
@@ -115,7 +115,7 @@ class TestAgentEvent:
         event = AgentEvent(
             type=EventType.GUARDRAIL_PASS,
             guardrail_name="no_pii",
-            workflow_id="wf-456",
+            execution_id="wf-456",
         )
         assert event.type == "guardrail_pass"
         assert event.guardrail_name == "no_pii"
@@ -125,7 +125,7 @@ class TestAgentEvent:
             type=EventType.GUARDRAIL_FAIL,
             guardrail_name="safety_check",
             content="Contains harmful content",
-            workflow_id="wf-456",
+            execution_id="wf-456",
         )
         assert event.type == "guardrail_fail"
         assert event.guardrail_name == "safety_check"
@@ -205,25 +205,25 @@ class TestAgentHandleRespond:
 
     def test_respond_delegates(self):
         runtime = MagicMock()
-        handle = AgentHandle(workflow_id="wf-1", runtime=runtime)
+        handle = AgentHandle(execution_id="wf-1", runtime=runtime)
         handle.respond({"approved": True})
         runtime.respond.assert_called_once_with("wf-1", {"approved": True})
 
     def test_approve_uses_respond(self):
         runtime = MagicMock()
-        handle = AgentHandle(workflow_id="wf-1", runtime=runtime)
+        handle = AgentHandle(execution_id="wf-1", runtime=runtime)
         handle.approve()
         runtime.respond.assert_called_once_with("wf-1", {"approved": True})
 
     def test_reject_uses_respond(self):
         runtime = MagicMock()
-        handle = AgentHandle(workflow_id="wf-1", runtime=runtime)
+        handle = AgentHandle(execution_id="wf-1", runtime=runtime)
         handle.reject("bad idea")
         runtime.respond.assert_called_once_with("wf-1", {"approved": False, "reason": "bad idea"})
 
     def test_send_uses_respond(self):
         runtime = MagicMock()
-        handle = AgentHandle(workflow_id="wf-1", runtime=runtime)
+        handle = AgentHandle(execution_id="wf-1", runtime=runtime)
         handle.send("hello")
         runtime.respond.assert_called_once_with("wf-1", {"message": "hello"})
 
@@ -234,31 +234,31 @@ class TestAgentHandleDelegation:
     def test_get_status(self):
         runtime = MagicMock()
         runtime.get_status.return_value = AgentStatus(is_running=True)
-        handle = AgentHandle(workflow_id="wf-1", runtime=runtime)
+        handle = AgentHandle(execution_id="wf-1", runtime=runtime)
         status = handle.get_status()
         runtime.get_status.assert_called_once_with("wf-1")
         assert status.is_running is True
 
     def test_pause(self):
         runtime = MagicMock()
-        handle = AgentHandle(workflow_id="wf-1", runtime=runtime)
+        handle = AgentHandle(execution_id="wf-1", runtime=runtime)
         handle.pause()
         runtime.pause.assert_called_once_with("wf-1")
 
     def test_resume(self):
         runtime = MagicMock()
-        handle = AgentHandle(workflow_id="wf-1", runtime=runtime)
+        handle = AgentHandle(execution_id="wf-1", runtime=runtime)
         handle.resume()
         runtime.resume.assert_called_once_with("wf-1")
 
     def test_cancel(self):
         runtime = MagicMock()
-        handle = AgentHandle(workflow_id="wf-1", runtime=runtime)
+        handle = AgentHandle(execution_id="wf-1", runtime=runtime)
         handle.cancel("too slow")
         runtime.cancel.assert_called_once_with("wf-1", "too slow")
 
     def test_repr(self):
-        handle = AgentHandle(workflow_id="wf-abc", runtime=MagicMock())
+        handle = AgentHandle(execution_id="wf-abc", runtime=MagicMock())
         r = repr(handle)
         assert "AgentHandle" in r
         assert "wf-abc" in r
@@ -268,7 +268,7 @@ class TestAgentResultPrintResult:
     """Test AgentResult.print_result()."""
 
     def test_print_basic(self, capsys):
-        result = AgentResult(output="Hello!", workflow_id="wf-1")
+        result = AgentResult(output="Hello!", execution_id="wf-1")
         result.print_result()
         captured = capsys.readouterr()
         assert "Hello!" in captured.out
@@ -403,7 +403,7 @@ class TestBuildResultFromEvents:
     """Test that _build_result_from_events sets finish_reason and error."""
 
     def test_done_event_sets_stop(self):
-        handle = AgentHandle(workflow_id="wf-1", runtime=MagicMock())
+        handle = AgentHandle(execution_id="wf-1", runtime=MagicMock())
         events = [AgentEvent(type=EventType.DONE, output="Hello")]
         result = _build_result_from_events(events, handle)
         assert result.status == Status.COMPLETED
@@ -413,7 +413,7 @@ class TestBuildResultFromEvents:
         assert result.output == {"result": "Hello"}
 
     def test_error_event_sets_failed(self):
-        handle = AgentHandle(workflow_id="wf-1", runtime=MagicMock())
+        handle = AgentHandle(execution_id="wf-1", runtime=MagicMock())
         events = [AgentEvent(type=EventType.ERROR, content="401 Unauthorized")]
         result = _build_result_from_events(events, handle)
         assert result.status == Status.FAILED
@@ -421,7 +421,7 @@ class TestBuildResultFromEvents:
         assert result.error == "401 Unauthorized"
 
     def test_guardrail_fail_event(self):
-        handle = AgentHandle(workflow_id="wf-1", runtime=MagicMock())
+        handle = AgentHandle(execution_id="wf-1", runtime=MagicMock())
         events = [
             AgentEvent(type=EventType.GUARDRAIL_FAIL, content="PII detected"),
         ]
@@ -436,7 +436,7 @@ class TestOutputNormalization:
 
     def test_string_output_wrapped_on_success(self):
         """Non-dict output on success is wrapped in {"result": ...}."""
-        handle = AgentHandle(workflow_id="wf-1", runtime=MagicMock())
+        handle = AgentHandle(execution_id="wf-1", runtime=MagicMock())
         events = [AgentEvent(type=EventType.DONE, output="Hello world")]
         result = _build_result_from_events(events, handle)
         assert isinstance(result.output, dict)
@@ -444,14 +444,14 @@ class TestOutputNormalization:
 
     def test_dict_output_preserved(self):
         """Dict output is returned as-is."""
-        handle = AgentHandle(workflow_id="wf-1", runtime=MagicMock())
+        handle = AgentHandle(execution_id="wf-1", runtime=MagicMock())
         events = [AgentEvent(type=EventType.DONE, output={"result": "ok", "finishReason": "STOP"})]
         result = _build_result_from_events(events, handle)
         assert result.output == {"result": "ok", "finishReason": "STOP"}
 
     def test_error_string_wrapped(self):
         """Error string output is wrapped in {"error": ..., "status": ...}."""
-        handle = AgentHandle(workflow_id="wf-1", runtime=MagicMock())
+        handle = AgentHandle(execution_id="wf-1", runtime=MagicMock())
         events = [AgentEvent(type=EventType.ERROR, content="401 Unauthorized")]
         result = _build_result_from_events(events, handle)
         assert isinstance(result.output, dict)
@@ -460,7 +460,7 @@ class TestOutputNormalization:
 
     def test_none_output_wrapped(self):
         """None output is wrapped in {"result": None}."""
-        handle = AgentHandle(workflow_id="wf-1", runtime=MagicMock())
+        handle = AgentHandle(execution_id="wf-1", runtime=MagicMock())
         events = []  # No DONE event
         result = _build_result_from_events(events, handle)
         assert isinstance(result.output, dict)
@@ -472,7 +472,7 @@ class TestParallelOutputNormalization:
 
     def test_server_normalized_parallel_output_preserved(self):
         """Server-normalized parallel output (result=string, subResults=dict) is preserved."""
-        handle = AgentHandle(workflow_id="wf-1", runtime=MagicMock())
+        handle = AgentHandle(execution_id="wf-1", runtime=MagicMock())
         # This is the format the server now produces after the INLINE aggregate task
         server_output = {
             "result": "[analyst]: Analysis done\n\n[researcher]: Research done",
@@ -487,7 +487,7 @@ class TestParallelOutputNormalization:
 
     def test_single_agent_string_result_no_sub_results(self):
         """Single-agent string result has empty sub_results."""
-        handle = AgentHandle(workflow_id="wf-1", runtime=MagicMock())
+        handle = AgentHandle(execution_id="wf-1", runtime=MagicMock())
         events = [AgentEvent(type=EventType.DONE, output="Simple answer")]
         result = _build_result_from_events(events, handle)
         assert result.output == {"result": "Simple answer"}
@@ -495,7 +495,7 @@ class TestParallelOutputNormalization:
 
     def test_handoff_string_result_no_sub_results(self):
         """Handoff string result has empty sub_results."""
-        handle = AgentHandle(workflow_id="wf-1", runtime=MagicMock())
+        handle = AgentHandle(execution_id="wf-1", runtime=MagicMock())
         events = [AgentEvent(type=EventType.DONE, output={"result": "Handoff answer"})]
         result = _build_result_from_events(events, handle)
         assert result.output == {"result": "Handoff answer"}

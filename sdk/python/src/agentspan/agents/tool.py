@@ -31,14 +31,14 @@ class ToolContext:
 
     Attributes:
         session_id: The session ID for the current execution.
-        workflow_id: The Conductor workflow ID.
+        execution_id: The Conductor execution ID.
         agent_name: The name of the agent executing this tool.
         metadata: Arbitrary metadata from the agent.
         dependencies: User-provided dependencies (DB connections, API clients, etc.)
     """
 
     session_id: str = ""
-    workflow_id: str = ""
+    execution_id: str = ""
     agent_name: str = ""
     metadata: Dict[str, Any] = field(default_factory=dict)
     dependencies: Dict[str, Any] = field(default_factory=dict)

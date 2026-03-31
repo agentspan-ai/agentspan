@@ -35,21 +35,21 @@ class AgentEventListenerTest {
         listener = new AgentEventListener(streamRegistry, meterRegistry);
     }
 
-    private TaskModel makeTask(String workflowId, String taskType, String refName) {
+    private TaskModel makeTask(String executionId, String taskType, String refName) {
         TaskModel task = new TaskModel();
-        task.setWorkflowInstanceId(workflowId);
+        task.setWorkflowInstanceId(executionId);
         task.setTaskType(taskType);
         task.setReferenceTaskName(refName);
         return task;
     }
 
-    private WorkflowModel makeWorkflow(String workflowId) {
-        return makeWorkflow(workflowId, null);
+    private WorkflowModel makeWorkflow(String executionId) {
+        return makeWorkflow(executionId, null);
     }
 
-    private WorkflowModel makeWorkflow(String workflowId, String workflowName) {
+    private WorkflowModel makeWorkflow(String executionId, String workflowName) {
         WorkflowModel wf = new WorkflowModel();
-        wf.setWorkflowId(workflowId);
+        wf.setWorkflowId(executionId);
         if (workflowName != null) {
             var def = new com.netflix.conductor.common.metadata.workflow.WorkflowDef();
             def.setName(workflowName);

@@ -7,7 +7,7 @@
 **Architecture:** Two resolution paths based on execution model:
 - **HTTP tools (server system task):** Custom `CredentialAwareHttpTask` extends Conductor's `HttpTask`, resolves `${NAME}` patterns in headers via `CredentialResolutionService` before HTTP execution. Registered as `@Primary @Bean("HTTP")`.
 - **MCP tools (worker task):** `CALL_MCP_TOOL` is a Conductor SDK worker, not a system task. Resolve `${NAME}` in MCP headers in `AgentEventListener.onTaskScheduled()` before the worker picks up the task.
-- **SDK-side tools (framework passthrough, extracted tools):** Credentials via `WorkerCredentialFetcher` with a workflow-level fallback registry.
+- **SDK-side tools (framework passthrough, extracted tools):** Credentials via `WorkerCredentialFetcher` with an execution-level fallback registry.
 
 Every change is test-first with e2e tests against a real server. No mocks.
 
@@ -679,7 +679,7 @@ In `runtime.py`, add `credentials: Optional[List[str]] = None` to `run()` (line 
 Pass through all internal paths:
 - `_start_via_server()`: add `credentials` to input payload
 - `_start_framework_via_server()`: same
-- After workflow starts, populate `_workflow_credentials[workflow_id]`
+- After execution starts, populate `_workflow_credentials[execution_id]`
 - In `_poll_status_until_complete()`, clean up in `finally`
 
 - [ ] **Step 4: Run test — verify it passes**
@@ -704,7 +704,7 @@ git commit -m "feat: run()/start()/stream() accept credentials kwarg"
 
 - [ ] **Step 1: Write the failing test**
 
-Verify that when workflow input contains `"credentials": ["KEY1", "KEY2"]`, the execution token's `declared_names` includes them.
+Verify that when execution input contains `"credentials": ["KEY1", "KEY2"]`, the execution token's `declared_names` includes them.
 
 - [ ] **Step 2: Implement**
 

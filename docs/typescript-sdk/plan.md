@@ -48,7 +48,7 @@ js/
 ### Tool definition — plain JavaScript (primary)
 
 ```js
-const { tool } = require('@agentspan/sdk')
+const { tool } = require('@agentspan-ai/sdk')
 
 const getWeather = tool(
   async function getWeather({ city }) {
@@ -71,7 +71,7 @@ const getWeather = tool(
 > standalone functions. `tool()` is the equivalent for standalone functions.
 
 ```ts
-import { AgentTool, toolsFrom } from '@agentspan/sdk/decorators'
+import { AgentTool, toolsFrom } from '@agentspan-ai/sdk/decorators'
 
 class WeatherTools {
   @AgentTool({
@@ -94,7 +94,7 @@ const tools = toolsFrom(new WeatherTools())
 ### Agent
 
 ```js
-const { Agent } = require('@agentspan/sdk')
+const { Agent } = require('@agentspan-ai/sdk')
 
 const agent = new Agent({
   name: 'weather_agent',
@@ -112,7 +112,7 @@ const agent = new Agent({
 ### Runtime
 
 ```js
-const { AgentRuntime } = require('@agentspan/sdk')
+const { AgentRuntime } = require('@agentspan-ai/sdk')
 
 const runtime = new AgentRuntime({ serverUrl: 'http://localhost:6767' })
 
@@ -149,7 +149,7 @@ runtime.run(agent, prompt)
   │
   ├─2─ POST /api/agent/start  { agentConfig, prompt, sessionId, media }
   │        Server compiles → Conductor workflow
-  │        Returns { workflowId }
+  │        Returns { executionId }
   │
   ├─3─ WorkerManager.registerAll(agent.tools)
   │        For each @tool with a JS func:
@@ -159,8 +159,8 @@ runtime.run(agent, prompt)
   │                ↕
   │          Conductor polls ← worker executes JS fn → result
   │
-  └─4─ Poll GET /api/agent/{workflowId}/status (500ms interval)
-           OR stream SSE  GET /api/agent/stream/{workflowId}
+  └─4─ Poll GET /api/agent/{executionId}/status (500ms interval)
+           OR stream SSE  GET /api/agent/stream/{executionId}
            Until COMPLETED / FAILED / TERMINATED / TIMED_OUT
            → AgentResult
 ```

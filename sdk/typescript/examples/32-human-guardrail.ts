@@ -83,7 +83,7 @@ if (process.argv[1]?.endsWith('32-human-guardrail.ts') || process.argv[1]?.endsW
       'Look up AAPL and explain whether it\'s a good investment. ' +
       'Include your opinion on potential returns.',
     );
-    console.log(`Workflow started: ${handle.workflowId}`);
+    console.log(`Execution started: ${handle.executionId}`);
 
     // Poll for status
     for (let i = 0; i < 60; i++) {

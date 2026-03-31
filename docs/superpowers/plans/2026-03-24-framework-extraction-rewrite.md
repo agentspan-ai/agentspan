@@ -258,7 +258,7 @@ private async _runFramework(agent: object, prompt: string, frameworkId: Framewor
       media: options?.media ?? [],
     }, options?.signal);
 
-    const workflowId = startResponse.workflowId as string;
+    const executionId = startResponse.executionId as string;
 
     // 4. Stream/poll for result (same as native agent path)
     // ... SSE stream or poll ...
@@ -376,7 +376,7 @@ After the extraction rewrite, `runtime.run(openaiAgent, prompt)` should:
 
 Verify by checking workflow structure:
 ```bash
-curl http://localhost:6767/api/workflow/{workflowId}?includeTasks=true
+curl http://localhost:6767/api/workflow/{executionId}?includeTasks=true
 ```
 
 - [ ] **Step 2: Fix any examples that fail extraction**

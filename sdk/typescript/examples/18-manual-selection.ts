@@ -59,7 +59,7 @@ if (process.argv[1]?.endsWith('18-manual-selection.ts') || process.argv[1]?.ends
       team,
       'Write a short paragraph about the history of artificial intelligence.',
     );
-    console.log(`Started workflow: ${handle.workflowId}`);
+    console.log(`Started execution: ${handle.executionId}`);
 
     // In a real app, a UI would show the agent options and the human would pick.
     // Here we simulate by selecting agents programmatically:

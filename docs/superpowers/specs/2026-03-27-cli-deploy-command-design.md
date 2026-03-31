@@ -156,9 +156,9 @@ AGENTSPAN_SERVER_URL=<url> AGENTSPAN_API_KEY=<token> \
 Both print JSON results to stdout:
 ```json
 [
-  {"agent_name": "researcher", "workflow_name": "workflow_researcher", "success": true, "error": null},
-  {"agent_name": "summarizer", "workflow_name": "workflow_summarizer", "success": true, "error": null},
-  {"agent_name": "classifier", "workflow_name": "workflow_classifier", "success": false, "error": "serialization failed: unsupported tool type"}
+  {"agent_name": "researcher", "registered_name": "workflow_researcher", "success": true, "error": null},
+  {"agent_name": "summarizer", "registered_name": "workflow_summarizer", "success": true, "error": null},
+  {"agent_name": "classifier", "registered_name": "workflow_classifier", "success": false, "error": "serialization failed: unsupported tool type"}
 ]
 ```
 
@@ -201,7 +201,7 @@ Exit code 1.
 ```json
 {
   "discovered": [{"name": "researcher", "framework": "native"}, ...],
-  "deployed": [{"agent_name": "researcher", "workflow_name": "workflow_researcher", "success": true, "error": null}, ...],
+  "deployed": [{"agent_name": "researcher", "registered_name": "workflow_researcher", "success": true, "error": null}, ...],
   "summary": {"total": 3, "succeeded": 2, "failed": 1}
 }
 ```
@@ -277,14 +277,14 @@ def main():
             info = infos[0]
             results.append({
                 "agent_name": info.agent_name,
-                "workflow_name": info.workflow_name,
+                "registered_name": info.registered_name,
                 "success": True,
                 "error": None,
             })
         except Exception as e:
             results.append({
                 "agent_name": agent.name,
-                "workflow_name": None,
+                "registered_name": None,
                 "success": False,
                 "error": str(e),
             })
@@ -357,14 +357,14 @@ for (const agent of agents) {
     const info = await runtime.deploy(agent);  // single agent per call
     results.push({
       agent_name: info.agentName,
-      workflow_name: info.workflowName,
+      registered_name: info.registeredName,
       success: true,
       error: null,
     });
   } catch (e: any) {
     results.push({
       agent_name: agent.name,
-      workflow_name: null,
+      registered_name: null,
       success: false,
       error: e.message || String(e),
     });

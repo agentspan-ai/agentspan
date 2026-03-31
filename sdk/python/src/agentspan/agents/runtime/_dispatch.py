@@ -281,7 +281,7 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
     """Create a Conductor worker wrapper for a @tool function.
 
     The wrapper accepts a ``Task`` object so it can extract metadata
-    (workflow ID) for ``ToolContext`` injection, then maps the task's
+    (execution ID) for ``ToolContext`` injection, then maps the task's
     ``inputParameters`` to the tool function's arguments.
     On failure the exception propagates so Conductor marks the task FAILED.
 
@@ -305,7 +305,7 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
     from conductor.client.http.models import Task, TaskResult
     from conductor.client.http.models.task_result_status import TaskResultStatus
 
-    def _execute(kwargs, wf_id="", agent_state=None):
+    def _execute(kwargs, execution_id="", agent_state=None):
         """Core execution logic shared by both Task-based and kwargs-based paths."""
         # Circuit breaker: disable tool after N consecutive failures
         if _tool_error_counts.get(tool_name, 0) >= _CIRCUIT_BREAKER_THRESHOLD:
@@ -320,7 +320,7 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
 
             state = dict(agent_state) if agent_state else {}
             ctx = ToolContext(
-                workflow_id=wf_id,
+                execution_id=execution_id,
                 agent_name=_current_context.get("agent_name", ""),
                 session_id=_current_context.get("session_id", ""),
                 metadata=_current_context.get("metadata", {}),
@@ -468,7 +468,7 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
             try:
                 result = _execute(
                     fn_kwargs,
-                    wf_id=task.workflow_instance_id or "",
+                    execution_id=task.workflow_instance_id or "",
                     agent_state=agent_state,
                 )
             finally:

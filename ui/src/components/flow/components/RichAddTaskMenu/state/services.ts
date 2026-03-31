@@ -30,7 +30,7 @@ export const fetchForTaskDefinitions = async ({
 export const fetchForWorkflowDefinitions = async ({
   authHeaders: headers,
 }: RichAddTaskMenuMachineContext) => {
-  const workflowDefinitionUrl = `/metadata/workflow?short=true`;
+  const workflowDefinitionUrl = `/metadata/workflow?short=true`; // TODO: migrate to agent API
 
   logger.info("Will search for workflow definitions", workflowDefinitionUrl);
   try {

@@ -25,7 +25,7 @@ export function serializeLangChain(
   const e = executor as Record<string, unknown>;
   const name = (typeof e.name === 'string' && e.name) || _DEFAULT_NAME;
 
-  // Check for wrapper metadata first (set by @agentspan/sdk/langchain wrapper)
+  // Check for wrapper metadata first (set by @agentspan-ai/sdk/langchain wrapper)
   const metadata = e._agentspan as Record<string, unknown> | undefined;
   if (metadata?.model && metadata?.tools) {
     return _serializeFromMetadata(name, metadata);
@@ -49,7 +49,7 @@ export function serializeLangChain(
 // ── Wrapper metadata extraction ─────────────────────────
 
 /**
- * Serialize from wrapper-captured metadata (set by @agentspan/sdk/langchain).
+ * Serialize from wrapper-captured metadata (set by @agentspan-ai/sdk/langchain).
  * Uses the model/tools/instructions stored on the executor by the wrapper.
  */
 function _serializeFromMetadata(

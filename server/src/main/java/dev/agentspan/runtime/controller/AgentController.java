@@ -12,6 +12,15 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import com.netflix.conductor.common.metadata.tasks.Task;
+import com.netflix.conductor.common.metadata.tasks.TaskExecLog;
+import com.netflix.conductor.common.metadata.tasks.TaskResult;
+import com.netflix.conductor.common.metadata.workflow.RerunWorkflowRequest;
+import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
+import com.netflix.conductor.common.run.SearchResult;
+import com.netflix.conductor.common.run.Workflow;
+import com.netflix.conductor.common.run.WorkflowSummary;
+
 import dev.agentspan.runtime.model.AgentExecutionDetail;
 import dev.agentspan.runtime.model.AgentRun;
 import dev.agentspan.runtime.model.AgentSummary;
@@ -205,5 +214,129 @@ public class AgentController {
     @PostMapping("/execution")
     public CreateTrackingWorkflowResponse createTrackingExecution(@RequestBody CreateTrackingWorkflowRequest req) {
         return agentDagService.createTrackingWorkflow(req);
+    }
+
+    // ── Execution lifecycle (UI) ────────────────────────────────────
+
+    /** Get full execution with tasks (Conductor Workflow object, used by UI). */
+    @GetMapping("/executions/{executionId}/full")
+    public Workflow getFullExecution(@PathVariable String executionId) {
+        return agentService.getFullExecution(executionId);
+    }
+
+    /** Restart a completed/failed execution. */
+    @PostMapping("/executions/{executionId}/restart")
+    public void restartExecution(@PathVariable String executionId,
+            @RequestParam(defaultValue = "false") boolean useLatestDefinitions) {
+        agentService.restartExecution(executionId, useLatestDefinitions);
+    }
+
+    /** Retry a failed execution from the failed task. */
+    @PostMapping("/executions/{executionId}/retry")
+    public void retryExecution(@PathVariable String executionId,
+            @RequestParam(defaultValue = "false") boolean resumeSubworkflowTasks) {
+        agentService.retryExecution(executionId, resumeSubworkflowTasks);
+    }
+
+    /** Rerun execution from a specific task. */
+    @PostMapping("/executions/{executionId}/rerun")
+    public String rerunExecution(@PathVariable String executionId,
+            @RequestBody RerunWorkflowRequest request) {
+        return agentService.rerunExecution(executionId, request);
+    }
+
+    /** Terminate a running execution (used by UI delete action). */
+    @DeleteMapping("/executions/{executionId}")
+    public void terminateExecution(@PathVariable String executionId,
+            @RequestParam(required = false) String reason) {
+        agentService.cancelAgent(executionId, reason);
+    }
+
+    /** Get paginated task list for an execution. */
+    @GetMapping("/executions/{executionId}/tasks")
+    public List<Task> getExecutionTasks(@PathVariable String executionId,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "15") int count,
+            @RequestParam(defaultValue = "0") int start) {
+        return agentService.getExecutionTasks(executionId, status, count, start);
+    }
+
+    /** Update a task's status within an execution. */
+    @PostMapping("/tasks/{executionId}/{refTaskName}/{status}")
+    public void updateTaskStatus(@PathVariable String executionId,
+            @PathVariable String refTaskName,
+            @PathVariable String status,
+            @RequestParam(defaultValue = "agent-ui") String workerid,
+            @RequestBody(required = false) Map<String, Object> body) {
+        // Reuse existing task update logic
+        Workflow wf = agentService.getFullExecution(executionId);
+        Task task = wf.getTasks().stream()
+                .filter(t -> refTaskName.equals(t.getReferenceTaskName()))
+                .reduce((first, second) -> second)
+                .orElseThrow(() -> new com.netflix.conductor.core.exception.NotFoundException(
+                        "Task not found: " + refTaskName));
+        TaskResult taskResult = new TaskResult(task);
+        taskResult.setStatus(TaskResult.Status.valueOf(status));
+        taskResult.setWorkerId(workerid);
+        if (body != null) {
+            taskResult.setOutputData(body);
+        }
+        agentService.updateTaskResult(taskResult);
+    }
+
+    /** Get task logs. */
+    @GetMapping("/tasks/{taskId}/log")
+    public List<TaskExecLog> getTaskLogs(@PathVariable String taskId) {
+        return agentService.getTaskLogs(taskId);
+    }
+
+    // ── Search ──────────────────────────────────────────────────────
+
+    /** Search executions (pass-through to Conductor search, used by UI). */
+    @GetMapping("/executions/search")
+    public SearchResult<WorkflowSummary> searchExecutionsRaw(
+            @RequestParam(defaultValue = "0") int start,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "startTime:DESC") String sort,
+            @RequestParam(required = false) String freeText,
+            @RequestParam(required = false) String query) {
+        return agentService.searchExecutionsRaw(start, size, sort, freeText, query);
+    }
+
+    // ── Bulk operations ─────────────────────────────────────────────
+
+    @PutMapping("/executions/bulk/pause")
+    public void bulkPause(@RequestBody List<String> ids) {
+        ids.forEach(id -> agentService.pauseAgent(id));
+    }
+
+    @PutMapping("/executions/bulk/resume")
+    public void bulkResume(@RequestBody List<String> ids) {
+        ids.forEach(id -> agentService.resumeAgent(id));
+    }
+
+    @PostMapping("/executions/bulk/restart")
+    public void bulkRestart(@RequestBody List<String> ids,
+            @RequestParam(defaultValue = "false") boolean useLatestDefinitions) {
+        ids.forEach(id -> agentService.restartExecution(id, useLatestDefinitions));
+    }
+
+    @PostMapping("/executions/bulk/retry")
+    public void bulkRetry(@RequestBody List<String> ids) {
+        ids.forEach(id -> agentService.retryExecution(id, false));
+    }
+
+    @PostMapping("/executions/bulk/terminate")
+    public void bulkTerminate(@RequestBody List<String> ids,
+            @RequestParam(required = false) String reason) {
+        ids.forEach(id -> agentService.cancelAgent(id, reason));
+    }
+
+    // ── Definition metadata ─────────────────────────────────────────
+
+    @GetMapping("/definitions/{name}")
+    public WorkflowDef getAgentDefinition(@PathVariable String name,
+            @RequestParam(required = false) Integer version) {
+        return agentService.getAgentDefinition(name, version);
     }
 }

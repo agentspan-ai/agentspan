@@ -72,14 +72,14 @@ def main():
                 info = infos[0]
                 results.append({
                     "agent_name": info.agent_name,
-                    "workflow_name": info.workflow_name,
+                    "registered_name": info.registered_name,
                     "success": True,
                     "error": None,
                 })
             except Exception as e:
                 results.append({
                     "agent_name": agent.name,
-                    "workflow_name": None,
+                    "registered_name": None,
                     "success": False,
                     "error": str(e),
                 })

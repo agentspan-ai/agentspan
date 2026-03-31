@@ -149,7 +149,7 @@ The agent definition describes **what** it does. Triggers describe **when** it r
 │                    └──────┬──────┘                             │
 │                           │                                   │
 │              ┌────────────▼─────────────┐                     │
-│              │     AGENT WORKFLOW       │                     │
+│              │    AGENT EXECUTION       │                     │
 │              │  ┌─────┐ ┌─────┐ ┌────┐ │                     │
 │              │  │ LLM │→│Tools│→│ LLM│ │                     │
 │              │  └─────┘ └─────┘ └────┘ │                     │
@@ -178,7 +178,7 @@ Schedule:
   catch_up: false               # run missed executions?
 ```
 
-**Maps to**: Conductor `SchedulerClient.save_schedule()` / any workflow engine's cron scheduler.
+**Maps to**: Conductor `SchedulerClient.save_schedule()` / any execution engine's cron scheduler.
 
 #### Event Trigger
 Runs the agent when a named event fires. The event payload is injected into the prompt.
@@ -265,7 +265,7 @@ Developer                    Orchestration Server
     │◄─────────────────────────────│
     │                              │
     │                              │  [cron fires / event arrives]
-    │                              │  → Start agent workflow
+    │                              │  → Start agent execution
     │                              │  → LLM + tools execute
     │                              │  → Result stored
     │                              │
@@ -316,7 +316,7 @@ The local process runs:
 
 ```bash
 # 1. Install
-pip install agentspan-sdk   # or: npm install @agentspan/sdk
+pip install agentspan-sdk   # or: npm install @agentspan-ai/sdk
 
 # 2. Write the sentinel (sentinel.py / sentinel.ts)
 #    Define agent + tools + FileWatch trigger
@@ -343,7 +343,7 @@ systemctl start conductor-sentinel@log_monitor   # systemd service
 | Trigger Type | Multi-Instance Behavior |
 |---|---|
 | **Schedule** | Orchestration server ensures exactly-once execution. Safe to run multiple instances. |
-| **Event** | Event handler registered once. Server routes to one workflow instance. |
+| **Event** | Event handler registered once. Server routes to one execution instance. |
 | **Webhook** | Server-side. Single handler. |
 | **FileWatch** | Local — each instance watches independently. Needs **distributed lock** or **leader election** to prevent duplicate triggers. |
 | **StreamWatch** | Use consumer groups (Kafka) or competing consumers (SQS) for natural dedup. |
@@ -357,7 +357,7 @@ When an agent is deployed, a handle is returned for ongoing management:
 ```
 DeploymentHandle:
   name: string                   # agent name
-  workflow_name: string          # compiled workflow name
+  registered_name: string        # compiled workflow name
   triggers: Trigger[]            # active triggers
   status: "running" | "paused" | "stopped"
 

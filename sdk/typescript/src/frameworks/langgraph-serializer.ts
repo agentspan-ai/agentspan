@@ -27,7 +27,7 @@ export function serializeLangGraph(
   const g = graph as Record<string, unknown>;
   const name = (typeof g.name === 'string' && g.name) || _DEFAULT_NAME;
 
-  // Check for wrapper metadata first (set by @agentspan/sdk/langgraph wrapper)
+  // Check for wrapper metadata first (set by @agentspan-ai/sdk/langgraph wrapper)
   const metadata = g._agentspan as Record<string, unknown> | undefined;
   if (metadata?.model && metadata?.tools) {
     return _serializeFromMetadata(name, metadata);
@@ -63,7 +63,7 @@ export function serializeLangGraph(
 // ── Wrapper metadata extraction ─────────────────────────
 
 /**
- * Serialize from wrapper-captured metadata (set by @agentspan/sdk/langgraph).
+ * Serialize from wrapper-captured metadata (set by @agentspan-ai/sdk/langgraph).
  * Uses the model/tools/instructions stored on the graph by the wrapper.
  */
 function _serializeFromMetadata(

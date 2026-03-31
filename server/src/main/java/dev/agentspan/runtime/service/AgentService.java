@@ -21,6 +21,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.netflix.conductor.common.metadata.tasks.Task;
 import com.netflix.conductor.common.metadata.tasks.TaskDef;
 import com.netflix.conductor.common.metadata.tasks.TaskResult;
+import com.netflix.conductor.common.metadata.tasks.TaskExecLog;
+import com.netflix.conductor.common.metadata.workflow.RerunWorkflowRequest;
 import com.netflix.conductor.common.metadata.workflow.StartWorkflowRequest;
 import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
 import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
@@ -228,7 +230,7 @@ public class AgentService {
                         RequestContextHolder.get().map(ctx -> ctx.getUser()).orElse(null);
                 if (currentUser != null) {
                     String token = executionTokenService.mint(
-                            currentUser.getId(), null /* workflowId not known yet */, declaredNames, timeoutSeconds);
+                            currentUser.getId(), null /* executionId not known yet */, declaredNames, timeoutSeconds);
                     Map<String, Object> agentCtx = new LinkedHashMap<>();
                     agentCtx.put("execution_token", token);
                     input.put("__agentspan_ctx__", agentCtx);
@@ -259,18 +261,18 @@ public class AgentService {
             }
         }
 
-        String workflowId = workflowExecutor.startWorkflow(new StartWorkflowInput(startReq));
-        log.info("Started workflow: {} (id={})", def.getName(), workflowId);
+        String executionId = workflowExecutor.startWorkflow(new StartWorkflowInput(startReq));
+        log.info("Started workflow: {} (id={})", def.getName(), executionId);
 
         // Validate provider AFTER start — workflow is captured for replay
         Optional<String> validationError = validateModelProvider(config);
         if (validationError.isPresent()) {
             log.warn("Provider not configured for agent '{}': {}", config.getName(), validationError.get());
-            workflowService.terminateWorkflow(workflowId, validationError.get());
+            workflowService.terminateWorkflow(executionId, validationError.get());
         }
 
         return StartResponse.builder()
-                .executionId(workflowId)
+                .executionId(executionId)
                 .agentName(def.getName())
                 .requiredWorkers(requiredWorkers)
                 .build();
@@ -551,7 +553,7 @@ public class AgentService {
 
     /**
      * Search for an existing workflow with the given correlationId (idempotency key).
-     * Returns the workflow ID if a RUNNING or COMPLETED execution exists, null otherwise.
+     * Returns the execution ID if a RUNNING or COMPLETED execution exists, null otherwise.
      */
     private String findExistingExecution(String workflowName, String idempotencyKey) {
         try {
@@ -962,7 +964,7 @@ public class AgentService {
     public Map<String, Object> getStatus(String executionId) {
         Workflow workflow = executionService.getExecutionStatus(executionId, true);
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("workflowId", executionId);
+        result.put("executionId", executionId);
         result.put("status", workflow.getStatus().name());
 
         boolean isComplete = workflow.getStatus().isTerminal();
@@ -1120,5 +1122,60 @@ public class AgentService {
                         task.getSubWorkflowParam().getWorkflowDef().getTasks(), names);
             }
         }
+    }
+
+    // ── Execution lifecycle (UI delegation) ─────────────────────────
+
+    public Workflow getFullExecution(String executionId) {
+        return executionService.getExecutionStatus(executionId, true);
+    }
+
+    public void restartExecution(String executionId, boolean useLatestDefinitions) {
+        workflowService.restartWorkflow(executionId, useLatestDefinitions);
+    }
+
+    public void retryExecution(String executionId, boolean resumeSubworkflowTasks) {
+        workflowService.retryWorkflow(executionId, resumeSubworkflowTasks);
+    }
+
+    public String rerunExecution(String executionId, RerunWorkflowRequest request) {
+        return workflowService.rerunWorkflow(executionId, request);
+    }
+
+    public List<Task> getExecutionTasks(String executionId, String status, int count, int start) {
+        Workflow wf = executionService.getExecutionStatus(executionId, true);
+        List<Task> tasks = wf.getTasks();
+        if (status != null && !status.isEmpty()) {
+            tasks = tasks.stream()
+                    .filter(t -> status.equals(t.getStatus().name()))
+                    .collect(Collectors.toList());
+        }
+        int end = Math.min(start + count, tasks.size());
+        if (start >= tasks.size()) return List.of();
+        return tasks.subList(start, end);
+    }
+
+    public SearchResult<WorkflowSummary> searchExecutionsRaw(int start, int size, String sort,
+                                                              String freeText, String query) {
+        return workflowService.searchWorkflows(start, size, sort, freeText, query);
+    }
+
+    public WorkflowDef getAgentDefinition(String name, Integer version) {
+        if (version != null) {
+            return metadataDAO.getWorkflowDef(name, version)
+                    .orElseThrow(() -> new com.netflix.conductor.core.exception.NotFoundException(
+                            "Definition not found: " + name));
+        }
+        return metadataDAO.getLatestWorkflowDef(name)
+                .orElseThrow(() -> new com.netflix.conductor.core.exception.NotFoundException(
+                        "Definition not found: " + name));
+    }
+
+    public void updateTaskResult(TaskResult taskResult) {
+        executionService.updateTask(taskResult);
+    }
+
+    public List<TaskExecLog> getTaskLogs(String taskId) {
+        return executionService.getTaskLogs(taskId);
     }
 }

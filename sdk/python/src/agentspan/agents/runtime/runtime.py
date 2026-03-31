@@ -6,7 +6,7 @@
 This is the core orchestrator that:
 1. Sends agent config to the server for compilation into a Conductor workflow.
 2. Registers and starts tool workers with Conductor.
-3. Executes the workflow and manages the lifecycle.
+3. Executes the agent and manages the lifecycle.
 4. Converts Conductor workflow results back into AgentResult/AgentHandle.
 """
 
@@ -361,7 +361,7 @@ class AgentRuntime:
         return headers
 
     def _register_workflow_credentials(
-        self, workflow_id: str, credentials: Optional[List[str]]
+        self, execution_id: str, credentials: Optional[List[str]]
     ) -> None:
         """Register request-scoped credential names for extracted framework tools."""
         if not credentials:
@@ -372,12 +372,12 @@ class AgentRuntime:
         )
 
         with _workflow_credentials_lock:
-            _workflow_credentials[workflow_id] = list(credentials)
+            _workflow_credentials[execution_id] = list(credentials)
 
     def _clear_workflow_credentials(
-        self, workflow_id: str, credentials: Optional[List[str]]
+        self, execution_id: str, credentials: Optional[List[str]]
     ) -> None:
-        """Clear request-scoped credential names after workflow completion."""
+        """Clear request-scoped credential names after execution completion."""
         if not credentials:
             return
         from agentspan.agents.runtime._dispatch import (
@@ -386,7 +386,7 @@ class AgentRuntime:
         )
 
         with _workflow_credentials_lock:
-            _workflow_credentials.pop(workflow_id, None)
+            _workflow_credentials.pop(execution_id, None)
 
     def _start_via_server(
         self,
@@ -402,10 +402,10 @@ class AgentRuntime:
         """Start an agent via the server's /api/agent/start endpoint.
 
         Sends the agent config + prompt to the server, which compiles,
-        registers, and starts the workflow in one call.
+        registers, and starts the execution in one call.
 
         Returns:
-            The workflow ID.
+            The execution ID.
         """
         import requests as req_lib
 
@@ -434,17 +434,17 @@ class AgentRuntime:
         except req_lib.exceptions.HTTPError as exc:
             _raise_api_error(exc, url=url)
         data = resp.json()
-        workflow_id = data.get("executionId", "")
+        execution_id = data.get("executionId", "")
         required_workers: Optional[set] = None
         if "requiredWorkers" in data:
             required_workers = set(data["requiredWorkers"])
             logger.info(
-                "Started agent '%s' via server (workflow_id=%s, requiredWorkers=%s)",
-                agent.name, workflow_id, sorted(required_workers),
+                "Started agent '%s' via server (execution_id=%s, requiredWorkers=%s)",
+                agent.name, execution_id, sorted(required_workers),
             )
         else:
-            logger.info("Started agent '%s' via server (workflow_id=%s)", agent.name, workflow_id)
-        return workflow_id, required_workers
+            logger.info("Started agent '%s' via server (execution_id=%s)", agent.name, execution_id)
+        return execution_id, required_workers
 
     async def _start_via_server_async(
         self,
@@ -477,17 +477,17 @@ class AgentRuntime:
             payload["credentials"] = credentials
 
         data = await self._http.start_agent(payload)
-        workflow_id = data.get("executionId", "")
+        execution_id = data.get("executionId", "")
         required_workers: Optional[set] = None
         if "requiredWorkers" in data:
             required_workers = set(data["requiredWorkers"])
             logger.info(
-                "Started agent '%s' via server (workflow_id=%s, requiredWorkers=%s)",
-                agent.name, workflow_id, sorted(required_workers),
+                "Started agent '%s' via server (execution_id=%s, requiredWorkers=%s)",
+                agent.name, execution_id, sorted(required_workers),
             )
         else:
-            logger.info("Started agent '%s' via server (workflow_id=%s)", agent.name, workflow_id)
-        return workflow_id, required_workers
+            logger.info("Started agent '%s' via server (execution_id=%s)", agent.name, execution_id)
+        return execution_id, required_workers
 
     async def _start_framework_via_server_async(
         self,
@@ -514,13 +514,13 @@ class AgentRuntime:
             payload["credentials"] = credentials
 
         data = await self._http.start_agent(payload)
-        workflow_id = data.get("executionId", "")
+        execution_id = data.get("executionId", "")
         logger.info(
-            "Started %s framework agent via server (workflow_id=%s)",
+            "Started %s framework agent via server (execution_id=%s)",
             framework,
-            workflow_id,
+            execution_id,
         )
-        return workflow_id
+        return execution_id
 
     # ── Context manager ──────────────────────────────────────────────
 
@@ -648,7 +648,7 @@ class AgentRuntime:
         return wf
 
     def prepare(self, agent: Any) -> None:
-        """Pre-register workers for an agent without starting workflows.
+        """Pre-register workers for an agent without starting executions.
 
         Call this for every agent *before* the first :meth:`start` when you
         know all agents up-front (e.g. a test matrix).  This ensures all
@@ -663,7 +663,7 @@ class AgentRuntime:
             for agent in agents:
                 runtime.prepare(agent)
 
-            # Then start workflows — all workers poll from the start
+            # Then start executions — all workers poll from the start
             for agent, prompt in work:
                 handle = runtime.start(agent, prompt)
         """
@@ -1893,10 +1893,10 @@ class AgentRuntime:
 
             framework = detect_framework(agent)
 
-            workflow_name = self._deploy_via_server(agent, framework=framework)
-            agent_name = agent.name if hasattr(agent, "name") else workflow_name
-            results.append(DeploymentInfo(workflow_name=workflow_name, agent_name=agent_name))
-            logger.info("Deployed agent '%s' as workflow '%s'", agent_name, workflow_name)
+            registered_name = self._deploy_via_server(agent, framework=framework)
+            agent_name = agent.name if hasattr(agent, "name") else registered_name
+            results.append(DeploymentInfo(registered_name=registered_name, agent_name=agent_name))
+            logger.info("Deployed agent '%s' as '%s'", agent_name, registered_name)
 
         return results
 
@@ -1921,15 +1921,15 @@ class AgentRuntime:
 
             framework = detect_framework(agent)
 
-            workflow_name = await self._deploy_via_server_async(agent, framework=framework)
-            agent_name = agent.name if hasattr(agent, "name") else workflow_name
-            results.append(DeploymentInfo(workflow_name=workflow_name, agent_name=agent_name))
-            logger.info("Deployed agent '%s' as workflow '%s'", agent_name, workflow_name)
+            registered_name = await self._deploy_via_server_async(agent, framework=framework)
+            agent_name = agent.name if hasattr(agent, "name") else registered_name
+            results.append(DeploymentInfo(registered_name=registered_name, agent_name=agent_name))
+            logger.info("Deployed agent '%s' as '%s'", agent_name, registered_name)
 
         return results
 
     def _deploy_via_server(self, agent: Any, *, framework: Optional[str] = None) -> str:
-        """Deploy agent via /api/agent/deploy.  Returns workflow name."""
+        """Deploy agent via /api/agent/deploy.  Returns registered name."""
         import requests as req_lib
 
         if framework:
@@ -2052,7 +2052,7 @@ class AgentRuntime:
     # ── Input guardrail pre-flight ─────────────────────────────────
 
     def _check_input_guardrails(self, agent: Agent, prompt: str) -> str:
-        """Run input guardrails before workflow execution.
+        """Run input guardrails before execution.
 
         Returns the (possibly modified) prompt.  Raises :class:`ValueError`
         for ``on_fail="raise"`` failures.
@@ -2107,16 +2107,16 @@ class AgentRuntime:
         """Execute an agent synchronously and return the result.
 
         Accepts native :class:`Agent` objects, foreign framework agents
-        (e.g. OpenAI Agent SDK, Google ADK), or a **workflow name string**
+        (e.g. OpenAI Agent SDK, Google ADK), or an **agent name string**
         to run a pre-deployed agent by name.
 
         Args:
             agent: The agent to execute — a native :class:`Agent`, a
-                foreign framework agent object, or a ``str`` workflow name
+                foreign framework agent object, or a ``str`` agent name
                 for a pre-deployed agent.
             prompt: The user's input message — a string or a
                 :class:`PromptTemplate` referencing a server-side template.
-            version: Workflow version (only used when *agent* is a string).
+            version: Agent version (only used when *agent* is a string).
             media: Optional list of media URLs (images, video, audio) to
                 include with the prompt.  Each URL is passed as part of
                 the user message to vision-capable models.
@@ -2127,12 +2127,12 @@ class AgentRuntime:
                 calls ``on_event(event)`` as events arrive.  The full
                 :class:`AgentResult` (with messages, token_usage, etc.)
                 is still returned after completion.
-            **kwargs: Additional workflow input parameters.
+            **kwargs: Additional input parameters.
 
         Returns:
             An :class:`AgentResult`.
         """
-        # Run by name — pre-deployed workflow
+        # Run by name — pre-deployed agent
         if isinstance(agent, str):
             return self._run_by_name(
                 agent,
@@ -2195,7 +2195,7 @@ class AgentRuntime:
         # Start via server first to get requiredWorkers, then register
         # locally.  Conductor queues tasks so workers can start polling
         # immediately after registration without missing work.
-        workflow_id, required_workers = self._start_via_server(
+        execution_id, required_workers = self._start_via_server(
             agent,
             resolved_prompt,
             media=media,
@@ -2207,22 +2207,22 @@ class AgentRuntime:
 
         self._prepare_workers(agent, required_workers=required_workers)
 
-        self._register_workflow_credentials(workflow_id, credentials)
+        self._register_workflow_credentials(execution_id, credentials)
 
         # Poll until complete
         effective_timeout = timeout or (
             agent.timeout_seconds if agent.timeout_seconds > 0 else None
         )
         try:
-            status = self._poll_status_until_complete(workflow_id, timeout=effective_timeout)
+            status = self._poll_status_until_complete(execution_id, timeout=effective_timeout)
         finally:
-            self._clear_workflow_credentials(workflow_id, credentials)
+            self._clear_workflow_credentials(execution_id, credentials)
 
         output = status.output
         raw_status = status.status
 
         if raw_status in ("FAILED", "TERMINATED"):
-            logger.warning("Agent '%s' workflow %s", agent.name, raw_status)
+            logger.warning("Agent '%s' execution %s", agent.name, raw_status)
             # Surface the termination reason when no output is available
             has_output = output and not (
                 isinstance(output, dict) and all(v is None for v in output.values())
@@ -2233,26 +2233,26 @@ class AgentRuntime:
         # Normalize output to always be a dict
         output = self._normalize_output(output, raw_status, status.reason)
 
-        # Fetch full workflow execution to populate tool_calls, messages,
+        # Fetch full execution to populate tool_calls, messages,
         # and token_usage — these are not available from the status endpoint.
         tool_calls: List[Dict[str, Any]] = []
         messages: List[Dict[str, Any]] = []
         token_usage: Optional[TokenUsage] = None
         try:
             wf = self._workflow_client.get_workflow(
-                workflow_id=workflow_id,
+                execution_id=execution_id,
                 include_tasks=True,
             )
             tool_calls = self._extract_tool_calls(wf)
             messages = self._extract_messages(wf)
-            token_usage = self._extract_token_usage(workflow_id)
+            token_usage = self._extract_token_usage(execution_id)
         except Exception as exc:
-            logger.debug("Could not fetch workflow details for %s: %s", workflow_id, exc)
+            logger.debug("Could not fetch execution details for %s: %s", execution_id, exc)
 
-        logger.info("Agent '%s' completed (workflow_id=%s)", agent.name, workflow_id)
+        logger.info("Agent '%s' completed (execution_id=%s)", agent.name, execution_id)
         return AgentResult(
             output=output,
-            workflow_id=workflow_id,
+            execution_id=execution_id,
             correlation_id=correlation_id,
             status=raw_status,
             finish_reason=self._derive_finish_reason(raw_status, status.output),
@@ -2263,7 +2263,7 @@ class AgentRuntime:
             sub_results=self._extract_sub_results(output),
         )
 
-    # ── Run-by-name (pre-deployed workflows) ─────────────────────────
+    # ── Run-by-name (pre-deployed agents) ──────────────────────────
 
     def _run_by_name(
         self,
@@ -2278,7 +2278,7 @@ class AgentRuntime:
         timeout: Optional[int] = None,
         **kwargs: Any,
     ) -> AgentResult:
-        """Execute a pre-registered workflow by name."""
+        """Execute a pre-deployed agent by name."""
         from conductor.client.http.models import StartWorkflowRequest
 
         req = StartWorkflowRequest()
@@ -2293,40 +2293,40 @@ class AgentRuntime:
         if idempotency_key:
             req.correlation_id = idempotency_key
 
-        workflow_id = self._workflow_client.start_workflow(req)
+        execution_id = self._workflow_client.start_workflow(req)
         correlation_id = str(uuid.uuid4())
-        logger.info("Executing '%s' by name (workflow_id=%s)", name, workflow_id)
+        logger.info("Executing '%s' by name (execution_id=%s)", name, execution_id)
 
         # If on_event requested, stream events
         if on_event is not None:
             handle = AgentHandle(
-                workflow_id=workflow_id, runtime=self, correlation_id=correlation_id
+                execution_id=execution_id, runtime=self, correlation_id=correlation_id
             )
             agent_stream = AgentStream(
-                handle=handle, event_iterator=self._stream_workflow(workflow_id)
+                handle=handle, event_iterator=self._stream_workflow(execution_id)
             )
             for event in agent_stream:
                 on_event(event)
             return agent_stream.get_result()
 
         # Poll until complete
-        status = self._poll_status_until_complete(workflow_id, timeout=timeout)
+        status = self._poll_status_until_complete(execution_id, timeout=timeout)
         output = self._normalize_output(status.output, status.status, status.reason)
 
         tool_calls: List[Dict[str, Any]] = []
         messages: List[Dict[str, Any]] = []
         token_usage: Optional[TokenUsage] = None
         try:
-            wf = self._workflow_client.get_workflow(workflow_id=workflow_id, include_tasks=True)
+            wf = self._workflow_client.get_workflow(execution_id=execution_id, include_tasks=True)
             tool_calls = self._extract_tool_calls(wf)
             messages = self._extract_messages(wf)
-            token_usage = self._extract_token_usage(workflow_id)
+            token_usage = self._extract_token_usage(execution_id)
         except Exception as exc:
-            logger.debug("Could not fetch workflow details: %s", exc)
+            logger.debug("Could not fetch execution details: %s", exc)
 
         return AgentResult(
             output=output,
-            workflow_id=workflow_id,
+            execution_id=execution_id,
             correlation_id=correlation_id,
             status=status.status,
             finish_reason=self._derive_finish_reason(status.status, status.output),
@@ -2347,7 +2347,7 @@ class AgentRuntime:
         idempotency_key: Optional[str] = None,
         **kwargs: Any,
     ) -> AgentHandle:
-        """Start a pre-registered workflow by name (fire-and-forget)."""
+        """Start a pre-deployed agent by name (fire-and-forget)."""
         from conductor.client.http.models import StartWorkflowRequest
 
         req = StartWorkflowRequest()
@@ -2362,10 +2362,10 @@ class AgentRuntime:
         if idempotency_key:
             req.correlation_id = idempotency_key
 
-        workflow_id = self._workflow_client.start_workflow(req)
+        execution_id = self._workflow_client.start_workflow(req)
         correlation_id = str(uuid.uuid4())
-        logger.info("Started '%s' by name (workflow_id=%s)", name, workflow_id)
-        return AgentHandle(workflow_id=workflow_id, runtime=self, correlation_id=correlation_id)
+        logger.info("Started '%s' by name (execution_id=%s)", name, execution_id)
+        return AgentHandle(execution_id=execution_id, runtime=self, correlation_id=correlation_id)
 
     async def _run_by_name_async(
         self,
@@ -2396,14 +2396,14 @@ class AgentRuntime:
             req.correlation_id = idempotency_key
 
         loop = asyncio.get_event_loop()
-        workflow_id = await loop.run_in_executor(
+        execution_id = await loop.run_in_executor(
             None,
             lambda: self._workflow_client.start_workflow(req),
         )
         correlation_id = str(uuid.uuid4())
-        logger.info("Executing '%s' by name async (workflow_id=%s)", name, workflow_id)
+        logger.info("Executing '%s' by name async (execution_id=%s)", name, execution_id)
 
-        status = await self._poll_status_until_complete_async(workflow_id, timeout=timeout)
+        status = await self._poll_status_until_complete_async(execution_id, timeout=timeout)
         output = self._normalize_output(status.output, status.status, status.reason)
 
         tool_calls: List[Dict[str, Any]] = []
@@ -2413,18 +2413,18 @@ class AgentRuntime:
             wf = await loop.run_in_executor(
                 None,
                 lambda: self._workflow_client.get_workflow(
-                    workflow_id=workflow_id, include_tasks=True
+                    execution_id=execution_id, include_tasks=True
                 ),
             )
             tool_calls = self._extract_tool_calls(wf)
             messages = self._extract_messages(wf)
-            token_usage = self._extract_token_usage(workflow_id)
+            token_usage = self._extract_token_usage(execution_id)
         except Exception as exc:
-            logger.debug("Could not fetch workflow details: %s", exc)
+            logger.debug("Could not fetch execution details: %s", exc)
 
         return AgentResult(
             output=output,
-            workflow_id=workflow_id,
+            execution_id=execution_id,
             correlation_id=correlation_id,
             status=status.status,
             finish_reason=self._derive_finish_reason(status.status, status.output),
@@ -2461,13 +2461,13 @@ class AgentRuntime:
             req.correlation_id = idempotency_key
 
         loop = asyncio.get_event_loop()
-        workflow_id = await loop.run_in_executor(
+        execution_id = await loop.run_in_executor(
             None,
             lambda: self._workflow_client.start_workflow(req),
         )
         correlation_id = str(uuid.uuid4())
-        logger.info("Started '%s' by name async (workflow_id=%s)", name, workflow_id)
-        return AgentHandle(workflow_id=workflow_id, runtime=self, correlation_id=correlation_id)
+        logger.info("Started '%s' by name async (execution_id=%s)", name, execution_id)
+        return AgentHandle(execution_id=execution_id, runtime=self, correlation_id=correlation_id)
 
     # ── Foreign framework support ────────────────────────────────────
 
@@ -2513,7 +2513,7 @@ class AgentRuntime:
         correlation_id = str(uuid.uuid4())
         resolved_prompt = str(prompt)
 
-        workflow_id = self._start_framework_via_server(
+        execution_id = self._start_framework_via_server(
             framework=framework,
             raw_config=raw_config,
             prompt=resolved_prompt,
@@ -2522,25 +2522,25 @@ class AgentRuntime:
             idempotency_key=idempotency_key,
             credentials=credentials,
         )
-        self._register_workflow_credentials(workflow_id, credentials)
+        self._register_workflow_credentials(execution_id, credentials)
 
         try:
             if on_event is not None:
                 return self._run_framework_with_events(
-                    workflow_id,
+                    execution_id,
                     correlation_id,
                     on_event,
                     timeout=timeout,
                 )
 
             # Poll until complete
-            status = self._poll_status_until_complete(workflow_id, timeout=timeout)
+            status = self._poll_status_until_complete(execution_id, timeout=timeout)
 
             output = status.output
             raw_status = status.status
 
             if raw_status in ("FAILED", "TERMINATED"):
-                logger.warning("Framework agent '%s' workflow %s", agent_name, raw_status)
+                logger.warning("Framework agent '%s' execution %s", agent_name, raw_status)
                 has_output = output and not (
                     isinstance(output, dict) and all(v is None for v in output.values())
                 )
@@ -2548,11 +2548,11 @@ class AgentRuntime:
                     output = status.reason
 
             output = self._normalize_output(output, raw_status, status.reason)
-            logger.info("Framework agent '%s' completed (workflow_id=%s)", agent_name, workflow_id)
-            token_usage = self._extract_token_usage(workflow_id)
+            logger.info("Framework agent '%s' completed (execution_id=%s)", agent_name, execution_id)
+            token_usage = self._extract_token_usage(execution_id)
             return AgentResult(
                 output=output,
-                workflow_id=workflow_id,
+                execution_id=execution_id,
                 correlation_id=correlation_id,
                 status=raw_status,
                 finish_reason=self._derive_finish_reason(raw_status, status.output),
@@ -2561,7 +2561,7 @@ class AgentRuntime:
                 sub_results=self._extract_sub_results(output),
             )
         finally:
-            self._clear_workflow_credentials(workflow_id, credentials)
+            self._clear_workflow_credentials(execution_id, credentials)
 
     def _start_framework(
         self,
@@ -2590,7 +2590,7 @@ class AgentRuntime:
         correlation_id = str(uuid.uuid4())
         resolved_prompt = str(prompt)
 
-        workflow_id = self._start_framework_via_server(
+        execution_id = self._start_framework_via_server(
             framework=framework,
             raw_config=raw_config,
             prompt=resolved_prompt,
@@ -2599,7 +2599,7 @@ class AgentRuntime:
             idempotency_key=idempotency_key,
         )
 
-        return AgentHandle(workflow_id=workflow_id, runtime=self, correlation_id=correlation_id)
+        return AgentHandle(execution_id=execution_id, runtime=self, correlation_id=correlation_id)
 
     def _start_framework_via_server(
         self,
@@ -2634,13 +2634,13 @@ class AgentRuntime:
         except req_lib.exceptions.HTTPError as exc:
             _raise_api_error(exc, url=url)
         data = resp.json()
-        workflow_id = data.get("executionId", "")
+        execution_id = data.get("executionId", "")
         logger.info(
-            "Started %s framework agent via server (workflow_id=%s)",
+            "Started %s framework agent via server (execution_id=%s)",
             framework,
-            workflow_id,
+            execution_id,
         )
-        return workflow_id
+        return execution_id
 
     def _register_framework_workers(self, workers: list) -> None:
         """Register extracted callable workers from a foreign framework agent."""
@@ -2828,7 +2828,7 @@ class AgentRuntime:
 
     def _run_framework_with_events(
         self,
-        workflow_id: str,
+        execution_id: str,
         correlation_id: str,
         on_event: Any,
         *,
@@ -2836,16 +2836,16 @@ class AgentRuntime:
     ) -> AgentResult:
         """Run a framework agent with event streaming."""
         events: List[AgentEvent] = []
-        for event in self._stream_workflow(workflow_id):
+        for event in self._stream_workflow(execution_id):
             events.append(event)
             on_event(event)
 
-        status = self._poll_status_until_complete(workflow_id, timeout=timeout)
+        status = self._poll_status_until_complete(execution_id, timeout=timeout)
         output = self._normalize_output(status.output, status.status, status.reason)
-        token_usage = self._extract_token_usage(workflow_id)
+        token_usage = self._extract_token_usage(execution_id)
         return AgentResult(
             output=output,
-            workflow_id=workflow_id,
+            execution_id=execution_id,
             correlation_id=correlation_id,
             status=status.status,
             finish_reason=self._derive_finish_reason(status.status, status.output),
@@ -2855,32 +2855,32 @@ class AgentRuntime:
             sub_results=self._extract_sub_results(output),
         )
 
-    # ── Workflow execution helpers ──────────────────────────────────
+    # ── Execution helpers ─────────────────────────────────────────
 
     def _poll_status_until_complete(
-        self, workflow_id: str, *, timeout: Optional[int] = None
+        self, execution_id: str, *, timeout: Optional[int] = None
     ) -> AgentStatus:
-        """Poll ``/api/agent/{id}/status`` until the workflow completes."""
+        """Poll ``/api/agent/{id}/status`` until the execution completes."""
         effective_timeout = timeout if timeout and timeout > 0 else 30000
         poll_interval = 1
         elapsed = 0
 
         while elapsed < effective_timeout:
-            status = self.get_status(workflow_id)
+            status = self.get_status(execution_id)
             if status.is_complete:
                 return status
             time.sleep(poll_interval)
             elapsed += poll_interval
 
         logger.warning(
-            "Workflow %s did not complete within %ds.",
-            workflow_id,
+            "Execution %s did not complete within %ds.",
+            execution_id,
             effective_timeout,
         )
-        return self.get_status(workflow_id)
+        return self.get_status(execution_id)
 
     async def _poll_status_until_complete_async(
-        self, workflow_id: str, *, timeout: Optional[int] = None
+        self, execution_id: str, *, timeout: Optional[int] = None
     ) -> AgentStatus:
         """Async version of :meth:`_poll_status_until_complete`."""
         effective_timeout = timeout if timeout and timeout > 0 else 30000
@@ -2888,18 +2888,18 @@ class AgentRuntime:
         elapsed = 0
 
         while elapsed < effective_timeout:
-            status = await self.get_status_async(workflow_id)
+            status = await self.get_status_async(execution_id)
             if status.is_complete:
                 return status
             await asyncio.sleep(poll_interval)
             elapsed += poll_interval
 
         logger.warning(
-            "Workflow %s did not complete within %ds.",
-            workflow_id,
+            "Execution %s did not complete within %ds.",
+            execution_id,
             effective_timeout,
         )
-        return await self.get_status_async(workflow_id)
+        return await self.get_status_async(execution_id)
 
     # ── Run with event callback ──────────────────────────────────────
 
@@ -2916,9 +2916,9 @@ class AgentRuntime:
     ) -> AgentResult:
         """Run an agent with real-time event callbacks, then return full result.
 
-        Starts the workflow asynchronously, streams events via SSE (with
+        Starts the execution asynchronously, streams events via SSE (with
         polling fallback), calls ``on_event(event)`` for each event, then
-        fetches the full workflow to build a complete :class:`AgentResult`
+        fetches the full execution to build a complete :class:`AgentResult`
         with messages, token_usage, etc.
         """
         handle = self.start(
@@ -2932,14 +2932,14 @@ class AgentRuntime:
 
         captured_events: List[AgentEvent] = []
         final_output = None
-        for event in self._stream_workflow(handle.workflow_id):
+        for event in self._stream_workflow(handle.execution_id):
             captured_events.append(event)
             on_event(event)
             if event.type in (EventType.DONE, EventType.ERROR):
                 final_output = event.output
 
         # Get final status via server API
-        status = self.get_status(handle.workflow_id)
+        status = self.get_status(handle.execution_id)
         output = final_output or status.output
 
         # Build tool_calls from captured TOOL_CALL/TOOL_RESULT event pairs
@@ -2957,10 +2957,10 @@ class AgentRuntime:
                     tool_calls.append({"name": ev.tool_name, "result": ev.result})
 
         output = self._normalize_output(output, status.status, status.reason)
-        token_usage = self._extract_token_usage(handle.workflow_id)
+        token_usage = self._extract_token_usage(handle.execution_id)
         return AgentResult(
             output=output,
-            workflow_id=handle.workflow_id,
+            execution_id=handle.execution_id,
             correlation_id=handle.correlation_id,
             status=status.status,
             finish_reason=self._derive_finish_reason(status.status, status.output),
@@ -2994,13 +2994,13 @@ class AgentRuntime:
 
         captured_events: List[AgentEvent] = []
         final_output = None
-        async for event in self._stream_workflow_async(handle.workflow_id):
+        async for event in self._stream_workflow_async(handle.execution_id):
             captured_events.append(event)
             on_event(event)
             if event.type in (EventType.DONE, EventType.ERROR):
                 final_output = event.output
 
-        status = await self.get_status_async(handle.workflow_id)
+        status = await self.get_status_async(handle.execution_id)
         output = final_output or status.output
 
         # Build tool_calls from captured TOOL_CALL/TOOL_RESULT event pairs
@@ -3018,10 +3018,10 @@ class AgentRuntime:
                     tool_calls.append({"name": ev.tool_name, "result": ev.result})
 
         output = self._normalize_output(output, status.status, status.reason)
-        token_usage = self._extract_token_usage(handle.workflow_id)
+        token_usage = self._extract_token_usage(handle.execution_id)
         return AgentResult(
             output=output,
-            workflow_id=handle.workflow_id,
+            execution_id=handle.execution_id,
             correlation_id=handle.correlation_id,
             status=status.status,
             finish_reason=self._derive_finish_reason(status.status, status.output),
@@ -3034,7 +3034,7 @@ class AgentRuntime:
 
     # ── SSE streaming ────────────────────────────────────────────────
 
-    def _stream_sse(self, workflow_id: str) -> Iterator[AgentEvent]:
+    def _stream_sse(self, execution_id: str) -> Iterator[AgentEvent]:
         """Consume SSE event stream from the server.
 
         Connects to ``GET /api/agent/stream/{executionId}`` and yields
@@ -3054,7 +3054,7 @@ class AgentRuntime:
         _SSE_NO_EVENT_TIMEOUT = 15  # seconds to wait for first real event
 
         server_url = self._config.server_url.rstrip("/")
-        url = f"{server_url}/agent/stream/{workflow_id}"
+        url = f"{server_url}/agent/stream/{execution_id}"
         headers: Dict[str, str] = {"Accept": "text/event-stream"}
         if self._config.auth_key:
             headers["X-Auth-Key"] = self._config.auth_key
@@ -3102,7 +3102,7 @@ class AgentRuntime:
                         if sse_event.get("id"):
                             last_event_id = sse_event["id"]
 
-                        agent_event = self._sse_to_agent_event(sse_event, workflow_id)
+                        agent_event = self._sse_to_agent_event(sse_event, execution_id)
                         if agent_event is not None:
                             got_real_event = True
                             yield agent_event
@@ -3167,7 +3167,7 @@ class AgentRuntime:
                 data_lines.append(line[5:].strip())
 
     @staticmethod
-    def _sse_to_agent_event(sse_event: Dict[str, Any], workflow_id: str) -> Optional[AgentEvent]:
+    def _sse_to_agent_event(sse_event: Dict[str, Any], execution_id: str) -> Optional[AgentEvent]:
         """Convert a parsed SSE event dict to an :class:`AgentEvent`."""
         data = sse_event.get("data", {})
         event_type = sse_event.get("event") or data.get("type")
@@ -3182,7 +3182,7 @@ class AgentRuntime:
             result=data.get("result"),
             target=data.get("target"),
             output=data.get("output"),
-            workflow_id=data.get("executionId", workflow_id),
+            execution_id=data.get("executionId", execution_id),
             guardrail_name=data.get("guardrailName"),
         )
 
@@ -3202,17 +3202,17 @@ class AgentRuntime:
         """Start an agent asynchronously and return a handle.
 
         Accepts native :class:`Agent` objects, foreign framework agents
-        (e.g. OpenAI Agent SDK, Google ADK), or a **workflow name string**.
+        (e.g. OpenAI Agent SDK, Google ADK), or an **agent name string**.
 
         Args:
             agent: The agent to execute — a native :class:`Agent`, a
-                foreign framework agent object, or a ``str`` workflow name.
+                foreign framework agent object, or a ``str`` agent name.
             prompt: The user's input message.
-            version: Workflow version (only used when *agent* is a string).
+            version: Agent version (only used when *agent* is a string).
             media: Optional list of media URLs (images, video, audio).
             session_id: Optional session ID.
             idempotency_key: Optional idempotency key.
-            **kwargs: Additional workflow input parameters.
+            **kwargs: Additional input parameters.
 
         Returns:
             An :class:`AgentHandle`.
@@ -3245,14 +3245,14 @@ class AgentRuntime:
 
         resolved_prompt = self._resolve_prompt(prompt)
 
-        # Run input guardrails before workflow submission
+        # Run input guardrails before submission
         resolved_prompt = self._check_input_guardrails(agent, resolved_prompt)
 
         correlation_id = str(uuid.uuid4())
 
         # Start via server first to get requiredWorkers, then register locally
         effective_timeout = agent.timeout_seconds if agent.timeout_seconds > 0 else None
-        workflow_id, required_workers = self._start_via_server(
+        execution_id, required_workers = self._start_via_server(
             agent,
             resolved_prompt,
             media=media,
@@ -3263,7 +3263,7 @@ class AgentRuntime:
 
         self._prepare_workers(agent, required_workers=required_workers)
 
-        return AgentHandle(workflow_id=workflow_id, runtime=self, correlation_id=correlation_id)
+        return AgentHandle(execution_id=execution_id, runtime=self, correlation_id=correlation_id)
 
     # ── Streaming execution ─────────────────────────────────────────
 
@@ -3282,31 +3282,31 @@ class AgentRuntime:
 
         Can be called in three ways:
 
-        1. **New workflow:** ``stream(agent, prompt)`` — starts a new
-           workflow and streams events from it.
-        2. **Existing workflow:** ``stream(handle=handle)`` — streams
-           events from an already-running workflow.
-        3. **By name:** ``stream("workflow_name", prompt)`` — starts a
-           pre-deployed workflow by name.
+        1. **New execution:** ``stream(agent, prompt)`` — starts a new
+           execution and streams events from it.
+        2. **Existing execution:** ``stream(handle=handle)`` — streams
+           events from an already-running execution.
+        3. **By name:** ``stream("agent_name", prompt)`` — starts a
+           pre-deployed agent by name.
 
         Returns an :class:`AgentStream` — iterable (yields events), with
         HITL convenience methods and access to the final :class:`AgentResult`.
 
         Args:
             agent: The agent to execute (required unless *handle* is given).
-                Can be a ``str`` workflow name for pre-deployed agents.
+                Can be a ``str`` agent name for pre-deployed agents.
             prompt: The user's input message (required unless *handle* is given).
-            version: Workflow version (only used when *agent* is a string).
+            version: Agent version (only used when *agent* is a string).
             handle: An existing :class:`AgentHandle` to stream from.
             media: Optional list of media URLs (images, video, audio).
             session_id: Optional session ID.
-            **kwargs: Additional workflow input parameters.
+            **kwargs: Additional input parameters.
 
         Returns:
             An :class:`AgentStream`.
         """
         if handle is not None:
-            event_iter = self._stream_workflow(handle.workflow_id)
+            event_iter = self._stream_workflow(handle.execution_id)
             return AgentStream(handle=handle, event_iterator=event_iter)
 
         if agent is None or prompt is None:
@@ -3315,49 +3315,49 @@ class AgentRuntime:
         handle = self.start(
             agent, prompt, version=version, media=media, session_id=session_id, **kwargs
         )
-        event_iter = self._stream_workflow(handle.workflow_id)
+        event_iter = self._stream_workflow(handle.execution_id)
         return AgentStream(handle=handle, event_iterator=event_iter)
 
-    def _stream_workflow(self, workflow_id: str) -> Iterator[AgentEvent]:
-        """Stream events for a workflow, with SSE-to-polling fallback.
+    def _stream_workflow(self, execution_id: str) -> Iterator[AgentEvent]:
+        """Stream events for an execution, with SSE-to-polling fallback.
 
         Tries SSE first (server-push, lower latency).  If SSE is
         unavailable, falls back to polling.
         """
         if self._config.streaming_enabled:
             try:
-                yield from self._stream_sse(workflow_id)
+                yield from self._stream_sse(execution_id)
                 return
             except _SSEUnavailableError:
                 if not self._sse_fallback_warned:
                     logger.info("SSE unavailable, falling back to polling-based stream")
                     self._sse_fallback_warned = True
 
-        yield from self._stream_polling(workflow_id)
+        yield from self._stream_polling(execution_id)
 
-    def _stream_polling(self, workflow_id: str) -> Iterator[AgentEvent]:
+    def _stream_polling(self, execution_id: str) -> Iterator[AgentEvent]:
         """Poll-based event streaming fallback.
 
-        Polls the workflow status and tasks, yielding typed events for
+        Polls the execution status and tasks, yielding typed events for
         new/changed tasks.  Detects HUMAN tasks (IN_PROGRESS) as WAITING
         events for human-in-the-loop scenarios.
         """
         seen_task_ids: set = set()
         seen_human_task_ids: set = set()
-        logger.info("Polling stream for workflow_id=%s", workflow_id)
+        logger.info("Polling stream for execution_id=%s", execution_id)
 
         while True:
             try:
                 wf = self._workflow_client.get_workflow(
-                    workflow_id=workflow_id,
+                    execution_id=execution_id,
                     include_tasks=True,
                 )
             except Exception as e:
-                logger.error("Error fetching workflow status: %s", e)
+                logger.error("Error fetching execution status: %s", e)
                 yield AgentEvent(
                     type=EventType.ERROR,
                     content=str(e),
-                    workflow_id=workflow_id,
+                    execution_id=execution_id,
                 )
                 break
 
@@ -3380,7 +3380,7 @@ class AgentRuntime:
                             yield AgentEvent(
                                 type=EventType.THINKING,
                                 content=f"LLM processing ({task_ref})",
-                                workflow_id=workflow_id,
+                                execution_id=execution_id,
                             )
 
                         # Dispatch task with function -> TOOL_CALL (local compile)
@@ -3391,13 +3391,13 @@ class AgentRuntime:
                                     type=EventType.TOOL_CALL,
                                     tool_name=fn_name,
                                     args=output_data.get("parameters"),
-                                    workflow_id=workflow_id,
+                                    execution_id=execution_id,
                                 )
                                 yield AgentEvent(
                                     type=EventType.TOOL_RESULT,
                                     tool_name=fn_name,
                                     result=output_data.get("result"),
-                                    workflow_id=workflow_id,
+                                    execution_id=execution_id,
                                 )
 
                         # Worker/tool task -> TOOL_CALL + TOOL_RESULT (server compile)
@@ -3413,13 +3413,13 @@ class AgentRuntime:
                                 type=EventType.TOOL_CALL,
                                 tool_name=fn_name,
                                 args=getattr(task, "input_data", None),
-                                workflow_id=workflow_id,
+                                execution_id=execution_id,
                             )
                             yield AgentEvent(
                                 type=EventType.TOOL_RESULT,
                                 tool_name=fn_name,
                                 result=output_data,
-                                workflow_id=workflow_id,
+                                execution_id=execution_id,
                             )
 
                         # Guardrail task -> GUARDRAIL_PASS or GUARDRAIL_FAIL
@@ -3432,14 +3432,14 @@ class AgentRuntime:
                                     yield AgentEvent(
                                         type=EventType.GUARDRAIL_PASS,
                                         guardrail_name=g_name,
-                                        workflow_id=workflow_id,
+                                        execution_id=execution_id,
                                     )
                                 else:
                                     yield AgentEvent(
                                         type=EventType.GUARDRAIL_FAIL,
                                         guardrail_name=g_name,
                                         content=g_message,
-                                        workflow_id=workflow_id,
+                                        execution_id=execution_id,
                                     )
 
                         # SubWorkflow -> HANDOFF
@@ -3448,7 +3448,7 @@ class AgentRuntime:
                             yield AgentEvent(
                                 type=EventType.HANDOFF,
                                 target=target,
-                                workflow_id=workflow_id,
+                                execution_id=execution_id,
                             )
 
                         # Failed task -> ERROR
@@ -3457,10 +3457,10 @@ class AgentRuntime:
                             yield AgentEvent(
                                 type=EventType.ERROR,
                                 content=f"Task '{task_ref}' failed: {reason}",
-                                workflow_id=workflow_id,
+                                execution_id=execution_id,
                             )
 
-            # Detect HUMAN tasks waiting for input (workflow stays RUNNING)
+            # Detect HUMAN tasks waiting for input (execution stays RUNNING)
             has_waiting_human = False
             if hasattr(wf, "tasks") and wf.tasks:
                 for task in wf.tasks:
@@ -3476,7 +3476,7 @@ class AgentRuntime:
                             yield AgentEvent(
                                 type=EventType.WAITING,
                                 content=f"Waiting for human input ({task_ref})",
-                                workflow_id=workflow_id,
+                                execution_id=execution_id,
                             )
 
             # Check explicit PAUSED state
@@ -3484,7 +3484,7 @@ class AgentRuntime:
                 yield AgentEvent(
                     type=EventType.WAITING,
                     content="Waiting for input...",
-                    workflow_id=workflow_id,
+                    execution_id=execution_id,
                 )
 
             if raw_status in ("COMPLETED", "FAILED", "TERMINATED", "TIMED_OUT"):
@@ -3500,18 +3500,18 @@ class AgentRuntime:
                     yield AgentEvent(
                         type=EventType.DONE,
                         output=output,
-                        workflow_id=workflow_id,
+                        execution_id=execution_id,
                     )
                 else:
                     reason = getattr(wf, "reason", None)
                     error_msg = (
-                        reason if isinstance(reason, str) and reason else f"Workflow {raw_status}"
+                        reason if isinstance(reason, str) and reason else f"Execution {raw_status}"
                     )
                     yield AgentEvent(
                         type=EventType.ERROR,
                         content=error_msg,
                         output=output,
-                        workflow_id=workflow_id,
+                        execution_id=execution_id,
                     )
                 break
 
@@ -3539,18 +3539,18 @@ class AgentRuntime:
     ) -> AgentResult:
         """Execute an agent asynchronously (async-first implementation).
 
-        Accepts native agents, foreign framework agents, or a workflow
+        Accepts native agents, foreign framework agents, or an agent
         name string for pre-deployed agents.
 
         Args:
-            agent: The agent to execute, or a ``str`` workflow name.
+            agent: The agent to execute, or a ``str`` agent name.
             prompt: The user's input message.
-            version: Workflow version (only used when *agent* is a string).
+            version: Agent version (only used when *agent* is a string).
             media: Optional list of media URLs (images, video, audio).
             session_id: Optional session ID.
             idempotency_key: Optional idempotency key.
             on_event: Optional callback invoked for each streaming event.
-            **kwargs: Additional workflow input parameters.
+            **kwargs: Additional input parameters.
 
         Returns:
             An :class:`AgentResult`.
@@ -3616,7 +3616,7 @@ class AgentRuntime:
         logger.info("Executing agent '%s' (async)", agent.name)
 
         # Start via server first to get requiredWorkers, then register locally
-        workflow_id, required_workers = await self._start_via_server_async(
+        execution_id, required_workers = await self._start_via_server_async(
             agent,
             resolved_prompt,
             media=media,
@@ -3627,23 +3627,23 @@ class AgentRuntime:
         )
 
         self._prepare_workers(agent, required_workers=required_workers)
-        self._register_workflow_credentials(workflow_id, credentials)
+        self._register_workflow_credentials(execution_id, credentials)
 
         effective_timeout = timeout or (
             agent.timeout_seconds if agent.timeout_seconds > 0 else None
         )
         try:
             status = await self._poll_status_until_complete_async(
-                workflow_id, timeout=effective_timeout
+                execution_id, timeout=effective_timeout
             )
         finally:
-            self._clear_workflow_credentials(workflow_id, credentials)
+            self._clear_workflow_credentials(execution_id, credentials)
 
         output = status.output
         raw_status = status.status
 
         if raw_status in ("FAILED", "TERMINATED"):
-            logger.warning("Agent '%s' workflow %s", agent.name, raw_status)
+            logger.warning("Agent '%s' execution %s", agent.name, raw_status)
             has_output = output and not (
                 isinstance(output, dict) and all(v is None for v in output.values())
             )
@@ -3653,7 +3653,7 @@ class AgentRuntime:
         # Normalize output to always be a dict
         output = self._normalize_output(output, raw_status, status.reason)
 
-        # Fetch full workflow execution to populate tool_calls, messages,
+        # Fetch full execution to populate tool_calls, messages,
         # and token_usage — these are not available from the status endpoint.
         tool_calls: List[Dict[str, Any]] = []
         messages: List[Dict[str, Any]] = []
@@ -3663,20 +3663,20 @@ class AgentRuntime:
             wf = await loop.run_in_executor(
                 None,
                 lambda: self._workflow_client.get_workflow(
-                    workflow_id=workflow_id,
+                    execution_id=execution_id,
                     include_tasks=True,
                 ),
             )
             tool_calls = self._extract_tool_calls(wf)
             messages = self._extract_messages(wf)
-            token_usage = self._extract_token_usage(workflow_id)
+            token_usage = self._extract_token_usage(execution_id)
         except Exception as exc:
-            logger.debug("Could not fetch workflow details for %s: %s", workflow_id, exc)
+            logger.debug("Could not fetch execution details for %s: %s", execution_id, exc)
 
-        logger.info("Agent '%s' completed (workflow_id=%s)", agent.name, workflow_id)
+        logger.info("Agent '%s' completed (execution_id=%s)", agent.name, execution_id)
         return AgentResult(
             output=output,
-            workflow_id=workflow_id,
+            execution_id=execution_id,
             correlation_id=correlation_id,
             status=raw_status,
             finish_reason=self._derive_finish_reason(raw_status, status.output),
@@ -3701,13 +3701,13 @@ class AgentRuntime:
         """Start an agent asynchronously and return a handle (async version).
 
         Args:
-            agent: The agent to execute, or a ``str`` workflow name.
+            agent: The agent to execute, or a ``str`` agent name.
             prompt: The user's input message.
-            version: Workflow version (only used when *agent* is a string).
+            version: Agent version (only used when *agent* is a string).
             media: Optional list of media URLs.
             session_id: Optional session ID.
             idempotency_key: Optional idempotency key.
-            **kwargs: Additional workflow input parameters.
+            **kwargs: Additional input parameters.
 
         Returns:
             An :class:`AgentHandle`.
@@ -3744,7 +3744,7 @@ class AgentRuntime:
 
         # Start via server first to get requiredWorkers, then register locally
         effective_timeout = agent.timeout_seconds if agent.timeout_seconds > 0 else None
-        workflow_id, required_workers = await self._start_via_server_async(
+        execution_id, required_workers = await self._start_via_server_async(
             agent,
             resolved_prompt,
             media=media,
@@ -3755,7 +3755,7 @@ class AgentRuntime:
 
         self._prepare_workers(agent, required_workers=required_workers)
 
-        return AgentHandle(workflow_id=workflow_id, runtime=self, correlation_id=correlation_id)
+        return AgentHandle(execution_id=execution_id, runtime=self, correlation_id=correlation_id)
 
     async def stream_async(
         self,
@@ -3772,21 +3772,21 @@ class AgentRuntime:
 
         Can be called in three ways:
 
-        1. ``await stream_async(agent, prompt)`` — starts a new workflow.
-        2. ``await stream_async(handle=handle)`` — streams from existing workflow.
-        3. ``await stream_async("workflow_name", prompt)`` — starts by name.
+        1. ``await stream_async(agent, prompt)`` — starts a new execution.
+        2. ``await stream_async(handle=handle)`` — streams from existing execution.
+        3. ``await stream_async("agent_name", prompt)`` — starts by name.
 
         Returns an :class:`AsyncAgentStream` — async-iterable that yields
         :class:`AgentEvent` objects.
 
         Args:
-            agent: The agent to execute, or a ``str`` workflow name.
+            agent: The agent to execute, or a ``str`` agent name.
             prompt: The user's input message (required unless *handle* is given).
-            version: Workflow version (only used when *agent* is a string).
+            version: Agent version (only used when *agent* is a string).
             handle: An existing :class:`AgentHandle` to stream from.
             media: Optional list of media URLs.
             session_id: Optional session ID.
-            **kwargs: Additional workflow input parameters.
+            **kwargs: Additional input parameters.
 
         Returns:
             An :class:`AsyncAgentStream`.
@@ -3802,11 +3802,11 @@ class AgentRuntime:
         )
         return AsyncAgentStream(handle=handle, runtime=self)
 
-    async def _stream_workflow_async(self, workflow_id: str) -> AsyncIterator[AgentEvent]:
+    async def _stream_workflow_async(self, execution_id: str) -> AsyncIterator[AgentEvent]:
         """Async version of :meth:`_stream_workflow`."""
         if self._config.streaming_enabled:
             try:
-                async for event in self._stream_sse_async(workflow_id):
+                async for event in self._stream_sse_async(execution_id):
                     yield event
                 return
             except _SSEUnavailableError:
@@ -3814,19 +3814,19 @@ class AgentRuntime:
                     logger.info("SSE unavailable, falling back to async polling stream")
                     self._sse_fallback_warned = True
 
-        async for event in self._stream_polling_async(workflow_id):
+        async for event in self._stream_polling_async(execution_id):
             yield event
 
-    async def _stream_sse_async(self, workflow_id: str) -> AsyncIterator[AgentEvent]:
+    async def _stream_sse_async(self, execution_id: str) -> AsyncIterator[AgentEvent]:
         """Async version of :meth:`_stream_sse`."""
-        async for sse_event in self._http.stream_sse(workflow_id):
-            agent_event = self._sse_to_agent_event(sse_event, workflow_id)
+        async for sse_event in self._http.stream_sse(execution_id):
+            agent_event = self._sse_to_agent_event(sse_event, execution_id)
             if agent_event is not None:
                 yield agent_event
                 if agent_event.type in (EventType.DONE, EventType.ERROR):
                     return
 
-    async def _stream_polling_async(self, workflow_id: str) -> AsyncIterator[AgentEvent]:
+    async def _stream_polling_async(self, execution_id: str) -> AsyncIterator[AgentEvent]:
         """Async version of :meth:`_stream_polling`.
 
         Uses ``run_in_executor`` for the sync Conductor SDK
@@ -3834,7 +3834,7 @@ class AgentRuntime:
         """
         seen_task_ids: set = set()
         seen_human_task_ids: set = set()
-        logger.info("Async polling stream for workflow_id=%s", workflow_id)
+        logger.info("Async polling stream for execution_id=%s", execution_id)
 
         loop = asyncio.get_event_loop()
 
@@ -3843,16 +3843,16 @@ class AgentRuntime:
                 wf = await loop.run_in_executor(
                     None,
                     lambda: self._workflow_client.get_workflow(
-                        workflow_id=workflow_id,
+                        execution_id=execution_id,
                         include_tasks=True,
                     ),
                 )
             except Exception as e:
-                logger.error("Error fetching workflow status: %s", e)
+                logger.error("Error fetching execution status: %s", e)
                 yield AgentEvent(
                     type=EventType.ERROR,
                     content=str(e),
-                    workflow_id=workflow_id,
+                    execution_id=execution_id,
                 )
                 break
 
@@ -3873,7 +3873,7 @@ class AgentRuntime:
                             yield AgentEvent(
                                 type=EventType.THINKING,
                                 content=f"LLM processing ({task_ref})",
-                                workflow_id=workflow_id,
+                                execution_id=execution_id,
                             )
                         elif "dispatch" in task_ref.lower() and task_status == "COMPLETED":
                             fn_name = output_data.get("function")
@@ -3882,13 +3882,13 @@ class AgentRuntime:
                                     type=EventType.TOOL_CALL,
                                     tool_name=fn_name,
                                     args=output_data.get("parameters"),
-                                    workflow_id=workflow_id,
+                                    execution_id=execution_id,
                                 )
                                 yield AgentEvent(
                                     type=EventType.TOOL_RESULT,
                                     tool_name=fn_name,
                                     result=output_data.get("result"),
-                                    workflow_id=workflow_id,
+                                    execution_id=execution_id,
                                 )
                         elif (
                             task_ref.startswith("call_")
@@ -3900,13 +3900,13 @@ class AgentRuntime:
                                 type=EventType.TOOL_CALL,
                                 tool_name=fn_name,
                                 args=getattr(task, "input_data", None),
-                                workflow_id=workflow_id,
+                                execution_id=execution_id,
                             )
                             yield AgentEvent(
                                 type=EventType.TOOL_RESULT,
                                 tool_name=fn_name,
                                 result=output_data,
-                                workflow_id=workflow_id,
+                                execution_id=execution_id,
                             )
                         elif "guardrail" in task_ref.lower() and task_status == "COMPLETED":
                             passed = output_data.get("passed")
@@ -3917,28 +3917,28 @@ class AgentRuntime:
                                     yield AgentEvent(
                                         type=EventType.GUARDRAIL_PASS,
                                         guardrail_name=g_name,
-                                        workflow_id=workflow_id,
+                                        execution_id=execution_id,
                                     )
                                 else:
                                     yield AgentEvent(
                                         type=EventType.GUARDRAIL_FAIL,
                                         guardrail_name=g_name,
                                         content=g_message,
-                                        workflow_id=workflow_id,
+                                        execution_id=execution_id,
                                     )
                         elif "SUB_WORKFLOW" in task_type:
                             target = _normalize_handoff_target(task_ref)
                             yield AgentEvent(
                                 type=EventType.HANDOFF,
                                 target=target,
-                                workflow_id=workflow_id,
+                                execution_id=execution_id,
                             )
                         elif task_status == "FAILED":
                             reason = output_data.get("reason", "Task failed")
                             yield AgentEvent(
                                 type=EventType.ERROR,
                                 content=f"Task '{task_ref}' failed: {reason}",
-                                workflow_id=workflow_id,
+                                execution_id=execution_id,
                             )
 
             # Detect HUMAN tasks
@@ -3956,14 +3956,14 @@ class AgentRuntime:
                             yield AgentEvent(
                                 type=EventType.WAITING,
                                 content=f"Waiting for human input ({task_ref})",
-                                workflow_id=workflow_id,
+                                execution_id=execution_id,
                             )
 
             if raw_status == "PAUSED" and not has_waiting_human:
                 yield AgentEvent(
                     type=EventType.WAITING,
                     content="Waiting for input...",
-                    workflow_id=workflow_id,
+                    execution_id=execution_id,
                 )
 
             if raw_status in ("COMPLETED", "FAILED", "TERMINATED", "TIMED_OUT"):
@@ -3979,18 +3979,18 @@ class AgentRuntime:
                     yield AgentEvent(
                         type=EventType.DONE,
                         output=output,
-                        workflow_id=workflow_id,
+                        execution_id=execution_id,
                     )
                 else:
                     reason = getattr(wf, "reason", None)
                     error_msg = (
-                        reason if isinstance(reason, str) and reason else f"Workflow {raw_status}"
+                        reason if isinstance(reason, str) and reason else f"Execution {raw_status}"
                     )
                     yield AgentEvent(
                         type=EventType.ERROR,
                         content=error_msg,
                         output=output,
-                        workflow_id=workflow_id,
+                        execution_id=execution_id,
                     )
                 break
 
@@ -4037,7 +4037,7 @@ class AgentRuntime:
         correlation_id = str(uuid.uuid4())
         resolved_prompt = str(prompt)
 
-        workflow_id = await self._start_framework_via_server_async(
+        execution_id = await self._start_framework_via_server_async(
             framework=framework,
             raw_config=raw_config,
             prompt=resolved_prompt,
@@ -4046,16 +4046,16 @@ class AgentRuntime:
             idempotency_key=idempotency_key,
             credentials=credentials,
         )
-        self._register_workflow_credentials(workflow_id, credentials)
+        self._register_workflow_credentials(execution_id, credentials)
 
         try:
             if on_event is not None:
                 captured_events: List[AgentEvent] = []
-                async for event in self._stream_workflow_async(workflow_id):
+                async for event in self._stream_workflow_async(execution_id):
                     captured_events.append(event)
                     on_event(event)
 
-                status = await self._poll_status_until_complete_async(workflow_id, timeout=timeout)
+                status = await self._poll_status_until_complete_async(execution_id, timeout=timeout)
                 output = status.output
                 has_output = output and not (
                     isinstance(output, dict) and all(v is None for v in output.values())
@@ -4063,10 +4063,10 @@ class AgentRuntime:
                 if not has_output and status.reason and status.status in ("FAILED", "TERMINATED"):
                     output = status.reason
                 output = self._normalize_output(output, status.status, status.reason)
-                token_usage = self._extract_token_usage(workflow_id)
+                token_usage = self._extract_token_usage(execution_id)
                 return AgentResult(
                     output=output,
-                    workflow_id=workflow_id,
+                    execution_id=execution_id,
                     correlation_id=correlation_id,
                     status=status.status,
                     finish_reason=self._derive_finish_reason(status.status, status.output),
@@ -4076,13 +4076,13 @@ class AgentRuntime:
                     sub_results=self._extract_sub_results(output),
                 )
 
-            status = await self._poll_status_until_complete_async(workflow_id, timeout=timeout)
+            status = await self._poll_status_until_complete_async(execution_id, timeout=timeout)
 
             output = status.output
             raw_status = status.status
 
             if raw_status in ("FAILED", "TERMINATED"):
-                logger.warning("Framework agent '%s' workflow %s", agent_name, raw_status)
+                logger.warning("Framework agent '%s' execution %s", agent_name, raw_status)
                 has_output = output and not (
                     isinstance(output, dict) and all(v is None for v in output.values())
                 )
@@ -4090,11 +4090,11 @@ class AgentRuntime:
                     output = status.reason
 
             output = self._normalize_output(output, raw_status, status.reason)
-            logger.info("Framework agent '%s' completed (workflow_id=%s)", agent_name, workflow_id)
-            token_usage = self._extract_token_usage(workflow_id)
+            logger.info("Framework agent '%s' completed (execution_id=%s)", agent_name, execution_id)
+            token_usage = self._extract_token_usage(execution_id)
             return AgentResult(
                 output=output,
-                workflow_id=workflow_id,
+                execution_id=execution_id,
                 correlation_id=correlation_id,
                 status=raw_status,
                 finish_reason=self._derive_finish_reason(raw_status, status.output),
@@ -4103,7 +4103,7 @@ class AgentRuntime:
                 sub_results=self._extract_sub_results(output),
             )
         finally:
-            self._clear_workflow_credentials(workflow_id, credentials)
+            self._clear_workflow_credentials(execution_id, credentials)
 
     async def _start_framework_async(
         self,
@@ -4132,7 +4132,7 @@ class AgentRuntime:
         correlation_id = str(uuid.uuid4())
         resolved_prompt = str(prompt)
 
-        workflow_id = await self._start_framework_via_server_async(
+        execution_id = await self._start_framework_via_server_async(
             framework=framework,
             raw_config=raw_config,
             prompt=resolved_prompt,
@@ -4141,7 +4141,7 @@ class AgentRuntime:
             idempotency_key=idempotency_key,
         )
 
-        return AgentHandle(workflow_id=workflow_id, runtime=self, correlation_id=correlation_id)
+        return AgentHandle(execution_id=execution_id, runtime=self, correlation_id=correlation_id)
 
     # ── Lifecycle ─────────────────────────────────────────────────────
 
@@ -4175,20 +4175,20 @@ class AgentRuntime:
 
     # ── Status / interaction ────────────────────────────────────────
 
-    def get_status(self, workflow_id: str) -> AgentStatus:
-        """Get the current status of an agent workflow.
+    def get_status(self, execution_id: str) -> AgentStatus:
+        """Get the current status of an agent execution.
 
         Fetches from ``/api/agent/{executionId}/status``.
 
         Args:
-            workflow_id: The Conductor workflow ID.
+            execution_id: The execution ID.
 
         Returns:
             An :class:`AgentStatus`.
         """
         import requests as req_lib
 
-        url = self._agent_api_url(f"/{workflow_id}/status")
+        url = self._agent_api_url(f"/{execution_id}/status")
         resp = req_lib.get(url, headers=self._agent_api_headers(content_type=""), timeout=30)
         try:
             resp.raise_for_status()
@@ -4205,7 +4205,7 @@ class AgentRuntime:
         reason = data.get("reasonForIncompletion")
 
         return AgentStatus(
-            workflow_id=workflow_id,
+            execution_id=execution_id,
             is_complete=is_complete,
             is_running=is_running,
             is_waiting=is_waiting,
@@ -4215,7 +4215,7 @@ class AgentRuntime:
             pending_tool=pending_tool,
         )
 
-    def respond(self, workflow_id: str, output: Any) -> None:
+    def respond(self, execution_id: str, output: Any) -> None:
         """Complete a pending human task with arbitrary output.
 
         This is the general-purpose method for interacting with a
@@ -4225,49 +4225,49 @@ class AgentRuntime:
         Posts to ``/api/agent/{executionId}/respond``.
 
         Args:
-            workflow_id: The Conductor workflow ID.
+            execution_id: The execution ID.
             output: Any JSON-serialisable value to pass as the task output.
         """
         import requests as req_lib
 
-        url = self._agent_api_url(f"/{workflow_id}/respond")
+        url = self._agent_api_url(f"/{execution_id}/respond")
         body = output if isinstance(output, dict) else {"output": output}
         resp = req_lib.post(url, json=body, headers=self._agent_api_headers(), timeout=30)
         try:
             resp.raise_for_status()
         except req_lib.exceptions.HTTPError as exc:
             _raise_api_error(exc, url=url)
-        logger.info("Responded to workflow %s", workflow_id)
+        logger.info("Responded to execution %s", execution_id)
 
-    def approve(self, workflow_id: str) -> None:
+    def approve(self, execution_id: str) -> None:
         """Approve a pending human-in-the-loop task."""
-        self.respond(workflow_id, {"approved": True})
+        self.respond(execution_id, {"approved": True})
 
-    def reject(self, workflow_id: str, reason: str = "") -> None:
+    def reject(self, execution_id: str, reason: str = "") -> None:
         """Reject a pending human-in-the-loop task."""
-        self.respond(workflow_id, {"approved": False, "reason": reason})
+        self.respond(execution_id, {"approved": False, "reason": reason})
 
-    def send_message(self, workflow_id: str, message: str) -> None:
+    def send_message(self, execution_id: str, message: str) -> None:
         """Send a message to a waiting agent."""
-        self.respond(workflow_id, {"message": message})
+        self.respond(execution_id, {"message": message})
 
-    def pause(self, workflow_id: str) -> None:
-        """Pause an agent workflow."""
-        self._workflow_client.pause_workflow(workflow_id)
+    def pause(self, execution_id: str) -> None:
+        """Pause an agent execution."""
+        self._workflow_client.pause_workflow(execution_id)
 
-    def resume(self, workflow_id: str) -> None:
-        """Resume a paused agent workflow."""
-        self._workflow_client.resume_workflow(workflow_id)
+    def resume(self, execution_id: str) -> None:
+        """Resume a paused agent execution."""
+        self._workflow_client.resume_workflow(execution_id)
 
-    def cancel(self, workflow_id: str, reason: str = "") -> None:
-        """Cancel an agent workflow."""
-        self._workflow_client.terminate_workflow(workflow_id=workflow_id, reason=reason)
+    def cancel(self, execution_id: str, reason: str = "") -> None:
+        """Cancel an agent execution."""
+        self._workflow_client.terminate_workflow(execution_id=execution_id, reason=reason)
 
     # ── Async status / interaction ───────────────────────────────────
 
-    async def get_status_async(self, workflow_id: str) -> AgentStatus:
+    async def get_status_async(self, execution_id: str) -> AgentStatus:
         """Async version of :meth:`get_status`."""
-        data = await self._http.get_status(workflow_id)
+        data = await self._http.get_status(execution_id)
 
         raw_status = data.get("status", "UNKNOWN")
         is_complete = data.get("isComplete", False)
@@ -4278,7 +4278,7 @@ class AgentRuntime:
         reason = data.get("reasonForIncompletion")
 
         return AgentStatus(
-            workflow_id=workflow_id,
+            execution_id=execution_id,
             is_complete=is_complete,
             is_running=is_running,
             is_waiting=is_waiting,
@@ -4288,41 +4288,41 @@ class AgentRuntime:
             pending_tool=pending_tool,
         )
 
-    async def respond_async(self, workflow_id: str, output: Any) -> None:
+    async def respond_async(self, execution_id: str, output: Any) -> None:
         """Async version of :meth:`respond`."""
         body = output if isinstance(output, dict) else {"output": output}
-        await self._http.respond(workflow_id, body)
-        logger.info("Responded to workflow %s (async)", workflow_id)
+        await self._http.respond(execution_id, body)
+        logger.info("Responded to execution %s (async)", execution_id)
 
-    async def approve_async(self, workflow_id: str) -> None:
+    async def approve_async(self, execution_id: str) -> None:
         """Async version of :meth:`approve`."""
-        await self.respond_async(workflow_id, {"approved": True})
+        await self.respond_async(execution_id, {"approved": True})
 
-    async def reject_async(self, workflow_id: str, reason: str = "") -> None:
+    async def reject_async(self, execution_id: str, reason: str = "") -> None:
         """Async version of :meth:`reject`."""
-        await self.respond_async(workflow_id, {"approved": False, "reason": reason})
+        await self.respond_async(execution_id, {"approved": False, "reason": reason})
 
-    async def send_message_async(self, workflow_id: str, message: str) -> None:
+    async def send_message_async(self, execution_id: str, message: str) -> None:
         """Async version of :meth:`send_message`."""
-        await self.respond_async(workflow_id, {"message": message})
+        await self.respond_async(execution_id, {"message": message})
 
-    async def pause_async(self, workflow_id: str) -> None:
+    async def pause_async(self, execution_id: str) -> None:
         """Async version of :meth:`pause`."""
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, self._workflow_client.pause_workflow, workflow_id)
+        await loop.run_in_executor(None, self._workflow_client.pause_workflow, execution_id)
 
-    async def resume_async(self, workflow_id: str) -> None:
+    async def resume_async(self, execution_id: str) -> None:
         """Async version of :meth:`resume`."""
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, self._workflow_client.resume_workflow, workflow_id)
+        await loop.run_in_executor(None, self._workflow_client.resume_workflow, execution_id)
 
-    async def cancel_async(self, workflow_id: str, reason: str = "") -> None:
+    async def cancel_async(self, execution_id: str, reason: str = "") -> None:
         """Async version of :meth:`cancel`."""
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(
             None,
             lambda: self._workflow_client.terminate_workflow(
-                workflow_id=workflow_id,
+                execution_id=execution_id,
                 reason=reason,
             ),
         )
@@ -4355,10 +4355,10 @@ class AgentRuntime:
             executions = resp.json().get("results", [])
 
             for execution in executions:
-                wf_id = execution.get("executionId")
-                if not wf_id:
+                exec_id = execution.get("executionId")
+                if not exec_id:
                     continue
-                wf = self._workflow_client.get_workflow(wf_id, include_tasks=False)
+                wf = self._workflow_client.get_workflow(exec_id, include_tasks=False)
                 if hasattr(wf, "variables") and wf.variables:
                     messages = wf.variables.get("messages", [])
                     if messages:
@@ -4426,7 +4426,7 @@ class AgentRuntime:
 
     @staticmethod
     def _derive_finish_reason(raw_status: str, output: Any) -> FinishReason:
-        """Derive a :class:`FinishReason` from workflow status and output."""
+        """Derive a :class:`FinishReason` from execution status and output."""
         if raw_status == "COMPLETED":
             if isinstance(output, dict):
                 fr = output.get("finishReason")
@@ -4446,7 +4446,7 @@ class AgentRuntime:
         return FinishReason.STOP
 
     def _extract_finish_reason(self, workflow_run: Any) -> Optional[str]:
-        """Extract finishReason from workflow output, with a descriptive message for LENGTH."""
+        """Extract finishReason from execution output, with a descriptive message for LENGTH."""
         if hasattr(workflow_run, "output") and isinstance(workflow_run.output, dict):
             fr = workflow_run.output.get("finishReason")
             if fr in ("LENGTH", "MAX_TOKENS"):
@@ -4458,7 +4458,7 @@ class AgentRuntime:
         return None
 
     def _extract_output(self, workflow_run: Any, agent: Agent) -> Any:
-        """Extract the final output from a workflow run."""
+        """Extract the final output from an execution."""
         import json as _json
 
         if hasattr(workflow_run, "output") and workflow_run.output:
@@ -4515,7 +4515,7 @@ class AgentRuntime:
         return non_null
 
     def _extract_messages(self, workflow_run: Any) -> List[Dict[str, Any]]:
-        """Extract conversation messages from workflow variables."""
+        """Extract conversation messages from execution variables."""
         if hasattr(workflow_run, "variables") and workflow_run.variables:
             return workflow_run.variables.get("messages", [])
         return []
@@ -4544,7 +4544,7 @@ class AgentRuntime:
     )
 
     def _extract_tool_calls(self, workflow_run: Any) -> List[Dict[str, Any]]:
-        """Extract tool call history from workflow tasks.
+        """Extract tool call history from execution tasks.
 
         Tool tasks are identified by their reference task name starting with
         ``call_`` (the pattern the compiler uses for all tool invocations).
@@ -4580,28 +4580,28 @@ class AgentRuntime:
 
         return tool_calls
 
-    def _fetch_agent_workflow(self, workflow_id: str) -> Optional[dict]:
-        """Fetch a workflow with its full task list from GET /api/agent/execution/{id}."""
+    def _fetch_agent_workflow(self, execution_id: str) -> Optional[dict]:
+        """Fetch an execution with its full task list from GET /api/agent/execution/{id}."""
         import requests
 
         try:
-            url = self._agent_api_url(f"/execution/{workflow_id}")
+            url = self._agent_api_url(f"/execution/{execution_id}")
             resp = requests.get(url, headers=self._agent_api_headers(), timeout=10)
             resp.raise_for_status()
             return resp.json()
         except Exception:
             return None
 
-    def _extract_token_usage(self, workflow_id: str) -> Optional[TokenUsage]:
-        """Extract aggregated token usage from the full workflow tree.
+    def _extract_token_usage(self, execution_id: str) -> Optional[TokenUsage]:
+        """Extract aggregated token usage from the full execution tree.
 
         Calls GET /api/agent/{id} to fetch tasks, then recursively traverses
         sub-workflows (sub-agents) via their subWorkflowId to aggregate tokens
         from every LLM_CHAT_COMPLETE task in the tree.
         """
-        if not workflow_id:
+        if not execution_id:
             return None
-        prompt, completion, total, found = self._collect_tokens_by_id(workflow_id, set())
+        prompt, completion, total, found = self._collect_tokens_by_id(execution_id, set())
         if not found:
             return None
         if total == 0 and (prompt > 0 or completion > 0):
@@ -4612,19 +4612,19 @@ class AgentRuntime:
             total_tokens=total,
         )
 
-    def _collect_tokens_by_id(self, workflow_id: str, visited: set) -> tuple:
+    def _collect_tokens_by_id(self, execution_id: str, visited: set) -> tuple:
         """Recursively collect token counts via GET /api/agent/{id}.
 
         Returns ``(prompt, completion, total, found_any)`` tuple.
-        The server pre-computes ``tokenUsage`` for each workflow level; this
+        The server pre-computes ``tokenUsage`` for each execution level; this
         method reads that field and recurses into SUB_WORKFLOW tasks so the
         full agent tree is covered.
         """
-        if workflow_id in visited:
+        if execution_id in visited:
             return 0, 0, 0, False
-        visited.add(workflow_id)
+        visited.add(execution_id)
 
-        data = self._fetch_agent_workflow(workflow_id)
+        data = self._fetch_agent_workflow(execution_id)
         if not data:
             return 0, 0, 0, False
 
@@ -4633,7 +4633,7 @@ class AgentRuntime:
         total_total = 0
         found_any = False
 
-        # Use server-computed token usage for this workflow level
+        # Use server-computed token usage for this execution level
         token_usage = data.get("tokenUsage")
         if token_usage:
             p = int(token_usage.get("promptTokens", 0))

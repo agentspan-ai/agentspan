@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-echo "=== @agentspan/sdk Test Runner ==="
+echo "=== @agentspan-ai/sdk Test Runner ==="
 echo ""
 
 # ── Unit Tests ────────────────────────────────────────────

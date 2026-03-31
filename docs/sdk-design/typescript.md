@@ -186,7 +186,7 @@ export interface TokenUsage {
 
 export interface ToolContext {
   sessionId: string;
-  workflowId: string;
+  executionId: string;
   agentName: string;
   metadata: Record<string, unknown>;
   dependencies: Record<string, unknown>;
@@ -207,14 +207,14 @@ export interface AgentEvent {
   result?: unknown;
   target?: string;
   output?: unknown;
-  workflowId?: string;
+  executionId?: string;
   guardrailName?: string;
   timestamp?: number;
 }
 
 export interface AgentResult {
   output: Record<string, unknown>;
-  workflowId: string;
+  executionId: string;
   correlationId?: string;
   messages: unknown[];
   toolCalls: unknown[];
@@ -232,7 +232,7 @@ export interface AgentResult {
 }
 
 export interface AgentStatus {
-  workflowId: string;
+  executionId: string;
   isComplete: boolean;
   isRunning: boolean;
   isWaiting: boolean;
@@ -245,7 +245,7 @@ export interface AgentStatus {
 }
 
 export interface DeploymentInfo {
-  workflowName: string;
+  registeredName: string;
   agentName: string;
 }
 
@@ -341,11 +341,11 @@ class ResearchTools {
   })
   async researchDatabase(query: string, ctx?: ToolContext): Promise<Record<string, unknown>> {
     const session = ctx?.sessionId ?? "unknown";
-    const workflow = ctx?.workflowId ?? "unknown";
+    const execution = ctx?.executionId ?? "unknown";
     return {
       query,
       sessionId: session,
-      workflowId: workflow,
+      executionId: execution,
       results: { source: "internal_db", count: 42 },
     };
   }
@@ -676,7 +676,7 @@ function createToolWorker(config: ToolWorkerConfig, runtime: AgentRuntime): void
     const toolCtx: ToolContext | undefined = rawCtx
       ? {
           sessionId: rawCtx.sessionId as string,
-          workflowId: rawCtx.workflowId as string,
+          executionId: rawCtx.executionId as string,
           agentName: rawCtx.agentName as string,
           metadata: (rawCtx.metadata as Record<string, unknown>) ?? {},
           dependencies: (rawCtx.dependencies as Record<string, unknown>) ?? {},
@@ -965,21 +965,21 @@ class AgentStream implements AsyncIterable<AgentEvent> {
   constructor(
     private url: string,
     private headers: Record<string, string>,
-    private workflowId: string,
+    private executionId: string,
     private runtime: AgentRuntime
   ) {}
 
   // HITL methods -- available on the stream object
   async approve(): Promise<void> {
-    await this.runtime.respond(this.workflowId, { approved: true });
+    await this.runtime.respond(this.executionId, { approved: true });
   }
 
   async reject(reason?: string): Promise<void> {
-    await this.runtime.respond(this.workflowId, { approved: false, reason });
+    await this.runtime.respond(this.executionId, { approved: false, reason });
   }
 
   async send(message: string): Promise<void> {
-    await this.runtime.respond(this.workflowId, { message });
+    await this.runtime.respond(this.executionId, { message });
   }
 
   async getResult(): Promise<AgentResult> {
@@ -1018,13 +1018,13 @@ class AgentStream implements AsyncIterable<AgentEvent> {
   private async *pollFallback(): AsyncGenerator<AgentEvent> {
     while (true) {
       await new Promise((r) => setTimeout(r, 500));
-      const status = await this.runtime.getStatus(this.workflowId);
+      const status = await this.runtime.getStatus(this.executionId);
       if (status.isComplete) {
-        yield { type: "done", output: status.output, workflowId: this.workflowId };
+        yield { type: "done", output: status.output, executionId: this.executionId };
         return;
       }
       if (status.isWaiting) {
-        yield { type: "waiting", workflowId: this.workflowId };
+        yield { type: "waiting", executionId: this.executionId };
       }
     }
   }
@@ -1466,7 +1466,7 @@ const researchDatabase = tool(
   async (args: { query: string }, ctx?: ToolContext) => ({
     query: args.query,
     sessionId: ctx?.sessionId ?? "unknown",
-    workflowId: ctx?.workflowId ?? "unknown",
+    executionId: ctx?.executionId ?? "unknown",
     results: MOCK_RESEARCH_DATA.quantum_computing ?? {},
   }),
   { name: "research_database", credentials: [{ envVar: "RESEARCH_API_KEY" }] }
@@ -1769,7 +1769,7 @@ await using runtime = new AgentRuntime();
 // Deploy
 const deployments = await runtime.deploy(fullPipeline);
 for (const dep of deployments) {
-  console.log(`  Deployed: ${dep.workflowName} (${dep.agentName})`);
+  console.log(`  Deployed: ${dep.registeredName} (${dep.agentName})`);
 }
 
 // Plan (dry-run)

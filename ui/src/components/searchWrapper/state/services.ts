@@ -27,7 +27,7 @@ export const fetchForWorkflowDef = async ({
     return workflowDefinitions;
   }
 
-  const path = `/metadata/workflow?short=true&access=${ACCESS}`;
+  const path = `/metadata/workflow?short=true&access=${ACCESS}`; // TODO: migrate to agent API
   try {
     const response = await queryClient.fetchQuery(
       [fetchContext.stack, path],

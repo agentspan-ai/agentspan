@@ -149,7 +149,7 @@ def make_claude_agent_sdk_worker(
     from conductor.client.http.models.task_result_status import TaskResultStatus
 
     def tool_worker(task: Task) -> TaskResult:
-        workflow_id = task.workflow_instance_id
+        execution_id = task.workflow_instance_id
         prompt = task.input_data.get("prompt", "")
         cwd = (task.input_data.get("cwd") or "").strip() or None
 
@@ -164,14 +164,14 @@ def make_claude_agent_sdk_worker(
         # Resolve workflow-level credentials and inject into os.environ
         _injected_cred_keys: List[str] = []
         try:
-            _injected_cred_keys = _inject_credentials(task, workflow_id)
+            _injected_cred_keys = _inject_credentials(task, execution_id)
         except Exception as _cred_err:
             logger.warning("Failed to resolve credentials for Claude Agent SDK: %s", _cred_err)
 
         try:
             # Build agentspan instrumentation hooks
             agentspan_hooks = _build_agentspan_hooks(
-                workflow_id, server_url, auth_key, auth_secret, metadata
+                execution_id, server_url, auth_key, auth_secret, metadata
             )
 
             # Merge user hooks + agentspan hooks, then update options
@@ -198,15 +198,15 @@ def make_claude_agent_sdk_worker(
 
             return TaskResult(
                 task_id=task.task_id,
-                workflow_instance_id=workflow_id,
+                workflow_instance_id=execution_id,
                 status=TaskResultStatus.COMPLETED,
                 output_data=output_data,
             )
         except Exception as exc:
-            logger.error("Claude Agent SDK worker error (workflow_id=%s): %s", workflow_id, exc)
+            logger.error("Claude Agent SDK worker error (execution_id=%s): %s", execution_id, exc)
             return TaskResult(
                 task_id=task.task_id,
-                workflow_instance_id=workflow_id,
+                workflow_instance_id=execution_id,
                 status=TaskResultStatus.FAILED,
                 reason_for_incompletion=str(exc),
             )
@@ -271,7 +271,7 @@ async def _run_query(prompt: str, options: Any) -> Tuple[str, Any]:
 
 
 def _build_agentspan_hooks(
-    workflow_id: str,
+    execution_id: str,
     server_url: str,
     auth_key: str,
     auth_secret: str,
@@ -291,7 +291,7 @@ def _build_agentspan_hooks(
             metadata["tool_call_count"] += 1
             metadata["tools_used"].add(tool_name)
             _push_event_nonblocking(
-                workflow_id,
+                execution_id,
                 {"type": "tool_call", "toolName": tool_name, "toolUseId": tool_use_id},
                 server_url,
                 auth_key,
@@ -306,7 +306,7 @@ def _build_agentspan_hooks(
         try:
             tool_name = input_data.get("tool_name", "")
             _push_event_nonblocking(
-                workflow_id,
+                execution_id,
                 {
                     "type": "tool_result",
                     "toolName": tool_name,
@@ -325,7 +325,7 @@ def _build_agentspan_hooks(
         try:
             metadata["subagent_count"] += 1
             _push_event_nonblocking(
-                workflow_id,
+                execution_id,
                 {"type": "subagent_stop"},
                 server_url,
                 auth_key,
@@ -339,7 +339,7 @@ def _build_agentspan_hooks(
     async def _stop(input_data: dict, tool_use_id: str | None, context: Any) -> dict:
         try:
             _push_event_nonblocking(
-                workflow_id,
+                execution_id,
                 {"type": "agent_stop"},
                 server_url,
                 auth_key,
@@ -390,19 +390,19 @@ def _merge_hooks(options: Any, agentspan_hooks: Dict[str, list]) -> Any:
 
 
 def _push_event_nonblocking(
-    workflow_id: str,
+    execution_id: str,
     event: Dict[str, Any],
     server_url: str,
     auth_key: str,
     auth_secret: str,
 ) -> None:
-    """Fire-and-forget HTTP POST to {server_url}/agent/events/{workflowId}."""
+    """Fire-and-forget HTTP POST to {server_url}/agent/events/{executionId}."""
 
     def _do_push():
         try:
             import requests
 
-            url = f"{server_url}/agent/events/{workflow_id}"
+            url = f"{server_url}/agent/events/{execution_id}"
             headers: Dict[str, str] = {}
             if auth_key:
                 headers["X-Auth-Key"] = auth_key
@@ -410,7 +410,7 @@ def _push_event_nonblocking(
                 headers["X-Auth-Secret"] = auth_secret
             requests.post(url, json=event, headers=headers, timeout=5)
         except Exception as exc:
-            logger.debug("Event push failed (workflow_id=%s): %s", workflow_id, exc)
+            logger.debug("Event push failed (execution_id=%s): %s", execution_id, exc)
 
     _EVENT_PUSH_POOL.submit(_do_push)
 
@@ -420,7 +420,7 @@ def _push_event_nonblocking(
 # ---------------------------------------------------------------------------
 
 
-def _inject_credentials(task: Any, workflow_id: str) -> List[str]:
+def _inject_credentials(task: Any, execution_id: str) -> List[str]:
     """Resolve workflow-level credentials and inject into os.environ.
 
     Returns list of env var keys that were injected (for cleanup).
@@ -435,9 +435,9 @@ def _inject_credentials(task: Any, workflow_id: str) -> List[str]:
     )
 
     injected_keys: List[str] = []
-    wf_id = workflow_id or ""
+    exec_id = execution_id or ""
     with _workflow_credentials_lock:
-        cred_names = list(_workflow_credentials.get(wf_id, []))
+        cred_names = list(_workflow_credentials.get(exec_id, []))
     if cred_names:
         token = _extract_execution_token(task)
         if token:

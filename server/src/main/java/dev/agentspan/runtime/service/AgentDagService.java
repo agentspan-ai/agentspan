@@ -52,7 +52,7 @@ public class AgentDagService {
         task.setStartTime(now);
 
         if (req.getSubWorkflowParam() != null) {
-            task.setSubWorkflowId(req.getSubWorkflowParam().getWorkflowId());
+            task.setSubWorkflowId(req.getSubWorkflowParam().getExecutionId());
         }
 
         executionDAO.createTasks(List.of(task));

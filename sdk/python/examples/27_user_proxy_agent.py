@@ -66,7 +66,7 @@ if __name__ == "__main__":
         #     conversation,
         #     "Let's write a Python function to sort a list of dictionaries by a key.",
         # )
-        # print(f"Conversation started: {handle.workflow_id}")
+        # print(f"Conversation started: {handle.execution_id}")
 
         # # Simulate human responses
         # human_messages = [

@@ -62,29 +62,29 @@ export default function BulkActionModule({
   const [tab, setTab] = useState(0);
 
   const { mutate: pauseAction, isLoading: pauseLoading } = useAction(
-    `/workflow/bulk/pause`,
+    `agent/executions/bulk/pause`,
     "put",
     { onSuccess, onError },
   );
   const { mutate: resumeAction, isLoading: resumeLoading } = useAction(
-    `/workflow/bulk/resume`,
+    `agent/executions/bulk/resume`,
     "put",
     { onSuccess, onError },
   );
   const { mutate: restartCurrentAction, isLoading: restartCurrentLoading } =
-    useAction(`/workflow/bulk/restart`, "post", { onSuccess });
+    useAction(`agent/executions/bulk/restart`, "post", { onSuccess });
   const { mutate: restartLatestAction, isLoading: restartLatestLoading } =
-    useAction(`/workflow/bulk/restart?useLatestDefinitions=true`, "post", {
+    useAction(`agent/executions/bulk/restart?useLatestDefinitions=true`, "post", {
       onSuccess,
       onError,
     });
   const { mutate: retryAction, isLoading: retryLoading } = useAction(
-    `/workflow/bulk/retry`,
+    `agent/executions/bulk/retry`,
     "post",
     { onSuccess, onError },
   );
   const { mutate: terminateAction, isLoading: terminateLoading } = useAction(
-    `/workflow/bulk/terminate${maybeTriggerFailureWorkflow()}`,
+    `agent/executions/bulk/terminate${maybeTriggerFailureWorkflow()}`,
     "post",
     { onSuccess, onError },
   );

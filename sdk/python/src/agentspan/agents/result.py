@@ -23,11 +23,11 @@ class DeploymentInfo:
     Returned by :meth:`AgentRuntime.deploy` for each deployed agent.
 
     Attributes:
-        workflow_name: The Conductor workflow name registered on the server.
+        registered_name: The name registered on the server.
         agent_name: The agent's name (from :attr:`Agent.name`).
     """
 
-    workflow_name: str
+    registered_name: str
     agent_name: str
 
 
@@ -97,7 +97,7 @@ class AgentResult:
             ``"result"`` key whose value is a string (or ``None``).
             If ``output_type`` was set on the agent, this is a validated
             instance of that type instead.
-        workflow_id: The Conductor workflow ID (for debugging in the UI).
+        execution_id: The Conductor execution ID (for debugging in the UI).
         messages: Full conversation history (list of message dicts).
         tool_calls: All tool invocations with inputs and outputs.
         status: Terminal workflow status (:class:`Status` enum, backward
@@ -111,7 +111,7 @@ class AgentResult:
     """
 
     output: Any = None
-    workflow_id: str = ""
+    execution_id: str = ""
     correlation_id: Optional[str] = None
     messages: List[Dict[str, Any]] = field(default_factory=list)
     tool_calls: List[Dict[str, Any]] = field(default_factory=list)
@@ -181,8 +181,8 @@ class AgentResult:
             print("Tokens: —")
         if self.finish_reason:
             print(f"Finish reason: {self.finish_reason}")
-        if self.workflow_id:
-            print(f"Workflow ID: {self.workflow_id}")
+        if self.execution_id:
+            print(f"Execution ID: {self.execution_id}")
 
         print("\n")
 
@@ -195,7 +195,7 @@ class AgentStatus:
     """Snapshot of a running agent's status.
 
     Attributes:
-        workflow_id: The Conductor workflow ID.
+        execution_id: The Conductor execution ID.
         is_complete: ``True`` if the workflow has reached a terminal state.
         is_running: ``True`` if the workflow is still executing.
         is_waiting: ``True`` if the workflow is paused (e.g. human-in-the-loop).
@@ -205,7 +205,7 @@ class AgentStatus:
         messages: Conversation messages accumulated so far.
     """
 
-    workflow_id: str = ""
+    execution_id: str = ""
     is_complete: bool = False
     is_running: bool = False
     is_waiting: bool = False
@@ -228,14 +228,14 @@ class AgentHandle:
     even after restarts.
 
     Args:
-        workflow_id: The Conductor workflow ID.
+        execution_id: The Conductor execution ID.
         runtime: The :class:`AgentRuntime` that launched this workflow.
     """
 
     def __init__(
-        self, workflow_id: str, runtime: Any, correlation_id: Optional[str] = None
+        self, execution_id: str, runtime: Any, correlation_id: Optional[str] = None
     ) -> None:
-        self.workflow_id = workflow_id
+        self.execution_id = execution_id
         self.correlation_id = correlation_id
         self._runtime = runtime
 
@@ -243,13 +243,13 @@ class AgentHandle:
 
     def get_status(self) -> AgentStatus:
         """Fetch the current status of the agent workflow."""
-        return self._runtime.get_status(self.workflow_id)
+        return self._runtime.get_status(self.execution_id)
 
     # ── Human-in-the-loop ───────────────────────────────────────────
 
     def respond(self, output: dict) -> None:
         """Complete a pending human task with arbitrary output."""
-        self._runtime.respond(self.workflow_id, output)
+        self._runtime.respond(self.execution_id, output)
 
     def approve(self) -> None:
         """Approve a pending tool call that requires human approval."""
@@ -267,15 +267,15 @@ class AgentHandle:
 
     def pause(self) -> None:
         """Pause the agent workflow."""
-        self._runtime.pause(self.workflow_id)
+        self._runtime.pause(self.execution_id)
 
     def resume(self) -> None:
         """Resume a paused agent workflow."""
-        self._runtime.resume(self.workflow_id)
+        self._runtime.resume(self.execution_id)
 
     def cancel(self, reason: str = "") -> None:
         """Cancel the agent workflow."""
-        self._runtime.cancel(self.workflow_id, reason)
+        self._runtime.cancel(self.execution_id, reason)
 
     # ── Streaming ────────────────────────────────────────────────────
 
@@ -289,18 +289,18 @@ class AgentHandle:
             An :class:`AgentStream` that yields events and provides
             HITL controls and access to the final result.
         """
-        event_iter = self._runtime._stream_workflow(self.workflow_id)
+        event_iter = self._runtime._stream_workflow(self.execution_id)
         return AgentStream(handle=self, event_iterator=event_iter)
 
     # ── Async methods ────────────────────────────────────────────────
 
     async def get_status_async(self) -> AgentStatus:
         """Async version of :meth:`get_status`."""
-        return await self._runtime.get_status_async(self.workflow_id)
+        return await self._runtime.get_status_async(self.execution_id)
 
     async def respond_async(self, output: dict) -> None:
         """Async version of :meth:`respond`."""
-        await self._runtime.respond_async(self.workflow_id, output)
+        await self._runtime.respond_async(self.execution_id, output)
 
     async def approve_async(self) -> None:
         """Async version of :meth:`approve`."""
@@ -316,22 +316,22 @@ class AgentHandle:
 
     async def pause_async(self) -> None:
         """Async version of :meth:`pause`."""
-        await self._runtime.pause_async(self.workflow_id)
+        await self._runtime.pause_async(self.execution_id)
 
     async def resume_async(self) -> None:
         """Async version of :meth:`resume`."""
-        await self._runtime.resume_async(self.workflow_id)
+        await self._runtime.resume_async(self.execution_id)
 
     async def cancel_async(self, reason: str = "") -> None:
         """Async version of :meth:`cancel`."""
-        await self._runtime.cancel_async(self.workflow_id, reason)
+        await self._runtime.cancel_async(self.execution_id, reason)
 
     def stream_async(self) -> "AsyncAgentStream":
         """Async streaming view. Returns an :class:`AsyncAgentStream`."""
         return AsyncAgentStream(handle=self, runtime=self._runtime)
 
     def __repr__(self) -> str:
-        return f"AgentHandle(workflow_id={self.workflow_id!r})"
+        return f"AgentHandle(execution_id={self.execution_id!r})"
 
 
 # ── AgentEvent (yielded by stream()) ───────────────────────────────────
@@ -365,7 +365,7 @@ class AgentEvent:
         result: Tool result (for ``tool_result``).
         target: Target agent name (for ``handoff``).
         output: Final output (for ``done``).
-        workflow_id: The Conductor workflow ID.
+        execution_id: The Conductor execution ID.
         guardrail_name: Guardrail name (for ``guardrail_pass``, ``guardrail_fail``).
     """
 
@@ -379,7 +379,7 @@ class AgentEvent:
     result: Any = None
     target: Optional[str] = None
     output: Any = None
-    workflow_id: str = ""
+    execution_id: str = ""
     guardrail_name: Optional[str] = None
 
     def __post_init__(self):
@@ -479,7 +479,7 @@ class AgentStream:
         sub_results = output.get("subResults", {}) if isinstance(output, dict) else {}
         self.result = AgentResult(
             output=output,
-            workflow_id=self.handle.workflow_id,
+            execution_id=self.handle.execution_id,
             correlation_id=self.handle.correlation_id,
             tool_calls=tool_calls,
             status=status,
@@ -508,13 +508,13 @@ class AgentStream:
         self.handle.send(message)
 
     @property
-    def workflow_id(self) -> str:
-        """The Conductor workflow ID."""
-        return self.handle.workflow_id
+    def execution_id(self) -> str:
+        """The Conductor execution ID."""
+        return self.handle.execution_id
 
     def __repr__(self) -> str:
         return (
-            f"AgentStream(workflow_id={self.handle.workflow_id!r}, "
+            f"AgentStream(execution_id={self.handle.execution_id!r}, "
             f"events={len(self.events)}, exhausted={self._exhausted})"
         )
 
@@ -590,7 +590,7 @@ def _build_result_from_events(
     sub_results = output.get("subResults", {}) if isinstance(output, dict) else {}
     return AgentResult(
         output=output,
-        workflow_id=handle.workflow_id,
+        execution_id=handle.execution_id,
         correlation_id=handle.correlation_id,
         tool_calls=tool_calls,
         status=status,
@@ -630,7 +630,7 @@ class AsyncAgentStream:
         return self._iterate()
 
     async def _iterate(self) -> AsyncIterator[AgentEvent]:
-        async for event in self._runtime._stream_workflow_async(self.handle.workflow_id):
+        async for event in self._runtime._stream_workflow_async(self.handle.execution_id):
             self.events.append(event)
             yield event
         self._exhausted = True
@@ -639,7 +639,7 @@ class AsyncAgentStream:
     async def get_result(self) -> AgentResult:
         """Drain the stream (if not already) and return the final result."""
         if not self._exhausted:
-            async for event in self._runtime._stream_workflow_async(self.handle.workflow_id):
+            async for event in self._runtime._stream_workflow_async(self.handle.execution_id):
                 self.events.append(event)
             self._exhausted = True
             self.result = _build_result_from_events(self.events, self.handle)
@@ -666,12 +666,12 @@ class AsyncAgentStream:
         await self.handle.send_async(message)
 
     @property
-    def workflow_id(self) -> str:
-        """The Conductor workflow ID."""
-        return self.handle.workflow_id
+    def execution_id(self) -> str:
+        """The Conductor execution ID."""
+        return self.handle.execution_id
 
     def __repr__(self) -> str:
         return (
-            f"AsyncAgentStream(workflow_id={self.handle.workflow_id!r}, "
+            f"AsyncAgentStream(execution_id={self.handle.execution_id!r}, "
             f"events={len(self.events)}, exhausted={self._exhausted})"
         )

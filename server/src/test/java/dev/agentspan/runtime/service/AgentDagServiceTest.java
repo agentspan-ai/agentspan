@@ -98,7 +98,7 @@ class AgentDagServiceTest {
         InjectTaskRequest.SubWorkflowParam swp = new InjectTaskRequest.SubWorkflowParam();
         swp.setName("my-sub-workflow");
         swp.setVersion(1);
-        swp.setWorkflowId("sub-wf-id-999");
+        swp.setExecutionId("sub-wf-id-999");
         req.setSubWorkflowParam(swp);
 
         service.injectTask("wf-2", req);

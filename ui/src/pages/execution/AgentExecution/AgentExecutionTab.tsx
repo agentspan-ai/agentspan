@@ -32,7 +32,7 @@ interface AgentExecutionTabProps {
 }
 
 async function fetchSubWorkflow(subWorkflowId: string): Promise<WorkflowExecution> {
-  const res = await fetch(`/api/workflow/${subWorkflowId}?summarize=true`);
+  const res = await fetch(`/api/agent/executions/${subWorkflowId}/full`);
   if (!res.ok) throw new Error(`Failed to fetch sub-workflow ${subWorkflowId}`);
   return res.json();
 }

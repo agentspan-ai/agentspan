@@ -1415,7 +1415,7 @@ def make_langgraph_worker(
     from conductor.client.http.models.task_result_status import TaskResultStatus
 
     def tool_worker(task: Task) -> TaskResult:
-        workflow_id = task.workflow_instance_id
+        execution_id = task.workflow_instance_id
         prompt = task.input_data.get("prompt", "")
         session_id = (task.input_data.get("session_id") or "").strip()
 
@@ -1429,9 +1429,9 @@ def make_langgraph_worker(
                 _workflow_credentials,
                 _workflow_credentials_lock,
             )
-            wf_id = workflow_id or ""
+            exec_id = execution_id or ""
             with _workflow_credentials_lock:
-                cred_names = list(_workflow_credentials.get(wf_id, []))
+                cred_names = list(_workflow_credentials.get(exec_id, []))
             if cred_names:
                 token = _extract_execution_token(task)
                 if token:
@@ -1455,23 +1455,23 @@ def make_langgraph_worker(
             final_state = None
             for mode, chunk in graph.stream(graph_input, config, stream_mode=["updates", "values"]):
                 if mode == "updates":
-                    _process_updates_chunk(chunk, workflow_id, server_url, auth_key, auth_secret)
+                    _process_updates_chunk(chunk, execution_id, server_url, auth_key, auth_secret)
                 elif mode == "values":
                     final_state = chunk
 
             output = _extract_output(final_state)
             return TaskResult(
                 task_id=task.task_id,
-                workflow_instance_id=workflow_id,
+                workflow_instance_id=execution_id,
                 status=TaskResultStatus.COMPLETED,
                 output_data={"result": output},
             )
 
         except Exception as exc:
-            logger.error("LangGraph worker error (workflow_id=%s): %s", workflow_id, exc)
+            logger.error("LangGraph worker error (execution_id=%s): %s", execution_id, exc)
             return TaskResult(
                 task_id=task.task_id,
-                workflow_instance_id=workflow_id,
+                workflow_instance_id=execution_id,
                 status=TaskResultStatus.FAILED,
                 reason_for_incompletion=str(exc),
             )
@@ -1506,7 +1506,7 @@ def _build_input(graph: Any, prompt: str) -> Dict[str, Any]:
 
 def _process_updates_chunk(
     chunk: Dict[str, Any],
-    workflow_id: str,
+    execution_id: str,
     server_url: str,
     auth_key: str,
     auth_secret: str,
@@ -1515,7 +1515,7 @@ def _process_updates_chunk(
     for node_name, state_updates in chunk.items():
         # Always emit a thinking event for each node execution
         _push_event_nonblocking(
-            workflow_id,
+            execution_id,
             {"type": "thinking", "content": node_name},
             server_url,
             auth_key,
@@ -1525,12 +1525,12 @@ def _process_updates_chunk(
         # Check for tool calls and tool results in messages
         messages = state_updates.get("messages", []) if isinstance(state_updates, dict) else []
         for msg in messages if isinstance(messages, list) else []:
-            _emit_message_events(msg, workflow_id, server_url, auth_key, auth_secret)
+            _emit_message_events(msg, execution_id, server_url, auth_key, auth_secret)
 
 
 def _emit_message_events(
     msg: Any,
-    workflow_id: str,
+    execution_id: str,
     server_url: str,
     auth_key: str,
     auth_secret: str,
@@ -1545,7 +1545,7 @@ def _emit_message_events(
             msg.get("content", "") if isinstance(msg, dict) else ""
         )
         _push_event_nonblocking(
-            workflow_id,
+            execution_id,
             {"type": "tool_result", "toolName": name, "result": str(content)},
             server_url,
             auth_key,
@@ -1564,7 +1564,7 @@ def _emit_message_events(
                 tc.get("args", {}) if isinstance(tc, dict) else {}
             )
             _push_event_nonblocking(
-                workflow_id,
+                execution_id,
                 {"type": "tool_call", "toolName": tc_name, "args": tc_args},
                 server_url,
                 auth_key,
@@ -1603,19 +1603,19 @@ def _extract_output(final_state: Optional[Dict[str, Any]]) -> str:
 
 
 def _push_event_nonblocking(
-    workflow_id: str,
+    execution_id: str,
     event: Dict[str, Any],
     server_url: str,
     auth_key: str,
     auth_secret: str,
 ) -> None:
-    """Fire-and-forget HTTP POST to {server_url}/agent/events/{workflowId}."""
+    """Fire-and-forget HTTP POST to {server_url}/agent/events/{executionId}."""
 
     def _do_push():
         try:
             import requests
 
-            url = f"{server_url}/agent/events/{workflow_id}"
+            url = f"{server_url}/agent/events/{execution_id}"
             headers = {}
             if auth_key:
                 headers["X-Auth-Key"] = auth_key
@@ -1623,6 +1623,6 @@ def _push_event_nonblocking(
                 headers["X-Auth-Secret"] = auth_secret
             requests.post(url, json=event, headers=headers, timeout=5)
         except Exception as exc:
-            logger.debug("Event push failed (workflow_id=%s): %s", workflow_id, exc)
+            logger.debug("Event push failed (execution_id=%s): %s", execution_id, exc)
 
     _EVENT_PUSH_POOL.submit(_do_push)

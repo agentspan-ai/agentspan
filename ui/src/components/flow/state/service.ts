@@ -14,7 +14,7 @@ import { AuthHeaders } from "types/common";
 
 const fetchContext = fetchContextNonHook();
 
-const BASE_PATH = `/metadata/workflow/`;
+const BASE_PATH = `/metadata/workflow/`; // TODO: migrate to agent API
 
 const fetchForWorkflowDefinition = async ({
   workflowName,

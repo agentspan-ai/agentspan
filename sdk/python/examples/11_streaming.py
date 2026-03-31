@@ -36,7 +36,7 @@ if __name__ == "__main__":
         # for event in runtime.stream(agent, "Write a haiku about Python programming"):
         #     if event.type == "done":
         #         print(f"\nResult: {event.output}")
-        #         print(f"Workflow: {event.workflow_id}")
+        #         print(f"Workflow: {event.execution_id}")
         #     elif event.type == "waiting":
         #         print("[Waiting...]")
         #     elif event.type == "error":

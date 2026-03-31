@@ -4,11 +4,11 @@
 """Client Reconnect — hard-kill the SDK process and resume later.
 
 Demonstrates:
-    - Starting a workflow and saving its workflow_id
+    - Starting a workflow and saving its execution_id
     - Reaching a durable approval wait state on the server
     - Hard-killing the local client process with SIGKILL from another process
     - Re-registering the tool worker from a fresh process
-    - Reconnecting later by workflow_id and continuing the same workflow
+    - Reconnecting later by execution_id and continuing the same workflow
 
 This proves client-process durability. The local Python process can die, but
 the workflow state remains stored on the Agentspan/Conductor server.
@@ -32,7 +32,7 @@ from pathlib import Path
 from agentspan.agents import Agent, AgentRuntime, tool
 from settings import settings
 
-DEFAULT_WORKFLOW_FILE = Path("/tmp/agentspan_client_reconnect.workflow_id")
+DEFAULT_WORKFLOW_FILE = Path("/tmp/agentspan_client_reconnect.execution_id")
 DEFAULT_CLIENT_INFO_FILE = Path("/tmp/agentspan_client_reconnect.client.json")
 
 
@@ -91,17 +91,17 @@ def start_workflow(prompt: str, workflow_file: Path, client_info_file: Path, tim
             {"pid": os.getpid(), "pgid": os.getpgid(0)},
         )
         handle = runtime.start(agent, prompt)
-        save_text(workflow_file, handle.workflow_id)
+        save_text(workflow_file, handle.execution_id)
 
         print(f"Client PID: {os.getpid()}")
         print(f"Client PGID: {os.getpgid(0)}")
-        print(f"Workflow ID: {handle.workflow_id}")
+        print(f"Workflow ID: {handle.execution_id}")
         print(f"Saved workflow ID to: {workflow_file}")
         print(f"Saved client info to: {client_info_file}")
         print("Waiting for the workflow to reach a durable WAITING state...")
 
         for second in range(timeout_seconds + 1):
-            status = runtime.get_status(handle.workflow_id)
+            status = runtime.get_status(handle.execution_id)
             print_status(f"  [{second:02d}s]", status)
             if status.is_waiting:
                 print()
@@ -120,7 +120,7 @@ def start_workflow(prompt: str, workflow_file: Path, client_info_file: Path, tim
             return
 
         while True:
-            status = runtime.get_status(handle.workflow_id)
+            status = runtime.get_status(handle.execution_id)
             print_status("  [hold]", status)
             time.sleep(2)
 
@@ -132,10 +132,10 @@ def kill_client(client_info_file: Path) -> None:
     os.killpg(pgid, signal.SIGKILL)
 
 
-def show_status(workflow_id: str, timeout_seconds: int) -> None:
+def show_status(execution_id: str, timeout_seconds: int) -> None:
     with AgentRuntime() as runtime:
         for second in range(timeout_seconds + 1):
-            status = runtime.get_status(workflow_id)
+            status = runtime.get_status(execution_id)
             print_status(f"  [{second:02d}s]", status)
             if status.is_complete:
                 print("\nFinal output:")
@@ -146,21 +146,21 @@ def show_status(workflow_id: str, timeout_seconds: int) -> None:
         print("\nTimed out waiting for completion.")
 
 
-def resume_workflow(workflow_id: str, timeout_seconds: int, approve: bool) -> None:
+def resume_workflow(execution_id: str, timeout_seconds: int, approve: bool) -> None:
     with AgentRuntime() as runtime:
         runtime.serve(agent, blocking=False)
-        print(f"Reconnected to workflow: {workflow_id}")
-        status = runtime.get_status(workflow_id)
+        print(f"Reconnected to workflow: {execution_id}")
+        status = runtime.get_status(execution_id)
         print_status("  [initial]", status)
 
         if status.is_waiting and approve:
             print("Sending approval from this new process...")
-            runtime.respond(workflow_id, {"approved": True})
+            runtime.respond(execution_id, {"approved": True})
         elif status.is_waiting:
             print("Workflow is waiting. Re-run with --approve to continue it.")
             return
 
-        show_status(workflow_id, timeout_seconds)
+        show_status(execution_id, timeout_seconds)
 
 
 def parse_args() -> argparse.Namespace:
@@ -182,7 +182,7 @@ def parse_args() -> argparse.Namespace:
         "--file",
         type=Path,
         default=DEFAULT_WORKFLOW_FILE,
-        help="Path to store workflow_id.",
+        help="Path to store execution_id.",
     )
     start.add_argument(
         "--client-info-file",
@@ -210,14 +210,14 @@ def parse_args() -> argparse.Namespace:
 
     status = sub.add_parser(
         "status",
-        help="Query workflow status by workflow_id or saved file.",
+        help="Query workflow status by execution_id or saved file.",
     )
     status.add_argument("--workflow-id", default="", help="Workflow ID (overrides --file).")
     status.add_argument(
         "--file",
         type=Path,
         default=DEFAULT_WORKFLOW_FILE,
-        help="Path containing saved workflow_id.",
+        help="Path containing saved execution_id.",
     )
     status.add_argument(
         "--timeout-seconds",
@@ -235,7 +235,7 @@ def parse_args() -> argparse.Namespace:
         "--file",
         type=Path,
         default=DEFAULT_WORKFLOW_FILE,
-        help="Path containing saved workflow_id.",
+        help="Path containing saved execution_id.",
     )
     resume.add_argument(
         "--approve",
@@ -260,8 +260,8 @@ if __name__ == "__main__":
     elif args.command == "kill-client":
         kill_client(args.client_info_file)
     elif args.command == "status":
-        workflow_id = args.workflow_id or load_text(args.file)
-        show_status(workflow_id, args.timeout_seconds)
+        execution_id = args.execution_id or load_text(args.file)
+        show_status(execution_id, args.timeout_seconds)
     elif args.command == "resume":
-        workflow_id = args.workflow_id or load_text(args.file)
-        resume_workflow(workflow_id, args.timeout_seconds, args.approve)
+        execution_id = args.execution_id or load_text(args.file)
+        resume_workflow(execution_id, args.timeout_seconds, args.approve)

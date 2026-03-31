@@ -86,9 +86,9 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | `GET` | `/` | Health check |
 | `POST` | `/compile` | Compile AgentConfig → WorkflowDef (no execution) |
 | `POST` | `/start` | Compile, register, and execute an agent |
-| `GET` | `/stream/{workflowId}` | SSE event stream (supports `Last-Event-ID` for reconnection) |
-| `POST` | `/{workflowId}/respond` | HITL response (approve/deny/message) |
-| `GET` | `/{workflowId}/status` | Polling-based execution status |
+| `GET` | `/stream/{executionId}` | SSE event stream (supports `Last-Event-ID` for reconnection) |
+| `POST` | `/{executionId}/respond` | HITL response (approve/deny/message) |
+| `GET` | `/{executionId}/status` | Polling-based execution status |
 | `GET` | `/list` | List all registered agents |
 | `GET` | `/get/{name}` | Get agent definition (`?version=X` optional) |
 | `DELETE` | `/delete/{name}` | Delete agent definition (`?version=X` optional) |

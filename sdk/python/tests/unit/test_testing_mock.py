@@ -95,7 +95,7 @@ class TestMockRun:
         result = mock_run(agent, "Hello", events=[MockEvent.done("Hi there!")])
         assert result.output == "Hi there!"
         assert result.status == "COMPLETED"
-        assert result.workflow_id == "mock"
+        assert result.execution_id == "mock"
         assert len(result.events) == 1
         assert result.tool_calls == []
 

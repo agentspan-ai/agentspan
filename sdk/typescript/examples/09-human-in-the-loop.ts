@@ -68,7 +68,7 @@ if (process.argv[1]?.endsWith('09-human-in-the-loop.ts') || process.argv[1]?.end
       agent,
       'Transfer $500 from ACC-789 to ACC-456',
     );
-    console.log(`Workflow started: ${handle.workflowId}\n`);
+    console.log(`Execution started: ${handle.executionId}\n`);
 
     for await (const event of handle.stream()) {
       switch (event.type) {
