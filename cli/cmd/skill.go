@@ -201,8 +201,17 @@ func pollExecution(c *client.Client, executionID string, timeout time.Duration) 
 		case "COMPLETED":
 			color.Green("Execution %s completed.", executionID)
 			if output, ok := status["output"]; ok {
+				cleaned := stripNulls(output)
+				// Check for empty result
+				if m, ok := cleaned.(map[string]interface{}); ok {
+					result, _ := m["result"].(string)
+					if result == "" || result == "{}" {
+						color.Yellow("\nWarning: agent returned an empty result. This can happen when the model runs out of context on long conversations. Try a larger model (e.g. --model anthropic/claude-sonnet-4-6).")
+						return nil
+					}
+				}
 				fmt.Println()
-				printJSON(stripNulls(output))
+				printJSON(cleaned)
 			}
 			return nil
 		case "FAILED", "TERMINATED", "TIMED_OUT":
