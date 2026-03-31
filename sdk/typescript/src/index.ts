@@ -248,6 +248,17 @@ export { discoverAgents } from './discovery.js';
 // ── Tracing ─────────────────────────────────────────────
 export { isTracingEnabled } from './tracing.js';
 
+// ── Skills ───────────────────────────────────────────────
+export type { SkillOptions, LoadSkillsOptions, SkillWorker } from './skill.js';
+export {
+  skill,
+  loadSkills,
+  SkillLoadError,
+  formatSkillParams,
+  formatPromptWithParams,
+  createSkillWorkers,
+} from './skill.js';
+
 // ── Framework Integration ───────────────────────────────
 export { detectFramework } from './frameworks/detect.js';
 export type { WorkerInfo } from './frameworks/serializer.js';

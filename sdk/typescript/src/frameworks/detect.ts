@@ -2,6 +2,7 @@
  * Framework auto-detection via duck-typing.
  *
  * Detection order (priority):
+ * 0. agent._framework === 'skill' → 'skill' (checked before instanceof)
  * 1. agent instanceof Agent → null (native agentspan)
  * 2. .invoke() + (.getGraph() OR .nodes Map) → 'langgraph'
  * 3. .invoke() + .lc_namespace → 'langchain'
@@ -92,6 +93,16 @@ function hasADKMarkers(obj: any): boolean {
  * Returns null for native agentspan Agent instances or unknown objects.
  */
 export function detectFramework(agent: unknown): FrameworkId | null {
+  // 0. Skill framework — must be checked before native Agent check
+  //    since skill agents are Agent instances with a _framework marker.
+  if (
+    agent != null &&
+    typeof agent === 'object' &&
+    (agent as Record<string, unknown>)._framework === 'skill'
+  ) {
+    return 'skill';
+  }
+
   // 1. Native agentspan Agent — not a framework
   if (agent instanceof Agent) return null;
 
