@@ -5,6 +5,7 @@ package dev.agentspan.internal;
 
 import dev.agentspan.Agent;
 import dev.agentspan.model.GuardrailDef;
+import dev.agentspan.model.PromptTemplate;
 import dev.agentspan.model.ToolDef;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,8 +57,20 @@ public class AgentConfigSerializer {
         // External flag (always emit)
         agentMap.put("external", agent.isExternal());
 
-        // Instructions
-        if (agent.getInstructions() != null && !agent.getInstructions().isEmpty()) {
+        // Instructions — prefer PromptTemplate over plain string
+        if (agent.getInstructionsTemplate() != null) {
+            PromptTemplate pt = agent.getInstructionsTemplate();
+            Map<String, Object> tmpl = new LinkedHashMap<>();
+            tmpl.put("type", "prompt_template");
+            tmpl.put("name", pt.getName());
+            if (pt.getVariables() != null && !pt.getVariables().isEmpty()) {
+                tmpl.put("variables", pt.getVariables());
+            }
+            if (pt.getVersion() != null) {
+                tmpl.put("version", pt.getVersion());
+            }
+            agentMap.put("instructions", tmpl);
+        } else if (agent.getInstructions() != null && !agent.getInstructions().isEmpty()) {
             agentMap.put("instructions", agent.getInstructions());
         }
 
@@ -141,6 +154,24 @@ public class AgentConfigSerializer {
         // Introduction (prepended to conversation in multi-agent discussions)
         if (agent.getIntroduction() != null && !agent.getIntroduction().isEmpty()) {
             agentMap.put("introduction", agent.getIntroduction());
+        }
+
+        // Callbacks (before/after model hooks)
+        List<Map<String, Object>> callbacks = new ArrayList<>();
+        if (agent.getBeforeModelCallback() != null) {
+            Map<String, Object> cb = new LinkedHashMap<>();
+            cb.put("position", "before_model");
+            cb.put("taskName", agent.getName() + "_before_model");
+            callbacks.add(cb);
+        }
+        if (agent.getAfterModelCallback() != null) {
+            Map<String, Object> cb = new LinkedHashMap<>();
+            cb.put("position", "after_model");
+            cb.put("taskName", agent.getName() + "_after_model");
+            callbacks.add(cb);
+        }
+        if (!callbacks.isEmpty()) {
+            agentMap.put("callbacks", callbacks);
         }
 
         return agentMap;

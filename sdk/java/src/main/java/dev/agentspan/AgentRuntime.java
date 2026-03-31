@@ -197,6 +197,26 @@ public class AgentRuntime implements AutoCloseable {
             if (tool.getFunc() != null && "worker".equals(tool.getToolType())) {
                 workerManager.register(tool.getName(), tool.getFunc());
             }
+            // Recursively prepare workers for agent_tool child agents
+            if ("agent_tool".equals(tool.getToolType()) && tool.getAgentRef() != null) {
+                prepareWorkers(tool.getAgentRef());
+            }
+        }
+
+        // Register callback workers
+        if (agent.getBeforeModelCallback() != null) {
+            final java.util.function.Function<Map<String, Object>, Map<String, Object>> beforeCb = agent.getBeforeModelCallback();
+            workerManager.register(agent.getName() + "_before_model", inputData -> {
+                Map<String, Object> result = beforeCb.apply(inputData);
+                return result != null ? result : java.util.Collections.emptyMap();
+            });
+        }
+        if (agent.getAfterModelCallback() != null) {
+            final java.util.function.Function<Map<String, Object>, Map<String, Object>> afterCb = agent.getAfterModelCallback();
+            workerManager.register(agent.getName() + "_after_model", inputData -> {
+                Map<String, Object> result = afterCb.apply(inputData);
+                return result != null ? result : java.util.Collections.emptyMap();
+            });
         }
 
         // Register combined guardrail worker per agent (matches Python: {agent_name}_output_guardrail)
