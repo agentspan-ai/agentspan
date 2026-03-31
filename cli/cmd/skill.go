@@ -202,13 +202,13 @@ func pollExecution(c *client.Client, executionID string, timeout time.Duration) 
 			color.Green("Execution %s completed.", executionID)
 			if output, ok := status["output"]; ok {
 				fmt.Println()
-				printJSON(output)
+				printJSON(stripNulls(output))
 			}
 			return nil
 		case "FAILED", "TERMINATED", "TIMED_OUT":
 			color.Red("Execution %s %s.", executionID, strings.ToLower(statusStr))
 			if output, ok := status["output"]; ok {
-				printJSON(output)
+				printJSON(stripNulls(output))
 			}
 			return fmt.Errorf("execution %s", strings.ToLower(statusStr))
 		case "PAUSED":
@@ -219,6 +219,29 @@ func pollExecution(c *client.Client, executionID string, timeout time.Duration) 
 			// RUNNING or other transient state — keep polling
 			time.Sleep(interval)
 		}
+	}
+}
+
+// stripNulls recursively removes null values from maps for cleaner output.
+func stripNulls(v interface{}) interface{} {
+	switch val := v.(type) {
+	case map[string]interface{}:
+		clean := make(map[string]interface{})
+		for k, v2 := range val {
+			if v2 == nil {
+				continue
+			}
+			clean[k] = stripNulls(v2)
+		}
+		return clean
+	case []interface{}:
+		out := make([]interface{}, 0, len(val))
+		for _, item := range val {
+			out = append(out, stripNulls(item))
+		}
+		return out
+	default:
+		return v
 	}
 }
 
