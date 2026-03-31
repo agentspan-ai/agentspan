@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agentspan/agentspan/cli/config"
+	"github.com/agentspan-ai/agentspan/cli/config"
 )
 
 type Client struct {

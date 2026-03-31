@@ -11,7 +11,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/agentspan/agentspan.git"
+    "url": "git+https://github.com/agentspan-ai/agentspan.git"
   },
   "keywords": [
     "agentspan",
@@ -25,9 +25,9 @@
   "author": "AgentSpan",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/agentspan/agentspan/issues"
+    "url": "https://github.com/agentspan-ai/agentspan/issues"
   },
-  "homepage": "https://github.com/agentspan/agentspan#readme",
+  "homepage": "https://github.com/agentspan-ai/agentspan#readme",
   "os": [
     "darwin",
     "linux",

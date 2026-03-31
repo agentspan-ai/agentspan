@@ -39,7 +39,7 @@ RUN cp "build/libs/${RUNTIME_JAR}" /build/runtime.jar
 # ─── Stage 3: Runtime image ───────────────────────────────────────────────────
 FROM eclipse-temurin:21-jre
 
-LABEL org.opencontainers.image.source="https://github.com/agentspan/agentspan"
+LABEL org.opencontainers.image.source="https://github.com/agentspan-ai/agentspan"
 LABEL org.opencontainers.image.description="Agentspan — durable AI agent runtime with embedded UI"
 LABEL org.opencontainers.image.licenses="MIT"
 

@@ -1,4 +1,4 @@
-module github.com/agentspan/agentspan/cli
+module github.com/agentspan-ai/agentspan/cli
 
 go 1.25.6
 

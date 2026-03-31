@@ -11,7 +11,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/agentspan/agentspan/cli/internal/progress"
+	"github.com/agentspan-ai/agentspan/cli/internal/progress"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )

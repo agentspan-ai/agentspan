@@ -4,7 +4,7 @@ set -e
 VERSION="${VERSION:-dev}"
 COMMIT="${COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || echo 'none')}"
 DATE="${DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
-LDFLAGS="-X github.com/agentspan/agentspan/cli/cmd.Version=${VERSION} -X github.com/agentspan/agentspan/cli/cmd.Commit=${COMMIT} -X github.com/agentspan/agentspan/cli/cmd.Date=${DATE}"
+LDFLAGS="-X github.com/agentspan-ai/agentspan/cli/cmd.Version=${VERSION} -X github.com/agentspan-ai/agentspan/cli/cmd.Commit=${COMMIT} -X github.com/agentspan-ai/agentspan/cli/cmd.Date=${DATE}"
 
 mkdir -p dist
 

@@ -105,7 +105,7 @@ public class AgentRuntime implements ApplicationRunner {
             log.warn("│    export OPENAI_API_KEY=sk-...                                 │");
             log.warn("│    export ANTHROPIC_API_KEY=sk-ant-...                          │");
             log.warn("│                                                                 │");
-            log.warn("│  Docs: https://github.com/agentspan/agentspan/blob/main/docs/ai-models.md");
+            log.warn("│  Docs: https://github.com/agentspan-ai/agentspan/blob/main/docs/ai-models.md");
             log.warn("└─────────────────────────────────────────────────────────────────┘");
         }
     }
