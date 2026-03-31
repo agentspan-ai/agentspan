@@ -3342,7 +3342,10 @@ class AgentRuntime:
         """
         if handle is not None:
             event_iter = self._stream_workflow(handle.workflow_id)
-            return AgentStream(handle=handle, event_iterator=event_iter)
+            return AgentStream(
+                handle=handle, event_iterator=event_iter,
+                token_fetcher=self._extract_token_usage,
+            )
 
         if agent is None or prompt is None:
             raise ValueError("Either (agent, prompt) or handle= must be provided")
@@ -3351,7 +3354,10 @@ class AgentRuntime:
             agent, prompt, version=version, media=media, session_id=session_id, **kwargs
         )
         event_iter = self._stream_workflow(handle.workflow_id)
-        return AgentStream(handle=handle, event_iterator=event_iter)
+        return AgentStream(
+            handle=handle, event_iterator=event_iter,
+            token_fetcher=self._extract_token_usage,
+        )
 
     def _stream_workflow(self, workflow_id: str) -> Iterator[AgentEvent]:
         """Stream events for a workflow, with SSE-to-polling fallback.
