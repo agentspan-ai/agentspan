@@ -1360,7 +1360,7 @@ public class AgentService {
     public List<String> findRunningExecutionIds(String agentName, String correlationId) {
         // Use existing workflowService.searchWorkflows() with status=RUNNING and freeText matching agentName
         SearchResult<WorkflowSummary> results = workflowService.searchWorkflows(
-            0, 100, null, "*", "workflowType = '" + agentName + "' AND status = 'RUNNING'");
+            0, 100, (String) null, "*", "workflowType = '" + agentName + "' AND status = 'RUNNING'");
         return results.getResults().stream()
             .map(WorkflowSummary::getWorkflowId)
             .collect(Collectors.toList());

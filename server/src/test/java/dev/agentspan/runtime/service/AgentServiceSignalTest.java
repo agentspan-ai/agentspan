@@ -53,14 +53,17 @@ class AgentServiceSignalTest {
     @Mock
     private dev.agentspan.runtime.normalizer.NormalizerRegistry normalizerRegistry;
 
+    @Mock
+    private dev.agentspan.runtime.util.ProviderValidator providerValidator;
+
     private AgentService agentService;
 
     @BeforeEach
     void setUp() {
         agentService = new AgentService(
-                workflowExecutor, agentCompiler, metadataDAO,
-                workflowService, executionService, streamRegistry,
-                normalizerRegistry);
+                agentCompiler, normalizerRegistry, metadataDAO,
+                workflowExecutor, workflowService, streamRegistry,
+                executionService, providerValidator, null);
     }
 
     /**

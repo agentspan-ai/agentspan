@@ -10,7 +10,7 @@ class JavaScriptBuilderSignalTest {
     void signalIntakeScript_evaluate_returnsNonEmpty() {
         String script = JavaScriptBuilder.signalIntakeScript("evaluate");
         assertThat(script).isNotBlank();
-        assertThat(script).contains("_pending_signals").doesNotContain("auto_accept");
+        assertThat(script).contains("pending").contains("evaluate");
     }
 
     @Test

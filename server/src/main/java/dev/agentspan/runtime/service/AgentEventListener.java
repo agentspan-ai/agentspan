@@ -24,6 +24,7 @@ import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Primary;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
@@ -75,6 +76,7 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
     private CredentialResolutionService credentialResolutionService;
 
     @Autowired(required = false)
+    @Lazy
     private WorkflowExecutor workflowExecutor;
 
     @Autowired(required = false)

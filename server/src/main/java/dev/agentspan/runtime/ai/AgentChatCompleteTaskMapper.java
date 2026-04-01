@@ -22,6 +22,7 @@ import org.conductoross.conductor.ai.models.ChatMessage;
 import org.conductoross.conductor.ai.models.LLMResponse;
 import org.conductoross.conductor.ai.models.Media;
 import org.conductoross.conductor.ai.models.ToolCall;
+import org.conductoross.conductor.ai.models.ToolSpec;
 import org.conductoross.conductor.ai.tasks.mapper.AIModelTaskMapper;
 import org.conductoross.conductor.common.utils.StringTemplate;
 import org.conductoross.conductor.config.AIIntegrationEnabledCondition;
@@ -144,12 +145,20 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
                     List<Map<String, Object>> signalTools =
                         (List<Map<String, Object>>) signalInjection.get("tools");
                     if (signalTools != null && !signalTools.isEmpty()) {
-                        List<Object> tools = chatCompletion.getTools();
+                        List<ToolSpec> tools = chatCompletion.getTools();
                         if (tools == null) {
                             tools = new ArrayList<>();
                             chatCompletion.setTools(tools);
                         }
-                        tools.addAll(signalTools);
+                        for (Map<String, Object> st : signalTools) {
+                            ToolSpec ts = new ToolSpec();
+                            ts.setName((String) st.get("name"));
+                            ts.setDescription((String) st.get("description"));
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> schema = (Map<String, Object>) st.get("inputSchema");
+                            ts.setInputSchema(schema);
+                            tools.add(ts);
+                        }
                     }
                 }
             }

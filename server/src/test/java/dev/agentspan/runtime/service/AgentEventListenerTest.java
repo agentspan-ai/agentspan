@@ -665,9 +665,7 @@ class AgentEventListenerTest {
         // Act
         wfListener.onTaskCompleted(task);
 
-        // Assert: updateVariables called to clear flag, then pauseWorkflow called
-        verify(mockWorkflowExecutor).updateVariables(eq("wf-123"),
-            argThat(m -> Boolean.FALSE.equals(m.get("_urgent_pause_requested"))));
+        // Assert: pauseWorkflow called (flag is cleared via REST, not via workflowExecutor)
         verify(mockWorkflowExecutor).pauseWorkflow("wf-123");
     }
 
