@@ -253,7 +253,9 @@ tasks.register('syncUiStatic', Sync) {
 }
 
 tasks.named('processResources') {
-    mustRunAfter 'syncUiStatic'
+    if (buildUiEnabled) {
+        dependsOn 'syncUiStatic'
+    }
 }
 
 tasks.named('bootJar') {
