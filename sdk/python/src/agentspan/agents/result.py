@@ -263,6 +263,25 @@ class AgentHandle:
         """Send a message to a waiting agent (multi-turn conversation)."""
         self.respond({"message": message})
 
+    def signal(self, message: str, *, priority: str = "normal",
+               data: dict | None = None, sender: str | None = None,
+               propagate: bool = True) -> "SignalReceipt":
+        """Send a signal to this running execution."""
+        from agentspan.agents.signal import SignalReceipt  # noqa: F401
+        return self._runtime.signal(
+            execution_id=self.execution_id,
+            message=message,
+            priority=priority,
+            data=data,
+            sender=sender,
+            propagate=propagate,
+        )
+
+    async def signal_async(self, message: str, **kwargs) -> "SignalReceipt":
+        """Async version of :meth:`signal`."""
+        return await self._runtime.signal_async(
+            execution_id=self.execution_id, message=message, **kwargs)
+
     # ── Execution control ───────────────────────────────────────────
 
     def pause(self) -> None:
@@ -350,6 +369,9 @@ class EventType(str, Enum):
     DONE = "done"
     GUARDRAIL_PASS = "guardrail_pass"
     GUARDRAIL_FAIL = "guardrail_fail"
+    SIGNAL_RECEIVED = "signal_received"
+    SIGNAL_ACCEPTED = "signal_accepted"
+    SIGNAL_REJECTED = "signal_rejected"
 
 
 @dataclass
@@ -381,6 +403,7 @@ class AgentEvent:
     output: Any = None
     execution_id: str = ""
     guardrail_name: Optional[str] = None
+    data: Optional[Dict[str, Any]] = None
 
     def __post_init__(self):
         if self.args and isinstance(self.args, dict):
@@ -518,6 +541,10 @@ class AgentStream:
     def send(self, message: str) -> None:
         """Send a message to a waiting agent (multi-turn conversation)."""
         self.handle.send(message)
+
+    def signal(self, message: str, **kwargs) -> "SignalReceipt":
+        """Send a signal to the running agent this stream is attached to."""
+        return self.handle.signal(message, **kwargs)
 
     @property
     def execution_id(self) -> str:

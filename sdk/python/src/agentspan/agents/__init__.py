@@ -85,6 +85,9 @@ from agentspan.agents.handoff import HandoffCondition, OnCondition, OnTextMentio
 # Memory
 from agentspan.agents.memory import ConversationMemory
 
+# Signal types
+from agentspan.agents.signal import SignalReceipt, SignalStatus
+
 # Result types
 from agentspan.agents.result import (
     AgentEvent,
@@ -191,6 +194,7 @@ from agentspan.agents.tool import (
     mcp_tool,
     pdf_tool,
     search_tool,
+    signal_tool,
     tool,
     video_tool,
 )
@@ -221,6 +225,8 @@ __all__ = [
     "http_tool",
     "human_tool",
     "mcp_tool",
+    "signal_tool",
+    "wait_for_message_tool",
     "image_tool",
     "audio_tool",
     "video_tool",
@@ -312,4 +318,7 @@ __all__ = [
     "skill",
     "load_skills",
     "SkillLoadError",
+    # Signal types
+    "SignalReceipt",
+    "SignalStatus",
 ]

@@ -105,4 +105,12 @@ public class AgentConfig {
     /** Whether this is an external agent (no model, references existing workflow). */
     @Builder.Default
     private boolean external = false;
+
+    private String signalMode;          // "evaluate" (default) | "auto_accept"
+    private String onSignalReceived;    // optional callback task name
+
+    public String getSignalMode() { return signalMode; }
+    public void setSignalMode(String signalMode) { this.signalMode = signalMode; }
+    public String getOnSignalReceived() { return onSignalReceived; }
+    public void setOnSignalReceived(String onSignalReceived) { this.onSignalReceived = onSignalReceived; }
 }

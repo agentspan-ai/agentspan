@@ -5,18 +5,33 @@
 
 package dev.agentspan.runtime.service;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Primary;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import com.netflix.conductor.core.execution.WorkflowExecutor;
 import com.netflix.conductor.core.listener.TaskStatusListener;
 import com.netflix.conductor.core.listener.WorkflowStatusListener;
 import com.netflix.conductor.model.TaskModel;
@@ -46,6 +61,11 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
     private static final Set<String> AI_TASK_TYPES =
             Set.of("LLM_CHAT_COMPLETE", "GENERATE_IMAGE", "GENERATE_AUDIO", "GENERATE_VIDEO");
 
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5))
+            .build();
+
     private final AgentStreamRegistry streamRegistry;
     private final MeterRegistry meterRegistry;
 
@@ -54,6 +74,20 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
 
     @Autowired(required = false)
     private CredentialResolutionService credentialResolutionService;
+
+    @Autowired(required = false)
+    @Lazy
+    private WorkflowExecutor workflowExecutor;
+
+    @Autowired(required = false)
+    private Environment environment;
+
+    private final ScheduledExecutorService urgentResumeScheduler =
+        Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "agentspan-urgent-resume");
+            t.setDaemon(true);
+            return t;
+        });
 
     @Autowired
     public AgentEventListener(AgentStreamRegistry streamRegistry, MeterRegistry meterRegistry) {
@@ -67,6 +101,13 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
         this.streamRegistry = streamRegistry;
         this.meterRegistry = null;
         this.executionTokenService = tokenService;
+    }
+
+    /** Package-private constructor for testing with WorkflowExecutor. */
+    AgentEventListener(AgentStreamRegistry streamRegistry, WorkflowExecutor workflowExecutor) {
+        this.streamRegistry = streamRegistry;
+        this.meterRegistry = null;
+        this.workflowExecutor = workflowExecutor;
     }
 
     // ── TaskStatusListener ───────────────────────────────────────────
@@ -114,10 +155,44 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
         String wfId = task.getWorkflowInstanceId();
         String taskRef = task.getReferenceTaskName();
         logger.debug("onTaskCompleted: wfId={}, type={}, ref={}", wfId, task.getTaskType(), taskRef);
+
+        // ── Urgent pause ──────────────────────────────────────────────────
+        if (workflowExecutor != null && isNaturalPausePoint(task)) {
+            try {
+                WorkflowModel wf = workflowExecutor.getWorkflow(wfId, false);
+                if (wf != null) {
+                    Object flag = wf.getVariables() != null
+                        ? wf.getVariables().get("_urgent_pause_requested") : null;
+                    if (Boolean.TRUE.equals(flag)) {
+                        // Clear flag first, then pause (prevents double-pause on concurrent completions)
+                        updateWorkflowVariables(wfId, Map.of("_urgent_pause_requested", false));
+                        workflowExecutor.pauseWorkflow(wfId);
+                        urgentResumeScheduler.schedule(() -> {
+                            try {
+                                workflowExecutor.resumeWorkflow(wfId);
+                            } catch (Exception e) {
+                                logger.debug("Auto-resume skipped for {}: {}", wfId, e.getMessage());
+                            }
+                        }, 100, TimeUnit.MILLISECONDS);
+                    }
+                }
+            } catch (Exception e) {
+                logger.debug("Urgent pause check failed for {}: {}", wfId, e.getMessage());
+            }
+        }
+
+        // ── Signal SSE events ─────────────────────────────────────────────
+        // Detect SET_VARIABLE tasks that persist signal state and emit SSE for new dispositions
+        if (taskRef != null && (taskRef.endsWith("_signal_intake_set")
+                || taskRef.endsWith("_signal_set")
+                || taskRef.endsWith("_signal_implicit_set"))) {
+            emitSignalDispositionEvents(wfId, task);
+        }
+
         Map<String, Object> output = task.getOutputData();
         if (output == null) output = Map.of();
 
-        // Tool dispatch — SIMPLE tasks that are tool invocations
+        // ── Tool + guardrail events (existing logic) ───────────────────────
         if (isToolTask(task)) {
             String toolName = resolveToolName(task);
             Object args = task.getInputData();
@@ -125,17 +200,64 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
             if (result == null) result = output;
             emit(wfId, AgentSSEEvent.toolCall(wfId, toolName, args));
             emit(wfId, AgentSSEEvent.toolResult(wfId, toolName, result));
-        }
-        // Guardrail tasks — identified by "guardrail" in ref name
-        else if (taskRef != null && taskRef.contains("guardrail") && output.containsKey("passed")) {
+        } else if (taskRef != null && taskRef.contains("guardrail") && output.containsKey("passed")) {
             Boolean passed = (Boolean) output.get("passed");
-            String name = taskRef;
             if (Boolean.TRUE.equals(passed)) {
-                emit(wfId, AgentSSEEvent.guardrailPass(wfId, name));
+                emit(wfId, AgentSSEEvent.guardrailPass(wfId, taskRef));
             } else {
                 String message = (String) output.getOrDefault("message", "");
-                emit(wfId, AgentSSEEvent.guardrailFail(wfId, name, message));
+                emit(wfId, AgentSSEEvent.guardrailFail(wfId, taskRef, message));
             }
+        }
+    }
+
+    private boolean isNaturalPausePoint(TaskModel task) {
+        String type = task.getTaskType();
+        return "LLM_CHAT_COMPLETE".equals(type) || "SIMPLE".equals(type)
+            || "HTTP".equals(type) || "CALL_MCP_TOOL".equals(type)
+            || "SUB_WORKFLOW".equals(type);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void emitSignalDispositionEvents(String wfId, TaskModel setVariableTask) {
+        // The preceding INLINE task's output is referenced by the SET_VARIABLE's inputParameters.
+        // We read newDispositions from the INLINE task output via the workflow's task list.
+        try {
+            if (workflowExecutor == null) return;
+            WorkflowModel wf = workflowExecutor.getWorkflow(wfId, true);
+            if (wf == null || wf.getTasks() == null) return;
+
+            // Find the INLINE task immediately before this SET_VARIABLE
+            List<TaskModel> tasks = wf.getTasks();
+            String setRef = setVariableTask.getReferenceTaskName();
+            // INLINE ref name: strip trailing "_set" to get the INLINE ref
+            String inlineRef = setRef.endsWith("_set") ? setRef.substring(0, setRef.length() - 4) : null;
+            if (inlineRef == null) return;
+
+            for (TaskModel t : tasks) {
+                if (inlineRef.equals(t.getReferenceTaskName())) {
+                    Map<String, Object> result = (Map<String, Object>)
+                        (t.getOutputData() != null ? t.getOutputData().get("result") : null);
+                    if (result == null) return;
+                    List<Map<String, Object>> dispositions = (List<Map<String, Object>>)
+                        result.get("newDispositions");
+                    if (dispositions == null || dispositions.isEmpty()) return;
+                    for (Map<String, Object> d : dispositions) {
+                        String type = (String) d.get("type");
+                        String signalId = (String) d.get("signalId");
+                        String sender = (String) d.getOrDefault("sender", "unknown");
+                        if ("signal_accepted".equals(type)) {
+                            emit(wfId, AgentSSEEvent.signalAccepted(wfId, signalId, sender));
+                        } else if ("signal_rejected".equals(type)) {
+                            String reason = (String) d.get("reason");
+                            emit(wfId, AgentSSEEvent.signalRejected(wfId, signalId, sender, reason));
+                        }
+                    }
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Failed to emit signal disposition events for {}: {}", wfId, e.getMessage());
         }
     }
 
@@ -552,5 +674,30 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
         }
 
         return name;
+    }
+
+    /**
+     * Updates workflow variables via Conductor's REST API:
+     * POST /workflow/{workflowId}/variables
+     */
+    private void updateWorkflowVariables(String workflowId, Map<String, Object> variables) {
+        try {
+            String port = environment != null ? environment.getProperty("server.port", "6767") : "6767";
+            String contextPath = environment != null ? environment.getProperty("server.servlet.context-path", "") : "";
+            String url = "http://localhost:" + port + contextPath + "/workflow/" + workflowId + "/variables";
+            String body = MAPPER.writeValueAsString(variables);
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(Duration.ofSeconds(5))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
+                    .build();
+            HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 300) {
+                logger.warn("updateWorkflowVariables failed for {}: HTTP {}", workflowId, response.statusCode());
+            }
+        } catch (Exception e) {
+            logger.warn("updateWorkflowVariables failed for {}: {}", workflowId, e.getMessage());
+        }
     }
 }

@@ -30,6 +30,10 @@ public class AgentSSEEvent {
     private String target;
     private Object output;
     private String guardrailName;
+    private String signalId;
+    private String sender;
+    private String priority;
+    private String rejectionReason;
     private Map<String, Object> pendingTool;
     private long timestamp;
     // context_condensed fields
@@ -76,6 +80,33 @@ public class AgentSSEEvent {
     public static AgentSSEEvent waiting(String executionId, Map<String, Object> pendingTool) {
         AgentSSEEvent e = new AgentSSEEvent("waiting", executionId);
         e.pendingTool = pendingTool;
+        return e;
+    }
+
+    public static AgentSSEEvent signalReceived(String executionId, String signalId,
+            String message, String sender, String priority) {
+        AgentSSEEvent e = new AgentSSEEvent("signal_received", executionId);
+        e.signalId = signalId;
+        e.content = message;
+        e.sender = sender;
+        e.priority = priority;
+        return e;
+    }
+
+    public static AgentSSEEvent signalAccepted(String executionId, String signalId,
+            String sender) {
+        AgentSSEEvent e = new AgentSSEEvent("signal_accepted", executionId);
+        e.signalId = signalId;
+        e.sender = sender;
+        return e;
+    }
+
+    public static AgentSSEEvent signalRejected(String executionId, String signalId,
+            String sender, String reason) {
+        AgentSSEEvent e = new AgentSSEEvent("signal_rejected", executionId);
+        e.signalId = signalId;
+        e.sender = sender;
+        e.rejectionReason = reason;
         return e;
     }
 
@@ -219,6 +250,22 @@ public class AgentSSEEvent {
 
     public void setGuardrailName(String guardrailName) {
         this.guardrailName = guardrailName;
+    }
+
+    public String getSignalId() {
+        return signalId;
+    }
+
+    public String getSender() {
+        return sender;
+    }
+
+    public String getPriority() {
+        return priority;
+    }
+
+    public String getRejectionReason() {
+        return rejectionReason;
     }
 
     public Map<String, Object> getPendingTool() {

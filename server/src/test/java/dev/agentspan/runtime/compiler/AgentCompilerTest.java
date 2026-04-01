@@ -74,9 +74,9 @@ class AgentCompilerTest {
         assertThat(loop.getType()).isEqualTo("DO_WHILE");
         assertThat(loop.getTaskReferenceName()).isEqualTo("tool_agent_loop");
 
-        // Loop should contain LLM + tool_router at minimum
+        // Loop should contain LLM + tool_router at minimum (signal intake tasks may precede LLM)
         assertThat(loop.getLoopOver().size()).isGreaterThanOrEqualTo(2);
-        assertThat(loop.getLoopOver().get(0).getType()).isEqualTo("LLM_CHAT_COMPLETE");
+        assertThat(loop.getLoopOver().stream().anyMatch(t -> "LLM_CHAT_COMPLETE".equals(t.getType()))).isTrue();
     }
 
     @Test
@@ -359,18 +359,19 @@ class AgentCompilerTest {
         WorkflowTask loop = wf.getTasks().get(2);
         assertThat(loop.getType()).isEqualTo("DO_WHILE");
 
-        // Inside loop: before_model + LLM + after_model + guardrails + tool_router + ...
+        // Inside loop: signal intake tasks may precede callbacks — find by name/type
         List<WorkflowTask> loopTasks = loop.getLoopOver();
-        // First in loop should be before_model callback
-        assertThat(loopTasks.get(0).getType()).isEqualTo("SIMPLE");
-        assertThat(loopTasks.get(0).getName()).isEqualTo("log_before");
-        // Second should be LLM
-        assertThat(loopTasks.get(1).getType()).isEqualTo("LLM_CHAT_COMPLETE");
-        // Third should be after_model callback
-        assertThat(loopTasks.get(2).getType()).isEqualTo("SIMPLE");
-        assertThat(loopTasks.get(2).getName()).isEqualTo("inspect_after");
+        WorkflowTask beforeModel = loopTasks.stream()
+                .filter(t -> "log_before".equals(t.getName())).findFirst().orElseThrow();
+        assertThat(beforeModel.getType()).isEqualTo("SIMPLE");
+        WorkflowTask llmTask2 = loopTasks.stream()
+                .filter(t -> "LLM_CHAT_COMPLETE".equals(t.getType())).findFirst().orElseThrow();
+        assertThat(llmTask2.getType()).isEqualTo("LLM_CHAT_COMPLETE");
+        WorkflowTask afterModel = loopTasks.stream()
+                .filter(t -> "inspect_after".equals(t.getName())).findFirst().orElseThrow();
+        assertThat(afterModel.getType()).isEqualTo("SIMPLE");
         // after_model should have llm_result input wired
-        assertThat(loopTasks.get(2).getInputParameters().get("llm_result")).isNotNull();
+        assertThat(afterModel.getInputParameters().get("llm_result")).isNotNull();
 
         // Last task: after_agent callback
         WorkflowTask afterAgent = wf.getTasks().get(3);
@@ -474,8 +475,9 @@ class AgentCompilerTest {
         WorkflowTask loop = wf.getTasks().get(1);
         assertThat(loop.getType()).isEqualTo("DO_WHILE");
 
-        // LLM task should have both tools in its tool specs
-        WorkflowTask llmTask = loop.getLoopOver().get(0);
+        // LLM task should have both tools in its tool specs (signal intake tasks may precede it)
+        WorkflowTask llmTask = loop.getLoopOver().stream()
+                .filter(t -> "LLM_CHAT_COMPLETE".equals(t.getType())).findFirst().orElseThrow();
         assertThat(llmTask.getType()).isEqualTo("LLM_CHAT_COMPLETE");
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> tools =

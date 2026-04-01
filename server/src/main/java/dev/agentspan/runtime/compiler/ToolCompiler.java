@@ -13,6 +13,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -67,7 +69,8 @@ public class ToolCompiler {
             Map.entry("generate_audio", "GENERATE_AUDIO"),
             Map.entry("generate_video", "GENERATE_VIDEO"),
             Map.entry("rag_index", "LLM_INDEX_TEXT"),
-            Map.entry("rag_search", "LLM_SEARCH_INDEX"));
+            Map.entry("rag_search", "LLM_SEARCH_INDEX"),
+            Map.entry("signal", "HTTP"));
 
     // ── Public API ───────────────────────────────────────────────────────
 
@@ -315,8 +318,9 @@ public class ToolCompiler {
         String cliJson = JavaScriptBuilder.toJson(cliConfig);
         String humanJson = JavaScriptBuilder.toJson(humanConfig);
 
-        String script = JavaScriptBuilder.enrichToolsScript(
+        String rawScript = JavaScriptBuilder.enrichToolsScript(
                 httpJson, mcpJson, mediaJson, agentToolJson, ragJson, cliJson, humanJson);
+        String script = bakeSignalScripts(rawScript);
 
         String enrichRef = agentName + "_" + p + "enrich_tools";
 
@@ -331,6 +335,9 @@ public class ToolCompiler {
         enrichInput.put("agentState", "${workflow.variables._agent_state}");
         enrichInput.put("agentspanCtx", "${workflow.input.__agentspan_ctx__}");
         enrichInput.put("userPrompt", "${workflow.input.prompt}");
+        enrichInput.put("processingSignals", "${workflow.variables._processing_signals}");
+        enrichInput.put("processedSignals", "${workflow.variables._processed_signals}");
+        enrichInput.put("signalData", "${workflow.variables._signal_data}");
         enrichTask.setInputParameters(enrichInput);
 
         // InlineTask output is at output.result.*
@@ -1427,8 +1434,9 @@ public class ToolCompiler {
         String agentToolJson = JavaScriptBuilder.toJson(agentToolConfig);
         String ragJson = JavaScriptBuilder.toJson(ragConfig);
         String humanJson = JavaScriptBuilder.toJson(humanConfig);
-        String script =
+        String rawScript =
                 JavaScriptBuilder.enrichToolsScriptDynamic(httpJson, mediaJson, agentToolJson, ragJson, humanJson);
+        String script = bakeSignalScripts(rawScript);
 
         String enrichRef = agentName + "_" + p + "enrich_tools";
 
@@ -1447,6 +1455,9 @@ public class ToolCompiler {
         enrichInput.put("agentState", "${workflow.variables._agent_state}");
         enrichInput.put("agentspanCtx", "${workflow.input.__agentspan_ctx__}");
         enrichInput.put("userPrompt", "${workflow.input.prompt}");
+        enrichInput.put("processingSignals", "${workflow.variables._processing_signals}");
+        enrichInput.put("processedSignals", "${workflow.variables._processed_signals}");
+        enrichInput.put("signalData", "${workflow.variables._signal_data}");
         enrichTask.setInputParameters(enrichInput);
 
         String outputRef = "${" + enrichRef + ".output.result.dynamicTasks}";
@@ -1610,6 +1621,103 @@ public class ToolCompiler {
         setTask.setInputParameters(Map.of("_agent_state", "${" + mergeRef + ".output.result.mergedState}"));
 
         return List.of(mergeTask, setTask);
+    }
+
+    /**
+     * Creates the pre-LLM signal intake INLINE + SET_VARIABLE pair (Section 4.1).
+     * Returns [inlineTask, setVariableTask].
+     */
+    public List<WorkflowTask> buildSignalIntakeTasks(String agentName, String signalMode) {
+        String intakeRef = agentName + "_signal_intake";
+        String intakeSetRef = agentName + "_signal_intake_set";
+
+        WorkflowTask intakeTask = new WorkflowTask();
+        intakeTask.setType("INLINE");
+        intakeTask.setTaskReferenceName(intakeRef);
+        Map<String, Object> intakeInput = new LinkedHashMap<>();
+        intakeInput.put("evaluatorType", "graaljs");
+        intakeInput.put("expression", JavaScriptBuilder.signalIntakeScript(signalMode));
+        intakeInput.put("pending", "${workflow.variables._pending_signals}");
+        intakeInput.put("processing", "${workflow.variables._processing_signals}");
+        intakeInput.put("processed", "${workflow.variables._processed_signals}");
+        intakeInput.put("signalMode", signalMode);
+        intakeInput.put("signalCounts", "${workflow.variables._signal_counts}");
+        intakeTask.setInputParameters(intakeInput);
+
+        WorkflowTask setTask = new WorkflowTask();
+        setTask.setType("SET_VARIABLE");
+        setTask.setTaskReferenceName(intakeSetRef);
+        setTask.setInputParameters(Map.of(
+                "_pending_signals",    "${" + intakeRef + ".output.result.newPending}",
+                "_processing_signals", "${" + intakeRef + ".output.result.newProcessing}",
+                "_processed_signals",  "${" + intakeRef + ".output.result.newProcessed}",
+                "_signal_counts",      "${" + intakeRef + ".output.result.newSignalCounts}",
+                "_signal_injection",   Map.of(
+                        "messages", "${" + intakeRef + ".output.result.injectionMessages}",
+                        "tools",    "${" + intakeRef + ".output.result.injectionTools}"
+                )
+        ));
+
+        return List.of(intakeTask, setTask);
+    }
+
+    /**
+     * Post-JOIN signal state merge INLINE + SET_VARIABLE pair (Section 5.2.1).
+     */
+    public List<WorkflowTask> buildSignalStateMergeTasks(String agentName, String joinRef) {
+        String mergeRef = agentName + "_signal_merge";
+        String mergeSetRef = agentName + "_signal_set";
+
+        WorkflowTask mergeTask = new WorkflowTask();
+        mergeTask.setType("INLINE");
+        mergeTask.setTaskReferenceName(mergeRef);
+        Map<String, Object> mergeInput = new LinkedHashMap<>();
+        mergeInput.put("evaluatorType", "graaljs");
+        mergeInput.put("expression", JavaScriptBuilder.signalStateMergeScript());
+        mergeInput.put("joinOutput", "${" + joinRef + ".output}");
+        mergeInput.put("currentProcessing", "${workflow.variables._processing_signals}");
+        mergeInput.put("currentProcessed",  "${workflow.variables._processed_signals}");
+        mergeInput.put("currentSignalData", "${workflow.variables._signal_data}");
+        mergeTask.setInputParameters(mergeInput);
+
+        WorkflowTask setTask = new WorkflowTask();
+        setTask.setType("SET_VARIABLE");
+        setTask.setTaskReferenceName(mergeSetRef);
+        setTask.setInputParameters(Map.of(
+                "_processing_signals", "${" + mergeRef + ".output.result.processing}",
+                "_processed_signals",  "${" + mergeRef + ".output.result.processed}",
+                "_signal_data",        "${" + mergeRef + ".output.result.signalData}"
+        ));
+
+        return List.of(mergeTask, setTask);
+    }
+
+    /**
+     * Implicit acceptance cleanup INLINE + SET_VARIABLE pair (Section 5.3).
+     */
+    public List<WorkflowTask> buildSignalImplicitAcceptTasks(String agentName) {
+        String implicitRef = agentName + "_signal_implicit";
+        String implicitSetRef = agentName + "_signal_implicit_set";
+
+        WorkflowTask implicitTask = new WorkflowTask();
+        implicitTask.setType("INLINE");
+        implicitTask.setTaskReferenceName(implicitRef);
+        Map<String, Object> implicitInput = new LinkedHashMap<>();
+        implicitInput.put("evaluatorType", "graaljs");
+        implicitInput.put("expression", JavaScriptBuilder.implicitAcceptScript());
+        implicitInput.put("processing",      "${workflow.variables._processing_signals}");
+        implicitInput.put("already_processed", "${workflow.variables._processed_signals}");
+        implicitTask.setInputParameters(implicitInput);
+
+        WorkflowTask setTask = new WorkflowTask();
+        setTask.setType("SET_VARIABLE");
+        setTask.setTaskReferenceName(implicitSetRef);
+        setTask.setInputParameters(Map.of(
+                "_processing_signals", "${" + implicitRef + ".output.result.processing}",
+                "_processed_signals",  "${" + implicitRef + ".output.result.processed}"
+        ));
+
+        return List.of(implicitTask, setTask);
     }
 
     // ── Private helpers ──────────────────────────────────────────────────
@@ -1834,5 +1942,24 @@ public class ToolCompiler {
         approvalSwitch.setDefaultCase(directChain);
 
         return List.of(checkTask, approvalSwitch);
+    }
+
+    /**
+     * Replaces the {@code BAKED_SIGNAL_SCRIPTS} placeholder in an enrichment script
+     * with the JSON-serialized disposition scripts for the three signal tool names.
+     */
+    private static String bakeSignalScripts(String script) {
+        try {
+            Map<String, String> signalScripts = Map.of(
+                    "accept_signal",     JavaScriptBuilder.signalDispositionScript("accept_signal"),
+                    "reject_signal",     JavaScriptBuilder.signalDispositionScript("reject_signal"),
+                    "accept_all_signals", JavaScriptBuilder.signalDispositionScript("accept_all_signals")
+            );
+            String signalScriptsJson = new ObjectMapper().writeValueAsString(signalScripts);
+            return script.replace("BAKED_SIGNAL_SCRIPTS", signalScriptsJson);
+        } catch (Exception e) {
+            logger.error("Failed to bake signal scripts into enrichment script", e);
+            return script.replace("BAKED_SIGNAL_SCRIPTS", "{}");
+        }
     }
 }

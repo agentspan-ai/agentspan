@@ -5,11 +5,18 @@
 
 package dev.agentspan.runtime.controller;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import com.netflix.conductor.common.metadata.tasks.Task;
@@ -29,6 +36,8 @@ import dev.agentspan.runtime.model.CreateTrackingWorkflowRequest;
 import dev.agentspan.runtime.model.CreateTrackingWorkflowResponse;
 import dev.agentspan.runtime.model.InjectTaskRequest;
 import dev.agentspan.runtime.model.InjectTaskResponse;
+import dev.agentspan.runtime.model.SignalReceipt;
+import dev.agentspan.runtime.model.SignalRequest;
 import dev.agentspan.runtime.model.StartRequest;
 import dev.agentspan.runtime.model.StartResponse;
 import dev.agentspan.runtime.service.AgentDagService;
@@ -41,6 +50,8 @@ import lombok.RequiredArgsConstructor;
 @RequestMapping({"/api/agent"})
 @RequiredArgsConstructor
 public class AgentController {
+
+    private static final Logger logger = LoggerFactory.getLogger(AgentController.class);
 
     private final AgentService agentService;
     private final AgentDagService agentDagService;
@@ -105,6 +116,73 @@ public class AgentController {
     @PostMapping("/{executionId}/respond")
     public void respondToAgent(@PathVariable String executionId, @RequestBody Map<String, Object> output) {
         agentService.respond(executionId, output);
+    }
+
+    /**
+     * Send a signal to a running agent execution by execution ID.
+     */
+    @PostMapping("/{executionId}/signal")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public SignalReceipt signal(
+            @PathVariable String executionId,
+            @RequestBody SignalRequest request) {
+        try {
+            return agentService.signal(executionId, request);
+        } catch (NoSuchElementException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+        } catch (IllegalStateException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
+    }
+
+    /**
+     * Send a signal to all running executions of a named agent.
+     */
+    @PostMapping("/signal")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public Map<String, Object> signalByName(
+            @RequestParam String agentName,
+            @RequestParam(required = false) String correlationId,
+            @RequestBody SignalRequest request) {
+        // Resolve agent name to running execution IDs, signal each
+        List<String> executionIds = agentService.findRunningExecutionIds(agentName, correlationId);
+        if (executionIds.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                "No running executions found for agent: " + agentName);
+        }
+        List<SignalReceipt> receipts = new ArrayList<>();
+        for (String id : executionIds) {
+            try {
+                receipts.add(agentService.signal(id, request));
+            } catch (Exception e) {
+                logger.warn("Failed to signal execution {}: {}", id, e.getMessage());
+            }
+        }
+        return Map.of("receipts", receipts);
+    }
+
+    /**
+     * Get the status of a signal by signal ID.
+     * Stub — returns 404 until Task 8 implements the lookup.
+     */
+    @GetMapping("/signal/{signalId}/status")
+    public ResponseEntity<Map<String, Object>> getSignalStatus(@PathVariable String signalId) {
+        // Stub — returns 404 until Task 8 implements the lookup
+        throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+            "Signal status lookup not yet implemented");
+    }
+
+    /**
+     * Resolve running execution IDs for a named agent.
+     */
+    @GetMapping("/resolve")
+    public Map<String, Object> resolveAgentName(
+            @RequestParam String name,
+            @RequestParam(required = false, defaultValue = "RUNNING") String status) {
+        List<String> ids = agentService.findRunningExecutionIds(name, null);
+        return Map.of("executionIds", ids, "count", ids.size());
     }
 
     /**

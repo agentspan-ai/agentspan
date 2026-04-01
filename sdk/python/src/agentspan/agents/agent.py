@@ -360,6 +360,7 @@ class Agent:
         required_tools: Optional[List[str]] = None,
         gate: Optional[Any] = None,
         credentials: Optional[List[Any]] = None,
+        signal_mode: str = "evaluate",
     ) -> None:
         if not name or not isinstance(name, str):
             raise ValueError("Agent name must be a non-empty string")
@@ -455,6 +456,7 @@ class Agent:
         self.thinking_budget_tokens = thinking_budget_tokens
         self.required_tools: List[str] = list(required_tools) if required_tools else []
         self.gate = gate
+        self.signal_mode = signal_mode
         # ── Code execution setup ─────────────────────────────────────
         self.code_execution_config: Optional[Any] = None
         if code_execution is not None:
