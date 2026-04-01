@@ -113,6 +113,9 @@ export class AgentRuntime {
     if (options?.credentials) {
       payload.credentials = options.credentials;
     }
+    if (options?.context) {
+      payload.context = options.context;
+    }
 
     // Register tool workers (always needed) before calling the server
     await this._registerToolWorkers(nativeAgent);
@@ -199,6 +202,9 @@ export class AgentRuntime {
     }
     if (options?.credentials) {
       payload.credentials = options.credentials;
+    }
+    if (options?.context) {
+      payload.context = options.context;
     }
 
     // Register tool workers (always needed) before calling the server

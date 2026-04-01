@@ -7,7 +7,7 @@
 import { MessageContext } from "components/v1/layout/MessageContext";
 import { useContext } from "react";
 import { IObject } from "types/common";
-import { getErrorMessage, tryToJson } from "utils/utils";
+import { formatHttpErrorMessage, getErrorMessage, tryToJson } from "utils/utils";
 import { useEnv as hardcodeEnv } from "./env";
 
 /**
@@ -32,7 +32,14 @@ export class FetchError extends Error {
     body: string | null,
     contentType: string | null = null,
   ) {
-    super(`HTTP ${status}: ${statusText}`);
+    const parsedBody =
+      contentType?.includes("application/json") === true
+        ? tryToJson<{ message?: string }>(body)
+        : undefined;
+    const serverMessage =
+      typeof parsedBody?.message === "string" ? parsedBody.message : statusText;
+
+    super(formatHttpErrorMessage(status, serverMessage));
     this.name = "FetchError";
     this.status = status;
     this.statusText = statusText;

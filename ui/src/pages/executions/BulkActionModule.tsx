@@ -97,21 +97,13 @@ export default function BulkActionModule({
     retryLoading ||
     terminateLoading;
 
-  function onSuccess(data: any) {
-    const retval = {
-      bulkErrorResults: Object.entries(data.bulkErrorResults).map(
-        ([key, value]) => ({
-          workflowId: key,
-          message: value,
-        }),
-      ),
-      bulkSuccessfulResults: data.bulkSuccessfulResults.map(
-        (value: string) => ({
-          workflowId: value,
-        }),
-      ),
-    };
-    setResults(retval);
+  function onSuccess() {
+    setResults({
+      bulkErrorResults: [],
+      bulkSuccessfulResults: selectedIds.map((workflowId: string) => ({
+        workflowId,
+      })),
+    });
   }
 
   function onError(error: any) {
@@ -130,7 +122,9 @@ export default function BulkActionModule({
 
   return (
     <Box style={executionsStyles.actionBar}>
-      <Heading level={0}>{selectedRows.length} Workflows Selected.</Heading>
+      <Heading level={0}>
+        {selectedRows.length} {selectedRows.length === 1 ? "Agent" : "Agents"} Selected.
+      </Heading>
       {/*@ts-ignore*/}
       <DropdownButton
         buttonProps={{ disabled: isTrialExpired }}

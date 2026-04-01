@@ -398,6 +398,7 @@ class AgentRuntime:
         idempotency_key: Optional[str] = None,
         timeout: Optional[int] = None,
         credentials: Optional[List[str]] = None,
+        context: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Start an agent via the server's /api/agent/start endpoint.
 
@@ -426,6 +427,8 @@ class AgentRuntime:
             payload["timeoutSeconds"] = timeout
         if credentials:
             payload["credentials"] = credentials
+        if context:
+            payload["context"] = context
 
         url = self._agent_api_url("/start")
         resp = req_lib.post(url, json=payload, headers=self._agent_api_headers(), timeout=30)
@@ -456,6 +459,7 @@ class AgentRuntime:
         idempotency_key: Optional[str] = None,
         timeout: Optional[int] = None,
         credentials: Optional[List[str]] = None,
+        context: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Async version of :meth:`_start_via_server`."""
         from agentspan.agents.config_serializer import AgentConfigSerializer
@@ -475,6 +479,8 @@ class AgentRuntime:
             payload["timeoutSeconds"] = timeout
         if credentials:
             payload["credentials"] = credentials
+        if context:
+            payload["context"] = context
 
         data = await self._http.start_agent(payload)
         execution_id = data.get("executionId", "")
@@ -2170,6 +2176,7 @@ class AgentRuntime:
         on_event: Optional[Any] = None,
         timeout: Optional[int] = None,
         credentials: Optional[List[str]] = None,
+        context: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> AgentResult:
         """Execute an agent synchronously and return the result.
@@ -2271,6 +2278,7 @@ class AgentRuntime:
             idempotency_key=idempotency_key,
             timeout=timeout,
             credentials=credentials,
+            context=context,
         )
 
         self._prepare_workers(agent, required_workers=required_workers)
@@ -2308,7 +2316,7 @@ class AgentRuntime:
         token_usage: Optional[TokenUsage] = None
         try:
             wf = self._workflow_client.get_workflow(
-                execution_id=execution_id,
+                execution_id,
                 include_tasks=True,
             )
             tool_calls = self._extract_tool_calls(wf)
@@ -2385,7 +2393,7 @@ class AgentRuntime:
         messages: List[Dict[str, Any]] = []
         token_usage: Optional[TokenUsage] = None
         try:
-            wf = self._workflow_client.get_workflow(execution_id=execution_id, include_tasks=True)
+            wf = self._workflow_client.get_workflow(execution_id, include_tasks=True)
             tool_calls = self._extract_tool_calls(wf)
             messages = self._extract_messages(wf)
             token_usage = self._extract_token_usage(execution_id)
@@ -2481,7 +2489,7 @@ class AgentRuntime:
             wf = await loop.run_in_executor(
                 None,
                 lambda: self._workflow_client.get_workflow(
-                    execution_id=execution_id, include_tasks=True
+                    execution_id, include_tasks=True
                 ),
             )
             tool_calls = self._extract_tool_calls(wf)
@@ -3265,6 +3273,7 @@ class AgentRuntime:
         media: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> AgentHandle:
         """Start an agent asynchronously and return a handle.
@@ -3327,6 +3336,7 @@ class AgentRuntime:
             session_id=session_id,
             idempotency_key=idempotency_key,
             timeout=effective_timeout,
+            context=context,
         )
 
         self._prepare_workers(agent, required_workers=required_workers)
@@ -3423,7 +3433,7 @@ class AgentRuntime:
         while True:
             try:
                 wf = self._workflow_client.get_workflow(
-                    execution_id=execution_id,
+                    execution_id,
                     include_tasks=True,
                 )
             except Exception as e:
@@ -3609,6 +3619,7 @@ class AgentRuntime:
         on_event: Optional[Any] = None,
         timeout: Optional[int] = None,
         credentials: Optional[List[str]] = None,
+        context: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> AgentResult:
         """Execute an agent asynchronously (async-first implementation).
@@ -3698,6 +3709,7 @@ class AgentRuntime:
             idempotency_key=idempotency_key,
             timeout=timeout,
             credentials=credentials,
+            context=context,
         )
 
         self._prepare_workers(agent, required_workers=required_workers)
@@ -3737,7 +3749,7 @@ class AgentRuntime:
             wf = await loop.run_in_executor(
                 None,
                 lambda: self._workflow_client.get_workflow(
-                    execution_id=execution_id,
+                    execution_id,
                     include_tasks=True,
                 ),
             )
@@ -3770,6 +3782,7 @@ class AgentRuntime:
         media: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> AgentHandle:
         """Start an agent asynchronously and return a handle (async version).
@@ -3825,6 +3838,7 @@ class AgentRuntime:
             session_id=session_id,
             idempotency_key=idempotency_key,
             timeout=effective_timeout,
+            context=context,
         )
 
         self._prepare_workers(agent, required_workers=required_workers)
@@ -3917,7 +3931,7 @@ class AgentRuntime:
                 wf = await loop.run_in_executor(
                     None,
                     lambda: self._workflow_client.get_workflow(
-                        execution_id=execution_id,
+                        execution_id,
                         include_tasks=True,
                     ),
                 )

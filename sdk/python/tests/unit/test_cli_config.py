@@ -186,6 +186,64 @@ class TestMakeCliTool:
         tool_fn = _make_cli_tool(allowed_commands=[], timeout=120)
         assert "120s" in tool_fn._tool_def.description
 
+    def test_context_key_saves_stdout_on_success(self):
+        from agentspan.agents.tool import ToolContext
+        tool_fn = _make_cli_tool(allowed_commands=[])
+        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="/tmp/abc123\n", stderr=""
+            )
+            ctx = ToolContext(execution_id="test", agent_name="test", state={})
+            result = tool_fn.__wrapped__(command="mktemp", args=["-d"], context_key="working_dir", context=ctx)
+            assert result["status"] == "success"
+            assert ctx.state["working_dir"] == "/tmp/abc123"
+
+    def test_context_key_not_saved_on_failure(self):
+        from agentspan.agents.tool import ToolContext
+        tool_fn = _make_cli_tool(allowed_commands=[])
+        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=1, stdout="partial output", stderr="error"
+            )
+            ctx = ToolContext(execution_id="test", agent_name="test", state={})
+            result = tool_fn.__wrapped__(command="false", context_key="result", context=ctx)
+            assert result["status"] == "error"
+            assert "result" not in ctx.state
+
+    def test_context_key_with_internal_key_name(self):
+        """context_key='_agent_state' should work without corrupting internals."""
+        from agentspan.agents.tool import ToolContext
+        tool_fn = _make_cli_tool(allowed_commands=[])
+        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="val\n", stderr="")
+            ctx = ToolContext(execution_id="test", agent_name="test", state={})
+            result = tool_fn.__wrapped__(command="echo", args=["val"], context_key="_agent_state", context=ctx)
+            assert result["status"] == "success"
+            assert ctx.state["_agent_state"] == "val"
+
+    def test_context_key_falls_back_to_stderr(self):
+        """When stdout is empty, context_key should fall back to stderr."""
+        from agentspan.agents.tool import ToolContext
+        tool_fn = _make_cli_tool(allowed_commands=[])
+        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="", stderr="Cloning into '/tmp/repo'...\n"
+            )
+            ctx = ToolContext(execution_id="test", agent_name="test", state={})
+            result = tool_fn.__wrapped__(command="gh", args=["repo", "clone", "org/repo"], context_key="repo", context=ctx)
+            assert result["status"] == "success"
+            assert ctx.state["repo"] == "Cloning into '/tmp/repo'..."
+
+    def test_context_key_empty_string_is_noop(self):
+        """Empty context_key should not write anything."""
+        from agentspan.agents.tool import ToolContext
+        tool_fn = _make_cli_tool(allowed_commands=[])
+        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="val\n", stderr="")
+            ctx = ToolContext(execution_id="test", agent_name="test", state={})
+            tool_fn.__wrapped__(command="echo", context_key="", context=ctx)
+            assert ctx.state == {}
+
 
 class TestAgentCliIntegration:
     """Test Agent integration with CLI tools."""

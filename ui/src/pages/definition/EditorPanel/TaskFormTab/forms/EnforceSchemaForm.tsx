@@ -35,7 +35,7 @@ export const EnforceSchema = ({
       <Box>
         <Typography component={"span"} style={{ opacity: 0.5 }}>
           Select input and/or output schemas to validate task data and ensure
-          data integrity throughout the workflow execution.
+          data integrity throughout the agent execution.
         </Typography>
         <Link
           sx={{

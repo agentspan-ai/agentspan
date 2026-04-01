@@ -85,14 +85,14 @@ public class AgentspanAIModelProvider extends AIModelProvider {
         }
 
         // Try per-user credential resolution
-        log.info("getModel called for provider='{}' model='{}'", provider, input.getModel());
+        log.debug("getModel called for provider='{}' model='{}'", provider, input.getModel());
         String userApiKey = resolveUserApiKey(provider);
-        log.info("resolveUserApiKey('{}') returned: {}", provider, userApiKey != null ? "key found" : "null");
+        log.debug("resolveUserApiKey('{}') returned: {}", provider, userApiKey != null ? "key found" : "null");
         if (userApiKey != null) {
             try {
                 AIModel model = createModelWithKey(provider, userApiKey);
                 if (model != null) {
-                    log.info("Per-user AIModel created for provider '{}'", provider);
+                    log.debug("Per-user AIModel created for provider '{}'", provider);
                     // Register in provider map so Conductor's executor can find it
                     getProviderToLLM().put(provider.toLowerCase(), model);
                     return model;

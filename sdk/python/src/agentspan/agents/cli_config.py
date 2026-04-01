@@ -116,6 +116,8 @@ def _make_cli_tool(
         args: list = [],
         cwd: str = "",
         shell: bool = False,
+        context_key: str = "",
+        context: Any = None,
         _allowed_commands: list = None,
         _allow_shell: bool = None,
         _timeout: int = None,
@@ -178,6 +180,11 @@ def _make_cli_tool(
                 )
 
             if result.returncode == 0:
+                if context_key and context is not None and hasattr(context, "state"):
+                    # Prefer stdout; fall back to stderr (e.g. git clone outputs to stderr)
+                    value = result.stdout.strip() or result.stderr.strip()
+                    if value:
+                        context.state[context_key] = value
                 return {
                     "status": "success",
                     "exit_code": 0,
@@ -208,6 +215,10 @@ def _make_cli_tool(
         desc += f" Allowed commands: {', '.join(sorted(allowed_commands))}."
     if not allow_shell:
         desc += " Shell mode is disabled — do not set shell=True."
+    desc += (
+        " If you need to save a command's output for later pipeline steps, set context_key."
+        " Well-known keys: repo, branch, working_dir, issue_number, pr_url, commit_sha."
+    )
     run_command._tool_def.description = desc
     run_command._tool_def.tool_type = "cli"
     run_command._tool_def.config = {"allowedCommands": list(allowed_commands)}

@@ -32,7 +32,7 @@
  *   });
  */
 
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 import { TerminalToolError } from './errors.js';
 import type { ToolDef } from './types.js';
 
@@ -106,6 +106,7 @@ export function makeCliTool(
   if (!allowShell) {
     desc += ' Shell mode is disabled — do not set shell=true.';
   }
+  desc += ' If you need to save a command\'s output for later pipeline steps, set context_key. Well-known keys: repo, branch, working_dir, issue_number, pr_url, commit_sha.';
 
   return {
     name: taskName,
@@ -127,12 +128,22 @@ export function makeCliTool(
           type: 'boolean',
           description: 'Whether to run via shell',
         },
+        context_key: {
+          type: 'string',
+          description: 'If set, saves stdout to context state under this key on success. Well-known keys: repo, branch, working_dir, issue_number, pr_url, commit_sha.',
+        },
       },
       required: ['command'],
     },
     toolType: 'worker',
     config: { allowedCommands: [...allowedCommands] },
     func: async (args: Record<string, unknown>) => {
+      // Extract context fields before command processing
+      const toolContext = args.__toolContext__ as { state: Record<string, unknown> } | undefined;
+      const contextKey = args.context_key as string | undefined;
+      delete args.__toolContext__;
+      delete args.context_key;
+
       const command = args.command as string;
       if (!command || typeof command !== 'string') {
         return {
@@ -163,68 +174,45 @@ export function makeCliTool(
       const effectiveCwd =
         (args.cwd as string) || workingDir || undefined;
 
-      try {
-        let cmdStr: string;
-        if (useShell) {
-          cmdStr =
-            command +
-            ' ' +
-            cmdArgs.map((a) => JSON.stringify(String(a))).join(' ');
-        } else {
-          const parts = [command, ...cmdArgs.map(String)];
-          cmdStr = parts.map((p) => JSON.stringify(p)).join(' ');
-        }
+      // Use spawnSync to capture both stdout and stderr on success
+      // (execSync only returns stdout, losing stderr from commands like gh clone)
+      const result = spawnSync(command, cmdArgs.map(String), {
+        timeout: timeout * 1000,
+        encoding: 'utf-8',
+        cwd: effectiveCwd,
+        shell: useShell ? '/bin/sh' : undefined,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
 
-        const output = execSync(cmdStr, {
-          timeout: timeout * 1000,
-          encoding: 'utf-8',
-          cwd: effectiveCwd,
-          shell: useShell ? '/bin/sh' : undefined,
-          stdio: ['pipe', 'pipe', 'pipe'],
-        });
-
-        return {
-          status: 'success',
-          exit_code: 0,
-          stdout: output,
-          stderr: '',
-        };
-      } catch (err: unknown) {
-        const execErr = err as {
-          status?: number | null;
-          killed?: boolean;
-          stdout?: string;
-          stderr?: string;
-          signal?: string;
-          message?: string;
-        };
-
-        if (execErr.killed === true || execErr.signal === 'SIGTERM') {
+      if (result.error) {
+        const err = result.error as NodeJS.ErrnoException & { killed?: boolean; signal?: string };
+        if (err.killed || result.signal === 'SIGTERM') {
           throw new TerminalToolError(`Command timed out after ${timeout}s`);
         }
-
-        if (
-          execErr.message &&
-          execErr.message.includes('ENOENT')
-        ) {
+        if (err.message?.includes('ENOENT')) {
           throw new TerminalToolError(`Command not found: ${command}`);
         }
-
-        const stdout =
-          typeof execErr.stdout === 'string' ? execErr.stdout : '';
-        const stderr =
-          typeof execErr.stderr === 'string'
-            ? execErr.stderr
-            : String(err);
-        const exitCode = execErr.status ?? 1;
-
-        return {
-          status: 'error',
-          exit_code: exitCode,
-          stdout,
-          stderr,
-        };
+        throw new TerminalToolError(err.message ?? String(err));
       }
+
+      const stdout = result.stdout ?? '';
+      const stderr = result.stderr ?? '';
+
+      if (result.status === 0) {
+        if (contextKey && toolContext) {
+          // Prefer stdout; fall back to stderr (e.g. git clone outputs to stderr)
+          const value = stdout.trim() || stderr.trim();
+          if (value) toolContext.state[contextKey] = value;
+        }
+        return { status: 'success', exit_code: 0, stdout, stderr };
+      }
+
+      return {
+        status: 'error',
+        exit_code: result.status ?? 1,
+        stdout,
+        stderr,
+      };
     },
   };
 }

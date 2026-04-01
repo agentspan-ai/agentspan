@@ -67,16 +67,18 @@ class AgentCompilerTest {
         WorkflowDef wf = compiler.compile(config);
 
         assertThat(wf.getName()).isEqualTo("tool_agent");
-        // Should have SET_VARIABLE (init state) + DoWhile loop
-        assertThat(wf.getTasks()).hasSize(2);
-        assertThat(wf.getTasks().get(0).getType()).isEqualTo("SET_VARIABLE");
-        WorkflowTask loop = wf.getTasks().get(1);
+        // Should have INLINE (ctx_resolve) + SET_VARIABLE (init state) + DoWhile loop
+        assertThat(wf.getTasks()).hasSize(3);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("INLINE");
+        assertThat(wf.getTasks().get(1).getType()).isEqualTo("SET_VARIABLE");
+        WorkflowTask loop = wf.getTasks().get(2);
         assertThat(loop.getType()).isEqualTo("DO_WHILE");
         assertThat(loop.getTaskReferenceName()).isEqualTo("tool_agent_loop");
 
-        // Loop should contain LLM + tool_router at minimum
-        assertThat(loop.getLoopOver().size()).isGreaterThanOrEqualTo(2);
-        assertThat(loop.getLoopOver().get(0).getType()).isEqualTo("LLM_CHAT_COMPLETE");
+        // Loop should contain ctx_inject + LLM + tool_router at minimum
+        assertThat(loop.getLoopOver().size()).isGreaterThanOrEqualTo(3);
+        assertThat(loop.getLoopOver().get(0).getType()).isEqualTo("INLINE"); // ctx_inject
+        assertThat(loop.getLoopOver().get(1).getType()).isEqualTo("LLM_CHAT_COMPLETE");
     }
 
     @Test
@@ -135,8 +137,8 @@ class AgentCompilerTest {
 
         WorkflowDef wf = compiler.compile(config);
 
-        // init_state + loop
-        WorkflowTask loop = wf.getTasks().get(1);
+        // ctx_resolve + init_state + loop
+        WorkflowTask loop = wf.getTasks().get(2);
         assertThat(loop.getType()).isEqualTo("DO_WHILE");
 
         // Loop condition should include termination check
@@ -162,8 +164,8 @@ class AgentCompilerTest {
 
         WorkflowDef wf = compiler.compile(config);
 
-        // init_state + loop
-        WorkflowTask loop = wf.getTasks().get(1);
+        // ctx_resolve + init_state + loop
+        WorkflowTask loop = wf.getTasks().get(2);
         String loopCondition = loop.getLoopCondition();
         assertThat(loopCondition).contains("stop_agent_stop_when.should_continue");
     }
@@ -193,11 +195,12 @@ class AgentCompilerTest {
 
         WorkflowDef wf = compiler.compile(config);
 
-        // Should have init_state + DoWhile + transfer switch
-        assertThat(wf.getTasks().size()).isGreaterThanOrEqualTo(3);
-        assertThat(wf.getTasks().get(0).getType()).isEqualTo("SET_VARIABLE");
-        assertThat(wf.getTasks().get(1).getType()).isEqualTo("DO_WHILE");
-        assertThat(wf.getTasks().get(2).getType()).isEqualTo("SWITCH");
+        // Should have ctx_resolve + init_state + DoWhile + transfer switch
+        assertThat(wf.getTasks().size()).isGreaterThanOrEqualTo(4);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("INLINE"); // ctx_resolve
+        assertThat(wf.getTasks().get(1).getType()).isEqualTo("SET_VARIABLE");
+        assertThat(wf.getTasks().get(2).getType()).isEqualTo("DO_WHILE");
+        assertThat(wf.getTasks().get(3).getType()).isEqualTo("SWITCH");
     }
 
     @Test
@@ -342,8 +345,8 @@ class AgentCompilerTest {
 
         WorkflowDef wf = compiler.compile(config);
 
-        // Should have: before_agent + init_state + DoWhile + after_agent
-        assertThat(wf.getTasks()).hasSize(4);
+        // Should have: before_agent + ctx_resolve + init_state + DoWhile + after_agent
+        assertThat(wf.getTasks()).hasSize(5);
 
         // First task: before_agent callback (SIMPLE worker)
         WorkflowTask beforeAgent = wf.getTasks().get(0);
@@ -352,28 +355,33 @@ class AgentCompilerTest {
         assertThat(beforeAgent.getTaskReferenceName()).isEqualTo("callback_agent_before_agent");
         assertThat(beforeAgent.getInputParameters().get("callback_position")).isEqualTo("before_agent");
 
-        // Second task: init_state SET_VARIABLE
-        assertThat(wf.getTasks().get(1).getType()).isEqualTo("SET_VARIABLE");
+        // Second task: ctx_resolve INLINE
+        assertThat(wf.getTasks().get(1).getType()).isEqualTo("INLINE");
 
-        // Third task: DoWhile loop
-        WorkflowTask loop = wf.getTasks().get(2);
+        // Third task: init_state SET_VARIABLE
+        assertThat(wf.getTasks().get(2).getType()).isEqualTo("SET_VARIABLE");
+
+        // Fourth task: DoWhile loop
+        WorkflowTask loop = wf.getTasks().get(3);
         assertThat(loop.getType()).isEqualTo("DO_WHILE");
 
-        // Inside loop: before_model + LLM + after_model + guardrails + tool_router + ...
+        // Inside loop: ctx_inject + before_model + LLM + after_model + guardrails + tool_router + ...
         List<WorkflowTask> loopTasks = loop.getLoopOver();
-        // First in loop should be before_model callback
-        assertThat(loopTasks.get(0).getType()).isEqualTo("SIMPLE");
-        assertThat(loopTasks.get(0).getName()).isEqualTo("log_before");
-        // Second should be LLM
-        assertThat(loopTasks.get(1).getType()).isEqualTo("LLM_CHAT_COMPLETE");
-        // Third should be after_model callback
-        assertThat(loopTasks.get(2).getType()).isEqualTo("SIMPLE");
-        assertThat(loopTasks.get(2).getName()).isEqualTo("inspect_after");
+        // First in loop should be ctx_inject INLINE
+        assertThat(loopTasks.get(0).getType()).isEqualTo("INLINE"); // ctx_inject
+        // Second in loop should be before_model callback
+        assertThat(loopTasks.get(1).getType()).isEqualTo("SIMPLE");
+        assertThat(loopTasks.get(1).getName()).isEqualTo("log_before");
+        // Third should be LLM
+        assertThat(loopTasks.get(2).getType()).isEqualTo("LLM_CHAT_COMPLETE");
+        // Fourth should be after_model callback
+        assertThat(loopTasks.get(3).getType()).isEqualTo("SIMPLE");
+        assertThat(loopTasks.get(3).getName()).isEqualTo("inspect_after");
         // after_model should have llm_result input wired
-        assertThat(loopTasks.get(2).getInputParameters().get("llm_result")).isNotNull();
+        assertThat(loopTasks.get(3).getInputParameters().get("llm_result")).isNotNull();
 
         // Last task: after_agent callback
-        WorkflowTask afterAgent = wf.getTasks().get(3);
+        WorkflowTask afterAgent = wf.getTasks().get(4);
         assertThat(afterAgent.getType()).isEqualTo("SIMPLE");
         assertThat(afterAgent.getName()).isEqualTo("agent_end");
     }
@@ -397,11 +405,12 @@ class AgentCompilerTest {
 
         WorkflowDef wf = compiler.compile(config);
 
-        // Should have: init_state + outer DO_WHILE (containing inner loop + check)
-        assertThat(wf.getTasks()).hasSize(2);
-        assertThat(wf.getTasks().get(0).getType()).isEqualTo("SET_VARIABLE");
+        // Should have: ctx_resolve + init_state + outer DO_WHILE (containing inner loop + check)
+        assertThat(wf.getTasks()).hasSize(3);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("INLINE"); // ctx_resolve
+        assertThat(wf.getTasks().get(1).getType()).isEqualTo("SET_VARIABLE");
 
-        WorkflowTask outerLoop = wf.getTasks().get(1);
+        WorkflowTask outerLoop = wf.getTasks().get(2);
         assertThat(outerLoop.getType()).isEqualTo("DO_WHILE");
         assertThat(outerLoop.getTaskReferenceName()).isEqualTo("filing_agent_required_tools_loop");
 
@@ -431,9 +440,9 @@ class AgentCompilerTest {
 
         WorkflowDef wf = compiler.compile(config);
 
-        // Should have init_state + inner loop (no outer loop)
-        assertThat(wf.getTasks()).hasSize(2);
-        WorkflowTask loop = wf.getTasks().get(1);
+        // Should have ctx_resolve + init_state + inner loop (no outer loop)
+        assertThat(wf.getTasks()).hasSize(3);
+        WorkflowTask loop = wf.getTasks().get(2);
         assertThat(loop.getType()).isEqualTo("DO_WHILE");
         assertThat(loop.getTaskReferenceName()).isEqualTo("normal_agent_loop");
     }
@@ -468,14 +477,15 @@ class AgentCompilerTest {
 
         WorkflowDef wf = compiler.compile(config);
 
-        // Should compile to init_state + DoWhile loop
-        assertThat(wf.getTasks()).hasSize(2);
-        assertThat(wf.getTasks().get(0).getType()).isEqualTo("SET_VARIABLE");
-        WorkflowTask loop = wf.getTasks().get(1);
+        // Should compile to ctx_resolve + init_state + DoWhile loop
+        assertThat(wf.getTasks()).hasSize(3);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("INLINE"); // ctx_resolve
+        assertThat(wf.getTasks().get(1).getType()).isEqualTo("SET_VARIABLE");
+        WorkflowTask loop = wf.getTasks().get(2);
         assertThat(loop.getType()).isEqualTo("DO_WHILE");
 
-        // LLM task should have both tools in its tool specs
-        WorkflowTask llmTask = loop.getLoopOver().get(0);
+        // LLM task should have both tools in its tool specs (after ctx_inject at index 0)
+        WorkflowTask llmTask = loop.getLoopOver().get(1);
         assertThat(llmTask.getType()).isEqualTo("LLM_CHAT_COMPLETE");
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> tools =

@@ -47,10 +47,26 @@ export const GENERIC_ERROR = "Error performing action. error number:";
 
 const defaultToEmpty = _defaultTo("");
 
+export const formatHttpErrorMessage = (
+  status?: string | number | null,
+  message?: string | null,
+) => {
+  const statusCode = defaultToEmpty(status == null ? "" : String(status)).trim();
+  const trimmedMessage = defaultToEmpty(message).trim();
+
+  if (statusCode && trimmedMessage) {
+    return `HTTP ${statusCode}: ${trimmedMessage}`;
+  }
+
+  if (statusCode) {
+    return `HTTP ${statusCode}`;
+  }
+
+  return trimmedMessage;
+};
+
 export const defaultGenericErrorHandler = (response: Response) => ({
-  message: `${GENERIC_ERROR} ${defaultToEmpty(
-    String(response?.status),
-  )} ${defaultToEmpty(response.statusText)}`,
+  message: formatHttpErrorMessage(response?.status, response?.statusText),
 });
 
 export const getErrors = async (
@@ -64,9 +80,20 @@ export const getErrors = async (
   }
 
   const clonedResponse = response.clone();
-  const body = await clonedResponse.json();
+  let body;
+  try {
+    body = await clonedResponse.json();
+  } catch (error) {
+    console.error("Error parsing JSON error response", error);
+    return genericErrorHandler(clonedResponse);
+  }
 
-  if (isEmpty(body?.validationErrors) && isEmpty(body?.message)) {
+  const formattedBodyMessage =
+    typeof body?.message === "string" && body.message.trim().length > 0
+      ? formatHttpErrorMessage(response.status, body.message)
+      : undefined;
+
+  if (isEmpty(body?.validationErrors) && isEmpty(formattedBodyMessage)) {
     console.error(
       Object.assign(Error("No error messages in response"), { body }),
     );
@@ -74,7 +101,7 @@ export const getErrors = async (
   }
 
   return Object.assign(
-    { message: body.message },
+    { message: formattedBodyMessage ?? genericErrorHandler(clonedResponse).message },
     ...(isEmpty(body.validationErrors)
       ? []
       : body.validationErrors.map(

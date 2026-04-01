@@ -234,6 +234,8 @@ export interface RunOptions {
   idempotencyKey?: string;
   timeoutSeconds?: number;
   credentials?: string[];
+  /** Initial context dict to pass to the agent pipeline. */
+  context?: Record<string, unknown>;
   /** AbortSignal for cancellation/timeout. */
   signal?: AbortSignal;
 }
