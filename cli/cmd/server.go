@@ -31,7 +31,8 @@ var (
 	serverVersion string
 	serverJar     string
 	serverLocal   bool
-	followLogs    bool
+	followLogs   bool
+	tailLines    int
 )
 
 var serverCmd = &cobra.Command{
@@ -65,6 +66,7 @@ func init() {
 	serverStartCmd.Flags().BoolVar(&serverLocal, "local", false, "Use locally built JAR from server/build/libs/")
 
 	serverLogsCmd.Flags().BoolVarP(&followLogs, "follow", "f", false, "Follow log output")
+	serverLogsCmd.Flags().IntVarP(&tailLines, "lines", "n", 20, "Number of lines to show before following (with -f)")
 
 	serverCmd.AddCommand(serverStartCmd, serverStopCmd, serverLogsCmd)
 	rootCmd.AddCommand(serverCmd)
@@ -242,15 +244,20 @@ func runServerLogs(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Follow mode: tail -f style
+	// Follow mode: tail -n N -f style
 	f, err := os.Open(path)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
-	// Seek to end
-	f.Seek(0, io.SeekEnd)
+	// Seek to show only the last N lines before following
+	if tailLines > 0 {
+		if offset, err := lastNLinesOffset(f, tailLines); err == nil {
+			f.Seek(offset, io.SeekStart)
+		}
+		// On error just follow from start
+	}
 
 	buf := make([]byte, 4096)
 	for {
@@ -266,6 +273,45 @@ func runServerLogs(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	}
+}
+
+// lastNLinesOffset returns the file offset to start reading from to get the last n lines.
+func lastNLinesOffset(f *os.File, n int) (int64, error) {
+	size, err := f.Seek(0, io.SeekEnd)
+	if err != nil {
+		return 0, err
+	}
+	if size == 0 {
+		return 0, nil
+	}
+
+	const chunkSize = 4096
+	found := 0
+	offset := size
+	buf := make([]byte, chunkSize)
+
+	for offset > 0 {
+		read := int64(chunkSize)
+		if read > offset {
+			read = offset
+		}
+		offset -= read
+		if _, err := f.Seek(offset, io.SeekStart); err != nil {
+			return 0, err
+		}
+		if _, err := io.ReadFull(f, buf[:read]); err != nil {
+			return 0, err
+		}
+		for i := int(read) - 1; i >= 0; i-- {
+			if buf[i] == '\n' {
+				found++
+				if found > n {
+					return offset + int64(i) + 1, nil
+				}
+			}
+		}
+	}
+	return 0, nil
 }
 
 // --- Local JAR helpers ---
