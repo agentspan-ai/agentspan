@@ -776,6 +776,12 @@ class AgentRuntime:
         from agentspan.agents.guardrail import LLMGuardrail, RegexGuardrail
         from agentspan.agents.tool import get_tool_def
 
+        # Skill agents — collect worker names from create_skill_workers
+        if getattr(agent, "_framework", None) == "skill":
+            from agentspan.agents.skill import create_skill_workers
+
+            return {sw.name for sw in create_skill_workers(agent)}
+
         # Always collect user-defined tool names from the agent tree
         tool_names: set = set()
         for t in agent.tools:
@@ -893,6 +899,11 @@ class AgentRuntime:
         """
         from agentspan.agents.guardrail import LLMGuardrail, RegexGuardrail
         from agentspan.agents.runtime.tool_registry import ToolRegistry
+
+        # 0. Skill workers — register script and read_skill_file workers
+        if getattr(agent, "_framework", None) == "skill":
+            self._register_skill_workers(agent)
+            return  # Skill agents have no native tools/guardrails/sub-agents
 
         def _server_needs(task_name: str) -> bool:
             """Return True if the server expects this system worker."""
@@ -1058,6 +1069,27 @@ class AgentRuntime:
                 self._register_workers(sub, required_workers=required_workers)
 
     # ── Worker registration helpers ────────────────────────────────
+
+    def _register_skill_workers(self, agent: Agent) -> None:
+        """Register skill workers (scripts + read_skill_file) for a skill-based agent."""
+        from conductor.client.worker.worker_task import worker_task
+
+        from agentspan.agents.runtime._dispatch import make_tool_worker
+        from agentspan.agents.skill import create_skill_workers
+
+        skill_workers = create_skill_workers(agent)
+        if not skill_workers:
+            return
+
+        for sw in skill_workers:
+            wrapper = make_tool_worker(sw.func, sw.name)
+            worker_task(
+                task_definition_name=sw.name,
+                task_def=_default_task_def(sw.name),
+                register_task_def=True,
+                overwrite_task_def=True,
+            )(wrapper)
+            logger.debug("Registered skill worker '%s'", sw.name)
 
     def _register_guardrail_worker(self, agent_name: str, guardrails: list) -> None:
         """Register guardrail workers for custom function guardrails.
@@ -1801,6 +1833,9 @@ class AgentRuntime:
         """
         # Claude-code agents always need a passthrough worker
         if getattr(agent, "is_claude_code", False):
+            return True
+        # Skill agents need script and read_skill_file workers
+        if getattr(agent, "_framework", None) == "skill":
             return True
         from agentspan.agents.guardrail import LLMGuardrail, RegexGuardrail
         from agentspan.agents.tool import get_tool_def
@@ -3307,7 +3342,10 @@ class AgentRuntime:
         """
         if handle is not None:
             event_iter = self._stream_workflow(handle.execution_id)
-            return AgentStream(handle=handle, event_iterator=event_iter)
+            return AgentStream(
+                handle=handle, event_iterator=event_iter,
+                token_fetcher=self._extract_token_usage,
+            )
 
         if agent is None or prompt is None:
             raise ValueError("Either (agent, prompt) or handle= must be provided")
@@ -3316,7 +3354,10 @@ class AgentRuntime:
             agent, prompt, version=version, media=media, session_id=session_id, **kwargs
         )
         event_iter = self._stream_workflow(handle.execution_id)
-        return AgentStream(handle=handle, event_iterator=event_iter)
+        return AgentStream(
+            handle=handle, event_iterator=event_iter,
+            token_fetcher=self._extract_token_usage,
+        )
 
     def _stream_workflow(self, execution_id: str) -> Iterator[AgentEvent]:
         """Stream events for an execution, with SSE-to-polling fallback.

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/agentspan/agentspan/cli/client"
+	"github.com/agentspan-ai/agentspan/cli/client"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )

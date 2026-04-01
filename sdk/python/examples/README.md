@@ -172,7 +172,7 @@ python examples/adk/01_basic_agent.py
 | 21 | [Regex Guardrails](21_regex_guardrails.py) | Pattern-based blocking (emails, SSNs) and allow-listing (JSON) | `RegexGuardrail` |
 | 22 | [LLM Guardrails](22_llm_guardrails.py) | AI-powered content safety evaluation via a judge LLM | `LLMGuardrail` |
 | 31 | [Tool Guardrails](31_tool_guardrails.py) | Pre-execution validation on tool inputs (SQL injection blocking) | `@tool(guardrails=[...])` |
-| 32 | [Human Guardrail](32_human_guardrail.py) | Pause workflow for human review when output fails validation | `on_fail="human"` |
+| 32 | [Human Guardrail](32_human_guardrail.py) | Pause agent for human review when output fails validation | `on_fail="human"` |
 | 35 | [Standalone Guardrails](35_standalone_guardrails.py) | Use `@guardrail` as plain callables — no agent, no server needed | `@guardrail`, `GuardrailResult` |
 | 36 | [Simple Agent Guardrails](36_simple_agent_guardrails.py) | Guardrails on agents without tools — mixed regex (InlineTask) + custom (worker) | `RegexGuardrail`, `@guardrail` |
 | 37 | [Fix Guardrail](37_fix_guardrail.py) | Auto-correct output instead of retrying — deterministic fixes | `on_fail="fix"`, `fixed_output` |
@@ -208,8 +208,8 @@ python examples/adk/01_basic_agent.py
 |---|---------|---------------------|
 | 11 | [Streaming](11_streaming.py) | Real-time events via `runtime.stream()` | `AgentEvent`, `EventType` |
 | 12 | [Long-Running](12_long_running.py) | Fire-and-forget with status polling from any process | `runtime.start()`, `handle.get_status()` |
-| 72 | [Client Reconnect](72_client_reconnect.py) | Hard-kill the SDK client, reconnect later, and continue the same workflow | `runtime.start()`, `runtime.get_status()`, `runtime.respond()` |
-| 73 | [Worker Restart Recovery](73_worker_restart_recovery.py) | Start a workflow with workers down, restart the worker service, and watch the same workflow finish | `runtime.deploy()`, `runtime.serve()`, `runtime.start()` |
+| 72 | [Client Reconnect](72_client_reconnect.py) | Hard-kill the SDK client, reconnect later, and continue the same agent execution | `runtime.start()`, `runtime.get_status()`, `runtime.respond()` |
+| 73 | [Worker Restart Recovery](73_worker_restart_recovery.py) | Start an agent with workers down, restart the worker service, and watch the same execution finish | `runtime.deploy()`, `runtime.serve()`, `runtime.start()` |
 
 ## Multimodal
 

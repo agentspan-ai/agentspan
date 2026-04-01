@@ -1,6 +1,6 @@
 # Client Reconnect Demo
 
-This demo proves that a workflow survives a hard kill of the local SDK process.
+This demo proves that an agent execution survives a hard kill of the local SDK process.
 
 ## Prerequisites
 
@@ -30,7 +30,7 @@ export AGENTSPAN_SERVER_URL=http://localhost:6767/api
 export AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini
 ```
 
-## Terminal 1: Start the workflow
+## Terminal 1: Start the agent
 
 ```bash
 python 72_client_reconnect.py start
@@ -39,7 +39,7 @@ python 72_client_reconnect.py start
 Wait for:
 
 ```text
-Workflow is durably paused on the server.
+Agent is durably paused on the server.
 Now hard-kill this client from another terminal with:
   python 72_client_reconnect.py kill-client --client-info-file /tmp/agentspan_client_reconnect.client.json
 ```
@@ -67,7 +67,7 @@ python 72_client_reconnect.py status
 ## What this proves
 
 - The local Python SDK process can die abruptly
-- The workflow remains durable on the server
+- The agent execution remains durable on the server
 - A fresh process can re-register the tool worker
 - A fresh process can reconnect later by `execution_id`
-- The same workflow continues and completes after approval is sent
+- The same agent execution continues and completes after approval is sent

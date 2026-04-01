@@ -226,35 +226,34 @@ public class AgentController {
 
     /** Restart a completed/failed execution. */
     @PostMapping("/executions/{executionId}/restart")
-    public void restartExecution(@PathVariable String executionId,
-            @RequestParam(defaultValue = "false") boolean useLatestDefinitions) {
+    public void restartExecution(
+            @PathVariable String executionId, @RequestParam(defaultValue = "false") boolean useLatestDefinitions) {
         agentService.restartExecution(executionId, useLatestDefinitions);
     }
 
     /** Retry a failed execution from the failed task. */
     @PostMapping("/executions/{executionId}/retry")
-    public void retryExecution(@PathVariable String executionId,
-            @RequestParam(defaultValue = "false") boolean resumeSubworkflowTasks) {
+    public void retryExecution(
+            @PathVariable String executionId, @RequestParam(defaultValue = "false") boolean resumeSubworkflowTasks) {
         agentService.retryExecution(executionId, resumeSubworkflowTasks);
     }
 
     /** Rerun execution from a specific task. */
     @PostMapping("/executions/{executionId}/rerun")
-    public String rerunExecution(@PathVariable String executionId,
-            @RequestBody RerunWorkflowRequest request) {
+    public String rerunExecution(@PathVariable String executionId, @RequestBody RerunWorkflowRequest request) {
         return agentService.rerunExecution(executionId, request);
     }
 
     /** Terminate a running execution (used by UI delete action). */
     @DeleteMapping("/executions/{executionId}")
-    public void terminateExecution(@PathVariable String executionId,
-            @RequestParam(required = false) String reason) {
+    public void terminateExecution(@PathVariable String executionId, @RequestParam(required = false) String reason) {
         agentService.cancelAgent(executionId, reason);
     }
 
     /** Get paginated task list for an execution. */
     @GetMapping("/executions/{executionId}/tasks")
-    public List<Task> getExecutionTasks(@PathVariable String executionId,
+    public List<Task> getExecutionTasks(
+            @PathVariable String executionId,
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "15") int count,
             @RequestParam(defaultValue = "0") int start) {
@@ -263,7 +262,8 @@ public class AgentController {
 
     /** Update a task's status within an execution. */
     @PostMapping("/tasks/{executionId}/{refTaskName}/{status}")
-    public void updateTaskStatus(@PathVariable String executionId,
+    public void updateTaskStatus(
+            @PathVariable String executionId,
             @PathVariable String refTaskName,
             @PathVariable String status,
             @RequestParam(defaultValue = "agent-ui") String workerid,
@@ -273,8 +273,8 @@ public class AgentController {
         Task task = wf.getTasks().stream()
                 .filter(t -> refTaskName.equals(t.getReferenceTaskName()))
                 .reduce((first, second) -> second)
-                .orElseThrow(() -> new com.netflix.conductor.core.exception.NotFoundException(
-                        "Task not found: " + refTaskName));
+                .orElseThrow(() ->
+                        new com.netflix.conductor.core.exception.NotFoundException("Task not found: " + refTaskName));
         TaskResult taskResult = new TaskResult(task);
         taskResult.setStatus(TaskResult.Status.valueOf(status));
         taskResult.setWorkerId(workerid);
@@ -316,8 +316,8 @@ public class AgentController {
     }
 
     @PostMapping("/executions/bulk/restart")
-    public void bulkRestart(@RequestBody List<String> ids,
-            @RequestParam(defaultValue = "false") boolean useLatestDefinitions) {
+    public void bulkRestart(
+            @RequestBody List<String> ids, @RequestParam(defaultValue = "false") boolean useLatestDefinitions) {
         ids.forEach(id -> agentService.restartExecution(id, useLatestDefinitions));
     }
 
@@ -327,16 +327,14 @@ public class AgentController {
     }
 
     @PostMapping("/executions/bulk/terminate")
-    public void bulkTerminate(@RequestBody List<String> ids,
-            @RequestParam(required = false) String reason) {
+    public void bulkTerminate(@RequestBody List<String> ids, @RequestParam(required = false) String reason) {
         ids.forEach(id -> agentService.cancelAgent(id, reason));
     }
 
     // ── Definition metadata ─────────────────────────────────────────
 
     @GetMapping("/definitions/{name}")
-    public WorkflowDef getAgentDefinition(@PathVariable String name,
-            @RequestParam(required = false) Integer version) {
+    public WorkflowDef getAgentDefinition(@PathVariable String name, @RequestParam(required = false) Integer version) {
         return agentService.getAgentDefinition(name, version);
     }
 }

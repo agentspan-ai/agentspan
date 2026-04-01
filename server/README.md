@@ -1,16 +1,16 @@
 <p align="center">
-  <img src="https://github.com/agentspan/agentspan/raw/main/assets/logo-light.png#gh-light-mode-only" alt="Agentspan" width="400">
-  <img src="https://github.com/agentspan/agentspan/raw/main/assets/logo-dark.png#gh-dark-mode-only" alt="Agentspan" width="400">
+  <img src="https://github.com/agentspan-ai/agentspan/raw/main/assets/logo-light.png#gh-light-mode-only" alt="Agentspan" width="400">
+  <img src="https://github.com/agentspan-ai/agentspan/raw/main/assets/logo-dark.png#gh-dark-mode-only" alt="Agentspan" width="400">
 </p>
 
 <p align="center">
-  <a href="https://github.com/agentspan/agentspan/stargazers"><img src="https://img.shields.io/github/stars/agentspan/agentspan?style=social" alt="Stars"></a>
-  <a href="https://github.com/agentspan/agentspan/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
+  <a href="https://github.com/agentspan-ai/agentspan/stargazers"><img src="https://img.shields.io/github/stars/agentspan-ai/agentspan?style=social" alt="Stars"></a>
+  <a href="https://github.com/agentspan-ai/agentspan/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
   <a href="https://discord.gg/agentspan"><img src="https://img.shields.io/discord/1234567890?label=Discord&logo=discord&color=5865F2" alt="Discord"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/agentspan/agentspan">Main Repo</a> &bull;
+  <a href="https://github.com/agentspan-ai/agentspan">Main Repo</a> &bull;
   <a href="https://docs.agentspan.dev">Docs</a> &bull;
   <a href="https://discord.gg/agentspan">Discord</a> &bull;
   <a href="../sdk/python/">Python SDK</a> &bull;
@@ -21,7 +21,7 @@
 
 # Agentspan Server
 
-The durable runtime server that executes AI agents as workflows. Compiles agent definitions into orchestrated workflows, manages LLM interactions, tool execution, streaming, and human-in-the-loop approvals — independently of the client process.
+The durable runtime server that executes AI agents. Compiles agent definitions into orchestrated executions, manages LLM interactions, tool execution, streaming, and human-in-the-loop approvals — independently of the client process.
 
 ## Quickstart
 
@@ -35,18 +35,14 @@ The durable runtime server that executes AI agents as workflows. Compiles agent 
 ```bash
 cd server
 
-# Build
+# Build the server JAR using the checked-in embedded UI
 ./gradlew bootJar
 
-# Build a size-optimized shaded executable jar
-# This is more aggressive about trimming transitive bytecode than bootJar.
-./gradlew shadowJar
+# Refresh the embedded UI and package it into the JAR
+./gradlew bootJar -PbuildUI=true
 
 # Run with default config (SQLite)
 java -jar build/libs/agentspan-runtime.jar
-
-# Run the shaded/minimized variant
-java -jar build/libs/agentspan-runtime-shaded.jar
 
 # Run with PostgreSQL
 java -jar build/libs/agentspan-runtime.jar --spring.profiles.active=postgres
@@ -58,14 +54,13 @@ Or use the CLI:
 agentspan server start --local
 ```
 
-For container builds, the Dockerfile now accepts an alternate Gradle task and jar name:
+For container builds:
 
 ```bash
-docker build -f server/Dockerfile \
-  --build-arg GRADLE_TASK=shadowJar \
-  --build-arg RUNTIME_JAR=agentspan-runtime-shaded.jar \
-  -t agentspan/server:shaded .
+docker build -f server/Dockerfile -t agentspan/server:latest .
 ```
+
+`bootJar` does not rebuild the UI by default. That keeps local Java builds fast for developers. Release packaging that needs the latest embedded frontend should use `-PbuildUI=true`, or run `./gradlew syncUiStatic` explicitly before building.
 
 ### Set LLM provider API keys
 
@@ -109,7 +104,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | `error` | Error occurred |
 | `done` | Agent execution completed |
 
-Reconnection is supported via `Last-Event-ID` header. Events are buffered in memory (up to 200 per workflow).
+Reconnection is supported via `Last-Event-ID` header. Events are buffered in memory (up to 200 per execution).
 
 ## Database
 
@@ -350,8 +345,8 @@ The server is a Spring Boot application (Java 21) built on top of [Conductor](ht
 ```bash
 ./gradlew bootJar
 
-# Or build the size-optimized shaded executable
-./gradlew shadowJar
+# Or refresh the embedded UI before packaging
+./gradlew bootJar -PbuildUI=true
 ```
 
 ### Run tests
@@ -391,14 +386,14 @@ server/
 ## Community
 
 - **[Discord](https://discord.gg/agentspan)** — Ask questions, share what you're building, get help
-- **[GitHub Issues](https://github.com/agentspan/agentspan/issues)** — Bug reports and feature requests
+- **[GitHub Issues](https://github.com/agentspan-ai/agentspan/issues)** — Bug reports and feature requests
 - **[Contributing Guide](../CONTRIBUTING.md)** — How to contribute
 
 If Agentspan is useful to you, help others find it:
 
-- [Star the repo](https://github.com/agentspan/agentspan) — it helps more than you think
-- [Share on LinkedIn](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/agentspan/agentspan) — tell your network
-- [Share on X/Twitter](https://twitter.com/intent/tweet?text=Agentspan%20%E2%80%94%20AI%20agents%20that%20don%27t%20die%20when%20your%20process%20does.%20Durable%2C%20scalable%2C%20observable.&url=https://github.com/agentspan/agentspan) — spread the word
+- [Star the repo](https://github.com/agentspan-ai/agentspan) — it helps more than you think
+- [Share on LinkedIn](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/agentspan-ai/agentspan) — tell your network
+- [Share on X/Twitter](https://twitter.com/intent/tweet?text=Agentspan%20%E2%80%94%20AI%20agents%20that%20don%27t%20die%20when%20your%20process%20does.%20Durable%2C%20scalable%2C%20observable.&url=https://github.com/agentspan-ai/agentspan) — spread the word
 
 ## License
 

@@ -11,10 +11,10 @@
 <p align="center">
   <a href="https://pypi.org/project/agentspan/"><img src="https://img.shields.io/pypi/v/agentspan?color=blue" alt="PyPI"></a>
   <a href="https://pypi.org/project/agentspan/"><img src="https://img.shields.io/pypi/dm/agentspan?color=blue" alt="Downloads"></a>
-  <a href="https://github.com/agentspan/agentspan/stargazers"><img src="https://img.shields.io/github/stars/agentspan/agentspan?style=social" alt="Stars"></a>
-  <a href="https://github.com/agentspan/agentspan/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
+  <a href="https://github.com/agentspan-ai/agentspan/stargazers"><img src="https://img.shields.io/github/stars/agentspan-ai/agentspan?style=social" alt="Stars"></a>
+  <a href="https://github.com/agentspan-ai/agentspan/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
   <a href="https://discord.gg/agentspan"><img src="https://img.shields.io/discord/1234567890?label=Discord&logo=discord&color=5865F2" alt="Discord"></a>
-  <a href="https://github.com/agentspan/agentspan/actions"><img src="https://img.shields.io/github/actions/workflow/status/agentspan/agentspan/ci.yml?label=CI" alt="CI"></a>
+  <a href="https://github.com/agentspan-ai/agentspan/actions"><img src="https://img.shields.io/github/actions/workflow/status/agentspan-ai/agentspan/ci.yml?label=CI" alt="CI"></a>
 </p>
 
 <p align="center">
@@ -524,13 +524,13 @@ pipeline = SequentialAgent(name="pipeline", sub_agents=[researcher, writer])
 We're building Agentspan in the open and would love your help.
 
 - **[Discord](https://discord.gg/agentspan)** — Ask questions, share what you're building, get help
-- **[GitHub Issues](https://github.com/agentspan/agentspan/issues)** — Bug reports and feature requests
+- **[GitHub Issues](https://github.com/agentspan-ai/agentspan/issues)** — Bug reports and feature requests
 - **[Contributing Guide](CONTRIBUTING.md)** — How to contribute code, docs, and examples
 
 ### Contributing
 
 ```bash
-git clone https://github.com/agentspan/agentspan.git
+git clone https://github.com/agentspan-ai/agentspan.git
 cd agentspan/sdk/python
 uv venv && source .venv/bin/activate
 uv pip install -e ".[dev]"
@@ -543,10 +543,10 @@ We welcome PRs of all sizes — from typo fixes to new examples to core features
 
 If Agentspan is useful to you, help others find it:
 
-- [Star this repo](https://github.com/agentspan/agentspan) — it helps more than you think
-- [Share on LinkedIn](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/agentspan/agentspan) — tell your network
-- [Share on X/Twitter](https://twitter.com/intent/tweet?text=Agentspan%20%E2%80%94%20AI%20agents%20that%20don%27t%20die%20when%20your%20process%20does.%20Durable%2C%20scalable%2C%20observable.&url=https://github.com/agentspan/agentspan) — spread the word
-- [Share on Reddit](https://www.reddit.com/submit?url=https://github.com/agentspan/agentspan&title=Agentspan%20%E2%80%94%20AI%20agents%20that%20survive%20crashes%2C%20scale%20across%20machines%2C%20and%20pause%20for%20human%20approval%20for%20days) — post in r/MachineLearning or r/LocalLLaMA
+- [Star this repo](https://github.com/agentspan-ai/agentspan) — it helps more than you think
+- [Share on LinkedIn](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/agentspan-ai/agentspan) — tell your network
+- [Share on X/Twitter](https://twitter.com/intent/tweet?text=Agentspan%20%E2%80%94%20AI%20agents%20that%20don%27t%20die%20when%20your%20process%20does.%20Durable%2C%20scalable%2C%20observable.&url=https://github.com/agentspan-ai/agentspan) — spread the word
+- [Share on Reddit](https://www.reddit.com/submit?url=https://github.com/agentspan-ai/agentspan&title=Agentspan%20%E2%80%94%20AI%20agents%20that%20survive%20crashes%2C%20scale%20across%20machines%2C%20and%20pause%20for%20human%20approval%20for%20days) — post in r/MachineLearning or r/LocalLLaMA
 
 ## API Reference
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, AsyncIterator, Dict, Iterator, List, Optional
+from typing import Any, AsyncIterator, Callable, Dict, Iterator, List, Optional
 
 # ── Status & FinishReason enums ────────────────────────────────────────
 
@@ -411,12 +411,14 @@ class AgentStream:
         self,
         handle: AgentHandle,
         event_iterator: Iterator[AgentEvent],
+        token_fetcher: Optional[Callable[[str], Optional["TokenUsage"]]] = None,
     ) -> None:
         self.handle = handle
         self.events: List[AgentEvent] = []
         self.result: Optional[AgentResult] = None
         self._event_iterator = event_iterator
         self._exhausted = False
+        self._token_fetcher = token_fetcher
 
     def __iter__(self) -> Iterator[AgentEvent]:
         """Yield events, capturing them in :attr:`events`."""
@@ -477,6 +479,15 @@ class AgentStream:
         output = _normalize_event_output(output, status, error_message)
 
         sub_results = output.get("subResults", {}) if isinstance(output, dict) else {}
+
+        # Fetch token usage from the server if a fetcher was provided
+        token_usage = None
+        if self._token_fetcher and self.handle.execution_id:
+            try:
+                token_usage = self._token_fetcher(self.handle.execution_id)
+            except Exception:
+                pass  # token tracking is best-effort
+
         self.result = AgentResult(
             output=output,
             execution_id=self.handle.execution_id,
@@ -487,6 +498,7 @@ class AgentStream:
             error=error_message,
             events=list(self.events),
             sub_results=sub_results,
+            token_usage=token_usage,
         )
 
     # ── HITL convenience (delegates to handle) ────────────────────
@@ -552,6 +564,7 @@ def _normalize_event_output(
 def _build_result_from_events(
     events: List[AgentEvent],
     handle: AgentHandle,
+    token_fetcher: Optional[Callable[[str], Optional["TokenUsage"]]] = None,
 ) -> AgentResult:
     """Build an :class:`AgentResult` from a list of captured events."""
     output = None
@@ -588,6 +601,15 @@ def _build_result_from_events(
     output = _normalize_event_output(output, status, error_message)
 
     sub_results = output.get("subResults", {}) if isinstance(output, dict) else {}
+
+    # Fetch token usage from the server if a fetcher was provided
+    token_usage = None
+    if token_fetcher and handle.execution_id:
+        try:
+            token_usage = token_fetcher(handle.execution_id)
+        except Exception:
+            pass  # token tracking is best-effort
+
     return AgentResult(
         output=output,
         execution_id=handle.execution_id,
@@ -598,6 +620,7 @@ def _build_result_from_events(
         error=error_message,
         events=list(events),
         sub_results=sub_results,
+        token_usage=token_usage,
     )
 
 
@@ -634,7 +657,10 @@ class AsyncAgentStream:
             self.events.append(event)
             yield event
         self._exhausted = True
-        self.result = _build_result_from_events(self.events, self.handle)
+        self.result = _build_result_from_events(
+            self.events, self.handle,
+            token_fetcher=getattr(self._runtime, '_extract_token_usage', None),
+        )
 
     async def get_result(self) -> AgentResult:
         """Drain the stream (if not already) and return the final result."""
@@ -642,9 +668,15 @@ class AsyncAgentStream:
             async for event in self._runtime._stream_workflow_async(self.handle.execution_id):
                 self.events.append(event)
             self._exhausted = True
-            self.result = _build_result_from_events(self.events, self.handle)
+            self.result = _build_result_from_events(
+                self.events, self.handle,
+                token_fetcher=getattr(self._runtime, '_extract_token_usage', None),
+            )
         if self.result is None:
-            self.result = _build_result_from_events(self.events, self.handle)
+            self.result = _build_result_from_events(
+                self.events, self.handle,
+                token_fetcher=getattr(self._runtime, '_extract_token_usage', None),
+            )
         return self.result
 
     # ── Async HITL convenience (delegates to handle) ─────────────

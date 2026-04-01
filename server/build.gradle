@@ -2,13 +2,35 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '3.3.5'
     id 'io.spring.dependency-management' version '1.1.7'
-    id 'com.gradleup.shadow' version '8.3.6'
     id 'com.diffplug.spotless' version '7.0.2'
+}
+
+def uiDir = file("${projectDir}/../ui")
+def uiDistDir = file("${uiDir}/dist")
+def serverStaticDir = file("${projectDir}/src/main/resources/static")
+def buildUiProperty = project.findProperty('buildUI')
+def buildUiEnabled = buildUiProperty != null && (
+    buildUiProperty.toString().trim().isEmpty() ||
+    buildUiProperty.toString().toBoolean()
+)
+def nodeOptionsWithMoreHeap = {
+    def current = System.getenv('NODE_OPTIONS')
+    current ? "${current} --max-old-space-size=4096" : '--max-old-space-size=4096'
+}
+def shellCommand = { String command ->
+    org.gradle.internal.os.OperatingSystem.current().isWindows()
+        ? ['cmd', '/c', command]
+        : ['bash', '-lc', command]
+}
+def pnpmCommand = { String args ->
+    org.gradle.internal.os.OperatingSystem.current().isWindows()
+        ? "where pnpm >NUL 2>NUL && pnpm ${args} || (where corepack >NUL 2>NUL && corepack pnpm ${args} || (echo pnpm or corepack is required to build the UI & exit /b 127))"
+        : "if command -v pnpm >/dev/null 2>&1; then pnpm ${args}; elif command -v corepack >/dev/null 2>&1; then corepack pnpm ${args}; else echo 'pnpm or corepack is required to build the UI' >&2; exit 127; fi"
 }
 
 // ── Version catalog ──────────────────────────────────────────────
 ext {
-    conductorVersion   = '3.3.0.rc3'
+    conductorVersion   = '3.3.0.rc4'
     lombokVersion      = '1.18.42'
     log4jVersion       = '2.24.3'  // managed by Spring BOM, explicit for clarity
     sqliteJdbcVersion  = '3.47.0.0'
@@ -188,49 +210,59 @@ test {
     useJUnitPlatform()
 }
 
-tasks.named('bootJar') {
-    archiveFileName = 'agentspan-runtime.jar'
+tasks.register('installUiDependencies', Exec) {
+    group = 'build'
+    description = 'Install UI dependencies with pnpm when the UI workspace is available'
+    onlyIf { uiDir.exists() }
+    workingDir uiDir
+    commandLine shellCommand(pnpmCommand('install --frozen-lockfile'))
+    environment 'CI', 'true'
+    inputs.files(
+        file("${uiDir}/package.json"),
+        file("${uiDir}/pnpm-lock.yaml")
+    )
+    outputs.file(file("${uiDir}/node_modules/.modules.yaml"))
 }
 
-tasks.named('shadowJar') {
-    archiveFileName = 'agentspan-runtime-shaded.jar'
-    zip64 true
+tasks.register('buildUi', Exec) {
+    group = 'build'
+    description = 'Build the latest UI bundle for the embedded server UI (opt-in via -PbuildUI for bootJar)'
+    onlyIf { uiDir.exists() }
+    dependsOn 'installUiDependencies'
+    workingDir uiDir
+    commandLine shellCommand(pnpmCommand('build'))
+    environment 'CI', 'true'
+    environment 'NODE_OPTIONS', nodeOptionsWithMoreHeap()
+    inputs.files(
+        file("${uiDir}/package.json"),
+        file("${uiDir}/pnpm-lock.yaml"),
+        file("${uiDir}/index.html"),
+        file("${uiDir}/vite.config.ts"),
+        file("${uiDir}/vite-plugin-csp-nonce.ts"),
+        file("${uiDir}/tsconfig.json")
+    )
+    inputs.dir(file("${uiDir}/src"))
+    inputs.dir(file("${uiDir}/public"))
+    outputs.dir(uiDistDir)
+}
 
-    manifest {
-        attributes(
-            'Main-Class': 'dev.agentspan.runtime.AgentRuntime',
-            'Multi-Release': 'true'
-        )
+tasks.register('syncUiStatic', Sync) {
+    group = 'build'
+    description = 'Sync the latest built UI assets into server/src/main/resources/static'
+    onlyIf { uiDir.exists() }
+    dependsOn 'buildUi'
+    from(uiDistDir)
+    into(serverStaticDir)
+    includeEmptyDirs = false
+}
+
+tasks.named('processResources') {
+    mustRunAfter 'syncUiStatic'
+}
+
+tasks.named('bootJar') {
+    if (buildUiEnabled) {
+        dependsOn 'syncUiStatic'
     }
-
-    mergeServiceFiles()
-    append 'META-INF/spring/aot.factories'
-    append 'META-INF/spring.handlers'
-    append 'META-INF/spring.schemas'
-    append 'META-INF/spring.tooling'
-    append 'META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports'
-    append 'META-INF/spring/org.springframework.boot.actuate.autoconfigure.web.ManagementContextConfiguration.imports'
-    transform(com.github.jengelman.gradle.plugins.shadow.transformers.PropertiesFileTransformer) {
-        paths = ['META-INF/spring.factories']
-        mergeStrategy = 'append'
-    }
-    transform(com.github.jengelman.gradle.plugins.shadow.transformers.Log4j2PluginsCacheFileTransformer)
-
-    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
-
-    // Keep framework/runtime modules that are heavily reflection-driven.
-    // The remainder of the graph is eligible for bytecode minimization.
-    minimize {
-        exclude(dependency('org.springframework.boot:.*:.*'))
-        exclude(dependency('org.springframework:.*:.*'))
-        exclude(dependency('org.apache.tomcat.embed:.*:.*'))
-        exclude(dependency('org.conductoross:.*:.*'))
-        exclude(dependency('org.apache.logging.log4j:.*:.*'))
-        exclude(dependency('org.slf4j:.*:.*'))
-        exclude(dependency('com.fasterxml.jackson.core:.*:.*'))
-        exclude(dependency('com.fasterxml.jackson.dataformat:.*:.*'))
-        exclude(dependency('com.fasterxml.jackson.datatype:.*:.*'))
-        exclude(dependency('com.fasterxml.jackson.module:.*:.*'))
-        exclude(dependency('org.xerial:sqlite-jdbc:.*'))
-    }
+    archiveFileName = 'agentspan-runtime.jar'
 }

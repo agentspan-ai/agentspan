@@ -20,8 +20,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.netflix.conductor.common.metadata.tasks.Task;
 import com.netflix.conductor.common.metadata.tasks.TaskDef;
-import com.netflix.conductor.common.metadata.tasks.TaskResult;
 import com.netflix.conductor.common.metadata.tasks.TaskExecLog;
+import com.netflix.conductor.common.metadata.tasks.TaskResult;
 import com.netflix.conductor.common.metadata.workflow.RerunWorkflowRequest;
 import com.netflix.conductor.common.metadata.workflow.StartWorkflowRequest;
 import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
@@ -1155,20 +1155,22 @@ public class AgentService {
         return tasks.subList(start, end);
     }
 
-    public SearchResult<WorkflowSummary> searchExecutionsRaw(int start, int size, String sort,
-                                                              String freeText, String query) {
+    public SearchResult<WorkflowSummary> searchExecutionsRaw(
+            int start, int size, String sort, String freeText, String query) {
         return workflowService.searchWorkflows(start, size, sort, freeText, query);
     }
 
     public WorkflowDef getAgentDefinition(String name, Integer version) {
         if (version != null) {
-            return metadataDAO.getWorkflowDef(name, version)
+            return metadataDAO
+                    .getWorkflowDef(name, version)
                     .orElseThrow(() -> new com.netflix.conductor.core.exception.NotFoundException(
                             "Definition not found: " + name));
         }
-        return metadataDAO.getLatestWorkflowDef(name)
-                .orElseThrow(() -> new com.netflix.conductor.core.exception.NotFoundException(
-                        "Definition not found: " + name));
+        return metadataDAO
+                .getLatestWorkflowDef(name)
+                .orElseThrow(() ->
+                        new com.netflix.conductor.core.exception.NotFoundException("Definition not found: " + name));
     }
 
     public void updateTaskResult(TaskResult taskResult) {

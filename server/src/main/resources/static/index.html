@@ -53,23 +53,28 @@
     />
     <meta name="twitter:image" content="/icons/icon-512x512.png" />
     <meta name="twitter:image:alt" content="Conductor Logo" />
-    <script nonce="tpsHAxwU5x0csoIuLNs2vg==">
+    <!--
+      CSP Nonce Setup:
+      At deploy time, replace __CSP_NONCE_PLACEHOLDER__ with a per-request
+      cryptographically random nonce. Your reverse proxy or server should:
+      1. Generate a unique nonce per response
+      2. Replace all occurrences of __CSP_NONCE_PLACEHOLDER__ in this HTML
+      3. Set the CSP header: script-src 'nonce-<generated-nonce>'
+
+      Without this replacement, the placeholder is inert and provides no CSP protection.
+    -->
+    <script nonce="__CSP_NONCE_PLACEHOLDER__">
       (function () {
-        // Retrieve the nonce value from an existing CSP-protected script
-        // const nonceElement = document.querySelector("[nonce]");
-        // const nonceValue = nonceElement
-        //   ? nonceElement.getAttribute("nonce")
-        //   : null;
-        var nonceValue = "tpsHAxwU5x0csoIuLNs2vg==";
-        if (nonceValue) {
+        var nonceValue = document.currentScript && document.currentScript.nonce;
+        if (nonceValue && nonceValue !== "__CSP_NONCE_PLACEHOLDER__") {
           // Save the original createElement function
           const originalCreateElement = document.createElement;
 
-          // Override document.createElement for <script nonce="tpsHAxwU5x0csoIuLNs2vg=="> tags
-          document.createElement = function (tagName) {
-            const element = originalCreateElement.call(document, tagName);
+          // Override document.createElement for <script nonce="__CSP_NONCE_PLACEHOLDER__"> tags
+          document.createElement = function (tagName, options) {
+            const element = originalCreateElement.call(document, tagName, options);
 
-            // If the created element is a <script nonce="tpsHAxwU5x0csoIuLNs2vg==">, add the nonce
+            // If the created element is a <script nonce="__CSP_NONCE_PLACEHOLDER__">, add the nonce
             if (tagName.toLowerCase() === "script") {
               element.setAttribute("nonce", nonceValue);
             }
@@ -80,12 +85,12 @@
           const observer = new MutationObserver((mutations) => {
             mutations.forEach((mutation) => {
               mutation.addedNodes.forEach((node) => {
-                // If a <script nonce="tpsHAxwU5x0csoIuLNs2vg=="> tag is added without a nonce, add the nonce
+                // If a <script nonce="__CSP_NONCE_PLACEHOLDER__"> tag is added without a nonce, add the nonce
                 if (node.tagName === "SCRIPT" && !node.hasAttribute("nonce")) {
                   node.setAttribute("nonce", nonceValue);
                 }
 
-                // Handle <script nonce="tpsHAxwU5x0csoIuLNs2vg=="> tags within added nodes (e.g., innerHTML)
+                // Handle <script nonce="__CSP_NONCE_PLACEHOLDER__"> tags within added nodes (e.g., innerHTML)
                 if (node.nodeType === 1) {
                   const scripts = node.querySelectorAll("script:not([nonce])");
                   scripts.forEach((script) => {
@@ -104,10 +109,10 @@
         }
       })();
     </script>
-    <script nonce="tpsHAxwU5x0csoIuLNs2vg==" src="/context.js?v=eca7854f"></script>
+    <script nonce="__CSP_NONCE_PLACEHOLDER__" src="/context.js?v=f86cfb83"></script>
     <title>Conductor UI</title>
-    <script nonce="tpsHAxwU5x0csoIuLNs2vg==" type="module" crossorigin src="/assets/index-D8K5dfjj.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-D4IWzWjN.css">
+    <script nonce="__CSP_NONCE_PLACEHOLDER__" type="module" crossorigin src="/assets/index-CdjHT7cB.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BXTT3K1m.css">
   </head>
 
   <body>

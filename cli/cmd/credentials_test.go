@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agentspan/agentspan/cli/config"
+	"github.com/agentspan-ai/agentspan/cli/config"
 )
 
 func TestCredentialsSetSimple(t *testing.T) {

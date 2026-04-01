@@ -407,7 +407,7 @@ They can also be deployed as standalone Conductor workers (see example 35), allo
 
 ## 11. Compilation Details
 
-### Where Guardrails Appear in the Workflow
+### Where Guardrails Appear in the Agent Execution
 
 Output guardrails are compiled inside the DoWhile loop, after the LLM task:
 

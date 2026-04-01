@@ -30,7 +30,7 @@ Agent(Python) → AgentCompiler.compile() → ConductorWorkflow(JSON) → execut
 When `run(agent, prompt)` is called:
 1. Agent is compiled into a Conductor workflow definition
 2. Worker processes are started for `@tool` functions
-3. Workflow is executed on the Conductor server
+3. Agent is executed on the Conductor server
 4. Result is extracted and returned as `AgentResult`
 
 ### Key Source Files
@@ -288,7 +288,7 @@ cd cli && VERSION=0.1.0 ./build.sh
 
 - **Language:** Go 1.25+
 - **CLI framework:** Cobra (`github.com/spf13/cobra`)
-- **Module path:** `github.com/agentspan/agentspan/cli`
+- **Module path:** `github.com/agentspan-ai/agentspan/cli`
 - **Binary name:** `agentspan`
 - **Config directory:** `~/.agentspan/`
 - **No third-party HTTP clients** — use stdlib `net/http`
@@ -315,7 +315,7 @@ Published via three channels (triggered by `cli-v*` git tags):
 
 1. **GitHub Releases** — 6 platform binaries (`agentspan_{os}_{arch}`)
 2. **npm** (`@agentspan-ai/agentspan`) — JS wrapper downloads Go binary on `postinstall`
-3. **Homebrew** (`agentspan/homebrew-agentspan` tap) — macOS/Linux formula
+3. **Homebrew** (`agentspan-ai/homebrew-agentspan` tap) — macOS/Linux formula
 
 Release workflow: `.github/workflows/release-cli.yml`
 

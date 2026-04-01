@@ -14,7 +14,7 @@ Initialize a Go module rooted at the repository's `sdk/go/` directory:
 
 ```
 sdk/go/
-  go.mod                         # module github.com/agentspan/agentspan-go
+  go.mod                         # module github.com/agentspan-ai/agentspan-go
   go.sum
   cmd/
     agentspan-validate/          # validation runner CLI binary
@@ -63,7 +63,7 @@ sdk/go/
 ### go.mod
 
 ```go
-module github.com/agentspan/agentspan-go
+module github.com/agentspan-ai/agentspan-go
 
 go 1.22
 
@@ -712,7 +712,7 @@ import (
     "net/http"
     "time"
 
-    "github.com/agentspan/agentspan-go/pkg/agentspan"
+    "github.com/agentspan-ai/agentspan-go/pkg/agentspan"
 )
 
 type TaskHandler func(ctx context.Context, input map[string]any) (any, error)
@@ -881,7 +881,7 @@ import (
     "strings"
     "time"
 
-    "github.com/agentspan/agentspan-go/pkg/agentspan"
+    "github.com/agentspan-ai/agentspan-go/pkg/agentspan"
 )
 
 type Client struct {
@@ -1204,7 +1204,7 @@ package testing
 import (
     "context"
 
-    "github.com/agentspan/agentspan-go/pkg/agentspan"
+    "github.com/agentspan-ai/agentspan-go/pkg/agentspan"
 )
 
 type MockResult struct {

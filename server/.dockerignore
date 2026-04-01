@@ -1,9 +1,0 @@
-.gradle
-.idea
-.DS_Store
-.pytest_cache
-.claude
-build
-bin
-agent-runtime.db
-*.db

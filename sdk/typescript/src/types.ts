@@ -107,7 +107,8 @@ export type FrameworkId =
   | 'langgraph'
   | 'langchain'
   | 'openai'
-  | 'google_adk';
+  | 'google_adk'
+  | 'skill';
 
 // ── Data interfaces ──────────────────────────────────────
 

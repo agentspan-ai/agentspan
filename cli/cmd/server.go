@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agentspan/agentspan/cli/config"
-	"github.com/agentspan/agentspan/cli/internal/progress"
+	"github.com/agentspan-ai/agentspan/cli/config"
+	"github.com/agentspan-ai/agentspan/cli/internal/progress"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
@@ -391,7 +391,7 @@ func downloadJAR(downloadURL, destPath string) error {
 
 // --- AI provider check ---
 
-const aiModelsDocURL = "https://github.com/agentspan/agentspan/blob/main/docs/ai-models.md"
+const aiModelsDocURL = "https://github.com/agentspan-ai/agentspan/blob/main/docs/ai-models.md"
 
 func checkAIProviderKeys() {
 	hasAny := false

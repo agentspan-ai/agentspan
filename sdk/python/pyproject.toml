@@ -67,6 +67,7 @@ timeout = 120
 timeout_method = "thread"
 markers = [
     "integration: marks tests requiring a live Agentspan server (deselect with '-m \"not integration\"')",
+    "e2e: marks end-to-end tests requiring a live Agentspan server and AGENTSPAN_SERVER_URL env var",
     "sse: marks tests requiring SSE streaming support (requires AGENTSPAN_STREAMING_ENABLED=true)",
     "agent_correctness: marks tests as agent correctness tests",
     "semantic: marks tests that use LLM judge for semantic assertions (requires litellm)",

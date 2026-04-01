@@ -123,8 +123,6 @@ class AgentControllerSSEIntegrationTest {
 
     // ── Tests ────────────────────────────────────────────────────────
 
-
-
     @Test
     void sseEndpointReturnsEventStream() throws Exception {
         String wfId = "e2e-test-content-type";

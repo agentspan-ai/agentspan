@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agentspan/agentspan/cli/client"
+	"github.com/agentspan-ai/agentspan/cli/client"
 )
 
 func TestStreamExecution_DrainsEventsBeforeError(t *testing.T) {

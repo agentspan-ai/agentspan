@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agentspan/agentspan/cli/config"
+	"github.com/agentspan-ai/agentspan/cli/config"
 )
 
 type Client struct {
@@ -110,6 +110,48 @@ func (c *Client) Start(req *StartRequest) (*StartResponse, error) {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 	return &result, nil
+}
+
+// StartFramework starts a framework agent (skill, openai, etc.) with a raw payload.
+// Framework agents use top-level "framework" + "rawConfig" instead of "agentConfig".
+func (c *Client) StartFramework(payload map[string]interface{}) (*StartResponse, error) {
+	resp, err := c.doRequest("POST", "/api/agent/start", payload)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var result StartResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	return &result, nil
+}
+
+// PollTask polls for a task of the given type. Returns nil if no task available.
+func (c *Client) PollTask(taskType string) (map[string]interface{}, error) {
+	resp, err := c.doRequest("GET", "/api/tasks/poll/"+url.PathEscape(taskType), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusNotFound {
+		return nil, nil // no task available
+	}
+	var task map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&task); err != nil {
+		return nil, nil // empty body
+	}
+	return task, nil
+}
+
+// UpdateTask reports the result of a completed task.
+func (c *Client) UpdateTask(result map[string]interface{}) error {
+	resp, err := c.doRequest("POST", "/api/tasks", result)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
 }
 
 // Compile compiles an agent config to an execution plan

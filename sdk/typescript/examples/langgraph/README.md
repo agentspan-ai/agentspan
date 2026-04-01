@@ -200,7 +200,7 @@ await runtime.shutdown();
 | `07-system-prompt.ts` | System prompt configuration |
 | `08-structured-output.ts` | Typed output schemas |
 | `09-math-agent.ts` | Math calculation agent |
-| `10-research-agent.ts` | Multi-step research workflow |
+| `10-research-agent.ts` | Multi-step research agent |
 
 ## Running
 

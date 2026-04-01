@@ -26,6 +26,7 @@ import { detectFramework } from './frameworks/detect.js';
 import { serializeFrameworkAgent } from './frameworks/serializer.js';
 import { serializeLangGraph } from './frameworks/langgraph-serializer.js';
 import { serializeLangChain } from './frameworks/langchain-serializer.js';
+import { createSkillWorkers } from './skill.js';
 
 /**
  * Callback method → wire position mapping (must match serializer.ts).
@@ -1027,9 +1028,33 @@ export class AgentRuntime {
       case 'openai':
       case 'google_adk':
         return serializeFrameworkAgent(agent);
+      case 'skill':
+        return this._serializeSkill(agent as Agent);
       default:
         throw new AgentspanError(`Unsupported framework: ${frameworkId}`);
     }
+  }
+
+  /**
+   * Serialize a skill-based agent for server-side normalization.
+   * Returns (rawConfig, workers) matching the framework serialization interface.
+   */
+  private _serializeSkill(
+    agent: Agent,
+  ): [Record<string, unknown>, { name: string; func?: Function }[]] {
+    const a = agent as unknown as Record<string, unknown>;
+    const rawConfig = a._framework_config as Record<string, unknown>;
+    const skillWorkers = createSkillWorkers(agent);
+
+    const workers = skillWorkers.map((sw) => ({
+      name: sw.name,
+      func: (inputData: Record<string, unknown>) => {
+        const command = (inputData.command as string) ?? '';
+        return sw.func(command);
+      },
+    }));
+
+    return [rawConfig, workers];
   }
 
   /**

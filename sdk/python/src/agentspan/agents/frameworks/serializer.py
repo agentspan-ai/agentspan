@@ -38,6 +38,11 @@ def detect_framework(agent_obj: Any) -> Optional[str]:
     ``"langgraph"``, ``"langchain"``, ``"google_adk"``) or ``None`` for native
     Conductor Agents.
     """
+    # Skill framework detection — must be checked before native Agent check
+    # since skill agents are Agent instances with a _framework marker.
+    if hasattr(agent_obj, "_framework") and agent_obj._framework == "skill":
+        return "skill"
+
     # Native Agent — check for claude-code model first
     from agentspan.agents.agent import Agent
 
@@ -112,6 +117,8 @@ def serialize_agent(agent_obj: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
         from agentspan.agents.frameworks.claude_agent_sdk import serialize_claude_agent_sdk
 
         return serialize_claude_agent_sdk(agent_obj)
+    if framework == "skill":
+        return _serialize_skill(agent_obj)
 
     workers: List[WorkerInfo] = []
     seen: Set[int] = set()  # Prevent infinite recursion on circular refs
@@ -419,3 +426,31 @@ def _extract_callable(func: Any) -> WorkerInfo:
         input_schema=input_schema,
         func=func,
     )
+
+
+def _serialize_skill(agent_obj: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
+    """Serialize a skill-based agent for server-side normalization.
+
+    Returns the raw skill config (which the server's SkillNormalizer expects)
+    and WorkerInfo instances for each skill worker (scripts + read_skill_file).
+    """
+    from agentspan.agents.skill import create_skill_workers
+
+    raw_config = agent_obj._framework_config
+
+    # Convert SkillWorkers to WorkerInfo for the framework worker registration path
+    skill_workers = create_skill_workers(agent_obj)
+    workers: List[WorkerInfo] = []
+    for sw in skill_workers:
+        workers.append(
+            WorkerInfo(
+                name=sw.name,
+                description=sw.description,
+                input_schema={"type": "object", "properties": {
+                    "command": {"type": "string", "description": "Arguments to pass"},
+                }},
+                func=sw.func,
+            )
+        )
+
+    return raw_config, workers
