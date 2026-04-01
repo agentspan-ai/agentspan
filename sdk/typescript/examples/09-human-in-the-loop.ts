@@ -14,7 +14,6 @@
 
 import { z } from 'zod';
 import { Agent, AgentRuntime, tool } from '../src/index.js';
-import type { AgentHandle } from '../src/index.js';
 import { llmModel } from './settings.js';
 
 const checkBalance = tool(
@@ -41,7 +40,8 @@ const transferFunds = tool(
   },
   {
     name: 'transfer_funds',
-    description: 'Transfer funds between accounts. Requires human approval.',
+    description:
+      'Request a funds transfer; runtime pauses for human approval before execution.',
     inputSchema: z.object({
       fromAcct: z.string().describe('Source account'),
       toAcct: z.string().describe('Destination account'),
@@ -56,7 +56,10 @@ export const agent = new Agent({
   model: llmModel,
   tools: [checkBalance, transferFunds],
   instructions:
-    'You are a banking assistant. Help with balance inquiries and transfers.',
+    'You are a banking assistant. Use check_balance for balance inquiries. ' +
+    'When asked to transfer money, first check the balance, then call ' +
+    'transfer_funds to request the transfer. The runtime will pause for ' +
+    'human approval before the transfer executes.',
 });
 
 // Only run when executed directly (not when imported for discovery)
@@ -76,12 +79,13 @@ if (process.argv[1]?.endsWith('09-human-in-the-loop.ts') || process.argv[1]?.end
     // await runtime.serve(agent);
     //
     // Interactive HITL alternative:
-    // const handle: AgentHandle = await runtime.start(
+    // const result = runtime.stream(
     //   agent,
-    //   'Transfer $500 from ACC-789 to ACC-456',
+    //   'Transfer $500 from ACC-789 to ACC-456. ' +
+    //     'Check the balance first, then use transfer_funds.',
     // );
-    // for await (const event of handle.stream()) {
-    //   if (event.type === 'waiting') await handle.approve();
+    // for await (const event of result) {
+    //   if (event.type === 'waiting') await result.approve();
     // }
   } finally {
     await runtime.shutdown();

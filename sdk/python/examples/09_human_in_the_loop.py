@@ -26,7 +26,7 @@ def check_balance(account_id: str) -> dict:
 
 @tool(approval_required=True)
 def transfer_funds(from_acct: str, to_acct: str, amount: float) -> dict:
-    """Transfer funds between accounts. Requires human approval."""
+    """Request a funds transfer; runtime pauses for human approval before execution."""
     return {"status": "completed", "from": from_acct, "to": to_acct, "amount": amount}
 
 
@@ -34,7 +34,12 @@ agent = Agent(
     name="banker",
     model=settings.llm_model,
     tools=[check_balance, transfer_funds],
-    instructions="You are a banking assistant. Help with balance inquiries and transfers.",
+    instructions=(
+        "You are a banking assistant. Use check_balance for balance inquiries. "
+        "When asked to transfer money, first check the balance, then call "
+        "transfer_funds to request the transfer. The runtime will pause for "
+        "human approval before the transfer executes."
+    ),
 )
 
 
@@ -68,34 +73,38 @@ if __name__ == "__main__":
 
 
         # Interactive HITL alternative:
-        # # start() returns a handle; handle.stream() streams events with HITL support
-        handle = runtime.start(agent, "Transfer $500 from ACC-789 to ACC-456")
-        print(f"Agent started: {handle.execution_id}\n")
+        # # stream() starts the workflow and returns an AgentStream with
+        # # approve()/reject() controls for the pending HUMAN task.
+        # result = runtime.stream(
+        #     agent,
+        #     "Transfer $500 from ACC-789 to ACC-456. "
+        #     "Check the balance first, then use transfer_funds.",
+        # )
+        # print(f"Workflow started: {result.execution_id}\n")
 
-        for event in handle.stream():
-            if event.type == EventType.THINKING:
-                print(f"  [thinking] {event.content}")
+        # for event in result:
+        #     if event.type == EventType.THINKING:
+        #         print(f"  [thinking] {event.content}")
 
-            elif event.type == EventType.TOOL_CALL:
-                print(f"  [tool_call] {event.tool_name}({event.args})")
+        #     elif event.type == EventType.TOOL_CALL:
+        #         print(f"  [tool_call] {event.tool_name}({event.args})")
 
-            elif event.type == EventType.TOOL_RESULT:
-                print(f"  [tool_result] {event.tool_name} -> {event.result}")
+        #     elif event.type == EventType.TOOL_RESULT:
+        #         print(f"  [tool_result] {event.tool_name} -> {event.result}")
 
-            elif event.type == EventType.WAITING:
-                print(f"\n--- Human approval required ---")
-                choice = input("  Approve? (y/n): ").strip().lower()
-                if choice == "y":
-                    handle.approve()
-                    print("  Approved!\n")
-                else:
-                    reason = input("  Rejection reason: ").strip()
-                    handle.reject(reason or "Rejected by user")
-                    print("  Rejected.\n")
+        #     elif event.type == EventType.WAITING:
+        #         print("\n--- Human approval required ---")
+        #         choice = input("  Approve? (y/n): ").strip().lower()
+        #         if choice == "y":
+        #             result.approve()
+        #             print("  Approved!\n")
+        #         else:
+        #             reason = input("  Rejection reason: ").strip()
+        #             result.reject(reason or "Rejected by user")
+        #             print("  Rejected.\n")
 
-            elif event.type == EventType.ERROR:
-                print(f"  [error] {event.content}")
+        #     elif event.type == EventType.ERROR:
+        #         print(f"  [error] {event.content}")
 
-            elif event.type == EventType.DONE:
-                print(f"\nResult: {event.output}")
-
+        #     elif event.type == EventType.DONE:
+        #         print(f"\nResult: {event.output}")
