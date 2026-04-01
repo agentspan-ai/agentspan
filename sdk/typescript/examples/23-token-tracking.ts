@@ -77,7 +77,7 @@ async function main() {
     }
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('23-token-tracking.ts') || process.argv[1]?.endsWith('23-token-tracking.js')) {

@@ -80,7 +80,7 @@ async function main() {
     result.printResult();
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('47-callbacks.ts') || process.argv[1]?.endsWith('47-callbacks.js')) {

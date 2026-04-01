@@ -194,7 +194,7 @@ async function main() {
     result.printResult();
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('16c-credentials-cli-tools.ts') || process.argv[1]?.endsWith('16c-credentials-cli-tools.js')) {

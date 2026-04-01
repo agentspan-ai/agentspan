@@ -118,7 +118,7 @@ async function main() {
     result.printResult();
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('46-transfer-control.ts') || process.argv[1]?.endsWith('46-transfer-control.js')) {

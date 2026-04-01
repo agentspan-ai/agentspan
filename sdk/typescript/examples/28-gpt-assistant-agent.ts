@@ -70,7 +70,7 @@ async function main() {
     }
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('28-gpt-assistant-agent.ts') || process.argv[1]?.endsWith('28-gpt-assistant-agent.js')) {

@@ -94,7 +94,7 @@ async function main() {
     result2.printResult();
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('39-local-code-execution.ts') || process.argv[1]?.endsWith('39-local-code-execution.js')) {

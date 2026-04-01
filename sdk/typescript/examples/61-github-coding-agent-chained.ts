@@ -184,7 +184,7 @@ async function main() {
     // console.log(`Tool calls: ${result.toolCalls.length}`);
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('61-github-coding-agent-chained.ts') || process.argv[1]?.endsWith('61-github-coding-agent-chained.js')) {

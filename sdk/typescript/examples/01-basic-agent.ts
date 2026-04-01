@@ -10,7 +10,7 @@
  *   - AGENTSPAN_LLM_MODEL set as environment variable (optional)
  */
 
-import { Agent, AgentRuntime } from '../src/index.js';
+import { Agent, AgentRuntime } from '../src';
 import { llmModel } from './settings.js';
 
 export const agent = new Agent({

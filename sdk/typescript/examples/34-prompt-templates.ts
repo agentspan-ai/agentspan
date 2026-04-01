@@ -116,7 +116,7 @@ async function main() {
     result3.printResult();
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('34-prompt-templates.ts') || process.argv[1]?.endsWith('34-prompt-templates.js')) {

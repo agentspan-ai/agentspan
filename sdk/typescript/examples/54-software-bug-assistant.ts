@@ -267,7 +267,7 @@ async function main() {
     result.printResult();
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('54-software-bug-assistant.ts') || process.argv[1]?.endsWith('54-software-bug-assistant.js')) {

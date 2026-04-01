@@ -137,7 +137,7 @@ async function main() {
     result2.printResult();
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('71-api-tool.ts') || process.argv[1]?.endsWith('71-api-tool.js')) {

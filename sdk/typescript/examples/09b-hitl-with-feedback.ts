@@ -155,7 +155,7 @@ async function main() {
     // console.log(`Status: ${final.status}`);
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('09b-hitl-with-feedback.ts') || process.argv[1]?.endsWith('09b-hitl-with-feedback.js')) {

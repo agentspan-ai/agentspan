@@ -75,7 +75,7 @@ async function main() {
     result.printResult();
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('24-code-execution.ts') || process.argv[1]?.endsWith('24-code-execution.js')) {

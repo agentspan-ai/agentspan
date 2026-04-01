@@ -14,7 +14,7 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime } from '../src/index.js';
+import { Agent, AgentRuntime } from '../src';
 import { llmModel } from './settings.js';
 
 // -- Agents with introductions ---------------------------------------------
@@ -87,7 +87,7 @@ async function main() {
     result.printResult();
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('29-agent-introductions.ts') || process.argv[1]?.endsWith('29-agent-introductions.js')) {

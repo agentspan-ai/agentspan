@@ -109,7 +109,7 @@ async function main() {
     result.printResult();
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('04-http-and-mcp-tools.ts') || process.argv[1]?.endsWith('04-http-and-mcp-tools.js')) {

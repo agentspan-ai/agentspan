@@ -160,7 +160,7 @@ async function main() {
     result4.printResult();
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('30-multimodal-agent.ts') || process.argv[1]?.endsWith('30-multimodal-agent.js')) {

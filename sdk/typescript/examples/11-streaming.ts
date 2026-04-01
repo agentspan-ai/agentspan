@@ -101,7 +101,7 @@ async function main() {
     // result.printResult();
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('11-streaming.ts') || process.argv[1]?.endsWith('11-streaming.js')) {

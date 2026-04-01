@@ -102,7 +102,7 @@ async function main() {
     }
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('36-simple-agent-guardrails.ts') || process.argv[1]?.endsWith('36-simple-agent-guardrails.js')) {
