@@ -6,7 +6,7 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -67,43 +67,42 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(coordinator);
-    await runtime.serve(coordinator);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
+    // await runtime.deploy(coordinator);
+    // await runtime.serve(coordinator);
+    // Direct run for local development:
     // const runtime = new AgentRuntime();
     // try {
-    // // Scenario 1: Deep analysis (handoff to parallel group)
-    // console.log('='.repeat(60));
-    // console.log('  Scenario 1: Deep analysis (handoff -> parallel group)');
-    // console.log('='.repeat(60));
-    // const result = await runtime.run(
-    // coordinator,
-    // 'Provide a deep analysis of entering the AI healthcare market.',
-    // );
-    // result.printResult();
+    // Scenario 1: Deep analysis (handoff to parallel group)
+    console.log('='.repeat(60));
+    console.log('  Scenario 1: Deep analysis (handoff -> parallel group)');
+    console.log('='.repeat(60));
+    const result = await runtime.run(
+    coordinator,
+    'Provide a deep analysis of entering the AI healthcare market.',
+    );
+    result.printResult();
 
-    // if (result.status === 'COMPLETED') {
-    // console.log('[OK] Handoff to parallel group completed successfully');
-    // } else {
-    // console.log(`[WARN] Unexpected status: ${result.status}`);
-    // }
+    if (result.status === 'COMPLETED') {
+    console.log('[OK] Handoff to parallel group completed successfully');
+    } else {
+    console.log(`[WARN] Unexpected status: ${result.status}`);
+    }
 
-    // // Scenario 2: Quick check (handoff to single agent)
-    // console.log('\n' + '='.repeat(60));
-    // console.log('  Scenario 2: Quick check (handoff -> single agent)');
-    // console.log('='.repeat(60));
-    // const result2 = await runtime.run(
-    // coordinator,
-    // 'Is the mobile app market still growing?',
-    // );
-    // result2.printResult();
+    // Scenario 2: Quick check (handoff to single agent)
+    console.log('\n' + '='.repeat(60));
+    console.log('  Scenario 2: Quick check (handoff -> single agent)');
+    console.log('='.repeat(60));
+    const result2 = await runtime.run(
+    coordinator,
+    'Is the mobile app market still growing?',
+    );
+    result2.printResult();
 
-    // if (result2.status === 'COMPLETED') {
-    // console.log('[OK] Quick check completed successfully');
-    // } else {
-    // console.log(`[WARN] Unexpected status: ${result2.status}`);
-    // }
+    if (result2.status === 'COMPLETED') {
+    console.log('[OK] Quick check completed successfully');
+    } else {
+    console.log(`[WARN] Unexpected status: ${result2.status}`);
+    }
   } finally {
     await runtime.shutdown();
     // }

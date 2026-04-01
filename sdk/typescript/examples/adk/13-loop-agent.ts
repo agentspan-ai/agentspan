@@ -57,16 +57,15 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(refinementLoop);
-    await runtime.serve(refinementLoop);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const result = await runtime.run(
-    // refinementLoop,
-    // 'Write a haiku about autumn leaves',
-    // );
-    // console.log('Status:', result.status);
-    // result.printResult();
+    // await runtime.deploy(refinementLoop);
+    // await runtime.serve(refinementLoop);
+    // Direct run for local development:
+    const result = await runtime.run(
+    refinementLoop,
+    'Write a haiku about autumn leaves',
+    );
+    console.log('Status:', result.status);
+    result.printResult();
   } finally {
     await runtime.shutdown();
   }

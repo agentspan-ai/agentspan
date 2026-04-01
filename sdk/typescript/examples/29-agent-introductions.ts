@@ -10,7 +10,7 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -74,18 +74,17 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(designReview);
-    await runtime.serve(designReview);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
+    // await runtime.deploy(designReview);
+    // await runtime.serve(designReview);
+    // Direct run for local development:
     // const runtime = new AgentRuntime();
     // try {
-    // const result = await runtime.run(
-    // designReview,
-    // 'We need to design a new user authentication system for our SaaS platform. ' +
-    // 'Should we use OAuth 2.0, SAML, or build our own JWT-based system?',
-    // );
-    // result.printResult();
+    const result = await runtime.run(
+    designReview,
+    'We need to design a new user authentication system for our SaaS platform. ' +
+    'Should we use OAuth 2.0, SAML, or build our own JWT-based system?',
+    );
+    result.printResult();
   } finally {
     await runtime.shutdown();
     // }

@@ -70,15 +70,14 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(researchAgent);
-    await runtime.serve(researchAgent);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const result = await runtime.run(
-    // researchAgent,
-    // 'What do we know about quantum error correction?',
-    // );
-    // result.printResult();
+    // await runtime.deploy(researchAgent);
+    // await runtime.serve(researchAgent);
+    // Direct run for local development:
+    const result = await runtime.run(
+    researchAgent,
+    'What do we know about quantum error correction?',
+    );
+    result.printResult();
     // await runtime.shutdown();
   } finally {
     await runtime.shutdown();

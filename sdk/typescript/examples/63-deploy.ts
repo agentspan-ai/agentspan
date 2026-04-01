@@ -6,7 +6,7 @@
  *
  * Requirements:
  *   - Conductor server running
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -64,14 +64,18 @@ export const opsBot = new Agent({
 if (process.argv[1]?.endsWith('63-deploy.ts') || process.argv[1]?.endsWith('63-deploy.js')) {
   const runtime = new AgentRuntime();
   try {
-    const agents = [docAssistant, opsBot];
-    for (const a of agents) {
-      const info = await runtime.deploy(a);
-      console.log(`Deployed: ${info.agentName} -> ${info.workflowName}`);
-    }
+    const result = await runtime.run(docAssistant, 'How do I reset my password?');
+    result.printResult();
 
-    console.log(`\n${agents.length} agent(s) registered on server.`);
-    console.log('Now run 63b-serve.ts to start workers, then 63c-run-by-name.ts to execute.');
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(docAssistant);
+    // await runtime.deploy(opsBot);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(docAssistant, opsBot);
   } finally {
     await runtime.shutdown();
   }

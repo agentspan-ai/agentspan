@@ -91,16 +91,15 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(agent);
-    await runtime.serve(agent);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const result = await runtime.run(
-    // agent,
-    // "I'm looking for the Widget Pro. Is it in stock? Also, what are the downtown store hours?",
-    // );
-    // console.log('Status:', result.status);
-    // result.printResult();
+    // await runtime.deploy(agent);
+    // await runtime.serve(agent);
+    // Direct run for local development:
+    const result = await runtime.run(
+    agent,
+    "I'm looking for the Widget Pro. Is it in stock? Also, what are the downtown store hours?",
+    );
+    console.log('Status:', result.status);
+    result.printResult();
   } finally {
     await runtime.shutdown();
   }

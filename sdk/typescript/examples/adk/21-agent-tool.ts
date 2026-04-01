@@ -130,17 +130,16 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(manager);
-    await runtime.serve(manager);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const result = await runtime.run(
-    // manager,
-    // 'Look up information about Python and Rust, then calculate ' +
-    // "what percentage of Python's 4 key use cases overlap with Rust's 4 use cases.",
-    // );
-    // console.log('Status:', result.status);
-    // result.printResult();
+    // await runtime.deploy(manager);
+    // await runtime.serve(manager);
+    // Direct run for local development:
+    const result = await runtime.run(
+    manager,
+    'Look up information about Python and Rust, then calculate ' +
+    "what percentage of Python's 4 key use cases overlap with Rust's 4 use cases.",
+    );
+    console.log('Status:', result.status);
+    result.printResult();
   } finally {
     await runtime.shutdown();
   }

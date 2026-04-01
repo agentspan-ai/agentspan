@@ -6,7 +6,7 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -49,33 +49,32 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(agent);
-    await runtime.serve(agent);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
+    // await runtime.deploy(agent);
+    // await runtime.serve(agent);
+    // Direct run for local development:
     // const runtime = new AgentRuntime();
     // try {
-    // const result = await runtime.run(
-    // agent,
-    // 'Calculate the compound interest on $10,000 at 5% annual rate ' +
-    // 'compounded monthly for 3 years.',
-    // );
-    // result.printResult();
+    const result = await runtime.run(
+    agent,
+    'Calculate the compound interest on $10,000 at 5% annual rate ' +
+    'compounded monthly for 3 years.',
+    );
+    result.printResult();
 
-    // // Token usage is automatically extracted from the workflow
-    // if (result.tokenUsage) {
-    // console.log('Token Usage Summary:');
-    // console.log(`  Prompt tokens:     ${result.tokenUsage.promptTokens}`);
-    // console.log(`  Completion tokens: ${result.tokenUsage.completionTokens}`);
-    // console.log(`  Total tokens:      ${result.tokenUsage.totalTokens}`);
+    // Token usage is automatically extracted from the workflow
+    if (result.tokenUsage) {
+    console.log('Token Usage Summary:');
+    console.log(`  Prompt tokens:     ${result.tokenUsage.promptTokens}`);
+    console.log(`  Completion tokens: ${result.tokenUsage.completionTokens}`);
+    console.log(`  Total tokens:      ${result.tokenUsage.totalTokens}`);
 
-    // // Estimate cost (example pricing -- adjust for your model)
-    // const promptCost = result.tokenUsage.promptTokens * 0.0025 / 1000;
-    // const completionCost = result.tokenUsage.completionTokens * 0.01 / 1000;
-    // console.log(`\n  Estimated cost: $${(promptCost + completionCost).toFixed(4)}`);
-    // } else {
-    // console.log('(Token usage not available from workflow)');
-    // }
+    // Estimate cost (example pricing -- adjust for your model)
+    const promptCost = result.tokenUsage.promptTokens * 0.0025 / 1000;
+    const completionCost = result.tokenUsage.completionTokens * 0.01 / 1000;
+    console.log(`\n  Estimated cost: $${(promptCost + completionCost).toFixed(4)}`);
+    } else {
+    console.log('(Token usage not available from workflow)');
+    }
   } finally {
     await runtime.shutdown();
     // }

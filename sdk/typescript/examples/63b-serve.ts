@@ -12,7 +12,7 @@
  * Requirements:
  *   - Conductor server running
  *   - Agents already deployed (run 63-deploy.ts first)
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -68,14 +68,21 @@ export const opsBot = new Agent({
 
 // Only run when executed directly (not when imported for discovery)
 if (process.argv[1]?.endsWith('63b-serve.ts') || process.argv[1]?.endsWith('63b-serve.js')) {
-  console.log('Serving workers for doc_assistant + ops_bot.');
-  console.log('To actually start the blocking serve loop, uncomment the runtime.serve() call.');
-  console.log('');
-  console.log('Usage:');
-  console.log('  const runtime = new AgentRuntime();');
-  console.log('  await runtime.serve(docAssistant, opsBot); // blocks until Ctrl+C / SIGTERM');
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(opsBot, 'Check the status of the API gateway.');
+    result.printResult();
 
-  // In production, uncomment:
-  // const runtime = new AgentRuntime();
-  // await runtime.serve(docAssistant, opsBot);  // blocks until Ctrl+C / SIGTERM
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(docAssistant);
+    // await runtime.deploy(opsBot);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(docAssistant, opsBot);
+  } finally {
+    await runtime.shutdown();
+  }
 }

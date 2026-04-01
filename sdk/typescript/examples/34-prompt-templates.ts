@@ -13,7 +13,7 @@
  * Requirements:
  *   - Conductor server with LLM support
  *   - Prompt templates created on the server (see setup below)
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -89,32 +89,31 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(supportAgent);
-    await runtime.serve(supportAgent);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
+    // await runtime.deploy(supportAgent);
+    // await runtime.serve(supportAgent);
+    // Direct run for local development:
     // const runtime = new AgentRuntime();
     // try {
-    // // --- 1. Template-based instructions ---
-    // console.log('=== Support Agent (template instructions) ===');
-    // const result1 = await runtime.run(supportAgent, 'What are your return policies?');
-    // result1.printResult();
+    // --- 1. Template-based instructions ---
+    console.log('=== Support Agent (template instructions) ===');
+    const result1 = await runtime.run(supportAgent, 'What are your return policies?');
+    result1.printResult();
 
-    // // --- 2. Template with tools ---
-    // console.log('\n=== Order Agent (template + tools) ===');
-    // const result2 = await runtime.run(orderAgent, 'Can you check order #12345?');
-    // result2.printResult();
+    // --- 2. Template with tools ---
+    console.log('\n=== Order Agent (template + tools) ===');
+    const result2 = await runtime.run(orderAgent, 'Can you check order #12345?');
+    result2.printResult();
 
-    // // --- 3. User prompt from a template ---
-    // // Note: In the TS SDK, PromptTemplate is supported for instructions
-    // // (server-side resolution). For user prompts, resolve the template
-    // // client-side since runtime.run() expects a string prompt.
-    // console.log('\n=== User Prompt Template ===');
-    // const result3 = await runtime.run(
-    // stableAgent,
-    // 'Please analyze Q4 2025 earnings trends and provide key insights with recommendations.',
-    // );
-    // result3.printResult();
+    // --- 3. User prompt from a template ---
+    // Note: In the TS SDK, PromptTemplate is supported for instructions
+    // (server-side resolution). For user prompts, resolve the template
+    // client-side since runtime.run() expects a string prompt.
+    console.log('\n=== User Prompt Template ===');
+    const result3 = await runtime.run(
+    stableAgent,
+    'Please analyze Q4 2025 earnings trends and provide key insights with recommendations.',
+    );
+    result3.printResult();
   } finally {
     await runtime.shutdown();
     // }

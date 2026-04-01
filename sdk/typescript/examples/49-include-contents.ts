@@ -6,7 +6,7 @@
  *
  * Requirements:
  *   - Conductor server with include_contents support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -66,19 +66,18 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(coordinator);
-    await runtime.serve(coordinator);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
+    // await runtime.deploy(coordinator);
+    // await runtime.serve(coordinator);
+    // Direct run for local development:
     // const runtime = new AgentRuntime();
     // try {
-    // const result = await runtime.run(
-    // coordinator,
-    // "Please summarize this: 'The quick brown fox jumps over the lazy dog. " +
-    // "This sentence contains every letter of the alphabet and is commonly " +
-    // "used for typography testing.'",
-    // );
-    // result.printResult();
+    const result = await runtime.run(
+    coordinator,
+    "Please summarize this: 'The quick brown fox jumps over the lazy dog. " +
+    "This sentence contains every letter of the alphabet and is commonly " +
+    "used for typography testing.'",
+    );
+    result.printResult();
   } finally {
     await runtime.shutdown();
     // }

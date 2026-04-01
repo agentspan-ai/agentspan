@@ -8,7 +8,7 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -63,44 +63,26 @@ export const agent = new Agent({
 if (process.argv[1]?.endsWith('09-human-in-the-loop.ts') || process.argv[1]?.endsWith('09-human-in-the-loop.js')) {
   const runtime = new AgentRuntime();
   try {
-    // start() returns a handle; handle.stream() streams events with HITL support
-    const handle: AgentHandle = await runtime.start(
-      agent,
-      'Transfer $500 from ACC-789 to ACC-456',
-    );
-    console.log(`Execution started: ${handle.executionId}\n`);
+    const result = await runtime.run(agent, "What's the balance on ACC-789?");
+    result.printResult();
 
-    for await (const event of handle.stream()) {
-      switch (event.type) {
-        case 'thinking':
-          console.log(`  [thinking] ${event.content}`);
-          break;
-
-        case 'tool_call':
-          console.log(`  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`);
-          break;
-
-        case 'tool_result':
-          console.log(`  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result)}`);
-          break;
-
-        case 'waiting':
-          console.log(`\n--- Human approval required ---`);
-          // Auto-approve since we can't do interactive stdin
-          console.log('  Auto-approving for demo...');
-          await handle.approve();
-          console.log('  Approved!\n');
-          break;
-
-        case 'error':
-          console.log(`  [error] ${event.content}`);
-          break;
-
-        case 'done':
-          console.log(`\nResult: ${JSON.stringify(event.output)}`);
-          break;
-      }
-    }
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+    //
+    // Interactive HITL alternative:
+    // const handle: AgentHandle = await runtime.start(
+    //   agent,
+    //   'Transfer $500 from ACC-789 to ACC-456',
+    // );
+    // for await (const event of handle.stream()) {
+    //   if (event.type === 'waiting') await handle.approve();
+    // }
   } finally {
     await runtime.shutdown();
   }

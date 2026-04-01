@@ -77,12 +77,11 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(safeWriter);
-    await runtime.serve(safeWriter);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const result = await runtime.run(safeWriter, 'Write about AI safety best practices.');
-    // result.printResult();
+    // await runtime.deploy(safeWriter);
+    // await runtime.serve(safeWriter);
+    // Direct run for local development:
+    const result = await runtime.run(safeWriter, 'Write about AI safety best practices.');
+    result.printResult();
     // await runtime.shutdown();
   } finally {
     await runtime.shutdown();

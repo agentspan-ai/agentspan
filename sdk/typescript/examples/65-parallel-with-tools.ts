@@ -6,7 +6,7 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -78,33 +78,32 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(analysis);
-    await runtime.serve(analysis);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
+    // await runtime.deploy(analysis);
+    // await runtime.serve(analysis);
+    // Direct run for local development:
     // const runtime = new AgentRuntime();
     // try {
-    // const result = await runtime.run(
-    // analysis,
-    // 'Check account ACC-200 balance and look up order ORD-300 status.',
-    // );
-    // result.printResult();
+    const result = await runtime.run(
+    analysis,
+    'Check account ACC-200 balance and look up order ORD-300 status.',
+    );
+    result.printResult();
 
-    // const output = String(result.output);
-    // const checks: string[] = [];
-    // if (output.includes('5432')) {
-    // checks.push('[OK] Financial analyst retrieved balance');
-    // } else {
-    // checks.push('[WARN] Expected balance in output');
-    // }
-    // if (output.toLowerCase().includes('shipped')) {
-    // checks.push('[OK] Order analyst retrieved order status');
-    // } else {
-    // checks.push('[WARN] Expected order status in output');
-    // }
-    // for (const c of checks) {
-    // console.log(c);
-    // }
+    const output = String(result.output);
+    const checks: string[] = [];
+    if (output.includes('5432')) {
+    checks.push('[OK] Financial analyst retrieved balance');
+    } else {
+    checks.push('[WARN] Expected balance in output');
+    }
+    if (output.toLowerCase().includes('shipped')) {
+    checks.push('[OK] Order analyst retrieved order status');
+    } else {
+    checks.push('[WARN] Expected order status in output');
+    }
+    for (const c of checks) {
+    console.log(c);
+    }
   } finally {
     await runtime.shutdown();
     // }

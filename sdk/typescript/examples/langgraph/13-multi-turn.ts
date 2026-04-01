@@ -46,42 +46,41 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(graph);
-    await runtime.serve(graph);
+    // await runtime.deploy(graph);
+    // await runtime.serve(graph);
+    // Direct run for local development:
+    console.log("=== Alice's session ===");
+    let result = await runtime.run(
+    graph,
+    "I'm applying for a senior backend engineer role at a fintech startup. " +
+    'I have 5 years of Python experience.',
+    { sessionId: SESSION_A },
+    );
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // console.log("=== Alice's session ===");
-    // let result = await runtime.run(
-    // graph,
-    // "I'm applying for a senior backend engineer role at a fintech startup. " +
-    // 'I have 5 years of Python experience.',
-    // { sessionId: SESSION_A },
-    // );
-    // result.printResult();
+    console.log("\n=== Bob's session (separate memory) ===");
+    result = await runtime.run(
+    graph,
+    'I want to become a product manager. I have a marketing background.',
+    { sessionId: SESSION_B },
+    );
+    result.printResult();
 
-    // console.log("\n=== Bob's session (separate memory) ===");
-    // result = await runtime.run(
-    // graph,
-    // 'I want to become a product manager. I have a marketing background.',
-    // { sessionId: SESSION_B },
-    // );
-    // result.printResult();
+    console.log("\n=== Alice's session — follow-up (remembers context) ===");
+    result = await runtime.run(
+    graph,
+    'What technical topics should I review for my upcoming interviews?',
+    { sessionId: SESSION_A },
+    );
+    result.printResult();
 
-    // console.log("\n=== Alice's session — follow-up (remembers context) ===");
-    // result = await runtime.run(
-    // graph,
-    // 'What technical topics should I review for my upcoming interviews?',
-    // { sessionId: SESSION_A },
-    // );
-    // result.printResult();
-
-    // console.log("\n=== Bob's session — follow-up (remembers context) ===");
-    // result = await runtime.run(
-    // graph,
-    // 'What skills gap should I address first?',
-    // { sessionId: SESSION_B },
-    // );
-    // result.printResult();
+    console.log("\n=== Bob's session — follow-up (remembers context) ===");
+    result = await runtime.run(
+    graph,
+    'What skills gap should I address first?',
+    { sessionId: SESSION_B },
+    );
+    result.printResult();
   } finally {
     await runtime.shutdown();
   }

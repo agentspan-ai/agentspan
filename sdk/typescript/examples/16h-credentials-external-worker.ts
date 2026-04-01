@@ -73,7 +73,7 @@ async function externalWorkerExample(taskInput: Record<string, unknown>) {
     return;
   }
 
-  const serverUrl = process.env.AGENTSPAN_SERVER_URL ?? 'http://localhost:8080/api';
+  const serverUrl = process.env.AGENTSPAN_SERVER_URL ?? 'http://localhost:6767/api';
 
   // resolveCredentials calls the server to get credential values
   const creds = await resolveCredentials(serverUrl, {}, executionToken, ['GITHUB_TOKEN']);

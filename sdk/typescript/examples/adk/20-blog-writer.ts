@@ -130,17 +130,16 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(coordinator);
-    await runtime.serve(coordinator);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const result = await runtime.run(
-    // coordinator,
-    // 'Write a blog post about the conductor oss workflow and how its the best workflow engine for the agentic era. ' +
-    // 'Make sure to write at-least 5000 word and use markdown to format the content',
-    // );
-    // console.log('Status:', result.status);
-    // result.printResult();
+    // await runtime.deploy(coordinator);
+    // await runtime.serve(coordinator);
+    // Direct run for local development:
+    const result = await runtime.run(
+    coordinator,
+    'Write a blog post about the conductor oss workflow and how its the best workflow engine for the agentic era. ' +
+    'Make sure to write at-least 5000 word and use markdown to format the content',
+    );
+    console.log('Status:', result.status);
+    result.printResult();
   } finally {
     await runtime.shutdown();
   }

@@ -141,17 +141,16 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(agent);
-    await runtime.serve(agent);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
+    // await runtime.deploy(agent);
+    // await runtime.serve(agent);
+    // Direct run for local development:
     // const runtime = new AgentRuntime();
     // try {
-    // const result = await runtime.run(
-    // agent,
-    // "List the 5 most recently updated repos for the 'agentspan' GitHub user.",
-    // );
-    // result.printResult();
+    const result = await runtime.run(
+    agent,
+    "List the 5 most recently updated repos for the 'agentspan' GitHub user.",
+    );
+    result.printResult();
   } finally {
     await runtime.shutdown();
     // }

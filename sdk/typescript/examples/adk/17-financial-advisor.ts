@@ -169,17 +169,16 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(coordinator);
-    await runtime.serve(coordinator);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const result = await runtime.run(
-    // coordinator,
-    // "I'm client CLT-001. Review my portfolio and tell me if I should rebalance " +
-    // 'given current market conditions. What would the tax impact be if I sold some AAPL?',
-    // );
-    // console.log('Status:', result.status);
-    // result.printResult();
+    // await runtime.deploy(coordinator);
+    // await runtime.serve(coordinator);
+    // Direct run for local development:
+    const result = await runtime.run(
+    coordinator,
+    "I'm client CLT-001. Review my portfolio and tell me if I should rebalance " +
+    'given current market conditions. What would the tax impact be if I sold some AAPL?',
+    );
+    console.log('Status:', result.status);
+    result.printResult();
   } finally {
     await runtime.shutdown();
   }

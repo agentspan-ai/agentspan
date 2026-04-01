@@ -125,17 +125,16 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(coordinator);
-    await runtime.serve(coordinator);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const result = await runtime.run(
-    // coordinator,
-    // 'I want to plan a trip to Japan. I need a flight from San Francisco ' +
-    // 'on 2025-04-15 and a hotel for 5 nights. Also, what\'s the travel advisory?',
-    // );
-    // console.log('Status:', result.status);
-    // result.printResult();
+    // await runtime.deploy(coordinator);
+    // await runtime.serve(coordinator);
+    // Direct run for local development:
+    const result = await runtime.run(
+    coordinator,
+    'I want to plan a trip to Japan. I need a flight from San Francisco ' +
+    'on 2025-04-15 and a hotel for 5 nights. Also, what\'s the travel advisory?',
+    );
+    console.log('Status:', result.status);
+    result.printResult();
   } finally {
     await runtime.shutdown();
   }

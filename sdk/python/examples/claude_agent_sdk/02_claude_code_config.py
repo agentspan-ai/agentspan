@@ -23,20 +23,20 @@ def main():
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.claude_agent_sdk.02_claude_code_config
-        runtime.deploy(reviewer)
-        runtime.serve(reviewer)
+        # runtime.deploy(reviewer)
+        # runtime.serve(reviewer)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        # reviewer,
-        # prompt="Use Glob to find .py files in examples/claude_agent_sdk/ and Read one of them. Give a brief code review.",
-        # )
-        # print(f"\n--- Result ---\n{result.output}")
-        # print(f"\n--- Metadata ---")
-        # print(f"Workflow ID: {result.execution_id}")
-        # print(f"Status: {result.status}")
-        # if result.token_usage:
-        # print(f"Token usage: {result.token_usage}")
+        # Direct run for local development:
+        result = runtime.run(
+            reviewer,
+            prompt="Use Glob to find .py files in examples/claude_agent_sdk/ and Read one of them. Give a brief code review.",
+        )
+        result.print_result()
+        print("\n--- Metadata ---")
+        print(f"Workflow ID: {result.execution_id}")
+        print(f"Status: {result.status}")
+        if result.token_usage:
+            print(f"Token usage: {result.token_usage}")
 
 
 

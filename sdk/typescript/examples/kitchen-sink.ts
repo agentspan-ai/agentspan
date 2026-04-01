@@ -337,7 +337,7 @@ for (const article of MOCK_PAST_ARTICLES) {
 const recallPastArticles = tool(
   async (args: { query: string }) => {
     const results = semanticMem.search(args.query, 3);
-    return { results: results.map((r) => ({ content: r.content })) };
+    return { results: results.map((content) => ({ content })) };
   },
   {
     name: 'recall_past_articles',
@@ -830,74 +830,22 @@ async function main() {
   }
 
   const runtime = new AgentRuntime();
-
-  // ── Feature #49: deploy ────────────────────────────────
-  console.log('=== Deploy ===');
-  const deployment = await runtime.deploy(fullPipeline);
-  console.log(`  Deployed: ${deployment.workflowName} (${deployment.agentName})`);
-
-  // ── Feature #51: plan (dry-run) ────────────────────────
-  console.log('\n=== Plan (dry-run) ===');
-  const executionPlan = await runtime.plan(fullPipeline);
-  console.log('  Plan compiled successfully');
-
-  // ── Feature #43: stream (sync SSE + HITL) ──────────────
-  console.log('\n=== Stream Execution ===');
-  const agentStream = await runtime.stream(fullPipeline, PROMPT);
-  console.log(`  Execution: ${agentStream.executionId}\n`);
-
-  const hitlState = { approved: 0, rejected: 0, feedback: 0 };
-
-  for await (const event of agentStream) {
-    switch (event.type) {
-      case EventTypes.THINKING:
-        console.log(`  [thinking] ${(event.content ?? '').slice(0, 80)}...`);
-        break;
-      case EventTypes.TOOL_CALL:
-        console.log(`  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`);
-        break;
-      case EventTypes.TOOL_RESULT:
-        console.log(`  [tool_result] ${event.toolName} -> ${String(event.result).slice(0, 80)}...`);
-        break;
-      case EventTypes.HANDOFF:
-        console.log(`  [handoff] -> ${event.target}`);
-        break;
-      case EventTypes.GUARDRAIL_PASS:
-        console.log(`  [guardrail_pass] ${event.guardrailName}`);
-        break;
-      case EventTypes.GUARDRAIL_FAIL:
-        console.log(`  [guardrail_fail] ${event.guardrailName}: ${event.content}`);
-        break;
-      case EventTypes.MESSAGE:
-        console.log(`  [message] ${(event.content ?? '').slice(0, 80)}...`);
-        break;
-      case EventTypes.WAITING:
-        console.log('\n  --- HITL: Approval required ---');
-        if (hitlState.feedback === 0) {
-          await agentStream.send('Please add more details about quantum error correction.');
-          hitlState.feedback++;
-          console.log('  Sent feedback (revision request)\n');
-        } else if (hitlState.rejected === 0) {
-          await agentStream.reject('Title needs improvement');
-          hitlState.rejected++;
-          console.log('  Rejected (title needs work)\n');
-        } else {
-          await agentStream.approve();
-          hitlState.approved++;
-          console.log('  Approved\n');
-        }
-        break;
-      case EventTypes.ERROR:
-        console.log(`  [error] ${event.content}`);
-        break;
-      case EventTypes.DONE:
-        console.log('\n  [done] Pipeline complete');
-        break;
-    }
-  }
-
-  const result = await agentStream.getResult();
+  const result = await runtime.run(fullPipeline, PROMPT);
   result.printResult();
+
+  // Production pattern:
+  // 1. Deploy once during CI/CD:
+  // await runtime.deploy(fullPipeline);
+  // CLI alternative:
+  // agentspan deploy --package sdk/typescript/examples
+  //
+  // 2. In a separate long-lived worker process:
+  // await runtime.serve(fullPipeline);
+  //
+  // Additional execution-mode alternatives:
+  // await runtime.plan(fullPipeline);
+  // const agentStream = await runtime.stream(fullPipeline, PROMPT);
+  // const handle = await runtime.start(fullPipeline, PROMPT);
 
   // ── Feature #64: Token tracking ────────────────────────
   if (result.tokenUsage) {
@@ -911,13 +859,6 @@ async function main() {
   for (const ev of callbackLog.slice(0, 5)) {
     console.log(`  ${ev.type}:`, ev.data);
   }
-
-  // ── Feature #48: start + polling ───────────────────────
-  console.log('\n=== Start + Polling ===');
-  const handle = await runtime.start(fullPipeline, PROMPT);
-  console.log(`  Started: ${handle.executionId}`);
-  const status = await handle.getStatus();
-  console.log(`  Status: ${status.status}, Running: ${status.isRunning}`);
 
   // ── Feature #46: top-level convenience APIs ────────────
   console.log('\n=== Top-Level Convenience API ===');

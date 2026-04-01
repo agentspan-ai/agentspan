@@ -67,17 +67,16 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(executor);
-    await runtime.serve(executor);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
+    // await runtime.deploy(executor);
+    // await runtime.serve(executor);
+    // Direct run for local development:
     // const runtime = new AgentRuntime();
     // try {
-    // const result = await runtime.run(
-    // agent,
-    // 'Check if the GitHub token is set',
-    // );
-    // result.printResult();
+    const result = await runtime.run(
+    agent,
+    'Check if the GitHub token is set',
+    );
+    result.printResult();
   } finally {
     await runtime.shutdown();
     // }

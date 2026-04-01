@@ -6,7 +6,7 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -66,20 +66,19 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(opsAgent);
-    await runtime.serve(opsAgent);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // console.log('='.repeat(60));
-    // console.log('  CLI Tool with Guardrails');
-    // console.log('  Allowed: ls, cat, df, du, git, ps, uname, wc');
-    // console.log('  Blocked: rm -rf, sudo, mkfs, dd');
-    // console.log('='.repeat(60));
-    // console.log(`\nPrompt: ${prompt}\n`);
+    // await runtime.deploy(opsAgent);
+    // await runtime.serve(opsAgent);
+    // Direct run for local development:
+    console.log('='.repeat(60));
+    console.log('  CLI Tool with Guardrails');
+    console.log('  Allowed: ls, cat, df, du, git, ps, uname, wc');
+    console.log('  Blocked: rm -rf, sudo, mkfs, dd');
+    console.log('='.repeat(60));
+    console.log(`\nPrompt: ${prompt}\n`);
     // const runtime = new AgentRuntime();
     // try {
-    // const result = await runtime.run(opsAgent, prompt);
-    // result.printResult();
+    const result = await runtime.run(opsAgent, prompt);
+    result.printResult();
   } finally {
     await runtime.shutdown();
     // }

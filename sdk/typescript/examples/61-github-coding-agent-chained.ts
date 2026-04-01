@@ -12,7 +12,7 @@
  *
  * Requirements:
  *   - Conductor server running
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - gh CLI authenticated
  */
 
@@ -128,10 +128,24 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(pipeline);
-    await runtime.serve(pipeline);
+    // await runtime.deploy(pipeline);
+    // await runtime.serve(pipeline);
+    const result = await runtime.run(
+    pipeline,
+    `Pick the most suitable open issue on ${REPO} and implement a fix.`,
+    );
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+
+    // Streaming alternative:
     // const runtime = new AgentRuntime();
     // try {
     // console.log('Starting pipeline: gitFetchIssues >> codingQA >> gitPushPR\n');

@@ -1,8 +1,8 @@
 /**
  * Vercel AI SDK Tools + Native Agent -- Streaming
  *
- * Demonstrates streaming events from a native agentspan Agent using AI SDK tools.
- * Uses runtime.stream() which returns an AgentStream (AsyncIterable<AgentEvent>).
+ * Demonstrates the default runtime.run() happy path with AI SDK tools.
+ * Includes a commented runtime.stream() alternative for event streaming.
  */
 
 import { tool as aiTool } from 'ai';
@@ -34,16 +34,26 @@ const prompt = 'Explain quantum computing in one paragraph, then tell me the wea
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    const agentStream = await runtime.stream(agent, prompt);
-
-    console.log('Streaming events:');
-    for await (const event of agentStream) {
-      console.log(`  [${event.type}]`, event.content ?? event.toolName ?? '');
-    }
-
-    const result = await agentStream.getResult();
-    console.log('\nStatus:', result.status);
+    const result = await runtime.run(agent, prompt);
+    console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/vercel-ai
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+    //
+    // Streaming alternative:
+    // const agentStream = await runtime.stream(agent, prompt);
+    // for await (const event of agentStream) {
+    //   console.log(`  [${event.type}]`, event.content ?? event.toolName ?? '');
+    // }
+    // const streamedResult = await agentStream.getResult();
+    // streamedResult.printResult();
   } finally {
     await runtime.shutdown();
   }

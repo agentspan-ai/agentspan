@@ -87,25 +87,24 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(graph);
-    await runtime.serve(graph);
+    // await runtime.deploy(graph);
+    // await runtime.serve(graph);
+    // Direct run for local development:
+    console.log('=== Alice\'s conversation ===');
+    for (const msg of ['Hi, my name is Alice!', "What's my name?", 'What did I just tell you?']) {
+    const result = await runtime.run(graph, msg, { sessionId: 'alice' });
+    console.log(`Alice: ${msg}`);
+    result.printResult();
+    console.log();
+    }
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // console.log('=== Alice\'s conversation ===');
-    // for (const msg of ['Hi, my name is Alice!', "What's my name?", 'What did I just tell you?']) {
-    // const result = await runtime.run(graph, msg, { sessionId: 'alice' });
-    // console.log(`Alice: ${msg}`);
-    // result.printResult();
-    // console.log();
-    // }
-
-    // console.log("=== Bob's conversation (separate session) ===");
-    // for (const msg of ["I'm Bob. I love hiking.", 'What hobby did I mention?']) {
-    // const result = await runtime.run(graph, msg, { sessionId: 'bob' });
-    // console.log(`Bob: ${msg}`);
-    // result.printResult();
-    // console.log();
-    // }
+    console.log("=== Bob's conversation (separate session) ===");
+    for (const msg of ["I'm Bob. I love hiking.", 'What hobby did I mention?']) {
+    const result = await runtime.run(graph, msg, { sessionId: 'bob' });
+    console.log(`Bob: ${msg}`);
+    result.printResult();
+    console.log();
+    }
   } finally {
     await runtime.shutdown();
   }

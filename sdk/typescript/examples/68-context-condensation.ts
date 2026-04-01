@@ -10,7 +10,7 @@
  *
  * Requirements:
  *   - Conductor server with LLM support + agentspan.default-context-window=10000
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -175,20 +175,19 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(orchestrator);
-    await runtime.serve(orchestrator);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
+    // await runtime.deploy(orchestrator);
+    // await runtime.serve(orchestrator);
+    // Direct run for local development:
     // const runtime = new AgentRuntime();
     // try {
-    // const result = await runtime.run(
-    // orchestrator,
-    // 'Produce comprehensive analyses for each of the following technology domains ' +
-    // 'by calling deep_analyst ONCE PER DOMAIN, one domain at a time (not in parallel). ' +
+    const result = await runtime.run(
+    orchestrator,
+    'Produce comprehensive analyses for each of the following technology domains ' +
+    'by calling deep_analyst ONCE PER DOMAIN, one domain at a time (not in parallel). ' +
     // `Complete all ${DOMAINS.length} domains, then summarise cross-domain trends. ` +
     // `Domains: ${DOMAINS.join(', ')}.`,
-    // );
-    // result.printResult();
+    );
+    result.printResult();
   } finally {
     await runtime.shutdown();
     // }

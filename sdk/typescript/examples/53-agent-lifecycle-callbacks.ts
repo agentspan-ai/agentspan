@@ -7,7 +7,7 @@
  *
  * Requirements:
  *   - Conductor server with callback support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -85,14 +85,13 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(agent);
-    await runtime.serve(agent);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
+    // await runtime.deploy(agent);
+    // await runtime.serve(agent);
+    // Direct run for local development:
     // const runtime = new AgentRuntime();
     // try {
-    // const result = await runtime.run(agent, "What's the weather like in Tokyo?");
-    // result.printResult();
+    const result = await runtime.run(agent, "What's the weather like in Tokyo?");
+    result.printResult();
   } finally {
     await runtime.shutdown();
     // }

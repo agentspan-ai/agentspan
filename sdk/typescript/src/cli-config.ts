@@ -33,6 +33,7 @@
  */
 
 import { execSync } from 'child_process';
+import { TerminalToolError } from './errors.js';
 import type { ToolDef } from './types.js';
 
 // ── CliConfigOptions ──────────────────────────────────────
@@ -184,6 +185,7 @@ export function makeCliTool(
 
         return {
           status: 'success',
+          exit_code: 0,
           stdout: output,
           stderr: '',
         };
@@ -198,22 +200,14 @@ export function makeCliTool(
         };
 
         if (execErr.killed === true || execErr.signal === 'SIGTERM') {
-          return {
-            status: 'error',
-            stdout: '',
-            stderr: `Command timed out after ${timeout}s`,
-          };
+          throw new TerminalToolError(`Command timed out after ${timeout}s`);
         }
 
         if (
           execErr.message &&
           execErr.message.includes('ENOENT')
         ) {
-          return {
-            status: 'error',
-            stdout: '',
-            stderr: `Command not found: ${command}`,
-          };
+          throw new TerminalToolError(`Command not found: ${command}`);
         }
 
         const stdout =
@@ -226,8 +220,9 @@ export function makeCliTool(
 
         return {
           status: 'error',
+          exit_code: exitCode,
           stdout,
-          stderr: (stderr || '') + `\nExit code: ${exitCode}`,
+          stderr,
         };
       }
     },

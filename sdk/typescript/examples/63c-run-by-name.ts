@@ -1,36 +1,35 @@
 /**
- * 63c - Run by Name — execute a pre-deployed agent without its definition.
+ * 63c - Direct Run — kept alongside the Python "run by name" variant for parity.
  *
- * Demonstrates the concept of running a deployed agent by workflow name.
- *
- * NOTE: The TypeScript SDK's runtime.run() currently requires an Agent
- * object. To run by name, use the HTTP API directly:
- *   POST /api/agent/run { "name": "agent_doc_assistant", "prompt": "..." }
+ * The current TypeScript runtime accepts agent objects here, so this example
+ * uses the imported agent definition directly. Deploy/serve remains the
+ * commented production pattern below.
  *
  * Requirements:
  *   - Conductor server running
- *   - Agent deployed (run 63-deploy.ts first)
- *   - Workers running (run 63b-serve.ts in another terminal)
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
+ *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
+
+import { docAssistant } from './63-deploy.js';
+import { AgentRuntime } from '../src/index.js';
 
 // Only run when executed directly (not when imported for discovery)
 if (process.argv[1]?.endsWith('63c-run-by-name.ts') || process.argv[1]?.endsWith('63c-run-by-name.js')) {
-  console.log('Run by Name -- Workflow Name Execution');
-  console.log('');
-  console.log('The TypeScript SDK currently requires an Agent object for runtime.run().');
-  console.log('To run a deployed agent by name, use the HTTP API directly:');
-  console.log('');
-  console.log('  // Run by name (synchronous)');
-  console.log('  POST /api/agent/run');
-  console.log('  { "name": "agent_doc_assistant", "prompt": "How do I reset my password?" }');
-  console.log('');
-  console.log('  // Start by name (fire-and-forget)');
-  console.log('  POST /api/agent/start');
-  console.log('  { "name": "agent_ops_bot", "prompt": "Check the status of the API gateway" }');
-  console.log('');
-  console.log('  // Stream by name');
-  console.log('  GET /api/agent/stream/{executionId}');
-  console.log('');
-  console.log('Or use the Python SDK which supports runtime.run("workflow_name", prompt).');
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(docAssistant, 'How do I reset my password?');
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(docAssistant);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(docAssistant);
+  } finally {
+    await runtime.shutdown();
+  }
 }

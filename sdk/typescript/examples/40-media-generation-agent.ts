@@ -14,7 +14,7 @@
  *
  * Requirements:
  *   - Conductor server with OpenAI integration configured
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -69,21 +69,20 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(mediaAgent);
-    await runtime.serve(mediaAgent);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // console.log('Media Generation Agent');
-    // console.log('='.repeat(60));
+    // await runtime.deploy(mediaAgent);
+    // await runtime.serve(mediaAgent);
+    // Direct run for local development:
+    console.log('Media Generation Agent');
+    console.log('='.repeat(60));
     // const runtime = new AgentRuntime();
     // try {
-    // const result = await runtime.run(
-    // mediaAgent,
-    // 'Create an image of a serene Japanese garden with a koi pond ' +
-    // 'at sunset, cherry blossoms falling gently. Use vivid style. ' +
-    // 'Use that image to generate a video with audio narration describing the image.',
-    // );
-    // result.printResult();
+    const result = await runtime.run(
+    mediaAgent,
+    'Create an image of a serene Japanese garden with a koi pond ' +
+    'at sunset, cherry blossoms falling gently. Use vivid style. ' +
+    'Use that image to generate a video with audio narration describing the image.',
+    );
+    result.printResult();
   } finally {
     await runtime.shutdown();
     // }

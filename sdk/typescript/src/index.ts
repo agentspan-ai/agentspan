@@ -42,6 +42,7 @@ export {
   CredentialRateLimitError,
   CredentialServiceError,
   SSETimeoutError,
+  TerminalToolError,
   GuardrailFailedError,
 } from './errors.js';
 

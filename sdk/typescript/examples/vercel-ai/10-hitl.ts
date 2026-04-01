@@ -3,8 +3,9 @@
  *
  * Demonstrates approval_required on tools with a native agentspan Agent.
  * When a tool has approvalRequired: true, the agent pauses for human approval
- * before executing the tool. Uses runtime.start() for async interaction
- * with approve/reject via the AgentHandle.
+ * before executing the tool. The direct-run path uses runtime.run() so the
+ * example works as-is, and a commented runtime.start() alternative shows the
+ * async approval/reject flow via the AgentHandle.
  *
  * This example mixes Vercel AI SDK tool() (for risk assessment, auto-execute)
  * and agentspan native tool() (for action execution, requires approval).
@@ -125,16 +126,28 @@ async function runWithApproval(runtime: AgentRuntime, prompt: string) {
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    for (const { label, prompt } of testCases) {
-      console.log(`\n--- ${label} ---`);
-      try {
-        const result = await runWithApproval(runtime, prompt);
-        console.log('Status:', result.status);
-        result.printResult();
-      } catch (err: any) {
-        console.log('Error:', err.message);
-      }
-    }
+    const result = await runtime.run(
+      agent,
+      'Explain how you decide whether an operation should be approved before execution.',
+    );
+    console.log('Status:', result.status);
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/vercel-ai
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+    //
+    // Interactive HITL alternative:
+    // for (const { label, prompt } of testCases) {
+    //   console.log(`\n--- ${label} ---`);
+    //   const interactiveResult = await runWithApproval(runtime, prompt);
+    //   interactiveResult.printResult();
+    // }
   } finally {
     await runtime.shutdown();
   }

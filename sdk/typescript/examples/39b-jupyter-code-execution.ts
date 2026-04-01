@@ -9,7 +9,7 @@
  * Requirements:
  *   - Conductor server with LLM support
  *   - Jupyter runtime installed (jupyter_client, ipykernel)
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -41,20 +41,19 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(jupyterCoder);
-    await runtime.serve(jupyterCoder);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
+    // await runtime.deploy(jupyterCoder);
+    // await runtime.serve(jupyterCoder);
+    // Direct run for local development:
     // const runtime = new AgentRuntime();
     // try {
-    // console.log('--- Jupyter Kernel Code Execution ---');
-    // const result = await runtime.run(
-    // jupyterCoder,
-    // "Compute the first 10 Fibonacci numbers using a loop, store them in a " +
-    // "list called 'fibs', and print them. Then in a second execution, print " +
-    // "the sum of 'fibs' (it should still exist from the first call).",
-    // );
-    // result.printResult();
+    console.log('--- Jupyter Kernel Code Execution ---');
+    const result = await runtime.run(
+    jupyterCoder,
+    "Compute the first 10 Fibonacci numbers using a loop, store them in a " +
+    "list called 'fibs', and print them. Then in a second execution, print " +
+    "the sum of 'fibs' (it should still exist from the first call).",
+    );
+    result.printResult();
   } finally {
     await runtime.shutdown();
     // }

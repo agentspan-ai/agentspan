@@ -65,17 +65,16 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(adkAgent);
-    await runtime.serve(adkAgent);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
+    // await runtime.deploy(adkAgent);
+    // await runtime.serve(adkAgent);
+    // Direct run for local development:
     // const runtime = new AgentRuntime();
     // try {
-    // const result = await runtime.run(
-    // agent,
-    // 'Is GitHub authentication available?',
-    // );
-    // result.printResult();
+    const result = await runtime.run(
+    agent,
+    'Is GitHub authentication available?',
+    );
+    result.printResult();
   } finally {
     await runtime.shutdown();
     // }

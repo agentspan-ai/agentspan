@@ -35,23 +35,22 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(analyzerAgent);
-    await runtime.serve(analyzerAgent);
+    // await runtime.deploy(analyzerAgent);
+    // await runtime.serve(analyzerAgent);
+    // Direct run for local development:
+    const result = await runtime.run(
+    analyzerAgent,
+    'Analyze: "Quantum Computing Breakthrough: New Error Correction Method Achieves 99.9% Fidelity"',
+    );
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const result = await runtime.run(
-    // analyzerAgent,
-    // 'Analyze: "Quantum Computing Breakthrough: New Error Correction Method Achieves 99.9% Fidelity"',
-    // );
-
-    // result.printResult();
+    result.printResult();
 
     // The output conforms to the ArticleAnalysis schema
-    // console.log('\nStructured output:');
-    // console.log('  Title:', result.output['title']);
-    // console.log('  Category:', result.output['category']);
-    // console.log('  Sentiment:', result.output['sentiment']);
-    // console.log('  Key Topics:', result.output['keyTopics']);
+    console.log('\nStructured output:');
+    console.log('  Title:', result.output['title']);
+    console.log('  Category:', result.output['category']);
+    console.log('  Sentiment:', result.output['sentiment']);
+    console.log('  Key Topics:', result.output['keyTopics']);
 
     // await runtime.shutdown();
   } finally {

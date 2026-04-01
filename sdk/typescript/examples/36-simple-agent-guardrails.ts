@@ -15,7 +15,7 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -78,29 +78,28 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(agent);
-    await runtime.serve(agent);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
+    // await runtime.deploy(agent);
+    // await runtime.serve(agent);
+    // Direct run for local development:
     // const runtime = new AgentRuntime();
     // try {
-    // const result = await runtime.run(agent, 'Explain why the sky is blue.');
-    // result.printResult();
+    const result = await runtime.run(agent, 'Explain why the sky is blue.');
+    result.printResult();
 
-    // // Verify guardrails
-    // const output = String(result.output);
-    // const hasBullets = output
+    // Verify guardrails
+    const output = String(result.output);
+    const hasBullets = output
     // .split('\n')
     // .some((line) => line.trim().startsWith('-') || line.trim().startsWith('*'));
-    // const wordCount = output.split(/\s+/).filter(Boolean).length;
+    const wordCount = output.split(/\s+/).filter(Boolean).length;
 
-    // if (hasBullets) {
-    // console.log('[WARN] Output contains bullet points -- guardrail may not have fired');
-    // } else if (wordCount < 50) {
-    // console.log(`[WARN] Output too short (${wordCount} words)`);
-    // } else {
-    // console.log(`[OK] Prose response, ${wordCount} words -- guardrails passed`);
-    // }
+    if (hasBullets) {
+    console.log('[WARN] Output contains bullet points -- guardrail may not have fired');
+    } else if (wordCount < 50) {
+    console.log(`[WARN] Output too short (${wordCount} words)`);
+    } else {
+    console.log(`[OK] Prose response, ${wordCount} words -- guardrails passed`);
+    }
   } finally {
     await runtime.shutdown();
     // }

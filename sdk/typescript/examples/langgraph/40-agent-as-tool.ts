@@ -141,16 +141,15 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(graph);
-    await runtime.serve(graph);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // for (const query of queries) {
-    // console.log(`\nQuery: ${query}`);
-    // const result = await runtime.run(graph, query);
-    // result.printResult();
-    // console.log('-'.repeat(60));
-    // }
+    // await runtime.deploy(graph);
+    // await runtime.serve(graph);
+    // Direct run for local development:
+    for (const query of queries) {
+    console.log(`\nQuery: ${query}`);
+    const result = await runtime.run(graph, query);
+    result.printResult();
+    console.log('-'.repeat(60));
+    }
   } finally {
     await runtime.shutdown();
   }

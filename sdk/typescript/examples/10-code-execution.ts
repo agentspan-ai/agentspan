@@ -39,15 +39,14 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(codeAgent);
-    await runtime.serve(codeAgent);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const result = await runtime.run(
-    // codeAgent,
-    // 'Calculate the first 10 Fibonacci numbers using code.',
-    // );
-    // result.printResult();
+    // await runtime.deploy(codeAgent);
+    // await runtime.serve(codeAgent);
+    // Direct run for local development:
+    const result = await runtime.run(
+    codeAgent,
+    'Calculate the first 10 Fibonacci numbers using code.',
+    );
+    result.printResult();
     // await runtime.shutdown();
   } finally {
     await runtime.shutdown();

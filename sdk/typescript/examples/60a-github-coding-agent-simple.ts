@@ -6,7 +6,7 @@
  *
  * Requirements:
  *   - Conductor server running
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - gh CLI authenticated
  *   - Git configured with push access to the repo
  */
@@ -116,38 +116,37 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(codingTeam);
-    await runtime.serve(codingTeam);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // console.log('='.repeat(60));
-    // console.log('  GitHub Coding Agent (Simplified)');
-    // console.log(`  Repo: ${REPO}`);
-    // console.log(`  Work dir: ${WORK_DIR}`);
-    // console.log('  coding_team -> github_agent <-> coder <-> qa_tester (swarm)');
-    // console.log('  Tools: built-in code execution (any language)');
-    // console.log('='.repeat(60));
-    // console.log(`\nPrompt: ${prompt}\n`);
+    // await runtime.deploy(codingTeam);
+    // await runtime.serve(codingTeam);
+    // Direct run for local development:
+    console.log('='.repeat(60));
+    console.log('  GitHub Coding Agent (Simplified)');
+    console.log(`  Repo: ${REPO}`);
+    console.log(`  Work dir: ${WORK_DIR}`);
+    console.log('  coding_team -> github_agent <-> coder <-> qa_tester (swarm)');
+    console.log('  Tools: built-in code execution (any language)');
+    console.log('='.repeat(60));
+    console.log(`\nPrompt: ${prompt}\n`);
     // const runtime = new AgentRuntime();
     // try {
-    // const result = await runtime.run(codingTeam, prompt);
+    const result = await runtime.run(codingTeam, prompt);
 
-    // const output = result.output;
-    // const skipKeys = new Set(['finishReason', 'rejectionReason', 'is_transfer', 'transfer_to']);
-    // if (output && typeof output === 'object' && !Array.isArray(output)) {
-    // for (const [key, text] of Object.entries(output as Record<string, string>)) {
-    // if (skipKeys.has(key) || !text) continue;
-    // console.log(`\n${'─'.repeat(60)}`);
-    // console.log(`  [${key}]`);
-    // console.log('─'.repeat(60));
-    // console.log(text);
-    // }
-    // } else {
-    // console.log(output);
-    // }
+    const output = result.output;
+    const skipKeys = new Set(['finishReason', 'rejectionReason', 'is_transfer', 'transfer_to']);
+    if (output && typeof output === 'object' && !Array.isArray(output)) {
+    for (const [key, text] of Object.entries(output as Record<string, string>)) {
+    if (skipKeys.has(key) || !text) continue;
+    console.log(`\n${'─'.repeat(60)}`);
+    console.log(`  [${key}]`);
+    console.log('─'.repeat(60));
+    console.log(text);
+    }
+    } else {
+    console.log(output);
+    }
 
-    // console.log(`\nFinish reason: ${result.finishReason}`);
-    // console.log(`Execution ID: ${result.executionId}`);
+    console.log(`\nFinish reason: ${result.finishReason}`);
+    console.log(`Execution ID: ${result.executionId}`);
   } finally {
     await runtime.shutdown();
     // }

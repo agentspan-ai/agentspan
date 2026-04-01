@@ -19,7 +19,7 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -156,28 +156,27 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(agent);
-    await runtime.serve(agent);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
+    // await runtime.deploy(agent);
+    // await runtime.serve(agent);
+    // Direct run for local development:
     // const runtime = new AgentRuntime();
     // try {
-    // // This prompt triggers both tools:
-    // //   1. get_order_status("ORD-42")   → safe data, passes guardrail
-    // //   2. get_customer_info("CUST-7")  → contains credit card, trips guardrail
-    // const result = await runtime.run(
-    // agent,
-    // 'I need a full summary: What\'s the status of order ORD-42, ' +
-    // 'and what\'s the profile for customer CUST-7?',
-    // );
-    // result.printResult();
+    // This prompt triggers both tools:
+    //   1. get_order_status("ORD-42")   → safe data, passes guardrail
+    //   2. get_customer_info("CUST-7")  → contains credit card, trips guardrail
+    const result = await runtime.run(
+    agent,
+    'I need a full summary: What\'s the status of order ORD-42, ' +
+    'and what\'s the profile for customer CUST-7?',
+    );
+    result.printResult();
 
-    // // Verify the guardrail worked — no raw card number in the output
-    // if (result.output && String(result.output).includes('4532-0150-1234-5678')) {
-    // console.log('[WARN] PII leaked through the guardrail!');
-    // } else {
-    // console.log('[OK] PII was redacted from the final output.');
-    // }
+    // Verify the guardrail worked — no raw card number in the output
+    if (result.output && String(result.output).includes('4532-0150-1234-5678')) {
+    console.log('[WARN] PII leaked through the guardrail!');
+    } else {
+    console.log('[OK] PII was redacted from the final output.');
+    }
   } finally {
     await runtime.shutdown();
     // }

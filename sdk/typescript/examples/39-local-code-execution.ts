@@ -12,7 +12,7 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -74,25 +74,24 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(simpleCoder);
-    await runtime.serve(simpleCoder);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
+    // await runtime.deploy(simpleCoder);
+    // await runtime.serve(simpleCoder);
+    // Direct run for local development:
     // const runtime = new AgentRuntime();
     // try {
-    // console.log('--- Simple Code Execution ---');
-    // const result1 = await runtime.run(
-    // simpleCoder,
-    // 'Write a Python function to find the first 10 prime numbers and print them.',
-    // );
-    // result1.printResult();
+    console.log('--- Simple Code Execution ---');
+    const result1 = await runtime.run(
+    simpleCoder,
+    'Write a Python function to find the first 10 prime numbers and print them.',
+    );
+    result1.printResult();
 
-    // console.log('\n--- Restricted Code Execution ---');
-    // const result2 = await runtime.run(
-    // restrictedCoder,
-    // 'List the files in the current directory using bash.',
-    // );
-    // result2.printResult();
+    console.log('\n--- Restricted Code Execution ---');
+    const result2 = await runtime.run(
+    restrictedCoder,
+    'List the files in the current directory using bash.',
+    );
+    result2.printResult();
   } finally {
     await runtime.shutdown();
     // }

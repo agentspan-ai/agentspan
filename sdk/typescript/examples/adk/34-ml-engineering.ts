@@ -180,19 +180,18 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(mlPipeline);
-    await runtime.serve(mlPipeline);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const result = await runtime.run(
-    // mlPipeline,
-    // 'Build a model to predict California housing prices. The dataset has 20,640 samples ' +
-    // 'with 8 features: MedInc, HouseAge, AveRooms, AveBedrms, Population, AveOccup, ' +
-    // 'Latitude, Longitude. Target: MedianHouseValue (continuous, in $100k units). ' +
-    // 'Metric: RMSE. Some features have skewed distributions.',
-    // );
-    // console.log('Status:', result.status);
-    // result.printResult();
+    // await runtime.deploy(mlPipeline);
+    // await runtime.serve(mlPipeline);
+    // Direct run for local development:
+    const result = await runtime.run(
+    mlPipeline,
+    'Build a model to predict California housing prices. The dataset has 20,640 samples ' +
+    'with 8 features: MedInc, HouseAge, AveRooms, AveBedrms, Population, AveOccup, ' +
+    'Latitude, Longitude. Target: MedianHouseValue (continuous, in $100k units). ' +
+    'Metric: RMSE. Some features have skewed distributions.',
+    );
+    console.log('Status:', result.status);
+    result.printResult();
   } finally {
     await runtime.shutdown();
   }

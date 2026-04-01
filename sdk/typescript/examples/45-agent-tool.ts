@@ -12,7 +12,7 @@
  *
  * Requirements:
  *   - Conductor server with AgentTool support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -103,18 +103,17 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(manager);
-    await runtime.serve(manager);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
+    // await runtime.deploy(manager);
+    // await runtime.serve(manager);
+    // Direct run for local development:
     // const runtime = new AgentRuntime();
     // try {
-    // const result = await runtime.run(
-    // manager,
-    // 'Research Python and Rust, then calculate how many use cases they ' +
-    // 'have combined.',
-    // );
-    // result.printResult();
+    const result = await runtime.run(
+    manager,
+    'Research Python and Rust, then calculate how many use cases they ' +
+    'have combined.',
+    );
+    result.printResult();
   } finally {
     await runtime.shutdown();
     // }

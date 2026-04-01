@@ -109,6 +109,18 @@ export class SSETimeoutError extends AgentspanError {
 }
 
 /**
+ * Terminal tool error — non-retryable failure (e.g., CLI command exited non-zero).
+ * Causes the Conductor task to be marked FAILED_WITH_TERMINAL_ERROR.
+ */
+export class TerminalToolError extends AgentspanError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TerminalToolError';
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/**
  * Guardrail validation failed.
  */
 export class GuardrailFailedError extends AgentspanError {

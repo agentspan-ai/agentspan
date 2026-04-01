@@ -46,10 +46,21 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(publishingAgent);
-    await runtime.serve(publishingAgent);
+    // await runtime.deploy(publishingAgent);
+    // await runtime.serve(publishingAgent);
+    const result = await runtime.run(publishingAgent, 'Write a short article outline about TypeScript, but do not publish it.');
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+
+    // Interactive HITL alternative:
     // const agentStream = await runtime.stream(
     // publishingAgent,
     // 'Write a short article about TypeScript and publish it.',

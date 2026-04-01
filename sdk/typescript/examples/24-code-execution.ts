@@ -12,7 +12,7 @@
  * Requirements:
  *   - Conductor server with LLM support
  *   - Docker (for DockerCodeExecutor example)
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -62,18 +62,17 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(coder);
-    await runtime.serve(coder);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
+    // await runtime.deploy(coder);
+    // await runtime.serve(coder);
+    // Direct run for local development:
     // const runtime = new AgentRuntime();
     // try {
-    // console.log('--- Local Code Execution ---');
-    // const result = await runtime.run(
-    // coder,
-    // 'Write a Python function to find the first 10 Fibonacci numbers and print them.',
-    // );
-    // result.printResult();
+    console.log('--- Local Code Execution ---');
+    const result = await runtime.run(
+    coder,
+    'Write a Python function to find the first 10 Fibonacci numbers and print them.',
+    );
+    result.printResult();
   } finally {
     await runtime.shutdown();
     // }

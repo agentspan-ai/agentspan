@@ -8,7 +8,7 @@
  * Requirements:
  *   - Conductor server with LLM support
  *   - Docker installed and daemon running
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -39,18 +39,17 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(dockerCoder);
-    await runtime.serve(dockerCoder);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
+    // await runtime.deploy(dockerCoder);
+    // await runtime.serve(dockerCoder);
+    // Direct run for local development:
     // const runtime = new AgentRuntime();
     // try {
-    // console.log('--- Docker Sandboxed Code Execution ---');
-    // const result = await runtime.run(
-    // dockerCoder,
-    // "Print Python's version and the container's hostname.",
-    // );
-    // result.printResult();
+    console.log('--- Docker Sandboxed Code Execution ---');
+    const result = await runtime.run(
+    dockerCoder,
+    "Print Python's version and the container's hostname.",
+    );
+    result.printResult();
   } finally {
     await runtime.shutdown();
     // }

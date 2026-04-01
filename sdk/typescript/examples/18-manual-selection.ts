@@ -13,7 +13,7 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -54,54 +54,27 @@ export const team = new Agent({
 if (process.argv[1]?.endsWith('18-manual-selection.ts') || process.argv[1]?.endsWith('18-manual-selection.js')) {
   const runtime = new AgentRuntime();
   try {
-    // Start async so we can interact with the human tasks
-    const handle: AgentHandle = await runtime.start(
-      team,
+    const result = await runtime.run(
+      writer,
       'Write a short paragraph about the history of artificial intelligence.',
     );
-    console.log(`Started execution: ${handle.executionId}`);
+    result.printResult();
 
-    // In a real app, a UI would show the agent options and the human would pick.
-    // Here we simulate by selecting agents programmatically:
-    const selections = ['writer', 'editor', 'fact_checker'];
-
-    for (let i = 0; i < selections.length; i++) {
-      const agentName = selections[i];
-
-      // Wait for the workflow to pause at the HumanTask
-      let completed = false;
-      let waiting = false;
-      for (let attempt = 0; attempt < 30; attempt++) {
-        const status = await handle.getStatus();
-        if (status.isComplete) {
-          console.log(`Workflow completed after ${i} turns`);
-          completed = true;
-          break;
-        }
-        if (status.isWaiting) {
-          waiting = true;
-          break;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      }
-
-      if (completed) break;
-
-      if (waiting) {
-        console.log(`Turn ${i + 1}: Selecting '${agentName}'`);
-        await handle.respond({ selected: agentName });
-      }
-    }
-
-    // Wait for final completion
-    for (let attempt = 0; attempt < 30; attempt++) {
-      const status = await handle.getStatus();
-      if (status.isComplete) {
-        console.log(`\nFinal output:\n${JSON.stringify(status.output)}`);
-        break;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    }
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(team);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(team);
+    //
+    // Interactive manual-selection alternative:
+    // const handle: AgentHandle = await runtime.start(
+    //   team,
+    //   'Write a short paragraph about the history of artificial intelligence.',
+    // );
+    // await handle.respond({ selected: 'writer' });
   } finally {
     await runtime.shutdown();
   }

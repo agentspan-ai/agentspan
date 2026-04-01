@@ -330,9 +330,23 @@ export class AgentRuntime {
   // ── serve() ───────────────────────────────────────────
 
   /**
-   * Start worker polling and keep the process alive.
+   * Register workers for the provided agents, start polling, and keep the process alive.
+   * When no agents are provided, starts polling with any workers already registered.
    */
-  async serve(): Promise<void> {
+  async serve(...agents: (Agent | object)[]): Promise<void> {
+    for (const agent of agents) {
+      const framework = detectFramework(agent);
+      if (framework !== null) {
+        const [, workers] = this._serializeFramework(agent, framework);
+        this._registerExtractedWorkers(workers);
+        continue;
+      }
+
+      const nativeAgent = agent as Agent;
+      await this._registerToolWorkers(nativeAgent);
+      await this._registerSystemWorkers(nativeAgent, null);
+    }
+
     this.workerManager.startPolling();
 
     // Keep process alive until SIGINT/SIGTERM
@@ -1036,6 +1050,28 @@ export class AgentRuntime {
   }
 
   /**
+   * Register extracted worker functions for framework-based agents.
+   */
+  private _registerExtractedWorkers(
+    workers: { name: string; func?: Function | null }[],
+  ): void {
+    for (const worker of workers) {
+      if (worker.func) {
+        const fn = worker.func;
+        this.workerManager.addWorker(worker.name, async (inputData) => {
+          const cleanInput = { ...inputData };
+          delete cleanInput['__workflowInstanceId__'];
+          delete cleanInput['__toolContext__'];
+          delete cleanInput['_agent_state'];
+          delete cleanInput['method'];
+          delete cleanInput['__agentspan_ctx__'];
+          return fn(cleanInput);
+        });
+      }
+    }
+  }
+
+  /**
    * Serialize a skill-based agent for server-side normalization.
    * Returns (rawConfig, workers) matching the framework serialization interface.
    */
@@ -1076,21 +1112,7 @@ export class AgentRuntime {
     const correlationId = generateCorrelationId();
     const [rawConfig, workers] = this._serializeFramework(agent, frameworkId);
 
-    // Add workers for each extracted tool
-    for (const worker of workers) {
-      if (worker.func) {
-        const fn = worker.func;
-        this.workerManager.addWorker(worker.name, async (inputData) => {
-          const cleanInput = { ...inputData };
-          delete cleanInput['__workflowInstanceId__'];
-          delete cleanInput['__toolContext__'];
-          delete cleanInput['_agent_state'];
-          delete cleanInput['method'];
-          delete cleanInput['__agentspan_ctx__'];
-          return fn(cleanInput);
-        });
-      }
-    }
+    this._registerExtractedWorkers(workers);
 
     this.workerManager.startPolling();
 
@@ -1151,21 +1173,7 @@ export class AgentRuntime {
     const correlationId = generateCorrelationId();
     const [rawConfig, workers] = this._serializeFramework(agent, frameworkId);
 
-    // Add workers for each extracted tool
-    for (const worker of workers) {
-      if (worker.func) {
-        const fn = worker.func;
-        this.workerManager.addWorker(worker.name, async (inputData) => {
-          const cleanInput = { ...inputData };
-          delete cleanInput['__workflowInstanceId__'];
-          delete cleanInput['__toolContext__'];
-          delete cleanInput['_agent_state'];
-          delete cleanInput['method'];
-          delete cleanInput['__agentspan_ctx__'];
-          return fn(cleanInput);
-        });
-      }
-    }
+    this._registerExtractedWorkers(workers);
 
     this.workerManager.startPolling();
 
@@ -1311,10 +1319,10 @@ export function plan(agent: Agent): Promise<object> {
 }
 
 /**
- * Start the singleton runtime worker polling.
+ * Register workers on the singleton runtime and start polling.
  */
-export function serve(): Promise<void> {
-  return getRuntime().serve();
+export function serve(...agents: (Agent | object)[]): Promise<void> {
+  return getRuntime().serve(...agents);
 }
 
 /**

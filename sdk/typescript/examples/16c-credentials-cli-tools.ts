@@ -185,14 +185,13 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(githubAwsAgent);
-    await runtime.serve(githubAwsAgent);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
+    // await runtime.deploy(githubAwsAgent);
+    // await runtime.serve(githubAwsAgent);
+    // Direct run for local development:
     // const runtime = new AgentRuntime();
     // try {
-    // const result = await runtime.run(githubAwsAgent, task);
-    // result.printResult();
+    const result = await runtime.run(githubAwsAgent, task);
+    result.printResult();
   } finally {
     await runtime.shutdown();
     // }

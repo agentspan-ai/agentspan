@@ -10,7 +10,7 @@
  *
  * Requirements:
  *   - Conductor server running
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -42,15 +42,20 @@ export const monitoringAgent = new Agent({
 
 // Only run when executed directly (not when imported for discovery)
 if (process.argv[1]?.endsWith('63d-serve-from-package.ts') || process.argv[1]?.endsWith('63d-serve-from-package.js')) {
-  console.log('Serving monitoring agent.');
-  console.log('To also serve discovered agents, use discoverAgents().');
-  console.log('');
-  console.log('Usage:');
-  console.log('  import { discoverAgents } from "../src/index.js";');
-  console.log('  const agents = await discoverAgents(["./agents"]);');
-  console.log('  await runtime.serve(monitoringAgent, ...agents);');
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(monitoringAgent, 'Is everything healthy? Run a full check.');
+    result.printResult();
 
-  // In production, uncomment:
-  // const runtime = new AgentRuntime();
-  // await runtime.serve(monitoringAgent);  // blocks until Ctrl+C / SIGTERM
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(monitoringAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(monitoringAgent);
+  } finally {
+    await runtime.shutdown();
+  }
 }

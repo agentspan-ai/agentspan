@@ -113,17 +113,16 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(safePipeline);
-    await runtime.serve(safePipeline);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const result = await runtime.run(
-    // safePipeline,
-    // 'What are the contact details for our support team? ' +
-    // 'Include email support@company.com and phone 555-123-4567.',
-    // );
-    // console.log('Status:', result.status);
-    // result.printResult();
+    // await runtime.deploy(safePipeline);
+    // await runtime.serve(safePipeline);
+    // Direct run for local development:
+    const result = await runtime.run(
+    safePipeline,
+    'What are the contact details for our support team? ' +
+    'Include email support@company.com and phone 555-123-4567.',
+    );
+    console.log('Status:', result.status);
+    result.printResult();
   } finally {
     await runtime.shutdown();
   }

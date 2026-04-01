@@ -70,16 +70,15 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(pipeline);
-    await runtime.serve(pipeline);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const result = await runtime.run(
-    // pipeline,
-    // 'Launching an AI-powered healthcare diagnostics tool in the US',
-    // );
-    // console.log('Status:', result.status);
-    // result.printResult();
+    // await runtime.deploy(pipeline);
+    // await runtime.serve(pipeline);
+    // Direct run for local development:
+    const result = await runtime.run(
+    pipeline,
+    'Launching an AI-powered healthcare diagnostics tool in the US',
+    );
+    console.log('Status:', result.status);
+    result.printResult();
   } finally {
     await runtime.shutdown();
   }
