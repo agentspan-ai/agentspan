@@ -77,7 +77,7 @@ async function main() {
     result.printResult();
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('16k-credentials-google-adk.ts') || process.argv[1]?.endsWith('16k-credentials-google-adk.js')) {

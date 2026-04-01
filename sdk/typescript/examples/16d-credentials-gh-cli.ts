@@ -17,7 +17,7 @@
  *   - GH_TOKEN stored via `agentspan credentials set`
  */
 
-import { Agent, AgentRuntime } from '../src/index.js';
+import { Agent, AgentRuntime } from '../src';
 import { llmModel } from './settings.js';
 
 export const agent = new Agent({
@@ -52,7 +52,7 @@ async function main() {
     result.printResult();
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('16d-credentials-gh-cli.ts') || process.argv[1]?.endsWith('16d-credentials-gh-cli.js')) {

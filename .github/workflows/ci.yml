@@ -81,9 +81,14 @@ jobs:
         with:
           java-version: '21'
           distribution: 'corretto'
-      - name: Build server JAR
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+      - name: Build server JAR with UI
         working-directory: server
-        run: ./gradlew bootJar -x test
+        run: ./gradlew bootJar -PbuildUI=true -x test
       - name: Upload server JAR
         uses: actions/upload-artifact@v4
         with:

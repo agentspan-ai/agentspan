@@ -149,7 +149,7 @@ async function main() {
     console.log(`Execution ID: ${result.executionId}`);
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('60a-github-coding-agent-simple.ts') || process.argv[1]?.endsWith('60a-github-coding-agent-simple.js')) {

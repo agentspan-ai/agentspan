@@ -140,7 +140,7 @@ async function main() {
     result.printResult();
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('44-safety-guardrails.ts') || process.argv[1]?.endsWith('44-safety-guardrails.js')) {

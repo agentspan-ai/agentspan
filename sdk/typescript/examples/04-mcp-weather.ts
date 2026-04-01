@@ -57,7 +57,7 @@ async function main() {
     result.printResult();
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('04-mcp-weather.ts') || process.argv[1]?.endsWith('04-mcp-weather.js')) {

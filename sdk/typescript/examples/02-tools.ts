@@ -150,7 +150,7 @@ async function main() {
     // console.log(`Status: ${final.status}`);
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('02-tools.ts') || process.argv[1]?.endsWith('02-tools.js')) {

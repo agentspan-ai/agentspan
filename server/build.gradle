@@ -76,6 +76,9 @@ dependencies {
     implementation "org.conductoross:conductor-http-task:${conductorVersion}"
     implementation "org.conductoross:conductor-json-jq-task:${conductorVersion}"
 
+    // Swagger / OpenAPI UI
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
+
     // Spring Boot
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
@@ -147,9 +150,6 @@ configurations.all {
     exclude group: 'io.micrometer', module: 'micrometer-registry-statsd'
     exclude group: 'io.micrometer', module: 'micrometer-registry-atlas'
     exclude group: 'com.netflix.spectator'
-
-    // Swagger UI (~3.5MB) — API docs not needed in production
-    exclude group: 'org.webjars', module: 'swagger-ui'
 
     // Groovy
     exclude group: 'org.apache.groovy'
@@ -253,7 +253,9 @@ tasks.register('syncUiStatic', Sync) {
 }
 
 tasks.named('processResources') {
-    mustRunAfter 'syncUiStatic'
+    if (buildUiEnabled) {
+        dependsOn 'syncUiStatic'
+    }
 }
 
 tasks.named('bootJar') {

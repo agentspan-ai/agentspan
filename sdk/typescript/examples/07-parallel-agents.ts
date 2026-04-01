@@ -10,7 +10,7 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime } from '../src/index.js';
+import { Agent, AgentRuntime } from '../src';
 import { llmModel } from './settings.js';
 
 // -- Specialist analysts -----------------------------------------------------
@@ -66,7 +66,7 @@ async function main() {
     result.printResult();
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('07-parallel-agents.ts') || process.argv[1]?.endsWith('07-parallel-agents.js')) {

@@ -94,7 +94,7 @@ async function main() {
     result2.printResult();
   } finally {
     await runtime.shutdown();
-    // }
+  }
 
     // // -- Direct memory operations ------------------------------------------------
 

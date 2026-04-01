@@ -77,7 +77,7 @@ async function main() {
     }
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('26-opentelemetry-tracing.ts') || process.argv[1]?.endsWith('26-opentelemetry-tracing.js')) {

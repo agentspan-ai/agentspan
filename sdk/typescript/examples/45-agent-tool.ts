@@ -116,7 +116,7 @@ async function main() {
     result.printResult();
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('45-agent-tool.ts') || process.argv[1]?.endsWith('45-agent-tool.js')) {

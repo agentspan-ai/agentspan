@@ -144,7 +144,7 @@ async function main() {
     }
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('37-fix-guardrail.ts') || process.argv[1]?.endsWith('37-fix-guardrail.js')) {

@@ -122,7 +122,7 @@ async function main() {
     }
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('64-swarm-with-tools.ts') || process.argv[1]?.endsWith('64-swarm-with-tools.js')) {

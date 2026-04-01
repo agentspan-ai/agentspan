@@ -93,7 +93,7 @@ async function main() {
     result2.printResult();
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('31-tool-guardrails.ts') || process.argv[1]?.endsWith('31-tool-guardrails.js')) {

@@ -316,7 +316,6 @@ async function main() {
     result.printResult();
   } finally {
     await runtime.shutdown();
-    // }
   }
 }
 

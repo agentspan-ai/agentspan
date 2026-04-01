@@ -12,7 +12,7 @@
  *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  */
 
-import { Agent, AgentRuntime } from '../src/index.js';
+import { Agent, AgentRuntime } from '../src';
 
 // -- QA Tester: reviews code and runs tests ----------------------------------
 
@@ -93,7 +93,7 @@ async function main() {
     }
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('59-coding-agent.ts') || process.argv[1]?.endsWith('59-coding-agent.js')) {

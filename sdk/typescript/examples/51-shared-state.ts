@@ -95,7 +95,7 @@ async function main() {
     result.printResult();
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('51-shared-state.ts') || process.argv[1]?.endsWith('51-shared-state.js')) {
