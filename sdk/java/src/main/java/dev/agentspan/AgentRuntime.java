@@ -341,6 +341,15 @@ public class AgentRuntime implements AutoCloseable {
             registerSwarmWorkers(agent);
         }
 
+        // Register MANUAL process_selection worker.
+        // The server creates a {name}_process_selection SIMPLE task after each
+        // HUMAN pick-agent task. This worker maps the selected agent name to its
+        // positional index (used by the SWITCH task to route to the right sub-agent).
+        if (dev.agentspan.enums.Strategy.MANUAL.equals(agent.getStrategy())
+                && !agent.getAgents().isEmpty()) {
+            registerManualWorkers(agent);
+        }
+
         // Recurse into sub-agents
         for (Agent subAgent : agent.getAgents()) {
             prepareWorkers(subAgent);
@@ -489,6 +498,48 @@ public class AgentRuntime implements AutoCloseable {
                 out.put("active_agent", currentAgent);
                 out.put("handoff", false);
             }
+            return out;
+        });
+    }
+
+    /**
+     * Register the {@code {name}_process_selection} worker for MANUAL strategy agents.
+     *
+     * <p>The server's MANUAL workflow loop has:
+     * <ol>
+     *   <li>HUMAN task ({@code {name}_pick_agent}) — pauses for human selection</li>
+     *   <li>SIMPLE task ({@code {name}_process_selection}) — maps agent name → index</li>
+     *   <li>SWITCH task routes to the selected sub-agent sub-workflow</li>
+     * </ol>
+     * This worker receives {@code {"human_output": {"selected": "<agentName>"}}} and
+     * returns {@code {"selected": "<index>"}} where the index is the 0-based position
+     * of the selected agent in the agents list.
+     */
+    @SuppressWarnings("unchecked")
+    private void registerManualWorkers(Agent manualAgent) {
+        List<Agent> subAgents = manualAgent.getAgents();
+        Map<String, String> nameToIndex = new java.util.HashMap<>();
+        for (int i = 0; i < subAgents.size(); i++) {
+            nameToIndex.put(subAgents.get(i).getName(), String.valueOf(i));
+        }
+
+        final String taskName = manualAgent.getName() + "_process_selection";
+        workerManager.register(taskName, inputData -> {
+            String selected = null;
+            Object humanOutput = inputData.get("human_output");
+            if (humanOutput instanceof Map) {
+                Object sel = ((Map<Object, Object>) humanOutput).get("selected");
+                if (sel instanceof String) {
+                    selected = (String) sel;
+                }
+            }
+            String index = (selected != null) ? nameToIndex.get(selected) : null;
+            if (index == null) {
+                logger.warn("MANUAL process_selection: unknown agent '{}'; defaulting to 0", selected);
+                index = "0";
+            }
+            Map<String, Object> out = new java.util.HashMap<>();
+            out.put("selected", index);
             return out;
         });
     }

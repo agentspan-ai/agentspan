@@ -32,7 +32,7 @@ import java.util.Map;
  */
 public class Example18ManualSelection {
 
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) {
         Agent writer = Agent.builder()
             .name("writer")
             .model(Settings.LLM_MODEL)
@@ -75,39 +75,21 @@ public class Example18ManualSelection {
         AgentHandle handle = Agentspan.start(editorialTeam, prompt);
         System.out.println("Workflow ID: " + handle.getWorkflowId());
 
-        // Drive the 3 manual turns. MANUAL strategy stays RUNNING between turns;
-        // the respond endpoint returns 500 when no HumanTask is pending yet.
-        // We retry each selection until it is accepted.
+        // Drive the 3 manual turns. Each turn the MANUAL strategy creates a
+        // HumanTask and sets isWaiting=true. We poll for that state, then send
+        // the selection. After the last turn the workflow completes.
         List<String> selections = List.of("writer", "fact_checker", "editor");
 
         for (int i = 0; i < selections.size(); i++) {
             String agentName = selections.get(i);
 
-            // Poll until the HumanTask is available, then send selection
-            boolean sent = false;
-            for (int retry = 0; retry < 60 && !sent; retry++) {
-                // Check if workflow already completed (e.g. after last turn)
-                if (handle.isWaiting()) {
-                    handle.respond(Map.of("selected", agentName));
-                    System.out.println("Turn " + (i + 1) + ": selected '" + agentName + "'");
-                    sent = true;
-                } else {
-                    // Try responding — succeeds when HumanTask is pending
-                    try {
-                        handle.respond(Map.of("selected", agentName));
-                        System.out.println("Turn " + (i + 1) + ": selected '" + agentName + "'");
-                        sent = true;
-                    } catch (Exception e) {
-                        // No pending HumanTask yet — wait and retry
-                        Thread.sleep(3_000);
-                    }
-                }
-            }
-
-            if (!sent) {
-                System.out.println("Turn " + (i + 1) + ": timed out waiting for HumanTask");
+            boolean waiting = handle.waitUntilWaiting(120_000);
+            if (!waiting) {
+                System.out.println("Turn " + (i + 1) + ": workflow completed before selection");
                 break;
             }
+            handle.respond(Map.of("selected", agentName));
+            System.out.println("Turn " + (i + 1) + ": selected '" + agentName + "'");
         }
 
         // Wait for final completion
