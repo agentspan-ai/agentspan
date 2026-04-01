@@ -82,6 +82,19 @@ public class HttpApi {
     }
 
     /**
+     * Send an arbitrary JSON response to a waiting agent.
+     *
+     * <p>Used for structured responses such as manual agent selection:
+     * {@code {"selected": "writer"}}.
+     *
+     * @param workflowId the workflow ID
+     * @param data       the response payload
+     */
+    public void respondWithData(String workflowId, Map<String, Object> data) {
+        post("/api/agent/" + workflowId + "/respond", data);
+    }
+
+    /**
      * Poll for a pending task of the given type.
      *
      * @param taskType the task type to poll

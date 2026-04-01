@@ -13,13 +13,14 @@ import dev.agentspan.model.AgentStream;
 import dev.agentspan.model.ToolDef;
 
 import java.util.List;
-import java.util.Scanner;
 
 /**
- * Example 09 — Human-in-the-Loop
+ * Example 09 — Human-in-the-Loop (auto-approve simulation)
  *
  * <p>Demonstrates tools that require human approval before execution.
  * Uses {@link Tool#approvalRequired()} and streaming to intercept WAITING events.
+ * In this example the approval is granted automatically — in a real application
+ * a UI would present the pending tool call and wait for a human decision.
  */
 public class Example09HumanInTheLoop {
 
@@ -27,10 +28,9 @@ public class Example09HumanInTheLoop {
         @Tool(
             name = "execute_sql",
             description = "Execute a SQL query on the production database",
-            approvalRequired = true  // Requires human approval
+            approvalRequired = true
         )
         public String executeSql(String query) {
-            // In a real app, this would execute the SQL
             System.out.println("\n[DATABASE] Executing: " + query);
             return "Query executed successfully. 42 rows affected.";
         }
@@ -58,13 +58,11 @@ public class Example09HumanInTheLoop {
             .tools(tools)
             .build();
 
-        Scanner scanner = new Scanner(System.in);
-
         try (AgentRuntime runtime = new AgentRuntime()) {
             AgentStream stream = runtime.stream(agent,
                 "Please update all users with 'inactive' status to 'active' and confirm the count.");
 
-            System.out.println("\nStreaming agent events (press Enter to approve/reject tools):\n");
+            System.out.println("Streaming agent events (WAITING events are auto-approved):\n");
 
             for (AgentEvent event : stream) {
                 EventType type = event.getType();
@@ -75,19 +73,9 @@ public class Example09HumanInTheLoop {
                     System.out.println("[TOOL_CALL] " + event.getToolName()
                         + " args: " + event.getArgs());
                 } else if (type == EventType.WAITING) {
-                    System.out.println("\n[WAITING] Tool '" + event.getToolName()
-                        + "' requires approval!");
-                    System.out.print("Approve? (y/n): ");
-
-                    String input = scanner.nextLine().trim().toLowerCase();
-                    if ("y".equals(input)) {
-                        System.out.println("Approving...");
-                        stream.approve();
-                    } else {
-                        System.out.print("Rejection reason: ");
-                        String reason = scanner.nextLine().trim();
-                        stream.reject(reason.isEmpty() ? "Rejected by user" : reason);
-                    }
+                    System.out.println("[WAITING] Tool '" + event.getToolName()
+                        + "' requires approval — auto-approving.");
+                    stream.approve();
                 } else if (type == EventType.TOOL_RESULT) {
                     System.out.println("[TOOL_RESULT] " + event.getResult());
                 } else if (type == EventType.MESSAGE) {

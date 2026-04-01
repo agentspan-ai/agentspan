@@ -10,6 +10,7 @@ import dev.agentspan.enums.OnFail;
 import dev.agentspan.enums.Position;
 import dev.agentspan.internal.ToolRegistry;
 import dev.agentspan.model.AgentHandle;
+import dev.agentspan.model.AgentResult;
 import dev.agentspan.model.GuardrailDef;
 import dev.agentspan.model.GuardrailResult;
 import dev.agentspan.model.ToolDef;
@@ -18,25 +19,18 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Example 32 — Human Guardrail (compliance review via HITL)
+ * Example 32 — Human Guardrail (compliance review, auto-approved)
  *
  * <p>Demonstrates an output guardrail with {@link OnFail#HUMAN}: when the
  * agent's response contains regulated financial language the workflow pauses
- * and waits for a human compliance officer to approve or reject it before
- * the response is delivered to the end-user.
+ * for human compliance review. In this example the review is auto-approved
+ * programmatically to make the example fully runnable end-to-end.
  *
- * <p>The guardrail checks for phrases that could constitute investment advice
- * or misrepresent financial risk ({@code "investment advice"},
- * {@code "guaranteed returns"}, {@code "risk-free"}). If any are present the
- * workflow enters a human-review pause rather than retrying or raising an
- * error automatically.
- *
- * <p>This example starts the workflow and prints the workflow ID. The
- * compliance review must be completed externally via the Conductor UI.
+ * <p>In a real application, a compliance officer would review the output in
+ * the Conductor UI or via {@code handle.approve()} / {@code handle.reject()}
+ * before the response is delivered to the end-user.
  */
 public class Example32HumanGuardrail {
-
-    // ── Market data tool ─────────────────────────────────────────────────
 
     static class MarketTools {
         @Tool(
@@ -44,7 +38,6 @@ public class Example32HumanGuardrail {
             description = "Get current market data for a stock ticker"
         )
         public Map<String, Object> getMarketData(String ticker) {
-            // Hardcoded demonstration data
             return Map.of(
                 "ticker", ticker.toUpperCase(),
                 "price", 185.42,
@@ -54,17 +47,10 @@ public class Example32HumanGuardrail {
         }
     }
 
-    // ── Main ─────────────────────────────────────────────────────────────
-
     public static void main(String[] args) {
-        // ── Tools ────────────────────────────────────────────────────────
-
         List<ToolDef> marketTools = ToolRegistry.fromInstance(new MarketTools());
 
-        // ── Compliance guardrail: flag regulated financial language ───────
-        // OnFail.HUMAN pauses the workflow for a human compliance officer
-        // to approve or reject the output rather than retrying or raising.
-
+        // Guardrail: flag regulated financial language — pause for human review on fail
         GuardrailDef complianceGuardrail = GuardrailDef.builder()
             .name("compliance_review")
             .position(Position.OUTPUT)
@@ -90,8 +76,6 @@ public class Example32HumanGuardrail {
             })
             .build();
 
-        // ── Finance agent ────────────────────────────────────────────────
-
         Agent financeAgent = Agent.builder()
             .name("finance_agent_32")
             .model(Settings.LLM_MODEL)
@@ -103,19 +87,24 @@ public class Example32HumanGuardrail {
             .guardrails(List.of(complianceGuardrail))
             .build();
 
-        // ── Start the workflow (fire-and-forget) ─────────────────────────
-        // The compliance guardrail may pause the workflow for human review.
-        // We start async so this process does not block.
-
+        // Start async — the compliance guardrail may pause the workflow
         AgentHandle handle = Agentspan.start(financeAgent,
             "What is the current price of AAPL and is it a good risk-free investment?");
 
-        System.out.println("Finance agent workflow started.");
         System.out.println("Workflow ID: " + handle.getWorkflowId());
-        System.out.println();
-        System.out.println(
-            "Workflow paused for human review — the compliance guardrail flagged "
-            + "the output. Approve/reject in the Conductor UI.");
+        System.out.println("Waiting for compliance guardrail review...");
+
+        // Poll for the WAITING state; auto-approve to simulate human approval
+        boolean paused = handle.waitUntilWaiting(60_000);
+        if (paused) {
+            System.out.println("Guardrail triggered — auto-approving (simulating compliance officer).");
+            handle.approve();
+        } else {
+            System.out.println("Workflow completed without guardrail pause (output was compliant).");
+        }
+
+        AgentResult result = handle.waitForResult();
+        result.printResult();
 
         Agentspan.shutdown();
     }

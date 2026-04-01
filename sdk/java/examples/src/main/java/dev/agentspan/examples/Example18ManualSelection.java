@@ -7,37 +7,32 @@ import dev.agentspan.Agent;
 import dev.agentspan.Agentspan;
 import dev.agentspan.enums.Strategy;
 import dev.agentspan.model.AgentHandle;
+import dev.agentspan.model.AgentResult;
+
+import java.util.List;
+import java.util.Map;
 
 /**
- * Example 18 — Manual Agent Selection (human-in-the-loop orchestration)
+ * Example 18 — Manual Agent Selection (programmatic simulation)
  *
- * <p>Demonstrates {@code Strategy.MANUAL} where a human operator decides
- * which sub-agent responds on each turn. Instead of the LLM or a fixed
- * rotation choosing the next speaker, the workflow pauses and waits for
- * an explicit selection before proceeding.
+ * <p>Demonstrates {@code Strategy.MANUAL} where an operator decides which
+ * sub-agent responds on each turn. The workflow pauses at a HumanTask after
+ * each turn, waiting for a {@code {"selected": "<agent_name>"}} response.
  *
- * <p>This is useful for editorial review, compliance workflows, or any
- * scenario where a human must stay in control of the conversational flow.
+ * <p>In this example the selections are driven programmatically to make the
+ * example fully runnable end-to-end. In a real application a UI would present
+ * the agent choices and a human would make the selection.
  *
- * <p>Flow:
- * <ol>
- *   <li>The {@code editorial_team} agent starts with {@code Strategy.MANUAL}</li>
- *   <li>After each turn the workflow pauses for operator input</li>
- *   <li>The operator selects the next agent via the Conductor UI or
- *       {@code handle.respond({"selected": "writer"})} calls</li>
- *   <li>The chosen sub-agent produces its response and the cycle repeats
- *       up to {@code maxTurns}</li>
- * </ol>
- *
- * <p>This example starts the workflow and prints the workflow ID. Actual
- * agent-selection interactions must be performed externally (Conductor UI
- * or programmatic {@code handle.respond()} calls).
+ * <pre>
+ * editorial_team (MANUAL, 3 turns)
+ *   turn 1 → writer       (auto-selected)
+ *   turn 2 → fact_checker (auto-selected)
+ *   turn 3 → editor       (auto-selected)
+ * </pre>
  */
 public class Example18ManualSelection {
 
-    public static void main(String[] args) {
-        // ── Sub-agents ───────────────────────────────────────────────────
-
+    public static void main(String[] args) throws InterruptedException {
         Agent writer = Agent.builder()
             .name("writer")
             .model(Settings.LLM_MODEL)
@@ -62,51 +57,62 @@ public class Example18ManualSelection {
                 + "claims in the content and flag anything unsubstantiated.")
             .build();
 
-        // ── Editorial team with MANUAL strategy ─────────────────────────
-        // Each turn the workflow pauses and waits for the operator to choose
-        // which agent responds next.
-
         Agent editorialTeam = Agent.builder()
             .name("editorial_team")
             .model(Settings.LLM_MODEL)
             .instructions(
-                "You coordinate an editorial team. A human operator will select "
+                "You coordinate an editorial team. A human operator selects "
                 + "which team member responds on each turn.")
             .agents(writer, editor, factChecker)
             .strategy(Strategy.MANUAL)
             .maxTurns(3)
             .build();
 
-        // ── Start the workflow (fire-and-forget) ─────────────────────────
-        // Agentspan.start() submits the workflow and returns immediately.
-        // The workflow pauses at each turn, waiting for the operator to pick
-        // the next agent.
-
         String prompt =
             "Draft a short paragraph about the discovery of penicillin, "
             + "then have it reviewed for accuracy and style.";
 
         AgentHandle handle = Agentspan.start(editorialTeam, prompt);
-
-        System.out.println("Editorial team workflow started.");
         System.out.println("Workflow ID: " + handle.getWorkflowId());
-        System.out.println();
 
-        // ── Interaction instructions ─────────────────────────────────────
-        // This example requires manual interaction. To drive the workflow
-        // programmatically you would call handle.respond() with the selected
-        // agent name, for example:
-        //
-        //   handle.respond("{\"selected\": \"writer\"}");
-        //   handle.respond("{\"selected\": \"fact_checker\"}");
-        //   handle.respond("{\"selected\": \"editor\"}");
-        //
-        // Or monitor and interact through the Conductor UI.
+        // Drive the 3 manual turns. MANUAL strategy stays RUNNING between turns;
+        // the respond endpoint returns 500 when no HumanTask is pending yet.
+        // We retry each selection until it is accepted.
+        List<String> selections = List.of("writer", "fact_checker", "editor");
 
-        System.out.println(
-            "This example requires manual interaction. "
-            + "Monitor at the Conductor UI or use "
-            + "handle.respond({\"selected\": \"writer\"}) to pick agents.");
+        for (int i = 0; i < selections.size(); i++) {
+            String agentName = selections.get(i);
+
+            // Poll until the HumanTask is available, then send selection
+            boolean sent = false;
+            for (int retry = 0; retry < 60 && !sent; retry++) {
+                // Check if workflow already completed (e.g. after last turn)
+                if (handle.isWaiting()) {
+                    handle.respond(Map.of("selected", agentName));
+                    System.out.println("Turn " + (i + 1) + ": selected '" + agentName + "'");
+                    sent = true;
+                } else {
+                    // Try responding — succeeds when HumanTask is pending
+                    try {
+                        handle.respond(Map.of("selected", agentName));
+                        System.out.println("Turn " + (i + 1) + ": selected '" + agentName + "'");
+                        sent = true;
+                    } catch (Exception e) {
+                        // No pending HumanTask yet — wait and retry
+                        Thread.sleep(3_000);
+                    }
+                }
+            }
+
+            if (!sent) {
+                System.out.println("Turn " + (i + 1) + ": timed out waiting for HumanTask");
+                break;
+            }
+        }
+
+        // Wait for final completion
+        AgentResult result = handle.waitForResult();
+        result.printResult();
 
         Agentspan.shutdown();
     }

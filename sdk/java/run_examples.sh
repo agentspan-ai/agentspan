@@ -28,6 +28,10 @@ get_timeout() {
     Example45AgentTool)             echo 180 ;;
     Example58ScatterGather)         echo 300 ;;
     Example59CodingAgent)           echo 180 ;;
+    Example09HumanInTheLoop)        echo 180 ;;
+    Example18ManualSelection)       echo 300 ;;
+    Example32HumanGuardrail)        echo 180 ;;
+    Example33ExternalWorkers)       echo 180 ;;
     *)                              echo "$DEFAULT_TIMEOUT" ;;
   esac
 }
@@ -35,11 +39,7 @@ get_timeout() {
 # Examples that require human-in-loop or external APIs not available — skipped
 is_skip() {
   case "$1" in
-    Example09HumanInTheLoop) return 0 ;;
-    Example16CredentialsTool) return 0 ;;
-    Example33ExternalWorkers) return 0 ;;
-    Example18ManualSelection) return 0 ;;   # requires human to pick agent each turn
-    Example32HumanGuardrail) return 0 ;;    # requires human approval in Conductor UI
+    Example16CredentialsTool) return 0 ;;   # requires external API credentials
     *) return 1 ;;
   esac
 }

@@ -105,13 +105,67 @@ public class AgentHandle {
     }
 
     /**
+     * Send an arbitrary structured response to a waiting workflow.
+     *
+     * <p>Use this for MANUAL agent selection:
+     * <pre>{@code handle.respond(Map.of("selected", "writer")); }</pre>
+     *
+     * @param data the response payload
+     */
+    public void respond(Map<String, Object> data) {
+        httpApi.respondWithData(workflowId, data);
+    }
+
+    /**
      * Send a message to a waiting agent.
      *
      * @param message the message to send
      */
     public void send(String message) {
-        // Send message via the respond endpoint
         httpApi.respondToAgent(workflowId, true, null);
+    }
+
+    /**
+     * Check whether the workflow is currently paused waiting for human input.
+     *
+     * @return true if the server reports isWaiting == true
+     */
+    public boolean isWaiting() {
+        try {
+            Map<String, Object> status = httpApi.getAgentStatus(workflowId);
+            Object waiting = status.get("isWaiting");
+            return Boolean.TRUE.equals(waiting);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Poll until the workflow is waiting for human input or reaches a terminal state.
+     *
+     * @param timeoutMs maximum wait time in milliseconds
+     * @return true if the workflow is now waiting, false if it completed/failed first
+     */
+    public boolean waitUntilWaiting(long timeoutMs) {
+        long start = System.currentTimeMillis();
+        while (System.currentTimeMillis() - start < timeoutMs) {
+            try {
+                Map<String, Object> status = httpApi.getAgentStatus(workflowId);
+                Object waiting = status.get("isWaiting");
+                if (Boolean.TRUE.equals(waiting)) return true;
+                String workflowStatus = (String) status.get("status");
+                if (workflowStatus != null && isTerminalStatus(workflowStatus)) return false;
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            } catch (Exception e) {
+                try { Thread.sleep(1000); } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt(); return false;
+                }
+            }
+        }
+        return false;
     }
 
     private boolean isTerminalStatus(String status) {
