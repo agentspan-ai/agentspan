@@ -18,4 +18,6 @@ import lombok.NoArgsConstructor;
 public class CreateTrackingWorkflowRequest {
     private String workflowName;
     private Map<String, Object> input;
+    private String parentWorkflowId;
+    private String parentWorkflowTaskId;
 }

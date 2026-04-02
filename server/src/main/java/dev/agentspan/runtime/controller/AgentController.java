@@ -209,11 +209,18 @@ public class AgentController {
     /**
      * Create a bare tracking execution for sub-agent display.
      * The execution has no tasks in its definition; tasks are injected via injectTask.
-     * Stays RUNNING permanently — completion is a future enhancement.
      */
     @PostMapping("/execution")
     public CreateTrackingWorkflowResponse createTrackingExecution(@RequestBody CreateTrackingWorkflowRequest req) {
         return agentDagService.createTrackingWorkflow(req);
+    }
+
+    /** Mark a tracking execution as COMPLETED. */
+    @PostMapping("/execution/{executionId}/complete")
+    public void completeTrackingExecution(
+            @PathVariable String executionId,
+            @RequestBody(required = false) Map<String, Object> output) {
+        agentDagService.completeTrackingWorkflow(executionId, output);
     }
 
     // ── Execution lifecycle (UI) ────────────────────────────────────
