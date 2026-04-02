@@ -22,6 +22,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
 import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
 import com.netflix.conductor.core.exception.NotFoundException;
+import com.netflix.conductor.core.execution.StartWorkflowInput;
+import com.netflix.conductor.core.execution.WorkflowExecutor;
 import com.netflix.conductor.dao.ExecutionDAO;
 import com.netflix.conductor.model.TaskModel;
 import com.netflix.conductor.model.WorkflowModel;
@@ -34,11 +36,14 @@ class AgentDagServiceTest {
     @Mock
     ExecutionDAO executionDAO;
 
+    @Mock
+    WorkflowExecutor workflowExecutor;
+
     AgentDagService service;
 
     @BeforeEach
     void setUp() {
-        service = new AgentDagService(executionDAO);
+        service = new AgentDagService(executionDAO, workflowExecutor);
     }
 
     // ── injectTask ──────────────────────────────────────────────────────────
@@ -139,23 +144,23 @@ class AgentDagServiceTest {
     // ── createTrackingWorkflow ───────────────────────────────────────────────
 
     @Test
-    void createTrackingWorkflow_callsCreateWorkflowWithRunningStatus() {
+    void createTrackingWorkflow_startsWorkflowViaExecutor() {
+        when(workflowExecutor.startWorkflow(any(StartWorkflowInput.class)))
+                .thenReturn("generated-exec-id");
+
         CreateTrackingWorkflowRequest req = new CreateTrackingWorkflowRequest();
         req.setWorkflowName("my-sub-agent");
         req.setInput(Map.of("prompt", "run the build"));
 
         CreateTrackingWorkflowResponse resp = service.createTrackingWorkflow(req);
 
-        assertThat(resp.getExecutionId()).isNotBlank();
+        assertThat(resp.getExecutionId()).isEqualTo("generated-exec-id");
 
-        ArgumentCaptor<WorkflowModel> captor = ArgumentCaptor.forClass(WorkflowModel.class);
-        verify(executionDAO).createWorkflow(captor.capture());
-        WorkflowModel created = captor.getValue();
-
-        assertThat(created.getStatus()).isEqualTo(WorkflowModel.Status.RUNNING);
-        assertThat(created.getWorkflowName()).isEqualTo("my-sub-agent");
-        assertThat(created.getInput()).containsEntry("prompt", "run the build");
-        assertThat(created.getWorkflowId()).isEqualTo(resp.getExecutionId());
+        ArgumentCaptor<StartWorkflowInput> captor = ArgumentCaptor.forClass(StartWorkflowInput.class);
+        verify(workflowExecutor).startWorkflow(captor.capture());
+        assertThat(captor.getValue().getName()).isEqualTo("my-sub-agent");
+        assertThat(captor.getValue().getWorkflowInput())
+                .containsEntry("prompt", "run the build");
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────
