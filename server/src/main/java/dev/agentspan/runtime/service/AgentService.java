@@ -166,6 +166,7 @@ public class AgentService {
      */
     @SuppressWarnings("unchecked")
     public StartResponse start(StartRequest request) {
+        validateStartInput(request);
         AgentConfig config = resolveConfig(request);
 
         // Apply per-call timeout override from StartRequest
@@ -204,6 +205,7 @@ public class AgentService {
         Map<String, Object> input = new LinkedHashMap<>();
         input.put("prompt", request.getPrompt());
         input.put("media", request.getMedia() != null ? request.getMedia() : List.of());
+        input.put("context", request.getContext() != null ? request.getContext() : Map.of());
         input.put("session_id", request.getSessionId() != null ? request.getSessionId() : "");
         if (request.getCredentials() != null && !request.getCredentials().isEmpty()) {
             input.put("credentials", request.getCredentials());
@@ -524,6 +526,34 @@ public class AgentService {
             }
         }
         return 0;
+    }
+
+    private void validateStartInput(StartRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("Start request is required");
+        }
+        if (hasMeaningfulText(request.getPrompt())
+                || hasMeaningfulMedia(request.getMedia())
+                || hasMeaningfulContext(request.getContext())) {
+            return;
+        }
+        throw new IllegalArgumentException(
+                "Agent execution requires a non-empty prompt, at least one media item, or non-empty context.");
+    }
+
+    private boolean hasMeaningfulText(String text) {
+        return text != null && !text.isBlank();
+    }
+
+    private boolean hasMeaningfulMedia(List<String> media) {
+        if (media == null || media.isEmpty()) {
+            return false;
+        }
+        return media.stream().anyMatch(item -> item != null && !item.isBlank());
+    }
+
+    private boolean hasMeaningfulContext(Map<String, Object> context) {
+        return context != null && !context.isEmpty();
     }
 
     @SuppressWarnings("unchecked")

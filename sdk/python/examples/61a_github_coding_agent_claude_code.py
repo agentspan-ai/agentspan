@@ -2,27 +2,37 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""GitHub Coding Agent — issue to PR pipeline.
+"""GitHub Coding Agent — Claude Code variant.
 
-Deploys and serves a three-stage pipeline:
-  1. Fetch open issue, create branch (CLI tools: gh, git)
-  2. Code fix + QA review (SWARM: coder <-> qa_tester)
-  3. Create pull request (CLI tool: gh)
+Same issue-to-PR pipeline as 61, but replaces the SWARM coder/qa loop
+with a single Claude Code agent that handles implementation, testing,
+and self-review natively.
+
+Architecture:
+  pipeline = git_fetch_issues >> claude_code_fixer >> git_push_pr
+
+  Stage 1: Fetch issue + create branch   (CLI tools: gh, git)
+  Stage 2: Implement fix                 (Claude Code: Bash, Read, Write, Edit, Glob, Grep)
+  Stage 3: Create pull request           (CLI tools: gh)
+
+Compared to 61 (SWARM coder <-> qa_tester):
+  - Simpler: one agent instead of a 3-agent swarm
+  - Claude Code brings its own file editing, terminal, and code navigation
+  - No need for local_code_execution — Claude Code has native tool support
 
 Run:
-    python github_coding_agent.py          # Deploy + serve
-    agentspan run github_pipeline "..."    # Trigger (from another terminal)
+    python 61a_github_coding_agent_claude_code.py
 
 Requirements:
     - Agentspan server running
     - GITHUB_TOKEN stored: agentspan credentials set --name GITHUB_TOKEN
     - gh CLI installed
+    - Claude Code SDK installed (pip install claude-code-sdk)
 """
 
-from agentspan.agents import Agent, AgentRuntime, Strategy
+from agentspan.agents import Agent, AgentRuntime, ClaudeCode
 from agentspan.agents.cli_config import CliConfig
 from agentspan.agents.gate import TextGate
-from agentspan.agents.handoff import OnTextMention
 
 REPO = "agentspan-ai/codingexamples"
 MODEL = "anthropic/claude-sonnet-4-6"
@@ -70,7 +80,7 @@ RULES:
 - Include the COMPLETE issue body in DETAILS — the next stage needs it to implement the fix.
 """,
     cli_config=CliConfig(
-        allowed_commands=["gh", "git", "mktemp", "ls"],
+        allowed_commands=["gh", "git", "mktemp"],
         allow_shell=True,
         timeout=60,
     ),
@@ -80,57 +90,56 @@ RULES:
     gate=TextGate("NO_OPEN_ISSUES"),
 )
 
-# ── Stage 2: Coding + QA (SWARM) ──────────────────────────────────
+# ── Stage 2: Claude Code fixer ────────────────────────────────────
 
-coder = Agent(
-    name="coder",
-    model=MODEL,
-    max_tokens=60000,
+claude_code_fixer = Agent(
+    name="claude_code_fixer",
+    model=ClaudeCode("sonnet", permission_mode=ClaudeCode.PermissionMode.ACCEPT_EDITS),
     credentials=["GITHUB_TOKEN", "GH_TOKEN"],
-    instructions="""\
-You are a senior developer. Your input contains issue details from the previous stage
-including REPO, BRANCH, ISSUE, AUTHOR, DETAILS, and SUMMARY.
+    instructions=f"""\
+You are a senior developer fixing a GitHub issue.
 
-1. Read the DETAILS field carefully — it contains the full issue body with requirements.
-2. Clone the repo: gh repo clone <REPO> /tmp/work && cd /tmp/work
-3. Check out the branch: git checkout <BRANCH>
-4. Implement the fix according to ALL requirements in DETAILS.
-5. Commit and push your changes.
-6. Say HANDOFF_TO_QA with REPO, BRANCH, and a summary of CHANGES.
+Your input contains structured output from the previous stage:
+  REPO, BRANCH, ISSUE, AUTHOR, DETAILS, SUMMARY
+
+Workflow:
+1. Clone the repo and check out the branch:
+   git clone https://github.com/<REPO>.git /tmp/work
+   cd /tmp/work
+   git checkout <BRANCH>
+
+2. Read the DETAILS field carefully — it contains the full issue requirements.
+
+3. Explore the codebase to understand the project structure, conventions,
+   and test patterns before making changes.
+
+4. Implement the fix:
+   - Make the SMALLEST correct change that fully resolves the issue.
+   - Match existing code style exactly.
+   - Add or update tests if the project has test infrastructure.
+
+5. Validate:
+   - Run the project's test suite if one exists.
+   - Run the linter if one exists.
+
+6. Commit and push:
+   git add <specific files>
+   git commit -m "fix: <concise description>"
+   git push origin <BRANCH>
+
+7. Output EXACTLY these lines when done:
+   REPO: <repo>
+   BRANCH: <branch>
+   ISSUE: <issue>
+   CHANGES: <summary of what was changed and why>
+
+RULES:
+- Fix root cause, not symptoms.
+- No "while I'm here" changes — every line must be justified by the issue.
+- Do NOT create a pull request — the next stage handles that.
 """,
-    local_code_execution=True,
-)
-
-qa_tester = Agent(
-    name="qa_tester",
-    model=MODEL,
-    credentials=["GITHUB_TOKEN", "GH_TOKEN"],
-    instructions="""\
-You are a QA engineer. Clone the repo, review changes, run tests.
-If bugs found: say HANDOFF_TO_CODER with what to fix.
-If good: say QA_APPROVED with REPO/BRANCH/SUMMARY.
-""",
-    local_code_execution=True,
-    max_tokens=60000,
-    max_turns=15,
-)
-
-coding_qa = Agent(
-    name="coding_qa",
-    model=MODEL,
-    instructions=(
-        "Delegate to coder, then qa_tester. Loop until QA approves. "
-        "Output REPO/BRANCH/SUMMARY when done."
-    ),
-    agents=[coder, qa_tester],
-    strategy=Strategy.SWARM,
-    handoffs=[
-        OnTextMention(text="HANDOFF_TO_QA", target="qa_tester"),
-        OnTextMention(text="HANDOFF_TO_CODER", target="coder"),
-    ],
-    max_turns=200,
-    max_tokens=60000,
-    timeout_seconds=6000,
+    tools=["Bash", "Read", "Write", "Edit", "Glob", "Grep"],
+    max_turns=50,
 )
 
 # ── Stage 3: Create PR ────────────────────────────────────────────
@@ -165,18 +174,18 @@ After the command succeeds, STOP calling tools and respond with ONLY the PR URL.
 
 # ── Pipeline ──────────────────────────────────────────────────────
 
-pipeline = git_fetch_issues >> coding_qa >> git_push_pr
+pipeline = git_fetch_issues >> claude_code_fixer >> git_push_pr
 
 if __name__ == "__main__":
     with AgentRuntime() as rt:
-        result = rt.run(pipeline, "Pick an open issue and create a PR.", timeout=240000)
+        result = rt.run(pipeline, "Pick an open issue and create a PR.", timeout=600000)
         result.print_result()
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
         # rt.deploy(pipeline)
         # CLI alternative:
-        # agentspan deploy --package examples.61_github_coding_agent_chained
+        # agentspan deploy --package examples.61a_github_coding_agent_claude_code
         #
         # 2. In a separate long-lived worker process:
         # rt.serve(pipeline)

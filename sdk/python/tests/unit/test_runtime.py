@@ -1054,6 +1054,51 @@ class TestRuntimeRunGuardrails:
             runtime.start(agent, "bad prompt")
 
 
+class TestExecutionInputValidation:
+    """Validate that execution requires prompt, media, or context."""
+
+    @pytest.fixture()
+    def runtime(self):
+        with patch("conductor.client.orkes_clients.OrkesClients"):
+            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
+                from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
+
+                config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
+                return AgentRuntime(config=config)
+
+    def test_run_rejects_blank_input_without_media_or_context(self, runtime):
+        agent = Agent(name="test", model="openai/gpt-4o")
+        runtime._start_via_server = MagicMock()
+
+        with pytest.raises(ValueError, match="non-empty prompt"):
+            runtime.run(agent, "   ")
+
+        runtime._start_via_server.assert_not_called()
+
+    def test_start_allows_blank_prompt_with_context(self, runtime):
+        agent = Agent(name="test", model="openai/gpt-4o")
+        runtime._prepare_workers = MagicMock()
+        runtime._start_via_server = MagicMock(return_value=("wf-ctx", None))
+
+        handle = runtime.start(agent, "   ", context={"repo": "acme"})
+
+        assert handle.execution_id == "wf-ctx"
+        call_kwargs = runtime._start_via_server.call_args
+        assert call_kwargs[1]["context"] == {"repo": "acme"}
+
+    def test_start_allows_blank_prompt_with_media(self, runtime):
+        agent = Agent(name="test", model="openai/gpt-4o")
+        runtime._prepare_workers = MagicMock()
+        runtime._start_via_server = MagicMock(return_value=("wf-media", None))
+
+        handle = runtime.start(agent, "   ", media=["https://example.com/cat.png"])
+
+        assert handle.execution_id == "wf-media"
+        call_kwargs = runtime._start_via_server.call_args
+        assert call_kwargs[1]["media"] == ["https://example.com/cat.png"]
+
+
 class TestRunPopulatesToolCalls:
     """Regression tests for BUG-P1-01: run() must populate tool_calls, messages, token_usage."""
 
@@ -1680,6 +1725,18 @@ class TestStartViaServer:
         payload = call_kwargs[1]["json"]
         assert payload["media"] == ["https://img.png"]
 
+    def test_start_via_server_passes_context(self, runtime):
+        """_start_via_server includes context in the payload."""
+        agent = Agent(name="test", model="openai/gpt-4o")
+
+        mock_post = _mock_requests_post({"executionId": "wf-1"})
+        with patch("requests.post", mock_post):
+            runtime._start_via_server(agent, "describe", context={"repo": "acme"})
+
+        call_kwargs = mock_post.call_args
+        payload = call_kwargs[1]["json"]
+        assert payload["context"] == {"repo": "acme"}
+
     def test_start_via_server_passes_idempotency_key(self, runtime):
         """Idempotency key is included in the payload when provided."""
         agent = Agent(name="test", model="openai/gpt-4o")
@@ -1731,6 +1788,20 @@ class TestStartFrameworkViaServer:
 
         payload = mock_post.call_args[1]["json"]
         assert payload["credentials"] == ["OPENAI_API_KEY"]
+
+    def test_start_framework_via_server_passes_context(self, runtime):
+        """Framework start payload includes context."""
+        mock_post = _mock_requests_post({"executionId": "wf-fw-1"})
+        with patch("requests.post", mock_post):
+            runtime._start_framework_via_server(
+                framework="openai",
+                raw_config={"name": "fw_agent"},
+                prompt="hello",
+                context={"repo": "acme"},
+            )
+
+        payload = mock_post.call_args[1]["json"]
+        assert payload["context"] == {"repo": "acme"}
 
 
 class TestFrameworkCredentials:
@@ -1934,6 +2005,11 @@ class TestResolvePrompt:
         """Plain string prompt is returned as-is."""
         rt, _ = runtime
         assert rt._resolve_prompt("Hello world") == "Hello world"
+
+    def test_none_resolves_to_empty_string(self, runtime):
+        """None prompt resolves to an empty string instead of literal 'None'."""
+        rt, _ = runtime
+        assert rt._resolve_prompt(None) == ""
 
     def test_template_resolved(self, runtime):
         """PromptTemplate fetches and substitutes variables."""
