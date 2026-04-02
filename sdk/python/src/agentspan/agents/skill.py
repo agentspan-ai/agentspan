@@ -7,8 +7,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 
-import yaml
-
 from agentspan.agents.agent import Agent
 
 
@@ -18,6 +16,8 @@ class SkillLoadError(Exception):
 
 def parse_frontmatter(content: str) -> Dict[str, Any]:
     """Extract YAML frontmatter from SKILL.md content."""
+    import yaml
+
     match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
     if not match:
         return {}
