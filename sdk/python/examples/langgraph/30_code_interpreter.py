@@ -121,6 +121,11 @@ graph = create_agent(
 )
 
 if __name__ == "__main__":
+    queries = [
+        "What is (17 * 23) + (45 / 5)?",
+        "Write Python code to check if a number is prime.",
+        "Evaluate: 2 ** 10 - 100",
+    ]
     with AgentRuntime() as runtime:
         for query in queries:
             print(f"\nQuery: {query}")

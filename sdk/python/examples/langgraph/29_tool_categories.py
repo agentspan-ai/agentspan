@@ -120,6 +120,11 @@ all_tools = [
 graph = create_agent(llm, tools=all_tools, name="tool_categories_agent")
 
 if __name__ == "__main__":
+    queries = [
+        "What is the square root of 144?",
+        "Reverse the string 'hello world'.",
+        "What day of the week is 2025-07-04?",
+    ]
     with AgentRuntime() as runtime:
         for query in queries:
             print(f"\nQuery: {query}")

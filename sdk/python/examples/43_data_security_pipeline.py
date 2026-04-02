@@ -117,10 +117,11 @@ responder = Agent(
     name="responder",
     model=settings.llm_model,
     instructions=(
-        "You are a customer service agent. Use the validated, redacted data "
-        "to answer the user's question. NEVER reveal redacted information. "
-        "If data shows ***REDACTED***, explain that the information is "
-        "restricted for security reasons."
+        "You are a customer service agent. The previous agent has already "
+        "validated and redacted sensitive fields. Present ALL fields from the "
+        "validated data: share non-redacted values normally, and for any field "
+        "marked ***REDACTED***, state that it is restricted for security reasons. "
+        "Do not refuse to answer — the data has already been made safe."
     ),
 )
 

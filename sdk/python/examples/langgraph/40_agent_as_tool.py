@@ -117,6 +117,11 @@ orch_builder.add_edge("tools", "orchestrator")
 graph = orch_builder.compile(name="orchestrator_with_subagents")
 
 if __name__ == "__main__":
+    queries = [
+        "What is 25 times 37?",
+        "Write a haiku about autumn leaves.",
+        "What is the capital of France and what is 100 divided by 4?",
+    ]
     with AgentRuntime() as runtime:
         for query in queries:
             print(f"\nQuery: {query}")

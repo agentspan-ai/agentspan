@@ -120,6 +120,11 @@ parent_builder.add_edge("build_report", END)
 graph = parent_builder.compile(name="document_pipeline_with_subgraph")
 
 if __name__ == "__main__":
+    sample_doc = (
+        "Quantum computing uses quantum bits (qubits) that can exist in superposition, "
+        "enabling parallel computation. Unlike classical bits, qubits leverage entanglement "
+        "and interference to solve certain problems exponentially faster."
+    )
     with AgentRuntime() as runtime:
         result = runtime.run(graph, sample_doc)
         print(f"Status: {result.status}")
