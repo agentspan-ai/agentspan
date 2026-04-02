@@ -31,18 +31,28 @@
 
 ## Quickstart (60 seconds)
 
+**Step 1 — Install** (installs the CLI, Python SDK, and verifies your setup automatically):
+
 ```bash
-# 1. Install (requires Python 3.10+)
-npm install -g @agentspan-ai/agentspan          # installs the CLI
-pip install agentspan                         # installs the Python SDK
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.sh | sh
+```
+
+```powershell
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.ps1 | iex
+```
+
+```bash
+# Step 2 — Set your LLM API key
 export OPENAI_API_KEY=sk-...                  # or any supported provider
 
-# 2. Start the server
+# Step 3 — Start the server
 agentspan server start                        # runs on localhost:6767 with UI
 ```
 
 ```python
-# 3. Run your first agent (save as hello.py, run with: python hello.py)
+# Step 4 — Run your first agent (save as hello.py, run with: python hello.py)
 from agentspan.agents import Agent, AgentRuntime, tool
 
 @tool
@@ -57,18 +67,50 @@ with AgentRuntime() as runtime:
     result.print_result()
 ```
 
-That's it. The server auto-starts workers, compiles your agent to a durable execution, and executes it. Open `http://localhost:6767` to see the visual execution UI.
+That's it. The installer handles the CLI, Python SDK, and environment check in one shot. Open `http://localhost:6767` to see the visual execution UI.
 
-<details><summary>Alternative install methods</summary>
+<details><summary>Advanced / Alternative Install</summary>
+
+### npm + pip (manual)
 
 ```bash
-# CLI alternative (if you don't have npm)
-curl -fsSL https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.sh | sh
+npm install -g @agentspan-ai/agentspan        # installs the CLI
+pip install agentspan                         # installs the Python SDK
+agentspan doctor                              # verify setup
+```
 
-# Python SDK with uv
+### Homebrew (macOS / Linux)
+
+```bash
+brew install agentspan-ai/agentspan           # installs the CLI
+pip install agentspan                         # installs the Python SDK
+agentspan doctor
+```
+
+### Python SDK with uv
+
+```bash
 uv pip install agentspan
+```
 
-# Verify setup
+### Windows — CMD / double-click
+
+Download [`install.bat`](https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.bat) and run it, or paste into CMD:
+
+```bat
+curl -fsSL https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.bat -o install.bat && install.bat
+```
+
+### From source
+
+```bash
+cd cli && go build -o agentspan .             # build the CLI
+pip install agentspan                         # install the Python SDK
+```
+
+### Verify setup manually
+
+```bash
 agentspan doctor
 ```
 
