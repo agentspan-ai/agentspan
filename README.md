@@ -32,7 +32,7 @@
 ## Quickstart (60 seconds)
 
 ```bash
-# 1. Install
+# 1. Install (requires Python 3.10+)
 npm install -g @agentspan-ai/agentspan          # installs the CLI
 pip install agentspan                         # installs the Python SDK
 export OPENAI_API_KEY=sk-...                  # or any supported provider
