@@ -1,6 +1,7 @@
 package dev.agentspan.runtime.credentials;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,21 +22,25 @@ class CredentialDataSourceConfigTest {
 
     @Test
     void schemaIsCreated_usersTableExists() {
-        Integer count = credentialJdbc.queryForObject(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='users'",
+        // Query the table directly — if it doesn't exist the query throws,
+        // which is a portable way to assert existence without relying on
+        // database-specific metadata tables (sqlite_master, information_schema, etc.)
+        assertThatCode(() -> credentialJdbc.queryForObject(
+                "SELECT COUNT(*) FROM users",
                 java.util.Map.of(),
-                Integer.class);
-        assertThat(count).isEqualTo(1);
+                Integer.class))
+                .doesNotThrowAnyException();
     }
 
     @Test
     void schemaIsCreated_allFourTablesExist() {
         for (String table : java.util.List.of("users", "api_keys", "credentials_store", "credentials_binding")) {
-            Integer count = credentialJdbc.queryForObject(
-                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=:t",
-                    java.util.Map.of("t", table),
-                    Integer.class);
-            assertThat(count).as("table %s should exist", table).isEqualTo(1);
+            assertThatCode(() -> credentialJdbc.queryForObject(
+                    "SELECT COUNT(*) FROM " + table,
+                    java.util.Map.of(),
+                    Integer.class))
+                    .as("table %s should exist and be queryable", table)
+                    .doesNotThrowAnyException();
         }
     }
 }

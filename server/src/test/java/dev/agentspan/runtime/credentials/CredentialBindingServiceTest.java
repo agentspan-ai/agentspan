@@ -6,6 +6,7 @@ package dev.agentspan.runtime.credentials;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 
@@ -35,10 +36,17 @@ class CredentialBindingServiceTest {
     @BeforeEach
     void setUp() {
         jdbc.update("DELETE FROM credentials_binding WHERE user_id = :uid", Map.of("uid", USER_ID));
-        jdbc.update(
-                "INSERT OR IGNORE INTO users (id, name, email, username, password_hash, created_at) "
-                        + "VALUES (:id, 'Binding Test', '', 'binding_test_user', '', datetime('now'))",
+        // Portable upsert: update first; insert only if the user row doesn't exist yet.
+        // Avoids SQLite-specific "INSERT OR IGNORE" and "datetime('now')" syntax.
+        int updated = jdbc.update(
+                "UPDATE users SET name = 'Binding Test' WHERE id = :id",
                 Map.of("id", USER_ID));
+        if (updated == 0) {
+            jdbc.update(
+                    "INSERT INTO users (id, name, email, username, password_hash, created_at) "
+                            + "VALUES (:id, 'Binding Test', '', 'binding_test_user', '', :now)",
+                    Map.of("id", USER_ID, "now", Instant.now().toString()));
+        }
     }
 
     @Test
