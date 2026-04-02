@@ -439,9 +439,13 @@ function transformChainWorkflowToAgentRun(execution: WorkflowExecution): AgentRu
     if (typeof candidate === "string" && (candidate as string).length > 0) chainOutput = candidate as string;
   }
 
+  const chainModel = (agentDef?.model as string | undefined) ??
+    tasks.find(t => t.taskType === "LLM_CHAT_COMPLETE")?.inputData?.model as string | undefined;
+
   return {
     id: execution.workflowId,
     agentName: (execution as any).workflowName ?? execution.workflowType ?? "agent",
+    model: chainModel,
     turns,
     status: mapWorkflowStatus(execution.status),
     agentDef,
@@ -1260,9 +1264,15 @@ export function transformWorkflowExecutionToAgentRun(
 
   const agentDef = (execution.workflowDefinition?.metadata?.agentDef as Record<string, unknown> | undefined);
 
+  // Extract model from agentDef metadata or from first LLM task
+  const agentModel =
+    (agentDef?.model as string | undefined) ??
+    tasks.find(t => t.taskType === "LLM_CHAT_COMPLETE")?.inputData?.model as string | undefined;
+
   return {
     id: execution.workflowId,
     agentName: (execution as any).workflowName ?? execution.workflowType ?? "agent",
+    model: agentModel,
     turns,
     status: mapWorkflowStatus(execution.status),
     agentDef,

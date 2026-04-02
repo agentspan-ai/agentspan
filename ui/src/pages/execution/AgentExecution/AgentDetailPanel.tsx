@@ -647,7 +647,7 @@ function GroupDetailPanel({ node, onDrillIn }: { node: DetailNodeData; onDrillIn
                 </Box>
               </Box>
             )}
-            {onDrillIn && (
+            {onDrillIn && selAgent.subWorkflowId && (
               <Box sx={{ px: 2, py: 1 }}>
                 <Box
                   onClick={() => onDrillIn(selAgent)}
@@ -771,7 +771,7 @@ function SummaryContent({ node, onDrillIn }: { node: DetailNodeData; onDrillIn?:
           {ct > 0 && <SummaryRow label="Completion tokens" value={formatTokens(ct)} />}
           {run.finishReason && <SummaryRow label="Finish reason" value={run.finishReason.toUpperCase()} />}
         </SummaryTable>
-        {onDrillIn && (
+        {onDrillIn && run.subWorkflowId && (
           <Box sx={{ px: 2, py: 1 }}>
             <Box
               onClick={() => onDrillIn(run)}
@@ -953,7 +953,7 @@ function SummaryContent({ node, onDrillIn }: { node: DetailNodeData; onDrillIn?:
           {ct > 0 && <SummaryRow label="Completion tokens" value={formatTokens(ct)} />}
           {run.failureReason && <SummaryRow label="Failure reason" value={<span style={{ color: "#DC2626" }}>{run.failureReason}</span>} />}
         </SummaryTable>
-        {onDrillIn && (
+        {onDrillIn && run.subWorkflowId && (
           <Box sx={{ px: 2, py: 1 }}>
             <Box
               onClick={() => onDrillIn(run)}
@@ -1062,8 +1062,8 @@ export function AgentDetailPanel({ node, onClose, onDrillIn }: AgentDetailPanelP
       <Paper square elevation={0} sx={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden", borderLeft: "1px solid", borderColor: "divider", backgroundColor: "#fff" }}>
         <Box sx={{ px: 2.5, pt: 2, pb: 1.5, borderBottom: "1px solid", borderColor: "divider", flexShrink: 0 }}>
           <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
-            <IconButton size="small" onClick={onClose} sx={{ width: 26, height: 26, color: "text.disabled", flexShrink: 0, mt: 0.25, "&:hover": { color: "text.primary" } }}>
-              <CloseIcon size={14} />
+            <IconButton size="small" onClick={onClose} sx={{ width: 28, height: 28, color: "text.primary", flexShrink: 0, mt: 0.25 }}>
+              <CloseIcon size={16} />
             </IconButton>
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 0.5 }}>
@@ -1072,7 +1072,7 @@ export function AgentDetailPanel({ node, onClose, onDrillIn }: AgentDetailPanelP
                 </Typography>
                 <StatusChip status={node.status} />
               </Box>
-              <Typography sx={{ fontSize: "0.7rem", color: "text.disabled", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+              <Typography sx={{ fontSize: "0.7rem", color: "text.secondary", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>
                 {node.groupType === "agents" ? "Parallel Agents" : "Parallel Tool Calls"}
               </Typography>
             </Box>
@@ -1111,9 +1111,9 @@ export function AgentDetailPanel({ node, onClose, onDrillIn }: AgentDetailPanelP
         <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
           <IconButton
             size="small" onClick={onClose}
-            sx={{ width: 26, height: 26, color: "text.disabled", flexShrink: 0, mt: 0.25, "&:hover": { color: "text.primary" } }}
+            sx={{ width: 28, height: 28, color: "text.primary", flexShrink: 0, mt: 0.25 }}
           >
-            <CloseIcon size={14} />
+            <CloseIcon size={16} />
           </IconButton>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             {/* Name + status badge inline */}
@@ -1124,7 +1124,7 @@ export function AgentDetailPanel({ node, onClose, onDrillIn }: AgentDetailPanelP
               <StatusChip status={node.status} />
             </Box>
             {/* Kind label below */}
-            <Typography sx={{ fontSize: "0.7rem", color: "text.disabled", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+            <Typography sx={{ fontSize: "0.7rem", color: "text.secondary", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>
               {KIND_DISPLAY[node.kind]}
             </Typography>
           </Box>
