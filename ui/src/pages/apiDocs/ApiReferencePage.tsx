@@ -1,20 +1,15 @@
 /**
  * API Reference Page
  *
- * Redirects to the Swagger UI for API documentation.
- * This is a simple redirect component that opens the Swagger UI in the current window.
+ * Redirects to the static API docs page.
  */
 
 import { useEffect } from "react";
 import { Box, CircularProgress, Typography } from "@mui/material";
 
-const getSwaggerUrl = () =>
-  `//${window.location.host}/swagger-ui/index.html?configUrl=/api-docs/swagger-config#/`;
-
 export default function ApiReferencePage() {
   useEffect(() => {
-    // Redirect to Swagger UI
-    window.location.href = getSwaggerUrl();
+    window.location.href = "/docs/";
   }, []);
 
   return (

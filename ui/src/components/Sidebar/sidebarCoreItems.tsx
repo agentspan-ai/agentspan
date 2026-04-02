@@ -222,7 +222,7 @@ export function getCoreSidebarItems(open: boolean): MenuItemType[] {
       id: "swaggerItem",
       title: "API Docs",
       icon: <WebhookOutlinedIcon />,
-      linkTo: "/api-reference",
+      linkTo: "/docs",
       shortcuts: [],
       hotkeys: "",
       hidden: false,
