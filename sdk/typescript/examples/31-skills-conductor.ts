@@ -9,7 +9,7 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api
  *   - conductor-skills installed (https://github.com/conductor-oss/conductor-skills)
  */
 
@@ -37,7 +37,7 @@ async function runStandalone() {
     console.log(`Execution ID: ${result.executionId}`);
     console.log(`Status: ${result.status}`);
     console.log(`Tokens: ${JSON.stringify(result.tokenUsage)}`);
-    console.log(`Output: ${JSON.stringify(result.output).slice(0, 500)}`);
+    result.printResult();
   } finally {
     await runtime.shutdown();
   }
@@ -55,7 +55,7 @@ async function runWithLoadSkills() {
       const result = await runtime.run(skills['conductor'], 'List all workflow definitions');
       console.log(`Execution ID: ${result.executionId}`);
       console.log(`Status: ${result.status}`);
-      console.log(`Output: ${JSON.stringify(result.output).slice(0, 500)}`);
+      result.printResult();
     } finally {
       await runtime.shutdown();
     }
@@ -104,12 +104,12 @@ async function runMultiSkillTeam() {
 
     if (result.subResults) {
       console.log('\nSub-agent executions:');
-      for (const sub of result.subResults) {
-        console.log(`  - ${sub.agentName}: ${sub.status} (tokens: ${JSON.stringify(sub.tokenUsage)})`);
+      for (const [agentName, subResult] of Object.entries(result.subResults)) {
+        console.log(`  - ${agentName}: ${JSON.stringify(subResult)}`);
       }
     }
 
-    console.log(`\nOutput: ${JSON.stringify(result.output).slice(0, 500)}`);
+    result.printResult();
   } finally {
     await runtime.shutdown();
   }

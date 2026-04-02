@@ -14,7 +14,7 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -82,65 +82,66 @@ export const agent = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(agent);
-    await runtime.serve(agent);
+    // -- Scenario 1: Guardrail TRIGGERS -- PII in tool output -----------------
+    console.log('='.repeat(60));
+    console.log('  Scenario 1: Request PII -- guardrails trigger');
+    console.log('='.repeat(60));
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const runtime = new AgentRuntime();
-    // try {
-    // // -- Scenario 1: Guardrail TRIGGERS -- PII in tool output -----------------
-    // console.log('='.repeat(60));
-    // console.log('  Scenario 1: Request PII -- guardrails trigger');
-    // console.log('='.repeat(60));
+    const result = await runtime.run(
+    agent,
+    'Tell me everything about user U-001.',
+    );
+    result.printResult();
 
-    // const result = await runtime.run(
-    // agent,
-    // 'Tell me everything about user U-001.',
-    // );
-    // result.printResult();
+    const output = JSON.stringify(result.output);
+    if (output.includes('alice.johnson@example.com')) {
+    console.log('[FAIL] Email leaked!');
+    } else {
+    console.log('[OK] Email was blocked by RegexGuardrail');
+    }
 
-    // const output = JSON.stringify(result.output);
-    // if (output.includes('alice.johnson@example.com')) {
-    // console.log('[FAIL] Email leaked!');
-    // } else {
-    // console.log('[OK] Email was blocked by RegexGuardrail');
-    // }
+    if (output.includes('123-45-6789')) {
+    console.log('[FAIL] SSN leaked!');
+    } else {
+    console.log('[OK] SSN was blocked by RegexGuardrail');
+    }
 
-    // if (output.includes('123-45-6789')) {
-    // console.log('[FAIL] SSN leaked!');
-    // } else {
-    // console.log('[OK] SSN was blocked by RegexGuardrail');
-    // }
+    // -- Scenario 2: Guardrail does NOT trigger -- no PII ---------------------
+    console.log('\n' + '='.repeat(60));
+    console.log('  Scenario 2: Non-PII question -- guardrails pass');
+    console.log('='.repeat(60));
 
-    // // -- Scenario 2: Guardrail does NOT trigger -- no PII ---------------------
-    // console.log('\n' + '='.repeat(60));
-    // console.log('  Scenario 2: Non-PII question -- guardrails pass');
-    // console.log('='.repeat(60));
+    // New agent without PII-returning tool
+    const cleanAgent = new Agent({
+    name: 'dept_assistant',
+    model: llmModel,
+    instructions: 'You are an HR assistant. Answer questions about departments.',
+    guardrails: [noEmails, noSsn],
+    });
 
-    // // New agent without PII-returning tool
-    // const cleanAgent = new Agent({
-    // name: 'dept_assistant',
-    // model: llmModel,
-    // instructions: 'You are an HR assistant. Answer questions about departments.',
-    // guardrails: [noEmails, noSsn],
-    // });
+    const result2 = await runtime.run(
+    cleanAgent,
+    'What departments exist at the company?',
+    );
+    result2.printResult();
 
-    // const result2 = await runtime.run(
-    // cleanAgent,
-    // 'What departments exist at the company?',
-    // );
-    // result2.printResult();
+    if (result2.status === 'COMPLETED') {
+    console.log('[OK] Clean response passed guardrails successfully');
+    } else {
+    console.log(`[WARN] Unexpected status: ${result2.status}`);
+    }
 
-    // if (result2.status === 'COMPLETED') {
-    // console.log('[OK] Clean response passed guardrails successfully');
-    // } else {
-    // console.log(`[WARN] Unexpected status: ${result2.status}`);
-    // }
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents hr_assistant
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('21-regex-guardrails.ts') || process.argv[1]?.endsWith('21-regex-guardrails.js')) {

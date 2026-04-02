@@ -9,7 +9,7 @@ Demonstrates:
     - Multiple terminal nodes converging to END
 
 Requirements:
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
@@ -96,12 +96,15 @@ graph = builder.compile(name="sentiment_router")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.langgraph.06_conditional_routing
-        runtime.deploy(graph)
-        runtime.serve(graph)
+        result = runtime.run(graph, "I just got promoted at work and I'm thrilled!")
+        print(f"Status: {result.status}")
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(graph, "I just got promoted at work and I'm thrilled!")
-        # print(f"Status: {result.status}")
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.06_conditional_routing
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)

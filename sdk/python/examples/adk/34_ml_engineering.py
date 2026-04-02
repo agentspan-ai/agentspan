@@ -28,8 +28,8 @@ Architecture:
 Requirements:
     - pip install google-adk
     - Conductor server
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
-    - AGENT_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api in .env or environment
+    - AGENTSPAN_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
 """
 
 from google.adk.agents import Agent, LoopAgent, ParallelAgent, SequentialAgent
@@ -201,17 +201,20 @@ ml_pipeline = SequentialAgent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.adk.34_ml_engineering
-        runtime.deploy(ml_pipeline)
-        runtime.serve(ml_pipeline)
+        result = runtime.run(
+        ml_pipeline,
+        "Build a model to predict California housing prices. The dataset has 20,640 samples "
+        "with 8 features: MedInc, HouseAge, AveRooms, AveBedrms, Population, AveOccup, "
+        "Latitude, Longitude. Target: MedianHouseValue (continuous, in $100k units). "
+        "Metric: RMSE. Some features have skewed distributions.",
+        )
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        # ml_pipeline,
-        # "Build a model to predict California housing prices. The dataset has 20,640 samples "
-        # "with 8 features: MedInc, HouseAge, AveRooms, AveBedrms, Population, AveOccup, "
-        # "Latitude, Longitude. Target: MedianHouseValue (continuous, in $100k units). "
-        # "Metric: RMSE. Some features have skewed distributions.",
-        # )
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(ml_pipeline)
+        # CLI alternative:
+        # agentspan deploy --package examples.adk.34_ml_engineering
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(ml_pipeline)

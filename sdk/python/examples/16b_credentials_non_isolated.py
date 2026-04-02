@@ -130,12 +130,15 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.16b_credentials_non_isolated
-        runtime.deploy(agent)
-        runtime.serve(agent)
+        result = runtime.run(agent, "Show me the 3 most recent charges.")
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(agent, "Show me the 3 most recent charges.")
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.16b_credentials_non_isolated
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
 

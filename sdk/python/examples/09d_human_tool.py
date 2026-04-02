@@ -18,7 +18,7 @@ Demonstrates:
     - The LLM using human input to make decisions
 
 Requirements:
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - AGENTSPAN_LLM_MODEL (default: openai/gpt-4o-mini)
 """
 
@@ -66,12 +66,19 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.09d_human_tool
-        runtime.deploy(agent)
-        runtime.serve(agent)
+        result = runtime.run(agent, "Look up Alice and summarize what details are still needed before filing a laptop support ticket.")
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.09d_human_tool
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
+
+        # Interactive human-tool alternative:
         # handle = runtime.start(agent, "I need to file a ticket for Alice about a laptop issue")
         # print(f"Workflow started: {handle.execution_id}\n")
 

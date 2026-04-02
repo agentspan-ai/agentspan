@@ -47,24 +47,27 @@ export const creativeAgent = new LlmAgent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(factualAgent);
-    await runtime.serve(factualAgent);
+    console.log('--- Factual Agent (temp=0.1) ---');
+    const factResult = await runtime.run(factualAgent, 'What is the speed of light in a vacuum?');
+    console.log('Status:', factResult.status);
+    factResult.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // console.log('--- Factual Agent (temp=0.1) ---');
-    // const factResult = await runtime.run(factualAgent, 'What is the speed of light in a vacuum?');
-    // console.log('Status:', factResult.status);
-    // factResult.printResult();
+    console.log('\n--- Creative Agent (temp=0.9) ---');
+    const creativeResult = await runtime.run(
+    creativeAgent,
+    'Write a two-sentence story about a cat who discovered a hidden library.',
+    );
+    console.log('Status:', creativeResult.status);
+    creativeResult.printResult();
 
-    // console.log('\n--- Creative Agent (temp=0.9) ---');
-    // const creativeResult = await runtime.run(
-    // creativeAgent,
-    // 'Write a two-sentence story about a cat who discovered a hidden library.',
-    // );
-    // console.log('Status:', creativeResult.status);
-    // creativeResult.printResult();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(factualAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents fact_checker
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(factualAgent);
   } finally {
     await runtime.shutdown();
   }

@@ -1,5 +1,5 @@
 import type { ToolContext } from './types.js';
-import { AgentAPIError } from './errors.js';
+import { AgentAPIError, TerminalToolError } from './errors.js';
 import { extractExecutionToken, setCredentialContext, clearCredentialContext, resolveCredentials, injectCredentials } from './credentials.js';
 
 // ── Type coercion (base spec §14.1) ─────────────────────
@@ -485,10 +485,12 @@ export class WorkerManager {
         await this.reportSuccess(task.taskId, task.workflowInstanceId, result);
       } catch (error) {
         recordFailure(worker.taskName);
+        const isTerminal = error instanceof TerminalToolError;
         await this.reportFailure(
           task.taskId,
           task.workflowInstanceId,
           error instanceof Error ? error : new Error(String(error)),
+          isTerminal,
         );
       } finally {
         cleanupCredentials?.();

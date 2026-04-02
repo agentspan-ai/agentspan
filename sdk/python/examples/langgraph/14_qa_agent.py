@@ -9,7 +9,7 @@ Demonstrates:
     - Grounded answer generation using retrieved context
 
 Requirements:
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
@@ -91,15 +91,18 @@ graph = builder.compile(name="qa_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.langgraph.14_qa_agent
-        runtime.deploy(graph)
-        runtime.serve(graph)
+        result = runtime.run(
+        graph,
+        "What is Python and how many packages does it have?",
+        )
+        print(f"Status: {result.status}")
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        # graph,
-        # "What is Python and how many packages does it have?",
-        # )
-        # print(f"Status: {result.status}")
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.14_qa_agent
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)

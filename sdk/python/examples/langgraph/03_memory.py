@@ -9,7 +9,7 @@ Demonstrates:
     - How the agent remembers context from earlier messages
 
 Requirements:
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
@@ -31,36 +31,36 @@ graph = create_agent(
 )
 
 if __name__ == "__main__":
-    # Use a fixed session_id so the agent remembers across turns
-    SESSION_ID = "user-session-001"
-
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.langgraph.03_memory
-        runtime.deploy(graph)
-        runtime.serve(graph)
+        print("=== Turn 1: Introduce a name ===")
+        result1 = runtime.run(
+        graph,
+        "My name is Alice. Please remember that.",
+        session_id=SESSION_ID,
+        )
+        result1.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # print("=== Turn 1: Introduce a name ===")
-        # result1 = runtime.run(
-        # graph,
-        # "My name is Alice. Please remember that.",
-        # session_id=SESSION_ID,
-        # )
-        # result1.print_result()
+        print("\n=== Turn 2: Ask the agent to recall ===")
+        result2 = runtime.run(
+        graph,
+        "What is my name?",
+        session_id=SESSION_ID,
+        )
+        result2.print_result()
 
-        # print("\n=== Turn 2: Ask the agent to recall ===")
-        # result2 = runtime.run(
-        # graph,
-        # "What is my name?",
-        # session_id=SESSION_ID,
-        # )
-        # result2.print_result()
+        print("\n=== Turn 3: Continue the conversation ===")
+        result3 = runtime.run(
+        graph,
+        "Give me a fun fact about the name Alice.",
+        session_id=SESSION_ID,
+        )
+        result3.print_result()
 
-        # print("\n=== Turn 3: Continue the conversation ===")
-        # result3 = runtime.run(
-        # graph,
-        # "Give me a fun fact about the name Alice.",
-        # session_id=SESSION_ID,
-        # )
-        # result3.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.03_memory
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)

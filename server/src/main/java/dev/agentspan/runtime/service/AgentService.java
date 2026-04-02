@@ -110,7 +110,9 @@ public class AgentService {
         stampAgentDef(metadata, request);
         def.setMetadata(metadata);
 
-        List<String> requiredWorkers = new ArrayList<>(collectSimpleTaskNames(def));
+        Set<String> workerNames = collectSimpleTaskNames(def);
+        collectDynamicTransferNames(config, workerNames);
+        List<String> requiredWorkers = new ArrayList<>(workerNames);
         Map<String, Object> defMap = MAPPER.convertValue(def, Map.class);
         return CompileResponse.builder()
                 .workflowDef(defMap)
@@ -150,9 +152,11 @@ public class AgentService {
         validateModelProvider(config)
                 .ifPresent(err -> log.warn("Provider not configured for agent '{}': {}", config.getName(), err));
 
+        Set<String> deployWorkerNames = collectSimpleTaskNames(def);
+        collectDynamicTransferNames(config, deployWorkerNames);
         return StartResponse.builder()
                 .agentName(def.getName())
-                .requiredWorkers(new ArrayList<>(collectSimpleTaskNames(def)))
+                .requiredWorkers(new ArrayList<>(deployWorkerNames))
                 .build();
     }
 
@@ -242,7 +246,9 @@ public class AgentService {
 
         startReq.setInput(input);
 
-        List<String> requiredWorkers = new ArrayList<>(collectSimpleTaskNames(def));
+        Set<String> startWorkerNames = collectSimpleTaskNames(def);
+        collectDynamicTransferNames(config, startWorkerNames);
+        List<String> requiredWorkers = new ArrayList<>(startWorkerNames);
 
         // Idempotency: use the key as correlationId and check for existing executions
         if (request.getIdempotencyKey() != null && !request.getIdempotencyKey().isEmpty()) {
@@ -1088,6 +1094,43 @@ public class AgentService {
         Set<String> names = new LinkedHashSet<>();
         collectSimpleTaskNamesFromTasks(workflowDef.getTasks(), names);
         return names;
+    }
+
+    /**
+     * Collect dynamically-dispatched swarm/hybrid transfer tool task names from the agent config.
+     * These tasks are created at runtime by FORK (based on LLM tool calls) and are not
+     * statically present in the compiled WorkflowDef, so collectSimpleTaskNames misses them.
+     */
+    private void collectDynamicTransferNames(AgentConfig config, Set<String> names) {
+        if (config == null) return;
+        // Swarm: {source}_transfer_to_{peer} for each pair
+        if ("swarm".equals(config.getStrategy()) && config.getAgents() != null && !config.getAgents().isEmpty()) {
+            List<String> allNames = new ArrayList<>();
+            allNames.add(config.getName());
+            for (AgentConfig sub : config.getAgents()) {
+                allNames.add(sub.getName());
+            }
+            for (String src : allNames) {
+                for (String dst : allNames) {
+                    if (!src.equals(dst)) {
+                        names.add(src + "_transfer_to_" + dst);
+                    }
+                }
+            }
+        }
+        // Hybrid: {parent}_transfer_to_{sub} for agents with both tools and sub-agents
+        if (config.getAgents() != null && !config.getAgents().isEmpty()
+                && config.getTools() != null && !config.getTools().isEmpty()) {
+            for (AgentConfig sub : config.getAgents()) {
+                names.add(config.getName() + "_transfer_to_" + sub.getName());
+            }
+        }
+        // Recurse into sub-agents
+        if (config.getAgents() != null) {
+            for (AgentConfig sub : config.getAgents()) {
+                collectDynamicTransferNames(sub, names);
+            }
+        }
     }
 
     private void collectSimpleTaskNamesFromTasks(List<WorkflowTask> tasks, Set<String> names) {

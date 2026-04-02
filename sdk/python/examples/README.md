@@ -1,6 +1,51 @@
 # Examples
 
-Runnable examples demonstrating every feature of the Conductor Agents SDK.
+Runnable examples demonstrating every feature of the Agentspan SDK.
+
+---
+
+## Examples vs. Production
+
+> **Every example uses `runtime.run()` for convenience. In production, you should not.**
+
+Examples call `runtime.run()` so you can try them in a single command — no setup, no
+separate processes. But `run()` blocks the caller until the agent finishes, which is fine
+for demos but not how you deploy real agents.
+
+### Production: Deploy → Serve → Run
+
+In production, the three concerns are separated:
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  1. DEPLOY (once, during CI/CD)                              │
+│     Registers the agent definition with the Agentspan server │
+│                                                              │
+│     runtime.deploy(agent)                                    │
+│     # or CLI: agentspan deploy --package my_agents           │
+├──────────────────────────────────────────────────────────────┤
+│  2. SERVE (long-running worker process)                      │
+│     Listens for tool-call tasks and executes them            │
+│                                                              │
+│     runtime.serve(agent)                                     │
+│     # typically run as a daemon, container, or systemd unit  │
+├──────────────────────────────────────────────────────────────┤
+│  3. RUN (on-demand, from anywhere)                           │
+│     Triggers an agent execution                              │
+│                                                              │
+│     agentspan run <agent-name> "prompt"                      │
+│     # or SDK: runtime.run("agent_name", "prompt")            │
+│     # or REST API                                            │
+└──────────────────────────────────────────────────────────────┘
+```
+
+Every example includes the deploy/serve pattern as commented code at the bottom of its
+`__main__` block — look for the `# Production pattern:` comment.
+
+See [63_deploy.py](63_deploy.py), [63b_serve.py](63b_serve.py), and
+[63c_run_by_name.py](63c_run_by_name.py) for a complete working example of this pattern.
+
+---
 
 ## Getting Started
 
@@ -206,22 +251,16 @@ python examples/adk/01_basic_agent.py
 
 | # | Example | What it demonstrates |
 |---|---------|---------------------|
-| 11 | [Streaming](11_streaming.py) | Real-time events via `runtime.stream()` | `AgentEvent`, `EventType` |
-| 12 | [Long-Running](12_long_running.py) | Fire-and-forget with status polling from any process | `runtime.start()`, `handle.get_status()` |
-| 72 | [Client Reconnect](72_client_reconnect.py) | Hard-kill the SDK client, reconnect later, and continue the same agent execution | `runtime.start()`, `runtime.get_status()`, `runtime.respond()` |
-| 73 | [Worker Restart Recovery](73_worker_restart_recovery.py) | Start an agent with workers down, restart the worker service, and watch the same execution finish | `runtime.deploy()`, `runtime.serve()`, `runtime.start()` |
+| 11 | [Streaming](11_streaming.py) | Default `runtime.run()` flow with a commented `runtime.stream()` alternative for real-time events | `runtime.run()`, `AgentEvent`, `EventType` |
+| 12 | [Long-Running](12_long_running.py) | Default `runtime.run()` flow with a commented `runtime.start()` alternative for async polling | `runtime.run()`, `runtime.start()`, `handle.get_status()` |
+| 72 | [Client Reconnect](72_client_reconnect.py) | Default `runtime.run()` flow plus an advanced reconnect demo that resumes the same execution after client death | `runtime.run()`, `runtime.start()`, `runtime.get_status()`, `runtime.respond()` |
+| 73 | [Worker Restart Recovery](73_worker_restart_recovery.py) | Default `runtime.run()` flow plus an advanced deploy/serve/start recovery demo | `runtime.run()`, `runtime.deploy()`, `runtime.serve()`, `runtime.start()` |
 
 ## Multimodal
 
 | # | Example | What it demonstrates |
 |---|---------|---------------------|
 | 30 | [Multimodal Agent](30_multimodal_agent.py) | Image/video analysis with vision models via the `media` parameter | `media=["url"]` |
-
-## Prompt Templates
-
-| # | Example | What it demonstrates |
-|---|---------|---------------------|
-| 34 | [Prompt Templates](34_prompt_templates.py) | Reusable, versioned prompts stored on the server for instructions and user prompts | `PromptTemplate` |
 
 ## Integrations
 
@@ -277,8 +316,9 @@ Quick lookup — find the right example for any SDK feature:
 | `approval_required=True` | 02, 09 |
 | `handle.approve()` / `reject()` | 09 |
 | `handle.respond()` / `send()` | 09b, 27 |
+| `runtime.run()` | 01, 02, 11, 12, 72, 73 |
 | `runtime.stream()` | 09c, 11 |
-| `runtime.start()` | 12, 18, 27 |
+| `runtime.start()` | 12, 18, 27, 72, 73 |
 | `@guardrail` decorator | 10, 35 |
 | `Guardrail` | 10, 32 |
 | `OnFail` / `Position` enums | 10 |
@@ -306,5 +346,5 @@ Quick lookup — find the right example for any SDK feature:
 | `@tool(external=True)` | 33 |
 | `OnTextMention` / `OnToolResult` | 17 |
 | `media` (multimodal input) | 30 |
-| `PromptTemplate` | 34 |
+| `PromptTemplate` | kitchen_sink |
 | `from __future__ import annotations` | 38 |

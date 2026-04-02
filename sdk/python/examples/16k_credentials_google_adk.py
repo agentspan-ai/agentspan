@@ -47,18 +47,20 @@ def create_adk_agent():
 if __name__ == "__main__":
     agent = create_adk_agent()
 
-
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.16k_credentials_google_adk
-        runtime.deploy(agent)
-        runtime.serve(agent)
+        result = runtime.run(
+            agent,
+            "Is GitHub authentication available?",
+            credentials=["GITHUB_TOKEN"],
+        )
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        #     agent,
-        #     "Is GitHub authentication available?",
-        #     credentials=["GITHUB_TOKEN"],
-        # )
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.16k_credentials_google_adk
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
 

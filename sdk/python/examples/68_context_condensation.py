@@ -36,7 +36,7 @@ agents that accumulate very large tool outputs.
 
 Requirements:
     - Conductor server with LLM support + ``agentspan.default-context-window=10000``
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -369,18 +369,21 @@ orchestrator = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.68_context_condensation
-        runtime.deploy(orchestrator)
-        runtime.serve(orchestrator)
+        result = runtime.run(
+            orchestrator,
+            "Produce comprehensive analyses for each of the following 25 technology domains "
+            "by calling deep_analyst ONCE PER DOMAIN, one domain at a time (not in parallel). "
+            "Complete all 25 domains, then summarise cross-domain trends. "
+            "Domains: " + ", ".join(DOMAINS) + ".",
+        )
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        #     orchestrator,
-        #     "Produce comprehensive analyses for each of the following 25 technology domains "
-        #     "by calling deep_analyst ONCE PER DOMAIN, one domain at a time (not in parallel). "
-        #     "Complete all 25 domains, then summarise cross-domain trends. "
-        #     "Domains: " + ", ".join(DOMAINS) + ".",
-        # )
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(orchestrator)
+        # CLI alternative:
+        # agentspan deploy --package examples.68_context_condensation
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(orchestrator)
 

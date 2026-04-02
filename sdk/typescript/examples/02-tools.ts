@@ -8,7 +8,7 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -98,14 +98,19 @@ export const agent = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(agent);
-    await runtime.serve(agent);
+    const result = await runtime.run(agent, 'send email to developer@orkes.io with current weather details in SF');
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const runtime = new AgentRuntime();
-    // try {
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents tool_demo_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+
+    // Streaming alternative:
     // const streamHandle = await runtime.stream(
     // agent,
     // 'send email to developer@orkes.io with current weather details in SF',
@@ -150,7 +155,7 @@ async function main() {
     // console.log(`Status: ${final.status}`);
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('02-tools.ts') || process.argv[1]?.endsWith('02-tools.js')) {

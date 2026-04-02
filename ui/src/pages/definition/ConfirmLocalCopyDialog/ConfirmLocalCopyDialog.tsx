@@ -54,7 +54,7 @@ export const ConfirmLocalCopyDialog: FunctionComponent<
   return isPromptUseLocalCopy ? (
     <ConfirmChoiceDialog
       handleConfirmationValue={handleConfirmUseLocalChanges}
-      message={`There are local changes for this workflow version. Do you want to load the local version${localCopySaveTime}?`}
+      message={`There are local changes for this agent definition version. Do you want to load the local version${localCopySaveTime}?`}
       header="Confirmation"
       disableBackdropClick
       disableEscapeKeyDown

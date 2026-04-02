@@ -15,7 +15,7 @@ the workflow state remains stored on the Agentspan/Conductor server.
 
 Requirements:
     - Agentspan server running
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in environment
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api in environment
     - AGENTSPAN_LLM_MODEL set (default: openai/gpt-4o-mini via settings.py)
     - Provider API key configured on the server (for example OPENAI_API_KEY)
 """
@@ -77,6 +77,26 @@ def print_status(prefix: str, status: object) -> None:
         f"{prefix} status={status.status} "
         f"waiting={status.is_waiting} complete={status.is_complete}"
     )
+
+
+def run_once(prompt: str) -> None:
+    with AgentRuntime() as runtime:
+        result = runtime.run(agent, prompt)
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.72_client_reconnect
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
+        #
+        # Advanced reconnect demo:
+        # python 72_client_reconnect.py start
+        # python 72_client_reconnect.py kill-client
+        # python 72_client_reconnect.py resume --approve
 
 
 def start_workflow(prompt: str, workflow_file: Path, client_info_file: Path, timeout_seconds: int) -> None:
@@ -253,15 +273,20 @@ def parse_args() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
-    args = parse_args()
+    if len(sys.argv) == 1:
+        run_once(
+            "Ship change CHG-204: rotate the production API gateway certificates."
+        )
+    else:
+        args = parse_args()
 
-    if args.command == "start":
-        start_workflow(args.prompt, args.file, args.client_info_file, args.timeout_seconds)
-    elif args.command == "kill-client":
-        kill_client(args.client_info_file)
-    elif args.command == "status":
-        execution_id = args.execution_id or load_text(args.file)
-        show_status(execution_id, args.timeout_seconds)
-    elif args.command == "resume":
-        execution_id = args.execution_id or load_text(args.file)
-        resume_workflow(execution_id, args.timeout_seconds, args.approve)
+        if args.command == "start":
+            start_workflow(args.prompt, args.file, args.client_info_file, args.timeout_seconds)
+        elif args.command == "kill-client":
+            kill_client(args.client_info_file)
+        elif args.command == "status":
+            execution_id = args.execution_id or load_text(args.file)
+            show_status(execution_id, args.timeout_seconds)
+        elif args.command == "resume":
+            execution_id = args.execution_id or load_text(args.file)
+            resume_workflow(execution_id, args.timeout_seconds, args.approve)

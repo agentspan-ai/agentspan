@@ -55,18 +55,21 @@ export const parallelAnalysis = new ParallelAgent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(parallelAnalysis);
-    await runtime.serve(parallelAnalysis);
+    const result = await runtime.run(
+    parallelAnalysis,
+    "Analyze Tesla's electric vehicle business",
+    );
+    console.log('Status:', result.status);
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const result = await runtime.run(
-    // parallelAnalysis,
-    // "Analyze Tesla's electric vehicle business",
-    // );
-    // console.log('Status:', result.status);
-    // result.printResult();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(parallelAnalysis);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents parallel_analysis
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(parallelAnalysis);
   } finally {
     await runtime.shutdown();
   }

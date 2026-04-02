@@ -15,8 +15,8 @@ Flow:
 
 Requirements:
     - Conductor server with LLM support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
-    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api in .env or environment
+    - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, Strategy, tool
@@ -82,35 +82,38 @@ support = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.64_swarm_with_tools
-        runtime.deploy(support)
-        runtime.serve(support)
+        # ── Scenario 1: Billing question → billing specialist uses check_balance
+        print("=" * 60)
+        print("  Scenario 1: Billing question (swarm → billing + tool)")
+        print("=" * 60)
+        result = runtime.run(support, "What's the balance on account ACC-456?")
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # # ── Scenario 1: Billing question → billing specialist uses check_balance
-        # print("=" * 60)
-        # print("  Scenario 1: Billing question (swarm → billing + tool)")
-        # print("=" * 60)
-        # result = runtime.run(support, "What's the balance on account ACC-456?")
-        # result.print_result()
+        output = str(result.output)
+        if "5432" in output:
+            print("[OK] Billing specialist used check_balance tool")
+        else:
+            print("[WARN] Expected balance amount in output")
 
-        # output = str(result.output)
-        # if "5432" in output:
-        #     print("[OK] Billing specialist used check_balance tool")
-        # else:
-        #     print("[WARN] Expected balance amount in output")
+        # ── Scenario 2: Order question → order specialist uses lookup_order
+        print("\n" + "=" * 60)
+        print("  Scenario 2: Order question (swarm → order + tool)")
+        print("=" * 60)
+        result2 = runtime.run(support, "Where is my order ORD-789?")
+        result2.print_result()
 
-        # # ── Scenario 2: Order question → order specialist uses lookup_order
-        # print("\n" + "=" * 60)
-        # print("  Scenario 2: Order question (swarm → order + tool)")
-        # print("=" * 60)
-        # result2 = runtime.run(support, "Where is my order ORD-789?")
-        # result2.print_result()
+        output2 = str(result2.output)
+        if "shipped" in output2.lower():
+            print("[OK] Order specialist used lookup_order tool")
+        else:
+            print("[WARN] Expected shipping status in output")
 
-        # output2 = str(result2.output)
-        # if "shipped" in output2.lower():
-        #     print("[OK] Order specialist used lookup_order tool")
-        # else:
-        #     print("[WARN] Expected shipping status in output")
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(support)
+        # CLI alternative:
+        # agentspan deploy --package examples.64_swarm_with_tools
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(support)
 

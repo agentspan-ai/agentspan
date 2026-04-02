@@ -56,21 +56,23 @@ def create_langgraph_agent():
 if __name__ == "__main__":
     graph = create_langgraph_agent()
 
-
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.16g_credentials_framework_passthrough
-        runtime.deploy(graph)
-        runtime.serve(graph)
+        # credentials=["GITHUB_TOKEN"] tells the runtime to resolve
+        # GITHUB_TOKEN from the server and inject it into os.environ
+        # before the graph executes.
+        result = runtime.run(
+            graph,
+            "Check if GitHub authentication is available",
+            credentials=["GITHUB_TOKEN"],
+        )
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # # credentials=["GITHUB_TOKEN"] tells the runtime to resolve
-        # # GITHUB_TOKEN from the server and inject it into os.environ
-        # # before the graph executes.
-        # result = runtime.run(
-        #     graph,
-        #     "Check if GitHub authentication is available",
-        #     credentials=["GITHUB_TOKEN"],
-        # )
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.16g_credentials_framework_passthrough
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)
 

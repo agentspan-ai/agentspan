@@ -10,7 +10,7 @@ Demonstrates:
     - The LLM correctly selects the right tool for each query
 
 Requirements:
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
@@ -120,20 +120,17 @@ all_tools = [
 graph = create_agent(llm, tools=all_tools, name="tool_categories_agent")
 
 if __name__ == "__main__":
-    queries = [
-        "What is the square root of 144?",
-        "How many words are in the phrase 'The quick brown fox'?",
-        "What day of the week was 2000-01-01?",
-    ]
-
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.langgraph.29_tool_categories
-        runtime.deploy(graph)
-        runtime.serve(graph)
+        for query in queries:
+            print(f"\nQuery: {query}")
+            result = runtime.run(graph, query)
+            result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # for query in queries:
-        # print(f"\nQuery: {query}")
-        # result = runtime.run(graph, query)
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.29_tool_categories
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)

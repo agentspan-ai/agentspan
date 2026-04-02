@@ -54,15 +54,18 @@ def main():
     )
 
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.adk.13_loop_agent
-        runtime.deploy(refinement_loop)
-        runtime.serve(refinement_loop)
+        result = runtime.run(refinement_loop, "Write a haiku about autumn leaves")
+        print(f"Status: {result.status}")
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(refinement_loop, "Write a haiku about autumn leaves")
-        # print(f"Status: {result.status}")
-        # print(f"Output: {result.output}")
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(refinement_loop)
+        # CLI alternative:
+        # agentspan deploy --package examples.adk.13_loop_agent
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(refinement_loop)
 
 
 

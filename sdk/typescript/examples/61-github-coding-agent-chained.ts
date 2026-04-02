@@ -12,7 +12,7 @@
  *
  * Requirements:
  *   - Conductor server running
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - gh CLI authenticated
  */
 
@@ -27,19 +27,22 @@ export const gitFetchIssues = new Agent({
   name: 'git_fetch_issues',
   model: MODEL,
   instructions:
-    `You are a GitHub issue fetcher.\n\n` +
+    `You are a GitHub issue fetcher. Your ONLY job is to pick an issue and ` +
+    `prepare a branch. Do NOT write any code or attempt to fix the issue — ` +
+    `the next pipeline stage handles implementation.\n\n` +
     `1. List the 5 most recent open issues on ${REPO} (include number, title, body).\n` +
     `2. If there are NO open issues, output exactly: NO_OPEN_ISSUES\n` +
     `3. Otherwise pick the most suitable issue, then:\n` +
     `   - Create a temp dir: mktemp -d /tmp/fetch-XXXXXXXX\n` +
-    `   - Clone ${REPO} into that dir and create branch fix/issue-<NUMBER>\n` +
-    `   - Push the branch to origin immediately\n` +
-    `   - Delete the temp dir.\n` +
+    `   - Clone ${REPO} into that dir\n` +
+    `   - Create branch fix/issue-<NUMBER>\n` +
+    `   - Push the empty branch: git push -u origin fix/issue-<NUMBER>\n` +
+    `   - Delete the temp dir\n` +
     `   - Output ONLY these lines:\n` +
     `       REPO: ${REPO}\n` +
     `       BRANCH: fix/issue-<NUMBER>\n` +
     `       ISSUE: #<NUMBER> <title>\n` +
-    `       SUMMARY: <one-sentence description>`,
+    `       SUMMARY: <one-sentence description of the issue>`,
   cliConfig: { enabled: true, allowedCommands: ['gh', 'git', 'mktemp', 'rm'] },
   maxTurns: 20,
   gate: new TextGate({ text: 'NO_OPEN_ISSUES' }),
@@ -111,7 +114,7 @@ export const gitPushPR = new Agent({
     'The branch is already pushed -- your only job is to open a pull request.\n\n' +
     '1. Create the PR: gh pr create --repo <REPO> --base main --head <BRANCH> --title "<title>" --body "<summary>"\n' +
     '2. Output the PR URL.',
-  cliConfig: { enabled: true, allowedCommands: ['gh'] },
+  cliConfig: { enabled: true, allowedCommands: ['gh', 'git'] },
   maxTokens: 60000,
   maxTurns: 10,
 });
@@ -126,14 +129,22 @@ const pipeline = gitFetchIssues.pipe(codingQA).pipe(gitPushPR);
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(pipeline);
-    await runtime.serve(pipeline);
+    const result = await runtime.run(
+    pipeline,
+    `Pick the most suitable open issue on ${REPO} and implement a fix.`,
+    );
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const runtime = new AgentRuntime();
-    // try {
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(pipeline);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents git_fetch_issues
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(pipeline);
+
+    // Streaming alternative:
     // console.log('Starting pipeline: gitFetchIssues >> codingQA >> gitPushPR\n');
     // const agentStream = await runtime.stream(
     // pipeline,
@@ -170,7 +181,7 @@ async function main() {
     // console.log(`Tool calls: ${result.toolCalls.length}`);
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('61-github-coding-agent-chained.ts') || process.argv[1]?.endsWith('61-github-coding-agent-chained.js')) {

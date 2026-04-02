@@ -12,7 +12,7 @@
  * Requirements:
  *   - Conductor server with LLM support
  *   - OPENAI_API_KEY=sk-... as environment variable
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -48,30 +48,31 @@ const dataAnalyst = new GPTAssistantAgent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(dataAnalyst);
-    await runtime.serve(dataAnalyst);
+    console.log('--- GPT Assistant with Code Interpreter ---');
+    console.log(`Using assistant ID: ${assistantId}`);
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const runtime = new AgentRuntime();
-    // try {
-    // console.log('--- GPT Assistant with Code Interpreter ---');
-    // console.log(`Using assistant ID: ${assistantId}`);
+    if (assistantId === 'asst_placeholder') {
+    console.log('(Skipping run -- set OPENAI_ASSISTANT_ID to use a real assistant)');
+    console.log('[OK] GPTAssistantAgent structure validated');
+    } else {
+    const result = await runtime.run(
+    dataAnalyst,
+    'Calculate the standard deviation of these numbers: 4, 8, 15, 16, 23, 42',
+    );
+    result.printResult();
+    }
 
-    // if (assistantId === 'asst_placeholder') {
-    // console.log('(Skipping run -- set OPENAI_ASSISTANT_ID to use a real assistant)');
-    // console.log('[OK] GPTAssistantAgent structure validated');
-    // } else {
-    // const result = await runtime.run(
-    // dataAnalyst,
-    // 'Calculate the standard deviation of these numbers: 4, 8, 15, 16, 23, 42',
-    // );
-    // result.printResult();
-    // }
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(dataAnalyst);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents data_analyst
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(dataAnalyst);
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('28-gpt-assistant-agent.ts') || process.argv[1]?.endsWith('28-gpt-assistant-agent.js')) {

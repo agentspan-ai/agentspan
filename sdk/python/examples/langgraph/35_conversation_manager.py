@@ -10,7 +10,7 @@ Demonstrates:
     - Practical use case: long-running chatbot that handles context limits gracefully
 
 Requirements:
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
@@ -106,26 +106,19 @@ builder.add_edge("respond", END)
 graph = builder.compile(name="conversation_manager")
 
 if __name__ == "__main__":
-    # Each turn runs as a separate Conductor workflow execution.
-    # The graph (summarize → respond) is compiled into a Conductor workflow
-    # with LLM calls intercepted via prep/LLM_CHAT_COMPLETE/finish tasks.
-    turns = [
-        "Hi! I'm learning Python. Where should I start?",
-        "What's the difference between a list and a tuple?",
-        "Can you give me a quick example of a dictionary?",
-        "How does exception handling work?",
-        "What is a decorator in Python?",
-    ]
-
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.langgraph.35_conversation_manager
-        runtime.deploy(graph)
-        runtime.serve(graph)
+        for turn in turns:
+            result = runtime.run(graph, turn, session_id="user-session-001")
+            print(f"You: {turn}")
+            result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # for turn in turns:
-        # result = runtime.run(graph, turn, session_id="user-session-001")
-        # print(f"You: {turn}")
-        # result.print_result()
-        # print()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.35_conversation_manager
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)
+
+            print()

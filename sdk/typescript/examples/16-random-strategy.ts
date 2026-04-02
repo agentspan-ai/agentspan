@@ -7,11 +7,11 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime } from '../src/index.js';
+import { Agent, AgentRuntime } from '../src';
 import { llmModel } from './settings.js';
 
 export const creative = new Agent({
@@ -51,22 +51,23 @@ export const brainstorm = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(brainstorm);
-    await runtime.serve(brainstorm);
+    const result = await runtime.run(
+    brainstorm,
+    'How should we approach building an AI-powered customer service platform?',
+    );
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const runtime = new AgentRuntime();
-    // try {
-    // const result = await runtime.run(
-    // brainstorm,
-    // 'How should we approach building an AI-powered customer service platform?',
-    // );
-    // result.printResult();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(brainstorm);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents brainstorm
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(brainstorm);
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('16-random-strategy.ts') || process.argv[1]?.endsWith('16-random-strategy.js')) {

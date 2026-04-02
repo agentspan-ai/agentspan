@@ -28,7 +28,7 @@ export default function RateLimitConfigForm({
           Rate Limit
         </Box>
         <Box style={{ opacity: 0.5 }}>
-          Limits the number of workflow executions at any given time.
+          Limits the number of agent executions at any given time.
         </Box>
       </Box>
       <Grid container sx={{ width: "100%" }} gap={3} size={12}>
@@ -46,7 +46,7 @@ export default function RateLimitConfigForm({
                 <>Rate limit key</>
                 <ConductorTooltip
                   title="Rate limit key"
-                  content="A unique identifier to group workflow executions for rate limiting."
+                  content="A unique identifier to group agent executions for rate limiting."
                   placement="top"
                   children={
                     <img
@@ -65,7 +65,7 @@ export default function RateLimitConfigForm({
             tooltip={{
               title: "Concurrent execution limit",
               content:
-                "The number of workflow executions that can run concurrently for a given key.",
+                "The number of agent executions that can run concurrently for a given key.",
             }}
             label="Concurrent execution limit"
             type="number"

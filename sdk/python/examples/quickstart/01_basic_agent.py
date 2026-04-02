@@ -9,6 +9,16 @@ agent = Agent(
     instructions="You are a friendly assistant. Keep responses brief.",
 )
 
-with AgentRuntime() as rt:
-    result = rt.run(agent, "Hello! What can you do?")
-    print(result.output)
+if __name__ == "__main__":
+    with AgentRuntime() as rt:
+        result = rt.run(agent, "Hello! What can you do?")
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # rt.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.quickstart.01_basic_agent
+        #
+        # 2. In a separate long-lived worker process:
+        # rt.serve(agent)

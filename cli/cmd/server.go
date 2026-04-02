@@ -4,8 +4,10 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -31,7 +33,8 @@ var (
 	serverVersion string
 	serverJar     string
 	serverLocal   bool
-	followLogs    bool
+	followLogs   bool
+	tailLines    int
 )
 
 var serverCmd = &cobra.Command{
@@ -65,6 +68,7 @@ func init() {
 	serverStartCmd.Flags().BoolVar(&serverLocal, "local", false, "Use locally built JAR from server/build/libs/")
 
 	serverLogsCmd.Flags().BoolVarP(&followLogs, "follow", "f", false, "Follow log output")
+	serverLogsCmd.Flags().IntVarP(&tailLines, "lines", "n", 20, "Number of lines to show before following (with -f)")
 
 	serverCmd.AddCommand(serverStartCmd, serverStopCmd, serverLogsCmd)
 	rootCmd.AddCommand(serverCmd)
@@ -83,6 +87,7 @@ func logFile() string {
 }
 
 func runServerStart(cmd *cobra.Command, args []string) error {
+	cmd.SilenceUsage = true
 	dir := serverDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create server dir: %w", err)
@@ -132,6 +137,12 @@ func runServerStart(cmd *cobra.Command, args []string) error {
 		}
 		// Stale PID file
 		os.Remove(pidFile())
+	}
+
+	// Check if port is already in use before starting the JVM
+	if conn, err := net.DialTimeout("tcp", "127.0.0.1:"+serverPort, time.Second); err == nil {
+		conn.Close()
+		return fmt.Errorf("port %s is already in use. Stop the other process or use --port to choose a different port.", serverPort)
 	}
 
 	checkAIProviderKeys()
@@ -193,11 +204,57 @@ func runServerStart(cmd *cobra.Command, args []string) error {
 	proc.Process.Release()
 	logF.Close()
 
-	color.Green("Server started (PID %d)", pid)
+	fmt.Printf("Server starting (PID %d)...\n", pid)
+
+	if err := waitForHealthy(pid, serverPort); err != nil {
+		return err
+	}
+
+	color.Green("Server is ready!")
+	fmt.Println()
 	fmt.Printf("  Logs: %s\n", logFile())
 	fmt.Printf("  URL:  http://localhost:%s\n", serverPort)
-	fmt.Println("\nUse 'agentspan server logs -f' to follow output.")
+	fmt.Println()
+	fmt.Println("Use 'agentspan server logs -f' to follow output.")
 	return nil
+}
+
+func waitForHealthy(pid int, port string) error {
+	const (
+		timeout      = 5 * time.Minute
+		pollInterval = 2 * time.Second
+	)
+
+	healthURL := fmt.Sprintf("http://localhost:%s/health", port)
+	client := &http.Client{Timeout: 3 * time.Second}
+	deadline := time.Now().Add(timeout)
+
+	spinner := progress.NewSpinner("Waiting for server to be ready...")
+	spinner.Start()
+	defer spinner.Stop()
+
+	for time.Now().Before(deadline) {
+		// Fail fast if the process has died
+		if !processRunning(pid) {
+			return fmt.Errorf("server process exited unexpectedly — check logs: %s", logFile())
+		}
+
+		resp, err := client.Get(healthURL)
+		if err == nil {
+			var result struct {
+				Healthy bool `json:"healthy"`
+			}
+			if json.NewDecoder(resp.Body).Decode(&result) == nil && result.Healthy {
+				resp.Body.Close()
+				return nil
+			}
+			resp.Body.Close()
+		}
+
+		time.Sleep(pollInterval)
+	}
+
+	return fmt.Errorf("server did not become healthy within 5 minutes — check logs: %s", logFile())
 }
 
 func runServerStop(cmd *cobra.Command, args []string) error {
@@ -242,15 +299,20 @@ func runServerLogs(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Follow mode: tail -f style
+	// Follow mode: tail -n N -f style
 	f, err := os.Open(path)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
-	// Seek to end
-	f.Seek(0, io.SeekEnd)
+	// Seek to show only the last N lines before following
+	if tailLines > 0 {
+		if offset, err := lastNLinesOffset(f, tailLines); err == nil {
+			f.Seek(offset, io.SeekStart)
+		}
+		// On error just follow from start
+	}
 
 	buf := make([]byte, 4096)
 	for {
@@ -266,6 +328,45 @@ func runServerLogs(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	}
+}
+
+// lastNLinesOffset returns the file offset to start reading from to get the last n lines.
+func lastNLinesOffset(f *os.File, n int) (int64, error) {
+	size, err := f.Seek(0, io.SeekEnd)
+	if err != nil {
+		return 0, err
+	}
+	if size == 0 {
+		return 0, nil
+	}
+
+	const chunkSize = 4096
+	found := 0
+	offset := size
+	buf := make([]byte, chunkSize)
+
+	for offset > 0 {
+		read := int64(chunkSize)
+		if read > offset {
+			read = offset
+		}
+		offset -= read
+		if _, err := f.Seek(offset, io.SeekStart); err != nil {
+			return 0, err
+		}
+		if _, err := io.ReadFull(f, buf[:read]); err != nil {
+			return 0, err
+		}
+		for i := int(read) - 1; i >= 0; i-- {
+			if buf[i] == '\n' {
+				found++
+				if found > n {
+					return offset + int64(i) + 1, nil
+				}
+			}
+		}
+	}
+	return 0, nil
 }
 
 // --- Local JAR helpers ---

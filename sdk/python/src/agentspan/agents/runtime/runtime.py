@@ -398,6 +398,7 @@ class AgentRuntime:
         idempotency_key: Optional[str] = None,
         timeout: Optional[int] = None,
         credentials: Optional[List[str]] = None,
+        context: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Start an agent via the server's /api/agent/start endpoint.
 
@@ -426,6 +427,8 @@ class AgentRuntime:
             payload["timeoutSeconds"] = timeout
         if credentials:
             payload["credentials"] = credentials
+        if context:
+            payload["context"] = context
 
         url = self._agent_api_url("/start")
         resp = req_lib.post(url, json=payload, headers=self._agent_api_headers(), timeout=30)
@@ -456,6 +459,7 @@ class AgentRuntime:
         idempotency_key: Optional[str] = None,
         timeout: Optional[int] = None,
         credentials: Optional[List[str]] = None,
+        context: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Async version of :meth:`_start_via_server`."""
         from agentspan.agents.config_serializer import AgentConfigSerializer
@@ -475,6 +479,8 @@ class AgentRuntime:
             payload["timeoutSeconds"] = timeout
         if credentials:
             payload["credentials"] = credentials
+        if context:
+            payload["context"] = context
 
         data = await self._http.start_agent(payload)
         execution_id = data.get("executionId", "")
@@ -911,6 +917,39 @@ class AgentRuntime:
                 return True  # fallback: register everything
             return task_name in required_workers
 
+        # Claude-code top-level agents: register the passthrough worker, skip tool registration
+        if getattr(agent, "is_claude_code", False):
+            if _server_needs(agent.name):
+                from agentspan.agents.frameworks.claude_agent_sdk import (
+                    agent_to_claude_code_options,
+                    make_claude_agent_sdk_worker,
+                )
+                from agentspan.agents.frameworks.serializer import WorkerInfo
+
+                cc_opts = agent_to_claude_code_options(agent)
+                worker_fn = make_claude_agent_sdk_worker(
+                    cc_opts,
+                    agent.name,
+                    self._config.server_url,
+                    self._config.auth_key or "",
+                    self._config.auth_secret or "",
+                )
+                worker = WorkerInfo(
+                    name=agent.name,
+                    description=f"Claude Agent SDK passthrough worker for {agent.name}",
+                    input_schema={
+                        "type": "object",
+                        "properties": {
+                            "prompt": {"type": "string"},
+                            "session_id": {"type": "string"},
+                        },
+                    },
+                    func=worker_fn,
+                    _pre_wrapped=True,
+                )
+                self._register_passthrough_worker(worker)
+            return
+
         # 1. Tools (and tool-level guardrails) — always registered
         if agent.tools:
             tc = ToolRegistry()
@@ -1015,11 +1054,11 @@ class AgentRuntime:
 
         # 7b. Swarm transfer tools and check_transfer workers
         if agent.strategy == "swarm" and agent.agents:
-            # Register transfer workers if any of them are needed
-            if required_workers is None or any(
-                "_transfer_to_" in w for w in required_workers
-            ):
-                self._register_swarm_transfer_workers(agent)
+            # Always register transfer workers for swarm agents — the server's
+            # requiredWorkers may not include them when the swarm is a nested
+            # registered sub-workflow (collectSimpleTaskNames doesn't recurse
+            # into separately-stored sub-workflow definitions).
+            self._register_swarm_transfer_workers(agent)
             if _server_needs(f"{agent.name}_check_transfer"):
                 self._register_check_transfer_worker(agent.name)  # parent
             for sub in agent.agents:
@@ -2137,6 +2176,7 @@ class AgentRuntime:
         on_event: Optional[Any] = None,
         timeout: Optional[int] = None,
         credentials: Optional[List[str]] = None,
+        context: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> AgentResult:
         """Execute an agent synchronously and return the result.
@@ -2238,6 +2278,7 @@ class AgentRuntime:
             idempotency_key=idempotency_key,
             timeout=timeout,
             credentials=credentials,
+            context=context,
         )
 
         self._prepare_workers(agent, required_workers=required_workers)
@@ -2275,7 +2316,7 @@ class AgentRuntime:
         token_usage: Optional[TokenUsage] = None
         try:
             wf = self._workflow_client.get_workflow(
-                execution_id=execution_id,
+                execution_id,
                 include_tasks=True,
             )
             tool_calls = self._extract_tool_calls(wf)
@@ -2352,7 +2393,7 @@ class AgentRuntime:
         messages: List[Dict[str, Any]] = []
         token_usage: Optional[TokenUsage] = None
         try:
-            wf = self._workflow_client.get_workflow(execution_id=execution_id, include_tasks=True)
+            wf = self._workflow_client.get_workflow(execution_id, include_tasks=True)
             tool_calls = self._extract_tool_calls(wf)
             messages = self._extract_messages(wf)
             token_usage = self._extract_token_usage(execution_id)
@@ -2448,7 +2489,7 @@ class AgentRuntime:
             wf = await loop.run_in_executor(
                 None,
                 lambda: self._workflow_client.get_workflow(
-                    execution_id=execution_id, include_tasks=True
+                    execution_id, include_tasks=True
                 ),
             )
             tool_calls = self._extract_tool_calls(wf)
@@ -3232,6 +3273,7 @@ class AgentRuntime:
         media: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> AgentHandle:
         """Start an agent asynchronously and return a handle.
@@ -3294,6 +3336,7 @@ class AgentRuntime:
             session_id=session_id,
             idempotency_key=idempotency_key,
             timeout=effective_timeout,
+            context=context,
         )
 
         self._prepare_workers(agent, required_workers=required_workers)
@@ -3390,7 +3433,7 @@ class AgentRuntime:
         while True:
             try:
                 wf = self._workflow_client.get_workflow(
-                    execution_id=execution_id,
+                    execution_id,
                     include_tasks=True,
                 )
             except Exception as e:
@@ -3576,6 +3619,7 @@ class AgentRuntime:
         on_event: Optional[Any] = None,
         timeout: Optional[int] = None,
         credentials: Optional[List[str]] = None,
+        context: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> AgentResult:
         """Execute an agent asynchronously (async-first implementation).
@@ -3665,6 +3709,7 @@ class AgentRuntime:
             idempotency_key=idempotency_key,
             timeout=timeout,
             credentials=credentials,
+            context=context,
         )
 
         self._prepare_workers(agent, required_workers=required_workers)
@@ -3704,7 +3749,7 @@ class AgentRuntime:
             wf = await loop.run_in_executor(
                 None,
                 lambda: self._workflow_client.get_workflow(
-                    execution_id=execution_id,
+                    execution_id,
                     include_tasks=True,
                 ),
             )
@@ -3737,6 +3782,7 @@ class AgentRuntime:
         media: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> AgentHandle:
         """Start an agent asynchronously and return a handle (async version).
@@ -3792,6 +3838,7 @@ class AgentRuntime:
             session_id=session_id,
             idempotency_key=idempotency_key,
             timeout=effective_timeout,
+            context=context,
         )
 
         self._prepare_workers(agent, required_workers=required_workers)
@@ -3884,7 +3931,7 @@ class AgentRuntime:
                 wf = await loop.run_in_executor(
                     None,
                     lambda: self._workflow_client.get_workflow(
-                        execution_id=execution_id,
+                        execution_id,
                         include_tasks=True,
                     ),
                 )

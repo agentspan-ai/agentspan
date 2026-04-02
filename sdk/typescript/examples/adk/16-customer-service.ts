@@ -131,19 +131,22 @@ export const agent = new LlmAgent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(agent);
-    await runtime.serve(agent);
+    const result = await runtime.run(
+    agent,
+    "I'm customer ACC-001. Can you check my billing history and tell me my current plan? " +
+    "I'm thinking about downgrading to the basic plan.",
+    );
+    console.log('Status:', result.status);
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const result = await runtime.run(
-    // agent,
-    // "I'm customer ACC-001. Can you check my billing history and tell me my current plan? " +
-    // "I'm thinking about downgrading to the basic plan.",
-    // );
-    // console.log('Status:', result.status);
-    // result.printResult();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents customer_service_rep
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
   } finally {
     await runtime.shutdown();
   }

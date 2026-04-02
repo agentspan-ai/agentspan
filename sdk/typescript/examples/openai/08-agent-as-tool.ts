@@ -111,15 +111,18 @@ const prompt =
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(manager);
-    await runtime.serve(manager);
+    const result = await runtime.run(manager, prompt);
+    console.log('Status:', result.status);
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const result = await runtime.run(manager, prompt);
-    // console.log('Status:', result.status);
-    // result.printResult();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(manager);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/openai --agents text_analysis_manager
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(manager);
   } finally {
     await runtime.shutdown();
   }

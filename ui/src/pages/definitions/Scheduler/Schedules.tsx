@@ -66,7 +66,7 @@ import {
 } from "../rowColorHelpers";
 import BulkActionModule from "./BulkActionModule";
 
-const INTRO_CONTENT = `Schedulers help you automate workflow execution using cron expressions. Set up recurring workflows with precise timing control, perfect for batch processing, periodic data syncs, or any time-based automation needs.
+const INTRO_CONTENT = `Schedulers help you automate agent execution using cron expressions. Set up recurring agent runs with precise timing control, perfect for batch processing, periodic data syncs, or any time-based automation needs.
 
 Read more:
 * [Developer Guides: Scheduling Workflows](https://orkes.io/content/developer-guides/scheduling-workflows)
@@ -75,7 +75,7 @@ Read more:
 
 const getNameAndVersion = (workflow: IStartWorkflowRequest | undefined) => {
   if (!workflow) {
-    return "Undefined Workflow";
+    return "Undefined Agent";
   }
   return workflow.version !== undefined
     ? `${workflow.name} - Version: ${workflow.version}`
@@ -177,7 +177,7 @@ const columns = [
       }
     },
     sortFunction: customSortForWorkflowColumn,
-    tooltip: "The workflow associated with the schedule",
+    tooltip: "The agent associated with the schedule",
   },
   {
     id: "createTime",

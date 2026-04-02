@@ -10,7 +10,7 @@ host filesystem is untouched.
 Requirements:
     - Conductor server with LLM support
     - Docker installed and daemon running
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:6767/api
 """
 
 from agentspan.agents import Agent, AgentRuntime, CodeExecutionConfig
@@ -37,16 +37,19 @@ docker_coder = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.39a_docker_code_execution
-        runtime.deploy(docker_coder)
-        runtime.serve(docker_coder)
+        print("--- Docker Sandboxed Code Execution ---")
+        result = runtime.run(
+            docker_coder,
+            "Print Python's version and the container's hostname.",
+        )
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # print("--- Docker Sandboxed Code Execution ---")
-        # result = runtime.run(
-        #     docker_coder,
-        #     "Print Python's version and the container's hostname.",
-        # )
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(docker_coder)
+        # CLI alternative:
+        # agentspan deploy --package examples.39a_docker_code_execution
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(docker_coder)
 

@@ -16,7 +16,7 @@ automatically emit spans for:
 Requirements:
     - pip install opentelemetry-api opentelemetry-sdk
     - Conductor server with LLM support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -58,25 +58,25 @@ agent = Agent(
 
 
 if __name__ == "__main__":
-    # ── Manual tracing (works even alongside automatic runtime tracing) ──
-
-
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.26_opentelemetry_tracing
-        runtime.deploy(agent)
-        runtime.serve(agent)
+        # The runtime automatically creates spans if OTel is configured.
+        # You can also create manual spans for custom instrumentation:
+        with trace_agent_run("traced_agent", "Who created Python?", model=settings.llm_model) as span:
+            result = runtime.run(agent, "Who created Python?")
+            if span:
+                span.set_attribute("agent.output_length", len(str(result.output)))
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # # The runtime automatically creates spans if OTel is configured.
-        # # You can also create manual spans for custom instrumentation:
-        # with trace_agent_run("traced_agent", "Who created Python?", model=settings.llm_model) as span:
-        #     result = runtime.run(agent, "Who created Python?")
-        #     if span:
-        #         span.set_attribute("agent.output_length", len(str(result.output)))
+        result.print_result()
 
-        # result.print_result()
+        if result.token_usage:
+            print(f"Tokens: {result.token_usage.total_tokens}")
 
-        # if result.token_usage:
-        #     print(f"Tokens: {result.token_usage.total_tokens}")
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.26_opentelemetry_tracing
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
 

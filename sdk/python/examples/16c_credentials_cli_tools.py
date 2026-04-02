@@ -139,14 +139,16 @@ if __name__ == "__main__":
         "Who am I in AWS, and list my S3 buckets?"
     )
 
-
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.16c_credentials_cli_tools
-        runtime.deploy(github_aws_agent)
-        runtime.serve(github_aws_agent)
+        result = runtime.run(github_aws_agent, task)
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(github_aws_agent, task)
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(github_aws_agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.16c_credentials_cli_tools
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(github_aws_agent)
 

@@ -40,6 +40,14 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 
+class TerminalToolError(RuntimeError):
+    """Non-retryable tool failure.
+
+    Causes the Conductor task to be marked FAILED_WITH_TERMINAL_ERROR
+    instead of FAILED (which would trigger retries).
+    """
+
+
 @dataclass
 class CliConfig:
     """Configuration for first-class CLI command execution on an Agent.
@@ -108,6 +116,8 @@ def _make_cli_tool(
         args: list = [],
         cwd: str = "",
         shell: bool = False,
+        context_key: str = "",
+        context: Any = None,
         _allowed_commands: list = None,
         _allow_shell: bool = None,
         _timeout: int = None,
@@ -170,37 +180,31 @@ def _make_cli_tool(
                 )
 
             if result.returncode == 0:
+                if context_key and context is not None and hasattr(context, "state"):
+                    # Prefer stdout; fall back to stderr (e.g. git clone outputs to stderr)
+                    value = result.stdout.strip() or result.stderr.strip()
+                    if value:
+                        context.state[context_key] = value
                 return {
                     "status": "success",
+                    "exit_code": 0,
                     "stdout": result.stdout,
                     "stderr": result.stderr,
                 }
             else:
                 return {
                     "status": "error",
+                    "exit_code": result.returncode,
                     "stdout": result.stdout,
-                    "stderr": (result.stderr or "")
-                    + f"\nExit code: {result.returncode}",
+                    "stderr": result.stderr,
                 }
 
         except subprocess.TimeoutExpired:
-            return {
-                "status": "error",
-                "stdout": "",
-                "stderr": f"Command timed out after {effective_timeout}s",
-            }
+            raise TerminalToolError(
+                f"Command timed out after {effective_timeout}s"
+            )
         except FileNotFoundError:
-            return {
-                "status": "error",
-                "stdout": "",
-                "stderr": f"Command not found: {command}",
-            }
-        except Exception as e:
-            return {
-                "status": "error",
-                "stdout": "",
-                "stderr": str(e),
-            }
+            raise TerminalToolError(f"Command not found: {command}")
 
     # Build dynamic description
     desc = (
@@ -211,6 +215,10 @@ def _make_cli_tool(
         desc += f" Allowed commands: {', '.join(sorted(allowed_commands))}."
     if not allow_shell:
         desc += " Shell mode is disabled — do not set shell=True."
+    desc += (
+        " If you need to save a command's output for later pipeline steps, set context_key."
+        " Well-known keys: repo, branch, working_dir, issue_number, pr_url, commit_sha."
+    )
     run_command._tool_def.description = desc
     run_command._tool_def.tool_type = "cli"
     run_command._tool_def.config = {"allowedCommands": list(allowed_commands)}

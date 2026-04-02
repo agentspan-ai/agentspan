@@ -16,8 +16,8 @@ Architecture:
 
 Requirements:
     - Conductor server with LLM support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
-    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api in .env or environment
+    - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, Strategy
@@ -78,39 +78,42 @@ coordinator = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.66_handoff_to_parallel
-        runtime.deploy(coordinator)
-        runtime.serve(coordinator)
+        # ── Scenario 1: Deep analysis (handoff to parallel group)
+        print("=" * 60)
+        print("  Scenario 1: Deep analysis (handoff → parallel group)")
+        print("=" * 60)
+        result = runtime.run(
+            coordinator,
+            "Provide a deep analysis of entering the AI healthcare market.",
+        )
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # # ── Scenario 1: Deep analysis (handoff to parallel group)
-        # print("=" * 60)
-        # print("  Scenario 1: Deep analysis (handoff → parallel group)")
-        # print("=" * 60)
-        # result = runtime.run(
-        #     coordinator,
-        #     "Provide a deep analysis of entering the AI healthcare market.",
-        # )
-        # result.print_result()
+        if result.status == "COMPLETED":
+            print("[OK] Handoff to parallel group completed successfully")
+        else:
+            print(f"[WARN] Unexpected status: {result.status}")
 
-        # if result.status == "COMPLETED":
-        #     print("[OK] Handoff to parallel group completed successfully")
-        # else:
-        #     print(f"[WARN] Unexpected status: {result.status}")
+        # ── Scenario 2: Quick check (handoff to single agent)
+        print("\n" + "=" * 60)
+        print("  Scenario 2: Quick check (handoff → single agent)")
+        print("=" * 60)
+        result2 = runtime.run(
+            coordinator,
+            "Is the mobile app market still growing?",
+        )
+        result2.print_result()
 
-        # # ── Scenario 2: Quick check (handoff to single agent)
-        # print("\n" + "=" * 60)
-        # print("  Scenario 2: Quick check (handoff → single agent)")
-        # print("=" * 60)
-        # result2 = runtime.run(
-        #     coordinator,
-        #     "Is the mobile app market still growing?",
-        # )
-        # result2.print_result()
+        if result2.status == "COMPLETED":
+            print("[OK] Quick check completed successfully")
+        else:
+            print(f"[WARN] Unexpected status: {result2.status}")
 
-        # if result2.status == "COMPLETED":
-        #     print("[OK] Quick check completed successfully")
-        # else:
-        #     print(f"[WARN] Unexpected status: {result2.status}")
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(coordinator)
+        # CLI alternative:
+        # agentspan deploy --package examples.66_handoff_to_parallel
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(coordinator)
 

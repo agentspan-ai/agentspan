@@ -18,7 +18,7 @@ Architecture:
 Requirements:
     - pip install google-adk
     - Conductor server with AgentTool support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=google_gemini/gemini-2.0-flash as environment variable
 """
 
@@ -119,15 +119,18 @@ manager = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.adk.21_agent_tool
-        runtime.deploy(manager)
-        runtime.serve(manager)
+        result = runtime.run(
+        manager,
+        "Look up information about Python and Rust, then calculate "
+        "what percentage of Python's 4 key use cases overlap with Rust's 4 use cases.",
+        )
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        # manager,
-        # "Look up information about Python and Rust, then calculate "
-        # "what percentage of Python's 4 key use cases overlap with Rust's 4 use cases.",
-        # )
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(manager)
+        # CLI alternative:
+        # agentspan deploy --package examples.adk.21_agent_tool
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(manager)

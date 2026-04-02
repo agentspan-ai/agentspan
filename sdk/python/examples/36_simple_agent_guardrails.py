@@ -20,7 +20,7 @@ and the LLM tries again.
 
 Requirements:
     - Conductor server with LLM support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -89,30 +89,33 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.36_simple_agent_guardrails
-        runtime.deploy(agent)
-        runtime.serve(agent)
+        result = runtime.run(
+            agent,
+            "Explain why the sky is blue.",
+        )
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        #     agent,
-        #     "Explain why the sky is blue.",
-        # )
-        # result.print_result()
+        # Verify guardrails
+        output = str(result.output)
+        has_bullets = any(
+            line.strip().startswith(("-", "*"))
+            for line in output.splitlines()
+        )
+        word_count = len(output.split())
 
-        # # Verify guardrails
-        # output = str(result.output)
-        # has_bullets = any(
-        #     line.strip().startswith(("-", "*"))
-        #     for line in output.splitlines()
-        # )
-        # word_count = len(output.split())
+        if has_bullets:
+            print("[WARN] Output contains bullet points — guardrail may not have fired")
+        elif word_count < 50:
+            print(f"[WARN] Output too short ({word_count} words)")
+        else:
+            print(f"[OK] Prose response, {word_count} words — guardrails passed")
 
-        # if has_bullets:
-        #     print("[WARN] Output contains bullet points — guardrail may not have fired")
-        # elif word_count < 50:
-        #     print(f"[WARN] Output too short ({word_count} words)")
-        # else:
-        #     print(f"[OK] Prose response, {word_count} words — guardrails passed")
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.36_simple_agent_guardrails
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
 

@@ -37,18 +37,20 @@ export const codeAgent = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(codeAgent);
-    await runtime.serve(codeAgent);
+    const result = await runtime.run(
+    codeAgent,
+    'Calculate the first 10 Fibonacci numbers using code.',
+    );
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const result = await runtime.run(
-    // codeAgent,
-    // 'Calculate the first 10 Fibonacci numbers using code.',
-    // );
-    // result.printResult();
-    // await runtime.shutdown();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(codeAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents code_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(codeAgent);
   } finally {
     await runtime.shutdown();
   }

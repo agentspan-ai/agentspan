@@ -44,6 +44,15 @@ async function main() {
     console.log('Skills:', person.skills);
 
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/vercel-ai --agents structured_output_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
   } finally {
     await runtime.shutdown();
   }

@@ -19,7 +19,7 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -154,33 +154,34 @@ export const agent = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(agent);
-    await runtime.serve(agent);
+    // This prompt triggers both tools:
+    //   1. get_order_status("ORD-42")   → safe data, passes guardrail
+    //   2. get_customer_info("CUST-7")  → contains credit card, trips guardrail
+    const result = await runtime.run(
+    agent,
+    'I need a full summary: What\'s the status of order ORD-42, ' +
+    'and what\'s the profile for customer CUST-7?',
+    );
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const runtime = new AgentRuntime();
-    // try {
-    // // This prompt triggers both tools:
-    // //   1. get_order_status("ORD-42")   → safe data, passes guardrail
-    // //   2. get_customer_info("CUST-7")  → contains credit card, trips guardrail
-    // const result = await runtime.run(
-    // agent,
-    // 'I need a full summary: What\'s the status of order ORD-42, ' +
-    // 'and what\'s the profile for customer CUST-7?',
-    // );
-    // result.printResult();
+    // Verify the guardrail worked — no raw card number in the output
+    if (result.output && String(result.output).includes('4532-0150-1234-5678')) {
+    console.log('[WARN] PII leaked through the guardrail!');
+    } else {
+    console.log('[OK] PII was redacted from the final output.');
+    }
 
-    // // Verify the guardrail worked — no raw card number in the output
-    // if (result.output && String(result.output).includes('4532-0150-1234-5678')) {
-    // console.log('[WARN] PII leaked through the guardrail!');
-    // } else {
-    // console.log('[OK] PII was redacted from the final output.');
-    // }
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents support_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('10-guardrails.ts') || process.argv[1]?.endsWith('10-guardrails.js')) {

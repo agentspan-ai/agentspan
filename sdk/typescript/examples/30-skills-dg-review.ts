@@ -10,7 +10,7 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api
  *   - /dg skill installed (https://github.com/v1r3n/dinesh-gilfoyle)
  */
 
@@ -32,7 +32,7 @@ async function runStandalone() {
   try {
     console.log('=== /dg Standalone Review ===\n');
 
-    const stream = await runtime.stream(
+    const result = await runtime.run(
       dg,
       `Review this code:
 
@@ -44,37 +44,23 @@ def get_user(name):
     return result.fetchone()
 \`\`\``,
     );
-
-    console.log(`Execution ID: ${stream.executionId}\n`);
-
-    for await (const event of stream) {
-      switch (event.type) {
-        case 'tool_call':
-          console.log(`  [${event.toolName}] dispatched`);
-          break;
-        case 'tool_result':
-          console.log(
-            `  [${event.toolName}] returned: ${String(event.result).slice(0, 100)}...`,
-          );
-          break;
-        case 'done':
-          console.log('\n--- Review Complete ---');
-          console.log(String(event.output).slice(0, 500));
-          break;
-      }
-    }
-
-    const result = await stream.getResult();
     console.log(`\nExecution ID: ${result.executionId}`);
     console.log(`Status: ${result.status}`);
     console.log(`Tokens: ${JSON.stringify(result.tokenUsage)}`);
+    result.printResult();
 
     if (result.subResults) {
       console.log('\nSub-agent executions:');
-      for (const sub of result.subResults) {
-        console.log(`  - ${sub.agentName}: ${sub.status} (${JSON.stringify(sub.tokenUsage)})`);
+      for (const [agentName, subResult] of Object.entries(result.subResults)) {
+        console.log(`  - ${agentName}: ${JSON.stringify(subResult)}`);
       }
     }
+
+    // Streaming alternative:
+    // const stream = await runtime.stream(dg, prompt);
+    // for await (const event of stream) {
+    //   console.log(`[${event.type}]`, event.toolName ?? event.content ?? '');
+    // }
   } finally {
     await runtime.shutdown();
   }
@@ -111,7 +97,7 @@ def fetch(url):
 
     console.log(`Execution ID: ${result.executionId}`);
     console.log(`Status: ${result.status}`);
-    console.log(`Output: ${JSON.stringify(result.output).slice(0, 500)}`);
+    result.printResult();
   } finally {
     await runtime.shutdown();
   }
@@ -140,7 +126,7 @@ async function runAsTool() {
 
     console.log(`Execution ID: ${result.executionId}`);
     console.log(`Status: ${result.status}`);
-    console.log(`Output: ${JSON.stringify(result.output).slice(0, 500)}`);
+    result.printResult();
   } finally {
     await runtime.shutdown();
   }

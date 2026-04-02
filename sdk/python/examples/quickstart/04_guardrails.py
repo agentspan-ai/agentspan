@@ -17,6 +17,16 @@ agent = Agent(
     ],
 )
 
-with AgentRuntime() as rt:
-    result = rt.run(agent, "How do I contact support?")
-    print(result.output)
+if __name__ == "__main__":
+    with AgentRuntime() as rt:
+        result = rt.run(agent, "How do I contact support?")
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # rt.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.quickstart.04_guardrails
+        #
+        # 2. In a separate long-lived worker process:
+        # rt.serve(agent)

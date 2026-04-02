@@ -490,7 +490,12 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
             logger.error(
                 "Tool '%s' failed (count=%d): %s", tool_name, _tool_error_counts[tool_name], e
             )
-            task_result.status = TaskResultStatus.FAILED
+            from agentspan.agents.cli_config import TerminalToolError
+
+            if isinstance(e, TerminalToolError):
+                task_result.status = TaskResultStatus.FAILED_WITH_TERMINAL_ERROR
+            else:
+                task_result.status = TaskResultStatus.FAILED
             task_result.reason_for_incompletion = str(e)
             return task_result
 

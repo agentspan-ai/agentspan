@@ -8,11 +8,11 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime } from '../src/index.js';
+import { Agent, AgentRuntime } from '../src';
 import { llmModel } from './settings.js';
 
 // -- Pipeline agents ---------------------------------------------------------
@@ -49,22 +49,23 @@ const pipeline = researcher.pipe(writer).pipe(editor);
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(pipeline);
-    await runtime.serve(pipeline);
+    const result = await runtime.run(
+    pipeline,
+    'The impact of AI agents on software development in 2025',
+    );
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const runtime = new AgentRuntime();
-    // try {
-    // const result = await runtime.run(
-    // pipeline,
-    // 'The impact of AI agents on software development in 2025',
-    // );
-    // result.printResult();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(pipeline);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents researcher
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(pipeline);
   } finally {
     await runtime.shutdown();
-    // }
+  }
 
     // // -- Option 2: Using strategy parameter (equivalent) -------------------------
     // //

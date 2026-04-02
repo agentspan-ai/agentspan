@@ -11,7 +11,7 @@ Demonstrates:
 Requirements:
     - Conductor server with LLM support
     - conductor-python installed (provides @worker_task)
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -72,12 +72,15 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.14_existing_workers
-        runtime.deploy(agent)
-        runtime.serve(agent)
+        result = runtime.run(agent, "Customer C001 is asking about their recent orders. Look them up and summarize.")
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(agent, "Customer C001 is asking about their recent orders. Look them up and summarize.")
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.14_existing_workers
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
 

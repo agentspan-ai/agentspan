@@ -20,7 +20,7 @@ Flow (swarm — LLM-driven handoffs):
 
 Requirements:
     - Conductor server running
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, Strategy
@@ -85,22 +85,25 @@ if __name__ == "__main__":
 
 
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.59_coding_agent
-        runtime.deploy(coder)
-        runtime.serve(coder)
+        result = runtime.run(coder, prompt)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(coder, prompt)
+        # Swarm output is a dict keyed by agent name
+        output = result.output
+        if isinstance(output, dict):
+            for agent_name, text in output.items():
+                print(f"\n{'─' * 60}")
+                print(f"  [{agent_name}]")
+                print(f"{'─' * 60}")
+                print(text)
+        else:
+            print(output)
 
-        # # Swarm output is a dict keyed by agent name
-        # output = result.output
-        # if isinstance(output, dict):
-        #     for agent_name, text in output.items():
-        #         print(f"\n{'─' * 60}")
-        #         print(f"  [{agent_name}]")
-        #         print(f"{'─' * 60}")
-        #         print(text)
-        # else:
-        #     print(output)
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(coder)
+        # CLI alternative:
+        # agentspan deploy --package examples.59_coding_agent
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(coder)
 

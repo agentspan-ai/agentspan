@@ -57,7 +57,7 @@ export default function IdempotencyForm({
           tooltip={{
             title: "Idempotency key",
             content:
-              "Idempotency Key is a user generated key to avoid conflicts with other workflows. Idempotency data is retained for the life of the workflow executions.",
+              "Idempotency Key is a user-generated key to avoid conflicts with other agent runs. Idempotency data is retained for the life of the agent executions.",
           }}
         />
       </Grid>
@@ -90,19 +90,19 @@ export default function IdempotencyForm({
                       value: IdempotencyStrategyEnum.RETURN_EXISTING,
                       label: "Return Existing",
                       helperText:
-                        "Request will not fail rather it will return the workflowId of the workflow which was triggered with the same idempotencyKey.",
+                        "Request will not fail; instead it will return the execution ID of the existing agent run started with the same idempotencyKey.",
                     },
                     {
                       value: IdempotencyStrategyEnum.FAIL,
                       label: "Fail",
                       helperText:
-                        "Request will fail if the workflow has been triggered with the same idempotencyKey in the past.",
+                        "Request will fail if an agent run has been started with the same idempotencyKey in the past.",
                     },
                     {
                       value: IdempotencyStrategyEnum.FAIL_ON_RUNNING,
                       label: "Fail on Running",
                       helperText:
-                        "Request will fail if another workflow with the same idempotencyKey is Running or Paused.",
+                        "Request will fail if another agent run with the same idempotencyKey is Running or Paused.",
                     },
                   ]}
                   name="idempotency strategy"

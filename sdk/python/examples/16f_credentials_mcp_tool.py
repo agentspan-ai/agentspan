@@ -11,10 +11,14 @@ Demonstrates:
 Setup (one-time):
     agentspan credentials set --name MCP_API_KEY
 
+MCP Weather Server Setup:
+    # Install and start the weather MCP server (runs on port 3001):
+    npx -y @philschmid/weather-mcp
+
 Requirements:
     - Agentspan server running at AGENTSPAN_SERVER_URL
     - AGENTSPAN_LLM_MODEL set (or defaults to openai/gpt-5.4)
-    - MCP server running at the specified URL
+    - MCP server running on http://localhost:3001/mcp (see setup above)
     - MCP_API_KEY stored via `agentspan credentials set`
 """
 
@@ -43,12 +47,15 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.16f_credentials_mcp_tool
-        runtime.deploy(agent)
-        runtime.serve(agent)
+        result = runtime.run(agent, "What tools are available?")
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(agent, "What tools are available?")
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.16f_credentials_mcp_tool
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
 

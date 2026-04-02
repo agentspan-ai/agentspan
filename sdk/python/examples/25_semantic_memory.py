@@ -11,7 +11,7 @@ giving the agent access to relevant past knowledge.
 
 Requirements:
     - Conductor server with LLM support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -54,34 +54,34 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.25_semantic_memory
-        runtime.deploy(agent)
-        runtime.serve(agent)
+        print("--- Query 1: Billing question ---")
+        result = runtime.run(
+            agent,
+            "I have a question about my billing — is there an issue with my account?",
+        )
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # print("--- Query 1: Billing question ---")
-        # result = runtime.run(
-        #     agent,
-        #     "I have a question about my billing — is there an issue with my account?",
-        # )
-        # result.print_result()
+        print("\n--- Query 2: Plan question ---")
+        result2 = runtime.run(
+            agent,
+            "What plan am I on and when did I sign up?",
+        )
+        result2.print_result()
 
-        # print("\n--- Query 2: Plan question ---")
-        # result2 = runtime.run(
-        #     agent,
-        #     "What plan am I on and when did I sign up?",
-        # )
-        # result2.print_result()
+        print("\n--- Memory contents ---")
+        for entry in memory.list_all():
+            print(f"  [{entry.id[:8]}] {entry.content}")
 
-        # # ── Direct memory operations ─────────────────────────────────────────
+        print(f"\n--- Search for 'billing' ---")
+        for result in memory.search("billing invoice"):
+            print(f"  → {result}")
 
-
-        # print("\n--- Memory contents ---")
-        # for entry in memory.list_all():
-        #     print(f"  [{entry.id[:8]}] {entry.content}")
-
-        # print(f"\n--- Search for 'billing' ---")
-        # for result in memory.search("billing invoice"):
-        #     print(f"  → {result}")
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.25_semantic_memory
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
 

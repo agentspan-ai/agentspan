@@ -15,7 +15,7 @@
  * Requirements:
  *   - Conductor server with LLM support
  *   - The referenced workers must be running somewhere
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -131,27 +131,28 @@ export const supportAgent = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(supportAgent);
-    await runtime.serve(supportAgent);
+    console.log('=== External Worker Tools ===');
+    console.log('Agent has 1 local tool + 3 external worker references.\n');
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const runtime = new AgentRuntime();
-    // try {
-    // console.log('=== External Worker Tools ===');
-    // console.log('Agent has 1 local tool + 3 external worker references.\n');
+    const result = await runtime.run(
+    supportAgent,
+    'Customer C-1234 wants to cancel order ORD-5678. ' +
+    'Look up the customer, check if we have the product in stock, ' +
+    'and process the cancellation.',
+    );
+    result.printResult();
 
-    // const result = await runtime.run(
-    // supportAgent,
-    // 'Customer C-1234 wants to cancel order ORD-5678. ' +
-    // 'Look up the customer, check if we have the product in stock, ' +
-    // 'and process the cancellation.',
-    // );
-    // result.printResult();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(supportAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents support_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(supportAgent);
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('33-external-workers.ts') || process.argv[1]?.endsWith('33-external-workers.js')) {

@@ -21,8 +21,8 @@ Architecture:
 
 Requirements:
     - Conductor server with AgentTool + MCP support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
-    - AGENT_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api in .env or environment
+    - AGENTSPAN_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
     - GH_TOKEN in .env or environment
 """
 
@@ -268,17 +268,20 @@ software_assistant = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.adk.33_software_bug_assistant
-        runtime.deploy(software_assistant)
-        runtime.serve(software_assistant)
+        result = runtime.run(
+        software_assistant,
+        "Review the latest open issues and PRs on conductor-oss/conductor. "
+        "Check if any of them relate to our internal tickets. "
+        "Pay attention to the DO_WHILE fix (PR #820) and the scheduler "
+        "persistence PRs. Give me a triage summary.",
+        )
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        # software_assistant,
-        # "Review the latest open issues and PRs on conductor-oss/conductor. "
-        # "Check if any of them relate to our internal tickets. "
-        # "Pay attention to the DO_WHILE fix (PR #820) and the scheduler "
-        # "persistence PRs. Give me a triage summary.",
-        # )
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(software_assistant)
+        # CLI alternative:
+        # agentspan deploy --package examples.adk.33_software_bug_assistant
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(software_assistant)

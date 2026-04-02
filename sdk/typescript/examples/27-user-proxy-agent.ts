@@ -12,7 +12,7 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -53,66 +53,27 @@ export const conversation = new Agent({
 if (process.argv[1]?.endsWith('27-user-proxy-agent.ts') || process.argv[1]?.endsWith('27-user-proxy-agent.js')) {
   const runtime = new AgentRuntime();
   try {
-    // Start async to interact with human tasks
-    const handle: AgentHandle = await runtime.start(
-      conversation,
-      "Let's write a Python function to sort a list of dictionaries by a key.",
+    const result = await runtime.run(
+      assistant,
+      "Write a Python function to sort a list of dictionaries by a key.",
     );
-    console.log(`Conversation started: ${handle.executionId}`);
+    result.printResult();
 
-    // Simulate human responses
-    const humanMessages = [
-      'The function should accept a list of dicts and a key name. ' +
-        'It should handle missing keys gracefully.',
-      'Looks good! Can you add type hints and a docstring?',
-    ];
-
-    for (let i = 0; i < humanMessages.length; i++) {
-      const msg = humanMessages[i];
-
-      // Wait for human task
-      let completed = false;
-      let waiting = false;
-      for (let attempt = 0; attempt < 30; attempt++) {
-        const status = await handle.getStatus();
-        if (status.isComplete) {
-          completed = true;
-          break;
-        }
-        if (status.isWaiting) {
-          waiting = true;
-          break;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      }
-
-      if (completed) break;
-
-      if (waiting) {
-        console.log(`\n[Human turn ${i + 1}]: ${msg}`);
-        await handle.respond({ message: msg });
-      }
-    }
-
-    // Wait for completion
-    for (let attempt = 0; attempt < 30; attempt++) {
-      const status = await handle.getStatus();
-      if (status.isComplete) {
-        console.log(`\nFinal conversation:\n${JSON.stringify(status.output)}`);
-        break;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    }
-  } catch (err: unknown) {
-    // UserProxyAgent may require server-side support for model-less sub-agents.
-    // If the server returns 400 due to missing model, log it gracefully.
-    const errStr = String(err);
-    if (errStr.includes('Model string cannot be null') || errStr.includes('400')) {
-      console.log('[EXPECTED] Server requires model on all sub-agents.');
-      console.log('UserProxyAgent structure is correct -- server support pending.');
-    } else {
-      throw err;
-    }
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(conversation);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(conversation);
+    //
+    // Interactive user-proxy alternative:
+    // const handle: AgentHandle = await runtime.start(
+    //   conversation,
+    //   "Let's write a Python function to sort a list of dictionaries by a key.",
+    // );
+    // await handle.respond({ message: 'Add type hints and a docstring.' });
   } finally {
     await runtime.shutdown();
   }

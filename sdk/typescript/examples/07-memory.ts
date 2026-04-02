@@ -68,18 +68,20 @@ export const researchAgent = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(researchAgent);
-    await runtime.serve(researchAgent);
+    const result = await runtime.run(
+    researchAgent,
+    'What do we know about quantum error correction?',
+    );
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const result = await runtime.run(
-    // researchAgent,
-    // 'What do we know about quantum error correction?',
-    // );
-    // result.printResult();
-    // await runtime.shutdown();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(researchAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents research_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(researchAgent);
   } finally {
     await runtime.shutdown();
   }

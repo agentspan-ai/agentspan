@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod';
-import { Agent, AgentRuntime } from '../src/index.js';
+import { Agent, AgentRuntime } from '../src';
 
 const MODEL = process.env.AGENTSPAN_LLM_MODEL ?? 'openai/gpt-4o';
 
@@ -33,27 +33,28 @@ export const analyzerAgent = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(analyzerAgent);
-    await runtime.serve(analyzerAgent);
+    const result = await runtime.run(
+    analyzerAgent,
+    'Analyze: "Quantum Computing Breakthrough: New Error Correction Method Achieves 99.9% Fidelity"',
+    );
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const result = await runtime.run(
-    // analyzerAgent,
-    // 'Analyze: "Quantum Computing Breakthrough: New Error Correction Method Achieves 99.9% Fidelity"',
-    // );
-
-    // result.printResult();
+    result.printResult();
 
     // The output conforms to the ArticleAnalysis schema
-    // console.log('\nStructured output:');
-    // console.log('  Title:', result.output['title']);
-    // console.log('  Category:', result.output['category']);
-    // console.log('  Sentiment:', result.output['sentiment']);
-    // console.log('  Key Topics:', result.output['keyTopics']);
+    console.log('\nStructured output:');
+    console.log('  Title:', result.output['title']);
+    console.log('  Category:', result.output['category']);
+    console.log('  Sentiment:', result.output['sentiment']);
+    console.log('  Key Topics:', result.output['keyTopics']);
 
-    // await runtime.shutdown();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(analyzerAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents article_analyzer
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(analyzerAgent);
   } finally {
     await runtime.shutdown();
   }

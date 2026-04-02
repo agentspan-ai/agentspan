@@ -12,7 +12,7 @@
  * Requirements:
  *   - Conductor server with LLM support
  *   - Docker (for DockerCodeExecutor example)
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -60,23 +60,24 @@ export const sandboxedCoder = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(coder);
-    await runtime.serve(coder);
+    console.log('--- Local Code Execution ---');
+    const result = await runtime.run(
+    coder,
+    'Write a Python function to find the first 10 Fibonacci numbers and print them.',
+    );
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const runtime = new AgentRuntime();
-    // try {
-    // console.log('--- Local Code Execution ---');
-    // const result = await runtime.run(
-    // coder,
-    // 'Write a Python function to find the first 10 Fibonacci numbers and print them.',
-    // );
-    // result.printResult();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(coder);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents local_coder
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(coder);
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('24-code-execution.ts') || process.argv[1]?.endsWith('24-code-execution.js')) {

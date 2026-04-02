@@ -11,7 +11,7 @@ Requirements:
     - pip install google-adk
     - GOOGLE_API_KEY or GEMINI_API_KEY environment variable
     - AGENTSPAN_LLM_MODEL=google_gemini/gemini-2.0-flash (for AgentSpan runs)
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api (for AgentSpan runs)
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api (for AgentSpan runs)
 """
 
 from google.adk.agents import Agent
@@ -29,11 +29,14 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.adk.00_hello_world
-        runtime.deploy(agent)
-        runtime.serve(agent)
+        result = runtime.run(agent, "Say hello!")
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(agent, "Say hello!")
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.adk.00_hello_world
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)

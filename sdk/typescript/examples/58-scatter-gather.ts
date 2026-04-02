@@ -8,7 +8,7 @@
  *
  * Requirements:
  *   - Conductor server running
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_SECONDARY_LLM_MODEL=openai/gpt-4o as environment variable
  */
 
@@ -102,27 +102,28 @@ const prompt = `Create a comprehensive profile for each of the ${COUNTRIES.lengt
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(coordinator);
-    await runtime.serve(coordinator);
+    console.log('='.repeat(70));
+    console.log(`  Scatter-Gather: ${COUNTRIES.length} Parallel Sub-Agents`);
+    console.log('  Coordinator: openai/gpt-4o  |  Workers: anthropic/claude-sonnet');
+    console.log('='.repeat(70));
+    console.log(`\nPrompt: ${prompt}`);
+    console.log(`Countries: ${COUNTRIES.length}`);
+    console.log(`Dispatching ${COUNTRIES.length} parallel researcher agents...\n`);
+    const result = await runtime.run(coordinator, prompt);
+    console.log('--- Coordinator Result ---');
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // console.log('='.repeat(70));
-    // console.log(`  Scatter-Gather: ${COUNTRIES.length} Parallel Sub-Agents`);
-    // console.log('  Coordinator: openai/gpt-4o  |  Workers: anthropic/claude-sonnet');
-    // console.log('='.repeat(70));
-    // console.log(`\nPrompt: ${prompt}`);
-    // console.log(`Countries: ${COUNTRIES.length}`);
-    // console.log(`Dispatching ${COUNTRIES.length} parallel researcher agents...\n`);
-    // const runtime = new AgentRuntime();
-    // try {
-    // const result = await runtime.run(coordinator, prompt);
-    // console.log('--- Coordinator Result ---');
-    // console.log(result.output);
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(coordinator);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents coordinator
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(coordinator);
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('58-scatter-gather.ts') || process.argv[1]?.endsWith('58-scatter-gather.js')) {

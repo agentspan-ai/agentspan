@@ -6,7 +6,7 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -86,44 +86,45 @@ export const support = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(support);
-    await runtime.serve(support);
+    // Scenario 1: Billing question
+    console.log('='.repeat(60));
+    console.log('  Scenario 1: Billing question (swarm -> billing + tool)');
+    console.log('='.repeat(60));
+    const result = await runtime.run(support, "What's the balance on account ACC-456?");
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const runtime = new AgentRuntime();
-    // try {
-    // // Scenario 1: Billing question
-    // console.log('='.repeat(60));
-    // console.log('  Scenario 1: Billing question (swarm -> billing + tool)');
-    // console.log('='.repeat(60));
-    // const result = await runtime.run(support, "What's the balance on account ACC-456?");
-    // result.printResult();
+    const output = String(result.output);
+    if (output.includes('5432')) {
+    console.log('[OK] Billing specialist used check_balance tool');
+    } else {
+    console.log('[WARN] Expected balance amount in output');
+    }
 
-    // const output = String(result.output);
-    // if (output.includes('5432')) {
-    // console.log('[OK] Billing specialist used check_balance tool');
-    // } else {
-    // console.log('[WARN] Expected balance amount in output');
-    // }
+    // Scenario 2: Order question
+    console.log('\n' + '='.repeat(60));
+    console.log('  Scenario 2: Order question (swarm -> order + tool)');
+    console.log('='.repeat(60));
+    const result2 = await runtime.run(support, 'Where is my order ORD-789?');
+    result2.printResult();
 
-    // // Scenario 2: Order question
-    // console.log('\n' + '='.repeat(60));
-    // console.log('  Scenario 2: Order question (swarm -> order + tool)');
-    // console.log('='.repeat(60));
-    // const result2 = await runtime.run(support, 'Where is my order ORD-789?');
-    // result2.printResult();
+    const output2 = String(result2.output);
+    if (output2.toLowerCase().includes('shipped')) {
+    console.log('[OK] Order specialist used lookup_order tool');
+    } else {
+    console.log('[WARN] Expected shipping status in output');
+    }
 
-    // const output2 = String(result2.output);
-    // if (output2.toLowerCase().includes('shipped')) {
-    // console.log('[OK] Order specialist used lookup_order tool');
-    // } else {
-    // console.log('[WARN] Expected shipping status in output');
-    // }
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(support);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents support
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(support);
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('64-swarm-with-tools.ts') || process.argv[1]?.endsWith('64-swarm-with-tools.js')) {

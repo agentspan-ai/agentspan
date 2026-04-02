@@ -148,7 +148,7 @@ await runtime.shutdown();
 | Structured output | `04-structured-output.ts` | `outputType: z.object({ ... })` |
 | Credential management | `09-credentials.ts` | `credentials: ['API_KEY']` |
 | Human-in-the-loop | `10-hitl.ts` | `approvalRequired: true` on tools |
-| Streaming events | `03-streaming.ts` | `runtime.stream(agent, prompt)` |
+| Streaming events | `03-streaming.ts` | `runtime.run(agent, prompt)` with commented `runtime.stream(agent, prompt)` |
 
 ## Examples
 
@@ -156,7 +156,7 @@ await runtime.shutdown();
 |------|-------------|
 | `01-basic-agent.ts` | Simple agent with one AI SDK tool |
 | `02-tools-compat.ts` | Mix of agentspan native and AI SDK tools |
-| `03-streaming.ts` | Streaming events via `runtime.stream()` |
+| `03-streaming.ts` | Default `runtime.run()` flow with a commented `runtime.stream()` alternative |
 | `04-structured-output.ts` | Zod schema for typed output |
 | `05-multi-step.ts` | Multiple tools, multi-turn conversation |
 | `06-middleware.ts` | Guardrails (regex + custom function) |

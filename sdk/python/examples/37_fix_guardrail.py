@@ -19,7 +19,7 @@ Comparison of on_fail modes:
 
 Requirements:
     - Conductor server with LLM support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -103,43 +103,46 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.37_fix_guardrail
-        runtime.deploy(agent)
-        runtime.serve(agent)
+        # ── Scenario 1: Guardrail TRIGGERS — contact has phone number ─────
+        print("=" * 60)
+        print("  Scenario 1: Contact with phone number (guardrail triggers)")
+        print("=" * 60)
+        result = runtime.run(
+            agent,
+            "What's Alice Johnson's contact information?",
+        )
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # # ── Scenario 1: Guardrail TRIGGERS — contact has phone number ─────
-        # print("=" * 60)
-        # print("  Scenario 1: Contact with phone number (guardrail triggers)")
-        # print("=" * 60)
-        # result = runtime.run(
-        #     agent,
-        #     "What's Alice Johnson's contact information?",
-        # )
-        # result.print_result()
+        output = str(result.output)
+        if "(555) 123-4567" in output or "555-123-4567" in output:
+            print("[FAIL] Phone number leaked through the guardrail!")
+        elif "[PHONE REDACTED]" in output:
+            print("[OK] Phone number was auto-redacted by fix guardrail")
+        else:
+            print("[OK] No phone number in output")
 
-        # output = str(result.output)
-        # if "(555) 123-4567" in output or "555-123-4567" in output:
-        #     print("[FAIL] Phone number leaked through the guardrail!")
-        # elif "[PHONE REDACTED]" in output:
-        #     print("[OK] Phone number was auto-redacted by fix guardrail")
-        # else:
-        #     print("[OK] No phone number in output")
+        # ── Scenario 2: Guardrail does NOT trigger — no phone in response ─
+        print("\n" + "=" * 60)
+        print("  Scenario 2: General question (guardrail does not trigger)")
+        print("=" * 60)
+        result2 = runtime.run(
+            agent,
+            "What department does Alice work in? Just the department name.",
+        )
+        result2.print_result()
 
-        # # ── Scenario 2: Guardrail does NOT trigger — no phone in response ─
-        # print("\n" + "=" * 60)
-        # print("  Scenario 2: General question (guardrail does not trigger)")
-        # print("=" * 60)
-        # result2 = runtime.run(
-        #     agent,
-        #     "What department does Alice work in? Just the department name.",
-        # )
-        # result2.print_result()
+        output2 = str(result2.output)
+        if "[PHONE REDACTED]" in output2:
+            print("[WARN] Unexpected redaction in clean response")
+        else:
+            print("[OK] No redaction needed — guardrail passed cleanly")
 
-        # output2 = str(result2.output)
-        # if "[PHONE REDACTED]" in output2:
-        #     print("[WARN] Unexpected redaction in clean response")
-        # else:
-        #     print("[OK] No redaction needed — guardrail passed cleanly")
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.37_fix_guardrail
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
 

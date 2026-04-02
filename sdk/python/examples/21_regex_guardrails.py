@@ -16,7 +16,7 @@ process is needed.  This makes them lightweight and fast.
 
 Requirements:
     - Conductor server with LLM support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -71,50 +71,53 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.21_regex_guardrails
-        runtime.deploy(agent)
-        runtime.serve(agent)
+        # ── Scenario 1: Guardrail TRIGGERS — PII in tool output ───────────
+        print("=" * 60)
+        print("  Scenario 1: Request PII — guardrails trigger")
+        print("=" * 60)
+        result = runtime.run(
+            agent,
+            "Tell me everything about user U-001.",
+        )
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # # ── Scenario 1: Guardrail TRIGGERS — PII in tool output ───────────
-        # print("=" * 60)
-        # print("  Scenario 1: Request PII — guardrails trigger")
-        # print("=" * 60)
-        # result = runtime.run(
-        #     agent,
-        #     "Tell me everything about user U-001.",
-        # )
-        # result.print_result()
+        output = str(result.output)
+        if "alice.johnson@example.com" in output:
+            print("[FAIL] Email leaked!")
+        else:
+            print("[OK] Email was blocked by RegexGuardrail")
 
-        # output = str(result.output)
-        # if "alice.johnson@example.com" in output:
-        #     print("[FAIL] Email leaked!")
-        # else:
-        #     print("[OK] Email was blocked by RegexGuardrail")
+        if "123-45-6789" in output:
+            print("[FAIL] SSN leaked!")
+        else:
+            print("[OK] SSN was blocked by RegexGuardrail")
 
-        # if "123-45-6789" in output:
-        #     print("[FAIL] SSN leaked!")
-        # else:
-        #     print("[OK] SSN was blocked by RegexGuardrail")
+        # ── Scenario 2: Guardrail does NOT trigger — no PII ───────────────
+        print("\n" + "=" * 60)
+        print("  Scenario 2: Non-PII question — guardrails pass")
+        print("=" * 60)
 
-        # # ── Scenario 2: Guardrail does NOT trigger — no PII ───────────────
-        # print("\n" + "=" * 60)
-        # print("  Scenario 2: Non-PII question — guardrails pass")
-        # print("=" * 60)
+        # New agent without PII-returning tool
+        clean_agent = Agent(
+            name="dept_assistant",
+            model=settings.llm_model,
+            instructions="You are an HR assistant. Answer questions about departments.",
+            guardrails=[no_emails, no_ssn],
+        )
+        result2 = runtime.run(clean_agent, "What departments exist at the company?")
+        result2.print_result()
 
-        # # New agent without PII-returning tool
-        # clean_agent = Agent(
-        #     name="dept_assistant",
-        #     model=settings.llm_model,
-        #     instructions="You are an HR assistant. Answer questions about departments.",
-        #     guardrails=[no_emails, no_ssn],
-        # )
-        # result2 = runtime.run(clean_agent, "What departments exist at the company?")
-        # result2.print_result()
+        if result2.status == "COMPLETED":
+            print("[OK] Clean response passed guardrails successfully")
+        else:
+            print(f"[WARN] Unexpected status: {result2.status}")
 
-        # if result2.status == "COMPLETED":
-        #     print("[OK] Clean response passed guardrails successfully")
-        # else:
-        #     print(f"[WARN] Unexpected status: {result2.status}")
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.21_regex_guardrails
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
 

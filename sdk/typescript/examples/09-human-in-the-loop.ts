@@ -8,13 +8,12 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
 import { z } from 'zod';
 import { Agent, AgentRuntime, tool } from '../src/index.js';
-import type { AgentHandle } from '../src/index.js';
 import { llmModel } from './settings.js';
 
 const checkBalance = tool(
@@ -41,7 +40,8 @@ const transferFunds = tool(
   },
   {
     name: 'transfer_funds',
-    description: 'Transfer funds between accounts. Requires human approval.',
+    description:
+      'Request a funds transfer; runtime pauses for human approval before execution.',
     inputSchema: z.object({
       fromAcct: z.string().describe('Source account'),
       toAcct: z.string().describe('Destination account'),
@@ -56,51 +56,37 @@ export const agent = new Agent({
   model: llmModel,
   tools: [checkBalance, transferFunds],
   instructions:
-    'You are a banking assistant. Help with balance inquiries and transfers.',
+    'You are a banking assistant. Use check_balance for balance inquiries. ' +
+    'When asked to transfer money, first check the balance, then call ' +
+    'transfer_funds to request the transfer. The runtime will pause for ' +
+    'human approval before the transfer executes.',
 });
 
 // Only run when executed directly (not when imported for discovery)
 if (process.argv[1]?.endsWith('09-human-in-the-loop.ts') || process.argv[1]?.endsWith('09-human-in-the-loop.js')) {
   const runtime = new AgentRuntime();
   try {
-    // start() returns a handle; handle.stream() streams events with HITL support
-    const handle: AgentHandle = await runtime.start(
-      agent,
-      'Transfer $500 from ACC-789 to ACC-456',
-    );
-    console.log(`Execution started: ${handle.executionId}\n`);
+    const result = await runtime.run(agent, "What's the balance on ACC-789?");
+    result.printResult();
 
-    for await (const event of handle.stream()) {
-      switch (event.type) {
-        case 'thinking':
-          console.log(`  [thinking] ${event.content}`);
-          break;
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents banker
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
 
-        case 'tool_call':
-          console.log(`  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`);
-          break;
-
-        case 'tool_result':
-          console.log(`  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result)}`);
-          break;
-
-        case 'waiting':
-          console.log(`\n--- Human approval required ---`);
-          // Auto-approve since we can't do interactive stdin
-          console.log('  Auto-approving for demo...');
-          await handle.approve();
-          console.log('  Approved!\n');
-          break;
-
-        case 'error':
-          console.log(`  [error] ${event.content}`);
-          break;
-
-        case 'done':
-          console.log(`\nResult: ${JSON.stringify(event.output)}`);
-          break;
-      }
-    }
+    // Interactive HITL alternative:
+    // const result = runtime.stream(
+    //   agent,
+    //   'Transfer $500 from ACC-789 to ACC-456. ' +
+    //     'Check the balance first, then use transfer_funds.',
+    // );
+    // for await (const event of result) {
+    //   if (event.type === 'waiting') await result.approve();
+    // }
   } finally {
     await runtime.shutdown();
   }

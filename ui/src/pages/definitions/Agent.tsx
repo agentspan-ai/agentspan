@@ -88,7 +88,7 @@ export default function AgentDefinitions() {
     onError: (err: Error) => {
       setMessage({
         severity: "error",
-        text: "Failed to delete workflow",
+        text: "Failed to delete agent",
       });
       logger.error(err);
       refetch();
@@ -209,9 +209,9 @@ export default function AgentDefinitions() {
       {
         id: "failure_workflow",
         name: "failureWorkflow",
-        label: "Failure workflow",
+        label: "Failure agent",
         grow: 1,
-        tooltip: "The compensation workflow",
+        tooltip: "The agent to run on failure",
       },
       {
         id: "executions_link",
@@ -424,7 +424,7 @@ export default function AgentDefinitions() {
               <strong style={{ color: "red" }}>
                 {confirmDelete.workflowName}
               </strong>{" "}
-              workflow definition? This cannot be undone.
+              agent definition? This cannot be undone.
               <div style={{ marginTop: "15px" }}>
                 Please type <strong>{confirmDelete.workflowName}</strong> to
                 confirm.

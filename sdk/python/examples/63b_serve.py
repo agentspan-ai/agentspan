@@ -21,8 +21,8 @@ Press Ctrl+C to stop.
 Requirements:
     - Conductor server running
     - Agents already deployed (run 63_deploy.py first)
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
-    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api in .env or environment
+    - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, tool
@@ -72,8 +72,15 @@ ops_bot = Agent(
 )
 
 if __name__ == "__main__":
-    # ── Serve: register workers and block ────────────────────────────────
-
     with AgentRuntime() as runtime:
-        print("Serving workers for doc_assistant + ops_bot. Press Ctrl+C to stop.")
-        runtime.serve(doc_assistant, ops_bot)  # blocks until Ctrl+C / SIGTERM
+        result = runtime.run(ops_bot, "Check the status of the API gateway.")
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(doc_assistant, ops_bot)
+        # CLI alternative:
+        # agentspan deploy --package examples.63b_serve
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(doc_assistant, ops_bot)

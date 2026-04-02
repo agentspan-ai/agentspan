@@ -104,16 +104,29 @@ public class MultiAgentCompiler {
                     .append("\n");
         }
 
-        // 1. Init: seed conversation variable with prompt
+        // 0. Context resolve: INLINE → null-coalesce input.context
+        String handoffCtxResolveRef = config.getName() + "_ctx_resolve";
+        WorkflowTask handoffCtxResolve = new WorkflowTask();
+        handoffCtxResolve.setType("INLINE");
+        handoffCtxResolve.setTaskReferenceName(handoffCtxResolveRef);
+        handoffCtxResolve.setInputParameters(Map.of(
+                "evaluatorType", "graaljs",
+                "ctx", "${workflow.input.context}",
+                "expression", JavaScriptBuilder.nullCoalesceScript()));
+
+        // 1. Init: seed conversation variable with prompt + context
         WorkflowTask initVar = new WorkflowTask();
         initVar.setType("SET_VARIABLE");
         initVar.setTaskReferenceName(config.getName() + "_init");
         String introductions = buildIntroductions(config);
+        Map<String, Object> initParams = new LinkedHashMap<>();
         if (!introductions.isEmpty()) {
-            initVar.setInputParameters(Map.of("conversation", introductions + "\n\n${workflow.input.prompt}"));
+            initParams.put("conversation", introductions + "\n\n${workflow.input.prompt}");
         } else {
-            initVar.setInputParameters(Map.of("conversation", "${workflow.input.prompt}"));
+            initParams.put("conversation", "${workflow.input.prompt}");
         }
+        initParams.put("_agent_state", "${" + handoffCtxResolveRef + ".output.result}");
+        initVar.setInputParameters(initParams);
 
         // 2. Router LLM — reads conversation, picks agent or says DONE
         String systemPrompt = (instructions.isEmpty() ? "" : instructions + "\n\n")
@@ -218,11 +231,14 @@ public class MultiAgentCompiler {
         finalLlm.setInputParameters(finalInputs);
 
         List<WorkflowTask> tasks = new ArrayList<>(instructionsPlan.getPreTasks());
+        tasks.add(handoffCtxResolve);
         tasks.add(initVar);
         tasks.add(loop);
         tasks.add(finalLlm);
         wf.setTasks(tasks);
-        wf.setOutputParameters(Map.of("result", ref(config.getName() + "_final.output.result")));
+        wf.setOutputParameters(Map.of(
+                "result", ref(config.getName() + "_final.output.result"),
+                "context", "${workflow.variables._agent_state}"));
         agentCompiler.applyTimeout(wf, config);
         return wf;
     }
@@ -236,13 +252,50 @@ public class MultiAgentCompiler {
         List<WorkflowTask> tasks = new ArrayList<>();
         String prevOutputRef = "${workflow.input.prompt}";
 
+        // Initialize context from input (INLINE → SET_VARIABLE pattern)
+        String seqCtxResolveRef = config.getName() + "_ctx_init_resolve";
+        WorkflowTask seqCtxResolve = new WorkflowTask();
+        seqCtxResolve.setType("INLINE");
+        seqCtxResolve.setTaskReferenceName(seqCtxResolveRef);
+        seqCtxResolve.setInputParameters(Map.of(
+                "evaluatorType", "graaljs",
+                "ctx", "${workflow.input.context}",
+                "expression", JavaScriptBuilder.nullCoalesceScript()));
+        tasks.add(seqCtxResolve);
+
+        WorkflowTask seqCtxInit = new WorkflowTask();
+        seqCtxInit.setType("SET_VARIABLE");
+        seqCtxInit.setTaskReferenceName(config.getName() + "_ctx_init");
+        seqCtxInit.setInputParameters(Map.of("context", "${" + seqCtxResolveRef + ".output.result}"));
+        tasks.add(seqCtxInit);
+
         for (int i = 0; i < config.getAgents().size(); i++) {
             AgentConfig sub = config.getAgents().get(i);
             String taskRef = config.getName() + "_step_" + i + "_" + sub.getName();
             String mediaRef = i == 0 ? "${workflow.input.media}" : "${workflow.input.media}";
 
-            WorkflowTask task = agentCompiler.compileSubAgent(sub, taskRef, prevOutputRef, mediaRef);
+            WorkflowTask task = agentCompiler.compileSubAgent(sub, taskRef, prevOutputRef, mediaRef,
+                    "${workflow.variables.context}");
             tasks.add(task);
+
+            // Merge child context back into pipeline context
+            String mergeRef = config.getName() + "_ctx_merge_" + i;
+            WorkflowTask mergeTask = new WorkflowTask();
+            mergeTask.setType("INLINE");
+            mergeTask.setTaskReferenceName(mergeRef);
+            mergeTask.setInputParameters(Map.of(
+                    "evaluatorType", "graaljs",
+                    "parent", "${workflow.variables.context}",
+                    "child", "${" + taskRef + ".output.context}",
+                    "expression", JavaScriptBuilder.flatMergeContextScript()));
+            tasks.add(mergeTask);
+
+            String ctxSetRef = config.getName() + "_ctx_set_" + i;
+            WorkflowTask ctxSet = new WorkflowTask();
+            ctxSet.setType("SET_VARIABLE");
+            ctxSet.setTaskReferenceName(ctxSetRef);
+            ctxSet.setInputParameters(Map.of("context", "${" + mergeRef + ".output.result}"));
+            tasks.add(ctxSet);
 
             // Get raw result ref
             String rawRef = AgentCompiler.subAgentResultRef(sub, taskRef);
@@ -286,7 +339,7 @@ public class MultiAgentCompiler {
 
                     String selectorOutputRef = "${" + selectorRef + ".output.result}";
                     wf.setTasks(tasks);
-                    wf.setOutputParameters(Map.of("result", selectorOutputRef));
+                    wf.setOutputParameters(Map.of("result", selectorOutputRef, "context", "${workflow.variables.context}"));
                     agentCompiler.applyTimeout(wf, config);
                     return wf;
                 }
@@ -298,7 +351,7 @@ public class MultiAgentCompiler {
         }
 
         wf.setTasks(tasks);
-        wf.setOutputParameters(Map.of("result", prevOutputRef));
+        wf.setOutputParameters(Map.of("result", prevOutputRef, "context", "${workflow.variables.context}"));
         agentCompiler.applyTimeout(wf, config);
         return wf;
     }
@@ -316,7 +369,8 @@ public class MultiAgentCompiler {
             String taskRef = config.getName() + "_step_" + i + "_" + sub.getName();
             String mediaRef = "${workflow.input.media}";
 
-            WorkflowTask task = agentCompiler.compileSubAgent(sub, taskRef, prevOutputRef, mediaRef);
+            WorkflowTask task = agentCompiler.compileSubAgent(sub, taskRef, prevOutputRef, mediaRef,
+                    "${workflow.variables.context}");
             tasks.add(task);
 
             String rawRef = AgentCompiler.subAgentResultRef(sub, taskRef);
@@ -402,6 +456,25 @@ public class MultiAgentCompiler {
         WorkflowDef wf = agentCompiler.createWorkflow(config);
         wf.setDescription("Parallel agents: " + config.getName());
 
+        List<WorkflowTask> tasks = new ArrayList<>();
+
+        // Context init: INLINE → SET_VARIABLE (null-coalesce input.context)
+        String parCtxResolveRef = config.getName() + "_ctx_resolve";
+        WorkflowTask parCtxResolve = new WorkflowTask();
+        parCtxResolve.setType("INLINE");
+        parCtxResolve.setTaskReferenceName(parCtxResolveRef);
+        parCtxResolve.setInputParameters(Map.of(
+                "evaluatorType", "graaljs",
+                "ctx", "${workflow.input.context}",
+                "expression", JavaScriptBuilder.nullCoalesceScript()));
+        tasks.add(parCtxResolve);
+
+        WorkflowTask parCtxInit = new WorkflowTask();
+        parCtxInit.setType("SET_VARIABLE");
+        parCtxInit.setTaskReferenceName(config.getName() + "_ctx_init");
+        parCtxInit.setInputParameters(Map.of("context", "${" + parCtxResolveRef + ".output.result}"));
+        tasks.add(parCtxInit);
+
         // Build fork task
         WorkflowTask forkTask = new WorkflowTask();
         forkTask.setType("FORK_JOIN");
@@ -409,14 +482,17 @@ public class MultiAgentCompiler {
 
         List<List<WorkflowTask>> forkTasks = new ArrayList<>();
         List<String> joinOn = new ArrayList<>();
+        List<String> taskRefs = new ArrayList<>();
 
         for (int i = 0; i < config.getAgents().size(); i++) {
             AgentConfig sub = config.getAgents().get(i);
             String taskRef = config.getName() + "_parallel_" + i + "_" + sub.getName();
             WorkflowTask task =
-                    agentCompiler.compileSubAgent(sub, taskRef, "${workflow.input.prompt}", "${workflow.input.media}");
+                    agentCompiler.compileSubAgent(sub, taskRef, "${workflow.input.prompt}", "${workflow.input.media}",
+                            "${workflow.variables.context}");
             forkTasks.add(List.of(task));
             joinOn.add(taskRef);
+            taskRefs.add(taskRef);
         }
         forkTask.setForkTasks(forkTasks);
         forkTask.setJoinOn(joinOn);
@@ -450,13 +526,37 @@ public class MultiAgentCompiler {
         aggInputs.put("expression", buildParallelAggregateScript(agentNames));
         aggregateTask.setInputParameters(aggInputs);
 
-        wf.setTasks(List.of(forkTask, joinTask, aggregateTask));
+        // Namespaced context merge: INLINE merges parent context + each child's context under agent name
+        String ctxMergeRef = config.getName() + "_ctx_merge";
+        WorkflowTask ctxMergeTask = new WorkflowTask();
+        ctxMergeTask.setType("INLINE");
+        ctxMergeTask.setTaskReferenceName(ctxMergeRef);
+        Map<String, Object> mergeInputs = new LinkedHashMap<>();
+        mergeInputs.put("evaluatorType", "graaljs");
+        mergeInputs.put("parentCtx", "${workflow.variables.context}");
+        mergeInputs.put("agentNames", agentNames);
+        for (int i = 0; i < config.getAgents().size(); i++) {
+            mergeInputs.put("child_" + i, "${" + taskRefs.get(i) + ".output.context}");
+        }
+        mergeInputs.put("expression", JavaScriptBuilder.namespacedMergeContextScript());
+        ctxMergeTask.setInputParameters(mergeInputs);
 
-        // Output references the INLINE task's result
+        // SET_VARIABLE to persist merged context
+        String ctxSetRef = config.getName() + "_ctx_set";
+        WorkflowTask ctxSet = new WorkflowTask();
+        ctxSet.setType("SET_VARIABLE");
+        ctxSet.setTaskReferenceName(ctxSetRef);
+        ctxSet.setInputParameters(Map.of("context", "${" + ctxMergeRef + ".output.result}"));
+
+        tasks.addAll(List.of(forkTask, joinTask, aggregateTask, ctxMergeTask, ctxSet));
+        wf.setTasks(tasks);
+
+        // Output references the INLINE task's result + merged context
         String aggRef = config.getName() + "_aggregate";
         wf.setOutputParameters(Map.of(
                 "result", "${" + aggRef + ".output.result.result}",
-                "subResults", "${" + aggRef + ".output.result.subResults}"));
+                "subResults", "${" + aggRef + ".output.result.subResults}",
+                "context", "${workflow.variables.context}"));
         agentCompiler.applyTimeout(wf, config);
         return wf;
     }
@@ -530,16 +630,29 @@ public class MultiAgentCompiler {
                     .append("\n");
         }
 
-        // 1. Init: seed conversation variable
+        // 0. Context resolve: INLINE → null-coalesce input.context
+        String routerCtxResolveRef = config.getName() + "_ctx_resolve";
+        WorkflowTask routerCtxResolve = new WorkflowTask();
+        routerCtxResolve.setType("INLINE");
+        routerCtxResolve.setTaskReferenceName(routerCtxResolveRef);
+        routerCtxResolve.setInputParameters(Map.of(
+                "evaluatorType", "graaljs",
+                "ctx", "${workflow.input.context}",
+                "expression", JavaScriptBuilder.nullCoalesceScript()));
+
+        // 1. Init: seed conversation variable + context
         WorkflowTask initVar = new WorkflowTask();
         initVar.setType("SET_VARIABLE");
         initVar.setTaskReferenceName(config.getName() + "_init");
         String introductions = buildIntroductions(config);
+        Map<String, Object> routerInitParams = new LinkedHashMap<>();
         if (!introductions.isEmpty()) {
-            initVar.setInputParameters(Map.of("conversation", introductions + "\n\n${workflow.input.prompt}"));
+            routerInitParams.put("conversation", introductions + "\n\n${workflow.input.prompt}");
         } else {
-            initVar.setInputParameters(Map.of("conversation", "${workflow.input.prompt}"));
+            routerInitParams.put("conversation", "${workflow.input.prompt}");
         }
+        routerInitParams.put("_agent_state", "${" + routerCtxResolveRef + ".output.result}");
+        initVar.setInputParameters(routerInitParams);
 
         // 2. Build router task (supports WorkerRef, AgentConfig, or fallback)
         Object router = config.getRouter();
@@ -683,11 +796,14 @@ public class MultiAgentCompiler {
                         Map.of("role", "user", "message", "${workflow.variables.conversation}")));
         finalLlm.setInputParameters(finalInputs);
 
+        preTasks.add(routerCtxResolve);
         preTasks.add(initVar);
         preTasks.add(loop);
         preTasks.add(finalLlm);
         wf.setTasks(preTasks);
-        wf.setOutputParameters(Map.of("result", ref(config.getName() + "_final.output.result")));
+        wf.setOutputParameters(Map.of(
+                "result", ref(config.getName() + "_final.output.result"),
+                "context", "${workflow.variables._agent_state}"));
         agentCompiler.applyTimeout(wf, config);
         return wf;
     }
@@ -703,7 +819,17 @@ public class MultiAgentCompiler {
         String loopRef = config.getName() + "_loop";
         int maxTurns = config.getMaxTurns() > 0 ? config.getMaxTurns() : 25;
 
-        // 1. Init: seed conversation
+        // 0. Context resolve: INLINE → null-coalesce input.context
+        String rotCtxResolveRef = config.getName() + "_ctx_resolve";
+        WorkflowTask rotCtxResolve = new WorkflowTask();
+        rotCtxResolve.setType("INLINE");
+        rotCtxResolve.setTaskReferenceName(rotCtxResolveRef);
+        rotCtxResolve.setInputParameters(Map.of(
+                "evaluatorType", "graaljs",
+                "ctx", "${workflow.input.context}",
+                "expression", JavaScriptBuilder.nullCoalesceScript()));
+
+        // 1. Init: seed conversation + context
         WorkflowTask initVar = new WorkflowTask();
         initVar.setType("SET_VARIABLE");
         initVar.setTaskReferenceName(config.getName() + "_init");
@@ -717,6 +843,7 @@ public class MultiAgentCompiler {
         if (config.getAllowedTransitions() != null) {
             initInputs.put("last_agent", "0");
         }
+        initInputs.put("_agent_state", "${" + rotCtxResolveRef + ".output.result}");
         initVar.setInputParameters(initInputs);
 
         // 2a. Select agent
@@ -756,8 +883,10 @@ public class MultiAgentCompiler {
         WorkflowTask loop =
                 agentCompiler.buildDoWhile(loopRef, termCondition, List.of(selectTask, switchTask), loopInputs);
 
-        wf.setTasks(List.of(initVar, loop));
-        wf.setOutputParameters(Map.of("result", "${workflow.variables.conversation}"));
+        wf.setTasks(List.of(rotCtxResolve, initVar, loop));
+        wf.setOutputParameters(Map.of(
+                "result", "${workflow.variables.conversation}",
+                "context", "${workflow.variables._agent_state}"));
         agentCompiler.applyTimeout(wf, config);
         return wf;
     }
@@ -791,7 +920,17 @@ public class MultiAgentCompiler {
         allSwarmAgents.add(parentAsAgent);
         allSwarmAgents.addAll(config.getAgents());
 
-        // 1. Init — track conversation, active_agent, last_response, transfer state
+        // 0. Context resolve: INLINE → null-coalesce input.context
+        String swarmCtxResolveRef = config.getName() + "_ctx_resolve";
+        WorkflowTask swarmCtxResolve = new WorkflowTask();
+        swarmCtxResolve.setType("INLINE");
+        swarmCtxResolve.setTaskReferenceName(swarmCtxResolveRef);
+        swarmCtxResolve.setInputParameters(Map.of(
+                "evaluatorType", "graaljs",
+                "ctx", "${workflow.input.context}",
+                "expression", JavaScriptBuilder.nullCoalesceScript()));
+
+        // 1. Init — track conversation, active_agent, last_response, transfer state, context
         WorkflowTask initVar = new WorkflowTask();
         initVar.setType("SET_VARIABLE");
         initVar.setTaskReferenceName(config.getName() + "_init");
@@ -804,6 +943,7 @@ public class MultiAgentCompiler {
         initInputs.put("last_response", "");
         initInputs.put("is_transfer", false);
         initInputs.put("transfer_to", "");
+        initInputs.put("_agent_state", "${" + swarmCtxResolveRef + ".output.result}");
         initVar.setInputParameters(initInputs);
 
         // 2. Switch by active_agent
@@ -879,11 +1019,14 @@ public class MultiAgentCompiler {
         finalLlm.setInputParameters(finalInputs);
 
         List<WorkflowTask> tasks = new ArrayList<>(instructionsPlan.getPreTasks());
+        tasks.add(swarmCtxResolve);
         tasks.add(initVar);
         tasks.add(loop);
         tasks.add(finalLlm);
         wf.setTasks(tasks);
-        wf.setOutputParameters(Map.of("result", ref(config.getName() + "_final.output.result")));
+        wf.setOutputParameters(Map.of(
+                "result", ref(config.getName() + "_final.output.result"),
+                "context", "${workflow.variables._agent_state}"));
         agentCompiler.applyTimeout(wf, config);
         return wf;
     }
@@ -1096,6 +1239,16 @@ public class MultiAgentCompiler {
         String loopRef = config.getName() + "_loop";
         int maxTurns = config.getMaxTurns() > 0 ? config.getMaxTurns() : 25;
 
+        // 0. Context resolve: INLINE → null-coalesce input.context
+        String manCtxResolveRef = config.getName() + "_ctx_resolve";
+        WorkflowTask manCtxResolve = new WorkflowTask();
+        manCtxResolve.setType("INLINE");
+        manCtxResolve.setTaskReferenceName(manCtxResolveRef);
+        manCtxResolve.setInputParameters(Map.of(
+                "evaluatorType", "graaljs",
+                "ctx", "${workflow.input.context}",
+                "expression", JavaScriptBuilder.nullCoalesceScript()));
+
         // 1. Init
         WorkflowTask initVar = new WorkflowTask();
         initVar.setType("SET_VARIABLE");
@@ -1105,6 +1258,7 @@ public class MultiAgentCompiler {
         initInputs.put(
                 "conversation",
                 introductions.isEmpty() ? "${workflow.input.prompt}" : introductions + "\n\n${workflow.input.prompt}");
+        initInputs.put("_agent_state", "${" + manCtxResolveRef + ".output.result}");
         initVar.setInputParameters(initInputs);
 
         // 2. HumanTask
@@ -1151,8 +1305,10 @@ public class MultiAgentCompiler {
         WorkflowTask loop = agentCompiler.buildDoWhile(
                 loopRef, termCondition, List.of(humanTask, processTask, switchTask), loopInputs);
 
-        wf.setTasks(List.of(initVar, loop));
-        wf.setOutputParameters(Map.of("result", "${workflow.variables.conversation}"));
+        wf.setTasks(List.of(manCtxResolve, initVar, loop));
+        wf.setOutputParameters(Map.of(
+                "result", "${workflow.variables.conversation}",
+                "context", "${workflow.variables._agent_state}"));
         agentCompiler.applyTimeout(wf, config);
         return wf;
     }
@@ -1221,7 +1377,8 @@ public class MultiAgentCompiler {
         String subRef = parent.getName() + "_agent_" + idx + "_" + sub.getName();
 
         WorkflowTask task = agentCompiler.compileSubAgent(
-                sub, subRef, "${workflow.variables.conversation}", "${workflow.input.media}");
+                sub, subRef, "${workflow.variables.conversation}", "${workflow.input.media}",
+                "${workflow.variables._agent_state}");
         caseTasks.add(task);
 
         // Concat
@@ -1237,7 +1394,19 @@ public class MultiAgentCompiler {
         concatTask.setInputParameters(concatInputs);
         caseTasks.add(concatTask);
 
-        // SetVariable
+        // Merge child context back into _agent_state
+        String rCtxMergeRef = parent.getName() + "_rctx_merge_" + idx;
+        WorkflowTask rCtxMerge = new WorkflowTask();
+        rCtxMerge.setType("INLINE");
+        rCtxMerge.setTaskReferenceName(rCtxMergeRef);
+        rCtxMerge.setInputParameters(Map.of(
+                "evaluatorType", "graaljs",
+                "parent", "${workflow.variables._agent_state}",
+                "child", "${" + subRef + ".output.context}",
+                "expression", JavaScriptBuilder.flatMergeContextScript()));
+        caseTasks.add(rCtxMerge);
+
+        // SetVariable — persist conversation + merged context
         WorkflowTask setVar = new WorkflowTask();
         setVar.setType("SET_VARIABLE");
         setVar.setTaskReferenceName(parent.getName() + "_set_" + idx);
@@ -1246,6 +1415,7 @@ public class MultiAgentCompiler {
         if (parent.getAllowedTransitions() != null) {
             setInputs.put("last_agent", String.valueOf(idx));
         }
+        setInputs.put("_agent_state", "${" + rCtxMergeRef + ".output.result}");
         setVar.setInputParameters(setInputs);
         caseTasks.add(setVar);
 
@@ -1270,6 +1440,7 @@ public class MultiAgentCompiler {
         subInputs.put("prompt", "${workflow.variables.conversation}");
         subInputs.put("media", "${workflow.input.media}");
         subInputs.put("session_id", "${workflow.input.session_id}");
+        subInputs.put("context", "${workflow.variables._agent_state}");
         task.setInputParameters(subInputs);
         caseTasks.add(task);
 
@@ -1286,7 +1457,19 @@ public class MultiAgentCompiler {
         concatTask.setInputParameters(concatInputs);
         caseTasks.add(concatTask);
 
-        // SetVariable — set conversation, last_response, and transfer state from agent output
+        // Merge child context back into _agent_state
+        String sCtxMergeRef = parent.getName() + "_sctx_merge_" + idx;
+        WorkflowTask sCtxMerge = new WorkflowTask();
+        sCtxMerge.setType("INLINE");
+        sCtxMerge.setTaskReferenceName(sCtxMergeRef);
+        sCtxMerge.setInputParameters(Map.of(
+                "evaluatorType", "graaljs",
+                "parent", "${workflow.variables._agent_state}",
+                "child", "${" + subRef + ".output.context}",
+                "expression", JavaScriptBuilder.flatMergeContextScript()));
+        caseTasks.add(sCtxMerge);
+
+        // SetVariable — set conversation, last_response, transfer state, and merged context
         String concatRef = parent.getName() + "_concat_" + idx;
         WorkflowTask setVar = new WorkflowTask();
         setVar.setType("SET_VARIABLE");
@@ -1296,6 +1479,7 @@ public class MultiAgentCompiler {
         setInputs.put("last_response", responseRef);
         setInputs.put("is_transfer", ref(subRef + ".output.is_transfer"));
         setInputs.put("transfer_to", ref(subRef + ".output.transfer_to"));
+        setInputs.put("_agent_state", "${" + sCtxMergeRef + ".output.result}");
         setVar.setInputParameters(setInputs);
         caseTasks.add(setVar);
 
@@ -1422,7 +1606,8 @@ public class MultiAgentCompiler {
         String subRef = parent.getName() + "_handoff_" + idx + "_" + sub.getName() + suffix;
 
         WorkflowTask task = agentCompiler.compileSubAgent(
-                sub, subRef, "${workflow.variables.conversation}", "${workflow.input.media}");
+                sub, subRef, "${workflow.variables.conversation}", "${workflow.input.media}",
+                "${workflow.variables._agent_state}");
         caseTasks.add(task);
 
         // Concat response to conversation
@@ -1438,12 +1623,26 @@ public class MultiAgentCompiler {
         concatTask.setInputParameters(concatInputs);
         caseTasks.add(concatTask);
 
-        // Persist updated conversation
+        // Merge child context back into _agent_state
+        String hCtxMergeRef = parent.getName() + "_hctx_merge_" + idx + suffix;
+        WorkflowTask hCtxMerge = new WorkflowTask();
+        hCtxMerge.setType("INLINE");
+        hCtxMerge.setTaskReferenceName(hCtxMergeRef);
+        hCtxMerge.setInputParameters(Map.of(
+                "evaluatorType", "graaljs",
+                "parent", "${workflow.variables._agent_state}",
+                "child", "${" + subRef + ".output.context}",
+                "expression", JavaScriptBuilder.flatMergeContextScript()));
+        caseTasks.add(hCtxMerge);
+
+        // Persist updated conversation + merged context
         WorkflowTask setVar = new WorkflowTask();
         setVar.setType("SET_VARIABLE");
         setVar.setTaskReferenceName(parent.getName() + "_hset_" + idx + suffix);
-        setVar.setInputParameters(
-                Map.of("conversation", ref(parent.getName() + "_hconcat_" + idx + suffix + ".output.result")));
+        Map<String, Object> setParams = new LinkedHashMap<>();
+        setParams.put("conversation", ref(parent.getName() + "_hconcat_" + idx + suffix + ".output.result"));
+        setParams.put("_agent_state", "${" + hCtxMergeRef + ".output.result}");
+        setVar.setInputParameters(setParams);
         caseTasks.add(setVar);
 
         return caseTasks;

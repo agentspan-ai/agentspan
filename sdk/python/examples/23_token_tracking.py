@@ -8,7 +8,7 @@ aggregated token usage across all LLM calls in an agent execution.
 
 Requirements:
     - Conductor server with LLM support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -36,30 +36,33 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.23_token_tracking
-        runtime.deploy(agent)
-        runtime.serve(agent)
+        result = runtime.run(
+            agent,
+            "Calculate the compound interest on $10,000 at 5% annual rate "
+            "compounded monthly for 3 years.",
+        )
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        #     agent,
-        #     "Calculate the compound interest on $10,000 at 5% annual rate "
-        #     "compounded monthly for 3 years.",
-        # )
-        # result.print_result()
+        # Token usage is automatically extracted from the workflow
+        if result.token_usage:
+            print("Token Usage Summary:")
+            print(f"  Prompt tokens:     {result.token_usage.prompt_tokens}")
+            print(f"  Completion tokens: {result.token_usage.completion_tokens}")
+            print(f"  Total tokens:      {result.token_usage.total_tokens}")
 
-        # # Token usage is automatically extracted from the workflow
-        # if result.token_usage:
-        #     print("Token Usage Summary:")
-        #     print(f"  Prompt tokens:     {result.token_usage.prompt_tokens}")
-        #     print(f"  Completion tokens: {result.token_usage.completion_tokens}")
-        #     print(f"  Total tokens:      {result.token_usage.total_tokens}")
+            # Estimate cost (example pricing — adjust for your model)
+            prompt_cost = result.token_usage.prompt_tokens * 0.0025 / 1000
+            completion_cost = result.token_usage.completion_tokens * 0.01 / 1000
+            print(f"\n  Estimated cost: ${prompt_cost + completion_cost:.4f}")
+        else:
+            print("(Token usage not available from workflow)")
 
-        #     # Estimate cost (example pricing — adjust for your model)
-        #     prompt_cost = result.token_usage.prompt_tokens * 0.0025 / 1000
-        #     completion_cost = result.token_usage.completion_tokens * 0.01 / 1000
-        #     print(f"\n  Estimated cost: ${prompt_cost + completion_cost:.4f}")
-        # else:
-        #     print("(Token usage not available from workflow)")
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.23_token_tracking
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
 

@@ -9,10 +9,14 @@
  * Setup (one-time):
  *   agentspan credentials set --name MCP_API_KEY
  *
+ * MCP Weather Server Setup:
+ *   # Install and start the weather MCP server (runs on port 3001):
+ *   npx -y @philschmid/weather-mcp
+ *
  * Requirements:
  *   - Agentspan server running at AGENTSPAN_SERVER_URL
  *   - AGENTSPAN_LLM_MODEL set (or defaults to openai/gpt-4o-mini)
- *   - MCP server running at the specified URL
+ *   - MCP server running on http://localhost:3001/mcp (see setup above)
  *   - MCP_API_KEY stored via `agentspan credentials set`
  */
 
@@ -42,19 +46,20 @@ export const agent = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(agent);
-    await runtime.serve(agent);
+    const result = await runtime.run(agent, 'What tools are available?');
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const runtime = new AgentRuntime();
-    // try {
-    // const result = await runtime.run(agent, 'What tools are available?');
-    // result.printResult();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents mcp_cred_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('16f-credentials-mcp-tool.ts') || process.argv[1]?.endsWith('16f-credentials-mcp-tool.js')) {

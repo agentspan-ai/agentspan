@@ -10,13 +10,13 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api
  *   - /dg skill installed (https://github.com/v1r3n/dinesh-gilfoyle)
  *   - conductor skill installed (https://github.com/conductor-oss/conductor-skills)
  */
 
 import { z } from 'zod';
-import { Agent, AgentRuntime, agentTool, skill, tool } from '../src/index.js';
+import { Agent, AgentRuntime, OnTextMention, agentTool, skill, tool } from '../src/index.js';
 import { llmModel, secondaryLlmModel } from './settings.js';
 
 // ── Load skills ────────────────────────────────────────────────────
@@ -85,9 +85,10 @@ async function exampleRouter() {
         "    query = f\"SELECT * FROM users WHERE user='{username}' AND pass='{password}'\"\n" +
         '    return db.execute(query)\n',
     );
-    console.log(`Workflow ID: ${result.workflowId}`);
+    console.log(`Execution ID: ${result.executionId}`);
     console.log(`Status:      ${result.status}`);
     console.log(`Tokens:      ${JSON.stringify(result.tokenUsage)}`);
+    result.printResult();
   } finally {
     await runtime.shutdown();
   }
@@ -128,9 +129,10 @@ async function examplePipeline() {
         '        return charge_card(card_number, amount)\n' +
         "    return {'error': 'invalid amount'}\n",
     );
-    console.log(`Workflow ID: ${result.workflowId}`);
+    console.log(`Execution ID: ${result.executionId}`);
     console.log(`Status:      ${result.status}`);
     console.log(`Tokens:      ${JSON.stringify(result.tokenUsage)}`);
+    result.printResult();
   } finally {
     await runtime.shutdown();
   }
@@ -178,9 +180,10 @@ async function exampleParallel() {
         '    output = subprocess.check_output(cmd, shell=True)\n' +
         '    return output.decode()\n',
     );
-    console.log(`Workflow ID: ${result.workflowId}`);
+    console.log(`Execution ID: ${result.executionId}`);
     console.log(`Status:      ${result.status}`);
     console.log(`Tokens:      ${JSON.stringify(result.tokenUsage)}`);
+    result.printResult();
   } finally {
     await runtime.shutdown();
   }
@@ -224,9 +227,10 @@ async function exampleOrchestrator() {
         '    }\n' +
         "    return {'status': 'COMPLETED', 'output': enriched}\n",
     );
-    console.log(`Workflow ID: ${result.workflowId}`);
+    console.log(`Execution ID: ${result.executionId}`);
     console.log(`Status:      ${result.status}`);
     console.log(`Tokens:      ${JSON.stringify(result.tokenUsage)}`);
+    result.printResult();
   } finally {
     await runtime.shutdown();
   }
@@ -251,8 +255,8 @@ async function exampleSwarm() {
     agents: [architect, dg],
     strategy: 'swarm',
     handoffs: [
-      { text: 'HANDOFF_TO_DG', target: 'dg' },
-      { text: 'HANDOFF_TO_ARCHITECT', target: 'architect' },
+      new OnTextMention({ text: 'HANDOFF_TO_DG', target: 'dg' }),
+      new OnTextMention({ text: 'HANDOFF_TO_ARCHITECT', target: 'architect' }),
     ],
   });
 
@@ -267,9 +271,10 @@ async function exampleSwarm() {
         '- REST API for configuration\n' +
         '- Middleware for Express.js',
     );
-    console.log(`Workflow ID: ${result.workflowId}`);
+    console.log(`Execution ID: ${result.executionId}`);
     console.log(`Status:      ${result.status}`);
     console.log(`Tokens:      ${JSON.stringify(result.tokenUsage)}`);
+    result.printResult();
   } finally {
     await runtime.shutdown();
   }

@@ -10,7 +10,7 @@ Demonstrates:
     - Practical use case: automated business report generation from raw data inputs
 
 Requirements:
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
@@ -171,17 +171,20 @@ graph = create_react_agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.langgraph.45_advanced_orchestration
-        runtime.deploy(graph)
-        runtime.serve(graph)
+        result = runtime.run(
+        graph,
+        "Generate a complete executive report for TechStartup Inc., "
+        "a SaaS company in the cloud infrastructure sector with $12M annual revenue "
+        "and 45% year-over-year growth.",
+        )
+        print(f"Status: {result.status}")
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        # graph,
-        # "Generate a complete executive report for TechStartup Inc., "
-        # "a SaaS company in the cloud infrastructure sector with $12M annual revenue "
-        # "and 45% year-over-year growth.",
-        # )
-        # print(f"Status: {result.status}")
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.45_advanced_orchestration
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)

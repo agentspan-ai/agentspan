@@ -222,7 +222,7 @@ def http_tool(
     return ToolDef(
         name=name,
         description=description,
-        input_schema=input_schema or {},
+        input_schema=input_schema or {"type": "object", "properties": {}},
         tool_type="http",
         config={
             "url": url,

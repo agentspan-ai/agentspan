@@ -12,7 +12,7 @@ Demonstrates:
 Requirements:
     - pip install google-adk
     - Conductor server with Google Gemini LLM integration configured
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=google_gemini/gemini-2.0-flash as environment variable
 """
 
@@ -169,15 +169,18 @@ coordinator = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.adk.10_hierarchical_agents
-        runtime.deploy(coordinator)
-        runtime.serve(coordinator)
+        result = runtime.run(
+        coordinator,
+        "Give me a full platform health assessment. Focus on the payments service "
+        "which seems to be having issues.",
+        )
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        # coordinator,
-        # "Give me a full platform health assessment. Focus on the payments service "
-        # "which seems to be having issues.",
-        # )
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(coordinator)
+        # CLI alternative:
+        # agentspan deploy --package examples.adk.10_hierarchical_agents
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(coordinator)

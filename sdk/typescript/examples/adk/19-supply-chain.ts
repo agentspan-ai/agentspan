@@ -168,19 +168,22 @@ export const coordinator = new LlmAgent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(coordinator);
-    await runtime.serve(coordinator);
+    const result = await runtime.run(
+    coordinator,
+    'Give me a full supply chain status report. Check both warehouses, ' +
+    'identify any items below reorder points, and recommend restocking actions.',
+    );
+    console.log('Status:', result.status);
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const result = await runtime.run(
-    // coordinator,
-    // 'Give me a full supply chain status report. Check both warehouses, ' +
-    // 'identify any items below reorder points, and recommend restocking actions.',
-    // );
-    // console.log('Status:', result.status);
-    // result.printResult();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(coordinator);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents supply_chain_coordinator
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(coordinator);
   } finally {
     await runtime.shutdown();
   }

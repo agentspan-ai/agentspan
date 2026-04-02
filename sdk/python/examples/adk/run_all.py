@@ -2229,13 +2229,14 @@ class _TimedRuntime:
         return getattr(self._rt, name)
 
 
-def _cancel_workflows(runtime: AgentRuntime, execution_ids: List[str], reason: str) -> None:
+def _cancel_workflows(execution_ids: List[str], reason: str) -> None:
     """Best-effort cancellation of all workflows started by an example."""
-    for execution_id in execution_ids:
-        try:
-            runtime.cancel(execution_id, reason=reason)
-        except Exception:
-            pass
+    with AgentRuntime() as runtime:
+        for execution_id in execution_ids:
+            try:
+                runtime.cancel(execution_id, reason=reason)
+            except Exception:
+                pass
 
 
 def _fn_to_filename(fn) -> str:
@@ -2247,49 +2248,50 @@ def _fn_to_filename(fn) -> str:
     return f"{name}.py"
 
 
-def _run_example_tracked(fn, runtime: AgentRuntime, state: _RunState) -> ExampleResult:
+def _run_example_tracked(fn, state: _RunState) -> ExampleResult:
     """Run one example and update the shared _RunState for live display."""
     state.status = "RUNNING"
     state.start_time = time.time()
     filename = _fn_to_filename(fn)
-    proxy = _TimedRuntime(runtime, EXAMPLE_TIMEOUT_S, state)
     try:
-        r = fn(proxy)
-        r.filename = filename
-        r.duration_s = time.time() - state.start_time
-        state.duration_s = r.duration_s
-        state.execution_id = r.execution_id or state.execution_id
+        with AgentRuntime() as runtime:
+            proxy = _TimedRuntime(runtime, EXAMPLE_TIMEOUT_S, state)
+            r = fn(proxy)
+            r.filename = filename
+            r.duration_s = time.time() - state.start_time
+            state.duration_s = r.duration_s
+            state.execution_id = r.execution_id or state.execution_id
 
-        # Detect poll timeout: runtime.run() returned with a non-terminal status.
-        # r.status may be comma-separated for multi-workflow examples (e.g. ex05
-        # sets r.status = "COMPLETED, COMPLETED"), so check each part individually.
-        _result_statuses = [s.strip() for s in r.status.split(",")]
-        if any(s not in _TERMINAL_WF_STATUSES for s in _result_statuses):
-            state.wf_status = "TIMEOUT"
-            state.status = "FAIL"
-            state.error = f"timed out after {EXAMPLE_TIMEOUT_S}s (server status: {r.status})"
-            _cancel_workflows(runtime, proxy.execution_ids, f"run_all: timeout after {EXAMPLE_TIMEOUT_S}s")
-            return ExampleResult(
-                name=state.display_name,
-                filename=filename,
-                execution_id=r.execution_id,
-                status="TIMEOUT",
-                error=state.error,
-                duration_s=state.duration_s,
+            # Detect poll timeout: runtime.run() returned with a non-terminal status.
+            # r.status may be comma-separated for multi-workflow examples (e.g. ex05
+            # sets r.status = "COMPLETED, COMPLETED"), so check each part individually.
+            _result_statuses = [s.strip() for s in r.status.split(",")]
+            if any(s not in _TERMINAL_WF_STATUSES for s in _result_statuses):
+                state.wf_status = "TIMEOUT"
+                state.status = "FAIL"
+                state.error = f"timed out after {EXAMPLE_TIMEOUT_S}s (server status: {r.status})"
+                _cancel_workflows(proxy.execution_ids, f"run_all: timeout after {EXAMPLE_TIMEOUT_S}s")
+                return ExampleResult(
+                    name=state.display_name,
+                    filename=filename,
+                    execution_id=r.execution_id,
+                    status="TIMEOUT",
+                    error=state.error,
+                    duration_s=state.duration_s,
+                )
+
+            # Use the "worst" individual status for the display (FAILED > COMPLETED).
+            state.wf_status = next(
+                (s for s in _result_statuses if s != "COMPLETED"),
+                "COMPLETED",
             )
-
-        # Use the "worst" individual status for the display (FAILED > COMPLETED).
-        state.wf_status = next(
-            (s for s in _result_statuses if s != "COMPLETED"),
-            "COMPLETED",
-        )
-        state.status = "PASS" if r.passed else "FAIL"
-        return r
+            state.status = "PASS" if r.passed else "FAIL"
+            return r
     except Exception as e:
         state.duration_s = time.time() - state.start_time
         state.status = "ERROR"
         state.error = f"{type(e).__name__}: {e}"
-        _cancel_workflows(runtime, proxy.execution_ids, "run_all: example exception")
+        _cancel_workflows(state.execution_ids, "run_all: example exception")
         return ExampleResult(
             name=fn.__name__,
             filename=filename,
@@ -2394,70 +2396,69 @@ def main() -> int:
 
     _console.print(f"\n  Server: [cyan]{_cfg.server_url}[/cyan]")
 
-    with AgentRuntime() as runtime:
-        with Live(
-            _make_display(states, len(EXAMPLES)),
-            refresh_per_second=8,
-            console=_console,
-            transient=False,
-        ) as live:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-                futures = {
-                    executor.submit(
-                        _run_example_tracked, fn, runtime, state_by_fn[fn.__name__]
-                    ): fn
-                    for fn in EXAMPLES
-                }
-                pending = set(futures.keys())
-                while pending:
-                    # Enforce wall-clock timeout per example.  Python threads
-                    # cannot be killed, but we cancel the Conductor workflow so
-                    # the server stops working, mark the example as timed out,
-                    # and drop it from the pending set so we don't wait forever.
-                    now = time.time()
-                    timed_out: set = set()
-                    for fut in list(pending):
+    with Live(
+        _make_display(states, len(EXAMPLES)),
+        refresh_per_second=8,
+        console=_console,
+        transient=False,
+    ) as live:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures = {
+                executor.submit(
+                    _run_example_tracked, fn, state_by_fn[fn.__name__]
+                ): fn
+                for fn in EXAMPLES
+            }
+            pending = set(futures.keys())
+            while pending:
+                # Enforce wall-clock timeout per example.  Python threads
+                # cannot be killed, but we cancel the Conductor workflow so
+                # the server stops working, mark the example as timed out,
+                # and drop it from the pending set so we don't wait forever.
+                now = time.time()
+                timed_out: set = set()
+                for fut in list(pending):
+                    fn = futures[fut]
+                    s = state_by_fn[fn.__name__]
+                    if (
+                        s.status == "RUNNING"
+                        and s.start_time > 0
+                        and (now - s.start_time) > EXAMPLE_TIMEOUT_S
+                    ):
+                        s.status = "FAIL"
+                        s.wf_status = "TIMEOUT"
+                        s.duration_s = now - s.start_time
+                        s.error = f"wall-clock timeout after {EXAMPLE_TIMEOUT_S}s"
+                        _cancel_workflows(
+                            s.execution_ids,
+                            f"run_all: wall-clock timeout after {EXAMPLE_TIMEOUT_S}s",
+                        )
+                        result_map[fn.__name__] = ExampleResult(
+                            name=s.display_name,
+                            filename=_fn_to_filename(fn),
+                            execution_id=s.execution_id,
+                            status="TIMEOUT",
+                            error=s.error,
+                            duration_s=s.duration_s,
+                        )
+                        timed_out.add(fut)
+                pending -= timed_out
+
+                if not pending:
+                    break
+
+                done, pending = concurrent.futures.wait(
+                    pending, timeout=0.1,
+                    return_when=concurrent.futures.FIRST_COMPLETED,
+                )
+                for fut in done:
+                    try:
+                        r = fut.result()
+                    except Exception:
                         fn = futures[fut]
                         s = state_by_fn[fn.__name__]
-                        if (
-                            s.status == "RUNNING"
-                            and s.start_time > 0
-                            and (now - s.start_time) > EXAMPLE_TIMEOUT_S
-                        ):
-                            s.status = "FAIL"
-                            s.wf_status = "TIMEOUT"
-                            s.duration_s = now - s.start_time
-                            s.error = f"wall-clock timeout after {EXAMPLE_TIMEOUT_S}s"
-                            _cancel_workflows(
-                                runtime, s.execution_ids,
-                                f"run_all: wall-clock timeout after {EXAMPLE_TIMEOUT_S}s",
-                            )
-                            result_map[fn.__name__] = ExampleResult(
-                                name=s.display_name,
-                                filename=_fn_to_filename(fn),
-                                execution_id=s.execution_id,
-                                status="TIMEOUT",
-                                error=s.error,
-                                duration_s=s.duration_s,
-                            )
-                            timed_out.add(fut)
-                    pending -= timed_out
-
-                    if not pending:
-                        break
-
-                    done, pending = concurrent.futures.wait(
-                        pending, timeout=0.1,
-                        return_when=concurrent.futures.FIRST_COMPLETED,
-                    )
-                    for fut in done:
-                        try:
-                            r = fut.result()
-                        except Exception:
-                            fn = futures[fut]
-                            s = state_by_fn[fn.__name__]
-                            r = ExampleResult(
-                                name=s.display_name,
+                        r = ExampleResult(
+                            name=s.display_name,
                                 error=s.error or "unknown error",
                                 duration_s=s.duration_s,
                             )

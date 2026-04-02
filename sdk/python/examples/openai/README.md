@@ -33,7 +33,7 @@ export OPENAI_API_KEY=your-key
 | 04 | [04_handoffs.py](04_handoffs.py) | **Handoffs** | Multi-agent orchestration with triage → specialist handoffs. Maps to Conductor's `strategy="handoff"`. |
 | 05 | [05_guardrails.py](05_guardrails.py) | **Guardrails** | Input guardrails (PII detection) and output guardrails (safety filtering). Guardrail functions become Conductor workers. |
 | 06 | [06_model_settings.py](06_model_settings.py) | **Model Settings** | `ModelSettings` for temperature and max_tokens tuning. Creative vs. precise agents. |
-| 07 | [07_streaming.py](07_streaming.py) | **Streaming** | Real-time SSE event streaming via `runtime.stream()`. Shows tool_call, tool_result, and done events. |
+| 07 | [07_streaming.py](07_streaming.py) | **Streaming** | Default `runtime.run()` flow with a commented `runtime.stream()` alternative for SSE events. |
 | 08 | [08_agent_as_tool.py](08_agent_as_tool.py) | **Agent-as-Tool** | Manager pattern with `Agent.as_tool()`. Manager retains control and synthesizes specialist results. |
 | 09 | [09_dynamic_instructions.py](09_dynamic_instructions.py) | **Dynamic Instructions** | Callable instruction function that generates context-aware prompts (time-of-day, user preferences). |
 | 10 | [10_multi_model.py](10_multi_model.py) | **Multi-Model** | Multiple agents with shared `settings.llm_model`. Override via `AGENTSPAN_LLM_MODEL` env var. |
@@ -51,7 +51,7 @@ export OPENAI_API_KEY=your-key
 | `Agent.as_tool()` (manager pattern) | 08 |
 | Dynamic instructions (callable) | 09 |
 | Multiple models | 10 |
-| Streaming (`runtime.stream()`) | 07 |
+| Streaming (`runtime.stream()`, commented alternative) | 07 |
 | Multi-agent patterns | 04, 08, 10 |
 
 ## How It Works

@@ -51,8 +51,8 @@ Usage:
 
 Requirements:
     - Conductor server running
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
-    - AGENT_LLM_MODEL in .env or environment
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api in .env or environment
+    - AGENTSPAN_LLM_MODEL in .env or environment
 """
 
 import sys

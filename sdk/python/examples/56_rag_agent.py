@@ -16,8 +16,8 @@ Supported vector databases:
 Requirements:
     - Conductor server with RAG system tasks enabled (--spring.profiles.active=rag)
     - A configured vector database (e.g., pgvector)
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
-    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api in .env or environment
+    - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, search_tool, index_tool
@@ -177,42 +177,44 @@ rag_agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.56_rag_agent
-        runtime.deploy(rag_agent)
-        runtime.serve(rag_agent)
+        # ── Phase 1: Index all documents into the vector database ────
+        print("=" * 60)
+        print("PHASE 1: Indexing documents into vector database")
+        print("=" * 60)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # # ── Phase 1: Index all documents into the vector database ────
-        # print("=" * 60)
-        # print("PHASE 1: Indexing documents into vector database")
-        # print("=" * 60)
+        # Build a single prompt that asks the agent to index all documents
+        index_lines = ["Please index the following documents into the knowledge base:\n"]
+        for doc in DOCUMENTS:
+            index_lines.append(f"DocID: {doc['docId']}")
+            index_lines.append(f"Text: {doc['text']}\n")
+        index_prompt = "\n".join(index_lines)
 
-        # # Build a single prompt that asks the agent to index all documents
-        # index_lines = ["Please index the following documents into the knowledge base:\n"]
-        # for doc in DOCUMENTS:
-        #     index_lines.append(f"DocID: {doc['docId']}")
-        #     index_lines.append(f"Text: {doc['text']}\n")
-        # index_prompt = "\n".join(index_lines)
+        result = runtime.run(rag_agent, index_prompt)
+        result.print_result()
 
-        # result = runtime.run(rag_agent, index_prompt)
-        # print(result.output)
+        # ── Phase 2: Search the indexed documents ────────────────────
+        print("\n" + "=" * 60)
+        print("PHASE 2: Searching the knowledge base")
+        print("=" * 60)
 
-        # # ── Phase 2: Search the indexed documents ────────────────────
-        # print("\n" + "=" * 60)
-        # print("PHASE 2: Searching the knowledge base")
-        # print("=" * 60)
+        queries = [
+            "How do I authenticate my API requests? What are the rate limits?",
+            "What retry policies are available for failed tasks?",
+            "How do I set up vector search with PostgreSQL?",
+            "What multi-agent patterns does the framework support?",
+            "How do guardrails work and what happens when validation fails?",
+        ]
 
-        # queries = [
-        #     "How do I authenticate my API requests? What are the rate limits?",
-        #     "What retry policies are available for failed tasks?",
-        #     "How do I set up vector search with PostgreSQL?",
-        #     "What multi-agent patterns does the framework support?",
-        #     "How do guardrails work and what happens when validation fails?",
-        # ]
+        for i, query in enumerate(queries, 1):
+            print(f"\n--- Query {i}: {query}")
+            result = runtime.run(rag_agent, query)
+            result.print_result()
 
-        # for i, query in enumerate(queries, 1):
-        #     print(f"\n--- Query {i}: {query}")
-        #     result = runtime.run(rag_agent, query)
-        #     print(result.output)
-
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(rag_agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.56_rag_agent
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(rag_agent)

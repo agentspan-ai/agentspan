@@ -535,7 +535,7 @@ def _fetch_agent_result(handle, runtime, status) -> Optional[AgentResult]:
         token_usage = None
         try:
             wf = runtime._workflow_client.get_workflow(
-                execution_id=handle.execution_id,
+                handle.execution_id,
                 include_tasks=True,
             )
             tool_calls = runtime._extract_tool_calls(wf)

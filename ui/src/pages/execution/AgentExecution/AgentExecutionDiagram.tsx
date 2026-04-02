@@ -617,11 +617,8 @@ function buildTurnNodes(
         let ellipsisCount = 0;
         if (isExpanded && batch.length > MAX_EXPANDED) {
           const head = batch.slice(0, EXPAND_HEAD);
-          const tail = batch.slice(batch.length - EXPAND_TAIL);
           ellipsisCount = batch.length - EXPAND_HEAD - EXPAND_TAIL;
-          visible = head;
-          // tail is handled separately below
-          visible = [...head]; // just head for now
+          visible = [...head]; // tail is handled separately below
         } else {
           visible = batch;
         }
@@ -831,7 +828,13 @@ function buildDiagram(agentRun: AgentRunData, _activeTurnNum: number, hasBack: b
         kind: "next", label: String(turn.turnNumber),
         nextTurn: turn.turnNumber, ts: toTS(turn.status),
       }});
-      edges.push({ id: `${prevRef.id}→${ntId}`, from: prevRef.id, to: ntId });
+      const fromPort = prevRef.id.endsWith("-join") ? `${prevRef.id}-south-port` : undefined;
+      edges.push({
+        id: `${prevRef.id}→${ntId}`,
+        from: prevRef.id,
+        to: ntId,
+        ...(fromPort ? { fromPort } : {}),
+      });
       if (turn.status === AgentStatus.COMPLETED) done.add(ntId);
       prevRef.id = ntId;
     }
@@ -1178,10 +1181,13 @@ export function AgentExecutionDiagram({ agentRun, activeTurn, onSelectTurn, sele
           }}
           node={<DiagramNode selectedId={selectedId} onSelect={handle} onDrillIn={onDrillIn} onBack={onBack} onToggleGroup={toggleGroup} />}
           edge={(ed: EdgeData) => (
-            <Edge {...ed} style={{
-              stroke: done.has(ed.from ?? "") ? EDGE_COMPLETED : EDGE_DEFAULT,
-              strokeWidth: done.has(ed.from ?? "") ? 2 : 1,
-            }} />
+            <Edge
+              {...ed}
+              style={{
+                stroke: done.has(ed.from ?? "") ? EDGE_COMPLETED : EDGE_DEFAULT,
+                strokeWidth: done.has(ed.from ?? "") ? 2 : 1,
+              }}
+            />
           )}
         />
       </div>

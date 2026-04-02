@@ -15,7 +15,7 @@ Requirements:
     - pip install openai
     - Conductor server with LLM support
     - OPENAI_API_KEY=sk-... as environment variable
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -45,20 +45,20 @@ data_analyst = GPTAssistantAgent(
 
 
 if __name__ == "__main__":
-    # ── Run ─────────────────────────────────────────────────────────────
-
-
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.28_gpt_assistant_agent
-        runtime.deploy(data_analyst)
-        runtime.serve(data_analyst)
+        print("--- GPT Assistant with Code Interpreter ---")
+        result = runtime.run(
+            data_analyst,
+            "Calculate the standard deviation of these numbers: 4, 8, 15, 16, 23, 42",
+        )
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # print("--- GPT Assistant with Code Interpreter ---")
-        # result = runtime.run(
-        #     data_analyst,
-        #     "Calculate the standard deviation of these numbers: 4, 8, 15, 16, 23, 42",
-        # )
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(data_analyst)
+        # CLI alternative:
+        # agentspan deploy --package examples.28_gpt_assistant_agent
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(data_analyst)
 

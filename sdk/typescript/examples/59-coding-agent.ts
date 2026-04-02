@@ -9,10 +9,10 @@
  *
  * Requirements:
  *   - Conductor server running
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  */
 
-import { Agent, AgentRuntime } from '../src/index.js';
+import { Agent, AgentRuntime } from '../src';
 
 // -- QA Tester: reviews code and runs tests ----------------------------------
 
@@ -65,36 +65,37 @@ const prompt =
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(coder);
-    await runtime.serve(coder);
+    console.log('='.repeat(60));
+    console.log('  Coding Agent + QA Tester (Swarm)');
+    console.log('  coder <-> qa_tester (LLM-driven handoffs)');
+    console.log('='.repeat(60));
+    console.log(`\nPrompt: ${prompt}\n`);
+    const result = await runtime.run(coder, prompt);
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // console.log('='.repeat(60));
-    // console.log('  Coding Agent + QA Tester (Swarm)');
-    // console.log('  coder <-> qa_tester (LLM-driven handoffs)');
-    // console.log('='.repeat(60));
-    // console.log(`\nPrompt: ${prompt}\n`);
-    // const runtime = new AgentRuntime();
-    // try {
-    // const result = await runtime.run(coder, prompt);
+    // Swarm output is a dict keyed by agent name
+    const output = result.output;
+    if (output && typeof output === 'object' && !Array.isArray(output)) {
+    for (const [agentName, text] of Object.entries(output as Record<string, string>)) {
+    console.log(`\n${'─'.repeat(60)}`);
+    console.log(`  [${agentName}]`);
+    console.log('─'.repeat(60));
+    console.log(text);
+    }
+    } else {
+    console.log(output);
+    }
 
-    // // Swarm output is a dict keyed by agent name
-    // const output = result.output;
-    // if (output && typeof output === 'object' && !Array.isArray(output)) {
-    // for (const [agentName, text] of Object.entries(output as Record<string, string>)) {
-    // console.log(`\n${'─'.repeat(60)}`);
-    // console.log(`  [${agentName}]`);
-    // console.log('─'.repeat(60));
-    // console.log(text);
-    // }
-    // } else {
-    // console.log(output);
-    // }
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(coder);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents coder
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(coder);
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('59-coding-agent.ts') || process.argv[1]?.endsWith('59-coding-agent.js')) {

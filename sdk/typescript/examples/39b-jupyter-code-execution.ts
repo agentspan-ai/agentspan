@@ -9,7 +9,7 @@
  * Requirements:
  *   - Conductor server with LLM support
  *   - Jupyter runtime installed (jupyter_client, ipykernel)
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -39,25 +39,26 @@ export const jupyterCoder = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(jupyterCoder);
-    await runtime.serve(jupyterCoder);
+    console.log('--- Jupyter Kernel Code Execution ---');
+    const result = await runtime.run(
+    jupyterCoder,
+    "Compute the first 10 Fibonacci numbers using a loop, store them in a " +
+    "list called 'fibs', and print them. Then in a second execution, print " +
+    "the sum of 'fibs' (it should still exist from the first call).",
+    );
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const runtime = new AgentRuntime();
-    // try {
-    // console.log('--- Jupyter Kernel Code Execution ---');
-    // const result = await runtime.run(
-    // jupyterCoder,
-    // "Compute the first 10 Fibonacci numbers using a loop, store them in a " +
-    // "list called 'fibs', and print them. Then in a second execution, print " +
-    // "the sum of 'fibs' (it should still exist from the first call).",
-    // );
-    // result.printResult();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(jupyterCoder);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents jupyter_coder
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(jupyterCoder);
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('39b-jupyter-code-execution.ts') || process.argv[1]?.endsWith('39b-jupyter-code-execution.js')) {

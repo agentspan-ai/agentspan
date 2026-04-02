@@ -20,10 +20,11 @@ Requirements:
 """
 
 from agentspan.agents import Agent, AgentRuntime, Strategy
+from agentspan.agents.cli_config import CliConfig
 from agentspan.agents.gate import TextGate
 from agentspan.agents.handoff import OnTextMention
 
-REPO = "agentspan/codingexamples"
+REPO = "agentspan-ai/codingexamples"
 MODEL = "anthropic/claude-sonnet-4-6"
 
 # ── Stage 1: Fetch issues ─────────────────────────────────────────
@@ -31,20 +32,35 @@ MODEL = "anthropic/claude-sonnet-4-6"
 git_fetch_issues = Agent(
     name="git_fetch_issues",
     model=MODEL,
+    max_tokens=8192,
     instructions=f"""\
-You are a GitHub issue fetcher.
+You fetch ONE open issue from {REPO} and push an empty branch.
 
-1. List the 5 most recent open issues on {REPO}.
-2. If there are NO open issues, output exactly: NO_OPEN_ISSUES
-3. Otherwise pick the most suitable issue, then:
-   - Create a temp dir, clone {REPO}, create branch fix/issue-<NUMBER>
-   - Push the branch to origin
-   - Output ONLY: REPO / BRANCH / ISSUE / SUMMARY lines
+Step 1 — run this command:
+  gh issue list --repo {REPO} --state open --limit 5
+If no issues, respond: NO_OPEN_ISSUES
+
+Step 2 — pick an issue, then run this ONE compound command (shell=true):
+  TMPDIR=$(mktemp -d) && gh repo clone {REPO} "$TMPDIR" && cd "$TMPDIR" && git checkout -b fix/issue-<N> && git push -u origin fix/issue-<N> && echo "DONE"
+
+Step 3 — respond with ONLY these 4 lines (NO tool calls):
+  REPO: {REPO}
+  BRANCH: fix/issue-<N>
+  ISSUE: #<N> <title>
+  SUMMARY: <one-sentence description>
+
+RULES:
+- Do NOT create files, commits, or pull requests.
+- After step 2, you MUST stop using tools entirely. Just output text.
+- You have at most 5 turns total.
 """,
-    cli_commands=True,
-    cli_allowed_commands=["gh", "git", "mktemp", "rm"],
+    cli_config=CliConfig(
+        allowed_commands=["gh", "git", "mktemp"],
+        allow_shell=True,
+        timeout=60,
+    ),
     credentials=["GITHUB_TOKEN", "GH_TOKEN"],
-    max_turns=20,
+    max_turns=8,
     gate=TextGate("NO_OPEN_ISSUES"),
 )
 
@@ -73,7 +89,7 @@ If good: say QA_APPROVED with REPO/BRANCH/SUMMARY.
 """,
     local_code_execution=True,
     max_tokens=60000,
-    max_turns=5,
+    max_turns=15,
 )
 
 coding_qa = Agent(
@@ -99,11 +115,14 @@ coding_qa = Agent(
 git_push_pr = Agent(
     name="git_push_pr",
     model=MODEL,
+    max_tokens=8192,
+    max_turns=15,
     credentials=["GITHUB_TOKEN", "GH_TOKEN"],
     instructions="""\
-You are a PR creator. The branch is already pushed.
-Run: gh pr create --repo <REPO> --base main --head <BRANCH> --title "..." --body "..."
-Output the PR URL.
+Create a pull request. Run this ONE command (extract REPO, BRANCH, ISSUE from context):
+  gh pr create --repo <REPO> --base main --head <BRANCH> --title "Fix <ISSUE>" --body "Fixes <ISSUE>"
+
+After the command succeeds, STOP calling tools and respond with ONLY the PR URL.
 """,
     cli_commands=True,
     cli_allowed_commands=["gh"],
@@ -115,18 +134,14 @@ pipeline = git_fetch_issues >> coding_qa >> git_push_pr
 
 if __name__ == "__main__":
     with AgentRuntime() as rt:
-        # Deploy: push definition to server (idempotent — safe to call every startup).
-        # Can also be done via CLI: agentspan deploy examples.production.github_coding_agent
-        rt.deploy(pipeline)
+        result = rt.run(pipeline, "Pick an open issue and create a PR.", timeout=240000)
+        result.print_result()
 
-        # Option A: Serve workers (production — blocks forever, run from outside)
-        rt.serve(pipeline)
-
-        # Option B: Run directly (quick test — uncomment below, comment out serve above)
-        # rt.run() handles deploy + workers internally, no serve needed.
-        # result = rt.run(pipeline, "Pick an open issue and create a PR.", timeout=240000)
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # rt.deploy(pipeline)
+        # CLI alternative:
+        # agentspan deploy --package examples.61_github_coding_agent_chained
         #
-        # Or trigger a deployed agent by name from any process:
-        # result = rt.run("github_pipeline", "Pick an open issue and create a PR.")
-        # result.print_result()
+        # 2. In a separate long-lived worker process:
+        # rt.serve(pipeline)

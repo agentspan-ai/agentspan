@@ -17,6 +17,16 @@ writer = Agent(
 
 pipeline = researcher >> writer
 
-with AgentRuntime() as rt:
-    result = rt.run(pipeline, "Quantum computing")
-    print(result.output)
+if __name__ == "__main__":
+    with AgentRuntime() as rt:
+        result = rt.run(pipeline, "Quantum computing")
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # rt.deploy(pipeline)
+        # CLI alternative:
+        # agentspan deploy --package examples.quickstart.03_multi_agent
+        #
+        # 2. In a separate long-lived worker process:
+        # rt.serve(pipeline)

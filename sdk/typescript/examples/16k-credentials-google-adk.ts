@@ -63,22 +63,23 @@ export const agent = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(adkAgent);
-    await runtime.serve(adkAgent);
+    const result = await runtime.run(
+    agent,
+    'Is GitHub authentication available?',
+    );
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const runtime = new AgentRuntime();
-    // try {
-    // const result = await runtime.run(
-    // agent,
-    // 'Is GitHub authentication available?',
-    // );
-    // result.printResult();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents google_adk_cred_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('16k-credentials-google-adk.ts') || process.argv[1]?.endsWith('16k-credentials-google-adk.js')) {

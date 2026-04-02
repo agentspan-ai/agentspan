@@ -4,7 +4,7 @@
 
 """ML Engineering Pipeline — multi-agent ML workflow.
 
-Deploys and serves a five-stage pipeline:
+Builds a five-stage pipeline:
   1. Data analysis — analyze dataset, recommend approaches
   2. Model exploration — (parallel) linear, tree, neural network strategies
   3. Evaluation — compare and select best model
@@ -12,8 +12,7 @@ Deploys and serves a five-stage pipeline:
   5. Report — final summary
 
 Run:
-    python ml_pipeline.py                          # Deploy + serve
-    agentspan run ml_pipeline "Build a model..."   # Trigger
+    python 55_ml_engineering.py
 
 Requirements:
     - Agentspan server running
@@ -23,7 +22,7 @@ Requirements:
 import os
 from agentspan.agents import Agent, AgentRuntime
 
-MODEL = os.environ.get("AGENT_LLM_MODEL", "openai/gpt-4o-mini")
+MODEL = os.environ.get("AGENTSPAN_LLM_MODEL", "openai/gpt-4o-mini")
 
 # ── Phase 1: Data Analysis ────────────────────────────────────────
 
@@ -93,18 +92,14 @@ ml_pipeline = data_analyst >> model_exploration >> evaluator >> refinement >> re
 
 if __name__ == "__main__":
     with AgentRuntime() as rt:
-        # Deploy: push definition to server (idempotent — safe to call every startup).
-        # Can also be done via CLI: agentspan deploy examples.production.ml_pipeline
-        rt.deploy(ml_pipeline)
+        result = rt.run(ml_pipeline, "Build a model for California housing prices...", timeout=120000)
+        result.print_result()
 
-        # Option A: Serve workers (production — blocks forever, run from outside)
-        rt.serve(ml_pipeline)
-
-        # Option B: Run directly (quick test — uncomment below, comment out serve above)
-        # rt.run() handles deploy + workers internally, no serve needed.
-        # result = rt.run(ml_pipeline, "Build a model for California housing prices...", timeout=120000)
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # rt.deploy(ml_pipeline)
+        # CLI alternative:
+        # agentspan deploy --package examples.55_ml_engineering
         #
-        # Or trigger a deployed agent by name from any process:
-        # result = rt.run("ml_pipeline", "Build a model for California housing prices...")
-        # result.print_result()
+        # 2. In a separate long-lived worker process:
+        # rt.serve(ml_pipeline)

@@ -181,15 +181,18 @@ const PROMPT = 'What is the square root of 144?';
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(graph);
-    await runtime.serve(graph);
+    const result = await runtime.run(graph, PROMPT);
+    console.log('Status:', result.status);
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const result = await runtime.run(graph, PROMPT);
-    // console.log('Status:', result.status);
-    // result.printResult();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(graph);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/langgraph --agents tool_categories
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(graph);
   } finally {
     await runtime.shutdown();
   }

@@ -17,7 +17,7 @@ Structure:
 
 Requirements:
     - Conductor server with LLM support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -108,18 +108,18 @@ ceo = Agent(
 
 
 if __name__ == "__main__":
-    # ── Run ─────────────────────────────────────────────────────────────
-
-
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.13_hierarchical_agents
-        runtime.deploy(ceo)
-        runtime.serve(ceo)
+        print("--- Technical question (CEO -> Engineering -> Backend) ---")
+        result = runtime.run(ceo, "Design a REST API for a user management system with authentication "
+                                  "and then come up with a marketing campaign for the system")
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # print("--- Technical question (CEO -> Engineering -> Backend) ---")
-        # result = runtime.run(ceo, "Design a REST API for a user management system with authentication "
-        #                           "and then come up with a marketing campaign for the system")
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(ceo)
+        # CLI alternative:
+        # agentspan deploy --package examples.13_hierarchical_agents
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(ceo)
 

@@ -215,45 +215,48 @@ export const ragAgent = new LlmAgent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(ragAgent);
-    await runtime.serve(ragAgent);
+    // ── Phase 1: Index all documents into the simulated vector store ──
+    console.log('='.repeat(60));
+    console.log('PHASE 1: Indexing documents into knowledge base');
+    console.log('='.repeat(60));
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // // ── Phase 1: Index all documents into the simulated vector store ──
-    // console.log('='.repeat(60));
-    // console.log('PHASE 1: Indexing documents into knowledge base');
-    // console.log('='.repeat(60));
+    const indexLines = ['Please index the following documents into the knowledge base:\n'];
+    for (const doc of DOCUMENTS) {
+    indexLines.push(`DocID: ${doc.docId}`);
+    indexLines.push(`Text: ${doc.text}\n`);
+    }
+    const indexPrompt = indexLines.join('\n');
 
-    // const indexLines = ['Please index the following documents into the knowledge base:\n'];
-    // for (const doc of DOCUMENTS) {
-    // indexLines.push(`DocID: ${doc.docId}`);
-    // indexLines.push(`Text: ${doc.text}\n`);
-    // }
-    // const indexPrompt = indexLines.join('\n');
+    const indexResult = await runtime.run(ragAgent, indexPrompt);
+    console.log('Status:', indexResult.status);
+    indexResult.printResult();
 
-    // const indexResult = await runtime.run(ragAgent, indexPrompt);
-    // console.log('Status:', indexResult.status);
-    // indexResult.printResult();
+    // ── Phase 2: Search the indexed documents ────────────────────────
+    console.log('\n' + '='.repeat(60));
+    console.log('PHASE 2: Searching the knowledge base');
+    console.log('='.repeat(60));
 
-    // // ── Phase 2: Search the indexed documents ────────────────────────
-    // console.log('\n' + '='.repeat(60));
-    // console.log('PHASE 2: Searching the knowledge base');
-    // console.log('='.repeat(60));
+    const queries = [
+    'How do I authenticate my API requests? What are the rate limits?',
+    'What retry policies are available for failed tasks?',
+    'How do I set up vector search with PostgreSQL?',
+    ];
 
-    // const queries = [
-    // 'How do I authenticate my API requests? What are the rate limits?',
-    // 'What retry policies are available for failed tasks?',
-    // 'How do I set up vector search with PostgreSQL?',
-    // ];
+    for (let i = 0; i < queries.length; i++) {
+    console.log(`\n--- Query ${i + 1}: ${queries[i]}`);
+    const searchResult = await runtime.run(ragAgent, queries[i]);
+    console.log('Status:', searchResult.status);
+    searchResult.printResult();
+    }
 
-    // for (let i = 0; i < queries.length; i++) {
-    // console.log(`\n--- Query ${i + 1}: ${queries[i]}`);
-    // const searchResult = await runtime.run(ragAgent, queries[i]);
-    // console.log('Status:', searchResult.status);
-    // searchResult.printResult();
-    // }
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(ragAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents rag_assistant
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(ragAgent);
   } finally {
     await runtime.shutdown();
   }

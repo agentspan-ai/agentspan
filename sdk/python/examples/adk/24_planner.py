@@ -11,7 +11,7 @@ Demonstrates:
 Requirements:
     - pip install google-adk
     - Conductor server
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=google_gemini/gemini-2.0-flash as environment variable
 """
 
@@ -86,15 +86,18 @@ agent = LlmAgent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.adk.24_planner
-        runtime.deploy(agent)
-        runtime.serve(agent)
+        result = runtime.run(
+        agent,
+        "Write a brief report on the current state of renewable energy "
+        "and climate change solutions.",
+        )
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        # agent,
-        # "Write a brief report on the current state of renewable energy "
-        # "and climate change solutions.",
-        # )
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.adk.24_planner
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)

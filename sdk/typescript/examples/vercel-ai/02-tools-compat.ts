@@ -62,6 +62,15 @@ async function main() {
     const result = await runtime.run(agent, prompt);
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/vercel-ai --agents mixed_tools_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
   } finally {
     await runtime.shutdown();
   }

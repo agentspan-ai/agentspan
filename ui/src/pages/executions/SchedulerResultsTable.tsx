@@ -251,7 +251,7 @@ export default function SchedulerResultsTable({
               <NoDataComponent
                 title="Empty"
                 titleBg={colors.warningTag}
-                description="Here you’ll see any executed scheduled workflows, regardless of its status.Let’s define a new schedule and automate!"
+                description="Here you'll see scheduled agent executions, regardless of status. Define a new schedule to automate your agents."
                 buttonText="Define a Schedule"
                 buttonHandler={handleClickDefineSchedule}
                 disableButton={isTrialExpired}

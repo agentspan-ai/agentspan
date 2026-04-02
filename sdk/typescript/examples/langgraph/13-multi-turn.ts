@@ -44,44 +44,47 @@ async function main() {
 
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(graph);
-    await runtime.serve(graph);
+    console.log("=== Alice's session ===");
+    let result = await runtime.run(
+    graph,
+    "I'm applying for a senior backend engineer role at a fintech startup. " +
+    'I have 5 years of Python experience.',
+    { sessionId: SESSION_A },
+    );
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // console.log("=== Alice's session ===");
-    // let result = await runtime.run(
-    // graph,
-    // "I'm applying for a senior backend engineer role at a fintech startup. " +
-    // 'I have 5 years of Python experience.',
-    // { sessionId: SESSION_A },
-    // );
-    // result.printResult();
+    console.log("\n=== Bob's session (separate memory) ===");
+    result = await runtime.run(
+    graph,
+    'I want to become a product manager. I have a marketing background.',
+    { sessionId: SESSION_B },
+    );
+    result.printResult();
 
-    // console.log("\n=== Bob's session (separate memory) ===");
-    // result = await runtime.run(
-    // graph,
-    // 'I want to become a product manager. I have a marketing background.',
-    // { sessionId: SESSION_B },
-    // );
-    // result.printResult();
+    console.log("\n=== Alice's session — follow-up (remembers context) ===");
+    result = await runtime.run(
+    graph,
+    'What technical topics should I review for my upcoming interviews?',
+    { sessionId: SESSION_A },
+    );
+    result.printResult();
 
-    // console.log("\n=== Alice's session — follow-up (remembers context) ===");
-    // result = await runtime.run(
-    // graph,
-    // 'What technical topics should I review for my upcoming interviews?',
-    // { sessionId: SESSION_A },
-    // );
-    // result.printResult();
+    console.log("\n=== Bob's session — follow-up (remembers context) ===");
+    result = await runtime.run(
+    graph,
+    'What skills gap should I address first?',
+    { sessionId: SESSION_B },
+    );
+    result.printResult();
 
-    // console.log("\n=== Bob's session — follow-up (remembers context) ===");
-    // result = await runtime.run(
-    // graph,
-    // 'What skills gap should I address first?',
-    // { sessionId: SESSION_B },
-    // );
-    // result.printResult();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(graph);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/langgraph --agents multi_turn
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(graph);
   } finally {
     await runtime.shutdown();
   }

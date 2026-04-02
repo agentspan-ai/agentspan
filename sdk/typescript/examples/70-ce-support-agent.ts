@@ -14,7 +14,7 @@
  *
  * Requirements:
  *   - Conductor server
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -201,6 +201,7 @@ const getGithubPullRequest = tool(
 // -- PII guardrail -----------------------------------------------------------
 
 const piiGuardrail = new RegexGuardrail({
+  name: 'ce_support_pii_guardrail',
   patterns: [
     '\\b\\d{4}[\\s-]?\\d{4}[\\s-]?\\d{4}[\\s-]?\\d{4}\\b', // credit card
     '\\b\\d{3}-\\d{2}-\\d{4}\\b',                              // SSN
@@ -303,20 +304,21 @@ const prompt = `Investigate Zendesk ticket #${ticketId} and provide a full analy
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(ceSupportAgent);
-    await runtime.serve(ceSupportAgent);
+    console.log(`\n--- Investigating ticket #${ticketId} ---\n`);
+    const result = await runtime.run(ceSupportAgent, prompt);
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const runtime = new AgentRuntime();
-    // try {
-    // console.log(`\n--- Investigating ticket #${ticketId} ---\n`);
-    // const result = await runtime.run(ceSupportAgent, prompt);
-    // console.log(result.output);
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(ceSupportAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents ce_support_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(ceSupportAgent);
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('70-ce-support-agent.ts') || process.argv[1]?.endsWith('70-ce-support-agent.js')) {

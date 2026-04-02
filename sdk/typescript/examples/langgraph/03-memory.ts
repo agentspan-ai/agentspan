@@ -32,19 +32,22 @@ const graph = createReactAgent({ llm, tools: [], checkpointer });
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(graph);
-    await runtime.serve(graph);
+    const result = await runtime.run(
+    graph,
+    'My name is Bob. Tell me something interesting about my name.',
+    { sessionId: 'agentspan-session-001' },
+    );
+    console.log('Status:', result.status);
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const result = await runtime.run(
-    // graph,
-    // 'My name is Bob. Tell me something interesting about my name.',
-    // { sessionId: 'agentspan-session-001' },
-    // );
-    // console.log('Status:', result.status);
-    // result.printResult();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(graph);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/langgraph --agents memory
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(graph);
   } finally {
     await runtime.shutdown();
   }

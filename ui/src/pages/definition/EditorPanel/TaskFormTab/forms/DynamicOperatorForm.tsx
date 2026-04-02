@@ -40,7 +40,7 @@ export const DynamicForkForm = ({ task, onChange }: TaskFormProps) => (
               tooltip: {
                 title: "Dynamic Task to be Executed",
                 content:
-                  "Indicates the name of the task, or the variable, to be called during workflow execution.",
+                  "Indicates the name of the task, or the variable, to be called during agent execution.",
               },
             }}
           />

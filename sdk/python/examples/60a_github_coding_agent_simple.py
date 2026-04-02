@@ -27,7 +27,7 @@ Architecture:
 
 Requirements:
     - Conductor server running
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api in .env or environment
     - gh CLI authenticated (gh auth status)
     - Git configured with push access to the repo
 """
@@ -179,28 +179,31 @@ if __name__ == "__main__":
 
 
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.60a_github_coding_agent_simple
-        runtime.deploy(coding_team)
-        runtime.serve(coding_team)
+        result = runtime.run(coding_team, prompt)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(coding_team, prompt)
+        # Display output
+        output = result.output
+        skip_keys = {"finishReason", "rejectionReason", "is_transfer", "transfer_to"}
+        if isinstance(output, dict):
+            for key, text in output.items():
+                if key in skip_keys or not text:
+                    continue
+                print(f"\n{'─' * 60}")
+                print(f"  [{key}]")
+                print(f"{'─' * 60}")
+                print(text)
+        else:
+            print(output)
 
-        # # Display output
-        # output = result.output
-        # skip_keys = {"finishReason", "rejectionReason", "is_transfer", "transfer_to"}
-        # if isinstance(output, dict):
-        #     for key, text in output.items():
-        #         if key in skip_keys or not text:
-        #             continue
-        #         print(f"\n{'─' * 60}")
-        #         print(f"  [{key}]")
-        #         print(f"{'─' * 60}")
-        #         print(text)
-        # else:
-        #     print(output)
+        print(f"\nFinish reason: {result.finish_reason}")
+        print(f"Workflow ID: {result.execution_id}")
 
-        # print(f"\nFinish reason: {result.finish_reason}")
-        # print(f"Workflow ID: {result.execution_id}")
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(coding_team)
+        # CLI alternative:
+        # agentspan deploy --package examples.60a_github_coding_agent_simple
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(coding_team)
 

@@ -9,7 +9,7 @@ using mock workflow objects. Does NOT require a running Conductor server.
 
 import logging
 import uuid
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -1110,6 +1110,9 @@ class TestRunPopulatesToolCalls:
         assert result.token_usage is not None
         assert result.token_usage.total_tokens == 150
         assert len(result.messages) > 0
+        runtime._workflow_client.get_workflow.assert_called_once_with(
+            "wf-tools", include_tasks=True
+        )
 
     def test_run_without_tool_calls(self, runtime):
         """run() works when workflow has no tool tasks."""
@@ -1135,6 +1138,52 @@ class TestRunPopulatesToolCalls:
 
         assert result.tool_calls == []
         assert result.token_usage is None
+        runtime._workflow_client.get_workflow.assert_called_once_with(
+            "wf-notool", include_tasks=True
+        )
+
+    @pytest.mark.asyncio
+    async def test_run_async_populates_tool_calls(self, runtime):
+        """run_async() fetches workflow execution using the workflow_id argument."""
+        agent = Agent(name="test", model="openai/gpt-4o")
+
+        runtime._prepare_workers = MagicMock()
+        runtime._start_via_server_async = AsyncMock(return_value=("wf-async-tools", None))
+        runtime._poll_status_until_complete_async = AsyncMock(
+            return_value=AgentStatus(
+                execution_id="wf-async-tools",
+                is_complete=True,
+                output={"result": "done", "finishReason": "STOP"},
+                status="COMPLETED",
+            )
+        )
+
+        tool_task = MagicMock()
+        tool_task.task_type = "get_weather"
+        tool_task.reference_task_name = "call_async__0"
+        tool_task.input_data = {"city": "NYC"}
+        tool_task.output_data = {"temp": 72}
+
+        wf = MagicMock()
+        wf.tasks = [tool_task]
+        wf.variables = {"messages": [{"role": "user", "content": "hi"}]}
+        runtime._workflow_client.get_workflow = MagicMock(return_value=wf)
+
+        with patch.object(
+            runtime,
+            "_fetch_agent_workflow",
+            return_value={
+                "tokenUsage": {"promptTokens": 100, "completionTokens": 50, "totalTokens": 150},
+                "tasks": [],
+            },
+        ):
+            result = await runtime.run_async(agent, "What's the weather?")
+
+        assert len(result.tool_calls) == 1
+        assert result.tool_calls[0]["name"] == "get_weather"
+        runtime._workflow_client.get_workflow.assert_called_once_with(
+            "wf-async-tools", include_tasks=True
+        )
 
 
 class TestHasWorkerTools:
@@ -1254,6 +1303,9 @@ class TestRuntimeStream:
         done_events = [e for e in events if e.type == EventType.DONE]
         assert len(done_events) == 1
         assert done_events[0].output == "Final answer"
+        runtime._workflow_client.get_workflow.assert_called_once_with(
+            "wf-stream-1", include_tasks=True
+        )
 
     def test_stream_yields_thinking_event(self, runtime):
         agent = Agent(name="test", model="openai/gpt-4o")

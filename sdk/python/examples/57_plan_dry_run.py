@@ -14,8 +14,8 @@ workers, or executing. Useful for debugging and CI validation.
 
 Requirements:
     - Conductor server running
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
-    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api in .env or environment
+    - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 import json

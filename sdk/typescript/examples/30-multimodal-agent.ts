@@ -13,7 +13,7 @@
  *
  * Requirements:
  *   - Conductor server with LLM support (OpenAI key configured)
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -116,52 +116,53 @@ const SAMPLE_IMAGE_2 = 'https://orkes.io/icons/hero-section-workflow_updated.png
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(visionAgent);
-    await runtime.serve(visionAgent);
+    // --- 1. Single image analysis ---
+    console.log('=== Single Image Analysis ===');
+    const result1 = await runtime.run(
+    visionAgent,
+    'What do you see in this image? Describe it in detail.',
+    { media: [SAMPLE_IMAGE] },
+    );
+    result1.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const runtime = new AgentRuntime();
-    // try {
-    // // --- 1. Single image analysis ---
-    // console.log('=== Single Image Analysis ===');
-    // const result1 = await runtime.run(
-    // visionAgent,
-    // 'What do you see in this image? Describe it in detail.',
-    // { media: [SAMPLE_IMAGE] },
-    // );
-    // result1.printResult();
+    // --- 2. Image analysis with tools ---
+    console.log('\n=== Image Analysis with Tools ===');
+    const result2 = await runtime.run(
+    visionWithTools,
+    'Analyze this image, search for similar ones, and save your findings.',
+    { media: [SAMPLE_IMAGE] },
+    );
+    result2.printResult();
 
-    // // --- 2. Image analysis with tools ---
-    // console.log('\n=== Image Analysis with Tools ===');
-    // const result2 = await runtime.run(
-    // visionWithTools,
-    // 'Analyze this image, search for similar ones, and save your findings.',
-    // { media: [SAMPLE_IMAGE] },
-    // );
-    // result2.printResult();
+    // --- 3. Compare multiple images ---
+    console.log('\n=== Multi-Image Comparison ===');
+    const result3 = await runtime.run(
+    comparator,
+    'Compare these two images. What are the key differences?',
+    { media: [SAMPLE_IMAGE, SAMPLE_IMAGE_2] },
+    );
+    result3.printResult();
 
-    // // --- 3. Compare multiple images ---
-    // console.log('\n=== Multi-Image Comparison ===');
-    // const result3 = await runtime.run(
-    // comparator,
-    // 'Compare these two images. What are the key differences?',
-    // { media: [SAMPLE_IMAGE, SAMPLE_IMAGE_2] },
-    // );
-    // result3.printResult();
+    // --- 4. Creative pipeline from image ---
+    console.log('\n=== Creative Pipeline (describe -> story) ===');
+    const result4 = await runtime.run(
+    creativePipeline,
+    'Create a story inspired by this image.',
+    { media: [SAMPLE_IMAGE_2] },
+    );
+    result4.printResult();
 
-    // // --- 4. Creative pipeline from image ---
-    // console.log('\n=== Creative Pipeline (describe -> story) ===');
-    // const result4 = await runtime.run(
-    // creativePipeline,
-    // 'Create a story inspired by this image.',
-    // { media: [SAMPLE_IMAGE_2] },
-    // );
-    // result4.printResult();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(visionAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents vision_analyst
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(visionAgent);
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('30-multimodal-agent.ts') || process.argv[1]?.endsWith('30-multimodal-agent.js')) {

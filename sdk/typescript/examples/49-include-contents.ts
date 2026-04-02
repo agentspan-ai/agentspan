@@ -6,7 +6,7 @@
  *
  * Requirements:
  *   - Conductor server with include_contents support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -64,24 +64,25 @@ export const coordinator = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(coordinator);
-    await runtime.serve(coordinator);
+    const result = await runtime.run(
+    coordinator,
+    "Please summarize this: 'The quick brown fox jumps over the lazy dog. " +
+    "This sentence contains every letter of the alphabet and is commonly " +
+    "used for typography testing.'",
+    );
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const runtime = new AgentRuntime();
-    // try {
-    // const result = await runtime.run(
-    // coordinator,
-    // "Please summarize this: 'The quick brown fox jumps over the lazy dog. " +
-    // "This sentence contains every letter of the alphabet and is commonly " +
-    // "used for typography testing.'",
-    // );
-    // result.printResult();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(coordinator);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents coordinator_49
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(coordinator);
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('49-include-contents.ts') || process.argv[1]?.endsWith('49-include-contents.js')) {

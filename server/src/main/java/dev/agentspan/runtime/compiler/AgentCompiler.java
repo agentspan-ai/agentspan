@@ -39,6 +39,8 @@ public class AgentCompiler {
 
     private int timeoutSeconds = 0;
     private int llmRetryCount = 3;
+    private int contextMaxSizeBytes = 32768;
+    private int contextMaxValueSizeBytes = 4096;
 
     static final class ResolvedInstructions {
         private final List<WorkflowTask> preTasks;
@@ -154,9 +156,11 @@ public class AgentCompiler {
             List<WorkflowTask> tasks = new ArrayList<>(resolvedInstructions.getPreTasks());
             tasks.add(llmTask);
             wf.setTasks(tasks);
-            wf.setOutputParameters(Map.of(
-                    "result", ref(llmRef + ".output.result"),
-                    "finishReason", ref(llmRef + ".output.finishReason")));
+            Map<String, Object> simpleOutput = new LinkedHashMap<>();
+            simpleOutput.put("result", ref(llmRef + ".output.result"));
+            simpleOutput.put("finishReason", ref(llmRef + ".output.finishReason"));
+            simpleOutput.put("context", "${workflow.input.context}");
+            wf.setOutputParameters(simpleOutput);
             return wf;
         }
 
@@ -222,9 +226,11 @@ public class AgentCompiler {
         tasks.add(loop);
         tasks.add(resolveTask);
         wf.setTasks(tasks);
-        wf.setOutputParameters(Map.of(
-                "result", ref(resolveRef + ".output.result.result"),
-                "finishReason", ref(resolveRef + ".output.result.finishReason")));
+        Map<String, Object> hierOutput = new LinkedHashMap<>();
+        hierOutput.put("result", ref(resolveRef + ".output.result.result"));
+        hierOutput.put("finishReason", ref(resolveRef + ".output.result.finishReason"));
+        hierOutput.put("context", "${workflow.input.context}");
+        wf.setOutputParameters(hierOutput);
         applyTimeout(wf, config);
         return wf;
     }
@@ -313,6 +319,35 @@ public class AgentCompiler {
 
         // Build loop body
         List<WorkflowTask> loopTasks = new ArrayList<>();
+
+        // Context injection: prepend _agent_state JSON to user prompt (with size limits)
+        String ctxInjectRef = config.getName() + "_ctx_inject";
+        WorkflowTask ctxInject = new WorkflowTask();
+        ctxInject.setType("INLINE");
+        ctxInject.setTaskReferenceName(ctxInjectRef);
+        Map<String, Object> ctxInjectInputs = new LinkedHashMap<>();
+        ctxInjectInputs.put("evaluatorType", "graaljs");
+        ctxInjectInputs.put("state", "${workflow.variables._agent_state}");
+        ctxInjectInputs.put("prompt", "${workflow.input.prompt}");
+        ctxInjectInputs.put("maxSize", contextMaxSizeBytes);
+        ctxInjectInputs.put("maxValueSize", contextMaxValueSizeBytes);
+        ctxInjectInputs.put("expression", JavaScriptBuilder.contextInjectionScript());
+        ctxInject.setInputParameters(ctxInjectInputs);
+        loopTasks.add(ctxInject);
+
+        // Replace user message prompt with context-injected version
+        @SuppressWarnings("unchecked")
+        List<Object> llmMessages = (List<Object>) llmTask.getInputParameters().get("messages");
+        for (int mi = 0; mi < llmMessages.size(); mi++) {
+            if (llmMessages.get(mi) instanceof Map<?, ?> msg && "user".equals(msg.get("role"))) {
+                Map<String, Object> injectedMsg = new LinkedHashMap<>();
+                injectedMsg.put("role", "user");
+                injectedMsg.put("message", "${" + ctxInjectRef + ".output.result}");
+                injectedMsg.put("media", "${workflow.input.media}");
+                llmMessages.set(mi, injectedMsg);
+                break;
+            }
+        }
 
         // Callback: before_model (runs before each LLM call in the loop)
         CallbackConfig beforeModel = findCallback(config, "before_model");
@@ -439,9 +474,20 @@ public class AgentCompiler {
         }
         allTasks.addAll(resolvedInstructions.getPreTasks());
 
+        // Resolve input context with null fallback (INLINE → SET_VARIABLE pattern)
+        String ctxResolveRef = config.getName() + "_ctx_resolve";
+        WorkflowTask ctxResolve = new WorkflowTask();
+        ctxResolve.setType("INLINE");
+        ctxResolve.setTaskReferenceName(ctxResolveRef);
+        ctxResolve.setInputParameters(Map.of(
+                "evaluatorType", "graaljs",
+                "ctx", "${workflow.input.context}",
+                "expression", JavaScriptBuilder.nullCoalesceScript()));
+        allTasks.add(ctxResolve);
+
         // Initialize workflow variables
         Map<String, Object> initVars = new LinkedHashMap<>();
-        initVars.put("_agent_state", new LinkedHashMap<>());
+        initVars.put("_agent_state", "${" + ctxResolveRef + ".output.result}");
         if (hasApproval) {
             // Pre-initialize to empty string so the system message doesn't
             // have null content on the first loop iteration.
@@ -494,12 +540,14 @@ public class AgentCompiler {
             outputParams.put("result", ref(resolveRef + ".output.result.result"));
             outputParams.put("finishReason", ref(resolveRef + ".output.result.finishReason"));
             outputParams.put("rejectionReason", "${workflow.variables.rejectionReason}");
+            outputParams.put("context", "${workflow.variables._agent_state}");
             wf.setOutputParameters(outputParams);
         } else {
             Map<String, Object> outputParams = new LinkedHashMap<>();
             outputParams.put("result", ref(llmRef + ".output.result"));
             outputParams.put("finishReason", ref(llmRef + ".output.finishReason"));
             outputParams.put("rejectionReason", "${workflow.variables.rejectionReason}");
+            outputParams.put("context", "${workflow.variables._agent_state}");
             wf.setOutputParameters(outputParams);
         }
 
@@ -606,6 +654,36 @@ public class AgentCompiler {
 
         // Build loop body
         List<WorkflowTask> loopTasks = new ArrayList<>();
+
+        // Context injection for hybrid loop (with size limits)
+        String hybridCtxInjectRef = config.getName() + "_ctx_inject";
+        WorkflowTask hybridCtxInject = new WorkflowTask();
+        hybridCtxInject.setType("INLINE");
+        hybridCtxInject.setTaskReferenceName(hybridCtxInjectRef);
+        Map<String, Object> hybridCtxInjectInputs = new LinkedHashMap<>();
+        hybridCtxInjectInputs.put("evaluatorType", "graaljs");
+        hybridCtxInjectInputs.put("state", "${workflow.variables._agent_state}");
+        hybridCtxInjectInputs.put("prompt", "${workflow.input.prompt}");
+        hybridCtxInjectInputs.put("maxSize", contextMaxSizeBytes);
+        hybridCtxInjectInputs.put("maxValueSize", contextMaxValueSizeBytes);
+        hybridCtxInjectInputs.put("expression", JavaScriptBuilder.contextInjectionScript());
+        hybridCtxInject.setInputParameters(hybridCtxInjectInputs);
+        loopTasks.add(hybridCtxInject);
+
+        // Replace user message with context-injected version
+        @SuppressWarnings("unchecked")
+        List<Object> hybridLlmMessages = (List<Object>) llmTask.getInputParameters().get("messages");
+        for (int mi = 0; mi < hybridLlmMessages.size(); mi++) {
+            if (hybridLlmMessages.get(mi) instanceof Map<?, ?> msg && "user".equals(msg.get("role"))) {
+                Map<String, Object> injectedMsg = new LinkedHashMap<>();
+                injectedMsg.put("role", "user");
+                injectedMsg.put("message", "${" + hybridCtxInjectRef + ".output.result}");
+                injectedMsg.put("media", "${workflow.input.media}");
+                hybridLlmMessages.set(mi, injectedMsg);
+                break;
+            }
+        }
+
         loopTasks.add(llmTask);
 
         // Output guardrails
@@ -689,14 +767,25 @@ public class AgentCompiler {
         for (AgentConfig sub : config.getAgents()) {
             String subTaskRef = config.getName() + "_transfer_" + sub.getName();
             WorkflowTask subTask =
-                    compileSubAgent(sub, subTaskRef, "${workflow.input.prompt}", "${workflow.input.media}");
+                    compileSubAgent(sub, subTaskRef, "${workflow.input.prompt}", "${workflow.input.media}",
+                            "${workflow.variables._agent_state}");
             transferCases.put(sub.getName(), List.of(subTask));
         }
         transferSwitch.setDecisionCases(transferCases);
 
+        // Resolve input context with null fallback (INLINE → SET_VARIABLE pattern)
+        String hybridCtxResolveRef = config.getName() + "_ctx_resolve";
+        WorkflowTask hybridCtxResolve = new WorkflowTask();
+        hybridCtxResolve.setType("INLINE");
+        hybridCtxResolve.setTaskReferenceName(hybridCtxResolveRef);
+        hybridCtxResolve.setInputParameters(Map.of(
+                "evaluatorType", "graaljs",
+                "ctx", "${workflow.input.context}",
+                "expression", JavaScriptBuilder.nullCoalesceScript()));
+
         // Initialize workflow variables
         Map<String, Object> initHybridVars = new LinkedHashMap<>();
-        initHybridVars.put("_agent_state", new LinkedHashMap<>());
+        initHybridVars.put("_agent_state", "${" + hybridCtxResolveRef + ".output.result}");
         if (hasApproval) {
             initHybridVars.put("_human_feedback", "");
         }
@@ -708,12 +797,14 @@ public class AgentCompiler {
         if (discoveryResult != null) {
             List<WorkflowTask> allTasks = new ArrayList<>(discoveryResult.getPreTasks());
             allTasks.addAll(resolvedInstructions.getPreTasks());
+            allTasks.add(hybridCtxResolve);
             allTasks.add(initStateHybrid);
             allTasks.add(loop);
             allTasks.add(transferSwitch);
             wf.setTasks(allTasks);
         } else {
             List<WorkflowTask> allTasks = new ArrayList<>(resolvedInstructions.getPreTasks());
+            allTasks.add(hybridCtxResolve);
             allTasks.add(initStateHybrid);
             allTasks.add(loop);
             allTasks.add(transferSwitch);
@@ -726,7 +817,11 @@ public class AgentCompiler {
         for (AgentConfig sub : config.getAgents()) {
             outputRefs.put(sub.getName(), ref(config.getName() + "_transfer_" + sub.getName() + ".output.result"));
         }
-        wf.setOutputParameters(Map.of("result", outputRefs, "finishReason", ref(llmRef + ".output.finishReason")));
+        Map<String, Object> hybridOutput = new LinkedHashMap<>();
+        hybridOutput.put("result", outputRefs);
+        hybridOutput.put("finishReason", ref(llmRef + ".output.finishReason"));
+        hybridOutput.put("context", "${workflow.variables._agent_state}");
+        wf.setOutputParameters(hybridOutput);
         applyTimeout(wf, config);
         return wf;
     }
@@ -738,7 +833,7 @@ public class AgentCompiler {
      * External -> SUB_WORKFLOW referencing by name.
      * Local -> SUB_WORKFLOW with inline workflowDef.
      */
-    WorkflowTask compileSubAgent(AgentConfig sub, String taskRef, String promptRef, String mediaRef) {
+    WorkflowTask compileSubAgent(AgentConfig sub, String taskRef, String promptRef, String mediaRef, String contextRef) {
         // Force passthrough compilation for Claude Code sub-agents
         String subModel = sub.getModel();
         if (subModel != null && subModel.startsWith("claude-code")) {
@@ -767,6 +862,10 @@ public class AgentCompiler {
         inputs.put("session_id", "${workflow.input.session_id}");
         // Forward execution token to sub-workflows for credential resolution
         inputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
+        // Pass context to sub-workflow for pipeline state
+        if (contextRef != null) {
+            inputs.put("context", contextRef);
+        }
         // When includeContents is "none", signal the sub-workflow to skip parent context
         if ("none".equalsIgnoreCase(sub.getIncludeContents())) {
             inputs.put("include_contents", "none");
@@ -937,9 +1036,10 @@ public class AgentCompiler {
             inputs.put("tools", toolSpecs);
         }
 
-        if (config.getMaxTokens() != null) {
-            inputs.put("maxTokens", config.getMaxTokens());
-        }
+        // Default maxTokens to 16384 when not explicitly configured.
+        // Without this, Spring AI defaults to 500 which is too low for agents
+        // that need to generate tool calls with complex arguments.
+        inputs.put("maxTokens", config.getMaxTokens() != null ? config.getMaxTokens() : 16384);
 
         // Temperature: default 0 for tool agents, null otherwise
         if (config.getTemperature() != null) {
@@ -1990,6 +2090,22 @@ public class AgentCompiler {
 
     public void setLlmRetryCount(int llmRetryCount) {
         this.llmRetryCount = llmRetryCount;
+    }
+
+    public void setContextMaxSizeBytes(int contextMaxSizeBytes) {
+        this.contextMaxSizeBytes = contextMaxSizeBytes;
+    }
+
+    public void setContextMaxValueSizeBytes(int contextMaxValueSizeBytes) {
+        this.contextMaxValueSizeBytes = contextMaxValueSizeBytes;
+    }
+
+    int getContextMaxSizeBytes() {
+        return contextMaxSizeBytes;
+    }
+
+    int getContextMaxValueSizeBytes() {
+        return contextMaxValueSizeBytes;
     }
 
     private boolean isGraphStructure(AgentConfig config) {

@@ -123,19 +123,22 @@ export const coordinator = new LlmAgent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(coordinator);
-    await runtime.serve(coordinator);
+    const result = await runtime.run(
+    coordinator,
+    'I want to plan a trip to Japan. I need a flight from San Francisco ' +
+    'on 2025-04-15 and a hotel for 5 nights. Also, what\'s the travel advisory?',
+    );
+    console.log('Status:', result.status);
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const result = await runtime.run(
-    // coordinator,
-    // 'I want to plan a trip to Japan. I need a flight from San Francisco ' +
-    // 'on 2025-04-15 and a hotel for 5 nights. Also, what\'s the travel advisory?',
-    // );
-    // console.log('Status:', result.status);
-    // result.printResult();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(coordinator);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents travel_coordinator
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(coordinator);
   } finally {
     await runtime.shutdown();
   }

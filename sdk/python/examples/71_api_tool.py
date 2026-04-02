@@ -15,7 +15,7 @@ Three patterns shown:
 
 Requirements:
     - Conductor server with LLM support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
     - For credential examples: store credentials via `agentspan credential store`
 """
@@ -133,19 +133,22 @@ github_agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.71_api_tool
-        runtime.deploy(pet_agent)
-        runtime.serve(pet_agent)
+        # Example 1: Petstore
+        print("=== Petstore API ===")
+        result = runtime.run(pet_agent, "List all available pets with status 'available'")
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # # Example 1: Petstore
-        # print("=== Petstore API ===")
-        # result = runtime.run(pet_agent, "List all available pets with status 'available'")
-        # result.print_result()
+        # Example 3: Mixed tools
+        print("\n=== Mixed Tools ===")
+        result = runtime.run(multi_tool_agent, "What's sqrt(144)? Also find pets named 'doggie'.")
+        result.print_result()
 
-        # # Example 3: Mixed tools
-        # print("\n=== Mixed Tools ===")
-        # result = runtime.run(multi_tool_agent, "What's sqrt(144)? Also find pets named 'doggie'.")
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(pet_agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.71_api_tool
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(pet_agent)
 

@@ -17,6 +17,16 @@ agent = Agent(
     tools=[get_weather],
 )
 
-with AgentRuntime() as rt:
-    result = rt.run(agent, "What's the weather in Tokyo?")
-    print(result.output)
+if __name__ == "__main__":
+    with AgentRuntime() as rt:
+        result = rt.run(agent, "What's the weather in Tokyo?")
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # rt.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.quickstart.02_tools
+        #
+        # 2. In a separate long-lived worker process:
+        # rt.serve(agent)

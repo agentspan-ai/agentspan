@@ -111,15 +111,18 @@ const prompt = "I'd like a refund for order ORD-002, the product arrived damaged
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(triageAgent);
-    await runtime.serve(triageAgent);
+    const result = await runtime.run(triageAgent, prompt);
+    console.log('Status:', result.status);
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const result = await runtime.run(triageAgent, prompt);
-    // console.log('Status:', result.status);
-    // result.printResult();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(triageAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/openai --agents customer_service_triage
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(triageAgent);
   } finally {
     await runtime.shutdown();
   }

@@ -16,7 +16,7 @@ reject the draft via the AgentSpan UI or API. This is true human-in-the-loop,
 not an LLM simulating a reviewer.
 
 Requirements:
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
@@ -109,14 +109,17 @@ graph = builder.compile(name="email_hitl_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.langgraph.22_human_in_the_loop
-        runtime.deploy(graph)
-        runtime.serve(graph)
+        result = runtime.run(
+        graph, "Schedule a team meeting for next Monday at 10am to discuss Q3 plans."
+        )
+        print(f"Status: {result.status}")
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        # graph, "Schedule a team meeting for next Monday at 10am to discuss Q3 plans."
-        # )
-        # print(f"Status: {result.status}")
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.22_human_in_the_loop
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)

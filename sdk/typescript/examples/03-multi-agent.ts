@@ -85,28 +85,29 @@ export const codingTeam = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(writingPipeline);
-    await runtime.serve(writingPipeline);
+    console.log('=== Sequential Pipeline ===');
+    const seqResult = await runtime.run(writingPipeline, 'Quantum computing');
+    seqResult.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // console.log('=== Sequential Pipeline ===');
-    // const seqResult = await runtime.run(writingPipeline, 'Quantum computing');
-    // seqResult.printResult();
+    console.log('\n=== Parallel Research ===');
+    const parResult = await runtime.run(researchTeam, 'AI trends in 2026');
+    parResult.printResult();
 
-    // console.log('\n=== Parallel Research ===');
-    // const parResult = await runtime.run(researchTeam, 'AI trends in 2026');
-    // parResult.printResult();
+    console.log('\n=== Handoff Team ===');
+    const handoffResult = await runtime.run(
+    codingTeam,
+    'How do I use async/await in Python?',
+    );
+    handoffResult.printResult();
 
-    // console.log('\n=== Handoff Team ===');
-    // const handoffResult = await runtime.run(
-    // codingTeam,
-    // 'How do I use async/await in Python?',
-    // );
-    // handoffResult.printResult();
-
-    // await runtime.shutdown();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(writingPipeline);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents writer
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(writingPipeline);
   } finally {
     await runtime.shutdown();
   }

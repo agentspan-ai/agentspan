@@ -11,10 +11,17 @@ protocol communication — **no worker process needed**.
 Flow:
     ListMcpTools → LLM (picks tool) → CallMcpTool → Final LLM
 
+MCP Weather Server Setup:
+    # Install and start the weather MCP server (runs on port 3001):
+    npx -y @philschmid/weather-mcp
+
+    # Verify it's running:
+    curl http://localhost:3001/mcp
+
 Requirements:
     - Conductor server with LLM support
-    - MCP weather server running on http://localhost:3001/mcp
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - MCP weather server running on http://localhost:3001/mcp (see setup above)
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -45,12 +52,15 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.04_mcp_weather
-        runtime.deploy(agent)
-        runtime.serve(agent)
+        result = runtime.run(agent, "What's the weather like in San Francisco (CA) right now?")
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(agent, "What's the weather like in San Francisco (CA) right now?")
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.04_mcp_weather
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
 

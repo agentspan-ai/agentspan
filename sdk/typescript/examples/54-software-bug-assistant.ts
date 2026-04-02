@@ -8,7 +8,7 @@
  *
  * Requirements:
  *   - Conductor server with AgentTool + MCP support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  *   - GH_TOKEN in environment (optional, for GitHub MCP)
  */
@@ -250,25 +250,26 @@ export const softwareAssistant = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(softwareAssistant);
-    await runtime.serve(softwareAssistant);
+    const result = await runtime.run(
+    softwareAssistant,
+    'Review the latest open issues and PRs on conductor-oss/conductor. ' +
+    'Check if any of them relate to our internal tickets. ' +
+    'Pay attention to the DO_WHILE fix (PR #820) and the scheduler ' +
+    'persistence PRs. Give me a triage summary.',
+    );
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const runtime = new AgentRuntime();
-    // try {
-    // const result = await runtime.run(
-    // softwareAssistant,
-    // 'Review the latest open issues and PRs on conductor-oss/conductor. ' +
-    // 'Check if any of them relate to our internal tickets. ' +
-    // 'Pay attention to the DO_WHILE fix (PR #820) and the scheduler ' +
-    // 'persistence PRs. Give me a triage summary.',
-    // );
-    // result.printResult();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(softwareAssistant);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents software_assistant_54
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(softwareAssistant);
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('54-software-bug-assistant.ts') || process.argv[1]?.endsWith('54-software-bug-assistant.js')) {

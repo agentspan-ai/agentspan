@@ -8,9 +8,17 @@
  *
  * These tools execute entirely server-side — no TypeScript worker process needed.
  *
+ * MCP Weather Server Setup:
+ *   # Install and start the weather MCP server (runs on port 3001):
+ *   npx -y @philschmid/weather-mcp
+ *
+ *   # Verify it's running:
+ *   curl http://localhost:3001/mcp
+ *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - MCP weather server running on http://localhost:3001/mcp (see setup above)
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -98,19 +106,20 @@ export const agent = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(agent);
-    await runtime.serve(agent);
+    const result = await runtime.run(agent, 'Get the weather in London and format it as a report.');
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const runtime = new AgentRuntime();
-    // try {
-    // const result = await runtime.run(agent, 'Get the weather in London and format it as a report.');
-    // result.printResult();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents api_assistant
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('04-http-and-mcp-tools.ts') || process.argv[1]?.endsWith('04-http-and-mcp-tools.js')) {

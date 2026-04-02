@@ -15,7 +15,7 @@ continues when a worker service comes back online.
 
 Requirements:
     - Agentspan server running
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in environment
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api in environment
     - AGENTSPAN_LLM_MODEL set (default: openai/gpt-4o-mini via settings.py)
     - Provider API key configured on the server (for example OPENAI_API_KEY)
 """
@@ -117,6 +117,27 @@ def print_status(prefix: str, status: object) -> None:
     attempts = attempt_state.get("attempts", [])
     attempt_summary = ",".join(f"{item['attempt']}:{item['status']}" for item in attempts) or "none"
     print(f"{prefix} status={status.status} complete={status.is_complete} attempts={attempt_summary}")
+
+
+def run_once() -> None:
+    with AgentRuntime() as runtime:
+        result = runtime.run(agent, "Validate change CHG-901 for production release.")
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.73_worker_restart_recovery
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
+        #
+        # Advanced recovery demo:
+        # python 73_worker_restart_recovery.py deploy
+        # python 73_worker_restart_recovery.py serve
+        # python 73_worker_restart_recovery.py start
+        # python 73_worker_restart_recovery.py kill-worker
 
 
 def deploy_agent() -> None:
@@ -255,16 +276,19 @@ def parse_args() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
-    args = parse_args()
+    if len(sys.argv) == 1:
+        run_once()
+    else:
+        args = parse_args()
 
-    if args.command == "deploy":
-        deploy_agent()
-    elif args.command == "serve":
-        serve_workers(args.worker_info_file)
-    elif args.command == "start":
-        start_workflow(args.file, args.timeout_seconds)
-    elif args.command == "kill-worker":
-        kill_worker(args.worker_info_file)
-    elif args.command == "status":
-        execution_id = args.execution_id or load_text(args.file)
-        show_status(execution_id, args.timeout_seconds)
+        if args.command == "deploy":
+            deploy_agent()
+        elif args.command == "serve":
+            serve_workers(args.worker_info_file)
+        elif args.command == "start":
+            start_workflow(args.file, args.timeout_seconds)
+        elif args.command == "kill-worker":
+            kill_worker(args.worker_info_file)
+        elif args.command == "status":
+            execution_id = args.execution_id or load_text(args.file)
+            show_status(execution_id, args.timeout_seconds)

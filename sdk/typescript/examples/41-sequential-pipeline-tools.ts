@@ -12,7 +12,7 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -200,23 +200,24 @@ const pipeline = conceptDeveloper
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(pipeline);
-    await runtime.serve(pipeline);
+    const result = await runtime.run(
+    pipeline,
+    'Create a 3-scene short film about a robot discovering music ' +
+    'for the first time in a post-apocalyptic world.',
+    );
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const runtime = new AgentRuntime();
-    // try {
-    // const result = await runtime.run(
-    // pipeline,
-    // 'Create a 3-scene short film about a robot discovering music ' +
-    // 'for the first time in a post-apocalyptic world.',
-    // );
-    // result.printResult();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(pipeline);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents concept_developer
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(pipeline);
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('41-sequential-pipeline-tools.ts') || process.argv[1]?.endsWith('41-sequential-pipeline-tools.js')) {

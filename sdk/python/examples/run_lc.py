@@ -312,7 +312,7 @@ def main() -> int:
         return 1
 
     # Read server config from env (same vars as AgentRuntime)
-    server_url  = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:8080/api")
+    server_url  = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:6767/api")
     auth_key    = os.environ.get("AGENTSPAN_AUTH_KEY", "")
     auth_secret = os.environ.get("AGENTSPAN_AUTH_SECRET", "")
 

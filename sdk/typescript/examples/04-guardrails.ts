@@ -75,15 +75,17 @@ export const safeWriter = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(safeWriter);
-    await runtime.serve(safeWriter);
+    const result = await runtime.run(safeWriter, 'Write about AI safety best practices.');
+    result.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // const result = await runtime.run(safeWriter, 'Write about AI safety best practices.');
-    // result.printResult();
-    // await runtime.shutdown();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(safeWriter);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents safe_writer
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(safeWriter);
   } finally {
     await runtime.shutdown();
   }

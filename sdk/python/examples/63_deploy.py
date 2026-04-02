@@ -13,12 +13,13 @@ Conductor workflow definitions and registers the corresponding task
 definitions. No local workers are started, no execution happens.
 
 Run this once during deployment. Use serve() separately (63b) to keep
-workers alive, and run-by-name (63c) to trigger execution.
+workers alive, or use `runtime.run()` directly in app code and keep
+deploy/serve as the production pattern.
 
 Requirements:
     - Conductor server running
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
-    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api in .env or environment
+    - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, tool
@@ -68,13 +69,17 @@ ops_bot = Agent(
 )
 
 if __name__ == "__main__":
-    # ── Deploy: compile + register on server ─────────────────────────────
-
     with AgentRuntime() as runtime:
-        results = runtime.deploy(doc_assistant, ops_bot)
+        result = runtime.run(doc_assistant, "How do I reset my password?")
+        result.print_result()
 
-        for info in results:
-            print(f"Deployed: {info.agent_name} -> {info.registered_name}")
-
-        print(f"\n{len(results)} agent(s) registered on server.")
-        print("Now run 63b_serve.py to start workers, then 63c_run_by_name.py to execute.")
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # results = runtime.deploy(doc_assistant, ops_bot)
+        # for info in results:
+        #     print(f"Deployed: {info.agent_name} -> {info.registered_name}")
+        # CLI alternative:
+        # agentspan deploy --package examples.63_deploy
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(doc_assistant, ops_bot)

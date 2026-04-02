@@ -10,7 +10,7 @@ Demonstrates:
       (AI_MODEL task for the LLM, SIMPLE tasks per tool)
 
 Requirements:
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
@@ -58,17 +58,20 @@ graph = create_react_agent(llm, tools=[calculate, count_words, reverse_string], 
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.langgraph.41_react_agent_basic
-        runtime.deploy(graph)
-        runtime.serve(graph)
+        result = runtime.run(
+        graph,
+        "What is sqrt(256) + 2**10? "
+        "Also count the words in 'the quick brown fox jumps over the lazy dog'. "
+        "And what is 'Agentspan' reversed?",
+        )
+        print(f"Status: {result.status}")
+        result.print_result()
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        # graph,
-        # "What is sqrt(256) + 2**10? "
-        # "Also count the words in 'the quick brown fox jumps over the lazy dog'. "
-        # "And what is 'Agentspan' reversed?",
-        # )
-        # print(f"Status: {result.status}")
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.41_react_agent_basic
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)

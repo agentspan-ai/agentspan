@@ -777,71 +777,22 @@ if __name__ == "__main__":
         print("[tracing] OpenTelemetry tracing is enabled")
 
     with AgentRuntime() as runtime:
-
-        # ── Feature #49: deploy (compile + register) ─────────────
-        print("=== Deploy ===")
-        deployments = runtime.deploy(full_pipeline)
-        for dep in deployments:
-            print(f"  Deployed: {dep.registered_name} ({dep.agent_name})")
-
-        # ── Feature #51: plan (dry-run, no prompt) ───────────────
-        print("\n=== Plan (dry-run) ===")
-        execution_plan = runtime.plan(full_pipeline)
-        print("  Plan compiled successfully")
-
-        # ── Feature #43: stream (sync SSE with HITL) ─────────────
-        print("\n=== Stream Execution ===")
-        agent_stream = runtime.stream(full_pipeline, PROMPT)
-        print(f"  Workflow: {agent_stream.execution_id}\n")
-
-        hitl_demo_state = {"approved": 0, "rejected": 0, "feedback": 0}
-
-        for event in agent_stream:
-            if event.type == EventType.THINKING:
-                print(f"  [thinking] {event.content[:80]}...")
-            elif event.type == EventType.TOOL_CALL:
-                print(f"  [tool_call] {event.tool_name}({event.args})")
-            elif event.type == EventType.TOOL_RESULT:
-                print(
-                    f"  [tool_result] {event.tool_name} -> {str(event.result)[:80]}..."
-                )
-            elif event.type == EventType.HANDOFF:
-                print(f"  [handoff] -> {event.target}")
-            elif event.type == EventType.GUARDRAIL_PASS:
-                print(f"  [guardrail_pass] {event.guardrail_name}")
-            elif event.type == EventType.GUARDRAIL_FAIL:
-                print(
-                    f"  [guardrail_fail] {event.guardrail_name}: {event.content}"
-                )
-            elif event.type == EventType.MESSAGE:
-                print(f"  [message] {event.content[:80]}...")
-            elif event.type == EventType.WAITING:
-                print("\n  --- HITL: Approval required ---")
-                # Demo all 3 HITL modes (#40, #41, #42):
-                if hitl_demo_state["feedback"] == 0:
-                    # #42: send feedback first
-                    agent_stream.send(
-                        "Please add more details about quantum error correction."
-                    )
-                    hitl_demo_state["feedback"] += 1
-                    print("  Sent feedback (revision request)\n")
-                elif hitl_demo_state["rejected"] == 0:
-                    # #41: reject once
-                    agent_stream.reject("Title needs improvement")
-                    hitl_demo_state["rejected"] += 1
-                    print("  Rejected (title needs work)\n")
-                else:
-                    # #40: approve
-                    agent_stream.approve()
-                    hitl_demo_state["approved"] += 1
-                    print("  Approved\n")
-            elif event.type == EventType.ERROR:
-                print(f"  [error] {event.content}")
-            elif event.type == EventType.DONE:
-                print("\n  [done] Pipeline complete")
-
-        result = agent_stream.get_result()
+        result = runtime.run(full_pipeline, PROMPT)
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(full_pipeline)
+        # CLI alternative:
+        # agentspan deploy --package examples.kitchen_sink
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(full_pipeline)
+        #
+        # Additional execution-mode alternatives:
+        # runtime.plan(full_pipeline)
+        # agent_stream = runtime.stream(full_pipeline, PROMPT)
+        # handle = runtime.start(full_pipeline, PROMPT)
 
         # ── Feature #64: Token tracking ──────────────────────────
         if result.token_usage:
@@ -853,31 +804,6 @@ if __name__ == "__main__":
         print(f"\nCallback events: {len(callback_log.events)}")
         for ev in callback_log.events[:5]:
             print(f"  {ev['type']}: {ev}")
-
-        # ── Feature #48: start + polling ─────────────────────────
-        print("\n=== Start + Polling ===")
-        handle = runtime.start(full_pipeline, PROMPT)
-        print(f"  Started: {handle.execution_id}")
-        status = handle.get_status()
-        print(f"  Status: {status.status}, Running: {status.is_running}")
-        if status.reason:
-            print(f"  Reason: {status.reason}")
-
-        # ── Feature #44: async streaming ─────────────────────────
-        print("\n=== Async Streaming ===")
-
-        async def demo_async_stream():
-            async_stream = await runtime.stream_async(full_pipeline, PROMPT)
-            async for event in async_stream:
-                if event.type == EventType.DONE:
-                    print("  [async done] Pipeline complete")
-                    break
-                elif event.type == EventType.WAITING:
-                    await async_stream.approve()
-            async_result = await async_stream.get_result()
-            print(f"  Async result status: {async_result.status}")
-
-        asyncio.run(demo_async_stream())
 
         # ── Feature #46/47: top-level convenience APIs ───────────
         print("\n=== Top-Level Convenience API ===")

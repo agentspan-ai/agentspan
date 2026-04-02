@@ -50,27 +50,30 @@ export const preciseAgent = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    await runtime.deploy(creativeAgent);
-    await runtime.serve(creativeAgent);
+    console.log('--- Creative Agent (temp=0.9) ---');
+    const creativeResult = await runtime.run(
+    creativeAgent,
+    'Write a two-sentence story about a robot learning to paint.',
+    );
+    console.log('Status:', creativeResult.status);
+    creativeResult.printResult();
 
-    // Quick test: uncomment below (and comment out serve) to run directly.
-    // console.log('--- Creative Agent (temp=0.9) ---');
-    // const creativeResult = await runtime.run(
-    // creativeAgent,
-    // 'Write a two-sentence story about a robot learning to paint.',
-    // );
-    // console.log('Status:', creativeResult.status);
-    // creativeResult.printResult();
+    console.log('\n--- Precise Agent (temp=0.1) ---');
+    const preciseResult = await runtime.run(
+    preciseAgent,
+    'Review this Python code: `data = eval(user_input)`',
+    );
+    console.log('Status:', preciseResult.status);
+    preciseResult.printResult();
 
-    // console.log('\n--- Precise Agent (temp=0.1) ---');
-    // const preciseResult = await runtime.run(
-    // preciseAgent,
-    // 'Review this Python code: `data = eval(user_input)`',
-    // );
-    // console.log('Status:', preciseResult.status);
-    // preciseResult.printResult();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(creativeAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/openai --agents creative_writer
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(creativeAgent);
   } finally {
     await runtime.shutdown();
   }

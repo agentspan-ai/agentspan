@@ -9,7 +9,7 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -77,38 +77,27 @@ export const agent = new Agent({
 if (process.argv[1]?.endsWith('32-human-guardrail.ts') || process.argv[1]?.endsWith('32-human-guardrail.js')) {
   const runtime = new AgentRuntime();
   try {
-    // Start the agent (async -- does not block)
-    const handle = await runtime.start(
+    const result = await runtime.run(
       agent,
-      'Look up AAPL and explain whether it\'s a good investment. ' +
-      'Include your opinion on potential returns.',
+      'Look up AAPL and summarize the latest price movement.',
     );
-    console.log(`Execution started: ${handle.executionId}`);
+    result.printResult();
 
-    // Poll for status
-    for (let i = 0; i < 60; i++) {
-      const status = await handle.getStatus();
-      console.log(`  Status: ${status.status} (waiting=${status.isWaiting})`);
-
-      if (status.isWaiting) {
-        console.log('\n--- Workflow paused for human review ---');
-        console.log('The guardrail flagged the response for compliance review.');
-        console.log('Options: approve(), reject(reason), or respond(output)');
-
-        // In a real app, a human would review in the Conductor UI.
-        // Here we auto-reject for the demo.
-        console.log('Auto-rejecting for demo...');
-        await handle.reject('bad idea');
-        console.log('Rejected! Resuming workflow...\n');
-      }
-
-      if (status.isComplete) {
-        console.log(`\nFinal output: ${status.output}`);
-        break;
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    }
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+    //
+    // Interactive human-review alternative:
+    // const handle = await runtime.start(
+    //   agent,
+    //   "Look up AAPL and explain whether it's a good investment. Include your opinion on potential returns.",
+    // );
+    // await handle.reject('bad idea');
   } finally {
     await runtime.shutdown();
   }

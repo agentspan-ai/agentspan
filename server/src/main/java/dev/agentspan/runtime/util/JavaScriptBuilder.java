@@ -1102,4 +1102,101 @@ public class JavaScriptBuilder {
         sb.append("})()");
         return sb.toString();
     }
+
+    // ── Context passing helpers ──────────────────────────────
+
+    /**
+     * Null-coalescing script: returns {@code $.ctx} if truthy, else empty object.
+     * Used for INLINE tasks that resolve context with null fallback.
+     * Input: {@code ctx} → the reference to resolve (e.g. {@code ${workflow.input.context}}).
+     * Output: {@code result} → the resolved context dict.
+     */
+    public static String nullCoalesceScript() {
+        return iife("return $.ctx || {};");
+    }
+
+    /**
+     * Flat-merge context script: merges child context into parent context.
+     * Used after each sequential sub-workflow step.
+     * Input: {@code parent} → parent context, {@code child} → child output.context.
+     * Output: merged context dict.
+     */
+    public static String flatMergeContextScript() {
+        // Java Map interop: for-in iterates entries but hasOwnProperty checks
+        // Java object properties (not map entries). Use .get(k) for values.
+        return iife(
+                "var parent = $.parent || {};"
+                        + "var child = $.child || {};"
+                        + "var merged = {};"
+                        + "for (var k in parent) { var v = parent.get ? parent.get(k) : parent[k]; if (v != null) merged[k] = '' + v; }"
+                        + "for (var k in child) { var v = child.get ? child.get(k) : child[k]; if (v != null) merged[k] = '' + v; }"
+                        + "return merged;");
+    }
+
+    /**
+     * Context injection script: prepends context JSON block to user prompt.
+     * If context is empty, returns the prompt unchanged.
+     * Enforces size limits: per-value truncation and total size budget.
+     * Input: {@code state} → the _agent_state dict, {@code prompt} → original prompt,
+     *        {@code maxSize} → max total context bytes, {@code maxValueSize} → max per-value bytes.
+     * Output: the prompt string with context prepended.
+     */
+    public static String contextInjectionScript() {
+        return iife(
+                // GraalJS interop: Conductor passes workflow variables as raw Java
+                // LinkedHashMap objects. Object.keys() returns Java method names,
+                // JSON.stringify() returns "{}". However for-in DOES iterate map
+                // entries. Do NOT use hasOwnProperty — it checks Java object
+                // properties, not map entries. Use state.get(k) for value access
+                // since bracket notation may not work for Java Maps.
+                "var rawState = $.state;"
+                        + "var prompt = $.prompt || '';"
+                        + "if (!rawState) return prompt;"
+                        + "var maxSize = $.maxSize || 32768;"
+                        + "var maxValueSize = $.maxValueSize || 4096;"
+                        // Collect map entries via for-in (works on Java Maps in GraalJS)
+                        + "var state = {};"
+                        + "for (var k in rawState) {"
+                        + "  var v = rawState.get(k);"
+                        + "  if (v != null) state[k] = '' + v;"
+                        + "}"
+                        + "var keys = Object.keys(state);"
+                        + "if (keys.length === 0) return prompt;"
+                        // Per-value truncation
+                        + "var truncated = {};"
+                        + "for (var i = 0; i < keys.length; i++) {"
+                        + "  var k = keys[i]; var s = state[k];"
+                        + "  if (s.length > maxValueSize) {"
+                        + "    truncated[k] = s.substring(0, maxValueSize) + '[truncated]';"
+                        + "  } else { truncated[k] = s; }"
+                        + "}"
+                        // Total size budget — drop oldest keys if over
+                        + "var json = JSON.stringify(truncated);"
+                        + "var tKeys = Object.keys(truncated);"
+                        + "while (json.length > maxSize && tKeys.length > 0) {"
+                        + "  delete truncated[tKeys.shift()];"
+                        + "  json = JSON.stringify(truncated);"
+                        + "}"
+                        + "if (Object.keys(truncated).length === 0) return prompt;"
+                        + "return 'Context:\\n```json\\n' + JSON.stringify(truncated, null, 2) + '\\n```\\n\\n' + prompt;");
+    }
+
+    /**
+     * Namespaced parallel merge script: merges parent context with
+     * each child's context namespaced under its agent name.
+     * Input: {@code parentCtx} → parent context, {@code agentNames} → array of names,
+     *        {@code child_0}, {@code child_1}, ... → each child's output.context.
+     * Output: merged context with child contexts namespaced.
+     */
+    public static String namespacedMergeContextScript() {
+        return iife(
+                "var parent = $.parentCtx || {};"
+                        + "var merged = {};"
+                        + "for (var k in parent) { var v = parent.get ? parent.get(k) : parent[k]; if (v != null) merged[k] = '' + v; }"
+                        + "var agents = $.agentNames || [];"
+                        + "for (var i = 0; i < agents.length; i++) {"
+                        + "  merged[agents[i]] = $['child_' + i] || {};"
+                        + "}"
+                        + "return merged;");
+    }
 }

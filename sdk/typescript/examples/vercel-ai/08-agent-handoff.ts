@@ -84,6 +84,15 @@ async function main() {
       result.printResult();
       console.log('-'.repeat(60));
     }
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(triageAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/vercel-ai --agents triage_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(triageAgent);
   } finally {
     await runtime.shutdown();
   }
