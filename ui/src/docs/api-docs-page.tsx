@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Search, ChevronRight, Play, Copy, Check, ExternalLink, Server } from 'lucide-react';
+import { Search, ChevronRight, Play, Copy, Check, Server } from 'lucide-react';
 import { Badge } from './components/ui/badge';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { Textarea } from './components/ui/textarea';
 import { cn } from './lib/utils';
 import { API_CATEGORIES, SERVER_URL } from './generated-api-data';
+import './index.css';
 
 // ============================================================================
 // Types
@@ -343,9 +344,10 @@ export function ApiDocsPage() {
   const totalEndpoints = categories.reduce((sum, cat) => sum + cat.endpoints.length, 0);
 
   return (
-    <div className="flex h-full">
-      {/* Left Sidebar */}
-      <div className="w-56 shrink-0 border-r flex flex-col">
+    <div className="api-docs-root flex h-full">
+
+      {/* ── Left Sidebar — only shown in standalone /docs/ page ── */}
+      <div className="w-56 shrink-0 border-r flex flex-col standalone-only">
         <div className="p-4 border-b">
           <img src="/agentspan-logo.svg" alt="Agentspan" className="h-6 mb-2" />
           <h3 className="text-sm font-semibold">API Reference</h3>
@@ -362,7 +364,6 @@ export function ApiDocsPage() {
               )}
               onClick={() => setSelectedCategory(null)}
             >
-              <ExternalLink className="h-4 w-4" />
               All Endpoints
             </button>
 
@@ -377,7 +378,7 @@ export function ApiDocsPage() {
                   )}
                   onClick={() => setSelectedCategory(cat.name)}
                 >
-                  <Server className="h-4 w-4" />
+                  <Server className="h-4 w-4 shrink-0" />
                   <span className="truncate">{cat.name}</span>
                   <Badge variant="secondary" className="text-[10px] ml-auto">{cat.endpoints.length}</Badge>
                 </button>
@@ -387,9 +388,11 @@ export function ApiDocsPage() {
         </ScrollArea>
       </div>
 
-      {/* Main Content */}
+      {/* ── Main content column ── */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="border-b p-4">
+
+        {/* ── Header: search + horizontal category chips (embedded mode only) ── */}
+        <div className="border-b p-4 space-y-3 shrink-0">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -399,8 +402,38 @@ export function ApiDocsPage() {
               className="pl-9"
             />
           </div>
+
+          {/* Category chips — only visible in embedded mode (hidden in standalone) */}
+          <div className="embedded-only flex items-center gap-2 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            <button
+              className={cn(
+                'shrink-0 px-3 py-1 rounded-full text-xs font-medium border transition-colors whitespace-nowrap',
+                !selectedCategory
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'bg-background text-muted-foreground border-border hover:border-primary hover:text-foreground'
+              )}
+              onClick={() => setSelectedCategory(null)}
+            >
+              All <span className="opacity-60">{totalEndpoints}</span>
+            </button>
+            {categories.map((cat) => (
+              <button
+                key={cat.name}
+                className={cn(
+                  'shrink-0 px-3 py-1 rounded-full text-xs font-medium border transition-colors whitespace-nowrap',
+                  selectedCategory === cat.name
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-background text-muted-foreground border-border hover:border-primary hover:text-foreground'
+                )}
+                onClick={() => setSelectedCategory(selectedCategory === cat.name ? null : cat.name)}
+              >
+                {cat.name} <span className="opacity-60">{cat.endpoints.length}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
+        {/* ── Endpoint cards ── */}
         <ScrollArea className="flex-1 p-4">
           <div className="max-w-4xl mx-auto space-y-8">
             {filteredCategories.map((category) => (
@@ -410,7 +443,6 @@ export function ApiDocsPage() {
                   <h2 className="text-lg font-semibold">{category.name}</h2>
                 </div>
                 <p className="text-sm text-muted-foreground mb-4">{category.description}</p>
-
                 <div className="space-y-2">
                   {category.endpoints.map((endpoint) => (
                     <EndpointCard

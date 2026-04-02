@@ -17,10 +17,19 @@ import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
- * Maps the public URL {@code /docs/} to the static files stored under
- * {@code classpath:/static/api-docs-ui/}. A servlet filter handles the
- * bare {@code /docs} and {@code /docs/} paths before the Conductor SPA
- * interceptor can forward them to the main UI.
+ * Serves the standalone API docs bundle at {@code /docs/} and its assets,
+ * and ensures hard-refreshing {@code /docs} serves the main SPA so React
+ * Router renders the embedded API docs page inside the app shell.
+ *
+ * <p>URL routing:
+ * <ul>
+ *   <li>{@code /docs}   → forward to main SPA ({@code /index.html}); React Router
+ *       renders ApiDocsPage embedded inside the app shell (no redirect).</li>
+ *   <li>{@code /docs/}  → forward to standalone docs ({@code /docs/index.html});
+ *       preserved as a direct/shareable full-page docs URL.</li>
+ *   <li>{@code /docs/**} → static assets for the standalone docs bundle
+ *       (JS, CSS served from {@code classpath:/static/docs/}).</li>
+ * </ul>
  */
 @Configuration
 public class StaticDocsConfig implements WebMvcConfigurer {
@@ -37,10 +46,13 @@ public class StaticDocsConfig implements WebMvcConfigurer {
             HttpServletRequest req = (HttpServletRequest) request;
             String uri = req.getRequestURI();
             if ("/docs".equals(uri)) {
-                ((HttpServletResponse) response).sendRedirect("/docs/");
+                // Hard-refresh on /docs: serve the main SPA so React Router
+                // picks up the /docs route and renders the embedded docs page.
+                request.getRequestDispatcher("/index.html").forward(request, response);
                 return;
             }
             if ("/docs/".equals(uri)) {
+                // Direct link to the standalone full-page docs view.
                 request.getRequestDispatcher("/docs/index.html").forward(request, response);
                 return;
             }

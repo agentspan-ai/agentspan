@@ -1,3 +1,4 @@
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { createHash } from "crypto";
 import { dirname, resolve } from "path";
@@ -9,6 +10,29 @@ import { vitePluginCspNonce } from "./vite-plugin-csp-nonce";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const packageDir = __dirname;
+
+// In dev, Vite serves docs.html at /docs because it lives in the project root.
+// Hard-refreshing /docs (or /docs/*) in the browser bypasses React Router and
+// loads the standalone docs bundle instead of the main app. This plugin
+// intercepts those requests early and rewrites them to / so Vite's SPA handler
+// serves index.html and React Router takes over.
+function docsDevRewritePlugin(): Plugin {
+  return {
+    name: "docs-dev-rewrite",
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        if (
+          req.url === "/docs" ||
+          req.url?.startsWith("/docs/") ||
+          req.url?.startsWith("/docs?")
+        ) {
+          req.url = "/";
+        }
+        next();
+      });
+    },
+  };
+}
 
 // Plugin to inject build-time hash into context.js script tag
 function contextJsHashPlugin(): Plugin {
@@ -79,10 +103,12 @@ export default defineConfig(({ mode }) => {
     base: BASE_URL,
     plugins: [
       react(),
+      tailwindcss(),
       tsconfigPaths(),
       svgr(),
       vitePluginCspNonce(),
       contextJsHashPlugin(),
+      docsDevRewritePlugin(),
     ],
     optimizeDeps: {
       include: [

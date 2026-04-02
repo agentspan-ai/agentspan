@@ -1,3 +1,8 @@
+/* Tell Tailwind v4 to scan the docs components in any build that processes this file.
+   This ensures all utility classes used in src/docs/** are emitted whether this
+   CSS is loaded by the standalone docs build or the main app build. */
+@source "../docs";
+
 @import "tailwindcss";
 
 @theme {
@@ -21,17 +26,58 @@
   --radius: 0.5rem;
 }
 
-* {
-  border-color: var(--color-border);
+/* Scoped base styles — applied only inside .api-docs-root so they don't
+   bleed into MUI when this CSS is loaded in the main app. The standalone
+   docs build wraps everything in #root which acts as a natural scope there. */
+.api-docs-root {
+  --color-background: hsl(0 0% 100%);
+  --color-foreground: hsl(222.2 84% 4.9%);
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(222.2 84% 4.9%);
+  --color-primary: hsl(222.2 47.4% 11.2%);
+  --color-primary-foreground: hsl(210 40% 98%);
+  --color-secondary: hsl(210 40% 96.1%);
+  --color-secondary-foreground: hsl(222.2 47.4% 11.2%);
+  --color-muted: hsl(210 40% 96.1%);
+  --color-muted-foreground: hsl(215.4 16.3% 46.9%);
+  --color-accent: hsl(210 40% 96.1%);
+  --color-accent-foreground: hsl(222.2 47.4% 11.2%);
+  --color-destructive: hsl(0 84.2% 60.2%);
+  --color-destructive-foreground: hsl(210 40% 98%);
+  --color-border: hsl(214.3 31.8% 91.4%);
+  --color-input: hsl(214.3 31.8% 91.4%);
+  --color-ring: hsl(222.2 84% 4.9%);
+  --radius: 0.5rem;
+
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-feature-settings: "rlig" 1, "calt" 1;
+  height: 100%;
+
+  /* Scoped border-color reset — only inside .api-docs-root */
+  & * {
+    border-color: var(--color-border);
+  }
 }
 
-body {
+/* Standalone docs build only — these selectors only match in /docs/ where
+   the page has a real <body> and <div id="root">. In the main app they are
+   harmless (body/root already have their own MUI styles). */
+body:has(#root > .api-docs-root) {
   margin: 0;
   background-color: var(--color-background);
   color: var(--color-foreground);
   font-feature-settings: "rlig" 1, "calt" 1;
 }
 
-#root {
+#root:has(> .api-docs-root) {
   height: 100vh;
 }
+
+/* Standalone mode (/docs/ page): show sidebar, hide chips */
+#root > .api-docs-root .standalone-only { display: flex; }
+#root > .api-docs-root .embedded-only   { display: none; }
+
+/* Embedded mode (inside main app): hide sidebar, show chips */
+.api-docs-root:not(#root > .api-docs-root) .standalone-only { display: none; }
+.api-docs-root:not(#root > .api-docs-root) .embedded-only   { display: flex; }

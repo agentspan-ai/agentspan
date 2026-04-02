@@ -22,6 +22,7 @@
     "build": "pnpm build:app && pnpm build:docs",
     "build:app": "vite build",
     "build:docs": "vite build --config vite.docs.config.ts && mv dist/docs/docs.html dist/docs/index.html",
+    "generate": "node generate.mjs",
     "build:lib": "vite build --mode lib && cp src/index.css dist/global.css",
     "build:all": "pnpm build:app && pnpm build:lib && pnpm build:docs",
     "preview": "vite preview",

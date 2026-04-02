@@ -1,32 +1,19 @@
 /**
  * API Reference Page
  *
- * Redirects to the static API docs page.
+ * Renders the API docs inline inside the main app shell — no redirect,
+ * no iframe. The ApiDocsPage component detects whether it is running inside
+ * the main app or the standalone /docs/ page and adjusts its layout
+ * accordingly (sidebar vs. horizontal category chips).
  */
 
-import { useEffect } from "react";
-import { Box, CircularProgress, Typography } from "@mui/material";
+import { Box } from "@mui/material";
+import { ApiDocsPage } from "../../docs/api-docs-page";
 
 export default function ApiReferencePage() {
-  useEffect(() => {
-    window.location.href = "/docs/";
-  }, []);
-
   return (
-    <Box
-      sx={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        height: "100vh",
-        gap: 2,
-      }}
-    >
-      <CircularProgress />
-      <Typography variant="body1" color="text.secondary">
-        Redirecting to API Documentation...
-      </Typography>
+    <Box sx={{ height: "100%", overflow: "hidden" }}>
+      <ApiDocsPage />
     </Box>
   );
 }
