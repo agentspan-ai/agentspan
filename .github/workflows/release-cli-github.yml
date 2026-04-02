@@ -50,6 +50,16 @@ jobs:
 
           chmod +x dist/agentspan_*
 
+      - name: Generate SHA256 checksums
+        run: |
+          cd dist
+          for binary in agentspan_linux_amd64 agentspan_linux_arm64 \
+                        agentspan_darwin_amd64 agentspan_darwin_arm64 \
+                        agentspan_windows_amd64.exe agentspan_windows_arm64.exe; do
+            sha256sum "$binary" | awk '{print $1}' > "${binary}.sha256"
+            echo "  $(cat ${binary}.sha256)  ${binary}"
+          done
+
       - name: Upload CLI binaries to GitHub release (if release exists)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -57,11 +67,17 @@ jobs:
           VERSION="${{ inputs.version }}"
           gh release upload "v${VERSION}" \
             dist/agentspan_linux_amd64 \
+            dist/agentspan_linux_amd64.sha256 \
             dist/agentspan_linux_arm64 \
+            dist/agentspan_linux_arm64.sha256 \
             dist/agentspan_darwin_amd64 \
+            dist/agentspan_darwin_amd64.sha256 \
             dist/agentspan_darwin_arm64 \
+            dist/agentspan_darwin_arm64.sha256 \
             dist/agentspan_windows_amd64.exe \
+            dist/agentspan_windows_amd64.exe.sha256 \
             dist/agentspan_windows_arm64.exe \
+            dist/agentspan_windows_arm64.exe.sha256 \
             --repo "${{ github.repository }}" \
             --clobber 2>/dev/null || echo "No release v${VERSION} found, skipping GitHub release upload"
 
@@ -72,8 +88,8 @@ jobs:
           AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
         run: |
           VERSION="${{ inputs.version }}"
-          for binary in dist/agentspan_*; do
-            filename=$(basename "$binary")
-            aws s3 cp "$binary" "s3://agentspan/cli/${VERSION}/${filename}"
-            aws s3 cp "$binary" "s3://agentspan/cli/latest/${filename}"
+          for file in dist/agentspan_*; do
+            filename=$(basename "$file")
+            aws s3 cp "$file" "s3://agentspan/cli/${VERSION}/${filename}"
+            aws s3 cp "$file" "s3://agentspan/cli/latest/${filename}"
           done
