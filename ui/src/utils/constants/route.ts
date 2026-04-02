@@ -142,7 +142,7 @@ export const WORKERS_URL = {
 };
 
 export const API_REFERENCE_URL = {
-  BASE: "/api-reference",
+  BASE: "/docs",
 };
 
 export const CREDENTIALS_URL = "/credentials";

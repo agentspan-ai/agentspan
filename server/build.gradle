@@ -77,7 +77,7 @@ dependencies {
     implementation "org.conductoross:conductor-json-jq-task:${conductorVersion}"
 
     // Swagger / OpenAPI UI
-    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-api:2.6.0'
 
     // Spring Boot
     implementation 'org.springframework.boot:spring-boot-starter-web'
