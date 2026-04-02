@@ -23,6 +23,12 @@ const MODEL = 'anthropic/claude-sonnet-4-6';
 
 // -- Stage 1: Fetch issues ---------------------------------------------------
 
+/** Stop when the agent has produced the structured output with issue details. */
+function fetchDone(messages: unknown[]): boolean {
+  const last = String(messages[messages.length - 1] ?? '');
+  return ['REPO:', 'BRANCH:', 'ISSUE:', 'AUTHOR:', 'DETAILS:'].every(tag => last.includes(tag));
+}
+
 export const gitFetchIssues = new Agent({
   name: 'git_fetch_issues',
   model: MODEL,
@@ -30,21 +36,29 @@ export const gitFetchIssues = new Agent({
     `You are a GitHub issue fetcher. Your ONLY job is to pick an issue and ` +
     `prepare a branch. Do NOT write any code or attempt to fix the issue — ` +
     `the next pipeline stage handles implementation.\n\n` +
-    `1. List the 5 most recent open issues on ${REPO} (include number, title, body).\n` +
+    `1. List the 5 most recent open issues: gh issue list --repo ${REPO} --state open --limit 5\n` +
     `2. If there are NO open issues, output exactly: NO_OPEN_ISSUES\n` +
-    `3. Otherwise pick the most suitable issue, then:\n` +
+    `3. Pick the most suitable issue and fetch FULL details (body, author, labels):\n` +
+    `   gh issue view <NUMBER> --repo ${REPO} --json number,title,body,author,labels\n` +
+    `   You MUST run this — gh issue list only returns titles, not the issue body.\n` +
+    `   Read the JSON output carefully and extract the author login and the COMPLETE body text.\n` +
+    `4. Create and push a branch:\n` +
     `   - Create a temp dir: mktemp -d /tmp/fetch-XXXXXXXX\n` +
     `   - Clone ${REPO} into that dir\n` +
     `   - Create branch fix/issue-<NUMBER>\n` +
     `   - Push the empty branch: git push -u origin fix/issue-<NUMBER>\n` +
     `   - Delete the temp dir\n` +
-    `   - Output ONLY these lines:\n` +
+    `5. Output ONLY these lines (NO tool calls):\n` +
     `       REPO: ${REPO}\n` +
     `       BRANCH: fix/issue-<NUMBER>\n` +
     `       ISSUE: #<NUMBER> <title>\n` +
-    `       SUMMARY: <one-sentence description of the issue>`,
+    `       AUTHOR: <who opened the issue>\n` +
+    `       DETAILS: <full issue body — preserve all requirements, acceptance criteria, and context>\n` +
+    `       SUMMARY: <one-sentence description of the issue>\n\n` +
+    `Include the COMPLETE issue body in DETAILS — the next stage needs it to implement the fix.`,
   cliConfig: { enabled: true, allowedCommands: ['gh', 'git', 'mktemp', 'rm'] },
   maxTurns: 20,
+  stopWhen: fetchDone,
   gate: new TextGate({ text: 'NO_OPEN_ISSUES' }),
 });
 
@@ -55,14 +69,16 @@ export const coderStage = new Agent({
   model: MODEL,
   maxTokens: 60000,
   instructions:
-    'You are a senior developer. Your task description contains REPO, BRANCH, ISSUE, and SUMMARY.\n\n' +
-    '1. Create a fresh temp dir: mktemp -d /tmp/coder-XXXXXXXX\n' +
-    '2. Clone the repo and check out the branch\n' +
-    '3. Implement the fix described in ISSUE/SUMMARY\n' +
-    '4. Commit your changes with a descriptive message\n' +
-    '5. Push: git push origin <BRANCH>\n' +
-    '6. Delete the temp dir\n' +
-    '7. Say HANDOFF_TO_QA followed by REPO/BRANCH/CHANGES lines',
+    'You are a senior developer. Your input contains issue details from the previous stage\n' +
+    'including REPO, BRANCH, ISSUE, AUTHOR, DETAILS, and SUMMARY.\n\n' +
+    '1. Read the DETAILS field carefully — it contains the full issue body with requirements.\n' +
+    '2. Create a fresh temp dir: mktemp -d /tmp/coder-XXXXXXXX\n' +
+    '3. Clone the repo and check out the branch\n' +
+    '4. Implement the fix according to ALL requirements in DETAILS.\n' +
+    '5. Commit your changes with a descriptive message\n' +
+    '6. Push: git push origin <BRANCH>\n' +
+    '7. Delete the temp dir\n' +
+    '8. Say HANDOFF_TO_QA followed by REPO/BRANCH/CHANGES lines',
   codeExecutionConfig: { enabled: true },
 });
 
@@ -106,17 +122,25 @@ export const codingQA = new Agent({
 
 // -- Stage 3: Create PR ------------------------------------------------------
 
+/** Stop when the agent has output a PR URL. */
+function prDone(messages: unknown[]): boolean {
+  const last = String(messages[messages.length - 1] ?? '');
+  return last.includes('github.com') && last.includes('/pull/');
+}
+
 export const gitPushPR = new Agent({
   name: 'git_push_pr',
   model: MODEL,
   instructions:
-    'You are a GitHub PR creator. Your task description contains REPO, BRANCH, and SUMMARY.\n' +
+    'You are a GitHub PR creator. Your input contains REPO, BRANCH, and SUMMARY from the previous stage.\n' +
     'The branch is already pushed -- your only job is to open a pull request.\n\n' +
-    '1. Create the PR: gh pr create --repo <REPO> --base main --head <BRANCH> --title "<title>" --body "<summary>"\n' +
-    '2. Output the PR URL.',
-  cliConfig: { enabled: true, allowedCommands: ['gh', 'git'] },
+    '1. Create the PR (use shell=true so quotes are handled correctly):\n' +
+    '   gh pr create --repo <REPO> --base main --head <BRANCH> --title "<title>" --body "<summary>"\n' +
+    '2. After the command succeeds, STOP calling tools and output ONLY the PR URL.',
+  cliConfig: { enabled: true, allowedCommands: ['gh', 'git'], allowShell: true, timeout: 60 },
   maxTokens: 60000,
   maxTurns: 10,
+  stopWhen: prDone,
 });
 
 // -- Pipeline ----------------------------------------------------------------

@@ -15,6 +15,7 @@ import asyncio
 import copy
 import logging
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import is_dataclass, replace
 from typing import Any, Dict, List, Tuple
@@ -28,6 +29,28 @@ _DEFAULT_NAME = "claude_agent_sdk_agent"
 _EVENT_PUSH_POOL = ThreadPoolExecutor(
     max_workers=4, thread_name_prefix="claude-code-sdk-event-push"
 )
+
+# Minimum seconds between IN_PROGRESS task updates to avoid spamming the server
+_PROGRESS_UPDATE_INTERVAL_S = 30
+
+# Max characters of tool output / assistant text to include in progress updates
+_PROGRESS_SNIPPET_MAX_CHARS = 500
+
+# Max characters for tool args/output stored per tool call entry
+_TOOL_OUTPUT_MAX_CHARS = 1000
+
+
+def _truncate_dict_values(d: Any, max_chars: int) -> Any:
+    """Truncate long string values in a dict (shallow, one level)."""
+    if not isinstance(d, dict):
+        return d
+    result = {}
+    for k, v in d.items():
+        if isinstance(v, str) and len(v) > max_chars:
+            result[k] = v[:max_chars] + "…"
+        else:
+            result[k] = v
+    return result
 
 
 def serialize_claude_agent_sdk(agent_or_options: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
@@ -83,7 +106,7 @@ def _import_sdk():
 
 
 # ---------------------------------------------------------------------------
-# Agent → ClaudeCodeOptions conversion
+# Agent -> ClaudeCodeOptions conversion
 # ---------------------------------------------------------------------------
 
 
@@ -97,7 +120,7 @@ def agent_to_claude_code_options(agent: Any) -> Any:
 
     from agentspan.agents.claude_code import resolve_claude_code_model
 
-    # Resolve model alias from "claude-code/opus" → "claude-opus-4-6"
+    # Resolve model alias from "claude-code/opus" -> "claude-opus-4-6"
     model_str = getattr(agent, "model", "") or ""
     _, _, alias = model_str.partition("/")
     resolved_model = resolve_claude_code_model(alias) if alias else None
@@ -116,7 +139,7 @@ def agent_to_claude_code_options(agent: Any) -> Any:
         try:
             instructions = instructions()
         except TypeError:
-            # Function expects arguments — use docstring as fallback
+            # Function expects arguments -- use docstring as fallback
             instructions = getattr(instructions, "__doc__", None) or ""
 
     # Get tools as strings
@@ -150,15 +173,19 @@ def make_claude_agent_sdk_worker(
 
     def tool_worker(task: Task) -> TaskResult:
         execution_id = task.workflow_instance_id
+        task_id = task.task_id
         prompt = task.input_data.get("prompt", "")
         cwd = (task.input_data.get("cwd") or "").strip() or None
 
-        # Metadata dict — hooks close over this to track counters
+        # Metadata dict -- hooks close over this to track counters and progress state
         metadata: Dict[str, Any] = {
             "tool_call_count": 0,
             "tool_error_count": 0,
             "subagent_count": 0,
-            "tools_used": set(),
+            "tools_used": [],           # list of per-call dicts
+            "_tool_use_index": {},       # tool_use_id -> list index for O(1) lookup
+            "last_tool_output": "",
+            "last_progress_time": 0.0,
         }
 
         # Resolve workflow-level credentials and inject into os.environ
@@ -168,10 +195,16 @@ def make_claude_agent_sdk_worker(
         except Exception as _cred_err:
             logger.warning("Failed to resolve credentials for Claude Agent SDK: %s", _cred_err)
 
+        # Send initial IN_PROGRESS update so the server knows the worker has started
+        _update_task_progress_nonblocking(
+            task_id, execution_id, metadata, server_url, auth_key, auth_secret,
+        )
+        metadata["last_progress_time"] = time.monotonic()
+
         try:
             # Build agentspan instrumentation hooks
             agentspan_hooks = _build_agentspan_hooks(
-                execution_id, server_url, auth_key, auth_secret, metadata
+                task_id, execution_id, server_url, auth_key, auth_secret, metadata
             )
 
             # Merge user hooks + agentspan hooks, then update options
@@ -192,7 +225,7 @@ def make_claude_agent_sdk_worker(
                 "tool_call_count": metadata["tool_call_count"],
                 "tool_error_count": metadata["tool_error_count"],
                 "subagent_count": metadata["subagent_count"],
-                "tools_used": sorted(metadata["tools_used"]),
+                "tools_used": metadata["tools_used"],
                 "token_usage": token_usage,
             }
 
@@ -271,6 +304,7 @@ async def _run_query(prompt: str, options: Any) -> Tuple[str, Any]:
 
 
 def _build_agentspan_hooks(
+    task_id: str,
     execution_id: str,
     server_url: str,
     auth_key: str,
@@ -281,6 +315,10 @@ def _build_agentspan_hooks(
 
     Returns a dict mapping event names to lists of HookMatcher dataclasses.
     All hook callbacks are defensive (try/except, return {}).
+
+    Hooks push streaming events AND periodically update the Conductor task
+    with IN_PROGRESS status so the server sees real-time progress for this
+    long-running worker.
     """
     from claude_code_sdk.types import HookMatcher as SdkHookMatcher
 
@@ -288,8 +326,18 @@ def _build_agentspan_hooks(
     async def _pre_tool_use(input_data: dict, tool_use_id: str | None, context: Any) -> dict:
         try:
             tool_name = input_data.get("tool_name", "")
+            tool_input = input_data.get("tool_input", {})
             metadata["tool_call_count"] += 1
-            metadata["tools_used"].add(tool_name)
+            entry = {
+                "tool_name": tool_name,
+                "args": _truncate_dict_values(tool_input, _TOOL_OUTPUT_MAX_CHARS),
+                "status": "running",
+                "stdout": "",
+                "stderr": "",
+            }
+            metadata["tools_used"].append(entry)
+            if tool_use_id:
+                metadata["_tool_use_index"][tool_use_id] = len(metadata["tools_used"]) - 1
             _push_event_nonblocking(
                 execution_id,
                 {"type": "tool_call", "toolName": tool_name, "toolUseId": tool_use_id},
@@ -301,10 +349,19 @@ def _build_agentspan_hooks(
             logger.debug("PreToolUse hook error: %s", exc)
         return {}
 
-    # -- PostToolUse hook: push tool result events --
+    # -- PostToolUse hook: push tool result events + throttled task progress --
     async def _post_tool_use(input_data: dict, tool_use_id: str | None, context: Any) -> dict:
         try:
             tool_name = input_data.get("tool_name", "")
+            tool_output = str(input_data.get("tool_output", ""))[:_TOOL_OUTPUT_MAX_CHARS]
+            metadata["last_tool_output"] = tool_output
+
+            # Update the matching entry with success result
+            idx = metadata["_tool_use_index"].get(tool_use_id)
+            if idx is not None and idx < len(metadata["tools_used"]):
+                metadata["tools_used"][idx]["status"] = "success"
+                metadata["tools_used"][idx]["stdout"] = tool_output
+
             _push_event_nonblocking(
                 execution_id,
                 {
@@ -316,8 +373,55 @@ def _build_agentspan_hooks(
                 auth_key,
                 auth_secret,
             )
+
+            # Throttled IN_PROGRESS task update
+            now = time.monotonic()
+            if now - metadata["last_progress_time"] >= _PROGRESS_UPDATE_INTERVAL_S:
+                metadata["last_progress_time"] = now
+                _update_task_progress_nonblocking(
+                    task_id, execution_id, metadata,
+                    server_url, auth_key, auth_secret,
+                )
         except Exception as exc:
             logger.debug("PostToolUse hook error: %s", exc)
+        return {}
+
+    # -- PostToolUseFailure hook: capture tool errors --
+    async def _post_tool_use_failure(input_data: dict, tool_use_id: str | None, context: Any) -> dict:
+        try:
+            tool_name = input_data.get("tool_name", "")
+            error_msg = str(input_data.get("error", ""))[:_TOOL_OUTPUT_MAX_CHARS]
+            metadata["tool_error_count"] += 1
+            metadata["last_tool_output"] = f"ERROR: {error_msg}"
+
+            # Update the matching entry with error result
+            idx = metadata["_tool_use_index"].get(tool_use_id)
+            if idx is not None and idx < len(metadata["tools_used"]):
+                metadata["tools_used"][idx]["status"] = "error"
+                metadata["tools_used"][idx]["stderr"] = error_msg
+
+            _push_event_nonblocking(
+                execution_id,
+                {
+                    "type": "tool_error",
+                    "toolName": tool_name,
+                    "toolUseId": tool_use_id,
+                },
+                server_url,
+                auth_key,
+                auth_secret,
+            )
+
+            # Throttled IN_PROGRESS task update
+            now = time.monotonic()
+            if now - metadata["last_progress_time"] >= _PROGRESS_UPDATE_INTERVAL_S:
+                metadata["last_progress_time"] = now
+                _update_task_progress_nonblocking(
+                    task_id, execution_id, metadata,
+                    server_url, auth_key, auth_secret,
+                )
+        except Exception as exc:
+            logger.debug("PostToolUseFailure hook error: %s", exc)
         return {}
 
     # -- SubagentStop hook: track subagent completions --
@@ -352,6 +456,7 @@ def _build_agentspan_hooks(
     return {
         "PreToolUse": [SdkHookMatcher(hooks=[_pre_tool_use])],
         "PostToolUse": [SdkHookMatcher(hooks=[_post_tool_use])],
+        "PostToolUseFailure": [SdkHookMatcher(hooks=[_post_tool_use_failure])],
         "SubagentStop": [SdkHookMatcher(hooks=[_subagent_stop])],
         "Stop": [SdkHookMatcher(hooks=[_stop])],
     }
@@ -375,7 +480,7 @@ def _merge_hooks(options: Any, agentspan_hooks: Dict[str, list]) -> Any:
         as_matchers = agentspan_hooks.get(event_name, [])
         merged[event_name] = list(user_matchers) + as_matchers
 
-    # ClaudeCodeOptions is a dataclass — use replace()
+    # ClaudeCodeOptions is a dataclass -- use replace()
     if is_dataclass(options) and not isinstance(options, type):
         return replace(options, hooks=merged)
     # Fallback for mock or other types
@@ -413,6 +518,57 @@ def _push_event_nonblocking(
             logger.debug("Event push failed (execution_id=%s): %s", execution_id, exc)
 
     _EVENT_PUSH_POOL.submit(_do_push)
+
+
+def _update_task_progress_nonblocking(
+    task_id: str,
+    execution_id: str,
+    metadata: Dict[str, Any],
+    server_url: str,
+    auth_key: str,
+    auth_secret: str,
+) -> None:
+    """Fire-and-forget Conductor task update with IN_PROGRESS status.
+
+    Sends current tool counts, tools used, and a snippet of the last output
+    so the server (and any polling clients) can see real-time progress from
+    this long-running Claude Code worker.
+    """
+
+    # Snapshot mutable metadata to avoid races with the hook thread
+    all_calls = metadata.get("tools_used", [])
+    progress_data: Dict[str, Any] = {
+        "tool_call_count": metadata.get("tool_call_count", 0),
+        "tool_error_count": metadata.get("tool_error_count", 0),
+        "subagent_count": metadata.get("subagent_count", 0),
+        "tools_used": all_calls[-5:],  # last 5 calls for progress payload
+        "last_tool_output": str(metadata.get("last_tool_output", ""))[:_PROGRESS_SNIPPET_MAX_CHARS],
+    }
+
+    def _do_update():
+        try:
+            import requests
+
+            url = f"{server_url}/tasks"
+            headers: Dict[str, str] = {"Content-Type": "application/json"}
+            if auth_key:
+                headers["X-Auth-Key"] = auth_key
+            if auth_secret:
+                headers["X-Auth-Secret"] = auth_secret
+            body = {
+                "taskId": task_id,
+                "workflowInstanceId": execution_id,
+                "status": "IN_PROGRESS",
+                "outputData": progress_data,
+            }
+            requests.post(url, json=body, headers=headers, timeout=5)
+        except Exception as exc:
+            logger.debug(
+                "Task progress update failed (task_id=%s, execution_id=%s): %s",
+                task_id, execution_id, exc,
+            )
+
+    _EVENT_PUSH_POOL.submit(_do_update)
 
 
 # ---------------------------------------------------------------------------
