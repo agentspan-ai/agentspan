@@ -5,6 +5,7 @@
 package dev.agentspan.runtime.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -150,5 +151,51 @@ class AgentServiceTokenTest {
 
         Map<String, Object> input = captor.getValue().getWorkflowInput();
         assertThat(input).doesNotContainKey("credentials");
+    }
+
+    @Test
+    void start_rejectsBlankInputWithoutMediaOrContext() {
+        dev.agentspan.runtime.model.StartRequest req = dev.agentspan.runtime.model.StartRequest.builder()
+                .agentConfig(dev.agentspan.runtime.model.AgentConfig.builder()
+                        .name("test_agent")
+                        .model("openai/gpt-4o")
+                        .build())
+                .prompt("   ")
+                .build();
+
+        assertThatThrownBy(() -> agentService.start(req))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("non-empty prompt");
+
+        verifyNoInteractions(agentCompiler, workflowExecutor);
+    }
+
+    @Test
+    void start_includesContextInWorkflowInput() {
+        com.netflix.conductor.common.metadata.workflow.WorkflowDef def =
+                new com.netflix.conductor.common.metadata.workflow.WorkflowDef();
+        def.setName("test_agent");
+        def.setVersion(1);
+        when(agentCompiler.compile(any())).thenReturn(def);
+        when(workflowExecutor.startWorkflow(any())).thenReturn("wf-xyz");
+        when(providerValidator.validateProvider(any())).thenReturn(java.util.Optional.empty());
+
+        dev.agentspan.runtime.model.StartRequest req = dev.agentspan.runtime.model.StartRequest.builder()
+                .agentConfig(dev.agentspan.runtime.model.AgentConfig.builder()
+                        .name("test_agent")
+                        .model("openai/gpt-4o")
+                        .build())
+                .prompt("hello")
+                .context(Map.of("repo", "acme"))
+                .build();
+
+        agentService.start(req);
+
+        ArgumentCaptor<com.netflix.conductor.core.execution.StartWorkflowInput> captor =
+                ArgumentCaptor.forClass(com.netflix.conductor.core.execution.StartWorkflowInput.class);
+        verify(workflowExecutor).startWorkflow(captor.capture());
+
+        Map<String, Object> input = captor.getValue().getWorkflowInput();
+        assertThat(input.get("context")).isEqualTo(Map.of("repo", "acme"));
     }
 }

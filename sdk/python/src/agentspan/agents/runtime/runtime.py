@@ -420,6 +420,7 @@ class AgentRuntime:
             "prompt": prompt,
             "sessionId": session_id or "",
             "media": media or [],
+            "context": context or {},
         }
         if idempotency_key:
             payload["idempotencyKey"] = idempotency_key
@@ -427,9 +428,6 @@ class AgentRuntime:
             payload["timeoutSeconds"] = timeout
         if credentials:
             payload["credentials"] = credentials
-        if context:
-            payload["context"] = context
-
         url = self._agent_api_url("/start")
         resp = req_lib.post(url, json=payload, headers=self._agent_api_headers(), timeout=30)
         try:
@@ -472,6 +470,7 @@ class AgentRuntime:
             "prompt": prompt,
             "sessionId": session_id or "",
             "media": media or [],
+            "context": context or {},
         }
         if idempotency_key:
             payload["idempotencyKey"] = idempotency_key
@@ -479,9 +478,6 @@ class AgentRuntime:
             payload["timeoutSeconds"] = timeout
         if credentials:
             payload["credentials"] = credentials
-        if context:
-            payload["context"] = context
-
         data = await self._http.start_agent(payload)
         execution_id = data.get("executionId", "")
         required_workers: Optional[set] = None
@@ -505,6 +501,7 @@ class AgentRuntime:
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
         credentials: Optional[List[str]] = None,
+        context: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Async version of :meth:`_start_framework_via_server`."""
         payload: Dict[str, Any] = {
@@ -513,6 +510,7 @@ class AgentRuntime:
             "prompt": prompt,
             "sessionId": session_id or "",
             "media": media or [],
+            "context": context or {},
         }
         if idempotency_key:
             payload["idempotencyKey"] = idempotency_key
@@ -1656,6 +1654,8 @@ class AgentRuntime:
         """
         from agentspan.agents.agent import PromptTemplate
 
+        if prompt is None:
+            return ""
         if isinstance(prompt, str):
             return prompt
         if not isinstance(prompt, PromptTemplate):
@@ -1668,6 +1668,37 @@ class AgentRuntime:
         for key, value in prompt.variables.items():
             text = text.replace(f"${{{key}}}", str(value))
         return text
+
+    @staticmethod
+    def _has_meaningful_media(media: Optional[List[str]]) -> bool:
+        """Return True when at least one media item is non-empty."""
+        if not media:
+            return False
+        return any(str(item).strip() for item in media if item is not None)
+
+    @staticmethod
+    def _has_meaningful_context(context: Optional[Dict[str, Any]]) -> bool:
+        """Return True when the context contains at least one entry."""
+        return bool(context)
+
+    def _validate_execution_input(
+        self,
+        prompt: str,
+        *,
+        media: Optional[List[str]] = None,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Require some meaningful user input before starting execution."""
+        if prompt.strip():
+            return
+        if self._has_meaningful_media(media):
+            return
+        if self._has_meaningful_context(context):
+            return
+        raise ValueError(
+            "Agent execution requires a non-empty prompt, at least one media item, "
+            "or non-empty context."
+        )
 
     def _associate_templates_with_models(self, agent: Agent) -> None:
         """Ensure prompt templates used by the agent are associated with its model.
@@ -2218,6 +2249,7 @@ class AgentRuntime:
                 idempotency_key=idempotency_key,
                 on_event=on_event,
                 timeout=timeout,
+                context=context,
                 **kwargs,
             )
 
@@ -2237,6 +2269,7 @@ class AgentRuntime:
                 on_event=on_event,
                 timeout=timeout,
                 credentials=credentials,
+                context=context,
                 **kwargs,
             )
 
@@ -2252,6 +2285,7 @@ class AgentRuntime:
                 session_id=session_id,
                 idempotency_key=idempotency_key,
                 timeout=timeout,
+                context=context,
             )
 
         # Session continuity: inject prior conversation into memory
@@ -2262,6 +2296,7 @@ class AgentRuntime:
 
         resolved_prompt = self._resolve_prompt(prompt)
         resolved_prompt = self._check_input_guardrails(agent, resolved_prompt)
+        self._validate_execution_input(resolved_prompt, media=media, context=context)
 
         correlation_id = str(uuid.uuid4())
 
@@ -2352,18 +2387,23 @@ class AgentRuntime:
         idempotency_key: Optional[str] = None,
         on_event: Optional[Any] = None,
         timeout: Optional[int] = None,
+        context: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> AgentResult:
         """Execute a pre-deployed agent by name."""
         from conductor.client.http.models import StartWorkflowRequest
 
+        resolved_prompt = self._resolve_prompt(prompt)
+        self._validate_execution_input(resolved_prompt, media=media, context=context)
+
         req = StartWorkflowRequest()
         req.name = name
         req.version = version
         req.input = {
-            "prompt": prompt,
+            "prompt": resolved_prompt,
             "media": media or [],
             "session_id": session_id or "",
+            "context": context or {},
             **kwargs,
         }
         if idempotency_key:
@@ -2421,18 +2461,23 @@ class AgentRuntime:
         media: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> AgentHandle:
         """Start a pre-deployed agent by name (fire-and-forget)."""
         from conductor.client.http.models import StartWorkflowRequest
 
+        resolved_prompt = self._resolve_prompt(prompt)
+        self._validate_execution_input(resolved_prompt, media=media, context=context)
+
         req = StartWorkflowRequest()
         req.name = name
         req.version = version
         req.input = {
-            "prompt": prompt,
+            "prompt": resolved_prompt,
             "media": media or [],
             "session_id": session_id or "",
+            "context": context or {},
             **kwargs,
         }
         if idempotency_key:
@@ -2454,18 +2499,23 @@ class AgentRuntime:
         idempotency_key: Optional[str] = None,
         on_event: Optional[Any] = None,
         timeout: Optional[int] = None,
+        context: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> AgentResult:
         """Async version of :meth:`_run_by_name`."""
         from conductor.client.http.models import StartWorkflowRequest
 
+        resolved_prompt = self._resolve_prompt(prompt)
+        self._validate_execution_input(resolved_prompt, media=media, context=context)
+
         req = StartWorkflowRequest()
         req.name = name
         req.version = version
         req.input = {
-            "prompt": prompt,
+            "prompt": resolved_prompt,
             "media": media or [],
             "session_id": session_id or "",
+            "context": context or {},
             **kwargs,
         }
         if idempotency_key:
@@ -2519,18 +2569,23 @@ class AgentRuntime:
         media: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> AgentHandle:
         """Async version of :meth:`_start_by_name`."""
         from conductor.client.http.models import StartWorkflowRequest
 
+        resolved_prompt = self._resolve_prompt(prompt)
+        self._validate_execution_input(resolved_prompt, media=media, context=context)
+
         req = StartWorkflowRequest()
         req.name = name
         req.version = version
         req.input = {
-            "prompt": prompt,
+            "prompt": resolved_prompt,
             "media": media or [],
             "session_id": session_id or "",
+            "context": context or {},
             **kwargs,
         }
         if idempotency_key:
@@ -2559,6 +2614,7 @@ class AgentRuntime:
         on_event: Optional[Any] = None,
         timeout: Optional[int] = None,
         credentials: Optional[List[str]] = None,
+        context: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> AgentResult:
         """Run a foreign-framework agent via server-side normalization."""
@@ -2587,7 +2643,8 @@ class AgentRuntime:
             self._register_framework_workers(workers)
 
         correlation_id = str(uuid.uuid4())
-        resolved_prompt = str(prompt)
+        resolved_prompt = self._resolve_prompt(prompt)
+        self._validate_execution_input(resolved_prompt, media=media, context=context)
 
         execution_id = self._start_framework_via_server(
             framework=framework,
@@ -2597,6 +2654,7 @@ class AgentRuntime:
             session_id=session_id,
             idempotency_key=idempotency_key,
             credentials=credentials,
+            context=context,
         )
         self._register_workflow_credentials(execution_id, credentials)
 
@@ -2648,6 +2706,7 @@ class AgentRuntime:
         media: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
     ) -> AgentHandle:
         """Start a foreign-framework agent asynchronously."""
         from agentspan.agents.frameworks.serializer import serialize_agent
@@ -2664,7 +2723,8 @@ class AgentRuntime:
             self._register_framework_workers(workers)
 
         correlation_id = str(uuid.uuid4())
-        resolved_prompt = str(prompt)
+        resolved_prompt = self._resolve_prompt(prompt)
+        self._validate_execution_input(resolved_prompt, media=media, context=context)
 
         execution_id = self._start_framework_via_server(
             framework=framework,
@@ -2673,6 +2733,7 @@ class AgentRuntime:
             media=media,
             session_id=session_id,
             idempotency_key=idempotency_key,
+            context=context,
         )
 
         return AgentHandle(execution_id=execution_id, runtime=self, correlation_id=correlation_id)
@@ -2687,6 +2748,7 @@ class AgentRuntime:
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
         credentials: Optional[List[str]] = None,
+        context: Optional[Dict[str, Any]] = None,
     ) -> str:
         """POST to /api/agent/start with framework + rawConfig."""
         import requests as req_lib
@@ -2697,6 +2759,7 @@ class AgentRuntime:
             "prompt": prompt,
             "sessionId": session_id or "",
             "media": media or [],
+            "context": context or {},
         }
         if idempotency_key:
             payload["idempotencyKey"] = idempotency_key
@@ -2989,6 +3052,7 @@ class AgentRuntime:
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
         timeout: Optional[int] = None,
+        context: Optional[Dict[str, Any]] = None,
     ) -> AgentResult:
         """Run an agent with real-time event callbacks, then return full result.
 
@@ -3003,7 +3067,7 @@ class AgentRuntime:
             media=media,
             session_id=session_id,
             idempotency_key=idempotency_key,
-            **kwargs,
+            context=context,
         )
 
         captured_events: List[AgentEvent] = []
@@ -3057,6 +3121,7 @@ class AgentRuntime:
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
         timeout: Optional[int] = None,
+        context: Optional[Dict[str, Any]] = None,
     ) -> AgentResult:
         """Async version of :meth:`_run_with_events`."""
         handle = await self.start_async(
@@ -3065,7 +3130,7 @@ class AgentRuntime:
             media=media,
             session_id=session_id,
             idempotency_key=idempotency_key,
-            **kwargs,
+            context=context,
         )
 
         captured_events: List[AgentEvent] = []
@@ -3303,6 +3368,7 @@ class AgentRuntime:
                 media=media,
                 session_id=session_id,
                 idempotency_key=idempotency_key,
+                context=context,
                 **kwargs,
             )
 
@@ -3318,12 +3384,14 @@ class AgentRuntime:
                 media=media,
                 session_id=session_id,
                 idempotency_key=idempotency_key,
+                context=context,
             )
 
         resolved_prompt = self._resolve_prompt(prompt)
 
         # Run input guardrails before submission
         resolved_prompt = self._check_input_guardrails(agent, resolved_prompt)
+        self._validate_execution_input(resolved_prompt, media=media, context=context)
 
         correlation_id = str(uuid.uuid4())
 
@@ -3651,6 +3719,7 @@ class AgentRuntime:
                 idempotency_key=idempotency_key,
                 on_event=on_event,
                 timeout=timeout,
+                context=context,
                 **kwargs,
             )
 
@@ -3670,6 +3739,7 @@ class AgentRuntime:
                 on_event=on_event,
                 timeout=timeout,
                 credentials=credentials,
+                context=context,
                 **kwargs,
             )
 
@@ -3685,6 +3755,7 @@ class AgentRuntime:
                 session_id=session_id,
                 idempotency_key=idempotency_key,
                 timeout=timeout,
+                context=context,
             )
 
         # Session continuity: inject prior conversation into memory
@@ -3695,6 +3766,7 @@ class AgentRuntime:
 
         resolved_prompt = self._resolve_prompt(prompt)
         resolved_prompt = self._check_input_guardrails(agent, resolved_prompt)
+        self._validate_execution_input(resolved_prompt, media=media, context=context)
 
         correlation_id = str(uuid.uuid4())
 
@@ -3808,6 +3880,7 @@ class AgentRuntime:
                 media=media,
                 session_id=session_id,
                 idempotency_key=idempotency_key,
+                context=context,
                 **kwargs,
             )
 
@@ -3822,10 +3895,12 @@ class AgentRuntime:
                 media=media,
                 session_id=session_id,
                 idempotency_key=idempotency_key,
+                context=context,
             )
 
         resolved_prompt = self._resolve_prompt(prompt)
         resolved_prompt = self._check_input_guardrails(agent, resolved_prompt)
+        self._validate_execution_input(resolved_prompt, media=media, context=context)
 
         correlation_id = str(uuid.uuid4())
 
@@ -4099,6 +4174,7 @@ class AgentRuntime:
         on_event: Optional[Any] = None,
         timeout: Optional[int] = None,
         credentials: Optional[List[str]] = None,
+        context: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> AgentResult:
         """Async version of :meth:`_run_framework`."""
@@ -4123,7 +4199,8 @@ class AgentRuntime:
             self._register_framework_workers(workers)
 
         correlation_id = str(uuid.uuid4())
-        resolved_prompt = str(prompt)
+        resolved_prompt = self._resolve_prompt(prompt)
+        self._validate_execution_input(resolved_prompt, media=media, context=context)
 
         execution_id = await self._start_framework_via_server_async(
             framework=framework,
@@ -4133,6 +4210,7 @@ class AgentRuntime:
             session_id=session_id,
             idempotency_key=idempotency_key,
             credentials=credentials,
+            context=context,
         )
         self._register_workflow_credentials(execution_id, credentials)
 
@@ -4202,6 +4280,7 @@ class AgentRuntime:
         media: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
     ) -> AgentHandle:
         """Async version of :meth:`_start_framework`."""
         from agentspan.agents.frameworks.serializer import serialize_agent
@@ -4218,7 +4297,8 @@ class AgentRuntime:
             self._register_framework_workers(workers)
 
         correlation_id = str(uuid.uuid4())
-        resolved_prompt = str(prompt)
+        resolved_prompt = self._resolve_prompt(prompt)
+        self._validate_execution_input(resolved_prompt, media=media, context=context)
 
         execution_id = await self._start_framework_via_server_async(
             framework=framework,
@@ -4227,6 +4307,7 @@ class AgentRuntime:
             media=media,
             session_id=session_id,
             idempotency_key=idempotency_key,
+            context=context,
         )
 
         return AgentHandle(execution_id=execution_id, runtime=self, correlation_id=correlation_id)

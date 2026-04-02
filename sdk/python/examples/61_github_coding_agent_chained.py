@@ -27,7 +27,14 @@ from agentspan.agents.handoff import OnTextMention
 REPO = "agentspan-ai/codingexamples"
 MODEL = "anthropic/claude-sonnet-4-6"
 
+
 # ── Stage 1: Fetch issues ─────────────────────────────────────────
+
+def _fetch_done(context: dict, **kwargs) -> bool:
+    """Stop when the agent has produced the expected 4-line output."""
+    result = context.get("result", "")
+    return "REPO:" in result and "BRANCH:" in result and "ISSUE:" in result
+
 
 git_fetch_issues = Agent(
     name="git_fetch_issues",
@@ -60,7 +67,8 @@ RULES:
         timeout=60,
     ),
     credentials=["GITHUB_TOKEN", "GH_TOKEN"],
-    max_turns=8,
+    max_turns=20,
+    stop_when=_fetch_done,
     gate=TextGate("NO_OPEN_ISSUES"),
 )
 
@@ -112,6 +120,12 @@ coding_qa = Agent(
 
 # ── Stage 3: Create PR ────────────────────────────────────────────
 
+def _pr_done(context: dict, **kwargs) -> bool:
+    """Stop when the agent has output a PR URL."""
+    result = context.get("result", "")
+    return "github.com" in result and "/pull/" in result
+
+
 git_push_pr = Agent(
     name="git_push_pr",
     model=MODEL,
@@ -125,7 +139,8 @@ Create a pull request. Run this ONE command (extract REPO, BRANCH, ISSUE from co
 After the command succeeds, STOP calling tools and respond with ONLY the PR URL.
 """,
     cli_commands=True,
-    cli_allowed_commands=["gh"],
+    cli_allowed_commands=["gh", "git"],
+    stop_when=_pr_done,
 )
 
 # ── Pipeline ──────────────────────────────────────────────────────

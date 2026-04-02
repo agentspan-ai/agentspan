@@ -117,14 +117,19 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         try {
             ChatCompletion chatCompletion = objectMapper.convertValue(taskModel.getInputData(), ChatCompletion.class);
             List<ChatMessage> history = chatCompletion.getMessages();
-            if (chatCompletion.getUserInput() != null
-                    && chatCompletion.getMessages().isEmpty()) {
+            if (history == null) {
+                history = new ArrayList<>();
+                chatCompletion.setMessages(history);
+            }
+            if (chatCompletion.getUserInput() != null && history.isEmpty()) {
                 history.add(new ChatMessage(ChatMessage.Role.user, chatCompletion.getUserInput()));
             }
             getHistory(workflowModel, taskModel, chatCompletion);
             condenseIfNeeded(chatCompletion, taskModel, workflowModel);
-            ensureEndsWithUserMessage(chatCompletion, taskModel);
             updateTaskModel(chatCompletion, taskModel);
+            sanitizeMessages(chatCompletion);
+            validateRunnableConversation(chatCompletion);
+            ensureEndsWithUserMessage(chatCompletion, taskModel);
         } catch (Exception e) {
             if (e instanceof TerminateWorkflowException) {
                 throw (TerminateWorkflowException) e;
@@ -146,6 +151,7 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         List<ChatMessage> messages = chatCompletion.getMessages();
         if (messages == null) {
             messages = new ArrayList<>();
+            chatCompletion.setMessages(messages);
         }
         for (ChatMessage message : messages) {
             String msgText = message.getMessage();
@@ -156,6 +162,70 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         }
         simpleTask.getInputData().put("messages", messages);
         simpleTask.getInputData().put("tools", chatCompletion.getTools());
+    }
+
+    void sanitizeMessages(ChatCompletion chatCompletion) {
+        List<ChatMessage> messages = chatCompletion.getMessages();
+        if (messages == null || messages.isEmpty()) {
+            return;
+        }
+
+        List<ChatMessage> sanitized = new ArrayList<>();
+        for (ChatMessage message : messages) {
+            if (message == null) {
+                continue;
+            }
+
+            if (message.getMessage() != null && message.getMessage().isBlank()) {
+                message.setMessage(null);
+            }
+
+            boolean hasText = hasMeaningfulText(message.getMessage());
+            boolean hasMedia = hasMeaningfulMedia(message);
+            boolean hasToolCalls = message.getToolCalls() != null && !message.getToolCalls().isEmpty();
+
+            if (!hasText && !hasMedia && !hasToolCalls) {
+                log.debug("Dropping empty {} message before LLM call", message.getRole());
+                continue;
+            }
+
+            sanitized.add(message);
+        }
+
+        messages.clear();
+        messages.addAll(sanitized);
+    }
+
+    void validateRunnableConversation(ChatCompletion chatCompletion) {
+        List<ChatMessage> messages = chatCompletion.getMessages();
+        if (messages == null || messages.isEmpty()) {
+            throw new TerminateWorkflowException(
+                    "No non-empty user prompt or media was available for the LLM call. "
+                            + "The execution started with an empty prompt or an upstream step produced empty output.");
+        }
+
+        boolean hasUserInput = messages.stream().anyMatch(this::isMeaningfulUserMessage);
+        if (!hasUserInput) {
+            throw new TerminateWorkflowException(
+                    "No non-empty user prompt or media was available for the LLM call. "
+                            + "The execution started with an empty prompt or an upstream step produced empty output.");
+        }
+    }
+
+    private boolean isMeaningfulUserMessage(ChatMessage message) {
+        return message != null
+                && message.getRole() == ChatMessage.Role.user
+                && (hasMeaningfulText(message.getMessage()) || hasMeaningfulMedia(message));
+    }
+
+    private boolean hasMeaningfulText(String text) {
+        return text != null && !text.isBlank();
+    }
+
+    private boolean hasMeaningfulMedia(ChatMessage message) {
+        return message != null
+                && message.getMedia() != null
+                && message.getMedia().stream().filter(Objects::nonNull).anyMatch(media -> !media.isBlank());
     }
 
     /**

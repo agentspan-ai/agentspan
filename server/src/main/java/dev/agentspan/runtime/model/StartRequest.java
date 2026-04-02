@@ -29,6 +29,7 @@ public class StartRequest {
     private String prompt;
     private String sessionId;
     private List<String> media;
+    private Map<String, Object> context;
     private String idempotencyKey;
     private List<String> credentials;
 

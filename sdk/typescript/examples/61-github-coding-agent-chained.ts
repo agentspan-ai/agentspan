@@ -23,6 +23,12 @@ const MODEL = 'anthropic/claude-sonnet-4-6';
 
 // -- Stage 1: Fetch issues ---------------------------------------------------
 
+/** Stop when the agent has produced the expected 4-line output. */
+function fetchDone(messages: unknown[]): boolean {
+  const last = String(messages[messages.length - 1] ?? '');
+  return last.includes('REPO:') && last.includes('BRANCH:') && last.includes('ISSUE:');
+}
+
 export const gitFetchIssues = new Agent({
   name: 'git_fetch_issues',
   model: MODEL,
@@ -45,6 +51,7 @@ export const gitFetchIssues = new Agent({
     `       SUMMARY: <one-sentence description of the issue>`,
   cliConfig: { enabled: true, allowedCommands: ['gh', 'git', 'mktemp', 'rm'] },
   maxTurns: 20,
+  stopWhen: fetchDone,
   gate: new TextGate({ text: 'NO_OPEN_ISSUES' }),
 });
 
@@ -106,6 +113,12 @@ export const codingQA = new Agent({
 
 // -- Stage 3: Create PR ------------------------------------------------------
 
+/** Stop when the agent has output a PR URL. */
+function prDone(messages: unknown[]): boolean {
+  const last = String(messages[messages.length - 1] ?? '');
+  return last.includes('github.com') && last.includes('/pull/');
+}
+
 export const gitPushPR = new Agent({
   name: 'git_push_pr',
   model: MODEL,
@@ -117,6 +130,7 @@ export const gitPushPR = new Agent({
   cliConfig: { enabled: true, allowedCommands: ['gh', 'git'] },
   maxTokens: 60000,
   maxTurns: 10,
+  stopWhen: prDone,
 });
 
 // -- Pipeline ----------------------------------------------------------------
