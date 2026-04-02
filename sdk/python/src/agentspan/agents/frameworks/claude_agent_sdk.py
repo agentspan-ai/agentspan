@@ -106,7 +106,7 @@ def _import_sdk():
 
 
 # ---------------------------------------------------------------------------
-# Agent → ClaudeCodeOptions conversion
+# Agent -> ClaudeCodeOptions conversion
 # ---------------------------------------------------------------------------
 
 
@@ -120,7 +120,7 @@ def agent_to_claude_code_options(agent: Any) -> Any:
 
     from agentspan.agents.claude_code import resolve_claude_code_model
 
-    # Resolve model alias from "claude-code/opus" → "claude-opus-4-6"
+    # Resolve model alias from "claude-code/opus" -> "claude-opus-4-6"
     model_str = getattr(agent, "model", "") or ""
     _, _, alias = model_str.partition("/")
     resolved_model = resolve_claude_code_model(alias) if alias else None
@@ -139,7 +139,7 @@ def agent_to_claude_code_options(agent: Any) -> Any:
         try:
             instructions = instructions()
         except TypeError:
-            # Function expects arguments — use docstring as fallback
+            # Function expects arguments -- use docstring as fallback
             instructions = getattr(instructions, "__doc__", None) or ""
 
     # Get tools as strings
@@ -319,6 +319,10 @@ def _build_agentspan_hooks(
 
     Returns a dict mapping event names to lists of HookMatcher dataclasses.
     All hook callbacks are defensive (try/except, return {}).
+
+    Hooks push streaming events AND periodically update the Conductor task
+    with IN_PROGRESS status so the server sees real-time progress for this
+    long-running worker.
     """
     from claude_code_sdk.types import HookMatcher as SdkHookMatcher
 
@@ -388,7 +392,7 @@ def _build_agentspan_hooks(
             logger.debug("PreToolUse hook error: %s", exc)
         return {}
 
-    # -- PostToolUse hook: push tool result events --
+    # -- PostToolUse hook: push tool result events + throttled task progress --
     async def _post_tool_use(input_data: dict, tool_use_id: str | None, context: Any) -> dict:
         try:
             tool_name = input_data.get("tool_name", "")
@@ -448,14 +452,14 @@ def _build_agentspan_hooks(
 
                 # Complete the injected DAG task
                 if tool_use_id:
-                    output_payload: Dict[str, Any] = {"duration_ms": duration_ms}
+                    output_payload2: Dict[str, Any] = {"duration_ms": duration_ms}
                     if isinstance(raw_response, dict):
-                        output_payload["tool_response"] = raw_response
+                        output_payload2["tool_response"] = raw_response
                     else:
-                        output_payload["stdout"] = tool_output
+                        output_payload2["stdout"] = tool_output
                     _complete_tool_task_nonblocking(
                         target_exec, tool_use_id, "COMPLETED",
-                        output_payload, server_url, auth_key, auth_secret,
+                        output_payload2, server_url, auth_key, auth_secret,
                     )
 
             # Throttled IN_PROGRESS task update
@@ -707,7 +711,7 @@ def _merge_hooks(options: Any, agentspan_hooks: Dict[str, list]) -> Any:
         as_matchers = agentspan_hooks.get(event_name, [])
         merged[event_name] = list(user_matchers) + as_matchers
 
-    # ClaudeCodeOptions is a dataclass — use replace()
+    # ClaudeCodeOptions is a dataclass -- use replace()
     if is_dataclass(options) and not isinstance(options, type):
         return replace(options, hooks=merged)
     # Fallback for mock or other types
@@ -755,13 +759,18 @@ def _update_task_progress_nonblocking(
     auth_key: str,
     auth_secret: str,
 ) -> None:
-    """Fire-and-forget Conductor task update with IN_PROGRESS status."""
+    """Fire-and-forget Conductor task update with IN_PROGRESS status.
+
+    Sends current tool counts, tools used, and a snippet of the last output
+    so the server (and any polling clients) can see real-time progress from
+    this long-running Claude Code worker.
+    """
     all_calls = metadata.get("tools_used", [])
     progress_data: Dict[str, Any] = {
         "tool_call_count": metadata.get("tool_call_count", 0),
         "tool_error_count": metadata.get("tool_error_count", 0),
         "subagent_count": metadata.get("subagent_count", 0),
-        "tools_used": all_calls[-5:],
+        "tools_used": all_calls[-5:],  # last 5 calls for progress payload
         "last_tool_output": str(metadata.get("last_tool_output", ""))[:_PROGRESS_SNIPPET_MAX_CHARS],
     }
 
@@ -943,6 +952,7 @@ def _complete_workflow_nonblocking(
             )
 
     _EVENT_PUSH_POOL.submit(_do_complete)
+
 
 
 # ---------------------------------------------------------------------------

@@ -49,6 +49,7 @@ public class TerminationCompiler {
         Map<String, Object> inputs = new LinkedHashMap<>();
         inputs.put("result", resultRef);
         inputs.put("iteration", iterationRef);
+        inputs.put("messages", "${" + llmRef + ".input.messages}");
         task.setInputParameters(inputs);
 
         return task;
@@ -76,6 +77,59 @@ public class TerminationCompiler {
         Map<String, Object> inputs = new LinkedHashMap<>();
         inputs.put("result", resultRef);
         inputs.put("iteration", iterationRef);
+        inputs.put("messages", "${" + llmRef + ".input.messages}");
+        task.setInputParameters(inputs);
+
+        return task;
+    }
+
+    /**
+     * Compile a stop_when worker for multi-agent loops (swarm, rotation, manual).
+     * Uses {@code workflow.variables.conversation} as the result input instead of
+     * a single LLM task output.
+     *
+     * @param taskName  the worker task name
+     * @param agentName the agent name (used for task reference naming)
+     * @param loopRef   the DO_WHILE loop task reference name
+     * @return a fully configured WorkflowTask of type SIMPLE
+     */
+    public static WorkflowTask compileStopWhenForConversation(String taskName, String agentName, String loopRef) {
+        String refName = agentName + "_stop_when";
+
+        WorkflowTask task = new WorkflowTask();
+        task.setName(taskName);
+        task.setTaskReferenceName(refName);
+        task.setType("SIMPLE");
+
+        Map<String, Object> inputs = new LinkedHashMap<>();
+        inputs.put("result", "${workflow.variables.conversation}");
+        inputs.put("iteration", "${" + loopRef + ".iteration}");
+        task.setInputParameters(inputs);
+
+        return task;
+    }
+
+    /**
+     * Compile a termination condition for multi-agent loops (swarm, rotation, manual).
+     * Uses {@code workflow.variables.conversation} as the result input.
+     *
+     * @param config    the termination configuration
+     * @param agentName the agent name (used for task reference naming)
+     * @param loopRef   the DO_WHILE loop task reference name
+     * @return a fully configured WorkflowTask
+     */
+    public static WorkflowTask compileTerminationForConversation(TerminationConfig config, String agentName, String loopRef) {
+        String taskName = agentName + "_termination";
+        String refName = agentName + "_termination";
+
+        WorkflowTask task = new WorkflowTask();
+        task.setName(taskName);
+        task.setTaskReferenceName(refName);
+        task.setType("SIMPLE");
+
+        Map<String, Object> inputs = new LinkedHashMap<>();
+        inputs.put("result", "${workflow.variables.conversation}");
+        inputs.put("iteration", "${" + loopRef + ".iteration}");
         task.setInputParameters(inputs);
 
         return task;

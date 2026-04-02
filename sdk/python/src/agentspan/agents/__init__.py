@@ -39,7 +39,7 @@ from agentspan.agents.claude_code import ClaudeCode
 
 # Callback handlers
 from agentspan.agents.callback import CallbackHandler
-from agentspan.agents.cli_config import CliConfig
+from agentspan.agents.cli_config import CliConfig, TerminalToolError
 
 # Code execution
 from agentspan.agents.code_execution_config import CodeExecutionConfig
@@ -277,6 +277,7 @@ __all__ = [
     # Code execution
     "CodeExecutionConfig",
     "CliConfig",
+    "TerminalToolError",
     "CodeExecutor",
     "LocalCodeExecutor",
     "DockerCodeExecutor",

@@ -44,7 +44,7 @@ class AgentConfigSerializer:
         # Claude-code agents emit a passthrough stub — all config is consumed
         # by the worker closure, not sent to the server.
         if getattr(agent, "is_claude_code", False):
-            return {
+            stub: Dict[str, Any] = {
                 "name": agent.name,
                 "model": agent.model,
                 "metadata": {"_framework_passthrough": True},
@@ -56,6 +56,15 @@ class AgentConfigSerializer:
                     }
                 ],
             }
+            # Credentials must still be sent so the server includes them
+            # in the execution token for the passthrough worker to resolve.
+            if hasattr(agent, "credentials") and agent.credentials:
+                from agentspan.agents.runtime.credentials.types import CredentialFile
+
+                stub["credentials"] = [
+                    c if isinstance(c, str) else c.env_var for c in agent.credentials
+                ]
+            return stub
 
         config: Dict[str, Any] = {
             "name": agent.name,

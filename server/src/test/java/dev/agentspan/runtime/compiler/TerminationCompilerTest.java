@@ -87,9 +87,10 @@ class TerminationCompilerTest {
         assertThat(task.getType()).isEqualTo("SIMPLE");
         assertThat(task.getName()).isEqualTo("my_stop");
         assertThat(task.getTaskReferenceName()).isEqualTo("agent_stop_when");
-        // Inputs bind to LLM result and loop iteration
+        // Inputs bind to LLM result, loop iteration, and conversation messages
         assertThat((String) task.getInputParameters().get("result")).contains("agent_llm.output.result");
         assertThat((String) task.getInputParameters().get("iteration")).contains("agent_loop.iteration");
+        assertThat((String) task.getInputParameters().get("messages")).contains("agent_llm.input.messages");
     }
 
     @Test

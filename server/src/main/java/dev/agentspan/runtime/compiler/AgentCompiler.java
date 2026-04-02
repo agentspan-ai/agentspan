@@ -3052,14 +3052,23 @@ public class AgentCompiler {
                 "prompt", "${workflow.input.prompt}",
                 "session_id", "${workflow.input.session_id}",
                 "media", "${workflow.input.media}",
-                "cwd", "${workflow.input.cwd}")));
+                "cwd", "${workflow.input.cwd}",
+                "__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}")));
 
         WorkflowDef wf = new WorkflowDef();
         wf.setName(config.getName());
         wf.setVersion(1);
-        wf.setInputParameters(new ArrayList<>(WORKFLOW_INPUTS));
+        List<String> inputs = new ArrayList<>(WORKFLOW_INPUTS);
+        inputs.add("context");
+        inputs.add("__agentspan_ctx__");
+        wf.setInputParameters(inputs);
         wf.setTasks(List.of(fwTask));
-        wf.setOutputParameters(Map.of("result", "${_fw_task.output.result}"));
+        // Output both result and context so sequential pipelines can merge
+        // pipeline state across passthrough stages (same contract as all other
+        // agent workflow types).
+        wf.setOutputParameters(Map.of(
+                "result", "${_fw_task.output.result}",
+                "context", "${workflow.input.context}"));
 
         Map<String, Object> metadata =
                 config.getMetadata() != null ? new LinkedHashMap<>(config.getMetadata()) : new LinkedHashMap<>();

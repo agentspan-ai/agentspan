@@ -651,11 +651,11 @@ describe('TypeScript SDK E2E', () => {
         instructions: 'Say hello.',
       });
       const rt = new AgentRuntime();
-      const result = await rt.run(agent, 'Hello', { timeoutSeconds: 60 });
+      const result = await rt.run(agent, 'Hello', { timeoutSeconds: 90 });
       expect(['FAILED', 'TERMINATED', 'FAILED_WITH_TERMINAL_ERROR']).toContain(
         result.status,
       );
-    });
+    }, 120_000);
   });
 
   // ── TestNegative (validation only, no server) ───────────

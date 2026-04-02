@@ -876,12 +876,43 @@ public class MultiAgentCompiler {
         }
         switchTask.setDecisionCases(cases);
 
-        // 3. DoWhile loop
-        String termCondition =
-                String.format("if ( $.%s['iteration'] < %d ) { true; } else { false; }", loopRef, maxTurns);
-        Map<String, Object> loopInputs = Map.of(loopRef, "${" + loopRef + "}");
+        // 3. Optional stop_when / termination workers
+        List<WorkflowTask> loopTasks = new ArrayList<>(List.of(selectTask, switchTask));
+
+        String stopWhenRef = null;
+        if (config.getStopWhen() != null) {
+            WorkflowTask stopWhenTask = TerminationCompiler.compileStopWhenForConversation(
+                    config.getStopWhen().getTaskName(), config.getName(), loopRef);
+            loopTasks.add(stopWhenTask);
+            stopWhenRef = config.getName() + "_stop_when";
+        }
+
+        String terminationRef = null;
+        if (config.getTermination() != null) {
+            WorkflowTask termTask = TerminationCompiler.compileTerminationForConversation(
+                    config.getTermination(), config.getName(), loopRef);
+            loopTasks.add(termTask);
+            terminationRef = config.getName() + "_termination";
+        }
+
+        // 4. DoWhile loop
+        StringBuilder termCondition = new StringBuilder();
+        termCondition.append(String.format("if ( $.%s['iteration'] < %d", loopRef, maxTurns));
+        if (stopWhenRef != null) {
+            termCondition.append(String.format(" && $.%s.should_continue == true", stopWhenRef));
+        }
+        if (terminationRef != null) {
+            termCondition.append(String.format(" && $.%s.should_continue == true", terminationRef));
+        }
+        termCondition.append(" ) { true; } else { false; }");
+
+        Map<String, Object> loopInputs = new LinkedHashMap<>();
+        loopInputs.put(loopRef, "${" + loopRef + "}");
+        if (stopWhenRef != null) loopInputs.put(stopWhenRef, "${" + stopWhenRef + "}");
+        if (terminationRef != null) loopInputs.put(terminationRef, "${" + terminationRef + "}");
+
         WorkflowTask loop =
-                agentCompiler.buildDoWhile(loopRef, termCondition, List.of(selectTask, switchTask), loopInputs);
+                agentCompiler.buildDoWhile(loopRef, termCondition.toString(), loopTasks, loopInputs);
 
         wf.setTasks(List.of(rotCtxResolve, initVar, loop));
         wf.setOutputParameters(Map.of(
@@ -986,15 +1017,46 @@ public class MultiAgentCompiler {
         updateActive.setTaskReferenceName(config.getName() + "_update_active");
         updateActive.setInputParameters(Map.of("active_agent", ref(handoffRef + ".output.active_agent")));
 
-        // 4. DoWhile — early termination when no handoff triggers
-        String termCondition = String.format(
-                "if ( $.%s['iteration'] < %d && $.%s['handoff'] == true ) { true; } else { false; }",
-                loopRef, maxTurns, handoffRef);
+        // 4. Optional stop_when / termination workers
+        List<WorkflowTask> loopTasks = new ArrayList<>(List.of(switchTask, handoffTask, updateActive));
+
+        String stopWhenRef = null;
+        if (config.getStopWhen() != null) {
+            WorkflowTask stopWhenTask = TerminationCompiler.compileStopWhenForConversation(
+                    config.getStopWhen().getTaskName(), config.getName(), loopRef);
+            loopTasks.add(stopWhenTask);
+            stopWhenRef = config.getName() + "_stop_when";
+        }
+
+        String terminationRef = null;
+        if (config.getTermination() != null) {
+            WorkflowTask termTask = TerminationCompiler.compileTerminationForConversation(
+                    config.getTermination(), config.getName(), loopRef);
+            loopTasks.add(termTask);
+            terminationRef = config.getName() + "_termination";
+        }
+
+        // 5. DoWhile — early termination when no handoff triggers
+        StringBuilder termCondition = new StringBuilder();
+        termCondition.append(String.format(
+                "if ( $.%s['iteration'] < %d && $.%s['handoff'] == true",
+                loopRef, maxTurns, handoffRef));
+        if (stopWhenRef != null) {
+            termCondition.append(String.format(" && $.%s.should_continue == true", stopWhenRef));
+        }
+        if (terminationRef != null) {
+            termCondition.append(String.format(" && $.%s.should_continue == true", terminationRef));
+        }
+        termCondition.append(" ) { true; } else { false; }");
+
         Map<String, Object> loopInputs = new LinkedHashMap<>();
         loopInputs.put(loopRef, "${" + loopRef + "}");
         loopInputs.put(handoffRef, "${" + handoffRef + "}");
+        if (stopWhenRef != null) loopInputs.put(stopWhenRef, "${" + stopWhenRef + "}");
+        if (terminationRef != null) loopInputs.put(terminationRef, "${" + terminationRef + "}");
+
         WorkflowTask loop = agentCompiler.buildDoWhile(
-                loopRef, termCondition, List.of(switchTask, handoffTask, updateActive), loopInputs);
+                loopRef, termCondition.toString(), loopTasks, loopInputs);
 
         // 5. Final synthesis LLM: combine all agents' work into a coherent response
         WorkflowTask finalLlm = new WorkflowTask();
@@ -1298,12 +1360,43 @@ public class MultiAgentCompiler {
         }
         switchTask.setDecisionCases(cases);
 
-        // 4. DoWhile
-        String termCondition =
-                String.format("if ( $.%s['iteration'] < %d ) { true; } else { false; }", loopRef, maxTurns);
-        Map<String, Object> loopInputs = Map.of(loopRef, "${" + loopRef + "}");
+        // 4. Optional stop_when / termination workers
+        List<WorkflowTask> loopTasks = new ArrayList<>(List.of(humanTask, processTask, switchTask));
+
+        String stopWhenRef = null;
+        if (config.getStopWhen() != null) {
+            WorkflowTask stopWhenTask = TerminationCompiler.compileStopWhenForConversation(
+                    config.getStopWhen().getTaskName(), config.getName(), loopRef);
+            loopTasks.add(stopWhenTask);
+            stopWhenRef = config.getName() + "_stop_when";
+        }
+
+        String terminationRef = null;
+        if (config.getTermination() != null) {
+            WorkflowTask termTask = TerminationCompiler.compileTerminationForConversation(
+                    config.getTermination(), config.getName(), loopRef);
+            loopTasks.add(termTask);
+            terminationRef = config.getName() + "_termination";
+        }
+
+        // 5. DoWhile
+        StringBuilder termCondition = new StringBuilder();
+        termCondition.append(String.format("if ( $.%s['iteration'] < %d", loopRef, maxTurns));
+        if (stopWhenRef != null) {
+            termCondition.append(String.format(" && $.%s.should_continue == true", stopWhenRef));
+        }
+        if (terminationRef != null) {
+            termCondition.append(String.format(" && $.%s.should_continue == true", terminationRef));
+        }
+        termCondition.append(" ) { true; } else { false; }");
+
+        Map<String, Object> loopInputs = new LinkedHashMap<>();
+        loopInputs.put(loopRef, "${" + loopRef + "}");
+        if (stopWhenRef != null) loopInputs.put(stopWhenRef, "${" + stopWhenRef + "}");
+        if (terminationRef != null) loopInputs.put(terminationRef, "${" + terminationRef + "}");
+
         WorkflowTask loop = agentCompiler.buildDoWhile(
-                loopRef, termCondition, List.of(humanTask, processTask, switchTask), loopInputs);
+                loopRef, termCondition.toString(), loopTasks, loopInputs);
 
         wf.setTasks(List.of(manCtxResolve, initVar, loop));
         wf.setOutputParameters(Map.of(
