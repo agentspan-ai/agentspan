@@ -31,6 +31,7 @@ import dev.agentspan.runtime.model.InjectTaskRequest;
 import dev.agentspan.runtime.model.InjectTaskResponse;
 import dev.agentspan.runtime.model.StartRequest;
 import dev.agentspan.runtime.model.StartResponse;
+import dev.agentspan.runtime.model.TaskListResponse;
 import dev.agentspan.runtime.service.AgentDagService;
 import dev.agentspan.runtime.service.AgentService;
 
@@ -259,7 +260,7 @@ public class AgentController {
 
     /** Get paginated task list for an execution. */
     @GetMapping("/executions/{executionId}/tasks")
-    public List<Task> getExecutionTasks(
+    public TaskListResponse getExecutionTasks(
             @PathVariable String executionId,
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "15") int count,

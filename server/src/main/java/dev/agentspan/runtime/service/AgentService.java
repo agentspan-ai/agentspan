@@ -1215,17 +1215,27 @@ public class AgentService {
         return workflowService.rerunWorkflow(executionId, request);
     }
 
-    public List<Task> getExecutionTasks(String executionId, String status, int count, int start) {
+    public TaskListResponse getExecutionTasks(String executionId, String status, int count, int start) {
         Workflow wf = executionService.getExecutionStatus(executionId, true);
-        List<Task> tasks = wf.getTasks();
+        List<Task> allTasks = wf.getTasks();
+
+        // Build per-status summary from all tasks (before filtering)
+        Map<String, Long> summary = allTasks.stream()
+                .collect(Collectors.groupingBy(t -> t.getStatus().name(), Collectors.counting()));
+
+        // Apply status filter
+        List<Task> filtered = allTasks;
         if (status != null && !status.isEmpty()) {
-            tasks = tasks.stream()
+            filtered = allTasks.stream()
                     .filter(t -> status.equals(t.getStatus().name()))
                     .collect(Collectors.toList());
         }
-        int end = Math.min(start + count, tasks.size());
-        if (start >= tasks.size()) return List.of();
-        return tasks.subList(start, end);
+
+        int totalHits = filtered.size();
+        int end = Math.min(start + count, filtered.size());
+        List<Task> page = start >= filtered.size() ? List.of() : filtered.subList(start, end);
+
+        return new TaskListResponse(page, totalHits, summary);
     }
 
     public SearchResult<WorkflowSummary> searchExecutionsRaw(
