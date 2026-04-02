@@ -19,7 +19,7 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime } from '../src';
+import { Agent, AgentRuntime, OnTextMention } from '../src';
 import { llmModel } from './settings.js';
 
 // ── Level 3: Individual specialists ─────────────────────────
@@ -88,10 +88,13 @@ export const ceo = new Agent({
   instructions:
     'You are the CEO. Route requests to the right department: ' +
     'engineering_lead for technical/development questions, ' +
-    'marketing_lead for marketing/content/SEO questions. ' +
-    'Delegate the entire request to the appropriate lead.',
+    'marketing_lead for marketing/content/SEO questions.',
   agents: [engineeringLead, marketingLead],
-  strategy: 'handoff',
+  handoffs: [
+    new OnTextMention({ text: 'engineering_lead', target: 'engineering_lead' }),
+    new OnTextMention({ text: 'marketing_lead', target: 'marketing_lead' }),
+  ],
+  strategy: 'swarm',
 });
 
 // ── Run ───────────────────────────────────────────────────
@@ -104,7 +107,7 @@ async function main() {
     const result = await runtime.run(
     ceo,
     'Design a REST API for a user management system with authentication ' +
-    'and then come up with a marketing campaign for the system',
+    'and then ask marketing team to come up with a marketing campaign for the system with details on how to run these campaign',
     );
     result.printResult();
 
