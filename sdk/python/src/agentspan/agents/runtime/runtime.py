@@ -1309,8 +1309,8 @@ class AgentRuntime:
 
         task_name = f"{agent_name}_stop_when"
 
-        async def stop_when_worker(result: str = "", iteration: int = 0) -> object:
-            context = {"result": result, "messages": [], "iteration": iteration}
+        async def stop_when_worker(result="", iteration: int = 0, messages=None) -> object:
+            context = {"result": result, "messages": messages or [], "iteration": iteration}
             try:
                 should_stop = await _call_user_fn(stop_when_fn, context)
                 return {"should_continue": not should_stop}
@@ -1318,7 +1318,7 @@ class AgentRuntime:
                 logger.error("stop_when evaluation failed: %s", e)
                 return {"should_continue": True}
 
-        stop_when_worker.__annotations__ = {"result": str, "iteration": int, "return": object}
+        stop_when_worker.__annotations__ = {"result": object, "iteration": int, "messages": object, "return": object}
         worker_task(
             task_definition_name=task_name,
             task_def=_default_task_def(task_name),

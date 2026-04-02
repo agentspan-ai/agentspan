@@ -49,6 +49,7 @@ public class TerminationCompiler {
         Map<String, Object> inputs = new LinkedHashMap<>();
         inputs.put("result", resultRef);
         inputs.put("iteration", iterationRef);
+        inputs.put("messages", "${" + llmRef + ".input.messages}");
         task.setInputParameters(inputs);
 
         return task;
@@ -76,6 +77,7 @@ public class TerminationCompiler {
         Map<String, Object> inputs = new LinkedHashMap<>();
         inputs.put("result", resultRef);
         inputs.put("iteration", iterationRef);
+        inputs.put("messages", "${" + llmRef + ".input.messages}");
         task.setInputParameters(inputs);
 
         return task;
