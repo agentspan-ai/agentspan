@@ -1,6 +1,6 @@
 #!/bin/sh
 # AgentSpan installer
-# Installs the CLI binary, the Python SDK, and runs agentspan doctor.
+# Installs Java 21+, the CLI binary, the Python SDK, and runs agentspan doctor.
 # Usage: curl -fsSL https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.sh | sh
 set -e
 
@@ -9,6 +9,10 @@ BINARY_NAME="agentspan"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 PYTHON_MIN_MAJOR=3
 PYTHON_MIN_MINOR=10
+JAVA_MIN=21
+
+ADOPTIUM_URL="https://adoptium.net/temurin/releases/?version=${JAVA_MIN}"
+PYTHON_URL="https://www.python.org/downloads/"
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -18,16 +22,26 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-step()    { printf "\n${CYAN}${BOLD}[%s/5]${NC} %s\n" "$1" "$2"; }
-ok()      { printf "  ${GREEN}✓${NC} %s\n" "$1"; }
-warn()    { printf "  ${YELLOW}!${NC} %s\n" "$1"; }
-die()     { printf "\n${RED}Error:${NC} %s\n" "$1" >&2; exit 1; }
+step() { printf "\n${CYAN}${BOLD}[%s/6]${NC} %s\n" "$1" "$2"; }
+ok()   { printf "  ${GREEN}✓${NC} %s\n" "$1"; }
+warn() { printf "  ${YELLOW}!${NC} %s\n" "$1"; }
+info() { printf "       %s\n" "$1"; }
+die()  { printf "\n${RED}Error:${NC} %s\n" "$1" >&2; exit 1; }
+
+# ── Prompt helper ─────────────────────────────────────────────────────────────
+# Works even when the script is piped through `curl | sh` by reading from /dev/tty.
+prompt_yn() {
+    printf "  ${YELLOW}?${NC} %s [y/N] " "$1"
+    read -r answer </dev/tty 2>/dev/null || answer="n"
+    case "$answer" in
+        [Yy]|[Yy][Ee][Ss]) return 0 ;;
+        *) return 1 ;;
+    esac
+}
 
 # ── Cleanup on unexpected exit ────────────────────────────────────────────────
 TMP_DIR=""
-cleanup() {
-    [ -n "$TMP_DIR" ] && rm -rf "$TMP_DIR"
-}
+cleanup() { [ -n "$TMP_DIR" ] && rm -rf "$TMP_DIR"; }
 trap cleanup EXIT INT TERM
 
 # ── Step 1: Detect platform ───────────────────────────────────────────────────
@@ -36,11 +50,9 @@ step 1 "Detecting platform..."
 detect_os() {
     OS="$(uname -s)"
     case "$OS" in
-        Linux*)   OS='linux';;
-        Darwin*)  OS='darwin';;
-        CYGWIN*)  OS='windows';;
-        MINGW*)   OS='windows';;
-        MSYS*)    OS='windows';;
+        Linux*)            OS='linux';;
+        Darwin*)           OS='darwin';;
+        CYGWIN*|MINGW*|MSYS*) OS='windows';;
         *) die "Unsupported operating system: $OS";;
     esac
 }
@@ -48,8 +60,8 @@ detect_os() {
 detect_arch() {
     ARCH="$(uname -m)"
     case "$ARCH" in
-        x86_64|amd64)        ARCH='amd64';;
-        arm64|aarch64)       ARCH='arm64';;
+        x86_64|amd64)  ARCH='amd64';;
+        arm64|aarch64) ARCH='arm64';;
         *) die "Unsupported architecture: $ARCH";;
     esac
 }
@@ -58,12 +70,101 @@ detect_os
 detect_arch
 ok "Platform: ${OS}/${ARCH}"
 
-# ── Step 2: Check prerequisites ───────────────────────────────────────────────
+# Detect Linux package manager for auto-installs
+PKG_MGR=""
+if [ "$OS" = "linux" ]; then
+    if   command -v apt-get >/dev/null 2>&1; then PKG_MGR="apt"
+    elif command -v dnf     >/dev/null 2>&1; then PKG_MGR="dnf"
+    elif command -v yum     >/dev/null 2>&1; then PKG_MGR="yum"
+    elif command -v pacman  >/dev/null 2>&1; then PKG_MGR="pacman"
+    fi
+fi
+
+# ── Step 2: Check + install prerequisites ─────────────────────────────────────
 step 2 "Checking prerequisites..."
 
+# ── Java ──────────────────────────────────────────────────────────────────────
+JAVA_OK=false
+if command -v java >/dev/null 2>&1; then
+    java_ver=$(java -version 2>&1 | head -1 | sed 's/.*"\(.*\)".*/\1/' | cut -d. -f1)
+    # Old 1.x versioning (e.g. Java 8 reports "1.8")
+    if [ "$java_ver" = "1" ]; then
+        java_ver=$(java -version 2>&1 | head -1 | sed 's/.*"\(.*\)".*/\1/' | cut -d. -f2)
+    fi
+    if [ "$java_ver" -ge "$JAVA_MIN" ] 2>/dev/null; then
+        ok "Java $java_ver found"
+        JAVA_OK=true
+    else
+        warn "Java $java_ver found — Java ${JAVA_MIN}+ is required."
+    fi
+fi
+
+if [ "$JAVA_OK" = false ]; then
+    warn "Java ${JAVA_MIN}+ is required to run the AgentSpan server."
+    if prompt_yn "Install Java ${JAVA_MIN} (Eclipse Temurin) now?"; then
+        JAVA_INSTALLED=false
+
+        if [ "$OS" = "darwin" ] && command -v brew >/dev/null 2>&1; then
+            info "Running: brew install --cask temurin@${JAVA_MIN}"
+            brew install --cask "temurin@${JAVA_MIN}" && JAVA_INSTALLED=true
+
+        elif [ "$OS" = "linux" ]; then
+            case "$PKG_MGR" in
+                apt)
+                    info "Adding Eclipse Temurin apt repository..."
+                    sudo apt-get install -y wget apt-transport-https gnupg 2>/dev/null
+                    sudo mkdir -p /etc/apt/keyrings
+                    wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public \
+                        | sudo tee /etc/apt/keyrings/adoptium.asc >/dev/null
+                    printf "deb [signed-by=/etc/apt/keyrings/adoptium.asc] https://packages.adoptium.net/artifactory/deb $(. /etc/os-release && echo "$VERSION_CODENAME") main\n" \
+                        | sudo tee /etc/apt/sources.list.d/adoptium.list >/dev/null
+                    sudo apt-get update -q
+                    sudo apt-get install -y "temurin-${JAVA_MIN}-jdk" && JAVA_INSTALLED=true
+                    ;;
+                dnf|yum)
+                    info "Adding Eclipse Temurin RPM repository..."
+                    cat <<EOF | sudo tee /etc/yum.repos.d/adoptium.repo >/dev/null
+[Adoptium]
+name=Adoptium
+baseurl=https://packages.adoptium.net/artifactory/rpm/\$releasever/\$basearch
+enabled=1
+gpgcheck=1
+gpgkey=https://packages.adoptium.net/artifactory/api/gpg/key/public
+EOF
+                    sudo "$PKG_MGR" install -y "temurin-${JAVA_MIN}-jdk" && JAVA_INSTALLED=true
+                    ;;
+                pacman)
+                    if command -v yay >/dev/null 2>&1; then
+                        yay -S --noconfirm "jdk${JAVA_MIN}-temurin" && JAVA_INSTALLED=true
+                    else
+                        warn "yay not found. Install Java manually: $ADOPTIUM_URL"
+                    fi
+                    ;;
+                *)
+                    warn "Unknown package manager. Install Java ${JAVA_MIN}+ manually:"
+                    warn "  $ADOPTIUM_URL"
+                    ;;
+            esac
+        else
+            warn "Automatic Java install not supported on this platform."
+            warn "Download Java ${JAVA_MIN} from: $ADOPTIUM_URL"
+        fi
+
+        if [ "$JAVA_INSTALLED" = true ]; then
+            ok "Java ${JAVA_MIN} installed"
+        else
+            warn "Java install did not complete. Install manually before running 'agentspan server start':"
+            warn "  $ADOPTIUM_URL"
+        fi
+    else
+        warn "Skipping Java install. You will need Java ${JAVA_MIN}+ to run 'agentspan server start'."
+        warn "  $ADOPTIUM_URL"
+    fi
+fi
+
+# ── Python ────────────────────────────────────────────────────────────────────
 PYTHON_CMD=""
 PYTHON_OK=false
-
 for cmd in python3 python; do
     if command -v "$cmd" >/dev/null 2>&1; then
         ver=$("$cmd" --version 2>&1 | sed 's/[^0-9.]//g' | cut -d. -f1-2)
@@ -74,28 +175,71 @@ for cmd in python3 python; do
             PYTHON_OK=true
             ok "Python $("$cmd" --version 2>&1) found"
             break
+        else
+            warn "Found Python $ver ($cmd) — version ${PYTHON_MIN_MAJOR}.${PYTHON_MIN_MINOR}+ required."
         fi
     fi
 done
 
 if [ "$PYTHON_OK" = false ]; then
-    warn "Python ${PYTHON_MIN_MAJOR}.${PYTHON_MIN_MINOR}+ not found. The Python SDK will not be installed."
-    warn "Download Python at: https://www.python.org/downloads/"
+    warn "Python ${PYTHON_MIN_MAJOR}.${PYTHON_MIN_MINOR}+ is required for the Python SDK."
+    if prompt_yn "Install Python ${PYTHON_MIN_MAJOR}.${PYTHON_MIN_MINOR} now?"; then
+        PYTHON_INSTALLED=false
+
+        if [ "$OS" = "darwin" ] && command -v brew >/dev/null 2>&1; then
+            info "Running: brew install python@3.${PYTHON_MIN_MINOR}"
+            brew install "python@3.${PYTHON_MIN_MINOR}" && PYTHON_INSTALLED=true
+            PYTHON_CMD="python3.${PYTHON_MIN_MINOR}"; PYTHON_OK=true
+
+        elif [ "$OS" = "linux" ]; then
+            case "$PKG_MGR" in
+                apt)
+                    sudo apt-get install -y \
+                        "python${PYTHON_MIN_MAJOR}.${PYTHON_MIN_MINOR}" \
+                        "python${PYTHON_MIN_MAJOR}.${PYTHON_MIN_MINOR}-venv" \
+                        "python${PYTHON_MIN_MAJOR}-pip" && PYTHON_INSTALLED=true
+                    PYTHON_CMD="python${PYTHON_MIN_MAJOR}.${PYTHON_MIN_MINOR}"; PYTHON_OK=true
+                    ;;
+                dnf|yum)
+                    sudo "$PKG_MGR" install -y "python${PYTHON_MIN_MAJOR}.${PYTHON_MIN_MINOR}" && PYTHON_INSTALLED=true
+                    PYTHON_CMD="python${PYTHON_MIN_MAJOR}.${PYTHON_MIN_MINOR}"; PYTHON_OK=true
+                    ;;
+                pacman)
+                    sudo pacman -S --noconfirm python && PYTHON_INSTALLED=true
+                    PYTHON_CMD="python"; PYTHON_OK=true
+                    ;;
+                *)
+                    warn "Unknown package manager. Install Python manually: $PYTHON_URL"
+                    ;;
+            esac
+        else
+            warn "Automatic Python install not supported on this platform."
+            warn "Download from: $PYTHON_URL"
+        fi
+
+        if [ "$PYTHON_INSTALLED" = true ]; then
+            ok "Python installed"
+        else
+            warn "Python install did not complete. Install manually: $PYTHON_URL"
+        fi
+    else
+        warn "Skipping Python install. The Python SDK will not be installed."
+        warn "  $PYTHON_URL"
+    fi
 fi
 
+# ── uv (optional, faster installs) ───────────────────────────────────────────
+UV_AVAILABLE=false
 if command -v uv >/dev/null 2>&1; then
     ok "uv found — will use uv for Python SDK install"
     UV_AVAILABLE=true
-else
-    UV_AVAILABLE=false
 fi
 
+# ── curl / wget ───────────────────────────────────────────────────────────────
 if command -v curl >/dev/null 2>&1; then
     DOWNLOADER="curl"
-    ok "curl found"
 elif command -v wget >/dev/null 2>&1; then
     DOWNLOADER="wget"
-    ok "wget found"
 else
     die "Neither curl nor wget found. Please install one and re-run."
 fi
@@ -116,7 +260,7 @@ TMP_DIR=$(mktemp -d)
 TMP_FILE="$TMP_DIR/$BINARY_NAME"
 TMP_CHECKSUM="$TMP_DIR/${BINARY_FILENAME}.sha256"
 
-printf "  Downloading from: %s\n" "$DOWNLOAD_URL"
+info "From: $DOWNLOAD_URL"
 
 download() {
     url="$1"; dest="$2"
@@ -129,26 +273,19 @@ download() {
 
 download "$DOWNLOAD_URL" "$TMP_FILE" || die "Failed to download binary."
 
-# Verify checksum if the .sha256 sidecar is available
-CHECKSUM_VERIFIED=false
+# Verify checksum
 if download "$CHECKSUM_URL" "$TMP_CHECKSUM" 2>/dev/null; then
-    EXPECTED=$(cat "$TMP_CHECKSUM" | tr -d '[:space:]')
+    EXPECTED=$(tr -d '[:space:]' < "$TMP_CHECKSUM")
     if [ -n "$EXPECTED" ]; then
-        if command -v sha256sum >/dev/null 2>&1; then
-            ACTUAL=$(sha256sum "$TMP_FILE" | awk '{print $1}')
-        elif command -v shasum >/dev/null 2>&1; then
-            ACTUAL=$(shasum -a 256 "$TMP_FILE" | awk '{print $1}')
-        else
-            warn "No sha256sum or shasum available — skipping checksum verification."
-            ACTUAL=""
+        if   command -v sha256sum >/dev/null 2>&1; then ACTUAL=$(sha256sum "$TMP_FILE" | awk '{print $1}')
+        elif command -v shasum    >/dev/null 2>&1; then ACTUAL=$(shasum -a 256 "$TMP_FILE" | awk '{print $1}')
+        else warn "sha256sum/shasum not available — skipping checksum verification."; ACTUAL=""
         fi
-
         if [ -n "$ACTUAL" ]; then
             if [ "$ACTUAL" = "$EXPECTED" ]; then
-                ok "Checksum verified (SHA256: ${ACTUAL:0:16}...)"
-                CHECKSUM_VERIFIED=true
+                ok "Checksum verified (SHA256: $(printf '%.16s' "$ACTUAL")...)"
             else
-                die "Checksum mismatch!\n  Expected: $EXPECTED\n  Got:      $ACTUAL\nThe download may be corrupted. Please try again."
+                die "Checksum mismatch!\n  Expected: $EXPECTED\n  Got:      $ACTUAL\nDownload may be corrupted. Please try again."
             fi
         fi
     fi
@@ -158,20 +295,19 @@ fi
 
 chmod +x "$TMP_FILE"
 
-# Install binary
+# Install
 if [ -w "$INSTALL_DIR" ]; then
     mv "$TMP_FILE" "$INSTALL_DIR/$BINARY_NAME"
     ok "Installed to $INSTALL_DIR/$BINARY_NAME"
 else
     warn "$INSTALL_DIR is not writable — trying sudo..."
-    sudo mv "$TMP_FILE" "$INSTALL_DIR/$BINARY_NAME" || die "Could not install to $INSTALL_DIR. Re-run with INSTALL_DIR=~/bin or as root."
+    sudo mv "$TMP_FILE" "$INSTALL_DIR/$BINARY_NAME" \
+        || die "Could not install to $INSTALL_DIR. Re-run with INSTALL_DIR=~/bin or as root."
     ok "Installed to $INSTALL_DIR/$BINARY_NAME (via sudo)"
 fi
 
-# Verify CLI is on PATH
-if ! command -v "$BINARY_NAME" >/dev/null 2>&1; then
-    warn "agentspan not found in PATH."
-    warn "Add this to your shell profile and restart your terminal:"
+if ! command -v agentspan >/dev/null 2>&1; then
+    warn "agentspan not in PATH yet. Add to your shell profile:"
     warn "  export PATH=\"$INSTALL_DIR:\$PATH\""
 fi
 
@@ -182,10 +318,9 @@ if [ "$PYTHON_OK" = true ]; then
     SDK_INSTALLED=false
 
     if [ "$UV_AVAILABLE" = true ]; then
-        printf "  Trying: uv pip install agentspan\n"
-        if uv pip install agentspan 2>&1 | sed 's/^/  /'; then
-            ok "Python SDK installed via uv"
-            SDK_INSTALLED=true
+        info "Trying: uv pip install agentspan"
+        if uv pip install agentspan 2>&1 | sed 's/^/       /'; then
+            ok "Python SDK installed via uv"; SDK_INSTALLED=true
         else
             warn "uv install failed — falling back to pip"
         fi
@@ -193,19 +328,14 @@ if [ "$PYTHON_OK" = true ]; then
 
     if [ "$SDK_INSTALLED" = false ]; then
         for pip_cmd in pip3 "python3 -m pip" "python -m pip"; do
-            printf "  Trying: %s install agentspan\n" "$pip_cmd"
-            if $pip_cmd install agentspan 2>&1 | sed 's/^/  /'; then
-                ok "Python SDK installed via $pip_cmd"
-                SDK_INSTALLED=true
-                break
+            info "Trying: $pip_cmd install agentspan"
+            if $pip_cmd install agentspan 2>&1 | sed 's/^/       /'; then
+                ok "Python SDK installed via $pip_cmd"; SDK_INSTALLED=true; break
             fi
         done
     fi
 
-    if [ "$SDK_INSTALLED" = false ]; then
-        warn "Could not install the Python SDK automatically."
-        warn "Run manually: pip install agentspan"
-    fi
+    [ "$SDK_INSTALLED" = false ] && warn "Could not install SDK automatically. Run: pip install agentspan"
 else
     warn "Skipping Python SDK install (Python ${PYTHON_MIN_MAJOR}.${PYTHON_MIN_MINOR}+ required)."
 fi
@@ -215,14 +345,16 @@ step 5 "Running agentspan doctor..."
 
 if command -v agentspan >/dev/null 2>&1; then
     printf "\n"
-    agentspan doctor || warn "agentspan doctor reported issues — see above for details."
+    agentspan doctor || warn "agentspan doctor reported issues — see above."
 else
     warn "agentspan not in PATH yet — skipping doctor."
-    warn "Run 'agentspan doctor' after adding $INSTALL_DIR to your PATH."
+    warn "Run 'agentspan doctor' after restarting your terminal."
 fi
 
-# ── Done ──────────────────────────────────────────────────────────────────────
-printf "\n${GREEN}${BOLD}AgentSpan installation complete!${NC}\n"
+# ── Step 6: Done ──────────────────────────────────────────────────────────────
+step 6 "Installation complete!"
+
+printf "\n${GREEN}${BOLD}AgentSpan is ready.${NC}\n"
 printf "\nNext steps:\n"
 printf "  1. Set your LLM API key:   export OPENAI_API_KEY=sk-...\n"
 printf "  2. Start the server:       agentspan server start\n"
