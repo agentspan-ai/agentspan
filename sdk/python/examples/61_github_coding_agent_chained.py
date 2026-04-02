@@ -31,9 +31,9 @@ MODEL = "anthropic/claude-sonnet-4-6"
 # ── Stage 1: Fetch issues ─────────────────────────────────────────
 
 def _fetch_done(context: dict, **kwargs) -> bool:
-    """Stop when the agent has produced the expected 4-line output."""
+    """Stop when the agent has produced the structured output with issue details."""
     result = context.get("result", "")
-    return "REPO:" in result and "BRANCH:" in result and "ISSUE:" in result
+    return "REPO:" in result and "BRANCH:" in result and "ISSUE:" in result and "DETAILS:" in result
 
 
 git_fetch_issues = Agent(
@@ -43,23 +43,28 @@ git_fetch_issues = Agent(
     instructions=f"""\
 You fetch ONE open issue from {REPO} and push an empty branch.
 
-Step 1 — run this command:
+Step 1 — list open issues:
   gh issue list --repo {REPO} --state open --limit 5
 If no issues, respond: NO_OPEN_ISSUES
 
-Step 2 — pick an issue, then run this ONE compound command (shell=true):
+Step 2 — pick an issue and fetch its full details:
+  gh issue view <N> --repo {REPO}
+
+Step 3 — create a branch and push it (one compound command, shell=true):
   TMPDIR=$(mktemp -d) && gh repo clone {REPO} "$TMPDIR" && cd "$TMPDIR" && git checkout -b fix/issue-<N> && git push -u origin fix/issue-<N> && echo "DONE"
 
-Step 3 — respond with ONLY these 4 lines (NO tool calls):
+Step 4 — respond with ONLY these lines (NO tool calls):
   REPO: {REPO}
   BRANCH: fix/issue-<N>
   ISSUE: #<N> <title>
+  AUTHOR: <who opened the issue>
+  DETAILS: <full issue body — preserve all requirements, acceptance criteria, and context>
   SUMMARY: <one-sentence description>
 
 RULES:
 - Do NOT create files, commits, or pull requests.
-- After step 2, you MUST stop using tools entirely. Just output text.
-- You have at most 5 turns total.
+- After step 3, you MUST stop using tools entirely. Just output text.
+- Include the COMPLETE issue body in DETAILS — the next stage needs it to implement the fix.
 """,
     cli_config=CliConfig(
         allowed_commands=["gh", "git", "mktemp"],

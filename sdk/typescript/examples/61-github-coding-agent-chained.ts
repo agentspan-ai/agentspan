@@ -23,10 +23,10 @@ const MODEL = 'anthropic/claude-sonnet-4-6';
 
 // -- Stage 1: Fetch issues ---------------------------------------------------
 
-/** Stop when the agent has produced the expected 4-line output. */
+/** Stop when the agent has produced the structured output with issue details. */
 function fetchDone(messages: unknown[]): boolean {
   const last = String(messages[messages.length - 1] ?? '');
-  return last.includes('REPO:') && last.includes('BRANCH:') && last.includes('ISSUE:');
+  return last.includes('REPO:') && last.includes('BRANCH:') && last.includes('ISSUE:') && last.includes('DETAILS:');
 }
 
 export const gitFetchIssues = new Agent({
@@ -36,19 +36,23 @@ export const gitFetchIssues = new Agent({
     `You are a GitHub issue fetcher. Your ONLY job is to pick an issue and ` +
     `prepare a branch. Do NOT write any code or attempt to fix the issue — ` +
     `the next pipeline stage handles implementation.\n\n` +
-    `1. List the 5 most recent open issues on ${REPO} (include number, title, body).\n` +
+    `1. List the 5 most recent open issues: gh issue list --repo ${REPO} --state open --limit 5\n` +
     `2. If there are NO open issues, output exactly: NO_OPEN_ISSUES\n` +
-    `3. Otherwise pick the most suitable issue, then:\n` +
+    `3. Pick the most suitable issue and fetch full details: gh issue view <NUMBER> --repo ${REPO}\n` +
+    `4. Create and push a branch:\n` +
     `   - Create a temp dir: mktemp -d /tmp/fetch-XXXXXXXX\n` +
     `   - Clone ${REPO} into that dir\n` +
     `   - Create branch fix/issue-<NUMBER>\n` +
     `   - Push the empty branch: git push -u origin fix/issue-<NUMBER>\n` +
     `   - Delete the temp dir\n` +
-    `   - Output ONLY these lines:\n` +
+    `5. Output ONLY these lines (NO tool calls):\n` +
     `       REPO: ${REPO}\n` +
     `       BRANCH: fix/issue-<NUMBER>\n` +
     `       ISSUE: #<NUMBER> <title>\n` +
-    `       SUMMARY: <one-sentence description of the issue>`,
+    `       AUTHOR: <who opened the issue>\n` +
+    `       DETAILS: <full issue body — preserve all requirements, acceptance criteria, and context>\n` +
+    `       SUMMARY: <one-sentence description of the issue>\n\n` +
+    `Include the COMPLETE issue body in DETAILS — the next stage needs it to implement the fix.`,
   cliConfig: { enabled: true, allowedCommands: ['gh', 'git', 'mktemp', 'rm'] },
   maxTurns: 20,
   stopWhen: fetchDone,
