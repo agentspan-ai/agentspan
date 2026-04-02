@@ -10,17 +10,15 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 
 import com.netflix.conductor.common.metadata.tasks.TaskType;
-import com.netflix.conductor.common.metadata.workflow.StartWorkflowRequest;
 import com.netflix.conductor.common.metadata.workflow.SubWorkflowParams;
 import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
 import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
 import com.netflix.conductor.core.exception.NotFoundException;
-import com.netflix.conductor.core.execution.StartWorkflowInput;
-import com.netflix.conductor.core.execution.WorkflowExecutor;
 import com.netflix.conductor.dao.ExecutionDAO;
 import com.netflix.conductor.model.TaskModel;
 import com.netflix.conductor.model.WorkflowModel;
@@ -34,7 +32,6 @@ import lombok.RequiredArgsConstructor;
 public class AgentDagService {
 
     private final ExecutionDAO executionDAO;
-    private final WorkflowExecutor workflowExecutor;
 
     public InjectTaskResponse injectTask(String executionId, InjectTaskRequest req) {
         WorkflowModel workflow = executionDAO.getWorkflow(executionId, true);
@@ -57,7 +54,7 @@ public class AgentDagService {
         }
 
         TaskModel task = new TaskModel();
-        task.setTaskId(java.util.UUID.randomUUID().toString());
+        task.setTaskId(UUID.randomUUID().toString());
         task.setTaskDefName(req.getTaskDefName());
         task.setReferenceTaskName(req.getReferenceTaskName());
         task.setTaskType(req.getType());
@@ -132,27 +129,23 @@ public class AgentDagService {
         def.setTasks(new ArrayList<>());
         def.setInputParameters(List.of("prompt"));
 
-        StartWorkflowRequest startReq = new StartWorkflowRequest();
-        startReq.setName(def.getName());
-        startReq.setVersion(def.getVersion());
-        startReq.setWorkflowDef(def);
-        startReq.setInput(req.getInput() != null ? req.getInput() : Map.of());
+        WorkflowModel workflow = new WorkflowModel();
+        workflow.setWorkflowId(UUID.randomUUID().toString());
+        workflow.setWorkflowDefinition(def);
+        workflow.setStatus(WorkflowModel.Status.RUNNING);
+        workflow.setInput(req.getInput() != null ? req.getInput() : Map.of());
+        workflow.setCreateTime(System.currentTimeMillis());
 
-        String executionId = workflowExecutor.startWorkflow(new StartWorkflowInput(startReq));
-
-        // Set parent linkage after creation (startWorkflow doesn't support it directly)
+        // Parent linkage for back-navigation
         if (req.getParentWorkflowId() != null) {
-            WorkflowModel workflow = executionDAO.getWorkflow(executionId, false);
-            if (workflow != null) {
-                workflow.setParentWorkflowId(req.getParentWorkflowId());
-                if (req.getParentWorkflowTaskId() != null) {
-                    workflow.setParentWorkflowTaskId(req.getParentWorkflowTaskId());
-                }
-                executionDAO.updateWorkflow(workflow);
+            workflow.setParentWorkflowId(req.getParentWorkflowId());
+            if (req.getParentWorkflowTaskId() != null) {
+                workflow.setParentWorkflowTaskId(req.getParentWorkflowTaskId());
             }
         }
 
-        return new CreateTrackingWorkflowResponse(executionId);
+        executionDAO.createWorkflow(workflow);
+        return new CreateTrackingWorkflowResponse(workflow.getWorkflowId());
     }
 
     public void completeTrackingWorkflow(String executionId, Map<String, Object> output) {
