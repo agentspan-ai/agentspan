@@ -29,6 +29,7 @@ import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
 import com.netflix.conductor.common.run.SearchResult;
 import com.netflix.conductor.common.run.Workflow;
 import com.netflix.conductor.common.run.WorkflowSummary;
+import com.netflix.conductor.core.exception.NotFoundException;
 import com.netflix.conductor.core.execution.StartWorkflowInput;
 import com.netflix.conductor.core.execution.WorkflowExecutor;
 import com.netflix.conductor.dao.MetadataDAO;
@@ -1251,13 +1252,11 @@ public class AgentService {
         if (version != null) {
             return metadataDAO
                     .getWorkflowDef(name, version)
-                    .orElseThrow(() -> new com.netflix.conductor.core.exception.NotFoundException(
-                            "Definition not found: " + name));
+                    .orElseThrow(() -> new NotFoundException("Definition not found: " + name));
         }
         return metadataDAO
                 .getLatestWorkflowDef(name)
-                .orElseThrow(() ->
-                        new com.netflix.conductor.core.exception.NotFoundException("Definition not found: " + name));
+                .orElseThrow(() -> new NotFoundException("Definition not found: " + name));
     }
 
     public void updateTaskResult(TaskResult taskResult) {
