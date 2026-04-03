@@ -258,12 +258,6 @@ tasks.named('processResources') {
     }
 }
 
-if (buildUiEnabled) {
-    tasks.named('spotlessJava') {
-        mustRunAfter 'syncUiStatic'
-    }
-}
-
 tasks.named('bootJar') {
     if (buildUiEnabled) {
         dependsOn 'syncUiStatic'
