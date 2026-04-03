@@ -93,12 +93,14 @@ public class CredentialDataSourceConfig {
     }
 
     @Bean("credentialJdbc")
-    public NamedParameterJdbcTemplate credentialJdbc() {
-        return new NamedParameterJdbcTemplate(credentialDataSource());
+    public NamedParameterJdbcTemplate credentialJdbc(
+            @org.springframework.beans.factory.annotation.Qualifier("credentialDataSource") DataSource dataSource) {
+        return new NamedParameterJdbcTemplate(dataSource);
     }
 
     @Bean
-    public DataSourceInitializer credentialSchemaInitializer() {
+    public DataSourceInitializer credentialSchemaInitializer(
+            @org.springframework.beans.factory.annotation.Qualifier("credentialDataSource") DataSource dataSource) {
         // Use a database-specific DDL file so that column types are correct:
         //   SQLite  → schema-credentials.sql          (BLOB for binary data)
         //   Postgres → schema-credentials-postgres.sql (BYTEA for binary data)
@@ -107,7 +109,7 @@ public class CredentialDataSourceConfig {
                 : "schema-credentials.sql";
 
         DataSourceInitializer initializer = new DataSourceInitializer();
-        initializer.setDataSource(credentialDataSource());
+        initializer.setDataSource(dataSource);
         ResourceDatabasePopulator populator = new ResourceDatabasePopulator();
         populator.addScript(new ClassPathResource(schemaFile));
         populator.setContinueOnError(true); // IF NOT EXISTS guards handle re-runs
