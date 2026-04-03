@@ -78,6 +78,11 @@ ANTHROPIC_API_KEY: "sk-ant-..."             # ← at least one LLM key
 ```
 
 > **Never commit `secret.yaml` with real values.** Use [Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets) or a cloud secrets manager in production.
+>
+> **Important (PostgreSQL + PVC):** `POSTGRES_PASSWORD` is used when Postgres initializes the data directory the first time. If you later change `POSTGRES_PASSWORD` in the Secret while reusing the same PVC, app startup can fail with `password authentication failed`. In that case, either:
+> - keep the original password in the Secret, or
+> - rotate the password inside the database manually, or
+> - recreate Postgres storage for a fresh init (data loss in local/dev).
 
 ### 2. Set your domain
 
@@ -191,6 +196,18 @@ kubectl apply -f deployment/k8s/hpa.yaml
 | `AWS_ACCESS_KEY_ID` / `SECRET` | — | AWS Bedrock |
 | `GOOGLE_CLOUD_PROJECT` | — | Vertex AI |
 
+### Secret Updates and Restarts
+
+When you update `deployment/k8s/secret.yaml` values, restart `agentspan-server` so pods pick up new env vars:
+
+```bash
+kubectl apply -f deployment/k8s/secret.yaml
+kubectl rollout restart deployment/agentspan-server -n agentspan
+kubectl rollout status deployment/agentspan-server -n agentspan
+```
+
+If the server fails with `password authentication failed for user "agentspan"` after a secret change, check the Postgres password note above.
+
 ---
 
 ## TLS / HTTPS
@@ -259,6 +276,11 @@ kubectl port-forward svc/agentspan-server 6767:6767 -n agentspan
 kubectl scale deployment/agentspan-server --replicas=5 -n agentspan
 
 # Tear down everything
+kubectl delete namespace agentspan
+
+# Local/dev reset when Postgres password state drifts (deletes all data)
+kubectl delete statefulset agentspan-postgres -n agentspan --ignore-not-found
+kubectl delete pvc -n agentspan --all
 kubectl delete namespace agentspan
 ```
 
