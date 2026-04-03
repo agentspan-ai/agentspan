@@ -176,8 +176,8 @@ async function main() {
     const result = await runtime.run(
     orchestrator,
     'Produce comprehensive analyses for each of the following technology domains ' +
-    'by calling deep_analyst ONCE PER DOMAIN, one domain at a time (not in parallel). ' +
-    // `Complete all ${DOMAINS.length} domains, then summarise cross-domain trends. ` +
+    'by calling deep_analyst ONCE PER DOMAIN, one domain at a time (not in parallel). '
+    // + `Complete all ${DOMAINS.length} domains, then summarise cross-domain trends. ` +
     // `Domains: ${DOMAINS.join(', ')}.`,
     );
     result.printResult();
