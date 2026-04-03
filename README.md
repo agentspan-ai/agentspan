@@ -13,7 +13,7 @@
   <a href="https://pypi.org/project/agentspan/"><img src="https://img.shields.io/pypi/dm/agentspan?color=blue" alt="Downloads"></a>
   <a href="https://github.com/agentspan-ai/agentspan/stargazers"><img src="https://img.shields.io/github/stars/agentspan-ai/agentspan?style=social" alt="Stars"></a>
   <a href="https://github.com/agentspan-ai/agentspan/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
-  <a href="https://discord.gg/agentspan"><img src="https://img.shields.io/discord/1234567890?label=Discord&logo=discord&color=5865F2" alt="Discord"></a>
+  <a href="https://discord.com/invite/ajcA66JcKq"><img src="https://img.shields.io/discord/1234567890?label=Discord&logo=discord&color=5865F2" alt="Discord"></a>
   <a href="https://github.com/agentspan-ai/agentspan/actions"><img src="https://img.shields.io/github/actions/workflow/status/agentspan-ai/agentspan/ci.yml?label=CI" alt="CI"></a>
 </p>
 
@@ -21,7 +21,7 @@
   <a href="https://docs.agentspan.dev">Docs</a> &bull;
   <a href="#quickstart">Quickstart</a> &bull;
   <a href="#examples">180+ Examples</a> &bull;
-  <a href="https://discord.gg/agentspan">Discord</a> &bull;
+  <a href="https://discord.com/invite/ajcA66JcKq">Discord</a> &bull;
   <a href="docs/python-sdk/api-reference.md">API Reference</a>
 </p>
 
@@ -777,7 +777,7 @@ agentspan doctor           # Check system dependencies
 
 We're building Agentspan in the open and would love your help.
 
-- **[Discord](https://discord.gg/agentspan)** — Ask questions, share what you're building, get help
+- **[Discord](https://discord.com/invite/ajcA66JcKq)** — Ask questions, share what you're building, get help
 - **[GitHub Issues](https://github.com/agentspan-ai/agentspan/issues)** — Bug reports and feature requests
 - **[Contributing Guide](CONTRIBUTING.md)** — How to contribute code, docs, and examples
 
