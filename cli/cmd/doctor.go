@@ -105,7 +105,7 @@ var aiProviders = []aiProvider{
 					return os.Getenv("AWS_ACCESS_KEY_ID") != "" && os.Getenv("AWS_DEFAULT_REGION") == "" && os.Getenv("AWS_REGION") == ""
 				},
 				message: "No AWS region set — defaults to us-east-1",
-				fix:     "export AWS_DEFAULT_REGION=us-east-1  # or your preferred region",
+				fix:     "export AWS_DEFAULT_REGION=your-aws-region  # or your preferred region",
 			},
 		},
 		models: []string{
@@ -481,4 +481,3 @@ func checkServer(baseURL string) bool {
 	resp.Body.Close()
 	return resp.StatusCode == http.StatusOK
 }
-
