@@ -8,7 +8,8 @@
 echo.
 echo  AgentSpan Installer
 echo  -------------------
-echo  This will install the AgentSpan CLI and Python SDK.
+echo  This will install the AgentSpan CLI and Java (required for the server).
+echo  SDK install is language-specific: pip / npm / Maven
 echo.
 
 :: Check if PowerShell is available
