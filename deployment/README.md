@@ -1,203 +1,452 @@
-# Self-Hosting Agentspan on Kubernetes
+# Agentspan Deployment Guide
 
-The root `Dockerfile` builds a single image containing both the server and the UI. Spring Boot automatically serves the compiled UI from `/` and the REST API from `/api`. No separate UI container is needed.
-
----
-
-## Architecture
-
-```
-                     ┌──────────────────────────────────────────┐
-                     │         Kubernetes Cluster               │
-                     │         namespace: agentspan             │
-Internet ──► DNS ──► LoadBalancer ──► Ingress (nginx) ──► agentspan-server:6767
-                     │                                          │
-                     │   agentspan-server (3 replicas, HPA 3–10)│
-                     │   ┌──────────────────────────────────┐   │
-                     │   │  Spring Boot (port 6767)         │   │
-                     │   │  /api/**   → REST API            │   │
-                     │   │  /**       → React UI (static)   │   │
-                     │   └──────────────────────────────────┘   │
-                     │           │                               │
-                     │   agentspan-postgres (StatefulSet)        │
-                     └──────────────────────────────────────────┘
-```
-
-**Components:**
-
-| Component | Image | Replicas |
-|---|---|---|
-| Server + UI | `agentspan/server:latest` | 3 (auto-scales to 10) |
-| PostgreSQL | `postgres:16-alpine` | 1 (StatefulSet + PVC) |
+Agentspan is a durable execution runtime for AI agents. This guide covers every deployment path from a single-command local start to a production Kubernetes cluster with auto-scaling, TLS, and managed PostgreSQL.
 
 ---
 
-## Prerequisites
+## Table of Contents
 
-| Tool | Purpose |
+1. [Quick Start](#1-quick-start)
+2. [Architecture](#2-architecture)
+3. [Deployment Options](#3-deployment-options)
+4. [Local Development](#4-local-development)
+5. [Single Server — Docker](#5-single-server--docker)
+6. [Production — Docker Compose](#6-production--docker-compose)
+7. [Production — Kubernetes](#7-production--kubernetes)
+8. [Production — Helm](#8-production--helm)
+9. [Managed Database (RDS / Cloud SQL / Azure DB)](#9-managed-database)
+10. [TLS / HTTPS](#10-tls--https)
+11. [Observability](#11-observability)
+12. [Backup & Restore](#12-backup--restore)
+13. [Production Checklist](#13-production-checklist)
+14. [Configuration Reference](#14-configuration-reference)
+
+---
+
+## 1. Quick Start
+
+```bash
+# Install the CLI
+curl -fsSL https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.sh | sh
+
+# Start the server (SQLite, no setup needed)
+export OPENAI_API_KEY=sk-...
+agentspan server start
+```
+
+Open the UI at **http://localhost:6767**
+
+---
+
+## 2. Architecture
+
+### Components
+
+| Component | Description |
 |---|---|
-| `kubectl` | Apply manifests |
-| `docker` | Build the combined image |
-| Kubernetes cluster | EKS, GKE, AKS, k3s, or any CNCF-conformant cluster |
-| Ingress-nginx | Load balancer controller |
-| (Optional) cert-manager | Automatic TLS certificates |
-| (Optional) metrics-server | Required for HPA auto-scaling |
+| **API Server** | REST API at `/api/**` and React UI at `/**`, both served from port 6767 |
+| **Execution Engine** | Durable state machine — survives restarts, picks up in-progress agents |
+| **Sweeper** | Background process that monitors running agent executions |
+| **Tool Worker** | Executes built-in tools (HTTP, file, code, search) |
+| **Credential Store** | AES-256-GCM encrypted storage for API keys and secrets |
 
-### Install ingress-nginx
+A single `agentspan/server` Docker image contains all components — no separate frontend container.
 
-```bash
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.1/deploy/static/provider/cloud/deploy.yaml
+### Infrastructure
 
-# Wait for the external IP (~60s on cloud providers)
-kubectl get svc -n ingress-nginx ingress-nginx-controller --watch
+| Layer | Development | Production |
+|---|---|---|
+| Database | SQLite (file) | PostgreSQL 16 |
+| Storage | Local file | PVC (K8s) or Docker volume |
+| Scaling | Single process | 3–10 replicas + HPA |
+| Networking | localhost:6767 | Ingress → LoadBalancer |
+
+### Deployment topology (Kubernetes)
+
 ```
-
-### Install cert-manager (for TLS — recommended)
-
-```bash
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
-```
-
-### Install metrics-server (for HPA)
-
-```bash
-kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+Internet ──► DNS ──► LoadBalancer ──► Ingress (nginx) ──► agentspan-server:6767
+                                                                │
+                                              agentspan-postgres (StatefulSet + PVC)
 ```
 
 ---
 
-## Quick Start
+## 3. Deployment Options
 
-### 1. Configure secrets
+Choose the stack that fits your environment:
 
-Edit `deployment/k8s/secret.yaml`. Set at minimum the PostgreSQL password and at least one LLM API key:
+| Environment | Method | Database | Best for |
+|---|---|---|---|
+| Local dev | `agentspan server start` | SQLite | Development, testing |
+| Single VM (demo) | `docker run` | SQLite | Demos, staging |
+| Single VM (prod) | Docker Compose | PostgreSQL | Small teams, single-region |
+| Multi-instance | Kubernetes | PostgreSQL | HA, auto-scaling, production SaaS |
+| GitOps | Helm | PostgreSQL | Templated multi-env deployments |
 
-```yaml
-POSTGRES_PASSWORD: "your-strong-password"   # ← required
-ANTHROPIC_API_KEY: "sk-ant-..."             # ← at least one LLM key
-```
+### Database backends
 
-> **Never commit `secret.yaml` with real values.** Use [Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets) or a cloud secrets manager in production.
-
-### 2. Set your domain
-
-Edit `deployment/k8s/ingress.yaml` and replace `agentspan.example.com` with your domain.
-
-### 3. Deploy
-
-```bash
-# Build image, push, apply all manifests
-./deployment/deploy.sh
-
-# Custom image tag (e.g. for a private registry)
-./deployment/deploy.sh --image registry.example.com/agentspan/server:v1.2.0
-
-# Skip Docker build if image already exists
-./deployment/deploy.sh --skip-build
-
-# Target a specific k8s context
-./deployment/deploy.sh --context my-cluster-context
-```
-
-### 4. Access
-
-```bash
-kubectl get ingress -n agentspan
-```
-
-Point your DNS A record to the ingress load balancer IP and open `http://your-domain`.
+| Backend | When to use |
+|---|---|
+| **SQLite** | Local development only. Single process, no setup, data in `agent-runtime.db`. |
+| **PostgreSQL** | All production deployments. ACID-compliant, supports multiple replicas. |
 
 ---
 
-## Docker Compose (Single VM / Local)
+## 4. Local Development
 
-For a turn-key single-node deployment (Agentspan + Postgres), use:
+Zero config. Uses SQLite. Data persists in `./agent-runtime.db`.
+
+```bash
+export OPENAI_API_KEY=sk-...
+agentspan server start
+```
+
+**Files created:**
+- `~/.agentspan/` — server JAR and config
+- `./agent-runtime.db` — SQLite database (working directory)
+
+**Reset:** `rm agent-runtime.db`
+
+---
+
+## 5. Single Server — Docker
+
+### Standalone (SQLite — no external DB needed)
+
+```bash
+docker run -d \
+  --name agentspan \
+  -p 6767:6767 \
+  -e OPENAI_API_KEY=sk-... \
+  -v agentspan_data:/data \
+  agentspan/server:latest
+```
+
+### With external PostgreSQL
+
+```bash
+docker run -d \
+  --name agentspan \
+  -p 6767:6767 \
+  -e SPRING_PROFILES_ACTIVE=postgres \
+  -e SPRING_DATASOURCE_URL=jdbc:postgresql://your-db-host:5432/agentspan \
+  -e SPRING_DATASOURCE_USERNAME=agentspan \
+  -e SPRING_DATASOURCE_PASSWORD=your-password \
+  -e OPENAI_API_KEY=sk-... \
+  agentspan/server:latest
+```
+
+**Verify:**
+```bash
+curl http://localhost:6767/actuator/health
+# {"status":"UP"}
+```
+
+---
+
+## 6. Production — Docker Compose
+
+Best for: single VM production. Includes PostgreSQL with a persistent volume.
+
+### Setup
 
 ```bash
 cd deployment/docker-compose
 cp .env.example .env
+```
+
+Edit `.env` — set at minimum:
+
+```bash
+# Change the database password
+POSTGRES_PASSWORD=your-strong-password
+
+# Set at least one LLM provider key
+OPENAI_API_KEY=sk-...
+# ANTHROPIC_API_KEY=sk-ant-...
+# GEMINI_API_KEY=...
+```
+
+### Start
+
+```bash
+docker compose up -d
+
+# Stream logs
+docker compose logs -f agentspan
+
+# Verify health
+curl http://localhost:6767/actuator/health
+```
+
+### Upgrade
+
+```bash
+docker compose pull
 docker compose up -d
 ```
 
-See `deployment/docker-compose/README.md` for full usage.
-
----
-
-## Building the Image Manually
+### Stop
 
 ```bash
-# Build context must be repo root so both ui/ and server/ are accessible
-docker build -f server/Dockerfile -t agentspan/server:latest .
-
-# Push to your registry
-docker push agentspan/server:latest
+docker compose down        # stop, keep data
+docker compose down -v     # stop + delete database (irreversible)
 ```
 
-`server/Dockerfile` runs three stages:
-1. **ui-builder** — `pnpm build` → `ui/dist/`
-2. **builder** — copies `ui/dist/` into `server/src/main/resources/static/`, then runs `./gradlew bootJar`
-3. **runtime** — copies the JAR into a slim JRE image
+Data persists in the `postgres_data` Docker volume. Back it up before upgrading.
 
 ---
 
-## Manual Step-by-Step Deployment
+## 7. Production — Kubernetes
+
+Best for: high availability, auto-scaling, managed cloud.
+
+### Prerequisites
+
+| Tool | Purpose |
+|---|---|
+| `kubectl` | Kubernetes CLI |
+| ingress-nginx | Ingress controller |
+| cert-manager | Automatic TLS (optional but recommended) |
+| metrics-server | Required for HPA auto-scaling |
 
 ```bash
-# 1. Namespace
-kubectl apply -f deployment/k8s/namespace.yaml
+# ingress-nginx
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.1/deploy/static/provider/cloud/deploy.yaml
 
-# 2. Config + Secrets
+# cert-manager
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+
+# metrics-server
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+```
+
+### Step 1 — Secrets
+
+Edit `deployment/k8s/secret.yaml`. **Never commit this file with real values.**
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: agentspan-secrets
+  namespace: agentspan
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: "your-strong-password"    # required
+  POSTGRES_USER: "agentspan"
+  OPENAI_API_KEY: "sk-..."                     # at least one LLM key
+  # ANTHROPIC_API_KEY: "sk-ant-..."
+  # GEMINI_API_KEY: "..."
+```
+
+> **Tip:** Use [Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets), [External Secrets Operator](https://external-secrets.io/), or your cloud secrets manager (AWS Secrets Manager, GCP Secret Manager, Azure Key Vault) instead of committing plaintext.
+
+### Step 2 — Config
+
+Non-sensitive settings go in `deployment/k8s/configmap.yaml` (safe to commit):
+
+```yaml
+data:
+  SPRING_PROFILES_ACTIVE: "postgres"
+  POSTGRES_HOST: "agentspan-postgres"
+  POSTGRES_DB: "agentspan"
+  JAVA_OPTS: "-Xms512m -Xmx1536m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+  LOGGING_LEVEL_ROOT: "WARN"
+  LOGGING_LEVEL_DEV_AGENTSPAN: "INFO"
+```
+
+### Step 3 — Domain
+
+Edit `deployment/k8s/ingress.yaml`, replace `agentspan.example.com` with your domain:
+
+```yaml
+rules:
+  - host: agentspan.yourdomain.com
+```
+
+### Step 4 — Deploy
+
+```bash
+# Deploy everything in order
+kubectl apply -f deployment/k8s/namespace.yaml
 kubectl apply -f deployment/k8s/configmap.yaml
 kubectl apply -f deployment/k8s/secret.yaml
-
-# 3. PostgreSQL
 kubectl apply -f deployment/k8s/postgres.yaml
 kubectl rollout status statefulset/agentspan-postgres -n agentspan
-
-# 4. Server (includes UI)
 kubectl apply -f deployment/k8s/server.yaml
 kubectl rollout status deployment/agentspan-server -n agentspan
-
-# 5. Ingress
 kubectl apply -f deployment/k8s/ingress.yaml
-
-# 6. HPA (auto-scaling)
 kubectl apply -f deployment/k8s/hpa.yaml
 ```
 
+Or use the deploy script:
+
+```bash
+./deployment/deploy.sh
+./deployment/deploy.sh --image registry.example.com/agentspan/server:v1.2.0
+./deployment/deploy.sh --skip-build --context my-cluster-context
+```
+
+### Step 5 — DNS
+
+```bash
+# Get the load balancer IP
+kubectl get ingress -n agentspan
+
+# Create an A record:
+#   agentspan.yourdomain.com → <EXTERNAL-IP>
+```
+
+### Useful commands
+
+```bash
+# Pod status
+kubectl get pods -n agentspan
+
+# Server logs
+kubectl logs -f deployment/agentspan-server -n agentspan
+
+# Restart (pick up new image)
+kubectl rollout restart deployment/agentspan-server -n agentspan
+
+# Local port-forward (bypass ingress)
+kubectl port-forward svc/agentspan-server 6767:6767 -n agentspan
+
+# Manual scale
+kubectl scale deployment/agentspan-server --replicas=5 -n agentspan
+
+# Tear down
+kubectl delete namespace agentspan
+```
+
+### Horizontal scaling
+
+The default HPA scales between 3 and 10 replicas based on CPU (70%) and memory (80%). All replicas share the same PostgreSQL database — no additional coordination needed.
+
+To change limits, edit `deployment/k8s/hpa.yaml` or set Helm values (see section 8).
+
 ---
 
-## Configuration
+## 8. Production — Helm
 
-### ConfigMap (`deployment/k8s/configmap.yaml`)
+Best for: GitOps, templated multi-environment deployments.
 
-| Key | Default | Description |
-|---|---|---|
-| `SPRING_PROFILES_ACTIVE` | `postgres` | Must be `postgres` for k8s |
-| `POSTGRES_HOST` | `agentspan-postgres` | PostgreSQL service name |
-| `POSTGRES_DB` | `agentspan` | Database name |
-| `JAVA_OPTS` | `-Xms512m -Xmx1536m ...` | JVM heap settings |
-| `OLLAMA_HOST` | _(unset)_ | Set if using local Ollama models |
+### Install
 
-### Secrets (`deployment/k8s/secret.yaml`)
+```bash
+helm install agentspan ./deployment/helm/agentspan \
+  --namespace agentspan \
+  --create-namespace \
+  --set secrets.postgresPassword=your-strong-password \
+  --set secrets.openaiApiKey=sk-...
+```
 
-| Key | Required | Description |
-|---|---|---|
-| `POSTGRES_PASSWORD` | Yes | DB password |
-| `ANTHROPIC_API_KEY` | At least one | Claude models |
-| `OPENAI_API_KEY` | At least one | GPT / o-series models |
-| `GEMINI_API_KEY` | — | Google Gemini |
-| `AZURE_OPENAI_*` | — | Azure OpenAI |
-| `AWS_ACCESS_KEY_ID` / `SECRET` | — | AWS Bedrock |
-| `GOOGLE_CLOUD_PROJECT` | — | Vertex AI |
+### Common overrides
+
+```bash
+# Use an external (managed) database instead of the bundled one
+helm install agentspan ./deployment/helm/agentspan \
+  --namespace agentspan \
+  --create-namespace \
+  --set postgres.enabled=false \
+  --set externalDatabase.enabled=true \
+  --set externalDatabase.host=your-rds-endpoint.rds.amazonaws.com \
+  --set externalDatabase.database=agentspan \
+  --set secrets.postgresPassword=your-password \
+  --set secrets.openaiApiKey=sk-...
+
+# Enable ingress + TLS
+helm upgrade agentspan ./deployment/helm/agentspan \
+  --set ingress.enabled=true \
+  --set ingress.hosts[0].host=agentspan.yourdomain.com \
+  --set ingress.tls[0].hosts[0]=agentspan.yourdomain.com \
+  --set ingress.tls[0].secretName=agentspan-tls
+
+# Change image tag for a version upgrade
+helm upgrade agentspan ./deployment/helm/agentspan \
+  --set image.tag=0.0.15
+```
+
+### Uninstall
+
+```bash
+helm uninstall agentspan --namespace agentspan
+```
+
+See `deployment/helm/agentspan/values.yaml` for all configurable values.
 
 ---
 
-## TLS / HTTPS
+## 9. Managed Database
 
-1. Create a ClusterIssuer:
+For production, replace the bundled PostgreSQL StatefulSet with a managed service for automated backups, failover, and point-in-time recovery.
+
+| Cloud | Service |
+|---|---|
+| AWS | RDS for PostgreSQL |
+| GCP | Cloud SQL for PostgreSQL |
+| Azure | Azure Database for PostgreSQL |
+| Self-hosted | [CloudNativePG](https://cloudnative-pg.io/) |
+
+### Docker Compose — update `.env`
+
+```bash
+POSTGRES_HOST=your-rds-endpoint.rds.amazonaws.com
+POSTGRES_USER=agentspan
+POSTGRES_PASSWORD=your-password
+POSTGRES_DB=agentspan
+```
+
+### Kubernetes — update configmap + secret
+
+`deployment/k8s/configmap.yaml`:
+```yaml
+POSTGRES_HOST: "your-rds-endpoint.rds.amazonaws.com"
+POSTGRES_DB: "agentspan"
+```
+
+`deployment/k8s/secret.yaml`:
+```yaml
+POSTGRES_USER: "agentspan"
+POSTGRES_PASSWORD: "your-password"
+```
+
+Also remove the `postgres.yaml` manifest — the bundled DB is no longer needed.
+
+### Helm — use `externalDatabase`
+
+```bash
+helm upgrade agentspan ./deployment/helm/agentspan \
+  --set postgres.enabled=false \
+  --set externalDatabase.enabled=true \
+  --set externalDatabase.host=your-rds-endpoint.rds.amazonaws.com \
+  --set secrets.postgresUser=agentspan \
+  --set secrets.postgresPassword=your-password
+```
+
+### Cloud-specific storage class
+
+When using the bundled PostgreSQL StatefulSet on cloud K8s, set the right storage class for your provider:
+
+| Cloud | storageClassName |
+|---|---|
+| AWS EKS | `gp3` |
+| GCP GKE | _(default — no change needed)_ |
+| Azure AKS | `managed-premium` |
+
+Edit `deployment/k8s/postgres.yaml` or set `postgres.persistence.storageClass` in Helm values.
+
+---
+
+## 10. TLS / HTTPS
+
+### Kubernetes — cert-manager (recommended)
+
+**Step 1** — Create a ClusterIssuer:
 
 ```yaml
+# deployment/k8s/cluster-issuer.yaml
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
@@ -205,7 +454,7 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: you@example.com
+    email: ops@yourdomain.com
     privateKeySecretRef:
       name: letsencrypt-prod
     solvers:
@@ -214,76 +463,251 @@ spec:
             class: nginx
 ```
 
-2. Uncomment in `deployment/k8s/ingress.yaml`:
+```bash
+kubectl apply -f deployment/k8s/cluster-issuer.yaml
+```
+
+**Step 2** — Uncomment TLS in `deployment/k8s/ingress.yaml`:
 
 ```yaml
-annotations:
-  cert-manager.io/cluster-issuer: "letsencrypt-prod"
-...
-tls:
-  - hosts:
-      - agentspan.example.com
-    secretName: agentspan-tls
+metadata:
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+    - hosts:
+        - agentspan.yourdomain.com
+      secretName: agentspan-tls
+```
+
+### Docker / single server — nginx reverse proxy
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name agentspan.yourdomain.com;
+
+    ssl_certificate     /etc/letsencrypt/live/agentspan.yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/agentspan.yourdomain.com/privkey.pem;
+
+    location / {
+        proxy_pass http://localhost:6767;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # SSE / streaming support
+        proxy_buffering    off;
+        proxy_cache        off;
+        proxy_read_timeout 3600s;
+    }
+}
 ```
 
 ---
 
-## Cloud-Specific Notes
+## 11. Observability
 
-**AWS EKS** — uncomment `storageClassName: gp3` in `postgres.yaml`
-
-**GKE** — default `standard` storage class works as-is
-
-**AKS** — uncomment `storageClassName: managed-premium` in `postgres.yaml`
-
-For production PostgreSQL HA, use [CloudNativePG](https://cloudnative-pg.io/) or a managed service (RDS, Cloud SQL, Azure Database for PostgreSQL).
-
----
-
-## Useful Commands
+### Health endpoints
 
 ```bash
-# Check pods
-kubectl get pods -n agentspan
+curl http://localhost:6767/actuator/health           # overall
+curl http://localhost:6767/actuator/health/liveness  # liveness probe
+curl http://localhost:6767/actuator/health/readiness # readiness probe
+```
 
-# Tail server logs
-kubectl logs -f deployment/agentspan-server -n agentspan
+### Prometheus metrics
 
-# Restart to pick up new image
-kubectl rollout restart deployment/agentspan-server -n agentspan
+Metrics are exposed at `/actuator/prometheus`:
 
-# Port-forward for local debugging
-kubectl port-forward svc/agentspan-server 6767:6767 -n agentspan
+```bash
+curl http://localhost:6767/actuator/prometheus
+```
 
-# Scale manually
-kubectl scale deployment/agentspan-server --replicas=5 -n agentspan
+Prometheus scrape config:
 
-# Tear down everything
-kubectl delete namespace agentspan
+```yaml
+scrape_configs:
+  - job_name: agentspan
+    static_configs:
+      - targets: ['agentspan:6767']
+    metrics_path: /actuator/prometheus
+```
+
+Key metrics:
+
+| Metric | Description |
+|---|---|
+| `agentspan_agent_executions_total` | Total agent runs |
+| `agentspan_agent_duration_seconds` | Execution duration histogram |
+| `agentspan_tool_calls_total` | Tool invocations |
+| `agentspan_guardrail_failures_total` | Guardrail failures |
+| `jvm_memory_used_bytes` | JVM heap usage |
+
+### Log levels
+
+```bash
+# Verbose (troubleshooting)
+LOGGING_LEVEL_ROOT=INFO
+LOGGING_LEVEL_DEV_AGENTSPAN=DEBUG
+
+# Default (production)
+LOGGING_LEVEL_ROOT=WARN
+LOGGING_LEVEL_DEV_AGENTSPAN=INFO
+```
+
+### OpenTelemetry (opt-in)
+
+Distributed tracing is disabled by default. Enable via env vars:
+
+```bash
+MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED=true
+MANAGEMENT_OTLP_METRICS_EXPORT_URL=http://your-otel-collector:4318/v1/metrics
 ```
 
 ---
 
-## File Overview
+## 12. Backup & Restore
 
+### PostgreSQL — Docker Compose
+
+```bash
+# Backup
+docker exec agentspan-postgres-1 pg_dump -U agentspan agentspan > backup_$(date +%Y%m%d).sql
+
+# Restore
+docker exec -i agentspan-postgres-1 psql -U agentspan agentspan < backup_20260101.sql
 ```
-server/Dockerfile               Builds UI + server into one image (build context: repo root)
-deployment/
-├── README.md                   This file
-├── deploy.sh                   One-shot deployment script
-├── docker-compose/
-│   ├── compose.yaml             Turn-key Compose stack (server + postgres)
-│   ├── .env.example             Environment template
-│   └── README.md                Compose deployment guide
-├── helm/
-│   ├── README.md                Helm usage guide
-│   └── agentspan/               Deployable Helm chart
-└── k8s/
-    ├── namespace.yaml           Namespace: agentspan
-    ├── configmap.yaml           Non-secret runtime config
-    ├── secret.yaml              Secrets template (edit before applying)
-    ├── postgres.yaml            PostgreSQL StatefulSet + Service + 20Gi PVC
-    ├── server.yaml              Server Deployment (3 replicas) + Service + PDB
-    ├── ingress.yaml             nginx Ingress: all traffic → server:6767
-    └── hpa.yaml                 HPA: auto-scale 3–10 replicas on CPU/memory
+
+### PostgreSQL — Kubernetes
+
+```bash
+# Backup
+kubectl exec -n agentspan statefulset/agentspan-postgres -- \
+  pg_dump -U agentspan agentspan > backup_$(date +%Y%m%d).sql
+
+# Restore
+kubectl exec -i -n agentspan statefulset/agentspan-postgres -- \
+  psql -U agentspan agentspan < backup_20260101.sql
 ```
+
+### SQLite — local dev
+
+```bash
+# Backup
+cp agent-runtime.db agent-runtime.db.$(date +%Y%m%d).bak
+
+# Restore
+cp agent-runtime.db.20260101.bak agent-runtime.db
+```
+
+Run a backup before every upgrade.
+
+---
+
+## 13. Production Checklist
+
+### Security
+- [ ] `POSTGRES_PASSWORD` changed from `changeme` to a strong password
+- [ ] TLS / HTTPS enabled
+- [ ] K8s secrets managed via Sealed Secrets or a cloud secrets manager
+- [ ] `secret.yaml` added to `.gitignore` — no plaintext secrets in git
+- [ ] LLM API keys rotated if ever committed or shared
+
+### Database
+- [ ] PostgreSQL in use (not SQLite)
+- [ ] Managed database service used (RDS, Cloud SQL) — not a stateful pod
+- [ ] Automated backups scheduled
+- [ ] Restore tested before go-live
+
+### Reliability
+- [ ] 2+ replicas running (`kubectl get pods -n agentspan`)
+- [ ] HPA configured (`kubectl get hpa -n agentspan`)
+- [ ] PodDisruptionBudget in place (`minAvailable: 2`)
+- [ ] Liveness and readiness probes responding
+
+### Observability
+- [ ] Prometheus scraping `/actuator/prometheus`
+- [ ] Log aggregation set up (CloudWatch, Datadog, Loki, etc.)
+- [ ] Alerting on error rate and latency
+
+### Operations
+- [ ] Upgrade runbook written: pull → `docker compose up -d` or `kubectl rollout restart`
+- [ ] Backup → restore → verify tested end-to-end
+
+---
+
+## 14. Configuration Reference
+
+All env vars. **Bold** = sensitive — set in K8s Secret or `.env`, never in ConfigMap or git.
+
+### Server
+
+| Variable | Default | Description |
+|---|---|---|
+| `SERVER_PORT` | `6767` | HTTP listen port |
+| `SPRING_PROFILES_ACTIVE` | `default` (SQLite) | Set to `postgres` for PostgreSQL |
+
+### Database — SQLite (dev only)
+
+| Variable | Default | Description |
+|---|---|---|
+| `SPRING_DATASOURCE_URL` | `jdbc:sqlite:agent-runtime.db` | SQLite file path |
+
+### Database — PostgreSQL
+
+| Variable | Default | Description |
+|---|---|---|
+| `SPRING_DATASOURCE_URL` | `jdbc:postgresql://localhost:5432/agentspan` | Full JDBC URL |
+| `SPRING_DATASOURCE_USERNAME` | `postgres` | DB user |
+| **`SPRING_DATASOURCE_PASSWORD`** | `postgres` | DB password |
+| `SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE` | `8` | Connection pool size |
+
+### JVM
+
+| Variable | Default | Description |
+|---|---|---|
+| `JAVA_TOOL_OPTIONS` | `-Xms512m -Xmx1536m -XX:+UseG1GC` | JVM heap + GC settings |
+
+Guidelines:
+- Dev: `-Xms256m -Xmx512m`
+- Prod small: `-Xms512m -Xmx1536m`
+- Prod large: `-Xms1g -Xmx3g`
+- Never set `-Xmx` above 75% of the container memory limit
+
+### LLM Providers
+
+Set at least one API key. The server auto-detects and enables providers when their key is present.
+
+| Variable | Provider |
+|---|---|
+| **`OPENAI_API_KEY`** | OpenAI |
+| **`ANTHROPIC_API_KEY`** | Anthropic |
+| **`GEMINI_API_KEY`** | Google Gemini |
+| **`AZURE_OPENAI_API_KEY`** | Azure OpenAI |
+| **`AZURE_OPENAI_ENDPOINT`** | Azure OpenAI |
+| `AZURE_OPENAI_DEPLOYMENT` | Azure OpenAI (model deployment name) |
+| **`AWS_ACCESS_KEY_ID`** | AWS Bedrock |
+| **`AWS_SECRET_ACCESS_KEY`** | AWS Bedrock |
+| `AWS_REGION` | AWS Bedrock (default: `us-east-1`) |
+| `GOOGLE_CLOUD_PROJECT` | Vertex AI |
+| `GOOGLE_CLOUD_LOCATION` | Vertex AI (default: `us-central1`) |
+| **`MISTRAL_API_KEY`** | Mistral |
+| **`COHERE_API_KEY`** | Cohere |
+| **`XAI_API_KEY`** | Grok / xAI |
+| **`PERPLEXITY_API_KEY`** | Perplexity |
+| `OLLAMA_HOST` | Ollama (e.g. `http://localhost:11434`) |
+
+### Observability
+
+| Variable | Default | Description |
+|---|---|---|
+| `LOGGING_LEVEL_ROOT` | `WARN` | Root log level |
+| `LOGGING_LEVEL_DEV_AGENTSPAN` | `INFO` | App log level |
+| `MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED` | `false` | Enable OpenTelemetry export |
+| `MANAGEMENT_OTLP_METRICS_EXPORT_URL` | _(unset)_ | OTLP collector endpoint |
+
+---
+
+> **Bold variables are sensitive** — store them in K8s Secrets (not ConfigMaps) and in `.env` (not committed to git).

@@ -31,28 +31,21 @@
 
 ## Quickstart (60 seconds)
 
-**Step 1 — Install** (installs the CLI, Python SDK, and verifies your setup automatically):
-
 ```bash
 # macOS / Linux
 curl -fsSL https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.sh | sh
-```
 
-```powershell
 # Windows (PowerShell)
 irm https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.ps1 | iex
 ```
 
 ```bash
-# Step 2 — Set your LLM API key
-export OPENAI_API_KEY=sk-...                  # or any supported provider
-
-# Step 3 — Start the server
-agentspan server start                        # runs on localhost:6767 with UI
+export OPENAI_API_KEY=sk-...   # or any supported provider
+agentspan server start         # runs on localhost:6767 with UI
 ```
 
 ```python
-# Step 4 — Run your first agent (save as hello.py, run with: python hello.py)
+# hello.py — run with: python hello.py
 from agentspan.agents import Agent, AgentRuntime, tool
 
 @tool
@@ -67,50 +60,24 @@ with AgentRuntime() as runtime:
     result.print_result()
 ```
 
-That's it. The installer handles the CLI, Python SDK, and environment check in one shot. Open `http://localhost:6767` to see the visual execution UI.
+Open `http://localhost:6767` to see the visual execution UI.
 
-<details><summary>Advanced / Alternative Install</summary>
-
-### npm + pip (manual)
+<details><summary>Alternative CLI install methods</summary>
 
 ```bash
-npm install -g @agentspan-ai/agentspan        # installs the CLI
-pip install agentspan                         # installs the Python SDK
-agentspan doctor                              # verify setup
-```
+# Homebrew (macOS / Linux)
+brew install agentspan-ai/agentspan
 
-### Homebrew (macOS / Linux)
+# npm
+npm install -g @agentspan-ai/agentspan
 
-```bash
-brew install agentspan-ai/agentspan           # installs the CLI
-pip install agentspan                         # installs the Python SDK
-agentspan doctor
-```
-
-### Python SDK with uv
-
-```bash
-uv pip install agentspan
-```
-
-### Windows — CMD / double-click
-
-Download [`install.bat`](https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.bat) and run it, or paste into CMD:
-
-```bat
+# Windows — CMD / double-click
 curl -fsSL https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.bat -o install.bat && install.bat
-```
 
-### From source
+# From source
+cd cli && go build -o agentspan .
 
-```bash
-cd cli && go build -o agentspan .             # build the CLI
-pip install agentspan                         # install the Python SDK
-```
-
-### Verify setup manually
-
-```bash
+# Verify setup
 agentspan doctor
 ```
 
@@ -172,7 +139,7 @@ Every other agent SDK runs agents in-memory. When the process dies, the agent di
 
 7. **Server-side tools** — HTTP endpoints and MCP servers execute as server-side tasks. No worker needed. MCP auto-discovered at compile time.
 
-8. **Full observability** — OpenTelemetry, Prometheus, visual execution UI, execution history, token/cost tracking.
+8. **Full observability** — Prometheus metrics, visual execution UI, execution history, token usage tracking. OpenTelemetry available (opt-in via config).
 
 9. **Framework compatible** — Works with Google ADK, OpenAI Agents SDK, LangChain, and LangGraph. [180+ examples](sdk/python/examples/).
 
@@ -667,77 +634,13 @@ pipeline = SequentialAgent(name="pipeline", sub_agents=[researcher, writer])
 
 ## Deployment
 
-### Development (SQLite — zero setup)
+| Environment | Guide |
+|---|---|
+| Local (dev) | `agentspan server start` — zero config, SQLite |
+| Single server | [Docker / Docker Compose](deployment/README.md) |
+| Production | [Kubernetes + Helm](deployment/README.md) |
 
-The default setup uses SQLite with WAL mode. No external database needed.
-
-```bash
-agentspan server start
-```
-
-Data is stored in `agent-runtime.db` in the working directory.
-
-### Production (PostgreSQL)
-
-For production workloads, use PostgreSQL for durability and concurrent access.
-
-**1. Start PostgreSQL with Docker Compose:**
-
-```bash
-cd deployment/docker-compose
-cp .env.example .env
-docker compose up -d postgres
-```
-
-This starts PostgreSQL 16 on port 5432 with:
-- User: `agentspan` (default)
-- Password: `changeme` (default)
-- Database: `agentspan` (default)
-
-**2. Start the server with the Postgres profile:**
-
-```bash
-SPRING_PROFILES_ACTIVE=postgres agentspan server start
-```
-
-Or configure the database connection directly:
-
-```bash
-export SPRING_DATASOURCE_URL=jdbc:postgresql://your-host:5432/conductor
-export SPRING_DATASOURCE_USERNAME=your_user
-export SPRING_DATASOURCE_PASSWORD=your_password
-export SPRING_PROFILES_ACTIVE=postgres
-agentspan server start
-```
-
-### Docker Deployment
-
-Run the Agentspan server and PostgreSQL together using the deployment Compose stack:
-
-```bash
-cd deployment/docker-compose
-cp .env.example .env
-docker compose up -d
-```
-
-Compose files:
-- `deployment/docker-compose/compose.yaml`
-- `deployment/docker-compose/.env.example`
-- `deployment/docker-compose/README.md`
-
-### Configuration Reference
-
-The server auto-enables LLM providers when their API key is set. No manual integration setup needed.
-
-| Setting | Env Var | Default |
-|---|---|---|
-| Server port | `SERVER_PORT` | `6767` |
-| Database backend | `SPRING_PROFILES_ACTIVE` | `default` (SQLite) |
-| SQLite path | `SPRING_DATASOURCE_URL` | `jdbc:sqlite:agent-runtime.db` |
-| Postgres URL | `SPRING_DATASOURCE_URL` | `jdbc:postgresql://localhost:5432/conductor` |
-| Postgres user | `SPRING_DATASOURCE_USERNAME` | `postgres` |
-| Postgres password | `SPRING_DATASOURCE_PASSWORD` | `postgres` |
-| Postgres pool size | `SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE` | `8` |
+Full deployment guide → **[deployment/README.md](deployment/README.md)**
 
 ## Project Structure
 
