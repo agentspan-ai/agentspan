@@ -158,7 +158,7 @@ configurations.all {
 // ── Code formatting ──────────────────────────────────────────────
 spotless {
     java {
-        target 'src/**/*.java'
+        target 'src/main/java/**/*.java', 'src/test/**/*.java'
         palantirJavaFormat('2.50.0')
         removeUnusedImports()
         importOrder('java', 'javax', 'jakarta', 'org', 'com', 'dev')
