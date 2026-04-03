@@ -672,7 +672,8 @@ public class AgentCompiler {
 
         // Replace user message with context-injected version
         @SuppressWarnings("unchecked")
-        List<Object> hybridLlmMessages = (List<Object>) llmTask.getInputParameters().get("messages");
+        List<Object> hybridLlmMessages =
+                (List<Object>) llmTask.getInputParameters().get("messages");
         for (int mi = 0; mi < hybridLlmMessages.size(); mi++) {
             if (hybridLlmMessages.get(mi) instanceof Map<?, ?> msg && "user".equals(msg.get("role"))) {
                 Map<String, Object> injectedMsg = new LinkedHashMap<>();
@@ -766,9 +767,12 @@ public class AgentCompiler {
         Map<String, List<WorkflowTask>> transferCases = new LinkedHashMap<>();
         for (AgentConfig sub : config.getAgents()) {
             String subTaskRef = config.getName() + "_transfer_" + sub.getName();
-            WorkflowTask subTask =
-                    compileSubAgent(sub, subTaskRef, "${workflow.input.prompt}", "${workflow.input.media}",
-                            "${workflow.variables._agent_state}");
+            WorkflowTask subTask = compileSubAgent(
+                    sub,
+                    subTaskRef,
+                    "${workflow.input.prompt}",
+                    "${workflow.input.media}",
+                    "${workflow.variables._agent_state}");
             transferCases.put(sub.getName(), List.of(subTask));
         }
         transferSwitch.setDecisionCases(transferCases);
@@ -833,7 +837,8 @@ public class AgentCompiler {
      * External -> SUB_WORKFLOW referencing by name.
      * Local -> SUB_WORKFLOW with inline workflowDef.
      */
-    WorkflowTask compileSubAgent(AgentConfig sub, String taskRef, String promptRef, String mediaRef, String contextRef) {
+    WorkflowTask compileSubAgent(
+            AgentConfig sub, String taskRef, String promptRef, String mediaRef, String contextRef) {
         // Force passthrough compilation for Claude Code sub-agents
         String subModel = sub.getModel();
         if (subModel != null && subModel.startsWith("claude-code")) {

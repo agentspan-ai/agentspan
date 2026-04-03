@@ -237,8 +237,10 @@ public class MultiAgentCompiler {
         tasks.add(finalLlm);
         wf.setTasks(tasks);
         wf.setOutputParameters(Map.of(
-                "result", ref(config.getName() + "_final.output.result"),
-                "context", "${workflow.variables._agent_state}"));
+                "result",
+                ref(config.getName() + "_final.output.result"),
+                "context",
+                "${workflow.variables._agent_state}"));
         agentCompiler.applyTimeout(wf, config);
         return wf;
     }
@@ -274,8 +276,8 @@ public class MultiAgentCompiler {
             String taskRef = config.getName() + "_step_" + i + "_" + sub.getName();
             String mediaRef = i == 0 ? "${workflow.input.media}" : "${workflow.input.media}";
 
-            WorkflowTask task = agentCompiler.compileSubAgent(sub, taskRef, prevOutputRef, mediaRef,
-                    "${workflow.variables.context}");
+            WorkflowTask task = agentCompiler.compileSubAgent(
+                    sub, taskRef, prevOutputRef, mediaRef, "${workflow.variables.context}");
             tasks.add(task);
 
             // Merge child context back into pipeline context
@@ -284,10 +286,14 @@ public class MultiAgentCompiler {
             mergeTask.setType("INLINE");
             mergeTask.setTaskReferenceName(mergeRef);
             mergeTask.setInputParameters(Map.of(
-                    "evaluatorType", "graaljs",
-                    "parent", "${workflow.variables.context}",
-                    "child", "${" + taskRef + ".output.context}",
-                    "expression", JavaScriptBuilder.flatMergeContextScript()));
+                    "evaluatorType",
+                    "graaljs",
+                    "parent",
+                    "${workflow.variables.context}",
+                    "child",
+                    "${" + taskRef + ".output.context}",
+                    "expression",
+                    JavaScriptBuilder.flatMergeContextScript()));
             tasks.add(mergeTask);
 
             String ctxSetRef = config.getName() + "_ctx_set_" + i;
@@ -339,7 +345,8 @@ public class MultiAgentCompiler {
 
                     String selectorOutputRef = "${" + selectorRef + ".output.result}";
                     wf.setTasks(tasks);
-                    wf.setOutputParameters(Map.of("result", selectorOutputRef, "context", "${workflow.variables.context}"));
+                    wf.setOutputParameters(
+                            Map.of("result", selectorOutputRef, "context", "${workflow.variables.context}"));
                     agentCompiler.applyTimeout(wf, config);
                     return wf;
                 }
@@ -369,8 +376,8 @@ public class MultiAgentCompiler {
             String taskRef = config.getName() + "_step_" + i + "_" + sub.getName();
             String mediaRef = "${workflow.input.media}";
 
-            WorkflowTask task = agentCompiler.compileSubAgent(sub, taskRef, prevOutputRef, mediaRef,
-                    "${workflow.variables.context}");
+            WorkflowTask task = agentCompiler.compileSubAgent(
+                    sub, taskRef, prevOutputRef, mediaRef, "${workflow.variables.context}");
             tasks.add(task);
 
             String rawRef = AgentCompiler.subAgentResultRef(sub, taskRef);
@@ -487,9 +494,12 @@ public class MultiAgentCompiler {
         for (int i = 0; i < config.getAgents().size(); i++) {
             AgentConfig sub = config.getAgents().get(i);
             String taskRef = config.getName() + "_parallel_" + i + "_" + sub.getName();
-            WorkflowTask task =
-                    agentCompiler.compileSubAgent(sub, taskRef, "${workflow.input.prompt}", "${workflow.input.media}",
-                            "${workflow.variables.context}");
+            WorkflowTask task = agentCompiler.compileSubAgent(
+                    sub,
+                    taskRef,
+                    "${workflow.input.prompt}",
+                    "${workflow.input.media}",
+                    "${workflow.variables.context}");
             forkTasks.add(List.of(task));
             joinOn.add(taskRef);
             taskRefs.add(taskRef);
@@ -802,8 +812,10 @@ public class MultiAgentCompiler {
         preTasks.add(finalLlm);
         wf.setTasks(preTasks);
         wf.setOutputParameters(Map.of(
-                "result", ref(config.getName() + "_final.output.result"),
-                "context", "${workflow.variables._agent_state}"));
+                "result",
+                ref(config.getName() + "_final.output.result"),
+                "context",
+                "${workflow.variables._agent_state}"));
         agentCompiler.applyTimeout(wf, config);
         return wf;
     }
@@ -911,8 +923,7 @@ public class MultiAgentCompiler {
         if (stopWhenRef != null) loopInputs.put(stopWhenRef, "${" + stopWhenRef + "}");
         if (terminationRef != null) loopInputs.put(terminationRef, "${" + terminationRef + "}");
 
-        WorkflowTask loop =
-                agentCompiler.buildDoWhile(loopRef, termCondition.toString(), loopTasks, loopInputs);
+        WorkflowTask loop = agentCompiler.buildDoWhile(loopRef, termCondition.toString(), loopTasks, loopInputs);
 
         wf.setTasks(List.of(rotCtxResolve, initVar, loop));
         wf.setOutputParameters(Map.of(
@@ -1038,9 +1049,8 @@ public class MultiAgentCompiler {
 
         // 5. DoWhile — early termination when no handoff triggers
         StringBuilder termCondition = new StringBuilder();
-        termCondition.append(String.format(
-                "if ( $.%s['iteration'] < %d && $.%s['handoff'] == true",
-                loopRef, maxTurns, handoffRef));
+        termCondition.append(
+                String.format("if ( $.%s['iteration'] < %d && $.%s['handoff'] == true", loopRef, maxTurns, handoffRef));
         if (stopWhenRef != null) {
             termCondition.append(String.format(" && $.%s.should_continue == true", stopWhenRef));
         }
@@ -1055,8 +1065,7 @@ public class MultiAgentCompiler {
         if (stopWhenRef != null) loopInputs.put(stopWhenRef, "${" + stopWhenRef + "}");
         if (terminationRef != null) loopInputs.put(terminationRef, "${" + terminationRef + "}");
 
-        WorkflowTask loop = agentCompiler.buildDoWhile(
-                loopRef, termCondition.toString(), loopTasks, loopInputs);
+        WorkflowTask loop = agentCompiler.buildDoWhile(loopRef, termCondition.toString(), loopTasks, loopInputs);
 
         // 5. Final synthesis LLM: combine all agents' work into a coherent response
         WorkflowTask finalLlm = new WorkflowTask();
@@ -1087,8 +1096,10 @@ public class MultiAgentCompiler {
         tasks.add(finalLlm);
         wf.setTasks(tasks);
         wf.setOutputParameters(Map.of(
-                "result", ref(config.getName() + "_final.output.result"),
-                "context", "${workflow.variables._agent_state}"));
+                "result",
+                ref(config.getName() + "_final.output.result"),
+                "context",
+                "${workflow.variables._agent_state}"));
         agentCompiler.applyTimeout(wf, config);
         return wf;
     }
@@ -1395,8 +1406,7 @@ public class MultiAgentCompiler {
         if (stopWhenRef != null) loopInputs.put(stopWhenRef, "${" + stopWhenRef + "}");
         if (terminationRef != null) loopInputs.put(terminationRef, "${" + terminationRef + "}");
 
-        WorkflowTask loop = agentCompiler.buildDoWhile(
-                loopRef, termCondition.toString(), loopTasks, loopInputs);
+        WorkflowTask loop = agentCompiler.buildDoWhile(loopRef, termCondition.toString(), loopTasks, loopInputs);
 
         wf.setTasks(List.of(manCtxResolve, initVar, loop));
         wf.setOutputParameters(Map.of(
@@ -1470,7 +1480,10 @@ public class MultiAgentCompiler {
         String subRef = parent.getName() + "_agent_" + idx + "_" + sub.getName();
 
         WorkflowTask task = agentCompiler.compileSubAgent(
-                sub, subRef, "${workflow.variables.conversation}", "${workflow.input.media}",
+                sub,
+                subRef,
+                "${workflow.variables.conversation}",
+                "${workflow.input.media}",
                 "${workflow.variables._agent_state}");
         caseTasks.add(task);
 
@@ -1493,10 +1506,14 @@ public class MultiAgentCompiler {
         rCtxMerge.setType("INLINE");
         rCtxMerge.setTaskReferenceName(rCtxMergeRef);
         rCtxMerge.setInputParameters(Map.of(
-                "evaluatorType", "graaljs",
-                "parent", "${workflow.variables._agent_state}",
-                "child", "${" + subRef + ".output.context}",
-                "expression", JavaScriptBuilder.flatMergeContextScript()));
+                "evaluatorType",
+                "graaljs",
+                "parent",
+                "${workflow.variables._agent_state}",
+                "child",
+                "${" + subRef + ".output.context}",
+                "expression",
+                JavaScriptBuilder.flatMergeContextScript()));
         caseTasks.add(rCtxMerge);
 
         // SetVariable — persist conversation + merged context
@@ -1556,10 +1573,14 @@ public class MultiAgentCompiler {
         sCtxMerge.setType("INLINE");
         sCtxMerge.setTaskReferenceName(sCtxMergeRef);
         sCtxMerge.setInputParameters(Map.of(
-                "evaluatorType", "graaljs",
-                "parent", "${workflow.variables._agent_state}",
-                "child", "${" + subRef + ".output.context}",
-                "expression", JavaScriptBuilder.flatMergeContextScript()));
+                "evaluatorType",
+                "graaljs",
+                "parent",
+                "${workflow.variables._agent_state}",
+                "child",
+                "${" + subRef + ".output.context}",
+                "expression",
+                JavaScriptBuilder.flatMergeContextScript()));
         caseTasks.add(sCtxMerge);
 
         // SetVariable — set conversation, last_response, transfer state, and merged context
@@ -1699,7 +1720,10 @@ public class MultiAgentCompiler {
         String subRef = parent.getName() + "_handoff_" + idx + "_" + sub.getName() + suffix;
 
         WorkflowTask task = agentCompiler.compileSubAgent(
-                sub, subRef, "${workflow.variables.conversation}", "${workflow.input.media}",
+                sub,
+                subRef,
+                "${workflow.variables.conversation}",
+                "${workflow.input.media}",
                 "${workflow.variables._agent_state}");
         caseTasks.add(task);
 
@@ -1722,10 +1746,14 @@ public class MultiAgentCompiler {
         hCtxMerge.setType("INLINE");
         hCtxMerge.setTaskReferenceName(hCtxMergeRef);
         hCtxMerge.setInputParameters(Map.of(
-                "evaluatorType", "graaljs",
-                "parent", "${workflow.variables._agent_state}",
-                "child", "${" + subRef + ".output.context}",
-                "expression", JavaScriptBuilder.flatMergeContextScript()));
+                "evaluatorType",
+                "graaljs",
+                "parent",
+                "${workflow.variables._agent_state}",
+                "child",
+                "${" + subRef + ".output.context}",
+                "expression",
+                JavaScriptBuilder.flatMergeContextScript()));
         caseTasks.add(hCtxMerge);
 
         // Persist updated conversation + merged context

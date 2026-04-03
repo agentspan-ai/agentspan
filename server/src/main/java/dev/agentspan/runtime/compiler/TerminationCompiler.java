@@ -118,7 +118,8 @@ public class TerminationCompiler {
      * @param loopRef   the DO_WHILE loop task reference name
      * @return a fully configured WorkflowTask
      */
-    public static WorkflowTask compileTerminationForConversation(TerminationConfig config, String agentName, String loopRef) {
+    public static WorkflowTask compileTerminationForConversation(
+            TerminationConfig config, String agentName, String loopRef) {
         String taskName = agentName + "_termination";
         String refName = agentName + "_termination";
 
