@@ -219,8 +219,7 @@ public class AgentController {
     /** Mark a tracking execution as COMPLETED. */
     @PostMapping("/execution/{executionId}/complete")
     public void completeTrackingExecution(
-            @PathVariable String executionId,
-            @RequestBody(required = false) Map<String, Object> output) {
+            @PathVariable String executionId, @RequestBody(required = false) Map<String, Object> output) {
         agentDagService.completeTrackingWorkflow(executionId, output);
     }
 

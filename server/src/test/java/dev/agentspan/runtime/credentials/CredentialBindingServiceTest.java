@@ -38,9 +38,7 @@ class CredentialBindingServiceTest {
         jdbc.update("DELETE FROM credentials_binding WHERE user_id = :uid", Map.of("uid", USER_ID));
         // Portable upsert: update first; insert only if the user row doesn't exist yet.
         // Avoids SQLite-specific "INSERT OR IGNORE" and "datetime('now')" syntax.
-        int updated = jdbc.update(
-                "UPDATE users SET name = 'Binding Test' WHERE id = :id",
-                Map.of("id", USER_ID));
+        int updated = jdbc.update("UPDATE users SET name = 'Binding Test' WHERE id = :id", Map.of("id", USER_ID));
         if (updated == 0) {
             jdbc.update(
                     "INSERT INTO users (id, name, email, username, password_hash, created_at) "
