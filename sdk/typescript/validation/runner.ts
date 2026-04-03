@@ -128,7 +128,7 @@ async function runSingle(
 
   const env: Record<string, string> = {
     ...(runConfig.env ?? {}),
-    AGENTSPAN_SERVER_URL: runConfig.serverUrl ?? 'http://localhost:8080/api',
+    AGENTSPAN_SERVER_URL: runConfig.serverUrl ?? 'http://localhost:6767/api',
   };
 
   if (runConfig.model) {
