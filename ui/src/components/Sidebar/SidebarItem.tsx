@@ -1,8 +1,6 @@
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import {
   Box,
   ClickAwayListener,
-  Collapse,
   List,
   ListItem,
   ListItemButton,
@@ -18,8 +16,6 @@ import React, {
   createElement,
   useCallback,
   useMemo,
-  useRef,
-  useState,
 } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { Link, matchPath, useLocation } from "react-router";
@@ -74,7 +70,7 @@ export const SidebarItem = ({
     [item.items],
   );
 
-  // Auto-expand if any child is active
+  // Check if any child is active
   const hasActiveChild = useMemo(() => {
     return visibleChildren.some((child) => {
       if (child.linkTo && location.pathname === child.linkTo) return true;
@@ -87,17 +83,6 @@ export const SidebarItem = ({
     });
   }, [visibleChildren, location.pathname]);
 
-  // Initialize expanded state - all menus default expanded
-  const [isExpanded, setIsExpanded] = useState(true);
-
-  // Update expanded state when active child changes
-  const prevHasActiveChildRef = useRef(hasActiveChild);
-
-  if (hasActiveChild && !prevHasActiveChildRef.current && !isExpanded) {
-    setIsExpanded(true);
-  }
-  prevHasActiveChildRef.current = hasActiveChild;
-
   // Parent items should show as active if any child is active
   const active = Boolean(
     isActive || isRouteActive || (hasChildren && hasActiveChild),
@@ -107,16 +92,13 @@ export const SidebarItem = ({
     hasChildren && hasActiveChild && !isRouteActive && !isActive;
 
   const handleClick = useCallback(() => {
-    if (hasChildren) {
-      setIsExpanded((prev) => !prev);
-    }
     if (onItemClick) {
       onItemClick(item);
     }
     if (item.handler) {
       item.handler();
     }
-  }, [hasChildren, item, onItemClick]);
+  }, [item, onItemClick]);
 
   // Handle keyboard shortcuts
   useHotkeys(
@@ -184,27 +166,28 @@ export const SidebarItem = ({
         !open && hasChildren && level === 0 ? onMouseLeave : undefined
       }
       sx={{
-        minHeight: level > 0 ? 32 : isSearchItem ? 24 : 32,
+        minHeight: level > 0 ? 32 : isSearchItem ? 24 : hasChildren ? 28 : 32,
         borderRadius: isSearchItem ? 8 : 1,
         mx: open ? (isSearchItem ? 1.5 : 1) : 0.5,
-        mb: level > 0 ? 0.5 : isSearchItem ? 1.5 : 0.75,
-        mt: isSearchItem ? 1.5 : 0,
+        mb: level > 0 ? 0.5 : isSearchItem ? 1.5 : hasChildren ? 0 : 0.75,
+        mt: isSearchItem ? 1.5 : hasChildren ? 1.5 : 0,
         px: open ? (level > 0 ? 1.25 : isSearchItem ? 2 : 1.5) : 1,
-        py: level > 0 ? 0.75 : isSearchItem ? 1.25 : 1,
+        py: level > 0 ? 0.75 : isSearchItem ? 1.25 : hasChildren ? 0.5 : 1,
         justifyContent: open ? "flex-start" : "center",
         position: "relative",
         transition: "all 0.2s ease-in-out",
+        cursor: hasChildren ? "default" : "pointer",
         backgroundColor: isSearchItem
           ? alpha(theme.palette.action.hover, 0.05)
-          : isParentWithActiveChild
-            ? alpha(theme.palette.action.hover, 0.05)
+          : hasChildren
+            ? alpha(theme.palette.text.primary, 0.04)
             : active
               ? alpha(theme.palette.primary.main, 0.1)
               : "transparent",
         color: isSearchItem
           ? alpha(theme.palette.text.primary, 0.8)
-          : isParentWithActiveChild
-            ? theme.palette.text.primary
+          : hasChildren
+            ? alpha(theme.palette.text.secondary, 0.7)
             : active
               ? theme.palette.primary.main
               : alpha(theme.palette.text.primary, 0.7),
@@ -214,8 +197,8 @@ export const SidebarItem = ({
         "&:hover": {
           backgroundColor: isSearchItem
             ? alpha(theme.palette.action.hover, 0.08)
-            : isParentWithActiveChild
-              ? alpha(theme.palette.action.hover, 0.08)
+            : hasChildren
+              ? alpha(theme.palette.text.primary, 0.04)
               : active
                 ? alpha(theme.palette.primary.main, 0.15)
                 : alpha(theme.palette.action.hover, 0.05),
@@ -227,8 +210,8 @@ export const SidebarItem = ({
             : "none",
           color: isSearchItem
             ? theme.palette.text.primary
-            : isParentWithActiveChild
-              ? theme.palette.text.primary
+            : hasChildren
+              ? alpha(theme.palette.text.secondary, 0.7)
               : active
                 ? theme.palette.primary.main
                 : theme.palette.text.primary,
@@ -290,26 +273,22 @@ export const SidebarItem = ({
                   ? "0.8125rem"
                   : isSearchItem
                     ? "0.9375rem"
-                    : "0.9375rem",
-              fontWeight: isSearchItem ? 600 : active ? 600 : 500,
+                    : hasChildren
+                      ? "0.6875rem"
+                      : "0.9375rem",
+              fontWeight: isSearchItem ? 600 : hasChildren ? 600 : active ? 600 : 500,
               sx: {
                 transition: "font-weight 0.2s ease-in-out",
                 lineHeight: level > 0 ? 1.3 : 1.5,
+                ...(hasChildren && {
+                  textTransform: "uppercase" as const,
+                  letterSpacing: "0.08em",
+                }),
               },
             }}
           />
           {item.shortcuts && item.shortcuts.length > 0 && (
             <HotKeysButton shortcuts={item.shortcuts} />
-          )}
-          {hasChildren && (
-            <ChevronRightIcon
-              sx={{
-                fontSize: 16,
-                transition: "transform 0.2s ease-in-out",
-                transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)",
-                color: "inherit",
-              }}
-            />
           )}
         </>
       )}
@@ -357,30 +336,28 @@ export const SidebarItem = ({
         </ListItem>
       )}
       {hasChildren && open && (
-        <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-          <List
-            component="div"
-            disablePadding
-            sx={{
-              mt: 0.25,
-              mb: 0.5,
-              borderLeft: `1px solid ${alpha(theme.palette.divider, 0.5)}`,
-              ml: 5,
-              pl: 0.75,
-            }}
-          >
-            {visibleChildren.map((child) => (
-              <Box key={child.id} sx={{ mb: 0 }}>
-                <SidebarItem
-                  item={child}
-                  level={level + 1}
-                  open={open}
-                  isActive={isRouteActive}
-                />
-              </Box>
-            ))}
-          </List>
-        </Collapse>
+        <List
+          component="div"
+          disablePadding
+          sx={{
+            mt: 0.25,
+            mb: 0.5,
+            borderLeft: `1px solid ${alpha(theme.palette.divider, 0.5)}`,
+            ml: 5,
+            pl: 0.75,
+          }}
+        >
+          {visibleChildren.map((child) => (
+            <Box key={child.id} sx={{ mb: 0 }}>
+              <SidebarItem
+                item={child}
+                level={level + 1}
+                open={open}
+                isActive={isRouteActive}
+              />
+            </Box>
+          ))}
+        </List>
       )}
       {showPopper && itemRef?.current && (
         <ClickAwayListener onClickAway={onMouseLeave || (() => {})}>

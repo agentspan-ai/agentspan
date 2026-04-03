@@ -28,7 +28,7 @@ import {
 } from "../errorInspector/state";
 import { extractWorkflowMetadata } from "../helpers";
 import * as actions from "./action";
-import { WORKFLOW_TAB } from "./constants";
+import { CODE_TAB } from "./constants";
 import * as guards from "./guards";
 import {
   fetchForImportedTemplateImportSummary,
@@ -68,8 +68,8 @@ export const workflowDefinitionMachine = createMachine<
         severity: undefined,
       },
       localCopyMessage: undefined,
-      openedTab: WORKFLOW_TAB,
-      previousTab: WORKFLOW_TAB,
+      openedTab: CODE_TAB,
+      previousTab: CODE_TAB,
       lastPerformedOperation: undefined,
       errorInspectorMachine: undefined,
       downloadFileObj: undefined,
@@ -980,7 +980,8 @@ export const workflowDefinitionMachine = createMachine<
                   [FlowActionTypes.SELECT_NODE_EVT]: {
                     actions: [
                       "persistSelectedTabCrumbs",
-                      "changeToTaskTab",
+                      "changeToCodeTab",
+                      "highlightSelectedTaskInCode",
                       "handleLeftPanelExpanded",
                       "setQueryParam",
                     ],

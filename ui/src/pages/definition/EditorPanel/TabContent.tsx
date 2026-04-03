@@ -1,21 +1,13 @@
 import { Box } from "@mui/material";
 import { FEATURES, featureFlags } from "utils";
 import { ActorRef, EventObject } from "xstate";
-import { RunWorkFlowForm } from "../RunAgent";
-import { RunMachineEvents } from "../RunAgent/state/types";
 import {
   CODE_TAB,
   DEPENDENCIES_TAB,
-  RUN_TAB,
-  TASK_TAB,
-  WORKFLOW_TAB,
 } from "../state/constants";
 import { WorkflowDefinitionEvents } from "../state/types";
-import { WorkflowMetadataEvents } from "../WorkflowMetadata/state/types";
 import { CodeTab } from "./CodeEditorTab";
 import DependenciesTab from "./DependenciesTab/DependenciesTab";
-import { TaskForm } from "./TaskFormTab";
-import { WorkflowPropertiesForm } from "./WorkflowPropertiesFormTab";
 
 const isPlayground = featureFlags.isEnabled(FEATURES.PLAYGROUND);
 
@@ -56,43 +48,6 @@ export const TabContent = ({
         scrollbarGutter: "stable",
       }}
     >
-      {openedTab === TASK_TAB &&
-      (
-        definitionActor as ActorRefWithChildren<WorkflowDefinitionEvents>
-      ).children?.get("flowMachine") != null ? (
-        <Box
-          sx={{
-            height: getTabContentHeight(),
-            overflow: "hidden",
-          }}
-        >
-          <TaskForm
-            workflowDefinitionActor={definitionActor}
-            isInTaskFormState={isInTaskFormState}
-          />
-        </Box>
-      ) : null}
-
-      {isReady &&
-        openedTab === WORKFLOW_TAB &&
-        (() => {
-          const workflowMetadataActor = (
-            definitionActor as ActorRefWithChildren<WorkflowDefinitionEvents>
-          ).children?.get<WorkflowMetadataEvents>("workflowTabMetaEditor");
-          return workflowMetadataActor != null ? (
-            <Box
-              sx={{
-                height: getTabContentHeight(),
-                overflow: "auto",
-              }}
-            >
-              <WorkflowPropertiesForm
-                workflowMetadataActor={workflowMetadataActor}
-              />
-            </Box>
-          ) : null;
-        })()}
-
       {openedTab === CODE_TAB ? (
         <Box
           id="code-tab"
@@ -114,27 +69,6 @@ export const TabContent = ({
           />
         </Box>
       ) : null}
-
-      {openedTab === RUN_TAB &&
-        isRunWorkflow &&
-        (() => {
-          const runTabActor = (
-            definitionActor as ActorRefWithChildren<WorkflowDefinitionEvents>
-          ).children?.get<RunMachineEvents>("runWorkflowMachine");
-          return runTabActor != null ? (
-            <Box
-              sx={{
-                height: getTabContentHeight(),
-                overflow: "auto",
-              }}
-            >
-              <RunWorkFlowForm
-                workflowDefinitionActor={definitionActor}
-                runTabActor={runTabActor}
-              />
-            </Box>
-          ) : null;
-        })()}
       {openedTab === DEPENDENCIES_TAB && isPlayground && (
         <Box
           sx={{

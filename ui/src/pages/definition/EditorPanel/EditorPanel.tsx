@@ -10,7 +10,7 @@ import React, {
 import { colors } from "theme/tokens/variables";
 import { FEATURES, featureFlags, logger } from "utils";
 import { ActorRef, EventObject, State } from "xstate";
-import ErrorInspector from "../errorInspector/ErrorInspector";
+
 import {
   DefinitionMachineContext,
   DefinitionMachineEventTypes,
@@ -258,9 +258,8 @@ const EditorPanel = ({ definitionActor, readOnly = false }: EditorPanelProps) =>
     return agentPanelHeight;
   }, [isAgentExpanded, agentPanelHeight]);
 
-  // Calculate available height for tab content (accounting for error inspector and assistant panel)
+  // Calculate available height for tab content (accounting for assistant panel)
   const getTabContentHeight = useCallback(() => {
-    const errorInspectorHeight = errorInspectorActor ? 50 : 0;
     let assistantPanelHeight = 0;
 
     if (agentEnabled) {
@@ -271,9 +270,9 @@ const EditorPanel = ({ definitionActor, readOnly = false }: EditorPanelProps) =>
       }
     }
 
-    const totalOffset = errorInspectorHeight + assistantPanelHeight;
+    const totalOffset = assistantPanelHeight;
     return totalOffset > 0 ? `calc(100% - ${totalOffset}px)` : "100%";
-  }, [isAgentExpanded, effectiveAgentPanelHeight, errorInspectorActor]);
+  }, [isAgentExpanded, effectiveAgentPanelHeight]);
 
   const handleHeaderMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -285,7 +284,7 @@ const EditorPanel = ({ definitionActor, readOnly = false }: EditorPanelProps) =>
         editorPanelContainerRef.current.getBoundingClientRect();
       const containerHeight = containerRect.height;
       const maxHeight =
-        containerHeight - tabsHeight - (errorInspectorActor ? 50 : 0);
+        containerHeight - tabsHeight;
 
       // When collapsed, start with collapsed height (50px)
       // When expanded, use current height or maxHeight
@@ -329,7 +328,7 @@ const EditorPanel = ({ definitionActor, readOnly = false }: EditorPanelProps) =>
       isResizingRef.current = false;
       setIsResizing(true);
     },
-    [isAgentExpanded, agentPanelHeight, tabsHeight, errorInspectorActor],
+    [isAgentExpanded, agentPanelHeight, tabsHeight],
   );
 
   const handleHeaderClick = useCallback(
@@ -358,7 +357,7 @@ const EditorPanel = ({ definitionActor, readOnly = false }: EditorPanelProps) =>
           editorPanelContainerRef.current.getBoundingClientRect();
         const containerHeight = containerRect.height;
         const maxHeight =
-          containerHeight - tabsHeight - (errorInspectorActor ? 50 : 0);
+          containerHeight - tabsHeight;
         // Set height first, then toggle
         setAgentPanelHeight(maxHeight);
         definitionActor.send({
@@ -373,7 +372,7 @@ const EditorPanel = ({ definitionActor, readOnly = false }: EditorPanelProps) =>
         });
       }
     },
-    [tabsHeight, errorInspectorActor, definitionActor],
+    [tabsHeight, definitionActor],
   );
 
   const handleToggleExpanded = useCallback(() => {
@@ -388,9 +387,9 @@ const EditorPanel = ({ definitionActor, readOnly = false }: EditorPanelProps) =>
       editorPanelContainerRef.current.getBoundingClientRect();
     const containerHeight = containerRect.height;
     const maxHeight =
-      containerHeight - tabsHeight - (errorInspectorActor ? 50 : 0);
+      containerHeight - tabsHeight;
     setAgentPanelHeight(maxHeight);
-  }, [tabsHeight, errorInspectorActor]);
+  }, [tabsHeight]);
 
   const handleHeightChange = useCallback((height: number) => {
     setAgentPanelHeight(height);
@@ -421,9 +420,6 @@ const EditorPanel = ({ definitionActor, readOnly = false }: EditorPanelProps) =>
           backgroundColor: (theme) => theme.palette.customBackground.form,
         }}
       >
-        {readOnly && (
-          <Box sx={{ position: "absolute", inset: 0, zIndex: 10, pointerEvents: "all", cursor: "default", backgroundColor: "transparent" }} />
-        )}
         <ConfirmationDialogs
           isConfirmReset={isConfirmReset}
           isConfirmDelete={isConfirmDelete}
@@ -466,10 +462,6 @@ const EditorPanel = ({ definitionActor, readOnly = false }: EditorPanelProps) =>
             definitionActor={definitionActor}
             getTabContentHeight={getTabContentHeight}
           />
-
-          {errorInspectorActor && (
-            <ErrorInspector errorInspectorActor={errorInspectorActor} />
-          )}
 
           {agentEnabled && (
             <AssistantPanel
