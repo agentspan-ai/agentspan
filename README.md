@@ -634,87 +634,13 @@ pipeline = SequentialAgent(name="pipeline", sub_agents=[researcher, writer])
 
 ## Deployment
 
-### Development (SQLite — zero setup)
+| Environment | Guide |
+|---|---|
+| Local (dev) | `agentspan server start` — zero config, SQLite |
+| Single server | [Docker / Docker Compose](deployment/README.md) |
+| Production | [Kubernetes + Helm](deployment/README.md) |
 
-The default setup uses SQLite with WAL mode. No external database needed.
-
-```bash
-agentspan server start
-```
-
-Data is stored in `agent-runtime.db` in the working directory.
-
-### Production (PostgreSQL)
-
-For production workloads, use PostgreSQL for durability and concurrent access.
-
-**1. Start PostgreSQL with Docker Compose:**
-
-```bash
-cd deployment/docker-compose
-cp .env.example .env
-docker compose up -d postgres
-```
-
-This starts PostgreSQL 16 on port 5432 with:
-- User: `agentspan` (default)
-- Password: `changeme` (default)
-- Database: `agentspan` (default)
-
-**2. Start the server with the Postgres profile:**
-
-```bash
-SPRING_PROFILES_ACTIVE=postgres agentspan server start
-```
-
-Or configure the database connection directly:
-
-```bash
-export SPRING_DATASOURCE_URL=jdbc:postgresql://your-host:5432/conductor
-export SPRING_DATASOURCE_USERNAME=your_user
-export SPRING_DATASOURCE_PASSWORD=your_password
-export SPRING_PROFILES_ACTIVE=postgres
-agentspan server start
-```
-
-### Docker Deployment
-
-The server image is published to Docker Hub as **`agentspan/server`**:
-
-```bash
-# Pull the latest image
-docker pull agentspan/server:latest
-
-# Run standalone (SQLite, no Postgres needed for development)
-docker run -p 6767:6767 agentspan/server:latest
-```
-
-For production (server + PostgreSQL together):
-
-```bash
-cd deployment/docker-compose
-cp .env.example .env
-docker compose up -d
-```
-
-Compose files:
-- `deployment/docker-compose/compose.yaml`
-- `deployment/docker-compose/.env.example`
-- `deployment/docker-compose/README.md`
-
-### Configuration Reference
-
-The server auto-enables LLM providers when their API key is set. No manual integration setup needed.
-
-| Setting | Env Var | Default |
-|---|---|---|
-| Server port | `SERVER_PORT` | `6767` |
-| Database backend | `SPRING_PROFILES_ACTIVE` | `default` (SQLite) |
-| SQLite path | `SPRING_DATASOURCE_URL` | `jdbc:sqlite:agent-runtime.db` |
-| Postgres URL | `SPRING_DATASOURCE_URL` | `jdbc:postgresql://localhost:5432/conductor` |
-| Postgres user | `SPRING_DATASOURCE_USERNAME` | `postgres` |
-| Postgres password | `SPRING_DATASOURCE_PASSWORD` | `postgres` |
-| Postgres pool size | `SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE` | `8` |
+Full deployment guide → **[deployment/README.md](deployment/README.md)**
 
 ## Project Structure
 
