@@ -162,7 +162,7 @@ export function getCoreSidebarItems(open: boolean): MenuItemType[] {
       id: "docsItem",
       title: "Docs",
       icon: <MenuBookOutlinedIcon />,
-      linkTo: "https://agentspan.ai/",
+      linkTo: "https://agentspan.ai/docs",
       shortcuts: [],
       hotkeys: "",
       hidden: false,
