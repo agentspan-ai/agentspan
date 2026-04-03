@@ -16,7 +16,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PYTHON_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 RUNTIME_DIR="$(cd "$PYTHON_DIR/../runtime" && pwd)"
-SERVER_URL="${SERVER_URL:-http://localhost:8080/api}"
+SERVER_URL="${SERVER_URL:-http://localhost:6767/api}"
 
 # ── Colors ───────────────────────────────────────────────────────────────
 RED='\033[0;31m'

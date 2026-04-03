@@ -13,7 +13,7 @@
 timeout = 300          # per-example timeout (seconds)
 parallel = true        # run examples within this run concurrently
 max_workers = 8        # max concurrent examples per run
-server_url = "http://localhost:8080/api"
+server_url = "http://localhost:6767/api"
 
 [judge]
 model = "gpt-4o-mini"           # LLM model for judging
@@ -84,4 +84,4 @@ native = true
 # parallel        Run examples concurrently (default: true)
 # max_workers     Max concurrent examples (default: 8)
 # timeout         Per-example timeout in seconds (default: 300)
-# server_url      Agentspan server URL (default: "http://localhost:8080/api")
+# server_url      Agentspan server URL (default: "http://localhost:6767/api")
