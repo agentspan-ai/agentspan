@@ -23,7 +23,7 @@ jobs:
           java-version: '21'
           distribution: 'corretto'
       - name: Run server tests
-        run: ./gradlew check
+        run: ./gradlew check test
 
   # ── Go CLI Tests ─────────────────────────────────────────────────
   cli-tests:
