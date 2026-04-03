@@ -31,48 +31,21 @@
 
 ## Quickstart (60 seconds)
 
-**Step 1 — Install the runtime** (CLI + Java for the server):
-
 ```bash
 # macOS / Linux
 curl -fsSL https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.sh | sh
-```
 
-```powershell
 # Windows (PowerShell)
 irm https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.ps1 | iex
 ```
-
-**Step 2 — Install your SDK:**
-
-```bash
-# Python
-pip install agentspan                        # or: uv pip install agentspan
-
-# TypeScript
-npm install @agentspan-ai/sdk
-```
-
-```xml
-<!-- Java (Maven) -->
-<dependency>
-  <groupId>dev.agentspan</groupId>
-  <artifactId>agentspan-sdk</artifactId>
-  <version>0.1.0</version>
-</dependency>
-```
-
-**Step 3 — Start the server and run your first agent:**
 
 ```bash
 export OPENAI_API_KEY=sk-...   # or any supported provider
 agentspan server start         # runs on localhost:6767 with UI
 ```
 
-<details><summary>Python</summary>
-
 ```python
-# hello.py
+# hello.py — run with: python hello.py
 from agentspan.agents import Agent, AgentRuntime, tool
 
 @tool
@@ -86,35 +59,6 @@ with AgentRuntime() as runtime:
     result = runtime.run(agent, "What's the weather in NYC?")
     result.print_result()
 ```
-
-Run with: `python hello.py`
-
-</details>
-
-<details><summary>TypeScript</summary>
-
-```typescript
-// hello.ts
-import { Agent, AgentRuntime, tool } from "@agentspan-ai/sdk";
-import { z } from "zod";
-
-const getWeather = tool({
-  name: "get_weather",
-  description: "Get current weather for a city.",
-  parameters: z.object({ city: z.string() }),
-  execute: async ({ city }) => `72F and sunny in ${city}`,
-});
-
-const agent = new Agent({ name: "weatherbot", model: "openai/gpt-4o", tools: [getWeather] });
-
-const runtime = new AgentRuntime();
-const result = await runtime.run(agent, "What's the weather in NYC?");
-result.printResult();
-```
-
-Run with: `npx ts-node hello.ts`
-
-</details>
 
 Open `http://localhost:6767` to see the visual execution UI.
 
@@ -195,7 +139,7 @@ Every other agent SDK runs agents in-memory. When the process dies, the agent di
 
 7. **Server-side tools** — HTTP endpoints and MCP servers execute as server-side tasks. No worker needed. MCP auto-discovered at compile time.
 
-8. **Full observability** — OpenTelemetry, Prometheus, visual execution UI, execution history, token/cost tracking.
+8. **Full observability** — Prometheus metrics, visual execution UI, execution history, token usage tracking. OpenTelemetry available (opt-in via config).
 
 9. **Framework compatible** — Works with Google ADK, OpenAI Agents SDK, LangChain, and LangGraph. [180+ examples](sdk/python/examples/).
 
