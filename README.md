@@ -38,6 +38,13 @@ curl -fsSL https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/ins
 # Windows (PowerShell)
 irm https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.ps1 | iex
 ```
+## Install SDKs
+```bash
+# Python
+pip install agentspan   # Python
+# Typescript
+npm install -g @agentspan-ai/sdk         # Typescript
+```
 
 ```bash
 export OPENAI_API_KEY=sk-...   # or any supported provider
