@@ -1,5 +1,5 @@
 import { Box } from "@mui/material";
-import { Handler } from "@use-gesture/core/types";
+import { Handler } from "@use-gesture/react";
 import { useDrag, usePinch, useWheel } from "@use-gesture/react";
 import { useSelector } from "@xstate/react";
 import { FlowEvents } from "components/flow/state";
