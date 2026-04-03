@@ -93,3 +93,7 @@ jobs:
             aws s3 cp "$file" "s3://agentspan/cli/${VERSION}/${filename}"
             aws s3 cp "$file" "s3://agentspan/cli/latest/${filename}"
           done
+          # Upload version.txt so install scripts can skip re-download when already up to date
+          echo "$VERSION" > dist/version.txt
+          aws s3 cp dist/version.txt "s3://agentspan/cli/latest/version.txt" \
+            --content-type "text/plain" --cache-control "no-cache"
