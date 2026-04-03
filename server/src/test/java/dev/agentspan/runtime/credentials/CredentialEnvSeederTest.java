@@ -37,10 +37,17 @@ class CredentialEnvSeederTest {
 
     @BeforeEach
     void cleanUp() {
-        // Remove test credentials from previous runs
-        jdbc.update(
-                "DELETE FROM credentials_store WHERE user_id = :uid AND name LIKE '_TEST_%'",
-                Map.of("uid", ANONYMOUS_USER_ID));
+        // Remove test credentials from previous runs.
+        // Use ESCAPE so that the leading underscore is treated as a literal
+        // character, not a single-character wildcard (SQLite/SQL standard).
+        // Also guard against the table not yet existing on the very first run.
+        try {
+            jdbc.update(
+                    "DELETE FROM credentials_store WHERE user_id = :uid AND name LIKE '\\_TEST\\_%' ESCAPE '\\'",
+                    Map.of("uid", ANONYMOUS_USER_ID));
+        } catch (Exception ignored) {
+            // Table may not exist yet on the first test run — safe to ignore.
+        }
         storeProvider.delete(ANONYMOUS_USER_ID, "GH_TOKEN");
         storeProvider.delete(ANONYMOUS_USER_ID, "GITHUB_TOKEN");
     }
