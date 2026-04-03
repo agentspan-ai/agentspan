@@ -51,13 +51,32 @@ See [63-deploy.ts](63-deploy.ts), [63b-serve.ts](63b-serve.ts), and
 
 ### 1. Install dependencies
 
-The core examples (numbered files in this directory) need the `agentspan` SDK:
+The core examples (numbered files in this directory) are repository examples.
+They intentionally import from `../src` or `../../src`, so they are meant to be
+run from this checkout of the SDK:
 
 ```bash
-npm install agentspan
+cd sdk/typescript
+npm install
 ```
 
 Framework-specific examples require additional packages. Install only what you need:
+
+### 1.1. Copy/paste into your own project
+
+If you want to copy an example into a separate project after `npm install`, switch
+its imports to the published package:
+
+```bash
+npm install @agentspan-ai/sdk zod
+```
+
+```ts
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+```
+
+The files under `examples/` are not copy/paste-ready as-is because they import the
+SDK source tree directly.
 
 #### Google ADK examples (`adk/`)
 
@@ -111,7 +130,7 @@ The `AGENTSPAN_LLM_MODEL` variable uses the `provider/model-name` format. Exampl
 ### 3. Run an example
 
 ```bash
-# Core SDK examples (via ts-node, tsx, or compile first)
+# Core SDK examples (run from sdk/typescript/)
 npx tsx examples/01-basic-agent.ts
 npx tsx examples/15-agent-discussion.ts
 
