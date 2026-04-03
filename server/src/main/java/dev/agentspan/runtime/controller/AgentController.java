@@ -20,6 +20,7 @@ import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
 import com.netflix.conductor.common.run.SearchResult;
 import com.netflix.conductor.common.run.Workflow;
 import com.netflix.conductor.common.run.WorkflowSummary;
+import com.netflix.conductor.core.exception.NotFoundException;
 
 import dev.agentspan.runtime.model.AgentExecutionDetail;
 import dev.agentspan.runtime.model.AgentRun;
@@ -219,8 +220,7 @@ public class AgentController {
     /** Mark a tracking execution as COMPLETED. */
     @PostMapping("/execution/{executionId}/complete")
     public void completeTrackingExecution(
-            @PathVariable String executionId,
-            @RequestBody(required = false) Map<String, Object> output) {
+            @PathVariable String executionId, @RequestBody(required = false) Map<String, Object> output) {
         agentDagService.completeTrackingWorkflow(executionId, output);
     }
 
@@ -281,8 +281,7 @@ public class AgentController {
         Task task = wf.getTasks().stream()
                 .filter(t -> refTaskName.equals(t.getReferenceTaskName()))
                 .reduce((first, second) -> second)
-                .orElseThrow(() ->
-                        new com.netflix.conductor.core.exception.NotFoundException("Task not found: " + refTaskName));
+                .orElseThrow(() -> new NotFoundException("Task not found: " + refTaskName));
         TaskResult taskResult = new TaskResult(task);
         taskResult.setStatus(TaskResult.Status.valueOf(status));
         taskResult.setWorkerId(workerid);
