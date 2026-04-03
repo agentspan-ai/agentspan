@@ -1124,13 +1124,12 @@ public class JavaScriptBuilder {
     public static String flatMergeContextScript() {
         // Java Map interop: for-in iterates entries but hasOwnProperty checks
         // Java object properties (not map entries). Use .get(k) for values.
-        return iife(
-                "var parent = $.parent || {};"
-                        + "var child = $.child || {};"
-                        + "var merged = {};"
-                        + "for (var k in parent) { var v = parent.get ? parent.get(k) : parent[k]; if (v != null) merged[k] = '' + v; }"
-                        + "for (var k in child) { var v = child.get ? child.get(k) : child[k]; if (v != null) merged[k] = '' + v; }"
-                        + "return merged;");
+        return iife("var parent = $.parent || {};"
+                + "var child = $.child || {};"
+                + "var merged = {};"
+                + "for (var k in parent) { var v = parent.get ? parent.get(k) : parent[k]; if (v != null) merged[k] = '' + v; }"
+                + "for (var k in child) { var v = child.get ? child.get(k) : child[k]; if (v != null) merged[k] = '' + v; }"
+                + "return merged;");
     }
 
     /**
@@ -1189,14 +1188,13 @@ public class JavaScriptBuilder {
      * Output: merged context with child contexts namespaced.
      */
     public static String namespacedMergeContextScript() {
-        return iife(
-                "var parent = $.parentCtx || {};"
-                        + "var merged = {};"
-                        + "for (var k in parent) { var v = parent.get ? parent.get(k) : parent[k]; if (v != null) merged[k] = '' + v; }"
-                        + "var agents = $.agentNames || [];"
-                        + "for (var i = 0; i < agents.length; i++) {"
-                        + "  merged[agents[i]] = $['child_' + i] || {};"
-                        + "}"
-                        + "return merged;");
+        return iife("var parent = $.parentCtx || {};"
+                + "var merged = {};"
+                + "for (var k in parent) { var v = parent.get ? parent.get(k) : parent[k]; if (v != null) merged[k] = '' + v; }"
+                + "var agents = $.agentNames || [];"
+                + "for (var i = 0; i < agents.length; i++) {"
+                + "  merged[agents[i]] = $['child_' + i] || {};"
+                + "}"
+                + "return merged;");
     }
 }

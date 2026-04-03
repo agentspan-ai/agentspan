@@ -87,8 +87,8 @@ public class CredentialDataSourceConfig {
             config.setConnectionTestQuery("SELECT 1");
         }
 
-        log.info("Credential DataSource (HikariCP/{}) initialized: {}",
-                postgres ? "postgres" : "sqlite", datasourceUrl);
+        log.info(
+                "Credential DataSource (HikariCP/{}) initialized: {}", postgres ? "postgres" : "sqlite", datasourceUrl);
         return new HikariDataSource(config);
     }
 
@@ -104,9 +104,7 @@ public class CredentialDataSourceConfig {
         // Use a database-specific DDL file so that column types are correct:
         //   SQLite  → schema-credentials.sql          (BLOB for binary data)
         //   Postgres → schema-credentials-postgres.sql (BYTEA for binary data)
-        String schemaFile = isPostgres()
-                ? "schema-credentials-postgres.sql"
-                : "schema-credentials.sql";
+        String schemaFile = isPostgres() ? "schema-credentials-postgres.sql" : "schema-credentials.sql";
 
         DataSourceInitializer initializer = new DataSourceInitializer();
         initializer.setDataSource(dataSource);
