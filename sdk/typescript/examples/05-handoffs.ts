@@ -11,8 +11,8 @@
  */
 
 import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Sub-agent tools --------------------------------------------------------
 
@@ -89,7 +89,6 @@ export const support = new Agent({
   strategy: 'handoff',
 });
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -112,6 +111,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('05-handoffs.ts') || process.argv[1]?.endsWith('05-handoffs.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

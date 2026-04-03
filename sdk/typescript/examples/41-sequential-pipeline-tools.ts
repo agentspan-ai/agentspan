@@ -17,8 +17,8 @@
  */
 
 import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Stage tools --------------------------------------------------------------
 
@@ -196,7 +196,6 @@ const pipeline = conceptDeveloper
   .pipe(audioDesigner)
   .pipe(producer);
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -220,6 +219,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('41-sequential-pipeline-tools.ts') || process.argv[1]?.endsWith('41-sequential-pipeline-tools.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

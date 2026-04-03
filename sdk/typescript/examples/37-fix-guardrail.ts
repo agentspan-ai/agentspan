@@ -22,9 +22,9 @@
  */
 
 import { z } from 'zod';
-import { Agent, AgentRuntime, guardrail, tool } from '../src/index.js';
-import type { GuardrailResult } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, guardrail, tool } from '@agentspan-ai/sdk';
+import type { GuardrailResult } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Fix guardrail: redact phone numbers -------------------------------------
 // Instead of asking the LLM to retry, this guardrail redacts phone
@@ -96,7 +96,6 @@ export const agent = new Agent({
   guardrails: [redactPhoneNumbers],
 });
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -149,6 +148,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('37-fix-guardrail.ts') || process.argv[1]?.endsWith('37-fix-guardrail.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

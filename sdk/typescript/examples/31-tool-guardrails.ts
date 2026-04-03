@@ -14,9 +14,9 @@
  */
 
 import { z } from 'zod';
-import { Agent, AgentRuntime, guardrail, tool } from '../src/index.js';
-import type { GuardrailResult } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, guardrail, tool } from '@agentspan-ai/sdk';
+import type { GuardrailResult } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Guardrail ---------------------------------------------------------------
 
@@ -68,7 +68,6 @@ export const agent = new Agent({
     'Only execute SELECT queries.',
 });
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -98,6 +97,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('31-tool-guardrails.ts') || process.argv[1]?.endsWith('31-tool-guardrails.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

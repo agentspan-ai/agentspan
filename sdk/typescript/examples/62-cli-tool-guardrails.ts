@@ -10,8 +10,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, RegexGuardrail } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, RegexGuardrail } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Guardrails --------------------------------------------------------------
 
@@ -60,7 +60,6 @@ export const opsAgent = new Agent({
 
 const prompt = 'Show me the disk usage summary and list files in the current directory.';
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -86,6 +85,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('62-cli-tool-guardrails.ts') || process.argv[1]?.endsWith('62-cli-tool-guardrails.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

@@ -13,8 +13,8 @@
  */
 
 import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 const checkBalance = tool(
   async (args: { accountId: string }) => {
@@ -62,32 +62,29 @@ export const agent = new Agent({
     'human approval before the transfer executes.',
 });
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('09-human-in-the-loop.ts') || process.argv[1]?.endsWith('09-human-in-the-loop.js')) {
-  const runtime = new AgentRuntime();
-  try {
-    const result = await runtime.run(agent, "What's the balance on ACC-789?");
-    result.printResult();
+const runtime = new AgentRuntime();
+try {
+  const result = await runtime.run(agent, "What's the balance on ACC-789?");
+  result.printResult();
 
-    // Production pattern:
-    // 1. Deploy once during CI/CD:
-    // await runtime.deploy(agent);
-    // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples --agents banker
-    //
-    // 2. In a separate long-lived worker process:
-    // await runtime.serve(agent);
+  // Production pattern:
+  // 1. Deploy once during CI/CD:
+  // await runtime.deploy(agent);
+  // CLI alternative:
+  // agentspan deploy --package sdk/typescript/examples --agents banker
+  //
+  // 2. In a separate long-lived worker process:
+  // await runtime.serve(agent);
 
-    // Interactive HITL alternative:
-    // const result = runtime.stream(
-    //   agent,
-    //   'Transfer $500 from ACC-789 to ACC-456. ' +
-    //     'Check the balance first, then use transfer_funds.',
-    // );
-    // for await (const event of result) {
-    //   if (event.type === 'waiting') await result.approve();
-    // }
-  } finally {
-    await runtime.shutdown();
-  }
+  // Interactive HITL alternative:
+  // const result = runtime.stream(
+  //   agent,
+  //   'Transfer $500 from ACC-789 to ACC-456. ' +
+  //     'Check the balance first, then use transfer_funds.',
+  // );
+  // for await (const event of result) {
+  //   if (event.type === 'waiting') await result.approve();
+  // }
+} finally {
+  await runtime.shutdown();
 }

@@ -13,8 +13,8 @@
  */
 
 import { z } from 'zod';
-import { Agent, AgentRuntime, scatterGather, tool } from '../src/index.js';
-import { secondaryLlmModel } from './settings.js';
+import { Agent, AgentRuntime, scatterGather, tool } from '@agentspan-ai/sdk';
+import { secondaryLlmModel } from './settings';
 
 // -- Worker tool: simulates a knowledge base lookup --------------------------
 
@@ -98,7 +98,6 @@ const coordinator = scatterGather({
 
 const prompt = `Create a comprehensive profile for each of the ${COUNTRIES.length} countries listed.`;
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -126,6 +125,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('58-scatter-gather.ts') || process.argv[1]?.endsWith('58-scatter-gather.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

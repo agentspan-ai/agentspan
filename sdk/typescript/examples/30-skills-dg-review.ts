@@ -14,8 +14,8 @@
  *   - /dg skill installed (https://github.com/v1r3n/dinesh-gilfoyle)
  */
 
-import { Agent, AgentRuntime, agentTool, skill } from '../src/index.js';
-import { llmModel, secondaryLlmModel } from './settings.js';
+import { Agent, AgentRuntime, agentTool, skill } from '@agentspan-ai/sdk';
+import { llmModel, secondaryLlmModel } from './settings';
 
 // ── Load /dg skill as an Agent ─────────────────────────────────────
 const dg = skill('~/.claude/skills/dg', {
@@ -148,9 +148,4 @@ async function main() {
   }
 }
 
-if (
-  process.argv[1]?.endsWith('30-skills-dg-review.ts') ||
-  process.argv[1]?.endsWith('30-skills-dg-review.js')
-) {
-  main().catch(console.error);
-}
+main().catch(console.error);

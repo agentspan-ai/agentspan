@@ -2,7 +2,7 @@
  * Basic agent — the simplest possible agentspan example.
  */
 
-import { Agent, AgentRuntime } from '../../src/index.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
 import { llmModel } from '../settings.js';
 
 export const agent = new Agent({
@@ -32,6 +32,4 @@ async function main() {
 
 export const prompt = 'Hello! What can you do?';
 
-if (process.argv[1]?.includes('01-basic-agent')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

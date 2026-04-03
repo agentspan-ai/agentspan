@@ -11,8 +11,8 @@
  */
 
 import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Tools -------------------------------------------------------------------
 
@@ -60,23 +60,20 @@ export const opsBot = new Agent({
 
 // -- Deploy: compile + register on server ------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('63-deploy.ts') || process.argv[1]?.endsWith('63-deploy.js')) {
-  const runtime = new AgentRuntime();
-  try {
-    const result = await runtime.run(docAssistant, 'How do I reset my password?');
-    result.printResult();
+const runtime = new AgentRuntime();
+try {
+  const result = await runtime.run(docAssistant, 'How do I reset my password?');
+  result.printResult();
 
-    // Production pattern:
-    // 1. Deploy once during CI/CD:
-    // await runtime.deploy(docAssistant);
-    // await runtime.deploy(opsBot);
-    // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples --agents doc_assistant
-    //
-    // 2. In a separate long-lived worker process:
-    // await runtime.serve(docAssistant, opsBot);
-  } finally {
-    await runtime.shutdown();
-  }
+  // Production pattern:
+  // 1. Deploy once during CI/CD:
+  // await runtime.deploy(docAssistant);
+  // await runtime.deploy(opsBot);
+  // CLI alternative:
+  // agentspan deploy --package sdk/typescript/examples --agents doc_assistant
+  //
+  // 2. In a separate long-lived worker process:
+  // await runtime.serve(docAssistant, opsBot);
+} finally {
+  await runtime.shutdown();
 }

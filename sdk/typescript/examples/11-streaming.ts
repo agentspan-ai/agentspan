@@ -11,8 +11,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, EventTypes } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, EventTypes } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 export const agent = new Agent({
   name: 'haiku_writer',
@@ -20,7 +20,6 @@ export const agent = new Agent({
   instructions: 'You are a haiku poet. Write a single haiku.',
 });
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -98,6 +97,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('11-streaming.ts') || process.argv[1]?.endsWith('11-streaming.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

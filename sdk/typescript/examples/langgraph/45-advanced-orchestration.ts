@@ -17,7 +17,7 @@ import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { StringOutputParser } from '@langchain/core/output_parsers';
 import { RunnableLambda } from '@langchain/core/runnables';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ── Parsers ──────────────────────────────────────────────
 
@@ -240,7 +240,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('25-advanced-orchestration.ts') || process.argv[1]?.endsWith('25-advanced-orchestration.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

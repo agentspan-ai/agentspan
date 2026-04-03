@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod';
-import { Agent, AgentRuntime } from '../src';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
 
 const MODEL = process.env.AGENTSPAN_LLM_MODEL ?? 'openai/gpt-4o';
 
@@ -60,8 +60,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('09-structured-output.ts') || process.argv[1]?.endsWith('09-structured-output.js')) {
-
-  main().catch(console.error);
-}
+main().catch(console.error);

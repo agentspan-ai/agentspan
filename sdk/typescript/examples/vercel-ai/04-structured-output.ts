@@ -7,7 +7,7 @@
  */
 
 import { z } from 'zod';
-import { Agent, AgentRuntime } from '../../src/index.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
 
 // ── Schema ───────────────────────────────────────────────
 const PersonSchema = z.object({
@@ -58,7 +58,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('04-structured-output.ts') || process.argv[1]?.endsWith('04-structured-output.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

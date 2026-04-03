@@ -15,8 +15,8 @@
  */
 
 import { z } from 'zod';
-import { Agent, AgentRuntime, agentTool, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, agentTool, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Domain data -------------------------------------------------------------
 
@@ -169,7 +169,6 @@ export const orchestrator = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -195,6 +194,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('68-context-condensation.ts') || process.argv[1]?.endsWith('68-context-condensation.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

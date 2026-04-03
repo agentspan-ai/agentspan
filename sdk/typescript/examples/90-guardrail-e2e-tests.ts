@@ -18,9 +18,9 @@ import {
   RegexGuardrail,
   guardrail,
   tool,
-} from '../src/index.js';
-import type { GuardrailResult } from '../src/index.js';
-import { llmModel } from './settings.js';
+} from '@agentspan-ai/sdk';
+import type { GuardrailResult } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Test infrastructure -----------------------------------------------------
 
@@ -479,8 +479,7 @@ async function runTests(runtime: AgentRuntime, runner: TestRunner) {
 
 // -- Main --------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('90-guardrail-e2e-tests.ts') || process.argv[1]?.endsWith('90-guardrail-e2e-tests.js')) {
+async function main() {
   console.log('='.repeat(90));
   console.log('  Guardrail E2E Test Suite -- 27-cell matrix');
   console.log('  Position (3) x Type (3) x OnFail (3)');
@@ -498,3 +497,5 @@ if (process.argv[1]?.endsWith('90-guardrail-e2e-tests.ts') || process.argv[1]?.e
   const failed = runner.printSummary();
   process.exit(failed > 0 ? 1 : 0);
 }
+
+main().catch(console.error);

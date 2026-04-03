@@ -16,9 +16,9 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, UserProxyAgent } from '../src/index.js';
-import type { AgentHandle } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, UserProxyAgent } from '@agentspan-ai/sdk';
+import type { AgentHandle } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Human proxy -----------------------------------------------------------
 
@@ -49,32 +49,29 @@ export const conversation = new Agent({
 
 // -- Run -------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('27-user-proxy-agent.ts') || process.argv[1]?.endsWith('27-user-proxy-agent.js')) {
-  const runtime = new AgentRuntime();
-  try {
-    const result = await runtime.run(
-      assistant,
-      "Write a Python function to sort a list of dictionaries by a key.",
-    );
-    result.printResult();
+const runtime = new AgentRuntime();
+try {
+  const result = await runtime.run(
+    assistant,
+    "Write a Python function to sort a list of dictionaries by a key.",
+  );
+  result.printResult();
 
-    // Production pattern:
-    // 1. Deploy once during CI/CD:
-    // await runtime.deploy(conversation);
-    // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples
-    //
-    // 2. In a separate long-lived worker process:
-    // await runtime.serve(conversation);
-    //
-    // Interactive user-proxy alternative:
-    // const handle: AgentHandle = await runtime.start(
-    //   conversation,
-    //   "Let's write a Python function to sort a list of dictionaries by a key.",
-    // );
-    // await handle.respond({ message: 'Add type hints and a docstring.' });
-  } finally {
-    await runtime.shutdown();
-  }
+  // Production pattern:
+  // 1. Deploy once during CI/CD:
+  // await runtime.deploy(conversation);
+  // CLI alternative:
+  // agentspan deploy --package sdk/typescript/examples
+  //
+  // 2. In a separate long-lived worker process:
+  // await runtime.serve(conversation);
+  //
+  // Interactive user-proxy alternative:
+  // const handle: AgentHandle = await runtime.start(
+  //   conversation,
+  //   "Let's write a Python function to sort a list of dictionaries by a key.",
+  // );
+  // await handle.respond({ message: 'Add type hints and a docstring.' });
+} finally {
+  await runtime.shutdown();
 }

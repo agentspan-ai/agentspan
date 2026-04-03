@@ -12,8 +12,8 @@
  */
 
 import { z } from 'zod';
-import { Agent, AgentRuntime, CallbackHandler, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, CallbackHandler, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Handler 1: Timing -------------------------------------------------------
 
@@ -79,7 +79,6 @@ export const agent = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -99,6 +98,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('53-agent-lifecycle-callbacks.ts') || process.argv[1]?.endsWith('53-agent-lifecycle-callbacks.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

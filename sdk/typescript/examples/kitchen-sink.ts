@@ -109,7 +109,7 @@ import {
   // Discovery & Tracing
   discoverAgents,
   isTracingEnabled,
-} from '../src/index.js';
+} from '@agentspan-ai/sdk';
 
 import type {
   GuardrailResult,
@@ -118,7 +118,7 @@ import type {
   CodeExecutionConfig,
   CliConfig,
   AgentResult,
-} from '../src/index.js';
+} from '@agentspan-ai/sdk';
 
 // ── Settings ─────────────────────────────────────────────
 
@@ -962,6 +962,4 @@ export {
 };
 
 // Only run main() when executed directly (not imported)
-if (typeof process !== 'undefined' && (process.argv[1]?.endsWith('kitchen-sink.ts') || process.argv[1]?.endsWith('kitchen-sink.js'))) {
-  main().catch(console.error);
-}
+main().catch(console.error);

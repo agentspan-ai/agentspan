@@ -17,7 +17,7 @@ import {
   Agent,
   AgentRuntime,
   tool as agentspanTool,
-} from '../../src/index.js';
+} from '@agentspan-ai/sdk';
 
 // ── Risk assessment tool (AI SDK, auto-execute) ──────────
 const assessRisk = aiTool({
@@ -153,7 +153,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('10-hitl.ts') || process.argv[1]?.endsWith('10-hitl.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

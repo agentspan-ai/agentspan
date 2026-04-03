@@ -16,7 +16,7 @@
  *   - gh CLI authenticated
  */
 
-import { Agent, AgentRuntime, OnTextMention, TextGate } from '../src/index.js';
+import { Agent, AgentRuntime, OnTextMention, TextGate } from '@agentspan-ai/sdk';
 
 const REPO = 'agentspan/codingexamples';
 const MODEL = 'anthropic/claude-sonnet-4-6';
@@ -149,7 +149,6 @@ const pipeline = gitFetchIssues.pipe(codingQA).pipe(gitPushPR);
 
 // Run the pipeline with streaming
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -208,6 +207,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('61-github-coding-agent-chained.ts') || process.argv[1]?.endsWith('61-github-coding-agent-chained.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

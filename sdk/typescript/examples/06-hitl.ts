@@ -10,7 +10,7 @@ import {
   AgentRuntime,
   EventTypes,
   tool,
-} from '../src/index.js';
+} from '@agentspan-ai/sdk';
 
 const MODEL = process.env.AGENTSPAN_LLM_MODEL ?? 'openai/gpt-4o';
 
@@ -96,8 +96,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('06-hitl.ts') || process.argv[1]?.endsWith('06-hitl.js')) {
-
-  main().catch(console.error);
-}
+main().catch(console.error);

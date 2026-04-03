@@ -8,7 +8,7 @@
 
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // Build the graph
@@ -48,7 +48,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('01-hello-world.ts') || process.argv[1]?.endsWith('01-hello-world.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

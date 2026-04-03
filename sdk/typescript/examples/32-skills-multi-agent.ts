@@ -16,8 +16,8 @@
  */
 
 import { z } from 'zod';
-import { Agent, AgentRuntime, OnTextMention, agentTool, skill, tool } from '../src/index.js';
-import { llmModel, secondaryLlmModel } from './settings.js';
+import { Agent, AgentRuntime, OnTextMention, agentTool, skill, tool } from '@agentspan-ai/sdk';
+import { llmModel, secondaryLlmModel } from './settings';
 
 // ── Load skills ────────────────────────────────────────────────────
 const dg = skill('~/.claude/skills/dg', { model: llmModel });
@@ -303,9 +303,4 @@ async function main() {
   }
 }
 
-if (
-  process.argv[1]?.endsWith('32-skills-multi-agent.ts') ||
-  process.argv[1]?.endsWith('32-skills-multi-agent.js')
-) {
-  main().catch(console.error);
-}
+main().catch(console.error);

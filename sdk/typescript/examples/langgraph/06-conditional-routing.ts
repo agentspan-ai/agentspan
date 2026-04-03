@@ -8,7 +8,7 @@
  */
 
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // State schema
@@ -128,7 +128,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('06-conditional-routing.ts') || process.argv[1]?.endsWith('06-conditional-routing.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

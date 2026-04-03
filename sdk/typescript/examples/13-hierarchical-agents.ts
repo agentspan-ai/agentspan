@@ -19,8 +19,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, OnTextMention } from '../src';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, OnTextMention } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // ── Level 3: Individual specialists ─────────────────────────
 
@@ -99,7 +99,6 @@ export const ceo = new Agent({
 
 // ── Run ───────────────────────────────────────────────────
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -124,6 +123,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('13-hierarchical-agents.ts') || process.argv[1]?.endsWith('13-hierarchical-agents.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

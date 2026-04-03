@@ -20,8 +20,8 @@
  */
 
 import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // --- Existing worker task implementations ---
 // These mirror @worker_task functions from an existing Conductor deployment.
@@ -119,7 +119,6 @@ export const agent = new Agent({
     'customer information, check order history, and create support tickets.',
 });
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -142,6 +141,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('14-existing-workers.ts') || process.argv[1]?.endsWith('14-existing-workers.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

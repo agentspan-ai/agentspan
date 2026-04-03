@@ -16,8 +16,8 @@
  */
 
 import { z } from 'zod';
-import { Agent, AgentRuntime, apiTool, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, apiTool, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Example 1: OpenAPI spec -------------------------------------------------
 
@@ -115,7 +115,6 @@ export const githubAgent = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -142,6 +141,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('71-api-tool.ts') || process.argv[1]?.endsWith('71-api-tool.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

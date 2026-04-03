@@ -15,7 +15,7 @@
  */
 
 import { z } from 'zod';
-import { Agent, AgentRuntime, OnTextMention, tool } from '../src/index.js';
+import { Agent, AgentRuntime, OnTextMention, tool } from '@agentspan-ai/sdk';
 import { execSync } from 'child_process';
 import { randomBytes } from 'crypto';
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'fs';
@@ -317,7 +317,6 @@ const prompt =
   'Pick an open issue from the GitHub repository, implement the ' +
   'feature or fix the bug, get it reviewed by QA, and create a PR.';
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -360,6 +359,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('60-github-coding-agent.ts') || process.argv[1]?.endsWith('60-github-coding-agent.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

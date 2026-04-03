@@ -23,8 +23,8 @@
  *   - GITHUB_TOKEN stored via `agentspan credentials set`
  */
 
-import { Agent, AgentRuntime, tool, getCredential } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool, getCredential } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // Mirrors a LangChain @tool that checks for a credential in the environment
 const checkGithubToken = tool(
@@ -61,7 +61,6 @@ export const agent = new Agent({
 
 // -- Run ----------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -84,6 +83,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('16i-credentials-langchain.ts') || process.argv[1]?.endsWith('16i-credentials-langchain.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

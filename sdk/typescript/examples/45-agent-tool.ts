@@ -17,8 +17,8 @@
  */
 
 import { z } from 'zod';
-import { Agent, AgentRuntime, agentTool, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, agentTool, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Child agent's tool -------------------------------------------------------
 
@@ -97,7 +97,6 @@ export const manager = new Agent({
   tools: [agentTool(researcher), calculate],
 });
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -121,6 +120,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('45-agent-tool.ts') || process.argv[1]?.endsWith('45-agent-tool.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

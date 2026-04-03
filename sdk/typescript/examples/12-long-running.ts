@@ -11,8 +11,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime } from '../src';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 export const agent = new Agent({
   name: 'saas_analyst',
@@ -24,32 +24,29 @@ export const agent = new Agent({
 
 // Start agent asynchronously (returns immediately)
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('12-long-running.ts') || process.argv[1]?.endsWith('12-long-running.js')) {
-  const runtime = new AgentRuntime();
-  try {
-    const result = await runtime.run(
-      agent,
-      'What are the key metrics to track for a SaaS product?',
-    );
-    result.printResult();
+const runtime = new AgentRuntime();
+try {
+  const result = await runtime.run(
+    agent,
+    'What are the key metrics to track for a SaaS product?',
+  );
+  result.printResult();
 
-    // Production pattern:
-    // 1. Deploy once during CI/CD:
-    // await runtime.deploy(agent);
-    // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples --agents saas_analyst
-    //
-    // 2. In a separate long-lived worker process:
-    // await runtime.serve(agent);
+  // Production pattern:
+  // 1. Deploy once during CI/CD:
+  // await runtime.deploy(agent);
+  // CLI alternative:
+  // agentspan deploy --package sdk/typescript/examples --agents saas_analyst
+  //
+  // 2. In a separate long-lived worker process:
+  // await runtime.serve(agent);
 
-    // Async handle alternative:
-    // const handle = await runtime.start(
-    //   agent,
-    //   'What are the key metrics to track for a SaaS product?',
-    // );
-    // console.log(handle.executionId);
-  } finally {
-    await runtime.shutdown();
-  }
+  // Async handle alternative:
+  // const handle = await runtime.start(
+  //   agent,
+  //   'What are the key metrics to track for a SaaS product?',
+  // );
+  // console.log(handle.executionId);
+} finally {
+  await runtime.shutdown();
 }

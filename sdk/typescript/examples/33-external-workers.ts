@@ -20,8 +20,8 @@
  */
 
 import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Example 1: Basic external worker reference ------------------------------
 // The function stub defines the schema; no implementation needed.
@@ -127,7 +127,6 @@ export const supportAgent = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -155,6 +154,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('33-external-workers.ts') || process.argv[1]?.endsWith('33-external-workers.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);
