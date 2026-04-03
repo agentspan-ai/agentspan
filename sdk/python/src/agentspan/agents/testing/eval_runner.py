@@ -352,3 +352,148 @@ def _assert_no_handoff(result: AgentResult, agent_name: str) -> None:
         raise AssertionError(
             f"Expected NO handoff to '{agent_name}', but {len(handoffs)} occurred."
         )
+
+
+# ── Eval case generation from observed results ───────────────────────
+
+
+def _slugify(text: str, max_len: int = 60) -> str:
+    """Turn a prompt into a snake_case name."""
+    import re
+
+    slug = re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
+    return slug[:max_len].rstrip("_")
+
+
+# Keys injected by the runtime that should not be captured in eval expectations.
+_INTERNAL_ARG_KEYS = frozenset({"__agentspan_ctx__", "_agent_state", "method"})
+
+
+def eval_case_from_result(
+    result: AgentResult,
+    *,
+    agent: Any,
+    prompt: str,
+    name: str = "",
+    include_tool_args: bool = True,
+    tags: Optional[List[str]] = None,
+) -> EvalCase:
+    """Generate an :class:`EvalCase` from an observed :class:`AgentResult`.
+
+    Inspects the result's tool calls, handoff events, status, and output
+    to build expectations automatically — no manual case authoring needed.
+
+    Typical workflow::
+
+        # 1. Run agent against a live server
+        result = runtime.run(agent, "What's the weather in Tokyo?")
+
+        # 2. Auto-generate an eval case from the observed behavior
+        case = eval_case_from_result(result, agent=agent, prompt="What's the weather in Tokyo?")
+
+        # 3. Use it in future regression runs
+        evaluator = CorrectnessEval(runtime)
+        suite = evaluator.run([case])
+
+    Args:
+        result: The :class:`AgentResult` to build expectations from.
+        agent: The Agent that produced this result (stored in the case).
+        prompt: The prompt that was sent to the agent.
+        name: Optional descriptive name. Auto-generated from prompt if empty.
+        include_tool_args: If True (default), capture tool call arguments
+            in ``expect_tool_args``.
+        tags: Optional tags for filtering.
+
+    Returns:
+        A fully-populated :class:`EvalCase`.
+    """
+    if not name:
+        name = _slugify(prompt)
+
+    # Extract tools used
+    tool_names = []
+    tool_args: Dict[str, Dict[str, Any]] = {}
+    for tc in result.tool_calls:
+        tool_name = tc.get("name", "")
+        if tool_name and tool_name not in tool_names:
+            tool_names.append(tool_name)
+        if include_tool_args and tool_name and tc.get("args"):
+            # Strip internal runtime keys that change per-execution
+            cleaned = {
+                k: v for k, v in tc["args"].items() if k not in _INTERNAL_ARG_KEYS
+            }
+            if cleaned:
+                tool_args[tool_name] = cleaned
+
+    # Extract handoff target from events
+    handoff_target = None
+    for ev in result.events:
+        if ev.type == EventType.HANDOFF and ev.target:
+            handoff_target = ev.target
+            break  # Use first handoff
+
+    # Check for errors
+    has_errors = any(ev.type == EventType.ERROR for ev in result.events)
+
+    return EvalCase(
+        name=name,
+        agent=agent,
+        prompt=prompt,
+        expect_tools=tool_names if tool_names else None,
+        expect_tool_args=tool_args if tool_args else None,
+        expect_handoff_to=handoff_target,
+        expect_status=str(result.status.value) if hasattr(result.status, "value") else str(result.status),
+        expect_no_errors=not has_errors,
+        validate_orchestration=True,
+        tags=list(tags) if tags else ["captured"],
+    )
+
+
+def capture_eval_case(
+    runtime: Any,
+    agent: Any,
+    prompt: str,
+    *,
+    name: str = "",
+    include_tool_args: bool = True,
+    tags: Optional[List[str]] = None,
+) -> tuple:
+    """Run an agent and auto-generate an :class:`EvalCase` from the result.
+
+    Convenience wrapper that combines ``runtime.run()`` with
+    :func:`eval_case_from_result`.  Returns both the generated case and
+    the original result for inspection.
+
+    Example::
+
+        with AgentRuntime() as runtime:
+            case, result = capture_eval_case(runtime, agent, "Check stock for AAPL")
+            result.print_result()  # inspect what happened
+
+            # Replay later as a regression test
+            evaluator = CorrectnessEval(runtime)
+            suite = evaluator.run([case])
+            suite.print_summary()
+
+    Args:
+        runtime: An :class:`AgentRuntime` instance (or any object with a
+            ``run(agent, prompt)`` method).
+        agent: The Agent to run.
+        prompt: The user message to send.
+        name: Optional descriptive name. Auto-generated from prompt if empty.
+        include_tool_args: If True (default), capture tool call arguments.
+        tags: Optional tags for filtering.
+
+    Returns:
+        A tuple of ``(EvalCase, AgentResult)``.
+    """
+    result = runtime.run(agent, prompt)
+    case = eval_case_from_result(
+        result,
+        agent=agent,
+        prompt=prompt,
+        name=name,
+        include_tool_args=include_tool_args,
+        tags=tags,
+    )
+    return case, result

@@ -42,6 +42,8 @@ from agentspan.agents.testing.eval_runner import (
     EvalCase,
     EvalCaseResult,
     EvalSuiteResult,
+    capture_eval_case,
+    eval_case_from_result,
 )
 
 # Fluent API
@@ -95,4 +97,6 @@ __all__ = [
     "EvalCase",
     "EvalCaseResult",
     "EvalSuiteResult",
+    "eval_case_from_result",
+    "capture_eval_case",
 ]

@@ -33,3 +33,7 @@ export { validateStrategy } from './strategy.js';
 // Record / replay
 export type { RecordingFixture, RecordOptions } from './recording.js';
 export { record, replay } from './recording.js';
+
+// Eval case capture
+export type { CapturedEvalCase } from './capture.js';
+export { evalCaseFromResult, captureEvalCase } from './capture.js';
