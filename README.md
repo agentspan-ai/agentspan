@@ -31,7 +31,7 @@
 
 ## Quickstart (60 seconds)
 
-**Step 1 — Install** (installs the CLI, Python SDK, and verifies your setup automatically):
+**Step 1 — Install the runtime** (CLI + Java for the server):
 
 ```bash
 # macOS / Linux
@@ -43,16 +43,36 @@ curl -fsSL https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/ins
 irm https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.ps1 | iex
 ```
 
-```bash
-# Step 2 — Set your LLM API key
-export OPENAI_API_KEY=sk-...                  # or any supported provider
+**Step 2 — Install your SDK:**
 
-# Step 3 — Start the server
-agentspan server start                        # runs on localhost:6767 with UI
+```bash
+# Python
+pip install agentspan                        # or: uv pip install agentspan
+
+# TypeScript
+npm install @agentspan-ai/sdk
 ```
 
+```xml
+<!-- Java (Maven) -->
+<dependency>
+  <groupId>dev.agentspan</groupId>
+  <artifactId>agentspan-sdk</artifactId>
+  <version>0.1.0</version>
+</dependency>
+```
+
+**Step 3 — Start the server and run your first agent:**
+
+```bash
+export OPENAI_API_KEY=sk-...   # or any supported provider
+agentspan server start         # runs on localhost:6767 with UI
+```
+
+<details><summary>Python</summary>
+
 ```python
-# Step 4 — Run your first agent (save as hello.py, run with: python hello.py)
+# hello.py
 from agentspan.agents import Agent, AgentRuntime, tool
 
 @tool
@@ -67,50 +87,53 @@ with AgentRuntime() as runtime:
     result.print_result()
 ```
 
-That's it. The installer handles the CLI, Python SDK, and environment check in one shot. Open `http://localhost:6767` to see the visual execution UI.
+Run with: `python hello.py`
 
-<details><summary>Advanced / Alternative Install</summary>
+</details>
 
-### npm + pip (manual)
+<details><summary>TypeScript</summary>
 
-```bash
-npm install -g @agentspan-ai/agentspan        # installs the CLI
-pip install agentspan                         # installs the Python SDK
-agentspan doctor                              # verify setup
+```typescript
+// hello.ts
+import { Agent, AgentRuntime, tool } from "@agentspan-ai/sdk";
+import { z } from "zod";
+
+const getWeather = tool({
+  name: "get_weather",
+  description: "Get current weather for a city.",
+  parameters: z.object({ city: z.string() }),
+  execute: async ({ city }) => `72F and sunny in ${city}`,
+});
+
+const agent = new Agent({ name: "weatherbot", model: "openai/gpt-4o", tools: [getWeather] });
+
+const runtime = new AgentRuntime();
+const result = await runtime.run(agent, "What's the weather in NYC?");
+result.printResult();
 ```
 
-### Homebrew (macOS / Linux)
+Run with: `npx ts-node hello.ts`
+
+</details>
+
+Open `http://localhost:6767` to see the visual execution UI.
+
+<details><summary>Alternative CLI install methods</summary>
 
 ```bash
-brew install agentspan-ai/agentspan           # installs the CLI
-pip install agentspan                         # installs the Python SDK
-agentspan doctor
-```
+# Homebrew (macOS / Linux)
+brew install agentspan-ai/agentspan
 
-### Python SDK with uv
+# npm
+npm install -g @agentspan-ai/agentspan
 
-```bash
-uv pip install agentspan
-```
-
-### Windows — CMD / double-click
-
-Download [`install.bat`](https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.bat) and run it, or paste into CMD:
-
-```bat
+# Windows — CMD / double-click
 curl -fsSL https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.bat -o install.bat && install.bat
-```
 
-### From source
+# From source
+cd cli && go build -o agentspan .
 
-```bash
-cd cli && go build -o agentspan .             # build the CLI
-pip install agentspan                         # install the Python SDK
-```
-
-### Verify setup manually
-
-```bash
+# Verify setup
 agentspan doctor
 ```
 
@@ -712,7 +735,17 @@ agentspan server start
 
 ### Docker Deployment
 
-Run the Agentspan server and PostgreSQL together using the deployment Compose stack:
+The server image is published to Docker Hub as **`agentspan/server`**:
+
+```bash
+# Pull the latest image
+docker pull agentspan/server:latest
+
+# Run standalone (SQLite, no Postgres needed for development)
+docker run -p 6767:6767 agentspan/server:latest
+```
+
+For production (server + PostgreSQL together):
 
 ```bash
 cd deployment/docker-compose

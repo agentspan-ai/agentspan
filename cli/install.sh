@@ -1,18 +1,15 @@
 #!/bin/sh
-# AgentSpan installer
-# Installs Java 21+, the CLI binary, the Python SDK, and runs agentspan doctor.
+# AgentSpan installer — installs the CLI binary and Java 21+ (required for the server).
+# SDK install is language-specific: pip install agentspan / npm install @agentspan-ai/sdk
 # Usage: curl -fsSL https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.sh | sh
 set -e
 
 S3_BUCKET="https://agentspan.s3.us-east-2.amazonaws.com"
 BINARY_NAME="agentspan"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
-PYTHON_MIN_MAJOR=3
-PYTHON_MIN_MINOR=10
 JAVA_MIN=21
 
 ADOPTIUM_URL="https://adoptium.net/temurin/releases/?version=${JAVA_MIN}"
-PYTHON_URL="https://www.python.org/downloads/"
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -22,7 +19,7 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-step() { printf "\n${CYAN}${BOLD}[%s/6]${NC} %s\n" "$1" "$2"; }
+step() { printf "\n${CYAN}${BOLD}[%s/4]${NC} %s\n" "$1" "$2"; }
 ok()   { printf "  ${GREEN}✓${NC} %s\n" "$1"; }
 warn() { printf "  ${YELLOW}!${NC} %s\n" "$1"; }
 info() { printf "       %s\n" "$1"; }
@@ -50,8 +47,8 @@ step 1 "Detecting platform..."
 detect_os() {
     OS="$(uname -s)"
     case "$OS" in
-        Linux*)            OS='linux';;
-        Darwin*)           OS='darwin';;
+        Linux*)               OS='linux';;
+        Darwin*)              OS='darwin';;
         CYGWIN*|MINGW*|MSYS*) OS='windows';;
         *) die "Unsupported operating system: $OS";;
     esac
@@ -60,10 +57,10 @@ detect_os() {
 detect_arch() {
     ARCH="$(uname -m)"
     case "$ARCH" in
-        x86_64|amd64)    ARCH='amd64';;
-        arm64|aarch64)   ARCH='arm64';;
-        armv7l|armv6l)   die "32-bit ARM (${ARCH}) is not supported. Pre-built binaries require arm64 or amd64.";;
-        *) die "Unsupported architecture: $ARCH. See https://docs.agentspan.dev for manual install options.";;
+        x86_64|amd64)  ARCH='amd64';;
+        arm64|aarch64) ARCH='arm64';;
+        armv7l|armv6l) die "32-bit ARM (${ARCH}) is not supported. Binaries require arm64 or amd64.";;
+        *) die "Unsupported architecture: $ARCH. See https://docs.agentspan.dev for manual install.";;
     esac
 }
 
@@ -71,7 +68,7 @@ detect_os
 detect_arch
 ok "Platform: ${OS}/${ARCH}"
 
-# Detect Linux package manager for auto-installs
+# Detect Linux package manager
 PKG_MGR=""
 if [ "$OS" = "linux" ]; then
     if   command -v apt-get >/dev/null 2>&1; then PKG_MGR="apt"
@@ -81,20 +78,17 @@ if [ "$OS" = "linux" ]; then
     fi
 fi
 
-# ── Step 2: Check + install prerequisites ─────────────────────────────────────
-step 2 "Checking prerequisites..."
+# ── Step 2: Check + install Java 21+ ─────────────────────────────────────────
+step 2 "Checking Java ${JAVA_MIN}+..."
 
-# ── Java ──────────────────────────────────────────────────────────────────────
-# Check Java version for a given binary path. Sets JAVA_OK=true and returns 0 if ok.
+# Helper: check a specific java binary's version
 check_java_bin() {
     _bin="$1"
     [ -z "$_bin" ] && return 1
     command -v "$_bin" >/dev/null 2>&1 || [ -x "$_bin" ] || return 1
     _ver=$("$_bin" -version 2>&1 | head -1 | sed 's/.*"\(.*\)".*/\1/' | cut -d. -f1)
-    # Old 1.x versioning (e.g. Java 8 reports "1.8")
-    if [ "$_ver" = "1" ]; then
-        _ver=$("$_bin" -version 2>&1 | head -1 | sed 's/.*"\(.*\)".*/\1/' | cut -d. -f2)
-    fi
+    # Old 1.x versioning (Java 8 reports "1.8")
+    [ "$_ver" = "1" ] && _ver=$("$_bin" -version 2>&1 | head -1 | sed 's/.*"\(.*\)".*/\1/' | cut -d. -f2)
     if [ "$_ver" -ge "$JAVA_MIN" ] 2>/dev/null; then
         ok "Java $_ver found"
         JAVA_OK=true
@@ -106,27 +100,25 @@ check_java_bin() {
 JAVA_OK=false
 
 # Search order: JAVA_HOME → sdkman → asdf → PATH
-# This covers users who have Java installed via version managers that don't
-# activate in non-interactive shells (which is what `curl | sh` runs as).
+# Covers users whose version manager doesn't activate in non-interactive shells
+# (which is what `curl | sh` runs as).
 for _java_candidate in \
     "${JAVA_HOME:+$JAVA_HOME/bin/java}" \
     "$HOME/.sdkman/candidates/java/current/bin/java" \
     "$HOME/.asdf/shims/java" \
     "java"; do
     [ -z "$_java_candidate" ] && continue
-    if check_java_bin "$_java_candidate"; then
-        break
-    fi
+    check_java_bin "$_java_candidate" && break
 done
 
-# Also check JAVA_HOME env if set but not already found (handles jenv, jabba, etc.)
-if [ "$JAVA_OK" = false ] && [ -n "$JAVA_HOME" ]; then
+# Also try jenv if available
+if [ "$JAVA_OK" = false ] && command -v jenv >/dev/null 2>&1; then
     _jenv_java="$(jenv which java 2>/dev/null)" || true
     [ -n "$_jenv_java" ] && check_java_bin "$_jenv_java" || true
 fi
 
 if [ "$JAVA_OK" = false ]; then
-    warn "Java ${JAVA_MIN}+ is required to run the AgentSpan server."
+    warn "Java ${JAVA_MIN}+ not found. It is required to run the AgentSpan server."
     if prompt_yn "Install Java ${JAVA_MIN} (Eclipse Temurin) now?"; then
         JAVA_INSTALLED=false
 
@@ -188,84 +180,6 @@ EOF
     fi
 fi
 
-# ── Python ────────────────────────────────────────────────────────────────────
-PYTHON_CMD=""
-PYTHON_OK=false
-
-# Search order: versioned names first (more specific), then generic python3/python.
-# This avoids picking up the macOS system stub (Python 3.9) when a newer version
-# is installed via Homebrew, pyenv, or asdf but not symlinked as `python3`.
-for cmd in \
-    "python3.13" "python3.12" "python3.11" "python3.10" \
-    "$HOME/.asdf/shims/python3" \
-    "$HOME/.pyenv/shims/python3" \
-    "python3" "python"; do
-    command -v "$cmd" >/dev/null 2>&1 || continue
-    ver=$("$cmd" --version 2>&1 | sed 's/[^0-9.]//g' | cut -d. -f1-2)
-    major=$(echo "$ver" | cut -d. -f1)
-    minor=$(echo "$ver" | cut -d. -f2)
-    if [ "$major" -ge "$PYTHON_MIN_MAJOR" ] && [ "$minor" -ge "$PYTHON_MIN_MINOR" ] 2>/dev/null; then
-        PYTHON_CMD="$cmd"
-        PYTHON_OK=true
-        ok "Python $("$cmd" --version 2>&1) found ($cmd)"
-        break
-    fi
-done
-
-if [ "$PYTHON_OK" = false ]; then
-    warn "Python ${PYTHON_MIN_MAJOR}.${PYTHON_MIN_MINOR}+ is required for the Python SDK."
-    if prompt_yn "Install Python ${PYTHON_MIN_MAJOR}.${PYTHON_MIN_MINOR} now?"; then
-        PYTHON_INSTALLED=false
-
-        if [ "$OS" = "darwin" ] && command -v brew >/dev/null 2>&1; then
-            info "Running: brew install python@3.${PYTHON_MIN_MINOR}"
-            brew install "python@3.${PYTHON_MIN_MINOR}" && PYTHON_INSTALLED=true
-            PYTHON_CMD="python3.${PYTHON_MIN_MINOR}"; PYTHON_OK=true
-
-        elif [ "$OS" = "linux" ]; then
-            case "$PKG_MGR" in
-                apt)
-                    sudo apt-get install -y \
-                        "python${PYTHON_MIN_MAJOR}.${PYTHON_MIN_MINOR}" \
-                        "python${PYTHON_MIN_MAJOR}.${PYTHON_MIN_MINOR}-venv" \
-                        "python${PYTHON_MIN_MAJOR}-pip" && PYTHON_INSTALLED=true
-                    PYTHON_CMD="python${PYTHON_MIN_MAJOR}.${PYTHON_MIN_MINOR}"; PYTHON_OK=true
-                    ;;
-                dnf|yum)
-                    sudo "$PKG_MGR" install -y "python${PYTHON_MIN_MAJOR}.${PYTHON_MIN_MINOR}" && PYTHON_INSTALLED=true
-                    PYTHON_CMD="python${PYTHON_MIN_MAJOR}.${PYTHON_MIN_MINOR}"; PYTHON_OK=true
-                    ;;
-                pacman)
-                    sudo pacman -S --noconfirm python && PYTHON_INSTALLED=true
-                    PYTHON_CMD="python"; PYTHON_OK=true
-                    ;;
-                *)
-                    warn "Unknown package manager. Install Python manually: $PYTHON_URL"
-                    ;;
-            esac
-        else
-            warn "Automatic Python install not supported on this platform."
-            warn "Download from: $PYTHON_URL"
-        fi
-
-        if [ "$PYTHON_INSTALLED" = true ]; then
-            ok "Python installed"
-        else
-            warn "Python install did not complete. Install manually: $PYTHON_URL"
-        fi
-    else
-        warn "Skipping Python install. The Python SDK will not be installed."
-        warn "  $PYTHON_URL"
-    fi
-fi
-
-# ── uv (optional, faster installs) ───────────────────────────────────────────
-UV_AVAILABLE=false
-if command -v uv >/dev/null 2>&1; then
-    ok "uv found — will use uv for Python SDK install"
-    UV_AVAILABLE=true
-fi
-
 # ── curl / wget ───────────────────────────────────────────────────────────────
 if command -v curl >/dev/null 2>&1; then
     DOWNLOADER="curl"
@@ -301,19 +215,17 @@ download() {
     fi
 }
 
-# Check if already up to date — skip the 306MB download if version matches
+# Skip download if already on latest version
 CLI_SKIP=false
 if command -v agentspan >/dev/null 2>&1; then
     CURRENT_VER=$(agentspan version 2>/dev/null | awk '{print $2}') || CURRENT_VER=""
-    if [ -n "$CURRENT_VER" ]; then
-        if download "$VERSION_URL" "$TMP_DIR/version.txt" 2>/dev/null; then
-            LATEST_VER=$(tr -d '[:space:]' < "$TMP_DIR/version.txt")
-            if [ "$CURRENT_VER" = "$LATEST_VER" ]; then
-                ok "CLI already up to date ($CURRENT_VER) — skipping download"
-                CLI_SKIP=true
-            else
-                info "Upgrading CLI: $CURRENT_VER → $LATEST_VER"
-            fi
+    if [ -n "$CURRENT_VER" ] && download "$VERSION_URL" "$TMP_DIR/version.txt" 2>/dev/null; then
+        LATEST_VER=$(tr -d '[:space:]' < "$TMP_DIR/version.txt")
+        if [ "$CURRENT_VER" = "$LATEST_VER" ]; then
+            ok "CLI already up to date ($CURRENT_VER) — skipping download"
+            CLI_SKIP=true
+        else
+            info "Upgrading CLI: $CURRENT_VER → $LATEST_VER"
         fi
     fi
 fi
@@ -344,7 +256,6 @@ if [ "$CLI_SKIP" = false ]; then
 
     chmod +x "$TMP_FILE"
 
-    # Install
     if [ -w "$INSTALL_DIR" ]; then
         mv "$TMP_FILE" "$INSTALL_DIR/$BINARY_NAME"
         ok "Installed to $INSTALL_DIR/$BINARY_NAME"
@@ -372,79 +283,12 @@ if ! command -v agentspan >/dev/null 2>&1; then
         ok "Added to $PROFILE"
         warn "Run this now or restart your terminal: export PATH=\"$INSTALL_DIR:\$PATH\""
     else
-        warn "Add manually to your shell profile: export PATH=\"$INSTALL_DIR:\$PATH\""
+        warn "Add manually: export PATH=\"$INSTALL_DIR:\$PATH\""
     fi
 fi
 
-# ── Step 4: Install Python SDK ────────────────────────────────────────────────
-step 4 "Installing Python SDK (agentspan)..."
-
-if [ "$PYTHON_OK" = true ]; then
-    SDK_INSTALLED=false
-
-    # 1. uv — fastest, handles all environments including Homebrew-managed Python
-    if [ "$UV_AVAILABLE" = true ]; then
-        info "Trying: uv pip install agentspan"
-        if uv pip install agentspan 2>&1 | sed 's/^/       /'; then
-            ok "Python SDK installed via uv"; SDK_INSTALLED=true
-        else
-            warn "uv install failed — trying pip"
-        fi
-    fi
-
-    # 2. pip via the specific Python binary we detected
-    #    Using $PYTHON_CMD -m pip ensures we install into the right Python
-    #    (avoids the macOS trap where pip3 points to system Python 3.9)
-    if [ "$SDK_INSTALLED" = false ]; then
-        info "Trying: $PYTHON_CMD -m pip install agentspan"
-        if "$PYTHON_CMD" -m pip install agentspan 2>&1 | sed 's/^/       /'; then
-            ok "Python SDK installed"; SDK_INSTALLED=true
-        fi
-    fi
-
-    # 3. --user flag — works on systems where the site-packages dir is not writable
-    if [ "$SDK_INSTALLED" = false ]; then
-        info "Trying: $PYTHON_CMD -m pip install --user agentspan"
-        if "$PYTHON_CMD" -m pip install --user agentspan 2>&1 | sed 's/^/       /'; then
-            ok "Python SDK installed (--user)"; SDK_INSTALLED=true
-        fi
-    fi
-
-    # 4. --break-system-packages — Homebrew/Debian managed Python environments
-    #    (Python 3.11+ on macOS/Debian refuse pip installs without this flag)
-    if [ "$SDK_INSTALLED" = false ]; then
-        warn "Standard pip install failed — this usually means Python is managed by Homebrew or the OS."
-        if prompt_yn "Install with --break-system-packages? (safe for this package, Homebrew may warn)"; then
-            if "$PYTHON_CMD" -m pip install --break-system-packages agentspan 2>&1 | sed 's/^/       /'; then
-                ok "Python SDK installed (--break-system-packages)"; SDK_INSTALLED=true
-            fi
-        fi
-    fi
-
-    # 5. Last resort: create a venv at ~/.agentspan-sdk and install there
-    if [ "$SDK_INSTALLED" = false ]; then
-        VENV_DIR="$HOME/.agentspan-sdk"
-        warn "Falling back to a virtual environment at $VENV_DIR"
-        if "$PYTHON_CMD" -m venv "$VENV_DIR" 2>&1 | sed 's/^/       /' \
-            && "$VENV_DIR/bin/pip" install agentspan 2>&1 | sed 's/^/       /'; then
-            ok "Python SDK installed in $VENV_DIR"
-            warn "To use the SDK, activate the venv first:"
-            warn "  source $VENV_DIR/bin/activate"
-            SDK_INSTALLED=true
-        fi
-    fi
-
-    if [ "$SDK_INSTALLED" = false ]; then
-        warn "Could not install the Python SDK automatically."
-        warn "Install manually: pip install agentspan"
-        warn "Or with uv:       uv pip install agentspan"
-    fi
-else
-    warn "Skipping Python SDK install (Python ${PYTHON_MIN_MAJOR}.${PYTHON_MIN_MINOR}+ not found)."
-fi
-
-# ── Step 5: Verify with agentspan doctor ──────────────────────────────────────
-step 5 "Running agentspan doctor..."
+# ── Step 4: Verify with agentspan doctor ──────────────────────────────────────
+step 4 "Running agentspan doctor..."
 
 if command -v agentspan >/dev/null 2>&1; then
     printf "\n"
@@ -454,12 +298,14 @@ else
     warn "Run 'agentspan doctor' after restarting your terminal."
 fi
 
-# ── Step 6: Done ──────────────────────────────────────────────────────────────
-step 6 "Installation complete!"
-
-printf "\n${GREEN}${BOLD}AgentSpan is ready.${NC}\n"
+# ── Done ──────────────────────────────────────────────────────────────────────
+printf "\n${GREEN}${BOLD}AgentSpan CLI is ready.${NC}\n"
 printf "\nNext steps:\n"
-printf "  1. Set your LLM API key:   export OPENAI_API_KEY=sk-...\n"
-printf "  2. Start the server:       agentspan server start\n"
-printf "  3. Open the UI:            http://localhost:6767\n"
+printf "  1. Install your SDK:\n"
+printf "       Python:     pip install agentspan\n"
+printf "       TypeScript: npm install @agentspan-ai/sdk\n"
+printf "       Java:       see https://docs.agentspan.dev/sdk/java\n"
+printf "  2. Set your LLM API key:   export OPENAI_API_KEY=sk-...\n"
+printf "  3. Start the server:       agentspan server start\n"
+printf "  4. Open the UI:            http://localhost:6767\n"
 printf "\nDocs: https://docs.agentspan.dev\n\n"
