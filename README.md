@@ -72,9 +72,6 @@ Open `http://localhost:6767` to see the visual execution UI.
 <details><summary>Alternative CLI install methods</summary>
 
 ```bash
-# Homebrew (macOS / Linux)
-brew install agentspan-ai/agentspan
-
 # npm
 npm install -g @agentspan-ai/agentspan
 
