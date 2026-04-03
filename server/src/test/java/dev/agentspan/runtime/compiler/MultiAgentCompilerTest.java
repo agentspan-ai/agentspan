@@ -122,7 +122,8 @@ class MultiAgentCompilerTest {
 
         WorkflowDef wf = compiler.compile(config);
 
-        // ctx_init_resolve + ctx_init + SUB_WORKFLOW(writer) + ctx_merge_0 + ctx_set_0 + coerce + SUB_WORKFLOW(reviewer) + ctx_merge_1 + ctx_set_1
+        // ctx_init_resolve + ctx_init + SUB_WORKFLOW(writer) + ctx_merge_0 + ctx_set_0 + coerce +
+        // SUB_WORKFLOW(reviewer) + ctx_merge_1 + ctx_set_1
         assertThat(wf.getTasks()).hasSize(9);
         assertThat(wf.getTasks().get(0).getType()).isEqualTo("INLINE"); // ctx_init_resolve
         assertThat(wf.getTasks().get(1).getType()).isEqualTo("SET_VARIABLE"); // ctx_init
@@ -638,7 +639,8 @@ class MultiAgentCompilerTest {
 
         WorkflowDef wf = compiler.compile(config);
 
-        // Should have: ctx_init_resolve + ctx_init + SUB_WORKFLOW(researcher) + ctx_merge_0 + ctx_set_0 + INLINE(coerce) + SUB_WORKFLOW(writer) + ctx_merge_1 + ctx_set_1
+        // Should have: ctx_init_resolve + ctx_init + SUB_WORKFLOW(researcher) + ctx_merge_0 + ctx_set_0 +
+        // INLINE(coerce) + SUB_WORKFLOW(writer) + ctx_merge_1 + ctx_set_1
         assertThat(wf.getTasks()).hasSize(9);
         assertThat(wf.getTasks().get(0).getType()).isEqualTo("INLINE"); // ctx_init_resolve
         assertThat(wf.getTasks().get(1).getType()).isEqualTo("SET_VARIABLE"); // ctx_init
@@ -890,7 +892,8 @@ class MultiAgentCompilerTest {
 
         WorkflowDef wf = compiler.compile(config);
 
-        // ctx_init_resolve + ctx_init + SUB_WORKFLOW(fetcher) + ctx_merge_0 + ctx_set_0 + coerce + INLINE(gate) + SWITCH(gate_switch) + output_selector
+        // ctx_init_resolve + ctx_init + SUB_WORKFLOW(fetcher) + ctx_merge_0 + ctx_set_0 + coerce + INLINE(gate) +
+        // SWITCH(gate_switch) + output_selector
         assertThat(wf.getTasks()).hasSize(9);
         assertThat(wf.getTasks().get(0).getType()).isEqualTo("INLINE"); // ctx_init_resolve
         assertThat(wf.getTasks().get(1).getType()).isEqualTo("SET_VARIABLE"); // ctx_init
@@ -931,7 +934,8 @@ class MultiAgentCompilerTest {
 
         WorkflowDef wf = compiler.compile(config);
 
-        // ctx_init_resolve + ctx_init + SUB_WORKFLOW(a) + ctx_merge_0 + ctx_set_0 + coerce + SUB_WORKFLOW(b) + ctx_merge_1 + ctx_set_1 — no SWITCH
+        // ctx_init_resolve + ctx_init + SUB_WORKFLOW(a) + ctx_merge_0 + ctx_set_0 + coerce + SUB_WORKFLOW(b) +
+        // ctx_merge_1 + ctx_set_1 — no SWITCH
         assertThat(wf.getTasks()).hasSize(9);
         boolean hasSwitch = wf.getTasks().stream().anyMatch(t -> "SWITCH".equals(t.getType()));
         assertThat(hasSwitch).isFalse();
@@ -955,7 +959,8 @@ class MultiAgentCompilerTest {
 
         WorkflowDef wf = compiler.compile(config);
 
-        // ctx_init_resolve + ctx_init + SUB_WORKFLOW + ctx_merge_0 + ctx_set_0 + coerce + SIMPLE(gate) + SWITCH + output_selector
+        // ctx_init_resolve + ctx_init + SUB_WORKFLOW + ctx_merge_0 + ctx_set_0 + coerce + SIMPLE(gate) + SWITCH +
+        // output_selector
         assertThat(wf.getTasks()).hasSize(9);
         assertThat(wf.getTasks().get(6).getType()).isEqualTo("SIMPLE");
         assertThat(wf.getTasks().get(6).getName()).isEqualTo("fetcher_gate");
@@ -988,7 +993,8 @@ class MultiAgentCompilerTest {
 
         WorkflowDef wf = compiler.compile(config);
 
-        // Top level: ctx_init_resolve + ctx_init + SUB_WORKFLOW(a) + ctx_merge_0 + ctx_set_0 + coerce + gate_0 + SWITCH_0 + output_selector
+        // Top level: ctx_init_resolve + ctx_init + SUB_WORKFLOW(a) + ctx_merge_0 + ctx_set_0 + coerce + gate_0 +
+        // SWITCH_0 + output_selector
         assertThat(wf.getTasks()).hasSize(9);
         assertThat(wf.getTasks().get(7).getType()).isEqualTo("SWITCH");
         assertThat(wf.getTasks().get(8).getType()).isEqualTo("INLINE"); // output_selector

@@ -182,7 +182,8 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
 
             boolean hasText = hasMeaningfulText(message.getMessage());
             boolean hasMedia = hasMeaningfulMedia(message);
-            boolean hasToolCalls = message.getToolCalls() != null && !message.getToolCalls().isEmpty();
+            boolean hasToolCalls =
+                    message.getToolCalls() != null && !message.getToolCalls().isEmpty();
 
             if (!hasText && !hasMedia && !hasToolCalls) {
                 log.debug("Dropping empty {} message before LLM call", message.getRole());
@@ -199,16 +200,14 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
     void validateRunnableConversation(ChatCompletion chatCompletion) {
         List<ChatMessage> messages = chatCompletion.getMessages();
         if (messages == null || messages.isEmpty()) {
-            throw new TerminateWorkflowException(
-                    "No non-empty user prompt or media was available for the LLM call. "
-                            + "The execution started with an empty prompt or an upstream step produced empty output.");
+            throw new TerminateWorkflowException("No non-empty user prompt or media was available for the LLM call. "
+                    + "The execution started with an empty prompt or an upstream step produced empty output.");
         }
 
         boolean hasUserInput = messages.stream().anyMatch(this::isMeaningfulUserMessage);
         if (!hasUserInput) {
-            throw new TerminateWorkflowException(
-                    "No non-empty user prompt or media was available for the LLM call. "
-                            + "The execution started with an empty prompt or an upstream step produced empty output.");
+            throw new TerminateWorkflowException("No non-empty user prompt or media was available for the LLM call. "
+                    + "The execution started with an empty prompt or an upstream step produced empty output.");
         }
     }
 

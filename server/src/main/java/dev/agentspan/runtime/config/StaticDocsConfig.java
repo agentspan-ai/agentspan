@@ -7,7 +7,6 @@ package dev.agentspan.runtime.config;
 
 import jakarta.servlet.Filter;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
