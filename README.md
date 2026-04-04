@@ -1,8 +1,8 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="assets/logo-light.svg">
-    <img src="assets/logo-light.svg" alt="Agentspan" width="400">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/agentspan-logo-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/agentspan-logo-light.png">
+    <img src="assets/agentspan-logo-light.png" alt="Agentspan" width="360">
   </picture>
 </p>
 
@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <a href="https://docs.agentspan.dev">Docs</a> &bull;
+  <a href="https://agentspan.ai/docs">Docs</a> &bull;
   <a href="#quickstart">Quickstart</a> &bull;
   <a href="#examples">180+ Examples</a> &bull;
   <a href="https://discord.com/invite/ajcA66JcKq">Discord</a> &bull;
