@@ -76,7 +76,8 @@
     "zod-to-json-schema": "^3.23.5"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && npm run verify:dist",
+    "verify:dist": "node ./scripts/verify-dist.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "tsc --noEmit"

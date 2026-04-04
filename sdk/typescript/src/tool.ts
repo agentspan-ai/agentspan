@@ -1,8 +1,16 @@
 import { createRequire } from 'node:module';
+import { isAbsolute, join } from 'node:path';
 import type { ToolDef, ToolType, ToolContext, CredentialFile } from './types.js';
 import { ConfigurationError } from './errors.js';
 
-const require = createRequire(import.meta.url);
+// `import.meta.url` survives tsup's CJS build on Node 25 and breaks `require()`.
+// Use the current file when available in CJS, and fall back to the caller's
+// working tree in ESM so optional peer dependencies still resolve.
+const require = createRequire(
+  typeof __filename === 'string' && isAbsolute(__filename)
+    ? __filename
+    : join(process.cwd(), '__agentspan_sdk__.cjs'),
+);
 
 // ── Symbol for attaching ToolDef metadata ─────────────────
 
