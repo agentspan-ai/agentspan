@@ -43,7 +43,7 @@ irm https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.ps
 # Python
 pip install agentspan   # Python
 # Typescript
-npm install -g @agentspan-ai/sdk         # Typescript
+npm install @agentspan-ai/sdk            # TypeScript
 ```
 
 ```bash
@@ -116,7 +116,7 @@ agentspan doctor
 
 ## Why Agentspan?
 
-Every other agent SDK runs agents in-memory. When the process dies, the agent dies. Agentspan compiles your agents to durable executions that execute on a server — giving you reliability, observability, and distributed scaling out of the box.
+Agentspan is the execution layer, not the replacement. Use native Agentspan agents, or bring LangGraph, the OpenAI Agents SDK, or Google ADK — pass your existing agent to `runtime.run()` and it gains crash recovery, human-in-the-loop pauses, and full execution history. Your definitions stay unchanged.
 
 | | CrewAI | LangChain | AutoGen | OpenAI Agents | **Agentspan** |
 |---|---|---|---|---|---|
@@ -212,11 +212,11 @@ Store API keys and secrets once on the server. Tools resolve them automatically 
 **Step 1: Store credentials on the server**
 
 ```bash
-agentspan credential store GITHUB_TOKEN ghp_xxxxxxxxxxxx
-agentspan credential store SEARCH_API_KEY xxx-your-key
+agentspan credentials set GITHUB_TOKEN ghp_xxxxxxxxxxxx
+agentspan credentials set SEARCH_API_KEY xxx-your-key
 ```
 
-Credentials are encrypted at rest (AES-256-GCM). List them with `agentspan credential list`.
+Credentials are encrypted at rest (AES-256-GCM). List them with `agentspan credentials list`.
 
 **Step 2: Declare which credentials a tool needs**
 
