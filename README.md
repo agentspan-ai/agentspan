@@ -43,7 +43,7 @@ irm https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.ps
 # Python
 pip install agentspan   # Python
 # Typescript
-npm install -g @agentspan-ai/sdk         # Typescript
+npm install @agentspan-ai/sdk            # TypeScript
 ```
 
 ```bash
@@ -212,11 +212,11 @@ Store API keys and secrets once on the server. Tools resolve them automatically 
 **Step 1: Store credentials on the server**
 
 ```bash
-agentspan credential store GITHUB_TOKEN ghp_xxxxxxxxxxxx
-agentspan credential store SEARCH_API_KEY xxx-your-key
+agentspan credentials set GITHUB_TOKEN ghp_xxxxxxxxxxxx
+agentspan credentials set SEARCH_API_KEY xxx-your-key
 ```
 
-Credentials are encrypted at rest (AES-256-GCM). List them with `agentspan credential list`.
+Credentials are encrypted at rest (AES-256-GCM). List them with `agentspan credentials list`.
 
 **Step 2: Declare which credentials a tool needs**
 

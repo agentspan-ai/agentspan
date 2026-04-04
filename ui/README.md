@@ -1,6 +1,6 @@
 # Agentspan UI
 
-The React UI for [Agentspan](https://github.com/agentspan-ai/agentspan). It ships as both a **standalone web application** and an **npm library** (`@agentspan-ai/agentspan`) that enterprise packages can extend via a plugin system.
+The React UI for [Agentspan](https://github.com/agentspan-ai/agentspan). It ships as both a **standalone web application** (bundled with the server) and an **npm library** (`conductor-ui`) that enterprise packages can extend via a plugin system. The npm package name will change before the first stable release.
 
 ## Running locally
 
@@ -59,17 +59,13 @@ This file sets feature flags (`window.agentspan`) and auth config (`window.authC
 
 ## Using as an npm library
 
-Install the package:
-
-```bash
-npm install @agentspan-ai/agentspan
-```
+> **Note:** The package (`conductor-ui`) is not yet published to npm. Build the library locally with `pnpm build:lib` and link it, or use it as a workspace dependency.
 
 Import styles in your app entry point:
 
 ```tsx
-import "@agentspan-ai/agentspan/styles.css"; // component styles
-import "@agentspan-ai/agentspan/global.css"; // global body/font styles (optional)
+import "conductor-ui/styles.css"; // component styles
+import "conductor-ui/global.css"; // global body/font styles (optional)
 ```
 
 ### Extending with plugins
@@ -77,7 +73,7 @@ import "@agentspan-ai/agentspan/global.css"; // global body/font styles (optiona
 The plugin system lets you register additional routes, sidebar items, task forms, auth providers, and more without modifying the core package.
 
 ```tsx
-import { pluginRegistry, App } from "@agentspan-ai/agentspan";
+import { pluginRegistry, App } from "conductor-ui";
 
 // Register a custom sidebar item
 pluginRegistry.registerSidebarItem({
@@ -124,7 +120,7 @@ function Root() {
 Sidebar items use numeric positions so plugins can inject between core items without collisions. The core OSS positions are exported for reference:
 
 ```tsx
-import { CORE_SIDEBAR_POSITIONS } from "@agentspan-ai/agentspan";
+import { CORE_SIDEBAR_POSITIONS } from "conductor-ui";
 
 // CORE_SIDEBAR_POSITIONS.ROOT:
 //   executionsSubMenu: 100

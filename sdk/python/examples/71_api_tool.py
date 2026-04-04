@@ -17,7 +17,7 @@ Requirements:
     - Conductor server with LLM support
     - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
-    - For credential examples: store credentials via `agentspan credential store`
+    - For credential examples: store credentials via `agentspan credentials set`
 """
 
 from agentspan.agents import Agent, AgentRuntime, api_tool, mcp_tool, tool
@@ -31,7 +31,7 @@ from settings import settings
 # Global auth headers are applied to every discovered endpoint.
 #
 # Before running, store the credential:
-#   agentspan credential store PETSTORE_KEY your-api-key
+#   agentspan credentials set PETSTORE_KEY your-api-key
 
 petstore = api_tool(
     url="https://petstore3.swagger.io/api/v3/openapi.json",
@@ -110,7 +110,7 @@ multi_tool_agent = Agent(
 # it needs.
 #
 # Before running:
-#   agentspan credential store GITHUB_TOKEN ghp_xxxxxxxxxxxx
+#   agentspan credentials set GITHUB_TOKEN ghp_xxxxxxxxxxxx
 
 github = api_tool(
     url="https://api.github.com",
