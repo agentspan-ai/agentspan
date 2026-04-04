@@ -15,7 +15,6 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
 import { Agent, AgentRuntime, apiTool, tool } from '@agentspan-ai/sdk';
 import { llmModel } from './settings';
 
@@ -68,9 +67,13 @@ const calculate = tool(
   {
     name: 'calculate',
     description: 'Evaluate a math expression.',
-    inputSchema: z.object({
-      expression: z.string().describe('A mathematical expression'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        expression: { type: 'string', description: 'A mathematical expression' },
+      },
+      required: ['expression'],
+    },
   },
 );
 

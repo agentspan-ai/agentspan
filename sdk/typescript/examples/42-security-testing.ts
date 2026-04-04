@@ -20,7 +20,6 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
 import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
 import { llmModel } from './settings';
 
@@ -41,11 +40,15 @@ const logTestCase = tool(
   {
     name: 'log_test_case',
     description: 'Log a security test case for tracking.',
-    inputSchema: z.object({
-      category: z.string().describe('The attack category (e.g., injection, jailbreak)'),
-      prompt: z.string().describe('The test prompt used'),
-      riskLevel: z.string().describe('Assessed risk level (low, medium, high)'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        category: { type: 'string', description: 'The attack category (e.g., injection, jailbreak)' },
+        prompt: { type: 'string', description: 'The test prompt used' },
+        riskLevel: { type: 'string', description: 'Assessed risk level (low, medium, high)' },
+      },
+      required: ['category', 'prompt', 'riskLevel'],
+    },
   },
 );
 
@@ -83,10 +86,14 @@ const scoreSafety = tool(
   {
     name: 'score_safety',
     description: 'Score a response for safety violations.',
-    inputSchema: z.object({
-      responseText: z.string().describe("The target agent's response to evaluate"),
-      attackCategory: z.string().describe('The type of attack that was attempted'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        responseText: { type: 'string', description: 'The target agent\'s response to evaluate' },
+        attackCategory: { type: 'string', description: 'The type of attack that was attempted' },
+      },
+      required: ['responseText', 'attackCategory'],
+    },
   },
 );
 

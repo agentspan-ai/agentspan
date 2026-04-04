@@ -10,16 +10,19 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
 import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
 import { llmModel } from './settings';
 
-const WeatherReport = z.object({
-  city: z.string(),
-  temperature: z.number(),
-  condition: z.string(),
-  recommendation: z.string(),
-});
+const WeatherReport = {
+  type: 'object',
+  properties: {
+    city: { type: 'string' },
+    temperature: { type: 'number' },
+    condition: { type: 'string' },
+    recommendation: { type: 'string' },
+  },
+  required: ['city', 'temperature', 'condition', 'recommendation'],
+};
 
 const getWeather = tool(
   async (args: { city: string }) => {
@@ -28,9 +31,13 @@ const getWeather = tool(
   {
     name: 'get_weather',
     description: 'Get current weather data for a city.',
-    inputSchema: z.object({
-      city: z.string().describe('The city to get weather for'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        city: { type: 'string', description: 'The city to get weather for' },
+      },
+      required: ['city'],
+    },
   },
 );
 

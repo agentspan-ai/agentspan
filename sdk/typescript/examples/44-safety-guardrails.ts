@@ -20,7 +20,6 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
 import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
 import { llmModel } from './settings';
 
@@ -52,9 +51,13 @@ const checkPii = tool(
   {
     name: 'check_pii',
     description: 'Check text for personally identifiable information (PII).',
-    inputSchema: z.object({
-      text: z.string().describe('The text to scan for PII'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'The text to scan for PII' },
+      },
+      required: ['text'],
+    },
   },
 );
 
@@ -84,13 +87,14 @@ const sanitizeResponse = tool(
   {
     name: 'sanitize_response',
     description: 'Remove or mask PII from a response before delivering to user.',
-    inputSchema: z.object({
-      text: z.string().describe('The response text to sanitize'),
-      piiTypes: z
-        .string()
-        .optional()
-        .describe('Comma-separated PII types detected'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'The response text to sanitize' },
+        piiTypes: { type: 'string', description: 'Comma-separated PII types detected' },
+      },
+      required: ['text'],
+    },
   },
 );
 

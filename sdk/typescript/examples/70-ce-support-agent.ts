@@ -18,7 +18,6 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
 import { Agent, AgentRuntime, RegexGuardrail, agentTool, tool } from '@agentspan-ai/sdk';
 import { llmModel } from './settings';
 
@@ -41,7 +40,13 @@ const getZendeskTicket = tool(
   {
     name: 'get_zendesk_ticket',
     description: 'Fetch a Zendesk support ticket by its ID.',
-    inputSchema: z.object({ ticketId: z.string() }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticketId: { type: 'string' },
+      },
+      required: ['ticketId'],
+    },
     credentials: ZENDESK_CREDS,
   },
 );
@@ -53,7 +58,13 @@ const searchZendeskTickets = tool(
   {
     name: 'search_zendesk_tickets',
     description: 'Search Zendesk for tickets matching a query.',
-    inputSchema: z.object({ query: z.string() }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+      },
+      required: ['query'],
+    },
     credentials: ZENDESK_CREDS,
   },
 );
@@ -67,7 +78,13 @@ const searchJiraIssues = tool(
   {
     name: 'search_jira_issues',
     description: 'Search JIRA issues using JQL.',
-    inputSchema: z.object({ jql: z.string() }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        jql: { type: 'string' },
+      },
+      required: ['jql'],
+    },
     credentials: JIRA_CREDS,
   },
 );
@@ -79,7 +96,13 @@ const getJiraIssue = tool(
   {
     name: 'get_jira_issue',
     description: 'Get full details of a specific JIRA issue.',
-    inputSchema: z.object({ issueKey: z.string() }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        issueKey: { type: 'string' },
+      },
+      required: ['issueKey'],
+    },
     credentials: JIRA_CREDS,
   },
 );
@@ -93,7 +116,13 @@ const searchHubspotCompany = tool(
   {
     name: 'search_hubspot_company',
     description: 'Search HubSpot for a company by name.',
-    inputSchema: z.object({ companyName: z.string() }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        companyName: { type: 'string' },
+      },
+      required: ['companyName'],
+    },
     credentials: HUBSPOT_CREDS,
   },
 );
@@ -105,7 +134,13 @@ const getHubspotContact = tool(
   {
     name: 'get_hubspot_contact',
     description: 'Look up a HubSpot contact by email address.',
-    inputSchema: z.object({ email: z.string() }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email: { type: 'string' },
+      },
+      required: ['email'],
+    },
     credentials: HUBSPOT_CREDS,
   },
 );
@@ -119,7 +154,13 @@ const searchNotionRunbooks = tool(
   {
     name: 'search_notion_runbooks',
     description: 'Search Notion runbooks database for articles matching a query.',
-    inputSchema: z.object({ query: z.string() }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+      },
+      required: ['query'],
+    },
     credentials: NOTION_CREDS,
   },
 );
@@ -131,7 +172,13 @@ const getNotionPageContent = tool(
   {
     name: 'get_notion_page_content',
     description: 'Retrieve the full content of a Notion page/runbook by its ID.',
-    inputSchema: z.object({ pageId: z.string() }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        pageId: { type: 'string' },
+      },
+      required: ['pageId'],
+    },
     credentials: NOTION_CREDS,
   },
 );
@@ -145,10 +192,14 @@ const searchGithubIssues = tool(
   {
     name: 'search_github_issues',
     description: 'Search GitHub issues and pull requests.',
-    inputSchema: z.object({
-      query: z.string(),
-      repo: z.string().optional(),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+        repo: { type: 'string' },
+      },
+      required: ['query'],
+    },
     credentials: GITHUB_CREDS,
   },
 );
@@ -160,10 +211,14 @@ const searchGithubCode = tool(
   {
     name: 'search_github_code',
     description: "Search GitHub code across the organization's repositories.",
-    inputSchema: z.object({
-      query: z.string(),
-      repo: z.string().optional(),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+        repo: { type: 'string' },
+      },
+      required: ['query'],
+    },
     credentials: GITHUB_CREDS,
   },
 );
@@ -175,10 +230,14 @@ const getGithubReleases = tool(
   {
     name: 'get_github_releases',
     description: 'Get recent releases for a GitHub repository.',
-    inputSchema: z.object({
-      repo: z.string(),
-      limit: z.number().optional(),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        repo: { type: 'string' },
+        limit: { type: 'number' },
+      },
+      required: ['repo'],
+    },
     credentials: GITHUB_CREDS,
   },
 );
@@ -190,10 +249,14 @@ const getGithubPullRequest = tool(
   {
     name: 'get_github_pull_request',
     description: 'Get details of a specific GitHub pull request.',
-    inputSchema: z.object({
-      repo: z.string(),
-      prNumber: z.number(),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        repo: { type: 'string' },
+        prNumber: { type: 'number' },
+      },
+      required: ['repo', 'prNumber'],
+    },
     credentials: GITHUB_CREDS,
   },
 );

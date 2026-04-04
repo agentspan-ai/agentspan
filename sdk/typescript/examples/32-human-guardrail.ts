@@ -13,7 +13,6 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
 import { Agent, AgentRuntime, guardrail, tool } from '@agentspan-ai/sdk';
 import type { GuardrailResult } from '@agentspan-ai/sdk';
 import { llmModel } from './settings';
@@ -54,9 +53,13 @@ const getMarketData = tool(
   {
     name: 'get_market_data',
     description: 'Get current market data for a stock ticker.',
-    inputSchema: z.object({
-      ticker: z.string().describe('The stock ticker symbol'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticker: { type: 'string', description: 'The stock ticker symbol' },
+      },
+      required: ['ticker'],
+    },
   },
 );
 

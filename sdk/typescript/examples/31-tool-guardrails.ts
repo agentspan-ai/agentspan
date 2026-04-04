@@ -13,7 +13,6 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
 import { Agent, AgentRuntime, guardrail, tool } from '@agentspan-ai/sdk';
 import type { GuardrailResult } from '@agentspan-ai/sdk';
 import { llmModel } from './settings';
@@ -50,9 +49,13 @@ const runQuery = tool(
   {
     name: 'run_query',
     description: 'Execute a read-only database query and return results.',
-    inputSchema: z.object({
-      query: z.string().describe('The SQL query to execute'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'The SQL query to execute' },
+      },
+      required: ['query'],
+    },
     guardrails: [noSqlInjection],
   },
 );

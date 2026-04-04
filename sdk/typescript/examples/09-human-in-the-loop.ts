@@ -12,7 +12,6 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
 import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
 import { llmModel } from './settings';
 
@@ -23,9 +22,13 @@ const checkBalance = tool(
   {
     name: 'check_balance',
     description: 'Check the balance of an account.',
-    inputSchema: z.object({
-      accountId: z.string().describe('The account ID'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        accountId: { type: 'string', description: 'The account ID' },
+      },
+      required: ['accountId'],
+    },
   },
 );
 
@@ -42,11 +45,15 @@ const transferFunds = tool(
     name: 'transfer_funds',
     description:
       'Request a funds transfer; runtime pauses for human approval before execution.',
-    inputSchema: z.object({
-      fromAcct: z.string().describe('Source account'),
-      toAcct: z.string().describe('Destination account'),
-      amount: z.number().describe('Amount to transfer'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        fromAcct: { type: 'string', description: 'Source account' },
+        toAcct: { type: 'string', description: 'Destination account' },
+        amount: { type: 'number', description: 'Amount to transfer' },
+      },
+      required: ['fromAcct', 'toAcct', 'amount'],
+    },
     approvalRequired: true,
   },
 );

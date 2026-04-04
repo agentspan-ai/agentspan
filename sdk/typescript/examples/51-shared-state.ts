@@ -10,7 +10,6 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
 import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
 import type { ToolContext } from '@agentspan-ai/sdk';
 import { llmModel } from './settings';
@@ -29,9 +28,13 @@ const addItem = tool(
   {
     name: 'add_item',
     description: 'Add an item to the shared shopping list.',
-    inputSchema: z.object({
-      item: z.string().describe('The item to add'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        item: { type: 'string', description: 'The item to add' },
+      },
+      required: ['item'],
+    },
   },
 );
 
@@ -43,7 +46,11 @@ const getList = tool(
   {
     name: 'get_list',
     description: 'Get the current shopping list from shared state.',
-    inputSchema: z.object({}),
+    inputSchema: {
+      type: 'object',
+      properties: {
+      },
+    },
   },
 );
 
@@ -57,7 +64,11 @@ const clearList = tool(
   {
     name: 'clear_list',
     description: 'Clear the shopping list.',
-    inputSchema: z.object({}),
+    inputSchema: {
+      type: 'object',
+      properties: {
+      },
+    },
   },
 );
 

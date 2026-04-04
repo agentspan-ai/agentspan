@@ -11,7 +11,6 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
 import { Agent, AgentRuntime, CallbackHandler, tool } from '@agentspan-ai/sdk';
 import { llmModel } from './settings';
 
@@ -61,9 +60,13 @@ const lookupWeather = tool(
   {
     name: 'lookup_weather',
     description: 'Get the current weather for a city.',
-    inputSchema: z.object({
-      city: z.string().describe('Name of the city'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        city: { type: 'string', description: 'Name of the city' },
+      },
+      required: ['city'],
+    },
   },
 );
 

@@ -12,7 +12,6 @@
  *   - AGENTSPAN_SECONDARY_LLM_MODEL=openai/gpt-4o as environment variable
  */
 
-import { z } from 'zod';
 import { Agent, AgentRuntime, scatterGather, tool } from '@agentspan-ai/sdk';
 import { secondaryLlmModel } from './settings';
 
@@ -32,9 +31,13 @@ const searchKnowledgeBase = tool(
   {
     name: 'search_knowledge_base',
     description: 'Search the knowledge base for information on a topic.',
-    inputSchema: z.object({
-      query: z.string().describe('The search query'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'The search query' },
+      },
+      required: ['query'],
+    },
   },
 );
 

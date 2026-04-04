@@ -16,7 +16,6 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
 import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
 import { llmModel } from './settings';
 
@@ -36,11 +35,15 @@ const createConcept = tool(
   {
     name: 'create_concept',
     description: 'Create a movie concept document.',
-    inputSchema: z.object({
-      title: z.string().describe('Working title for the short film'),
-      genre: z.string().describe('Genre (e.g., sci-fi, drama, comedy)'),
-      logline: z.string().describe('One-sentence summary of the story'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Working title for the short film' },
+        genre: { type: 'string', description: 'Genre (e.g., sci-fi, drama, comedy)' },
+        logline: { type: 'string', description: 'One-sentence summary of the story' },
+      },
+      required: ['title', 'genre', 'logline'],
+    },
   },
 );
 
@@ -64,12 +67,16 @@ const writeScene = tool(
   {
     name: 'write_scene',
     description: 'Write a single scene for the script.',
-    inputSchema: z.object({
-      sceneNumber: z.number().describe('Scene number in sequence'),
-      location: z.string().describe('Scene location description'),
-      action: z.string().describe('Action/direction description'),
-      dialogue: z.string().optional().describe('Optional dialogue for the scene'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sceneNumber: { type: 'number', description: 'Scene number in sequence' },
+        location: { type: 'string', description: 'Scene location description' },
+        action: { type: 'string', description: 'Action/direction description' },
+        dialogue: { type: 'string', description: 'Optional dialogue for the scene' },
+      },
+      required: ['sceneNumber', 'location', 'action'],
+    },
   },
 );
 
@@ -86,11 +93,15 @@ const describeVisual = tool(
   {
     name: 'describe_visual',
     description: 'Describe visual direction for a scene.',
-    inputSchema: z.object({
-      sceneNumber: z.number().describe('Which scene this visual is for'),
-      shotType: z.string().describe('Camera shot type (wide, close-up, tracking, etc.)'),
-      description: z.string().describe('Visual description including lighting, color, mood'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sceneNumber: { type: 'number', description: 'Which scene this visual is for' },
+        shotType: { type: 'string', description: 'Camera shot type (wide, close-up, tracking, etc.)' },
+        description: { type: 'string', description: 'Visual description including lighting, color, mood' },
+      },
+      required: ['sceneNumber', 'shotType', 'description'],
+    },
   },
 );
 
@@ -107,11 +118,15 @@ const specifyAudio = tool(
   {
     name: 'specify_audio',
     description: 'Specify audio direction for a scene.',
-    inputSchema: z.object({
-      sceneNumber: z.number().describe('Which scene this audio is for'),
-      musicMood: z.string().describe('Music mood/style description'),
-      soundEffects: z.string().describe('Key sound effects needed'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sceneNumber: { type: 'number', description: 'Which scene this audio is for' },
+        musicMood: { type: 'string', description: 'Music mood/style description' },
+        soundEffects: { type: 'string', description: 'Key sound effects needed' },
+      },
+      required: ['sceneNumber', 'musicMood', 'soundEffects'],
+    },
   },
 );
 
@@ -129,11 +144,15 @@ const assembleProduction = tool(
   {
     name: 'assemble_production',
     description: 'Assemble final production notes.',
-    inputSchema: z.object({
-      title: z.string().describe('Final title of the short film'),
-      totalScenes: z.number().describe('Number of scenes in the final cut'),
-      estimatedRuntime: z.string().describe('Estimated runtime (e.g., "3 minutes")'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Final title of the short film' },
+        totalScenes: { type: 'number', description: 'Number of scenes in the final cut' },
+        estimatedRuntime: { type: 'string', description: 'Estimated runtime (e.g., "3 minutes")' },
+      },
+      required: ['title', 'totalScenes', 'estimatedRuntime'],
+    },
   },
 );
 

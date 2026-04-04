@@ -12,7 +12,6 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
 import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
 import { llmModel } from './settings';
 
@@ -29,9 +28,13 @@ const getWeather = tool(
   {
     name: 'get_weather',
     description: 'Get current weather for a city.',
-    inputSchema: z.object({
-      city: z.string().describe('The city to get weather for'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        city: { type: 'string', description: 'The city to get weather for' },
+      },
+      required: ['city'],
+    },
   },
 );
 
@@ -62,9 +65,13 @@ const calculate = tool(
   {
     name: 'calculate',
     description: 'Evaluate a math expression.',
-    inputSchema: z.object({
-      expression: z.string().describe('The math expression to evaluate'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        expression: { type: 'string', description: 'The math expression to evaluate' },
+      },
+      required: ['expression'],
+    },
   },
 );
 
@@ -76,11 +83,15 @@ const sendEmail = tool(
   {
     name: 'send_email',
     description: 'Send an email.',
-    inputSchema: z.object({
-      to: z.string().describe('Recipient email address'),
-      subject: z.string().describe('Email subject'),
-      body: z.string().describe('Email body'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to: { type: 'string', description: 'Recipient email address' },
+        subject: { type: 'string', description: 'Email subject' },
+        body: { type: 'string', description: 'Email body' },
+      },
+      required: ['to', 'subject', 'body'],
+    },
     approvalRequired: true,
     timeoutSeconds: 60,
   },

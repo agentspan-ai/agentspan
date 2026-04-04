@@ -10,9 +10,7 @@
     "@langchain/openai": ">=0.2.0",
     "@openai/agents": "^0.3.0",
     "ai": ">=3.0.0",
-    "tsx": "^4.21.0",
-    "zod": "^3.22.0",
-    "zod-to-json-schema": "^3.23.0"
+    "tsx": "^4.21.0"
   },
   "scripts": {
     "start": "tsx"

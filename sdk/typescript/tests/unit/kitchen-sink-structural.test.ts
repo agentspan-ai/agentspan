@@ -137,10 +137,11 @@ describe('Stage 1: Intake & Classification', () => {
     expect((intakeRouter.router as Agent).name).toBe('category_router');
   });
 
-  it('intake router has structured output (Zod schema)', () => {
+  it('intake router has structured output (JSON Schema)', () => {
     expect(intakeRouter.outputType).toBeDefined();
-    // Verify it's a Zod schema
-    expect(intakeRouter.outputType).toHaveProperty('_def');
+    // Verify it's a JSON Schema object
+    expect(intakeRouter.outputType).toHaveProperty('type', 'object');
+    expect(intakeRouter.outputType).toHaveProperty('properties');
   });
 
   it('intake router uses PromptTemplate for instructions', () => {
@@ -150,11 +151,11 @@ describe('Stage 1: Intake & Classification', () => {
     expect(tmpl.variables?.categories).toBe('tech, business, creative');
   });
 
-  it('ClassificationResult is a Zod schema with correct fields', () => {
-    const shape = ClassificationResult.shape;
-    expect(shape.category).toBeDefined();
-    expect(shape.priority).toBeDefined();
-    expect(shape.tags).toBeDefined();
+  it('ClassificationResult is a JSON Schema with correct fields', () => {
+    const props = (ClassificationResult as any).properties;
+    expect(props.category).toBeDefined();
+    expect(props.priority).toBeDefined();
+    expect(props.tags).toBeDefined();
   });
 });
 
@@ -474,9 +475,10 @@ describe('Stage 8: Analytics & Reporting', () => {
     expect(analyticsAgent.metadata).toEqual({ stage: 'analytics', version: '1.0' });
   });
 
-  it('analytics agent has structured output (Zod)', () => {
+  it('analytics agent has structured output (JSON Schema)', () => {
     expect(analyticsAgent.outputType).toBeDefined();
-    expect(analyticsAgent.outputType).toHaveProperty('_def');
+    expect(analyticsAgent.outputType).toHaveProperty('type', 'object');
+    expect(analyticsAgent.outputType).toHaveProperty('properties');
   });
 
   it('GPTAssistantAgent exists with correct properties', () => {

@@ -20,7 +20,6 @@
  *   - AGENTSPAN_LLM_MODEL (default: openai/gpt-4o-mini)
  */
 
-import { z } from 'zod';
 import { Agent, AgentRuntime, humanTool, tool } from '@agentspan-ai/sdk';
 import type { AgentHandle } from '@agentspan-ai/sdk';
 import { llmModel } from './settings';
@@ -53,9 +52,13 @@ const lookupEmployee = tool(
   {
     name: 'lookup_employee',
     description: 'Look up an employee by name and return their info.',
-    inputSchema: z.object({
-      name: z.string().describe('Employee name to look up'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Employee name to look up' },
+      },
+      required: ['name'],
+    },
   },
 );
 
@@ -71,11 +74,15 @@ const submitTicket = tool(
   {
     name: 'submit_ticket',
     description: 'Submit an IT support ticket.',
-    inputSchema: z.object({
-      title: z.string().describe('Ticket title'),
-      priority: z.string().describe('Priority level'),
-      assignee: z.string().describe('Assignee name'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Ticket title' },
+        priority: { type: 'string', description: 'Priority level' },
+        assignee: { type: 'string', description: 'Assignee name' },
+      },
+      required: ['title', 'priority', 'assignee'],
+    },
   },
 );
 

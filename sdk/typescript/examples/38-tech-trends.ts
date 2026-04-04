@@ -17,7 +17,6 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
 import { Agent, AgentRuntime, pdfTool, tool } from '@agentspan-ai/sdk';
 import { llmModel } from './settings';
 
@@ -53,10 +52,14 @@ const searchHackernews = tool(
     description:
       'Search HackerNews for stories about a technology topic. ' +
       'Returns recent stories with title, points, comment count, author, and story ID.',
-    inputSchema: z.object({
-      query: z.string().describe('Search query'),
-      maxResults: z.number().optional().describe('Max results (1-20, default 8)'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search query' },
+        maxResults: { type: 'number', description: 'Max results (1-20, default 8)' },
+      },
+      required: ['query'],
+    },
   },
 );
 
@@ -90,9 +93,13 @@ const getHnStoryComments = tool(
     description:
       'Fetch the top comments for a HackerNews story by its numeric ID. ' +
       'Returns the story title, score, and up to 8 top-level comment excerpts.',
-    inputSchema: z.object({
-      storyId: z.string().describe('HN story ID'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        storyId: { type: 'string', description: 'HN story ID' },
+      },
+      required: ['storyId'],
+    },
   },
 );
 
@@ -121,9 +128,13 @@ const getWikipediaSummary = tool(
     description:
       'Fetch the Wikipedia introduction paragraph for a technology or topic. ' +
       'Returns the page title, a short description, and the first ~800 chars of the extract.',
-    inputSchema: z.object({
-      topic: z.string().describe('The topic to look up'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        topic: { type: 'string', description: 'The topic to look up' },
+      },
+      required: ['topic'],
+    },
   },
 );
 
@@ -154,9 +165,13 @@ const fetchPypiDownloads = tool(
     description:
       'Fetch recent PyPI download statistics for a Python package. ' +
       'Returns last-day, last-week, and last-month download counts.',
-    inputSchema: z.object({
-      package: z.string().describe('PyPI package name'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        package: { type: 'string', description: 'PyPI package name' },
+      },
+      required: ['package'],
+    },
   },
 );
 
@@ -182,9 +197,13 @@ const fetchNpmDownloads = tool(
     description:
       'Fetch last-month download count for an npm package. ' +
       'Use for JavaScript/TypeScript ecosystem packages.',
-    inputSchema: z.object({
-      package: z.string().describe('npm package name'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        package: { type: 'string', description: 'npm package name' },
+      },
+      required: ['package'],
+    },
   },
 );
 
@@ -223,13 +242,17 @@ const compareNumbers = tool(
     description:
       'Compute ratio and percentage difference between two numeric values. ' +
       'Useful for comparing HN story counts, download figures, etc.',
-    inputSchema: z.object({
-      labelA: z.string().describe('Label for value A'),
-      valueA: z.number().describe('Numeric value A'),
-      labelB: z.string().describe('Label for value B'),
-      valueB: z.number().describe('Numeric value B'),
-      metric: z.string().describe('Name of the metric being compared'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        labelA: { type: 'string', description: 'Label for value A' },
+        valueA: { type: 'number', description: 'Numeric value A' },
+        labelB: { type: 'string', description: 'Label for value B' },
+        valueB: { type: 'number', description: 'Numeric value B' },
+        metric: { type: 'string', description: 'Name of the metric being compared' },
+      },
+      required: ['labelA', 'valueA', 'labelB', 'valueB', 'metric'],
+    },
   },
 );
 

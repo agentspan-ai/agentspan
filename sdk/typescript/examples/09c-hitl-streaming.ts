@@ -15,7 +15,6 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
 import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
 import { llmModel } from './settings';
 
@@ -26,9 +25,13 @@ const checkService = tool(
   {
     name: 'check_service',
     description: 'Check the health of a service.',
-    inputSchema: z.object({
-      serviceName: z.string().describe('Name of the service to check'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        serviceName: { type: 'string', description: 'Name of the service to check' },
+      },
+      required: ['serviceName'],
+    },
   },
 );
 
@@ -39,9 +42,13 @@ const restartService = tool(
   {
     name: 'restart_service',
     description: 'Restart a service. Safe operation, no approval needed.',
-    inputSchema: z.object({
-      serviceName: z.string().describe('Name of the service to restart'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        serviceName: { type: 'string', description: 'Name of the service to restart' },
+      },
+      required: ['serviceName'],
+    },
   },
 );
 
@@ -56,10 +63,14 @@ const deleteServiceData = tool(
   {
     name: 'delete_service_data',
     description: 'Delete service data. Destructive — requires human approval.',
-    inputSchema: z.object({
-      serviceName: z.string().describe('Name of the service'),
-      dataType: z.string().describe('Type of data to delete'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        serviceName: { type: 'string', description: 'Name of the service' },
+        dataType: { type: 'string', description: 'Type of data to delete' },
+      },
+      required: ['serviceName', 'dataType'],
+    },
     approvalRequired: true,
   },
 );

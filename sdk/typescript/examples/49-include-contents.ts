@@ -10,7 +10,6 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
 import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
 import { llmModel } from './settings';
 
@@ -24,9 +23,13 @@ const summarizeText = tool(
   {
     name: 'summarize_text',
     description: 'Summarize a piece of text.',
-    inputSchema: z.object({
-      text: z.string().describe('The text to summarize'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'The text to summarize' },
+      },
+      required: ['text'],
+    },
   },
 );
 

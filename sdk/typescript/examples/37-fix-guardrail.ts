@@ -21,7 +21,6 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
 import { Agent, AgentRuntime, guardrail, tool } from '@agentspan-ai/sdk';
 import type { GuardrailResult } from '@agentspan-ai/sdk';
 import { llmModel } from './settings';
@@ -78,9 +77,13 @@ const getContactInfo = tool(
   {
     name: 'get_contact_info',
     description: 'Look up contact information for a person.',
-    inputSchema: z.object({
-      name: z.string().describe('Name of the person to look up'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Name of the person to look up' },
+      },
+      required: ['name'],
+    },
   },
 );
 

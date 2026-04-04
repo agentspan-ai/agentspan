@@ -16,7 +16,6 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
 import { Agent, AgentRuntime, agentTool, tool } from '@agentspan-ai/sdk';
 import { llmModel } from './settings';
 
@@ -44,9 +43,13 @@ const searchKnowledgeBase = tool(
   {
     name: 'search_knowledge_base',
     description: 'Search an internal knowledge base for information.',
-    inputSchema: z.object({
-      query: z.string().describe('The search query'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'The search query' },
+      },
+      required: ['query'],
+    },
   },
 );
 
@@ -69,9 +72,13 @@ const calculate = tool(
   {
     name: 'calculate',
     description: 'Evaluate a math expression safely.',
-    inputSchema: z.object({
-      expression: z.string().describe('A mathematical expression to evaluate'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        expression: { type: 'string', description: 'A mathematical expression to evaluate' },
+      },
+      required: ['expression'],
+    },
   },
 );
 

@@ -23,7 +23,6 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
 import {
   Agent,
   AgentRuntime,
@@ -49,9 +48,13 @@ const getOrderStatus = tool(
   {
     name: 'get_order_status',
     description: 'Look up the current status of an order.',
-    inputSchema: z.object({
-      orderId: z.string().describe('The order ID to look up'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        orderId: { type: 'string', description: 'The order ID to look up' },
+      },
+      required: ['orderId'],
+    },
   },
 );
 
@@ -70,9 +73,13 @@ const getCustomerInfo = tool(
   {
     name: 'get_customer_info',
     description: 'Retrieve customer details including payment info on file.',
-    inputSchema: z.object({
-      customerId: z.string().describe('The customer ID to look up'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        customerId: { type: 'string', description: 'The customer ID to look up' },
+      },
+      required: ['customerId'],
+    },
   },
 );
 

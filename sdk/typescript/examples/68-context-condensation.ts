@@ -14,7 +14,6 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
 import { Agent, AgentRuntime, agentTool, tool } from '@agentspan-ai/sdk';
 import { llmModel } from './settings';
 
@@ -120,9 +119,13 @@ const fetchDomainData = tool(
     name: 'fetch_domain_data',
     description:
       'Fetch market data, statistics, and key facts for a technology domain.',
-    inputSchema: z.object({
-      domain: z.string().describe('The technology domain to research'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        domain: { type: 'string', description: 'The technology domain to research' },
+      },
+      required: ['domain'],
+    },
   },
 );
 
