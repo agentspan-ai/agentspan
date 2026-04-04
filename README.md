@@ -116,7 +116,7 @@ agentspan doctor
 
 ## Why Agentspan?
 
-Every other agent SDK runs agents in-memory. When the process dies, the agent dies. Agentspan compiles your agents to durable executions that execute on a server — giving you reliability, observability, and distributed scaling out of the box.
+Agentspan is the execution layer, not the replacement. Use native Agentspan agents, or bring LangGraph, the OpenAI Agents SDK, or Google ADK — pass your existing agent to `runtime.run()` and it gains crash recovery, human-in-the-loop pauses, and full execution history. Your definitions stay unchanged.
 
 | | CrewAI | LangChain | AutoGen | OpenAI Agents | **Agentspan** |
 |---|---|---|---|---|---|
