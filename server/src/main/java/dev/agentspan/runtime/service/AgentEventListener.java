@@ -90,8 +90,8 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
                 try {
                     executionDAOFacade.updateTask(task);
                 } catch (Exception e) {
-                    logger.warn("Failed to persist resolved MCP headers for task {}: {}",
-                            task.getTaskId(), e.getMessage());
+                    logger.warn(
+                            "Failed to persist resolved MCP headers for task {}: {}", task.getTaskId(), e.getMessage());
                 }
             }
         }

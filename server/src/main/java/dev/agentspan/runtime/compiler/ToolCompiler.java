@@ -298,8 +298,11 @@ public class ToolCompiler {
                     Map<String, Object> mcpEntry = new LinkedHashMap<>();
                     mcpEntry.put("mcpServer", cfg.getOrDefault("server_url", ""));
                     Object mcpHeaders = cfg.getOrDefault("headers", Collections.emptyMap());
-                    mcpEntry.put("headers", mcpHeaders instanceof Map<?, ?>
-                            ? escapeCredentialPlaceholders((Map<?, ?>) mcpHeaders) : mcpHeaders);
+                    mcpEntry.put(
+                            "headers",
+                            mcpHeaders instanceof Map<?, ?>
+                                    ? escapeCredentialPlaceholders((Map<?, ?>) mcpHeaders)
+                                    : mcpHeaders);
                     mcpConfig.put(tool.getName(), mcpEntry);
                 } else if ("agent_tool".equals(toolType)) {
                     // workflowName is set by AgentService.registerAgentToolWorkflows()
@@ -636,8 +639,9 @@ public class ToolCompiler {
                 Map<String, Object> serverInfo = new LinkedHashMap<>();
                 serverInfo.put("serverUrl", serverUrl);
                 Object mcpDiscH = cfg.getOrDefault("headers", Collections.emptyMap());
-                serverInfo.put("headers", mcpDiscH instanceof Map<?, ?>
-                        ? escapeCredentialPlaceholders((Map<?, ?>) mcpDiscH) : mcpDiscH);
+                serverInfo.put(
+                        "headers",
+                        mcpDiscH instanceof Map<?, ?> ? escapeCredentialPlaceholders((Map<?, ?>) mcpDiscH) : mcpDiscH);
                 serverMap.put(serverUrl, serverInfo);
             }
             Object mt = cfg.get("max_tools");
@@ -783,8 +787,11 @@ public class ToolCompiler {
                 Map<String, Object> specInfo = new LinkedHashMap<>();
                 specInfo.put("specUrl", specUrl);
                 Object apiHeaders = cfg.getOrDefault("headers", Collections.emptyMap());
-                specInfo.put("headers", apiHeaders instanceof Map<?, ?>
-                        ? escapeCredentialPlaceholders((Map<?, ?>) apiHeaders) : apiHeaders);
+                specInfo.put(
+                        "headers",
+                        apiHeaders instanceof Map<?, ?>
+                                ? escapeCredentialPlaceholders((Map<?, ?>) apiHeaders)
+                                : apiHeaders);
                 specMap.put(specUrl, specInfo);
             }
             Object mt = cfg.get("max_tools");
@@ -950,8 +957,8 @@ public class ToolCompiler {
                 Map<String, Object> serverInfo = new LinkedHashMap<>();
                 serverInfo.put("serverUrl", serverUrl);
                 Object mcpH = cfg.getOrDefault("headers", Collections.emptyMap());
-                serverInfo.put("headers", mcpH instanceof Map<?, ?>
-                        ? escapeCredentialPlaceholders((Map<?, ?>) mcpH) : mcpH);
+                serverInfo.put(
+                        "headers", mcpH instanceof Map<?, ?> ? escapeCredentialPlaceholders((Map<?, ?>) mcpH) : mcpH);
                 mcpServerMap.put(serverUrl, serverInfo);
             }
             Object mt = cfg.get("max_tools");
@@ -991,8 +998,8 @@ public class ToolCompiler {
                 Map<String, Object> specInfo = new LinkedHashMap<>();
                 specInfo.put("specUrl", specUrl);
                 Object apiH = cfg.getOrDefault("headers", Collections.emptyMap());
-                specInfo.put("headers", apiH instanceof Map<?, ?>
-                        ? escapeCredentialPlaceholders((Map<?, ?>) apiH) : apiH);
+                specInfo.put(
+                        "headers", apiH instanceof Map<?, ?> ? escapeCredentialPlaceholders((Map<?, ?>) apiH) : apiH);
                 apiSpecMap.put(specUrl, specInfo);
             }
             Object mt = cfg.get("max_tools");
