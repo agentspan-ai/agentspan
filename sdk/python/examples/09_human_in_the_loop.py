@@ -4,9 +4,8 @@
 """Human-in-the-Loop — approval workflows.
 
 Demonstrates how tools with approval_required=True pause the workflow
-until a human approves or rejects the action.  A Conductor HumanTask is
-inserted into the compiled workflow so the loop pauses at the right point
-and resumes after the reviewer decides.
+until a human approves or rejects the action.  Uses interactive streaming
+with schema-driven console prompts to handle the HITL pause.
 
 Requirements:
     - Conductor server with LLM support
@@ -45,51 +44,46 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(agent, "What's the balance on ACC-789? ")
-        result.print_result()
+        handle = runtime.start(agent, "Transfer $500 from ACC-789 to ACC-456. Check the balance first.")
+        print(f"Started: {handle.execution_id}\n")
+
+        for event in handle.stream():
+            if event.type == EventType.THINKING:
+                print(f"  [thinking] {event.content}")
+
+            elif event.type == EventType.TOOL_CALL:
+                print(f"  [tool_call] {event.tool_name}({event.args})")
+
+            elif event.type == EventType.TOOL_RESULT:
+                print(f"  [tool_result] {event.tool_name} -> {str(event.result)[:100]}")
+
+            elif event.type == EventType.WAITING:
+                status = handle.get_status()
+                pt = status.pending_tool or {}
+                schema = pt.get("response_schema", {})
+                props = schema.get("properties", {})
+                print("\n--- Human input required ---")
+                response = {}
+                for field, fs in props.items():
+                    desc = fs.get("description") or fs.get("title", field)
+                    if fs.get("type") == "boolean":
+                        val = input(f"  {desc} (y/n): ").strip().lower()
+                        response[field] = val in ("y", "yes")
+                    else:
+                        response[field] = input(f"  {desc}: ").strip()
+                handle.respond(response)
+                print()
+
+            elif event.type == EventType.DONE:
+                print(f"\nDone: {event.output}")
+
+        # Non-interactive alternative (no HITL, will block on human tasks):
+        # result = runtime.run(agent, "What's the balance on ACC-789?")
+        # result.print_result()
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
         # runtime.deploy(agent)
-        # CLI alternative:
-        # agentspan deploy --package examples.09_human_in_the_loop
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
-
-        # Interactive HITL alternative:
-        # # stream() starts the workflow and returns an AgentStream with
-        # # approve()/reject() controls for the pending HUMAN task.
-        # result = runtime.stream(
-        #     agent,
-        #     "Transfer $500 from ACC-789 to ACC-456. "
-        #     "Check the balance first, then use transfer_funds.",
-        # )
-        # print(f"Workflow started: {result.execution_id}\n")
-
-        # for event in result:
-        #     if event.type == EventType.THINKING:
-        #         print(f"  [thinking] {event.content}")
-
-        #     elif event.type == EventType.TOOL_CALL:
-        #         print(f"  [tool_call] {event.tool_name}({event.args})")
-
-        #     elif event.type == EventType.TOOL_RESULT:
-        #         print(f"  [tool_result] {event.tool_name} -> {event.result}")
-
-        #     elif event.type == EventType.WAITING:
-        #         print("\n--- Human approval required ---")
-        #         choice = input("  Approve? (y/n): ").strip().lower()
-        #         if choice == "y":
-        #             result.approve()
-        #             print("  Approved!\n")
-        #         else:
-        #             reason = input("  Rejection reason: ").strip()
-        #             result.reject(reason or "Rejected by user")
-        #             print("  Rejected.\n")
-
-        #     elif event.type == EventType.ERROR:
-        #         print(f"  [error] {event.content}")
-
-        #     elif event.type == EventType.DONE:
-        #         print(f"\nResult: {event.output}")

@@ -1025,6 +1025,12 @@ public class AgentService {
                 if (task.getInputData() != null) {
                     pendingTool.put("tool_name", task.getInputData().get("tool_name"));
                     pendingTool.put("parameters", task.getInputData().get("parameters"));
+                    if (task.getInputData().get("response_schema") != null) {
+                        pendingTool.put("response_schema", task.getInputData().get("response_schema"));
+                    }
+                    if (task.getInputData().get("response_ui_schema") != null) {
+                        pendingTool.put("response_ui_schema", task.getInputData().get("response_ui_schema"));
+                    }
                 }
                 result.put("pendingTool", pendingTool);
                 result.put("isWaiting", true);

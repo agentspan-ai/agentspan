@@ -12,7 +12,10 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
+import * as readline from 'node:readline/promises';
+import { stdin, stdout } from 'node:process';
 import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import type { AgentHandle } from '@agentspan-ai/sdk';
 import { llmModel } from './settings';
 
 const getWeather = tool(
@@ -105,67 +108,64 @@ export const agent = new Agent({
     'You are a helpful assistant with access to weather, calculator, and email tools.',
 });
 
-async function main() {
-  const runtime = new AgentRuntime();
-  try {
-    const result = await runtime.run(agent, 'send email to developer@orkes.io with current weather details in SF');
-    result.printResult();
-
-    // Production pattern:
-    // 1. Deploy once during CI/CD:
-    // await runtime.deploy(agent);
-    // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples --agents tool_demo_agent
-    //
-    // 2. In a separate long-lived worker process:
-    // await runtime.serve(agent);
-
-    // Streaming alternative:
-    // const streamHandle = await runtime.stream(
-    // agent,
-    // 'send email to developer@orkes.io with current weather details in SF',
-    // );
-    // console.log(`Execution started: ${streamHandle.executionId}\n`);
-
-    // for await (const event of streamHandle) {
-    // switch (event.type) {
-    // case 'thinking':
-    // console.log(`  [thinking] ${event.content}`);
-    // break;
-
-    // case 'tool_call':
-    // console.log(`  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`);
-    // break;
-
-    // case 'tool_result':
-    // console.log(`  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result)}`);
-    // break;
-
-    // case 'waiting':
-    // console.log(`\n--- Human approval required for send_email ---`);
-    // // In a real application you'd prompt for user input.
-    // // Auto-approve for this example:
-    // console.log('  Auto-approving for demo...');
-    // await streamHandle.approve();
-    // console.log('  Approved!\n');
-    // break;
-
-    // case 'error':
-    // console.log(`  [error] ${event.content}`);
-    // break;
-
-    // case 'done':
-    // console.log(`\nResult: ${JSON.stringify(event.output)}`);
-    // break;
-    // }
-    // }
-
-    // const final = await streamHandle.getResult();
-    // console.log(`\nTool calls: ${final.toolCalls.length}`);
-    // console.log(`Status: ${final.status}`);
-  } finally {
-    await runtime.shutdown();
+async function promptHuman(
+  rl: readline.Interface,
+  pendingTool: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const schema = (pendingTool.response_schema ?? {}) as Record<string, unknown>;
+  const props = (schema.properties ?? {}) as Record<string, Record<string, unknown>>;
+  const response: Record<string, unknown> = {};
+  for (const [field, fs] of Object.entries(props)) {
+    const desc = (fs.description || fs.title || field) as string;
+    if (fs.type === 'boolean') {
+      const val = await rl.question(`  ${desc} (y/n): `);
+      response[field] = ['y', 'yes'].includes(val.trim().toLowerCase());
+    } else {
+      response[field] = await rl.question(`  ${desc}: `);
+    }
   }
+  return response;
 }
 
-main().catch(console.error);
+const rl = readline.createInterface({ input: stdin, output: stdout });
+const runtime = new AgentRuntime();
+try {
+  const handle = await runtime.start(
+    agent,
+    'send email to developer@orkes.io with current weather details in SF',
+  );
+  console.log(`Started: ${handle.executionId}\n`);
+
+  for await (const event of handle.stream()) {
+    if (event.type === 'thinking') {
+      console.log(`  [thinking] ${event.content}`);
+    } else if (event.type === 'tool_call') {
+      console.log(`  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`);
+    } else if (event.type === 'tool_result') {
+      console.log(`  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result).slice(0, 100)}`);
+    } else if (event.type === 'waiting') {
+      const status = await handle.getStatus();
+      const pt = (status.pendingTool ?? {}) as Record<string, unknown>;
+      console.log('\n--- Human input required ---');
+      const response = await promptHuman(rl, pt);
+      await handle.respond(response);
+      console.log();
+    } else if (event.type === 'done') {
+      console.log(`\nDone: ${JSON.stringify(event.output)}`);
+    }
+  }
+
+  // Non-interactive alternative (no HITL, will block on human tasks):
+  // const result = await runtime.run(agent, 'What is the weather in San Francisco?');
+  // result.printResult();
+
+  // Production pattern:
+  // 1. Deploy once during CI/CD:
+  // await runtime.deploy(agent);
+  //
+  // 2. In a separate long-lived worker process:
+  // await runtime.serve(agent);
+} finally {
+  rl.close();
+  await runtime.shutdown();
+}

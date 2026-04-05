@@ -3,14 +3,15 @@
  *
  * Demonstrates approval_required on tools with a native agentspan Agent.
  * When a tool has approvalRequired: true, the agent pauses for human approval
- * before executing the tool. The direct-run path uses runtime.run() so the
- * example works as-is, and a commented runtime.start() alternative shows the
- * async approval/reject flow via the AgentHandle.
+ * before executing the tool. Uses interactive streaming with schema-driven
+ * console prompts to handle the HITL pause.
  *
  * This example mixes Vercel AI SDK tool() (for risk assessment, auto-execute)
  * and agentspan native tool() (for action execution, requires approval).
  */
 
+import * as readline from 'node:readline/promises';
+import { stdin, stdout } from 'node:process';
 import { tool as aiTool } from 'ai';
 import { z } from 'zod';
 import {
@@ -71,86 +72,67 @@ export const agent = new Agent({
   maxTurns: 6,
 });
 
-// ── Test cases ───────────────────────────────────────────
-const testCases = [
-  { label: 'Low risk (should be approved)', prompt: 'Fetch the latest sales report for Q4 2024.' },
-  { label: 'Medium risk (should be approved)', prompt: 'Update the customer email address for account #12345.' },
-  { label: 'High risk (should be rejected)', prompt: 'Delete all records from the staging database.' },
-];
-
-// ── HITL simulation: auto-approve low/medium, reject high ─
-async function runWithApproval(runtime: AgentRuntime, prompt: string) {
-  const handle = await runtime.start(agent, prompt);
-  const MAX_POLLS = 30;
-  let polls = 0;
-
-  // Poll until done or waiting for approval
-  while (polls < MAX_POLLS) {
-    polls++;
-    const status = await handle.getStatus();
-
-    if (status.isComplete) {
-      return await handle.wait();
+// ── Helpers ──────────────────────────────────────────────
+async function promptHuman(
+  rl: readline.Interface,
+  pendingTool: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const schema = (pendingTool.response_schema ?? {}) as Record<string, unknown>;
+  const props = (schema.properties ?? {}) as Record<string, Record<string, unknown>>;
+  const response: Record<string, unknown> = {};
+  for (const [field, fs] of Object.entries(props)) {
+    const desc = (fs.description || fs.title || field) as string;
+    if (fs.type === 'boolean') {
+      const val = await rl.question(`  ${desc} (y/n): `);
+      response[field] = ['y', 'yes'].includes(val.trim().toLowerCase());
+    } else {
+      response[field] = await rl.question(`  ${desc}: `);
     }
-
-    if (status.isWaiting) {
-      // Check if there is a pending tool requiring approval
-      const pending = status.pendingTool;
-      if (pending && pending.args) {
-        const action = String(pending.args.action ?? pending.name ?? '');
-        const lower = action.toLowerCase();
-
-        if (lower.includes('delete') || lower.includes('drop')) {
-          console.log(`  [HITL] Rejecting: "${action}"`);
-          await handle.reject('High-risk action rejected by human reviewer.');
-        } else {
-          console.log(`  [HITL] Approving: "${action}"`);
-          await handle.approve();
-        }
-      } else {
-        // Waiting but no pending tool details -- auto-approve to unblock
-        console.log('  [HITL] Waiting (no pending tool details) -- auto-approving');
-        await handle.approve();
-      }
-    }
-
-    // Brief wait before next poll
-    await new Promise(resolve => setTimeout(resolve, 500));
   }
-
-  // If we exhaust polls, wait for final result
-  return await handle.wait();
+  return response;
 }
 
 // ── Run on agentspan ─────────────────────────────────────
-async function main() {
-  const runtime = new AgentRuntime();
-  try {
-    const result = await runtime.run(
-      agent,
-      'Explain how you decide whether an operation should be approved before execution.',
-    );
-    console.log('Status:', result.status);
-    result.printResult();
 
-    // Production pattern:
-    // 1. Deploy once during CI/CD:
-    // await runtime.deploy(agent);
-    // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples/vercel-ai --agents hitl_agent
-    //
-    // 2. In a separate long-lived worker process:
-    // await runtime.serve(agent);
-    //
-    // Interactive HITL alternative:
-    // for (const { label, prompt } of testCases) {
-    //   console.log(`\n--- ${label} ---`);
-    //   const interactiveResult = await runWithApproval(runtime, prompt);
-    //   interactiveResult.printResult();
-    // }
-  } finally {
-    await runtime.shutdown();
+const rl = readline.createInterface({ input: stdin, output: stdout });
+const runtime = new AgentRuntime();
+try {
+  const handle = await runtime.start(
+    agent,
+    'Fetch the latest sales report for Q4 2024.',
+  );
+  console.log(`Started: ${handle.executionId}\n`);
+
+  for await (const event of handle.stream()) {
+    if (event.type === 'thinking') {
+      console.log(`  [thinking] ${event.content}`);
+    } else if (event.type === 'tool_call') {
+      console.log(`  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`);
+    } else if (event.type === 'tool_result') {
+      console.log(`  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result).slice(0, 100)}`);
+    } else if (event.type === 'waiting') {
+      const status = await handle.getStatus();
+      const pt = (status.pendingTool ?? {}) as Record<string, unknown>;
+      console.log('\n--- Human input required ---');
+      const response = await promptHuman(rl, pt);
+      await handle.respond(response);
+      console.log();
+    } else if (event.type === 'done') {
+      console.log(`\nDone: ${JSON.stringify(event.output)}`);
+    }
   }
-}
 
-main().catch(console.error);
+  // Non-interactive alternative (no HITL, will block on human tasks):
+  // const result = await runtime.run(agent, 'Explain how you decide whether an operation should be approved before execution.');
+  // result.printResult();
+
+  // Production pattern:
+  // 1. Deploy once during CI/CD:
+  // await runtime.deploy(agent);
+  //
+  // 2. In a separate long-lived worker process:
+  // await runtime.serve(agent);
+} finally {
+  rl.close();
+  await runtime.shutdown();
+}
