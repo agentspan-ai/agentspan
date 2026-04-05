@@ -48,6 +48,36 @@ public class ToolCompiler {
         private List<String[]> toolGuardrailRefs; // [refName, isInline]
     }
 
+    /**
+     * Replace {@code ${NAME}} credential placeholders with {@code #{NAME}} in a
+     * headers map so that Conductor's {@code ParametersUtils} does not consume them.
+     * The {@code #} prefix is invisible to Conductor's expression engine and is later
+     * resolved by credential-aware task handlers.
+     */
+    private static Map<String, Object> escapeCredentialPlaceholders(Map<?, ?> headers) {
+        Map<String, Object> escaped = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> e : headers.entrySet()) {
+            String v = String.valueOf(e.getValue());
+            escaped.put(String.valueOf(e.getKey()), v.replace("${", "#{"));
+        }
+        return escaped;
+    }
+
+    /**
+     * Return a copy of {@code cfg} with credential placeholders in its {@code headers}
+     * entry escaped from {@code ${NAME}} to {@code #{NAME}}.
+     */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> escapeHeadersInConfig(Map<String, Object> cfg) {
+        Object headers = cfg.get("headers");
+        if (!(headers instanceof Map<?, ?>)) {
+            return cfg;
+        }
+        Map<String, Object> result = new LinkedHashMap<>(cfg);
+        result.put("headers", escapeCredentialPlaceholders((Map<?, ?>) headers));
+        return result;
+    }
+
     /** Tool types whose execution is handled server-side (not by a worker). */
     private static final Set<String> MEDIA_TOOL_TYPES =
             Set.of("generate_image", "generate_audio", "generate_video", "generate_pdf");
@@ -259,7 +289,7 @@ public class ToolCompiler {
                 Map<String, Object> cfg = tool.getConfig() != null ? tool.getConfig() : Collections.emptyMap();
 
                 if ("http".equals(toolType)) {
-                    httpConfig.put(tool.getName(), cfg);
+                    httpConfig.put(tool.getName(), escapeHeadersInConfig(cfg));
                 } else if ("cli".equals(toolType)) {
                     Map<String, Object> cliEntry = new LinkedHashMap<>();
                     cliEntry.put("allowedCommands", cfg.getOrDefault("allowedCommands", Collections.emptyList()));
@@ -267,7 +297,9 @@ public class ToolCompiler {
                 } else if ("mcp".equals(toolType)) {
                     Map<String, Object> mcpEntry = new LinkedHashMap<>();
                     mcpEntry.put("mcpServer", cfg.getOrDefault("server_url", ""));
-                    mcpEntry.put("headers", cfg.getOrDefault("headers", Collections.emptyMap()));
+                    Object mcpHeaders = cfg.getOrDefault("headers", Collections.emptyMap());
+                    mcpEntry.put("headers", mcpHeaders instanceof Map<?, ?>
+                            ? escapeCredentialPlaceholders((Map<?, ?>) mcpHeaders) : mcpHeaders);
                     mcpConfig.put(tool.getName(), mcpEntry);
                 } else if ("agent_tool".equals(toolType)) {
                     // workflowName is set by AgentService.registerAgentToolWorkflows()
@@ -603,7 +635,9 @@ public class ToolCompiler {
             if (!serverUrl.isEmpty() && !serverMap.containsKey(serverUrl)) {
                 Map<String, Object> serverInfo = new LinkedHashMap<>();
                 serverInfo.put("serverUrl", serverUrl);
-                serverInfo.put("headers", cfg.getOrDefault("headers", Collections.emptyMap()));
+                Object mcpDiscH = cfg.getOrDefault("headers", Collections.emptyMap());
+                serverInfo.put("headers", mcpDiscH instanceof Map<?, ?>
+                        ? escapeCredentialPlaceholders((Map<?, ?>) mcpDiscH) : mcpDiscH);
                 serverMap.put(serverUrl, serverInfo);
             }
             Object mt = cfg.get("max_tools");
@@ -631,6 +665,7 @@ public class ToolCompiler {
             if (headers != null && !((Map<?, ?>) headers).isEmpty()) {
                 listInputs.put("headers", headers);
             }
+            listInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
             listTask.setInputParameters(listInputs);
             preTasks.add(listTask);
         }
@@ -747,7 +782,9 @@ public class ToolCompiler {
             if (!specUrl.isEmpty() && !specMap.containsKey(specUrl)) {
                 Map<String, Object> specInfo = new LinkedHashMap<>();
                 specInfo.put("specUrl", specUrl);
-                specInfo.put("headers", cfg.getOrDefault("headers", Collections.emptyMap()));
+                Object apiHeaders = cfg.getOrDefault("headers", Collections.emptyMap());
+                specInfo.put("headers", apiHeaders instanceof Map<?, ?>
+                        ? escapeCredentialPlaceholders((Map<?, ?>) apiHeaders) : apiHeaders);
                 specMap.put(specUrl, specInfo);
             }
             Object mt = cfg.get("max_tools");
@@ -783,6 +820,8 @@ public class ToolCompiler {
             }
             Map<String, Object> fetchInputs = new LinkedHashMap<>();
             fetchInputs.put("http_request", httpReq);
+            // Forward execution token so CredentialAwareHttpTask can resolve #{NAME} headers
+            fetchInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
             fetchTask.setInputParameters(fetchInputs);
             preTasks.add(fetchTask);
 
@@ -910,7 +949,9 @@ public class ToolCompiler {
             if (!serverUrl.isEmpty() && !mcpServerMap.containsKey(serverUrl)) {
                 Map<String, Object> serverInfo = new LinkedHashMap<>();
                 serverInfo.put("serverUrl", serverUrl);
-                serverInfo.put("headers", cfg.getOrDefault("headers", Collections.emptyMap()));
+                Object mcpH = cfg.getOrDefault("headers", Collections.emptyMap());
+                serverInfo.put("headers", mcpH instanceof Map<?, ?>
+                        ? escapeCredentialPlaceholders((Map<?, ?>) mcpH) : mcpH);
                 mcpServerMap.put(serverUrl, serverInfo);
             }
             Object mt = cfg.get("max_tools");
@@ -936,6 +977,7 @@ public class ToolCompiler {
             if (headers != null && !((Map<?, ?>) headers).isEmpty()) {
                 listInputs.put("headers", headers);
             }
+            listInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
             listTask.setInputParameters(listInputs);
             preTasks.add(listTask);
         }
@@ -948,7 +990,9 @@ public class ToolCompiler {
             if (!specUrl.isEmpty() && !apiSpecMap.containsKey(specUrl)) {
                 Map<String, Object> specInfo = new LinkedHashMap<>();
                 specInfo.put("specUrl", specUrl);
-                specInfo.put("headers", cfg.getOrDefault("headers", Collections.emptyMap()));
+                Object apiH = cfg.getOrDefault("headers", Collections.emptyMap());
+                specInfo.put("headers", apiH instanceof Map<?, ?>
+                        ? escapeCredentialPlaceholders((Map<?, ?>) apiH) : apiH);
                 apiSpecMap.put(specUrl, specInfo);
             }
             Object mt = cfg.get("max_tools");
@@ -982,6 +1026,7 @@ public class ToolCompiler {
             }
             Map<String, Object> fetchInputs = new LinkedHashMap<>();
             fetchInputs.put("http_request", httpReq);
+            fetchInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
             fetchTask.setInputParameters(fetchInputs);
             preTasks.add(fetchTask);
 
@@ -1383,7 +1428,7 @@ public class ToolCompiler {
                 Map<String, Object> cfg = tool.getConfig() != null ? tool.getConfig() : Collections.emptyMap();
 
                 if ("http".equals(toolType)) {
-                    httpConfig.put(tool.getName(), cfg);
+                    httpConfig.put(tool.getName(), escapeHeadersInConfig(cfg));
                 } else if ("agent_tool".equals(toolType)) {
                     String workflowName = (String) cfg.getOrDefault("workflowName", tool.getName() + "_agent_wf");
                     Map<String, Object> atEntry = new LinkedHashMap<>();

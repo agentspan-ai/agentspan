@@ -20,8 +20,11 @@ import com.netflix.conductor.tasks.http.HttpTask;
 import com.netflix.conductor.tasks.http.providers.RestTemplateProvider;
 
 /**
- * Extends Conductor's HttpTask to resolve ${NAME} credential placeholders
- * in HTTP headers before execution.
+ * Extends Conductor's HttpTask to resolve credential placeholders in HTTP
+ * headers before execution.  Placeholders arrive as {@code #{NAME}} because
+ * {@link dev.agentspan.runtime.compiler.ToolCompiler} converts the SDK's
+ * {@code ${NAME}} syntax so that Conductor's own {@code ${...}} parameter
+ * resolution does not consume them.
  *
  * <p>Resolution uses {@link CredentialResolutionService} with the userId from
  * the execution token in {@code __agentspan_ctx__}. Resolved values exist
@@ -30,7 +33,7 @@ import com.netflix.conductor.tasks.http.providers.RestTemplateProvider;
 public class CredentialAwareHttpTask extends HttpTask {
 
     private static final Logger log = LoggerFactory.getLogger(CredentialAwareHttpTask.class);
-    private static final Pattern PLACEHOLDER = Pattern.compile("\\$\\{(\\w+)}");
+    private static final Pattern PLACEHOLDER = Pattern.compile("#\\{(\\w+)}");
 
     private final ExecutionTokenService tokenService;
     private final CredentialResolutionService resolutionService;
@@ -67,7 +70,7 @@ public class CredentialAwareHttpTask extends HttpTask {
     }
 
     /**
-     * Resolve ${NAME} placeholders in header values using the credential store.
+     * Resolve #{NAME} placeholders in header values using the credential store.
      * Package-private for testing.
      */
     Map<String, String> resolveHeadersForUser(Map<String, String> headers, String userId) {

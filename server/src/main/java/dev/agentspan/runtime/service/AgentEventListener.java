@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
+import com.netflix.conductor.core.dal.ExecutionDAOFacade;
 import com.netflix.conductor.core.listener.TaskStatusListener;
 import com.netflix.conductor.core.listener.WorkflowStatusListener;
 import com.netflix.conductor.model.TaskModel;
@@ -55,6 +56,9 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
     @Autowired(required = false)
     private CredentialResolutionService credentialResolutionService;
 
+    @Autowired(required = false)
+    private ExecutionDAOFacade executionDAOFacade;
+
     @Autowired
     public AgentEventListener(AgentStreamRegistry streamRegistry, MeterRegistry meterRegistry) {
         this.streamRegistry = streamRegistry;
@@ -78,9 +82,18 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
         String taskRef = task.getReferenceTaskName();
         logger.debug("onTaskScheduled: wfId={}, type={}, ref={}", wfId, taskType, taskRef);
 
-        // Resolve ${NAME} credential placeholders in MCP task headers
-        if ("CALL_MCP_TOOL".equals(taskType)) {
-            resolveMcpCredentialHeaders(task);
+        // Resolve #{NAME} credential placeholders in MCP task headers.
+        // Both CALL_MCP_TOOL and LIST_MCP_TOOLS are async system tasks, so
+        // modifications must be persisted — the async executor reads from DB.
+        if ("CALL_MCP_TOOL".equals(taskType) || "LIST_MCP_TOOLS".equals(taskType)) {
+            if (resolveMcpCredentialHeaders(task) && executionDAOFacade != null) {
+                try {
+                    executionDAOFacade.updateTask(task);
+                } catch (Exception e) {
+                    logger.warn("Failed to persist resolved MCP headers for task {}: {}",
+                            task.getTaskId(), e.getMessage());
+                }
+            }
         }
 
         if ("LLM_CHAT_COMPLETE".equals(taskType)) {
@@ -94,8 +107,6 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
             String target = extractHandoffTarget(taskRef);
             emit(wfId, AgentSSEEvent.handoff(wfId, target));
         }
-        // Note: HUMAN tasks emit WAITING via AgentHumanTask.start(), not here.
-        // Conductor does NOT call TaskStatusListener for system tasks.
     }
 
     @Override
@@ -379,29 +390,33 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
     // ── Internal ─────────────────────────────────────────────────────
 
     /**
-     * Resolve ${NAME} credential placeholders in CALL_MCP_TOOL task headers.
-     * MCP is a worker task (not a system task), so we resolve before the worker picks it up.
+     * Resolve #{NAME} credential placeholders in MCP task headers.
+     * Both LIST_MCP_TOOLS and CALL_MCP_TOOL are async system tasks — the async
+     * executor reads task input from the database, so callers must persist the
+     * task after this method returns {@code true}.
+     *
+     * @return {@code true} if any headers were resolved (task was modified)
      */
     @SuppressWarnings("unchecked")
-    private void resolveMcpCredentialHeaders(TaskModel task) {
-        if (executionTokenService == null || credentialResolutionService == null) return;
+    private boolean resolveMcpCredentialHeaders(TaskModel task) {
+        if (executionTokenService == null || credentialResolutionService == null) return false;
 
         Map<String, Object> input = task.getInputData();
         Object headers = input.get("headers");
         Object ctx = input.get("__agentspan_ctx__");
 
-        if (!(headers instanceof Map<?, ?> headerMap) || ctx == null) return;
+        if (!(headers instanceof Map<?, ?> headerMap) || ctx == null) return false;
 
-        // Check for ${NAME} patterns
+        // Check for #{NAME} patterns (escaped from ${NAME} by ToolCompiler)
         boolean hasPlaceholders = false;
-        Pattern p = Pattern.compile("\\$\\{(\\w+)}");
+        Pattern p = Pattern.compile("#\\{(\\w+)}");
         for (Object v : headerMap.values()) {
             if (v != null && p.matcher(String.valueOf(v)).find()) {
                 hasPlaceholders = true;
                 break;
             }
         }
-        if (!hasPlaceholders) return;
+        if (!hasPlaceholders) return false;
 
         // Extract userId from execution token
         String token = null;
@@ -410,7 +425,7 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
         } else if (ctx instanceof String s) {
             token = s;
         }
-        if (token == null) return;
+        if (token == null) return false;
 
         try {
             String userId = executionTokenService.validate(token).userId();
@@ -428,8 +443,10 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
                 resolved.put(String.valueOf(entry.getKey()), sb.toString());
             }
             input.put("headers", resolved);
+            return true;
         } catch (Exception e) {
             logger.warn("Failed to resolve MCP credential headers: {}", e.getMessage());
+            return false;
         }
     }
 
