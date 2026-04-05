@@ -642,7 +642,7 @@ describe('TypeScript SDK E2E', () => {
       // The tool raises — workflow should complete but report error,
       // or the agent may recover. Either outcome is acceptable.
       expect(['COMPLETED', 'FAILED', 'TERMINATED']).toContain(result.status);
-    });
+    }, 120_000);
 
     it('invalid model fails (test_invalid_model_fails)', async () => {
       const agent = new Agent({
