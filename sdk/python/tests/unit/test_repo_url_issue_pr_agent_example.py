@@ -584,17 +584,15 @@ class TestPipelineStructure:
             )
 
         repo_analyst = pipeline.agents[2]
-        fixer = pipeline.agents[3].agents[0]
-        reviewer = pipeline.agents[3].agents[1]
-        coding_loop = pipeline.agents[3]
+        fixer = pipeline.agents[3]
+        publisher = pipeline.agents[4]
 
         assert "never try to create it again" in fixer.instructions
         assert "Prefer small Python scripts for code edits" in fixer.instructions
         assert "hand off to reviewer with honest results" in fixer.instructions
-        assert "Optimize for deciding whether the current branch is reviewable" in reviewer.instructions
         assert "Keep analysis tight and practical" in repo_analyst.instructions
-        assert "stop after two fixer turns or one reviewer pass without approval" in coding_loop.instructions
+        assert fixer.name == "fixer"
+        assert publisher.name == "publisher"
+        assert all(agent.name != "coding_review_loop" for agent in pipeline.agents)
         assert repo_analyst.max_turns == 8
         assert fixer.max_turns == 12
-        assert reviewer.max_turns == 8
-        assert coding_loop.max_turns == 16

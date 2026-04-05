@@ -1292,6 +1292,9 @@ ISSUE_COMMENT: <status>
         timeout_seconds=stage_timeout_seconds(1200, 300),
     )
 
+    if is_review_branch_only():
+        return repo_intake >> issue_scout >> repo_analyst >> fixer >> publisher
+
     return repo_intake >> issue_scout >> repo_analyst >> coding_review_loop >> publisher
 
 
