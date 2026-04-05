@@ -17,9 +17,9 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime } from '../src';
-import type { AgentHandle } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import type { AgentHandle } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 export const writer = new Agent({
   name: 'writer',
@@ -50,32 +50,29 @@ export const team = new Agent({
 
 // -- Run ----------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('18-manual-selection.ts') || process.argv[1]?.endsWith('18-manual-selection.js')) {
-  const runtime = new AgentRuntime();
-  try {
-    const result = await runtime.run(
-      writer,
-      'Write a short paragraph about the history of artificial intelligence.',
-    );
-    result.printResult();
+const runtime = new AgentRuntime();
+try {
+  const result = await runtime.run(
+    writer,
+    'Write a short paragraph about the history of artificial intelligence.',
+  );
+  result.printResult();
 
-    // Production pattern:
-    // 1. Deploy once during CI/CD:
-    // await runtime.deploy(team);
-    // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples
-    //
-    // 2. In a separate long-lived worker process:
-    // await runtime.serve(team);
-    //
-    // Interactive manual-selection alternative:
-    // const handle: AgentHandle = await runtime.start(
-    //   team,
-    //   'Write a short paragraph about the history of artificial intelligence.',
-    // );
-    // await handle.respond({ selected: 'writer' });
-  } finally {
-    await runtime.shutdown();
-  }
+  // Production pattern:
+  // 1. Deploy once during CI/CD:
+  // await runtime.deploy(team);
+  // CLI alternative:
+  // agentspan deploy --package sdk/typescript/examples
+  //
+  // 2. In a separate long-lived worker process:
+  // await runtime.serve(team);
+  //
+  // Interactive manual-selection alternative:
+  // const handle: AgentHandle = await runtime.start(
+  //   team,
+  //   'Write a short paragraph about the history of artificial intelligence.',
+  // );
+  // await handle.respond({ selected: 'writer' });
+} finally {
+  await runtime.shutdown();
 }

@@ -12,7 +12,7 @@ import {
   SemanticMemory,
   InMemoryStore,
   tool,
-} from '../src/index.js';
+} from '@agentspan-ai/sdk';
 
 const MODEL = process.env.AGENTSPAN_LLM_MODEL ?? 'openai/gpt-4o';
 
@@ -87,15 +87,12 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('07-memory.ts') || process.argv[1]?.endsWith('07-memory.js')) {
-  console.log('Conversation messages:', conversationMem.toChatMessages().length);
+console.log('Conversation messages:', conversationMem.toChatMessages().length);
 
-  const results = semanticMem.search('quantum error', 2);
-  console.log('\nSemantic search results:');
-  for (const entry of results) {
-    console.log(`  - ${entry.content}`);
-  }
-
-  main().catch(console.error);
+const results = semanticMem.search('quantum error', 2);
+console.log('\nSemantic search results:');
+for (const entry of results) {
+  console.log(`  - ${entry.content}`);
 }
+
+main().catch(console.error);

@@ -8,24 +8,21 @@
  */
 
 import { monitoringAgent } from './63d-serve-from-package.js';
-import { AgentRuntime } from '../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('63e-run-monitoring.ts') || process.argv[1]?.endsWith('63e-run-monitoring.js')) {
-  const runtime = new AgentRuntime();
-  try {
-    const result = await runtime.run(monitoringAgent, 'Is everything healthy? Run a full check.');
-    result.printResult();
+const runtime = new AgentRuntime();
+try {
+  const result = await runtime.run(monitoringAgent, 'Is everything healthy? Run a full check.');
+  result.printResult();
 
-    // Production pattern:
-    // 1. Deploy once during CI/CD:
-    // await runtime.deploy(monitoringAgent);
-    // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples --agents monitoring
-    //
-    // 2. In a separate long-lived worker process:
-    // await runtime.serve(monitoringAgent);
-  } finally {
-    await runtime.shutdown();
-  }
+  // Production pattern:
+  // 1. Deploy once during CI/CD:
+  // await runtime.deploy(monitoringAgent);
+  // CLI alternative:
+  // agentspan deploy --package sdk/typescript/examples --agents monitoring
+  //
+  // 2. In a separate long-lived worker process:
+  // await runtime.serve(monitoringAgent);
+} finally {
+  await runtime.shutdown();
 }

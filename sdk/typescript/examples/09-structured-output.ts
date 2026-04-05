@@ -5,20 +5,23 @@
  * so the agent returns typed structured data.
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime } from '../src';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
 
 const MODEL = process.env.AGENTSPAN_LLM_MODEL ?? 'openai/gpt-4o';
 
 // -- Define a Zod schema for the expected output --
-const ArticleAnalysis = z.object({
-  title: z.string().describe('Article title'),
-  summary: z.string().describe('Brief summary (1-2 sentences)'),
-  category: z.enum(['tech', 'business', 'science', 'creative']).describe('Article category'),
-  sentiment: z.enum(['positive', 'neutral', 'negative']).describe('Overall sentiment'),
-  keyTopics: z.array(z.string()).describe('Key topics covered'),
-  wordCount: z.number().describe('Estimated word count'),
-}).describe('ArticleAnalysis');
+const ArticleAnalysis = {
+  type: 'object',
+  properties: {
+    title: { type: 'string', description: 'Article title' },
+    summary: { type: 'string', description: 'Brief summary (1-2 sentences)' },
+    category: { type: 'string', enum: ['tech', 'business', 'science', 'creative'], description: 'Article category' },
+    sentiment: { type: 'string', enum: ['positive', 'neutral', 'negative'], description: 'Overall sentiment' },
+    keyTopics: { type: 'array', items: { type: 'string' }, description: 'Key topics covered' },
+    wordCount: { type: 'number', description: 'Estimated word count' },
+  },
+  required: ['title', 'summary', 'category', 'sentiment', 'keyTopics', 'wordCount'],
+};
 
 // -- Agent with structured output --
 export const analyzerAgent = new Agent({
@@ -60,8 +63,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('09-structured-output.ts') || process.argv[1]?.endsWith('09-structured-output.js')) {
-
-  main().catch(console.error);
-}
+main().catch(console.error);

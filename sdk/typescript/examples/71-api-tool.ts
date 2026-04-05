@@ -15,9 +15,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, apiTool, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, apiTool, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Example 1: OpenAPI spec -------------------------------------------------
 
@@ -68,9 +67,13 @@ const calculate = tool(
   {
     name: 'calculate',
     description: 'Evaluate a math expression.',
-    inputSchema: z.object({
-      expression: z.string().describe('A mathematical expression'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        expression: { type: 'string', description: 'A mathematical expression' },
+      },
+      required: ['expression'],
+    },
   },
 );
 
@@ -115,7 +118,6 @@ export const githubAgent = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -142,6 +144,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('71-api-tool.ts') || process.argv[1]?.endsWith('71-api-tool.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

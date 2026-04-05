@@ -15,7 +15,7 @@ import {
   AgentRuntime,
   RegexGuardrail,
   guardrail,
-} from '../../src/index.js';
+} from '@agentspan-ai/sdk';
 
 // ── Regex guardrail: block PII patterns (server-side) ────
 const piiGuardrail = new RegexGuardrail({
@@ -101,7 +101,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('06-middleware.ts') || process.argv[1]?.endsWith('06-middleware.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

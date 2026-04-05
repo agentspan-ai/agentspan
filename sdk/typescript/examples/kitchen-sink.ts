@@ -23,7 +23,6 @@
  *   - For full execution: Docker, MCP server, credential store
  */
 
-import { z } from 'zod';
 
 import {
   // Core
@@ -109,7 +108,7 @@ import {
   // Discovery & Tracing
   discoverAgents,
   isTracingEnabled,
-} from '../src/index.js';
+} from '@agentspan-ai/sdk';
 
 import type {
   GuardrailResult,
@@ -118,7 +117,7 @@ import type {
   CodeExecutionConfig,
   CliConfig,
   AgentResult,
-} from '../src/index.js';
+} from '@agentspan-ai/sdk';
 
 // ── Settings ─────────────────────────────────────────────
 
@@ -152,12 +151,16 @@ const callbackLog: Array<{ type: string; data: Record<string, unknown> }> = [];
 // Features: #5 Router, #30 structured output, #63 PromptTemplate, @agent
 // ═══════════════════════════════════════════════════════════════════════
 
-const ClassificationResult = z.object({
-  category: z.enum(['tech', 'business', 'creative']).describe('Article category'),
-  priority: z.number().describe('Priority level (1=highest)'),
-  tags: z.array(z.string()).describe('Relevant tags'),
-  metadata: z.record(z.string(), z.string()).optional().describe('Additional metadata'),
-}).describe('ClassificationResult');
+const ClassificationResult = {
+  type: 'object',
+  properties: {
+    category: { type: 'string', enum: ['tech', 'business', 'creative'], description: 'Article category' },
+    priority: { type: 'number', description: 'Priority level (1=highest)' },
+    tags: { type: 'array', items: { type: 'string' }, description: 'Relevant tags' },
+    metadata: { type: 'object', additionalProperties: { type: 'string' }, description: 'Additional metadata' },
+  },
+  required: ['category', 'priority', 'tags'],
+};
 
 // @agent decorator equivalents
 const techClassifier = agent(
@@ -216,7 +219,13 @@ const researchDatabase = tool(
   {
     name: 'research_database',
     description: 'Search internal research database.',
-    inputSchema: z.object({ query: z.string() }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+      },
+      required: ['query'],
+    },
     credentials: [{ envVar: 'RESEARCH_API_KEY' } as CredentialFile],
   },
 );
@@ -235,7 +244,13 @@ const analyzeTrends = tool(
   {
     name: 'analyze_trends',
     description: 'Analyze trending topics using analytics API.',
-    inputSchema: z.object({ topic: z.string() }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        topic: { type: 'string' },
+      },
+      required: ['topic'],
+    },
     isolated: false,
     credentials: ['ANALYTICS_KEY'],
   },
@@ -281,10 +296,14 @@ const externalResearchAggregator = tool(
   {
     name: 'external_research_aggregator',
     description: 'Aggregate research from external sources. Runs on remote worker.',
-    inputSchema: z.object({
-      query: z.string(),
-      sources: z.number().optional(),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+        sources: { type: 'number' },
+      },
+      required: ['query'],
+    },
     external: true,
   },
 );
@@ -342,7 +361,13 @@ const recallPastArticles = tool(
   {
     name: 'recall_past_articles',
     description: 'Retrieve relevant past articles from semantic memory.',
-    inputSchema: z.object({ query: z.string() }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+      },
+      required: ['query'],
+    },
   },
 );
 
@@ -469,7 +494,13 @@ const safeSearch = tool(
   {
     name: 'safe_search',
     description: 'Search with SQL injection protection.',
-    inputSchema: z.object({ query: z.string() }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+      },
+      required: ['query'],
+    },
     guardrails: [sqlInjectionGuard],
   },
 );
@@ -500,11 +531,15 @@ const publishArticle = tool(
   {
     name: 'publish_article',
     description: 'Publish article to platform. Requires editorial approval.',
-    inputSchema: z.object({
-      title: z.string(),
-      content: z.string(),
-      platform: z.string(),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string' },
+        content: { type: 'string' },
+        platform: { type: 'string' },
+      },
+      required: ['title', 'content', 'platform'],
+    },
     approvalRequired: true,
   },
 );
@@ -614,7 +649,13 @@ const formatCheck = tool(
   {
     name: 'format_check',
     description: 'Check article formatting.',
-    inputSchema: z.object({ content: z.string() }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        content: { type: 'string' },
+      },
+      required: ['content'],
+    },
   },
 );
 
@@ -743,12 +784,16 @@ const gptAssistant = new GPTAssistantAgent({
 });
 
 // -- ArticleReport output schema --
-const ArticleReport = z.object({
-  wordCount: z.number(),
-  sentimentScore: z.number(),
-  readabilityGrade: z.string(),
-  topKeywords: z.array(z.string()),
-}).describe('ArticleReport');
+const ArticleReport = {
+  type: 'object',
+  properties: {
+    wordCount: { type: 'number' },
+    sentimentScore: { type: 'number' },
+    readabilityGrade: { type: 'string' },
+    topKeywords: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['wordCount', 'sentimentScore', 'readabilityGrade', 'topKeywords'],
+};
 
 const analyticsAgent = new Agent({
   name: 'analytics_agent',
@@ -962,6 +1007,4 @@ export {
 };
 
 // Only run main() when executed directly (not imported)
-if (typeof process !== 'undefined' && (process.argv[1]?.endsWith('kitchen-sink.ts') || process.argv[1]?.endsWith('kitchen-sink.js'))) {
-  main().catch(console.error);
-}
+main().catch(console.error);

@@ -12,9 +12,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Tools -------------------------------------------------------------------
 
@@ -25,9 +24,13 @@ const searchWeb = tool(
   {
     name: 'search_web',
     description: 'Search the web for information.',
-    inputSchema: z.object({
-      query: z.string().describe('Search query string'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search query string' },
+      },
+      required: ['query'],
+    },
   },
 );
 
@@ -38,10 +41,14 @@ const writeReport = tool(
   {
     name: 'write_report',
     description: 'Write a section of a report.',
-    inputSchema: z.object({
-      title: z.string().describe('Section title'),
-      content: z.string().describe('Section body text'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Section title' },
+        content: { type: 'string', description: 'Section body text' },
+      },
+      required: ['title', 'content'],
+    },
   },
 );
 
@@ -57,31 +64,28 @@ export const agent = new Agent({
 
 // -- Plan: compile without executing -----------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('57-plan-dry-run.ts') || process.argv[1]?.endsWith('57-plan-dry-run.js')) {
-  const runtime = new AgentRuntime();
-  try {
-    const workflowDef = await runtime.plan(agent);
+const runtime = new AgentRuntime();
+try {
+  const workflowDef = await runtime.plan(agent);
 
-    console.log(`Workflow name: ${workflowDef.name}`);
-    const tasks: Array<Record<string, unknown>> = (workflowDef as Record<string, unknown>).tasks as Array<Record<string, unknown>> ?? [];
-    console.log(`Total tasks:   ${tasks.length}`);
-    console.log();
+  console.log(`Workflow name: ${workflowDef.name}`);
+  const tasks: Array<Record<string, unknown>> = (workflowDef as Record<string, unknown>).tasks as Array<Record<string, unknown>> ?? [];
+  console.log(`Total tasks:   ${tasks.length}`);
+  console.log();
 
-    // Walk the task tree
-    for (const task of tasks) {
-      console.log(`  [${task.type}] ${task.taskReferenceName}`);
-      if (task.type === 'DO_WHILE' && Array.isArray(task.loopOver)) {
-        for (const sub of task.loopOver as Array<Record<string, unknown>>) {
-          console.log(`    [${sub.type}] ${sub.taskReferenceName}`);
-        }
+  // Walk the task tree
+  for (const task of tasks) {
+    console.log(`  [${task.type}] ${task.taskReferenceName}`);
+    if (task.type === 'DO_WHILE' && Array.isArray(task.loopOver)) {
+      for (const sub of task.loopOver as Array<Record<string, unknown>>) {
+        console.log(`    [${sub.type}] ${sub.taskReferenceName}`);
       }
     }
-
-    // Full JSON for CI/CD validation or export
-    console.log('\n--- Full workflow JSON ---');
-    console.log(JSON.stringify(workflowDef, null, 2));
-  } finally {
-    await runtime.shutdown();
   }
+
+  // Full JSON for CI/CD validation or export
+  console.log('\n--- Full workflow JSON ---');
+  console.log(JSON.stringify(workflowDef, null, 2));
+} finally {
+  await runtime.shutdown();
 }

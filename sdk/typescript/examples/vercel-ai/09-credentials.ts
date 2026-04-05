@@ -8,7 +8,7 @@
 
 import { tool as aiTool } from 'ai';
 import { z } from 'zod';
-import { Agent, AgentRuntime } from '../../src/index.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
 
 // ── Vercel AI SDK tool that uses a credential ────────────
 const fetchReport = aiTool({
@@ -66,7 +66,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('09-credentials.ts') || process.argv[1]?.endsWith('09-credentials.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

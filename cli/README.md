@@ -26,12 +26,6 @@ Command-line interface for managing the Agentspan runtime — start servers, run
 
 ## Install
 
-### Homebrew (macOS / Linux)
-
-```bash
-brew install agentspan-ai/agentspan
-```
-
 ### npm
 
 ```bash

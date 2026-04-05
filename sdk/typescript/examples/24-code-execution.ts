@@ -21,8 +21,8 @@ import {
   AgentRuntime,
   LocalCodeExecutor,
   DockerCodeExecutor,
-} from '../src/index.js';
-import { llmModel } from './settings.js';
+} from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Example 1: Local code execution ---------------------------------------
 
@@ -56,7 +56,6 @@ export const sandboxedCoder = new Agent({
 
 // -- Run -------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -80,6 +79,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('24-code-execution.ts') || process.argv[1]?.endsWith('24-code-execution.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

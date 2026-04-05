@@ -20,10 +20,9 @@
  *   - AGENTSPAN_LLM_MODEL (default: openai/gpt-4o-mini)
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, humanTool, tool } from '../src/index.js';
-import type { AgentHandle } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, humanTool, tool } from '@agentspan-ai/sdk';
+import type { AgentHandle } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 const lookupEmployee = tool(
   async (args: { name: string }) => {
@@ -53,9 +52,13 @@ const lookupEmployee = tool(
   {
     name: 'lookup_employee',
     description: 'Look up an employee by name and return their info.',
-    inputSchema: z.object({
-      name: z.string().describe('Employee name to look up'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Employee name to look up' },
+      },
+      required: ['name'],
+    },
   },
 );
 
@@ -71,11 +74,15 @@ const submitTicket = tool(
   {
     name: 'submit_ticket',
     description: 'Submit an IT support ticket.',
-    inputSchema: z.object({
-      title: z.string().describe('Ticket title'),
-      priority: z.string().describe('Priority level'),
-      assignee: z.string().describe('Assignee name'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Ticket title' },
+        priority: { type: 'string', description: 'Priority level' },
+        assignee: { type: 'string', description: 'Assignee name' },
+      },
+      required: ['title', 'priority', 'assignee'],
+    },
   },
 );
 
@@ -97,40 +104,37 @@ export const agent = new Agent({
     'before submitting.',
 });
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('09d-human-tool.ts') || process.argv[1]?.endsWith('09d-human-tool.js')) {
-  const runtime = new AgentRuntime();
-  try {
-    const result = await runtime.run(
-      agent,
-      'Look up Alice Chen and summarize her department and level.',
-    );
-    result.printResult();
+const runtime = new AgentRuntime();
+try {
+  const result = await runtime.run(
+    agent,
+    'Look up Alice Chen and summarize her department and level.',
+  );
+  result.printResult();
 
-    // Production pattern:
-    // 1. Deploy once during CI/CD:
-    // await runtime.deploy(agent);
-    // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples --agents it_support
-    //
-    // 2. In a separate long-lived worker process:
-    // await runtime.serve(agent);
+  // Production pattern:
+  // 1. Deploy once during CI/CD:
+  // await runtime.deploy(agent);
+  // CLI alternative:
+  // agentspan deploy --package sdk/typescript/examples --agents it_support
+  //
+  // 2. In a separate long-lived worker process:
+  // await runtime.serve(agent);
 
-    // Interactive human-tool alternative:
-    // const handle: AgentHandle = await runtime.start(
-    //   agent,
-    //   'I need to file a ticket for Alice about a laptop issue',
-    // );
-    // console.log(`Execution started: ${handle.executionId}\n`);
-    // for await (const event of handle.stream()) {
-    //   if (event.type === 'waiting') {
-    //     await handle.respond({
-    //       response:
-    //         'The laptop screen is flickering, high priority please',
-    //     });
-    //   }
-    // }
-  } finally {
-    await runtime.shutdown();
-  }
+  // Interactive human-tool alternative:
+  // const handle: AgentHandle = await runtime.start(
+  //   agent,
+  //   'I need to file a ticket for Alice about a laptop issue',
+  // );
+  // console.log(`Execution started: ${handle.executionId}\n`);
+  // for await (const event of handle.stream()) {
+  //   if (event.type === 'waiting') {
+  //     await handle.respond({
+  //       response:
+  //         'The laptop screen is flickering, high priority please',
+  //     });
+  //   }
+  // }
+} finally {
+  await runtime.shutdown();
 }

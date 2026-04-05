@@ -15,9 +15,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 const checkService = tool(
   async (args: { serviceName: string }) => {
@@ -26,9 +25,13 @@ const checkService = tool(
   {
     name: 'check_service',
     description: 'Check the health of a service.',
-    inputSchema: z.object({
-      serviceName: z.string().describe('Name of the service to check'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        serviceName: { type: 'string', description: 'Name of the service to check' },
+      },
+      required: ['serviceName'],
+    },
   },
 );
 
@@ -39,9 +42,13 @@ const restartService = tool(
   {
     name: 'restart_service',
     description: 'Restart a service. Safe operation, no approval needed.',
-    inputSchema: z.object({
-      serviceName: z.string().describe('Name of the service to restart'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        serviceName: { type: 'string', description: 'Name of the service to restart' },
+      },
+      required: ['serviceName'],
+    },
   },
 );
 
@@ -56,10 +63,14 @@ const deleteServiceData = tool(
   {
     name: 'delete_service_data',
     description: 'Delete service data. Destructive — requires human approval.',
-    inputSchema: z.object({
-      serviceName: z.string().describe('Name of the service'),
-      dataType: z.string().describe('Type of data to delete'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        serviceName: { type: 'string', description: 'Name of the service' },
+        dataType: { type: 'string', description: 'Type of data to delete' },
+      },
+      required: ['serviceName', 'dataType'],
+    },
     approvalRequired: true,
   },
 );
@@ -74,7 +85,6 @@ export const agent = new Agent({
     'deleting data if explicitly asked.',
 });
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -154,6 +164,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('09c-hitl-streaming.ts') || process.argv[1]?.endsWith('09c-hitl-streaming.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

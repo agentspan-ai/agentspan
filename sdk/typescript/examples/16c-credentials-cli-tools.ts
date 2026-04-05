@@ -32,8 +32,8 @@
  */
 
 import { execSync } from 'node:child_process';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- gh tool: list pull requests ----------------------------------------------
 
@@ -179,7 +179,6 @@ export const githubAwsAgent = new Agent({
 
 const task = process.argv.slice(2).join(' ') || 'Who am I in AWS, and list my S3 buckets?';
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -199,6 +198,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('16c-credentials-cli-tools.ts') || process.argv[1]?.endsWith('16c-credentials-cli-tools.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

@@ -13,10 +13,9 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, guardrail, tool } from '../src/index.js';
-import type { GuardrailResult } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, guardrail, tool } from '@agentspan-ai/sdk';
+import type { GuardrailResult } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Guardrail ---------------------------------------------------------------
 
@@ -54,9 +53,13 @@ const getMarketData = tool(
   {
     name: 'get_market_data',
     description: 'Get current market data for a stock ticker.',
-    inputSchema: z.object({
-      ticker: z.string().describe('The stock ticker symbol'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticker: { type: 'string', description: 'The stock ticker symbol' },
+      },
+      required: ['ticker'],
+    },
   },
 );
 
@@ -73,32 +76,29 @@ export const agent = new Agent({
   guardrails: [complianceCheck],
 });
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('32-human-guardrail.ts') || process.argv[1]?.endsWith('32-human-guardrail.js')) {
-  const runtime = new AgentRuntime();
-  try {
-    const result = await runtime.run(
-      agent,
-      'Look up AAPL and summarize the latest price movement.',
-    );
-    result.printResult();
+const runtime = new AgentRuntime();
+try {
+  const result = await runtime.run(
+    agent,
+    'Look up AAPL and summarize the latest price movement.',
+  );
+  result.printResult();
 
-    // Production pattern:
-    // 1. Deploy once during CI/CD:
-    // await runtime.deploy(agent);
-    // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples
-    //
-    // 2. In a separate long-lived worker process:
-    // await runtime.serve(agent);
-    //
-    // Interactive human-review alternative:
-    // const handle = await runtime.start(
-    //   agent,
-    //   "Look up AAPL and explain whether it's a good investment. Include your opinion on potential returns.",
-    // );
-    // await handle.reject('bad idea');
-  } finally {
-    await runtime.shutdown();
-  }
+  // Production pattern:
+  // 1. Deploy once during CI/CD:
+  // await runtime.deploy(agent);
+  // CLI alternative:
+  // agentspan deploy --package sdk/typescript/examples
+  //
+  // 2. In a separate long-lived worker process:
+  // await runtime.serve(agent);
+  //
+  // Interactive human-review alternative:
+  // const handle = await runtime.start(
+  //   agent,
+  //   "Look up AAPL and explain whether it's a good investment. Include your opinion on potential returns.",
+  // );
+  // await handle.reject('bad idea');
+} finally {
+  await runtime.shutdown();
 }

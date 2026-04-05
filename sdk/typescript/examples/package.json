@@ -1,0 +1,18 @@
+{
+  "name": "examples",
+  "private": true,
+  "description": "TypeScript examples for building and running AI agents on Agentspan",
+  "dependencies": {
+    "@agentspan-ai/sdk": "file:..",
+    "@google/adk": ">=0.1.0",
+    "@langchain/core": ">=0.2.0",
+    "@langchain/langgraph": ">=0.2.0",
+    "@langchain/openai": ">=0.2.0",
+    "@openai/agents": "^0.3.0",
+    "ai": ">=3.0.0",
+    "tsx": "^4.21.0"
+  },
+  "scripts": {
+    "start": "tsx"
+  }
+}

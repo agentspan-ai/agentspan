@@ -12,9 +12,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 const getWeather = tool(
   async (args: { city: string }) => {
@@ -29,9 +28,13 @@ const getWeather = tool(
   {
     name: 'get_weather',
     description: 'Get current weather for a city.',
-    inputSchema: z.object({
-      city: z.string().describe('The city to get weather for'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        city: { type: 'string', description: 'The city to get weather for' },
+      },
+      required: ['city'],
+    },
   },
 );
 
@@ -62,9 +65,13 @@ const calculate = tool(
   {
     name: 'calculate',
     description: 'Evaluate a math expression.',
-    inputSchema: z.object({
-      expression: z.string().describe('The math expression to evaluate'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        expression: { type: 'string', description: 'The math expression to evaluate' },
+      },
+      required: ['expression'],
+    },
   },
 );
 
@@ -76,11 +83,15 @@ const sendEmail = tool(
   {
     name: 'send_email',
     description: 'Send an email.',
-    inputSchema: z.object({
-      to: z.string().describe('Recipient email address'),
-      subject: z.string().describe('Email subject'),
-      body: z.string().describe('Email body'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to: { type: 'string', description: 'Recipient email address' },
+        subject: { type: 'string', description: 'Email subject' },
+        body: { type: 'string', description: 'Email body' },
+      },
+      required: ['to', 'subject', 'body'],
+    },
     approvalRequired: true,
     timeoutSeconds: 60,
   },
@@ -94,7 +105,6 @@ export const agent = new Agent({
     'You are a helpful assistant with access to weather, calculator, and email tools.',
 });
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -158,6 +168,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('02-tools.ts') || process.argv[1]?.endsWith('02-tools.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

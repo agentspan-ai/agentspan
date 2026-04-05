@@ -17,8 +17,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Example 1: Simple image analysis --------------------------------------
 
@@ -112,7 +112,6 @@ const creativePipeline = describer.pipe(storyteller);
 const SAMPLE_IMAGE = 'https://orkes.io/Home-Page-Prompt-to-Workflow-1.png';
 const SAMPLE_IMAGE_2 = 'https://orkes.io/icons/hero-section-workflow_updated.png';
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -165,6 +164,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('30-multimodal-agent.ts') || process.argv[1]?.endsWith('30-multimodal-agent.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

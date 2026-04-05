@@ -15,9 +15,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 const publishArticle = tool(
   async (args: { title: string; body: string }) => {
@@ -30,10 +29,14 @@ const publishArticle = tool(
   {
     name: 'publish_article',
     description: 'Publish an article to the blog. Requires editorial approval.',
-    inputSchema: z.object({
-      title: z.string().describe('Article title'),
-      body: z.string().describe('Article body'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Article title' },
+        body: { type: 'string', description: 'Article body' },
+      },
+      required: ['title', 'body'],
+    },
     approvalRequired: true,
   },
 );
@@ -48,7 +51,6 @@ export const agent = new Agent({
     'feedback, revise the article and try publishing again.',
 });
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -152,6 +154,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('09b-hitl-with-feedback.ts') || process.argv[1]?.endsWith('09b-hitl-with-feedback.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

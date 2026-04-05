@@ -2,7 +2,7 @@
  * Claude Code agent — uses Claude's built-in tools (Read, Glob, Grep).
  */
 
-import { Agent, AgentRuntime } from '../../src/index.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
 
 export const agent = new Agent({
   name: 'code_explorer',
@@ -33,6 +33,4 @@ async function main() {
 
 export const prompt = 'What TypeScript files are in the current directory?';
 
-if (process.argv[1]?.includes('05-claude-code')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

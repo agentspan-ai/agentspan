@@ -21,7 +21,6 @@ let _ai: any = null;
 async function _loadAI(): Promise<any> {
   if (_ai) return _ai;
   try {
-    // @ts-expect-error 'ai' is an optional peer dependency
     _ai = await import('ai');
     return _ai;
   } catch {

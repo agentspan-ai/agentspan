@@ -12,24 +12,21 @@
  */
 
 import { docAssistant } from './63-deploy.js';
-import { AgentRuntime } from '../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('63c-run-by-name.ts') || process.argv[1]?.endsWith('63c-run-by-name.js')) {
-  const runtime = new AgentRuntime();
-  try {
-    const result = await runtime.run(docAssistant, 'How do I reset my password?');
-    result.printResult();
+const runtime = new AgentRuntime();
+try {
+  const result = await runtime.run(docAssistant, 'How do I reset my password?');
+  result.printResult();
 
-    // Production pattern:
-    // 1. Deploy once during CI/CD:
-    // await runtime.deploy(docAssistant);
-    // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples --agents doc_assistant
-    //
-    // 2. In a separate long-lived worker process:
-    // await runtime.serve(docAssistant);
-  } finally {
-    await runtime.shutdown();
-  }
+  // Production pattern:
+  // 1. Deploy once during CI/CD:
+  // await runtime.deploy(docAssistant);
+  // CLI alternative:
+  // agentspan deploy --package sdk/typescript/examples --agents doc_assistant
+  //
+  // 2. In a separate long-lived worker process:
+  // await runtime.serve(docAssistant);
+} finally {
+  await runtime.shutdown();
 }

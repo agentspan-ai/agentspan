@@ -16,8 +16,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, LLMGuardrail } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, LLMGuardrail } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- LLM-based safety guardrail -------------------------------------------
 
@@ -50,7 +50,6 @@ export const agent = new Agent({
 
 // -- Run -------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -73,6 +72,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('22-llm-guardrails.ts') || process.argv[1]?.endsWith('22-llm-guardrails.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

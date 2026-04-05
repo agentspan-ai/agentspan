@@ -23,8 +23,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, mcpTool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, mcpTool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // Create MCP tool from the weather server — Conductor discovers tools at runtime
 const weather = mcpTool({
@@ -46,7 +46,6 @@ export const agent = new Agent({
     'use the tools provided',
 });
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -69,6 +68,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('04-mcp-weather.ts') || process.argv[1]?.endsWith('04-mcp-weather.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);
