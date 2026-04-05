@@ -625,16 +625,42 @@ def configure_git_identity(
 
 @tool(credentials=["GITHUB_TOKEN"])
 def push_review_branch(
-    repo: str,
-    workdir: str,
-    branch: str,
+    repo: str = "",
+    workdir: str = "",
+    branch: str = "",
     remote_name: str = "agentspan",
 ) -> dict:
     """Push the issue branch to the authenticated user's fork for manual review."""
     try:
-        workdir = resolve_workdir(workdir, repo=repo)
+        workdir = resolve_workdir(workdir or "/path/to/repo", repo=repo)
     except RuntimeError as exc:
         return {"error": str(exc), "workdir": workdir, "repo": repo}
+
+    if not repo:
+        remote = run_cmd(
+            ["git", "-C", workdir, "config", "--get", "remote.origin.url"], timeout=15
+        )
+        if remote.returncode != 0 or not (remote.stdout or "").strip():
+            return {
+                "error": "Could not determine repo from remote.origin.url",
+                "workdir": workdir,
+            }
+        try:
+            repo = normalize_repo_input((remote.stdout or "").strip())
+        except ValueError as exc:
+            return {"error": str(exc), "workdir": workdir}
+
+    if not branch:
+        current_branch = run_cmd(
+            ["git", "-C", workdir, "branch", "--show-current"], timeout=15
+        )
+        branch = (current_branch.stdout or "").strip()
+        if current_branch.returncode != 0 or not branch:
+            return {
+                "error": "Could not determine current git branch for review push",
+                "workdir": workdir,
+                "repo": repo,
+            }
 
     if is_dry_run():
         return {
@@ -962,6 +988,9 @@ Execution rules:
 - Never ask the user for the repo path.
 - For directory changes, file discovery, and shell pipelines, use bash code rather than Python subprocess wrappers.
 - Prefer commands that run inside WORKDIR or reference WORKDIR explicitly.
+- The execute_code tool input must be executable code only: no prose, no markdown fences, no labels like WORKDIR:, run:, content:, or def:.
+- Do not start bash snippets with variable-assignment lines like WORKDIR=...; inline the real path directly in commands.
+- Default to bash for repo inspection. Use python only for actual Python scripts.
 
 Output EXACTLY:
 
@@ -1008,6 +1037,9 @@ Execution rules:
 - Never ask the user for the repo path.
 - For changing directories or multi-step shell commands, use bash code rather than Python subprocess wrappers.
 - Keep commands scoped to WORKDIR.
+- The execute_code tool input must be executable code only: no prose, no markdown fences, no labels like WORKDIR:, run:, content:, or def:.
+- Do not start bash snippets with variable-assignment lines like WORKDIR=...; inline the real path directly in commands.
+- Default to bash for edits, git commands, and tests. Use python only for actual Python scripts.
 
 When ready, output:
 
@@ -1051,6 +1083,9 @@ Execution rules:
 - Never use placeholder paths like /path/to/repo.
 - Never ask the user for the repo path.
 - For shell validation or directory changes, prefer bash code over Python subprocess wrappers.
+- The execute_code tool input must be executable code only: no prose, no markdown fences, no labels like WORKDIR:, run:, content:, or def:.
+- Do not start bash snippets with variable-assignment lines like WORKDIR=...; inline the real path directly in commands.
+- Default to bash for validation commands. Use python only for actual Python scripts.
 
 If anything is weak, output:
 
@@ -1150,14 +1185,15 @@ Important:
 - Never use placeholder paths like /path/to/repo.
 - Never ask the user for the repo path.
 - Never answer conversationally or thank the user.
+- In review-branch mode, prefer push_review_branch directly. That tool can recover missing repo/workdir/branch details from the latest cloned workspace.
 
 If review-branch mode is OFF and the input does NOT contain APPROVED_FOR_PUBLICATION, do not call any tools. Output EXACTLY:
 PUBLICATION_BLOCKED
 REASON: reviewer did not approve publication-ready changes
 
-If review-branch mode is ON and the input does not contain enough context to push a branch, output EXACTLY:
+If review-branch mode is ON and push_review_branch still cannot recover enough context, output EXACTLY:
 PUBLICATION_BLOCKED
-REASON: review-branch mode needs REPO, WORKDIR, BRANCH, and ISSUE details from the prior stage
+REASON: review-branch mode could not recover a reviewable branch from the latest workspace
 
 If review-branch mode is ON and you successfully push the branch, output EXACTLY:
 REVIEW_BRANCH_PUSHED

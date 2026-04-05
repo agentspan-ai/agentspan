@@ -284,6 +284,34 @@ class TestBranchAndPublicationTools:
         assert result["status"] == "dry_run"
         assert result["would_push"]["branch"] == "agentspan/issue-1334-test"
 
+    def test_push_review_branch_recovers_repo_and_branch(self):
+        from repo_url_issue_pr_agent import push_review_branch
+
+        with patch.dict(os.environ, {"GITHUB_TOKEN": "secret-token"}, clear=True):
+            with patch("repo_url_issue_pr_agent.resolve_workdir", return_value="/tmp/test"):
+                with patch("repo_url_issue_pr_agent.current_github_login", return_value="agentspan"):
+                    with patch("repo_url_issue_pr_agent.ensure_fork_remote") as ensure_remote:
+                        with patch("repo_url_issue_pr_agent.run_cmd") as mock_cmd:
+                            mock_cmd.side_effect = [
+                                MagicMock(
+                                    returncode=0,
+                                    stdout="https://github.com/pytest-dev/pytest-asyncio.git\n",
+                                    stderr="",
+                                ),
+                                MagicMock(
+                                    returncode=0,
+                                    stdout="agentspan/issue-1334-test\n",
+                                    stderr="",
+                                ),
+                                MagicMock(returncode=0, stdout="", stderr=""),
+                            ]
+                            result = push_review_branch.__wrapped__()
+
+        ensure_remote.assert_called_once()
+        assert result["status"] == "pushed"
+        assert result["branch"] == "agentspan/issue-1334-test"
+        assert result["branch_url"].endswith("/agentspan/pytest-asyncio/tree/agentspan%2Fissue-1334-test")
+
     def test_push_review_branch_declares_github_token(self):
         from repo_url_issue_pr_agent import push_review_branch
 
@@ -491,6 +519,20 @@ class TestPipelineStructure:
             )
             assert "Never ask the user for the repo path" in agent.instructions
 
+    def test_coding_stage_instructions_require_executable_code_only(self):
+        from repo_url_issue_pr_agent import build_pipeline
+
+        pipeline = build_pipeline(
+            "https://github.com/pytest-dev/pytest-asyncio", 1334, ""
+        )
+        for agent in (
+            pipeline.agents[2],
+            pipeline.agents[3].agents[0],
+            pipeline.agents[3].agents[1],
+        ):
+            assert "execute_code tool input must be executable code only" in agent.instructions
+            assert "Do not start bash snippets with variable-assignment lines like WORKDIR=..." in agent.instructions
+
     def test_publisher_has_explicit_blocked_output_contract(self):
         from repo_url_issue_pr_agent import build_pipeline
 
@@ -513,3 +555,4 @@ class TestPipelineStructure:
         publisher = pipeline.agents[4]
         assert "REVIEW_BRANCH_PUSHED" in publisher.instructions
         assert "do not open a PR and do not comment on the issue" in publisher.instructions
+        assert "push_review_branch directly" in publisher.instructions
