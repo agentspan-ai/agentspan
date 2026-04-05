@@ -176,12 +176,13 @@ export class AgentRuntime {
             resultRec.tokenUsage = tokenUsage;
           }
 
-          // Fill output from execution if stream returned null
-          if (resultRec.output == null || (typeof resultRec.output === 'object' &&
-              (resultRec.output as Record<string, unknown>)?.result === null)) {
+          // Fill output from execution if stream returned null or junk
+          // (server sometimes returns workflow state like {result: [], finishReason: "TOOL_CALLS"})
+          if (_isOutputJunk(resultRec.output)) {
             const execOutput = _extractOutput(execution);
             if (execOutput != null) {
-              resultRec.output = execOutput;
+              resultRec.output = typeof execOutput === 'string'
+                ? { result: execOutput } : execOutput;
             }
           }
         }
@@ -267,6 +268,15 @@ export class AgentRuntime {
                 resultData.toolCalls = _extractToolCalls(execution) as unknown[];
                 resultData.messages = _extractMessages(execution);
                 resultData.tokenUsage = _extractTokenUsage(execution) ?? undefined;
+
+                // Replace junk output with execution data
+                if (_isOutputJunk(resultData.output)) {
+                  const execOutput = _extractOutput(execution);
+                  if (execOutput != null) {
+                    resultData.output = typeof execOutput === 'string'
+                      ? { result: execOutput } : execOutput;
+                  }
+                }
               }
             } catch {
               // Non-critical
@@ -1223,12 +1233,12 @@ export class AgentRuntime {
       try {
         const execution = await this._fetchExecution(executionId, options?.signal);
         if (execution) {
-          // Extract output from execution if stream returned null
-          if (resultRec.output == null || (typeof resultRec.output === 'object' &&
-              (resultRec.output as Record<string, unknown>)?.result === null)) {
+          // Extract output from execution if stream returned null or junk
+          if (_isOutputJunk(resultRec.output)) {
             const execOutput = _extractOutput(execution);
             if (execOutput != null) {
-              resultRec.output = execOutput;
+              resultRec.output = typeof execOutput === 'string'
+                ? { result: execOutput } : execOutput;
             }
           }
 
@@ -1317,6 +1327,15 @@ export class AgentRuntime {
                 resultData.toolCalls = _extractToolCalls(execution) as unknown[];
                 resultData.messages = _extractMessages(execution);
                 resultData.tokenUsage = _extractTokenUsage(execution) ?? undefined;
+
+                // Replace junk output with execution data
+                if (_isOutputJunk(resultData.output)) {
+                  const execOutput = _extractOutput(execution);
+                  if (execOutput != null) {
+                    resultData.output = typeof execOutput === 'string'
+                      ? { result: execOutput } : execOutput;
+                  }
+                }
               }
             } catch {
               // Non-critical
@@ -1465,6 +1484,21 @@ function sleep(ms: number): Promise<void> {
 
 // ── Execution extraction helpers (mirrors Python SDK) ────
 
+/**
+ * Detect "junk" output from the server — workflow state objects that
+ * aren't the actual LLM response (e.g. {result: [], finishReason: "TOOL_CALLS"}).
+ */
+function _isOutputJunk(output: unknown): boolean {
+  if (output == null) return true;
+  if (typeof output !== 'object' || Array.isArray(output)) return false;
+  const obj = output as Record<string, unknown>;
+  const result = obj.result;
+  // {result: null, ...} or {result: [], finishReason: ...}
+  if (result === null && 'finishReason' in obj) return true;
+  if (Array.isArray(result) && result.length === 0) return true;
+  return false;
+}
+
 /** System task types that are never user-defined tool calls. */
 const SYSTEM_TASK_TYPES = new Set([
   'LLM_CHAT_COMPLETE',
@@ -1483,16 +1517,45 @@ const INTERNAL_KEYS = ['_agent_state', 'method', '__humanTaskDefinition'];
 
 /**
  * Extract output from a full execution response.
- * Mirrors Python's wf.output extraction.
+ * Mirrors Python's wf.output extraction with fallback to messages.
+ *
+ * The server sometimes returns workflow state as output
+ * (e.g. {result: [], finishReason: "TOOL_CALLS"}) instead of the
+ * actual LLM text response.  When that happens, fall back to the
+ * last assistant message in execution.variables.messages.
  */
 function _extractOutput(execution: Record<string, unknown>): unknown {
   const output = execution.output;
-  if (output == null) return null;
-  if (typeof output === 'object' && !Array.isArray(output)) {
+
+  // Try workflow output first
+  if (output != null && typeof output === 'object' && !Array.isArray(output)) {
     const obj = output as Record<string, unknown>;
-    return 'result' in obj ? obj.result ?? obj : obj;
+    const result = 'result' in obj ? obj.result : undefined;
+    // Usable if result is a non-empty string or non-empty object/array
+    if (result != null && result !== '') {
+      if (Array.isArray(result) && result.length === 0) {
+        // empty array — fall through to messages
+      } else {
+        return result;
+      }
+    }
+  } else if (output != null) {
+    // Primitive or array — return directly
+    return output;
   }
-  return output;
+
+  // Fallback: last assistant message content from execution variables
+  const variables = execution.variables as Record<string, unknown> | undefined;
+  if (variables && Array.isArray(variables.messages)) {
+    for (let i = variables.messages.length - 1; i >= 0; i--) {
+      const msg = variables.messages[i] as Record<string, unknown>;
+      if (msg.role === 'assistant' && msg.content) {
+        return msg.content;
+      }
+    }
+  }
+
+  return null;
 }
 
 /**

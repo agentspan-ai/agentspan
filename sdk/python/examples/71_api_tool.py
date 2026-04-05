@@ -8,63 +8,63 @@ discovers all operations as agent tools. The server fetches the spec at
 workflow startup, parses it, and makes each operation available to the LLM.
 No manual tool definitions needed — just point and go.
 
-Three patterns shown:
-    1. OpenAPI 3.x spec URL with credentials
-    2. Base URL (server auto-discovers /openapi.json, /swagger.json, etc.)
-    3. Mixing api_tool with other tool types (mcp_tool, @tool)
+Four patterns shown:
+    1. OpenAPI 3.x spec URL (local MCP test server with 65 deterministic tools)
+    2. Filtered operations — whitelist specific endpoints via tool_names
+    3. Mixing api_tool with other tool types (@tool)
+    4. Large API with credential auth (GitHub)
 
 Requirements:
     - Conductor server with LLM support
     - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
+    - MCP test server running on http://localhost:3001 (for examples 1-3)
     - For credential examples: store credentials via `agentspan credentials set`
 """
 
-from agentspan.agents import Agent, AgentRuntime, api_tool, mcp_tool, tool
+from agentspan.agents import Agent, AgentRuntime, api_tool, tool
 from settings import settings
 
+MCP_TEST_SERVER_SPEC = "http://localhost:3001/api-docs"
 
-# ── Example 1: OpenAPI spec with credentials ──────────────────────────
+
+# ── Example 1: OpenAPI spec (full discovery) ──────────────────────────
 #
 # Point to a live OpenAPI spec. The server discovers all operations,
 # and the LLM picks the right one based on the user's request.
-# Global auth headers are applied to every discovered endpoint.
-#
-# Before running, store the credential:
-#   agentspan credentials set PETSTORE_KEY your-api-key
+# The MCP test server exposes 65 deterministic tools across math,
+# string, collection, encoding, hash, datetime, validation, and
+# conversion groups.
 
-petstore = api_tool(
-    url="https://petstore3.swagger.io/api/v3/openapi.json",
-    name="petstore",
-    max_tools=20,  # Petstore has many ops — filter to top 20
+math_api = api_tool(
+    url=MCP_TEST_SERVER_SPEC,
+    name="mcp_test_tools",
+    max_tools=10,  # 65 ops — filter to top 10 most relevant
 )
 
-pet_agent = Agent(
-    name="pet_store_assistant",
+math_agent = Agent(
+    name="math_assistant",
     model=settings.llm_model,
-    instructions="You help users manage a pet store. Use the available API tools.",
-    tools=[petstore],
+    instructions="You are a math assistant. Use the API tools to compute results.",
+    tools=[math_api],
 )
 
 
-# ── Example 2: Base URL (auto-discovery) ──────────────────────────────
+# ── Example 2: Filtered operations (tool_names whitelist) ─────────────
 #
-# Just provide the base URL. The server tries:
-#   /openapi.json, /swagger.json, /v3/api-docs, /swagger/v1/swagger.json,
-#   /api-docs, /.well-known/openapi.json
-#
-# Optionally whitelist specific operations:
+# Whitelist specific operations by operationId. Only these are
+# exposed to the LLM — everything else is ignored.
 
-weather = api_tool(
-    url="https://api.weather.com",
-    tool_names=["getCurrentWeather", "getForecast"],  # Only these two ops
+string_api = api_tool(
+    url=MCP_TEST_SERVER_SPEC,
+    tool_names=["string_reverse", "string_uppercase", "string_length"],
 )
 
-weather_agent = Agent(
-    name="weather_assistant",
+string_agent = Agent(
+    name="string_assistant",
     model=settings.llm_model,
-    instructions="You provide weather information.",
-    tools=[weather],
+    instructions="You are a string manipulation assistant.",
+    tools=[string_api],
 )
 
 
@@ -86,8 +86,9 @@ def calculate(expression: str) -> dict:
         return {"expression": expression, "error": str(e)}
 
 
-petstore_api = api_tool(
-    url="https://petstore3.swagger.io/api/v3/openapi.json",
+collection_api = api_tool(
+    url=MCP_TEST_SERVER_SPEC,
+    tool_names=["collection_sort", "collection_unique", "collection_flatten"],
     max_tools=10,
 )
 
@@ -95,10 +96,10 @@ multi_tool_agent = Agent(
     name="multi_tool_assistant",
     model=settings.llm_model,
     instructions=(
-        "You are a versatile assistant. Use API tools for pet store operations, "
+        "You are a versatile assistant. Use API tools for collection operations, "
         "and the calculator for math. Pick the best tool for each request."
     ),
-    tools=[petstore_api, calculate],
+    tools=[collection_api, calculate],
 )
 
 
@@ -133,22 +134,27 @@ github_agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Example 1: Petstore
-        print("=== Petstore API ===")
-        result = runtime.run(pet_agent, "List all available pets with status 'available'")
+        # Example 1: Math via OpenAPI-discovered tools
+        print("=== Math API ===")
+        result = runtime.run(math_agent, "What is 15 + 27? Also compute 8 factorial.")
+        result.print_result()
+
+        # Example 2: Filtered string tools
+        print("\n=== String API (filtered) ===")
+        result = runtime.run(string_agent, "Reverse the string 'hello world' and tell me its length.")
         result.print_result()
 
         # Example 3: Mixed tools
         print("\n=== Mixed Tools ===")
-        result = runtime.run(multi_tool_agent, "What's sqrt(144)? Also find pets named 'doggie'.")
+        result = runtime.run(multi_tool_agent, "Sort [3,1,4,1,5,9] and also compute sqrt(144).")
         result.print_result()
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
-        # runtime.deploy(pet_agent)
+        # runtime.deploy(math_agent)
         # CLI alternative:
         # agentspan deploy --package examples.71_api_tool
         #
         # 2. In a separate long-lived worker process:
-        # runtime.serve(pet_agent)
+        # runtime.serve(math_agent)
 
