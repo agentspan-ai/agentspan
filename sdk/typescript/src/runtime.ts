@@ -152,23 +152,42 @@ export class AgentRuntime {
         events.push(event);
       }
 
-      // Get final status for token usage
-      let tokenUsage;
-      try {
-        const status = await this._getStatus(executionId, options?.signal);
-        tokenUsage = (status as unknown as Record<string, unknown>).tokenUsage as
-          | AgentResult['tokenUsage']
-          | undefined;
-      } catch {
-        // Non-critical
-      }
-
       // Build result from stream
       const result = await agentStream.getResult();
-      if (tokenUsage) {
-        (result as unknown as Record<string, unknown>).tokenUsage = tokenUsage;
+      const resultRec = result as unknown as Record<string, unknown>;
+      resultRec.correlationId = correlationId;
+
+      // Enrich with execution data (toolCalls, messages, tokenUsage)
+      try {
+        const execution = await this._fetchExecution(executionId, options?.signal);
+        if (execution) {
+          const toolCalls = _extractToolCalls(execution);
+          if (toolCalls.length > 0) {
+            resultRec.toolCalls = toolCalls;
+          }
+
+          const messages = _extractMessages(execution);
+          if (messages.length > 0) {
+            resultRec.messages = messages;
+          }
+
+          const tokenUsage = _extractTokenUsage(execution);
+          if (tokenUsage) {
+            resultRec.tokenUsage = tokenUsage;
+          }
+
+          // Fill output from execution if stream returned null
+          if (resultRec.output == null || (typeof resultRec.output === 'object' &&
+              (resultRec.output as Record<string, unknown>)?.result === null)) {
+            const execOutput = _extractOutput(execution);
+            if (execOutput != null) {
+              resultRec.output = execOutput;
+            }
+          }
+        }
+      } catch {
+        // Non-critical — fall back to stream-only result
       }
-      (result as unknown as Record<string, unknown>).correlationId = correlationId;
 
       return result;
     } finally {
@@ -235,12 +254,25 @@ export class AgentRuntime {
         while (true) {
           const status = await this._getStatus(executionId, options?.signal);
           if (TERMINAL_STATUSES.has(status.status)) {
-            return makeAgentResult({
+            const resultData: Parameters<typeof makeAgentResult>[0] = {
               output: status.output,
               executionId,
               correlationId,
               status: status.status,
-            });
+            };
+
+            try {
+              const execution = await this._fetchExecution(executionId, options?.signal);
+              if (execution) {
+                resultData.toolCalls = _extractToolCalls(execution) as unknown[];
+                resultData.messages = _extractMessages(execution);
+                resultData.tokenUsage = _extractTokenUsage(execution) ?? undefined;
+              }
+            } catch {
+              // Non-critical
+            }
+
+            return makeAgentResult(resultData);
           }
           await sleep(pollIntervalMs);
         }
@@ -1272,12 +1304,25 @@ export class AgentRuntime {
         while (true) {
           const status = await this._getStatus(executionId, options?.signal);
           if (TERMINAL_STATUSES.has(status.status)) {
-            return makeAgentResult({
+            const resultData: Parameters<typeof makeAgentResult>[0] = {
               output: status.output,
               executionId,
               correlationId,
               status: status.status,
-            });
+            };
+
+            try {
+              const execution = await this._fetchExecution(executionId, options?.signal);
+              if (execution) {
+                resultData.toolCalls = _extractToolCalls(execution) as unknown[];
+                resultData.messages = _extractMessages(execution);
+                resultData.tokenUsage = _extractTokenUsage(execution) ?? undefined;
+              }
+            } catch {
+              // Non-critical
+            }
+
+            return makeAgentResult(resultData);
           }
           await sleep(pollIntervalMs);
         }
@@ -1475,16 +1520,25 @@ function _extractToolCalls(execution: Record<string, unknown>): unknown[] {
     const taskType = String(task.taskType ?? task.task_type ?? '').toUpperCase();
     const ref = String(task.referenceTaskName ?? task.reference_task_name ?? '');
 
-    if (SYSTEM_TASK_TYPES.has(taskType)) continue;
+    // The call_ prefix is the compiler's marker for tool invocations.
+    // Any task with a call_ ref is a user-initiated tool call, regardless
+    // of whether the underlying task type is HTTP, CALL_MCP_TOOL, SIMPLE, etc.
     if (!ref.startsWith('call_')) continue;
+    // Skip only orchestration-level system tasks (these never have call_ refs,
+    // but guard against edge cases)
+    if (SYSTEM_TASK_TYPES.has(taskType)) continue;
 
     const inputData = { ...(task.inputData ?? task.input_data ?? {}) as Record<string, unknown> };
     for (const k of INTERNAL_KEYS) {
       delete inputData[k];
     }
 
+    // Use the tool name from inputData.method (set by compiler) if available
+    const toolName = String(inputData.method ?? taskType).toLowerCase();
+    delete inputData.method;
+
     toolCalls.push({
-      name: taskType.toLowerCase(),
+      name: toolName,
       args: inputData,
       result: task.outputData ?? task.output_data ?? {},
     });
