@@ -596,3 +596,19 @@ class TestPipelineStructure:
         assert all(agent.name != "coding_review_loop" for agent in pipeline.agents)
         assert repo_analyst.max_turns == 8
         assert fixer.max_turns == 12
+
+    def test_forced_issue_skips_issue_search(self):
+        from repo_url_issue_pr_agent import build_pipeline
+
+        pipeline = build_pipeline(
+            "https://github.com/pytest-dev/pytest-asyncio", 1334, ""
+        )
+
+        issue_scout = pipeline.agents[1]
+        tool_names = [tool._tool_def.name for tool in issue_scout.tools]
+        assert "search_repo_issues" not in tool_names
+        assert "read_issue_detail" in tool_names
+        assert "create_issue_branch" in tool_names
+        assert "Do not call search_repo_issues" in issue_scout.instructions
+        assert "Call read_issue_detail exactly once" in issue_scout.instructions
+        assert issue_scout.max_turns == 8

@@ -896,6 +896,15 @@ def build_pipeline(
     forced_issue_note = (
         f"Forced issue: #{issue_number}." if issue_number else "No forced issue."
     )
+    forced_issue_rules = (
+        "\nForced-issue rules:\n"
+        f"- The target issue is already chosen: #{issue_number}.\n"
+        "- Do not call search_repo_issues.\n"
+        "- Call read_issue_detail exactly once for the forced issue, then create_issue_branch.\n"
+        "- Do not debate alternative issues or reread the same issue multiple times.\n"
+        if issue_number
+        else ""
+    )
     code_commands = [
         "bash",
         "sh",
@@ -974,6 +983,7 @@ You are selecting a GitHub issue that is worth turning into a real PR.{dry_run_n
 
 {forced_issue_note}
 Extra guidance: {extra_guidance or "none"}
+{forced_issue_rules}
 
 Selection rubric:
 1. Clear bug or tightly scoped enhancement.
@@ -1007,14 +1017,18 @@ BUILD_CMD: <command or "none">
 RATIONALE: <why this is the right issue>
 SUCCESS_CRITERIA: <observable acceptance criteria>
 """,
-        tools=[search_repo_issues, read_issue_detail, create_issue_branch],
+        tools=(
+            [read_issue_detail, create_issue_branch]
+            if issue_number
+            else [search_repo_issues, read_issue_detail, create_issue_branch]
+        ),
         local_code_execution=True,
         allowed_languages=["python", "bash", "javascript", "typescript"],
         allowed_commands=code_commands,
         gate=TextGate("NO_CANDIDATE_ISSUES"),
-        max_turns=20,
+        max_turns=8 if issue_number else 20,
         max_tokens=stage_max_tokens(8000),
-        timeout_seconds=stage_timeout_seconds(1200, 420),
+        timeout_seconds=180 if issue_number else stage_timeout_seconds(1200, 420),
     )
 
     repo_analyst = Agent(
