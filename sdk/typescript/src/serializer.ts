@@ -167,12 +167,12 @@ export class AgentConfigSerializer {
       config.memory = this.serializeMemory(agent.memory);
     }
 
-    // Scalar fields
-    if (agent.maxTurns !== 25) config.maxTurns = agent.maxTurns;
+    // Scalar fields — always emit maxTurns, timeoutSeconds, external (match Python)
+    config.maxTurns = agent.maxTurns;
     if (agent.maxTokens !== undefined) config.maxTokens = agent.maxTokens;
     if (agent.temperature !== undefined) config.temperature = agent.temperature;
-    if (agent.timeoutSeconds !== 0) config.timeoutSeconds = agent.timeoutSeconds;
-    if (agent.external) config.external = agent.external;
+    config.timeoutSeconds = agent.timeoutSeconds;
+    config.external = agent.external;
 
     // stopWhen
     if (agent.stopWhen) {

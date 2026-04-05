@@ -343,6 +343,7 @@ export class Agent {
       // Flatten: merge other into existing sequential pipeline
       return new Agent({
         name: [...this.agents, other].map((a) => a.name).join('_'),
+        model: this.model,
         agents: [...this.agents, other],
         strategy: 'sequential',
       });
@@ -351,6 +352,7 @@ export class Agent {
     // Create new sequential pipeline
     return new Agent({
       name: `${this.name}_${other.name}`,
+      model: this.model,
       agents: [this, other],
       strategy: 'sequential',
     });

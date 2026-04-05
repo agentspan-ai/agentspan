@@ -111,6 +111,8 @@ describe('Agent', () => {
       expect(pipeline.agents[0]).toBe(a);
       expect(pipeline.agents[1]).toBe(b);
       expect(pipeline.name).toBe('a_b');
+      // Model propagated from left-hand side (matching Python >>)
+      expect(pipeline.model).toBe('openai/gpt-4o');
     });
 
     it('flattens sequential pipeline (base spec §14.14)', () => {

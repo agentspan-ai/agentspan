@@ -274,7 +274,7 @@ describe('httpTool', () => {
 });
 
 describe('mcpTool', () => {
-  it('creates MCP tool', () => {
+  it('creates MCP tool with snake_case wire config', () => {
     const t = mcpTool({
       serverUrl: 'https://mcp.example.com',
       name: 'my_mcp',
@@ -284,20 +284,22 @@ describe('mcpTool', () => {
     });
     expect(t.toolType).toBe('mcp');
     expect(t.func).toBeNull();
-    expect(t.config?.serverUrl).toBe('https://mcp.example.com');
-    expect(t.config?.toolNames).toEqual(['tool_a', 'tool_b']);
-    expect(t.config?.maxTools).toBe(10);
+    // Wire format uses snake_case keys (server expects this)
+    expect(t.config?.server_url).toBe('https://mcp.example.com');
+    expect(t.config?.tool_names).toEqual(['tool_a', 'tool_b']);
+    expect(t.config?.max_tools).toBe(10);
   });
 
-  it('uses defaults for name and description', () => {
+  it('uses defaults for name, description, and max_tools', () => {
     const t = mcpTool({ serverUrl: 'https://mcp.example.com' });
-    expect(t.name).toBe('mcp_tool');
-    expect(t.description).toBe('MCP tool');
+    expect(t.name).toBe('mcp_tools');
+    expect(t.description).toBe('MCP tools from https://mcp.example.com');
+    expect(t.config?.max_tools).toBe(64);
   });
 });
 
 describe('apiTool', () => {
-  it('creates API tool', () => {
+  it('creates API tool with snake_case wire config', () => {
     const t = apiTool({
       url: 'https://api.example.com/openapi.json',
       name: 'my_api',
@@ -307,7 +309,7 @@ describe('apiTool', () => {
     expect(t.toolType).toBe('api');
     expect(t.func).toBeNull();
     expect(t.config?.url).toBe('https://api.example.com/openapi.json');
-    expect(t.config?.maxTools).toBe(32);
+    expect(t.config?.max_tools).toBe(32);
   });
 });
 
@@ -323,8 +325,14 @@ describe('agentTool', () => {
       optional: true,
     });
     expect(t.toolType).toBe('agent_tool');
-    expect(t.name).toBe('researcher_tool');
+    expect(t.name).toBe('researcher');
+    expect(t.description).toBe('Invoke the researcher agent');
     expect(t.func).toBeNull();
+    // inputSchema should have request property
+    const schema = t.inputSchema as Record<string, unknown>;
+    const props = schema.properties as Record<string, unknown>;
+    expect(props).toHaveProperty('request');
+    expect((schema as any).required).toEqual(['request']);
     expect(t.config?.agent).toBe(subAgent);
     expect(t.config?.retryCount).toBe(3);
     expect(t.config?.retryDelaySeconds).toBe(5);
@@ -413,7 +421,14 @@ describe('pdfTool', () => {
     const t = pdfTool();
     expect(t.toolType).toBe('generate_pdf');
     expect(t.name).toBe('generate_pdf');
-    expect(t.description).toBe('Generate a PDF document');
+    expect(t.description).toBe('Generate a PDF document from markdown text.');
+    expect(t.config?.taskType).toBe('GENERATE_PDF');
+    // Default inputSchema has markdown required
+    expect(t.inputSchema).toHaveProperty('properties.markdown');
+    expect(t.inputSchema).toHaveProperty('properties.pageSize');
+    expect(t.inputSchema).toHaveProperty('properties.theme');
+    expect(t.inputSchema).toHaveProperty('properties.baseFontSize');
+    expect((t.inputSchema as any).required).toEqual(['markdown']);
   });
 
   it('creates PDF tool with options', () => {
@@ -425,6 +440,7 @@ describe('pdfTool', () => {
       fontSize: 14,
     });
     expect(t.name).toBe('custom_pdf');
+    expect(t.config?.taskType).toBe('GENERATE_PDF');
     expect(t.config?.pageSize).toBe('A4');
     expect(t.config?.theme).toBe('dark');
     expect(t.config?.fontSize).toBe(14);
@@ -444,11 +460,15 @@ describe('searchTool', () => {
       dimensions: 1536,
     });
     expect(t.toolType).toBe('rag_search');
-    expect(t.config?.vectorDb).toBe('pinecone');
+    expect(t.config?.taskType).toBe('LLM_SEARCH_INDEX');
+    expect(t.config?.vectorDB).toBe('pinecone');
     expect(t.config?.index).toBe('docs-index');
     expect(t.config?.namespace).toBe('default_ns');
     expect(t.config?.maxResults).toBe(10);
     expect(t.config?.dimensions).toBe(1536);
+    // Default inputSchema has query required
+    expect(t.inputSchema).toHaveProperty('properties.query');
+    expect((t.inputSchema as any).required).toEqual(['query']);
   });
 });
 
@@ -465,9 +485,16 @@ describe('indexTool', () => {
       chunkOverlap: 50,
     });
     expect(t.toolType).toBe('rag_index');
+    expect(t.config?.taskType).toBe('LLM_INDEX_TEXT');
+    expect(t.config?.vectorDB).toBe('weaviate');
     expect(t.config?.chunkSize).toBe(512);
     expect(t.config?.chunkOverlap).toBe(50);
     expect(t.config?.namespace).toBe('default_ns');
+    // Default inputSchema has text and docId required
+    expect(t.inputSchema).toHaveProperty('properties.text');
+    expect(t.inputSchema).toHaveProperty('properties.docId');
+    expect(t.inputSchema).toHaveProperty('properties.metadata');
+    expect((t.inputSchema as any).required).toEqual(['text', 'docId']);
   });
 });
 
