@@ -571,3 +571,6 @@ class TestPipelineStructure:
         assert "push_review_branch directly" in publisher.instructions
         assert "COMMIT_SHA:" in publisher.instructions
         assert "COMMIT_URL:" in publisher.instructions
+        assert "always call push_review_branch first" in publisher.instructions
+        assert "Never ask the user for REPO, WORKDIR, BRANCH, ISSUE" in publisher.instructions
+        assert publisher.required_tools == ["push_review_branch"]

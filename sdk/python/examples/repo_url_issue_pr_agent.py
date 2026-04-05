@@ -1182,7 +1182,7 @@ You publish the approved fix to GitHub.{dry_run_note}{review_branch_note}
 
 Publication requirements:
 1. In normal mode, only proceed if reviewer emitted APPROVED_FOR_PUBLICATION.
-2. In review-branch mode, you may proceed whenever the input contains REPO, WORKDIR, BRANCH, and ISSUE, even if reviewer did not approve publication.
+2. In review-branch mode, always call push_review_branch first, even if REPO, WORKDIR, BRANCH, or ISSUE are missing from the handoff.
 3. In review-branch mode, do not open a PR and do not comment on the issue. Push the branch for manual inspection instead.
 4. In review-branch mode, skip approve_publication entirely.
 5. Rebase the issue branch onto the latest upstream default branch.
@@ -1201,8 +1201,10 @@ Important:
 - Treat WORKDIR from the approved handoff as the source of truth.
 - Never use placeholder paths like /path/to/repo.
 - Never ask the user for the repo path.
+- Never ask the user for REPO, WORKDIR, BRANCH, ISSUE, or any other review-branch metadata.
 - Never answer conversationally or thank the user.
 - In review-branch mode, prefer push_review_branch directly. That tool can recover missing repo/workdir/branch details from the latest cloned workspace.
+- In review-branch mode, do not ask follow-up questions. Either push the recovered branch or return PUBLICATION_BLOCKED with the tool failure summary.
 
 If review-branch mode is OFF and the input does NOT contain APPROVED_FOR_PUBLICATION, do not call any tools. Output EXACTLY:
 PUBLICATION_BLOCKED
@@ -1245,6 +1247,7 @@ ISSUE_COMMENT: <status>
         local_code_execution=True,
         allowed_languages=["bash"],
         allowed_commands=["bash", "sh", "git", "ls", "cat"],
+        required_tools=["push_review_branch"] if is_review_branch_only() else [],
         max_turns=18,
         max_tokens=stage_max_tokens(8000),
         timeout_seconds=stage_timeout_seconds(1200, 300),
