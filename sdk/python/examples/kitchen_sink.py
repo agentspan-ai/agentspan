@@ -192,7 +192,7 @@ intake_router = Agent(
 
 
 # -- Native tool with ToolContext injection + file-based credentials --
-@tool(credentials=[CredentialFile(env_var="RESEARCH_API_KEY")])
+@tool(credentials=[CredentialFile(env_var="RESEARCH_API_KEY", relative_path=".research/api_key")])
 def research_database(query: str, ctx: ToolContext = None) -> dict:
     """Search internal research database."""
     session = ctx.session_id if ctx else "unknown"
@@ -406,7 +406,6 @@ def fact_validator(content: str) -> GuardrailResult:
 # -- External guardrail (remote worker, on_fail=RAISE) --
 compliance_guardrail = Guardrail(
     name="compliance_check",
-    external=True,
     position=Position.OUTPUT,
     on_fail=OnFail.RAISE,
 )
@@ -584,7 +583,6 @@ formatter = Agent(
 # External agent — runs as remote SUB_WORKFLOW (#88)
 external_publisher = Agent(
     name="external_publisher",
-    external=True,
     instructions="Publish to the CMS platform.",
 )
 
@@ -715,7 +713,7 @@ analytics_agent = Agent(
     include_contents="default",  # #68
     output_type=ArticleReport,  # #30
     required_tools=["index_article"],  # #70
-    code_execution_config=CodeExecutionConfig(  # #58
+    code_execution=CodeExecutionConfig(  # #58
         enabled=True,
         allowed_languages=["python", "shell"],
         allowed_commands=["python3", "pip"],
