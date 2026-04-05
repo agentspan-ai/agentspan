@@ -1083,6 +1083,7 @@ export class AgentRuntime {
    */
   private _registerExtractedWorkers(
     workers: { name: string; func?: Function | null }[],
+    credentials?: string[],
   ): void {
     for (const worker of workers) {
       if (worker.func) {
@@ -1095,7 +1096,7 @@ export class AgentRuntime {
           delete cleanInput['method'];
           delete cleanInput['__agentspan_ctx__'];
           return fn(cleanInput);
-        });
+        }, credentials);
       }
     }
   }
@@ -1141,7 +1142,7 @@ export class AgentRuntime {
     const correlationId = generateCorrelationId();
     const [rawConfig, workers] = this._serializeFramework(agent, frameworkId, { model: options?.model });
 
-    this._registerExtractedWorkers(workers);
+    this._registerExtractedWorkers(workers, options?.credentials);
 
     this.workerManager.startPolling();
 
@@ -1239,7 +1240,7 @@ export class AgentRuntime {
     const correlationId = generateCorrelationId();
     const [rawConfig, workers] = this._serializeFramework(agent, frameworkId, { model: options?.model });
 
-    this._registerExtractedWorkers(workers);
+    this._registerExtractedWorkers(workers, options?.credentials);
 
     this.workerManager.startPolling();
 

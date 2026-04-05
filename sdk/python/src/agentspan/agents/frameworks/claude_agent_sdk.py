@@ -18,7 +18,7 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import is_dataclass, replace
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from agentspan.agents.frameworks.serializer import WorkerInfo
 
@@ -165,11 +165,15 @@ def make_claude_agent_sdk_worker(
     server_url: str,
     auth_key: str,
     auth_secret: str,
+    credential_names: Optional[List[str]] = None,
 ) -> Any:
     """Build a pre-wrapped tool_worker(task) -> TaskResult for a Claude Agent SDK agent."""
     from conductor.client.http.models.task import Task
     from conductor.client.http.models.task_result import TaskResult
     from conductor.client.http.models.task_result_status import TaskResultStatus
+
+    # Capture credential names in closure — avoids race with _workflow_credentials
+    _closure_cred_names = list(credential_names) if credential_names else []
 
     def tool_worker(task: Task) -> TaskResult:
         execution_id = task.workflow_instance_id
@@ -195,7 +199,9 @@ def make_claude_agent_sdk_worker(
         # Resolve workflow-level credentials and inject into os.environ
         _injected_cred_keys: List[str] = []
         try:
-            _injected_cred_keys = _inject_credentials(task, execution_id)
+            _injected_cred_keys = _inject_credentials(
+                task, execution_id, credential_names=_closure_cred_names or None,
+            )
         except Exception as _cred_err:
             logger.warning("Failed to resolve credentials for Claude Agent SDK: %s", _cred_err)
 
@@ -960,7 +966,9 @@ def _complete_workflow_nonblocking(
 # ---------------------------------------------------------------------------
 
 
-def _inject_credentials(task: Any, execution_id: str) -> List[str]:
+def _inject_credentials(
+    task: Any, execution_id: str, credential_names: Optional[List[str]] = None,
+) -> List[str]:
     """Resolve workflow-level credentials and inject into os.environ.
 
     Returns list of env var keys that were injected (for cleanup).
@@ -975,9 +983,12 @@ def _inject_credentials(task: Any, execution_id: str) -> List[str]:
     )
 
     injected_keys: List[str] = []
-    exec_id = execution_id or ""
-    with _workflow_credentials_lock:
-        cred_names = list(_workflow_credentials.get(exec_id, []))
+    # Use directly-provided credential names first, fall back to workflow registry
+    cred_names = list(credential_names) if credential_names else []
+    if not cred_names:
+        exec_id = execution_id or ""
+        with _workflow_credentials_lock:
+            cred_names = list(_workflow_credentials.get(exec_id, []))
     if cred_names:
         token = _extract_execution_token(task)
         if token:
@@ -987,6 +998,12 @@ def _inject_credentials(task: Any, execution_id: str) -> List[str]:
                 if isinstance(v, str):
                     _os.environ[k] = v
                     injected_keys.append(k)
+        else:
+            logger.warning(
+                "No execution token in task for Claude Agent SDK worker — "
+                "credentials %s will not be injected",
+                cred_names,
+            )
     return injected_keys
 
 

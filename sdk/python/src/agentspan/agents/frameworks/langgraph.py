@@ -1405,6 +1405,7 @@ def make_langgraph_worker(
     server_url: str,
     auth_key: str,
     auth_secret: str,
+    credential_names: Optional[List[str]] = None,
 ) -> Any:
     """Build a pre-wrapped tool_worker(task) -> TaskResult for a LangGraph graph.
 
@@ -1414,6 +1415,9 @@ def make_langgraph_worker(
     from conductor.client.http.models.task import Task
     from conductor.client.http.models.task_result import TaskResult
     from conductor.client.http.models.task_result_status import TaskResultStatus
+
+    # Capture credential names in closure — avoids race with _workflow_credentials
+    _closure_cred_names = list(credential_names) if credential_names else []
 
     def tool_worker(task: Task) -> TaskResult:
         execution_id = task.workflow_instance_id
@@ -1430,9 +1434,12 @@ def make_langgraph_worker(
                 _workflow_credentials,
                 _workflow_credentials_lock,
             )
-            exec_id = execution_id or ""
-            with _workflow_credentials_lock:
-                cred_names = list(_workflow_credentials.get(exec_id, []))
+            # Use closure credential names first, fall back to workflow registry
+            cred_names = list(_closure_cred_names)
+            if not cred_names:
+                exec_id = execution_id or ""
+                with _workflow_credentials_lock:
+                    cred_names = list(_workflow_credentials.get(exec_id, []))
             if cred_names:
                 token = _extract_execution_token(task)
                 if token:
@@ -1442,10 +1449,14 @@ def make_langgraph_worker(
                         if isinstance(v, str):
                             _os.environ[k] = v
                             _injected_cred_keys.append(k)
+                else:
+                    logger.warning(
+                        "No execution token in task for LangGraph worker — "
+                        "credentials %s will not be injected",
+                        cred_names,
+                    )
         except Exception as _cred_err:
-            import logging as _log
-            _log.getLogger("agentspan.agents.frameworks.langgraph").warning(
-                "Failed to resolve credentials for LangGraph: %s", _cred_err)
+            logger.warning("Failed to resolve credentials for LangGraph: %s", _cred_err)
 
         try:
             graph_input = _build_input(graph, prompt)

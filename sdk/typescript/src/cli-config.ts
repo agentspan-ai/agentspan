@@ -69,7 +69,7 @@ function validateCliCommand(command: string, allowedCommands: string[]): void {
     return; // no restrictions
   }
   // Strip path prefix
-  const parts = command.split('/');
+  const parts = command.split(' ');
   const base = parts[parts.length - 1];
   if (!allowedCommands.includes(base)) {
     throw new Error(

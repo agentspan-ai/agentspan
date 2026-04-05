@@ -1029,7 +1029,8 @@ public class AgentService {
                         pendingTool.put("response_schema", task.getInputData().get("response_schema"));
                     }
                     if (task.getInputData().get("response_ui_schema") != null) {
-                        pendingTool.put("response_ui_schema", task.getInputData().get("response_ui_schema"));
+                        pendingTool.put(
+                                "response_ui_schema", task.getInputData().get("response_ui_schema"));
                     }
                 }
                 result.put("pendingTool", pendingTool);

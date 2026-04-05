@@ -1,26 +1,13 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Credentials — CLI tools with automatic credential mapping.
+"""Credentials — CLI tools with explicit credential declarations.
 
 Demonstrates:
-    - cli_allowed_commands auto-maps to credentials (gh → GITHUB_TOKEN, aws → AWS_*)
-    - No need to declare credentials manually when using CLI tools
-    - Multi-credential tools (aws needs 3 env vars)
-    - terraform guard: raises ConfigurationError (not supported — use isolated tools)
-
-CLI credential auto-mapping (built-in):
-    gh          → GITHUB_TOKEN
-    aws         → AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN
-    gcloud      → GOOGLE_APPLICATION_CREDENTIALS (CredentialFile)
-    docker      → DOCKER_USERNAME, DOCKER_PASSWORD
-    kubectl     → KUBECONFIG (CredentialFile)
-    az          → AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID
-    npm         → NPM_TOKEN
-    pip         → PIP_INDEX_URL
-    databricks  → DATABRICKS_TOKEN, DATABRICKS_HOST
-    snowflake   → SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_PASSWORD
-    terraform   → ConfigurationError (use @tool with explicit credentials instead)
+    - Explicit credentials on agents and tools
+    - cli_allowed_commands defines which CLI tools the agent can use
+    - credentials=[...] declares which secrets the server must inject
+    - Multi-credential tools (aws needs multiple env vars)
 
 Setup (one-time, via CLI):
     agentspan login
@@ -41,7 +28,7 @@ from agentspan.agents import Agent, AgentRuntime, tool
 from settings import settings
 
 
-# gh is in cli_allowed_commands → GITHUB_TOKEN auto-injected in subprocess
+# gh tool — requires GITHUB_TOKEN
 @tool(credentials=["GITHUB_TOKEN"])
 def gh_list_prs(repo: str, state: str = "open") -> dict:
     """List pull requests for a GitHub repo using the gh CLI.
@@ -82,9 +69,8 @@ def gh_create_pr(repo: str, title: str, body: str, head: str, base: str = "main"
     return {"url": result.stdout.strip()}
 
 
-# aws is in cli_allowed_commands → AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
-# AWS_SESSION_TOKEN all auto-injected in subprocess
-@tool(credentials=["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"])
+# aws tool — requires AWS credentials
+@tool(credentials=["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"])
 def aws_list_s3_buckets() -> dict:
     """List S3 buckets accessible with the user's AWS credentials."""
     result = subprocess.run(
@@ -103,7 +89,7 @@ def aws_list_s3_buckets() -> dict:
     return {"buckets": buckets}
 
 
-@tool(credentials=["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"])
+@tool(credentials=["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"])
 def aws_get_caller_identity() -> dict:
     """Return the AWS identity (account, ARN) for the current credentials."""
     result = subprocess.run(
@@ -117,13 +103,13 @@ def aws_get_caller_identity() -> dict:
     return json.loads(result.stdout)
 
 
-# Agent with cli_allowed_commands — credentials auto-mapped from CLI tool names
-# gh → GITHUB_TOKEN, aws → AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY
+# Agent with explicit credentials for CLI tools
 github_aws_agent = Agent(
     name="devops_agent",
     model=settings.llm_model,
     tools=[gh_list_prs, gh_create_pr, aws_list_s3_buckets, aws_get_caller_identity],
-    cli_allowed_commands=["gh", "aws"],  # auto-maps to credentials; no need to list them
+    cli_allowed_commands=["gh", "aws"],
+    credentials=["GITHUB_TOKEN", "GH_TOKEN", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"],
     instructions=(
         "You are a DevOps assistant. You can manage GitHub pull requests and "
         "inspect AWS resources. Always confirm destructive actions before proceeding."

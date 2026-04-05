@@ -490,38 +490,9 @@ class Agent:
             self._attach_cli_tool()
 
         # ── Credential setup ─────────────────────────────────────────────
-        # When explicit credentials provided, use them as-is.
-        # When not provided, auto-map from cli_allowed_commands via CLI_CREDENTIAL_MAP.
-        from agentspan.agents.runtime.credentials.cli_map import CLI_CREDENTIAL_MAP
-
+        # Credentials must be explicitly declared — no auto-mapping.
         if credentials is not None:
             self.credentials: List[Any] = list(credentials)
-        elif self.cli_config and self.cli_config.allowed_commands:
-            # Check for terraform (None entry) before auto-mapping
-            null_mapped = [
-                cmd
-                for cmd in self.cli_config.allowed_commands
-                if CLI_CREDENTIAL_MAP.get(cmd) is None and cmd in CLI_CREDENTIAL_MAP
-            ]
-            if null_mapped:
-                raise ConfigurationError(
-                    f"CLI command(s) {null_mapped!r} have no credential auto-mapping. "
-                    f"You must provide an explicit credentials=[...] list. "
-                    f"Example: Agent(cli_allowed_commands=['terraform', ...], "
-                    f"credentials=['AWS_ACCESS_KEY_ID', 'TF_VAR_...'])"
-                )
-            # Collect and deduplicate
-            seen: set = set()
-            auto_creds: List[Any] = []
-            for cmd in self.cli_config.allowed_commands:
-                mapped = CLI_CREDENTIAL_MAP.get(cmd)
-                if mapped:
-                    for cred in mapped:
-                        key = cred.env_var if hasattr(cred, "env_var") else cred
-                        if key not in seen:
-                            seen.add(key)
-                            auto_creds.append(cred)
-            self.credentials = auto_creds
         else:
             self.credentials = []
 

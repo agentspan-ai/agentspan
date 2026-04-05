@@ -829,6 +829,7 @@ const analyticsAgent = new Agent({
     allowedCommands: ['git', 'gh'],
     timeout: 30,
   },
+  credentials: ['GITHUB_TOKEN', 'GH_TOKEN'],
   metadata: { stage: 'analytics', version: '1.0' },
   planner: true,                          // #69
 });

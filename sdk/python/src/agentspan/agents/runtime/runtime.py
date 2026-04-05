@@ -2659,12 +2659,14 @@ class AgentRuntime:
         # 3. Full extraction: individual tool workers with raw callables
         if workers and workers[0].func is None:
             worker = workers[0]
-            worker.func = self._build_passthrough_func(agent_obj, framework, worker.name)
+            worker.func = self._build_passthrough_func(
+                agent_obj, framework, worker.name, credentials=credentials,
+            )
             self._register_passthrough_worker(worker)
         elif "_graph" in raw_config:
             self._register_graph_workers(raw_config, workers)
         else:
-            self._register_framework_workers(workers)
+            self._register_framework_workers(workers, credentials=credentials)
 
         correlation_id = str(uuid.uuid4())
         resolved_prompt = self._resolve_prompt(prompt)
@@ -2680,6 +2682,7 @@ class AgentRuntime:
             credentials=credentials,
             context=context,
         )
+        # Also register in _workflow_credentials for full-extraction tool workers
         self._register_workflow_credentials(execution_id, credentials)
 
         try:
@@ -2805,7 +2808,9 @@ class AgentRuntime:
         )
         return execution_id
 
-    def _register_framework_workers(self, workers: list) -> None:
+    def _register_framework_workers(
+        self, workers: list, credentials: Optional[List[str]] = None
+    ) -> None:
         """Register extracted callable workers from a foreign framework agent."""
         if not workers:
             return
@@ -2819,7 +2824,7 @@ class AgentRuntime:
                 setattr(w.func, "_agentspan_framework_callable", True)
             except Exception:
                 pass
-            wrapper = make_tool_worker(w.func, w.name)
+            wrapper = make_tool_worker(w.func, w.name, credential_names=credentials)
             worker_task(
                 task_definition_name=w.name,
                 task_def=_default_task_def(w.name),
@@ -2958,7 +2963,9 @@ class AgentRuntime:
                 elif new_workers:
                     self._worker_manager.start()
 
-    def _build_passthrough_func(self, agent_obj: Any, framework: str, name: str) -> Any:
+    def _build_passthrough_func(
+        self, agent_obj: Any, framework: str, name: str, credentials: Optional[List[str]] = None
+    ) -> Any:
         """Build the pre-wrapped tool_worker function for a passthrough worker."""
         server_url = self._config.server_url
         auth_key = self._config.auth_key or ""
@@ -2967,11 +2974,17 @@ class AgentRuntime:
         if framework == "langgraph":
             from agentspan.agents.frameworks.langgraph import make_langgraph_worker
 
-            return make_langgraph_worker(agent_obj, name, server_url, auth_key, auth_secret)
+            return make_langgraph_worker(
+                agent_obj, name, server_url, auth_key, auth_secret,
+                credential_names=credentials,
+            )
         elif framework == "langchain":
             from agentspan.agents.frameworks.langchain import make_langchain_worker
 
-            return make_langchain_worker(agent_obj, name, server_url, auth_key, auth_secret)
+            return make_langchain_worker(
+                agent_obj, name, server_url, auth_key, auth_secret,
+                credential_names=credentials,
+            )
         elif framework == "claude_agent_sdk":
             from agentspan.agents.frameworks.claude_agent_sdk import (
                 agent_to_claude_code_options,
@@ -2986,7 +2999,10 @@ class AgentRuntime:
             else:
                 options = agent_obj  # Already ClaudeCodeOptions
 
-            return make_claude_agent_sdk_worker(options, name, server_url, auth_key, auth_secret)
+            return make_claude_agent_sdk_worker(
+                options, name, server_url, auth_key, auth_secret,
+                credential_names=credentials,
+            )
         raise ValueError(f"Unknown passthrough framework: {framework}")
 
     def _run_framework_with_events(
@@ -4215,12 +4231,14 @@ class AgentRuntime:
 
         if workers and workers[0].func is None:
             worker = workers[0]
-            worker.func = self._build_passthrough_func(agent_obj, framework, worker.name)
+            worker.func = self._build_passthrough_func(
+                agent_obj, framework, worker.name, credentials=credentials,
+            )
             self._register_passthrough_worker(worker)
         elif "_graph" in raw_config:
             self._register_graph_workers(raw_config, workers)
         else:
-            self._register_framework_workers(workers)
+            self._register_framework_workers(workers, credentials=credentials)
 
         correlation_id = str(uuid.uuid4())
         resolved_prompt = self._resolve_prompt(prompt)
