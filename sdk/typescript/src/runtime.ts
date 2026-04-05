@@ -478,6 +478,7 @@ export class AgentRuntime {
 
   /**
    * Recursively collect all ToolDefs with handlers from an agent tree.
+   * Walks agent.agents AND agents nested inside agentTool() configs.
    */
   private _collectToolDefs(agent: Agent): ToolDef[] {
     const defs: ToolDef[] = [];
@@ -487,6 +488,13 @@ export class AgentRuntime {
         const def = getToolDef(t);
         if (def.func != null) {
           defs.push(def);
+        }
+        // Walk into agents referenced via agentTool() — their tools need workers too
+        if (def.toolType === 'agent_tool' && def.config?.agent) {
+          const innerAgent = def.config.agent as Agent;
+          if (innerAgent.tools || innerAgent.agents) {
+            defs.push(...this._collectToolDefs(innerAgent));
+          }
         }
       } catch {
         // Skip unrecognized tool formats

@@ -12,6 +12,12 @@ from unittest.mock import MagicMock, patch
 sdk_root = Path(__file__).parent.parent
 sys.path.insert(0, str(sdk_root / "src"))
 
+# Add example's directory and parent to sys.path for `from settings import settings`
+example_path_obj = Path(sys.argv[1]) if len(sys.argv) > 1 else None
+if example_path_obj:
+    sys.path.insert(0, str(example_path_obj.parent))
+    sys.path.insert(0, str(example_path_obj.parent.parent))
+
 example_path = sys.argv[1] if len(sys.argv) > 1 else None
 if not example_path:
     print(json.dumps({"error": "no file path"}))
@@ -71,15 +77,14 @@ with patch("agentspan.agents.runtime.runtime.AgentRuntime", MockRuntime), \
      patch("agentspan.agents.run._get_default_runtime", lambda: MockRuntime()), \
      patch("agentspan.agents.AgentRuntime", MockRuntime):
 
-    module_name = Path(example_path).stem
-    spec = importlib.util.spec_from_file_location(module_name, example_path)
+    # Use __main__ as module name so `if __name__ == "__main__":` guard passes
+    spec = importlib.util.spec_from_file_location("__main__", example_path)
     if spec and spec.loader:
         # Suppress stdout
         old_stdout = sys.stdout
         sys.stdout = open(os.devnull, "w")
         try:
             module = importlib.util.module_from_spec(spec)
-            module.__name__ = module_name
             spec.loader.exec_module(module)
         except (SystemExit, Exception):
             pass

@@ -9,6 +9,9 @@
 import { serializeLangGraph } from '../src/frameworks/langgraph-serializer.js';
 import { serializeFrameworkAgent } from '../src/frameworks/serializer.js';
 import { detectFramework } from '../src/frameworks/detect.js';
+import { Agent } from '../src/agent.js';
+import { AgentConfigSerializer } from '../src/serializer.js';
+import { getToolDef } from '../src/tool.js';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { pathToFileURL } from 'url';
@@ -21,15 +24,58 @@ if (!examplePath) {
 
 let captured: [Record<string, unknown>, any[]] | null = null;
 
+// Duck-type check: is this an Agentspan native Agent?
+// Check for properties unique to Agent class (name + tools array + agents array + maxTurns number)
+function isAgentspanAgent(obj: any): boolean {
+  return (
+    obj != null &&
+    typeof obj === 'object' &&
+    typeof obj.name === 'string' &&
+    Array.isArray(obj.tools) &&
+    Array.isArray(obj.agents) &&
+    typeof obj.maxTurns === 'number'
+  );
+}
+
+// Helper: serialize a native Agentspan Agent into [rawConfig, workers]
+function serializeNativeAgent(agent: any): [Record<string, unknown>, any[]] {
+  const serializer = new AgentConfigSerializer();
+  const rawConfig = serializer.serializeAgent(agent);
+  // Collect all tools with handlers (workers) recursively
+  const workers: any[] = [];
+  function collectWorkers(a: any) {
+    for (const t of (a.tools ?? [])) {
+      try {
+        const def = getToolDef(t);
+        if (def.func != null) {
+          workers.push({ name: def.name, func: def.func });
+        }
+      } catch {}
+    }
+    for (const sub of (a.agents ?? [])) {
+      collectWorkers(sub);
+    }
+  }
+  collectWorkers(agent);
+  return [rawConfig, workers];
+}
+
+// Helper: try to serialize any agent (native or framework)
+function tryCaptureAgent(agent: any) {
+  const fw = detectFramework(agent);
+  if (fw === 'langgraph') {
+    try { captured = serializeLangGraph(agent); } catch {}
+  } else if (fw) {
+    try { captured = serializeFrameworkAgent(agent); } catch {}
+  } else if (isAgentspanAgent(agent)) {
+    try { captured = serializeNativeAgent(agent); } catch {}
+  }
+}
+
 // Helper: patch an AgentRuntime class (prototype)
 function patchRuntime(RT: any) {
   RT.prototype.run = async function (agent: any) {
-    const fw = detectFramework(agent);
-    if (fw === 'langgraph') {
-      try { captured = serializeLangGraph(agent); } catch {}
-    } else if (fw) {
-      try { captured = serializeFrameworkAgent(agent); } catch {}
-    }
+    tryCaptureAgent(agent);
     return {
       status: 'COMPLETED', output: {}, events: [], messages: [], toolCalls: [],
       isSuccess: true, isFailed: false, isRejected: false, finishReason: 'stop',
@@ -37,23 +83,13 @@ function patchRuntime(RT: any) {
     };
   };
   RT.prototype.plan = async function (agent: any) {
-    const fw = detectFramework(agent);
-    if (fw === 'langgraph') {
-      try { captured = serializeLangGraph(agent); } catch {}
-    } else if (fw) {
-      try { captured = serializeFrameworkAgent(agent); } catch {}
-    }
+    tryCaptureAgent(agent);
     return {};
   };
   RT.prototype.shutdown = async function () {};
   RT.prototype.serve = async function (...agents: any[]) {
     for (const agent of agents) {
-      const fw = detectFramework(agent);
-      if (fw === 'langgraph') {
-        try { captured = serializeLangGraph(agent); } catch {}
-      } else if (fw) {
-        try { captured = serializeFrameworkAgent(agent); } catch {}
-      }
+      tryCaptureAgent(agent);
     }
   };
 }

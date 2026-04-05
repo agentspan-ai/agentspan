@@ -1,13 +1,15 @@
 /**
- * Count workers for all LangGraph examples by running each in a subprocess.
- * Usage: npx tsx tests/count-workers.ts
+ * Count workers for framework examples by running each in a subprocess.
+ * Usage: npx tsx tests/count-workers.ts [framework]
+ * Frameworks: langgraph (default), openai, adk
  */
 import { readdirSync } from 'fs';
 import { join } from 'path';
 import { execSync } from 'child_process';
 
+const framework = process.argv[2] || 'langgraph';
 const sdkRoot = join(import.meta.dirname!, '..');
-const examplesDir = join(sdkRoot, 'examples', 'langgraph');
+const examplesDir = join(sdkRoot, 'examples', framework);
 const harness = join(sdkRoot, 'tests', '_worker-harness.ts');
 
 const files = readdirSync(examplesDir)

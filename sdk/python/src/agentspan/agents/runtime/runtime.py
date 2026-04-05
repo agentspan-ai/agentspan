@@ -1960,10 +1960,32 @@ class AgentRuntime:
             agent: The agent to compile.
 
         Returns:
-            A :class:`WorkflowDef` with ``name``, ``tasks``, etc.
+            The raw server response dict with ``workflowDef`` and
+            ``requiredWorkers`` keys.
         """
-        wf = self._compile_agent(agent)
-        return wf.to_workflow_def()
+        import requests
+
+        from agentspan.agents.config_serializer import AgentConfigSerializer
+
+        serializer = AgentConfigSerializer()
+        config_json = serializer.serialize(agent)
+
+        server_url = self._config.server_url.rstrip("/")
+        url = f"{server_url}/agent/compile"
+
+        headers = {"Content-Type": "application/json"}
+        if self._config.auth_key:
+            headers["X-Auth-Key"] = self._config.auth_key
+        if self._config.auth_secret:
+            headers["X-Auth-Secret"] = self._config.auth_secret
+
+        payload = {"agentConfig": config_json}
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        try:
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as exc:
+            _raise_api_error(exc, url=url)
+        return response.json()
 
     # ── Deploy (CI/CD) ─────────────────────────────────────────────
 
