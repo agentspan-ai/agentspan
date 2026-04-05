@@ -1227,24 +1227,56 @@ Rules:
         timeout_seconds=420 if is_review_branch_only() else stage_timeout_seconds(3600, 900),
     )
 
-    publisher = Agent(
-        name="publisher",
-        model=model,
-        instructions=f"""\
-You publish the approved fix to GitHub.{dry_run_note}{review_branch_note}
+    if is_review_branch_only():
+        publisher = Agent(
+            name="publisher",
+            model=model,
+            instructions="""\
+You push the current issue branch to GitHub for manual review.
+
+Rules:
+1. Call push_review_branch() immediately as your first action.
+2. Call push_review_branch with no arguments unless you already have concrete repo/workdir/branch values.
+3. Never ask the user for REPO, WORKDIR, BRANCH, ISSUE, or any other metadata.
+4. Do not open a PR and do not comment on the issue.
+5. Do not call any tool other than push_review_branch.
+6. Do not block on reviewer approval.
+7. Never answer conversationally.
+
+If push_review_branch succeeds, output EXACTLY:
+REVIEW_BRANCH_PUSHED
+BRANCH: <branch name>
+BRANCH_URL: <url or dry-run summary>
+COMMIT_SHA: <full sha>
+COMMIT_URL: <url>
+REVIEW_STATUS: blocked
+REASON: awaiting manual review
+
+If push_review_branch returns an error, output EXACTLY:
+PUBLICATION_BLOCKED
+REASON: <tool error summary>
+""",
+            tools=[push_review_branch],
+            required_tools=["push_review_branch"],
+            max_turns=6,
+            max_tokens=stage_max_tokens(4000),
+            timeout_seconds=180,
+        )
+    else:
+        publisher = Agent(
+            name="publisher",
+            model=model,
+            instructions=f"""\
+You publish the approved fix to GitHub.{dry_run_note}
 
 Publication requirements:
 1. In normal mode, only proceed if reviewer emitted APPROVED_FOR_PUBLICATION.
-2. In review-branch mode, always call push_review_branch first, even if REPO, WORKDIR, BRANCH, or ISSUE are missing from the handoff.
-3. In review-branch mode, do not open a PR and do not comment on the issue. Push the branch for manual inspection instead.
-4. In review-branch mode, skip approve_publication entirely.
-5. Rebase the issue branch onto the latest upstream default branch.
-6. Pause on approve_publication so a human reviews the final tested diff before anything is sent.
-7. Configure git identity so commits clearly show AgentSpan in history.
-8. Commit only the issue-relevant changes.
-9. In normal mode, use create_pull_request so the PR is opened from the authenticated GitHub fork.
-10. In normal mode, use comment_on_issue to leave a brief comment with the PR link.
-11. In review-branch mode, use push_review_branch and stop after reporting the branch URL.
+2. Rebase the issue branch onto the latest upstream default branch.
+3. Pause on approve_publication so a human reviews the final tested diff before anything is sent.
+4. Configure git identity so commits clearly show AgentSpan in history.
+5. Commit only the issue-relevant changes.
+6. Use create_pull_request so the PR is opened from the authenticated GitHub fork.
+7. Use comment_on_issue to leave a brief comment with the PR link.
 
 Important:
 - PR and issue comment authorship comes from the stored GITHUB_TOKEN credential.
@@ -1254,27 +1286,11 @@ Important:
 - Treat WORKDIR from the approved handoff as the source of truth.
 - Never use placeholder paths like /path/to/repo.
 - Never ask the user for the repo path.
-- Never ask the user for REPO, WORKDIR, BRANCH, ISSUE, or any other review-branch metadata.
 - Never answer conversationally or thank the user.
-- In review-branch mode, prefer push_review_branch directly. That tool can recover missing repo/workdir/branch details from the latest cloned workspace.
-- In review-branch mode, do not ask follow-up questions. Either push the recovered branch or return PUBLICATION_BLOCKED with the tool failure summary.
 
-If review-branch mode is OFF and the input does NOT contain APPROVED_FOR_PUBLICATION, do not call any tools. Output EXACTLY:
+If the input does NOT contain APPROVED_FOR_PUBLICATION, do not call any tools. Output EXACTLY:
 PUBLICATION_BLOCKED
 REASON: reviewer did not approve publication-ready changes
-
-If review-branch mode is ON and push_review_branch still cannot recover enough context, output EXACTLY:
-PUBLICATION_BLOCKED
-REASON: review-branch mode could not recover a reviewable branch from the latest workspace
-
-If review-branch mode is ON and you successfully push the branch, output EXACTLY:
-REVIEW_BRANCH_PUSHED
-BRANCH: <branch name>
-BRANCH_URL: <url or dry-run summary>
-COMMIT_SHA: <full sha>
-COMMIT_URL: <url>
-REVIEW_STATUS: approved|blocked
-REASON: <approved for publication or concise reviewer feedback summary>
 
 If any publication tool returns an error, output EXACTLY:
 PUBLICATION_BLOCKED
@@ -1289,22 +1305,21 @@ PUBLISHED
 PR_URL: <url or dry-run summary>
 ISSUE_COMMENT: <status>
 """,
-        tools=[
-            sync_branch_with_base,
-            approve_publication,
-            configure_git_identity,
-            push_review_branch,
-            create_pull_request,
-            comment_on_issue,
-        ],
-        local_code_execution=True,
-        allowed_languages=["bash"],
-        allowed_commands=["bash", "sh", "git", "ls", "cat"],
-        required_tools=["push_review_branch"] if is_review_branch_only() else [],
-        max_turns=18,
-        max_tokens=stage_max_tokens(8000),
-        timeout_seconds=stage_timeout_seconds(1200, 300),
-    )
+            tools=[
+                sync_branch_with_base,
+                approve_publication,
+                configure_git_identity,
+                push_review_branch,
+                create_pull_request,
+                comment_on_issue,
+            ],
+            local_code_execution=True,
+            allowed_languages=["bash"],
+            allowed_commands=["bash", "sh", "git", "ls", "cat"],
+            max_turns=18,
+            max_tokens=stage_max_tokens(8000),
+            timeout_seconds=stage_timeout_seconds(1200, 300),
+        )
 
     if is_review_branch_only():
         return repo_intake >> issue_scout >> repo_analyst >> fixer >> publisher

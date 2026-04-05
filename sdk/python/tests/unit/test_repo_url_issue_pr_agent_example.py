@@ -567,13 +567,14 @@ class TestPipelineStructure:
 
         publisher = pipeline.agents[4]
         assert "REVIEW_BRANCH_PUSHED" in publisher.instructions
-        assert "do not open a PR and do not comment on the issue" in publisher.instructions
-        assert "push_review_branch directly" in publisher.instructions
+        assert "Do not open a PR and do not comment on the issue" in publisher.instructions
+        assert "Call push_review_branch() immediately as your first action" in publisher.instructions
         assert "COMMIT_SHA:" in publisher.instructions
         assert "COMMIT_URL:" in publisher.instructions
-        assert "always call push_review_branch first" in publisher.instructions
         assert "Never ask the user for REPO, WORKDIR, BRANCH, ISSUE" in publisher.instructions
         assert publisher.required_tools == ["push_review_branch"]
+        tool_names = [tool._tool_def.name for tool in publisher.tools]
+        assert tool_names == ["push_review_branch"]
 
     def test_review_branch_mode_tightens_fix_review_loop(self):
         from repo_url_issue_pr_agent import build_pipeline
