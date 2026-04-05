@@ -55,18 +55,28 @@ public class CredentialAwareHttpTask extends HttpTask {
         Object httpRequest = input.get("http_request");
         Object ctx = input.get("__agentspan_ctx__");
 
+        Map<String, String> originalHeaders = null;
+
         if (httpRequest instanceof Map<?, ?> reqMap && ctx != null) {
             Object headers = reqMap.get("headers");
             if (headers instanceof Map<?, ?> headerMap && containsPlaceholders(headerMap)) {
                 String userId = extractUserId(ctx);
                 if (userId != null) {
+                    originalHeaders = new LinkedHashMap<>((Map<String, String>) headerMap);
                     Map<String, String> resolved = resolveHeadersForUser((Map<String, String>) headerMap, userId);
                     ((Map<String, Object>) reqMap).put("headers", resolved);
                 }
             }
         }
 
-        super.start(workflow, task, executor);
+        try {
+            super.start(workflow, task, executor);
+        } finally {
+            // Restore placeholder headers so resolved secrets are never persisted.
+            if (originalHeaders != null && httpRequest instanceof Map<?, ?> reqMap) {
+                ((Map<String, Object>) reqMap).put("headers", originalHeaders);
+            }
+        }
     }
 
     /**
