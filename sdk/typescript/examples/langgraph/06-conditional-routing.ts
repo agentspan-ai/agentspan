@@ -93,7 +93,7 @@ builder.addEdge('positive', END);
 builder.addEdge('negative', END);
 builder.addEdge('neutral', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "sentiment_router" });
 
 // Add agentspan metadata for extraction (no LLM in this pipeline example)
 (graph as any)._agentspan = {

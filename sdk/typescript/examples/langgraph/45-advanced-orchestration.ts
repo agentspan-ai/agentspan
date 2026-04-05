@@ -207,9 +207,10 @@ const agentRunnable = new RunnableLambda({
     const output = await runOrchestrationAgent(input.input);
     return { output };
   },
-});
+}).withConfig({ runName: "advanced_orchestration" });
 
 (agentRunnable as any)._agentspan = {
+  name: 'advanced_orchestration',
   model: 'openai/gpt-4o-mini',
   tools,
   framework: 'langchain',
@@ -240,4 +241,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('45-advanced-orchestration.ts') || process.argv[1]?.endsWith('45-advanced-orchestration.js')) {
+  main().catch(console.error);
+}

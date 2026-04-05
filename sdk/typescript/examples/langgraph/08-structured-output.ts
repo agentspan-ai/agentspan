@@ -32,6 +32,7 @@ const graph = createReactAgent({
   llm,
   tools: [],
   responseFormat: MovieReviewSchema,
+  name: "movie_review_agent",
 });
 
 // Add agentspan metadata for extraction

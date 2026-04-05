@@ -131,7 +131,7 @@ builder.addConditionalEdges('con', continueOrJudge, { judge: 'judge', con: 'pro'
 builder.addEdge('pro', 'con');
 builder.addEdge('judge', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "debate_agents" });
 
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',

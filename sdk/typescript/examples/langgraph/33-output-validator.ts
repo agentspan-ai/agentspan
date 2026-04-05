@@ -141,7 +141,7 @@ builder.addConditionalEdges('validate', shouldRetry, {
 });
 builder.addEdge('finalize', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "output_validator_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

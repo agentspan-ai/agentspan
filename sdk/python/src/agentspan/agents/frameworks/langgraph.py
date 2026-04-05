@@ -505,7 +505,8 @@ def _get_node_function(node: Any) -> Optional[Any]:
     bound = getattr(node, "bound", None)
     if bound is None:
         return None
-    func = getattr(bound, "func", None)
+    # LangGraph stores sync functions in bound.func and async in bound.afunc
+    func = getattr(bound, "func", None) or getattr(bound, "afunc", None)
     if func and callable(func):
         # Skip lambda/internal functions
         func_name = getattr(func, "__name__", "")
@@ -1230,7 +1231,7 @@ def _extract_system_prompt_from_graph(graph: Any) -> Optional[str]:
         bound = getattr(node, "bound", None)
         if bound is None:
             continue
-        func = getattr(bound, "func", None)
+        func = getattr(bound, "func", None) or getattr(bound, "afunc", None)
         if func is None or not callable(func):
             continue
         code = getattr(func, "__code__", None)

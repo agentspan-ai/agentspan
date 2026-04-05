@@ -26,6 +26,7 @@ const graph = createReactAgent({
     'You are an interview preparation coach. ' +
     'Remember what the user tells you about their background, skills, and target role. ' +
     'Build on previous messages to give increasingly personalized advice.',
+  name: "interview_coach",
 });
 
 // Add agentspan metadata for extraction

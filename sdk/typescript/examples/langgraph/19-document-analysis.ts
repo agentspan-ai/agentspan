@@ -195,6 +195,7 @@ const graph = createReactAgent({
     '3) Summarize the key points, ' +
     '4) Classify sentiment. ' +
     'Combine findings into a structured report.',
+  name: "document_analysis_agent",
 });
 
 // Add agentspan metadata for extraction

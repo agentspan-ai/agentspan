@@ -164,7 +164,7 @@ const allTools = [
   dayOfWeekTool,
 ];
 
-const graph = createReactAgent({ llm, tools: allTools });
+const graph = createReactAgent({ llm, tools: allTools, name: "tool_categories_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

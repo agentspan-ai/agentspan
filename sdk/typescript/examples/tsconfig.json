@@ -8,7 +8,14 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "noEmit": true
+    "noEmit": true,
+    "paths": {
+      "@agentspan-ai/sdk": ["../src/index.ts"],
+      "@agentspan-ai/sdk/langgraph": ["../src/wrappers/langgraph.ts"],
+      "@agentspan-ai/sdk/langchain": ["../src/wrappers/langchain.ts"],
+      "@agentspan-ai/sdk/vercel-ai": ["../src/wrappers/ai.ts"],
+      "@agentspan-ai/sdk/testing": ["../src/testing/index.ts"]
+    }
   },
   "include": ["**/*.ts"],
   "exclude": ["node_modules"]

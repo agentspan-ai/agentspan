@@ -63,6 +63,7 @@ const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
 const graph = createReactAgent({
   llm,
   tools: [calculateTool, countWordsTool, getTodayTool],
+  name: "react_tools_agent",
 });
 
 // Add agentspan metadata for extraction

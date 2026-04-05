@@ -238,6 +238,12 @@ export interface RunOptions {
   context?: Record<string, unknown>;
   /** AbortSignal for cancellation/timeout. */
   signal?: AbortSignal;
+  /**
+   * LLM model hint for framework agents where automatic detection fails.
+   * Accepts a model string ('openai/gpt-4o-mini') or an LLM object (e.g. ChatOpenAI instance).
+   * Required for LangGraph agents that don't use the @agentspan-ai/sdk/langgraph wrapper.
+   */
+  model?: unknown;
 }
 
 // ── Tool definition ──────────────────────────────────────

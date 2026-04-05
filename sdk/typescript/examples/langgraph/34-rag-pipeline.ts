@@ -186,7 +186,7 @@ builder.addConditionalEdges('grade', decideToGenerate, {
 builder.addEdge('rewrite', 'retrieve');
 builder.addEdge('generate', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "rag_pipeline" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

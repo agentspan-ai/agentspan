@@ -25,6 +25,10 @@ export interface WorkerInfo {
   description: string;
   inputSchema: Record<string, unknown>;
   func: Function | null;
+  /** True if the worker function is already wrapped as a Task→TaskResult handler. */
+  _pre_wrapped?: boolean;
+  /** Extra metadata (e.g. llm_role, subgraph_role, is_dynamic_fanout). */
+  _extra?: Record<string, unknown>;
 }
 
 // ── Public API ──────────────────────────────────────────

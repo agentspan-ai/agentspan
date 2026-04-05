@@ -106,7 +106,7 @@ const checkSyntaxTool = new DynamicStructuredTool({
 // Build the graph
 // ---------------------------------------------------------------------------
 const tools = [evaluateExpressionTool, explainCodeTool, checkSyntaxTool];
-const graph = createReactAgent({ llm, tools });
+const graph = createReactAgent({ llm, tools, name: "code_interpreter_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

@@ -67,7 +67,7 @@ const reverseStringTool = new DynamicStructuredTool({
 // ---------------------------------------------------------------------------
 const tools = [calculateTool, countWordsTool, reverseStringTool];
 const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
-const graph = createReactAgent({ llm, tools });
+const graph = createReactAgent({ llm, tools, name: "math_and_text_agent" });
 
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',

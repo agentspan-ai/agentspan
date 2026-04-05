@@ -149,6 +149,7 @@ const graph = createReactAgent({
     'You are an expert software engineer assistant. ' +
     'Use your tools to write, explain, and debug code. ' +
     'Always provide clear, well-commented solutions.',
+  name: "code_agent",
 });
 
 // Add agentspan metadata for extraction

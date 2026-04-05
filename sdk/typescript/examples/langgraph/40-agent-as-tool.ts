@@ -119,7 +119,7 @@ const orchBuilder = new StateGraph(MessagesAnnotation)
   .addConditionalEdges('orchestrator', toolsCondition)
   .addEdge('tools', 'orchestrator');
 
-const graph = orchBuilder.compile();
+const graph = orchBuilder.compile({ name: "orchestrator_with_subagents" });
 
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',

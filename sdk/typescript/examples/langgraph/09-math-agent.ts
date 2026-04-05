@@ -103,6 +103,7 @@ const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
 const graph = createReactAgent({
   llm,
   tools: [addTool, subtractTool, multiplyTool, divideTool, powerTool, sqrtTool, factorialTool],
+  name: "math_agent",
 });
 
 // Add agentspan metadata for extraction

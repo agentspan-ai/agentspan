@@ -70,7 +70,7 @@ builder.addEdge(START, 'chat');
 builder.addEdge('chat', END);
 
 const checkpointer = new MemorySaver();
-const graph = builder.compile({ checkpointer });
+const graph = builder.compile({ checkpointer, name: "persistent_memory_chatbot" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

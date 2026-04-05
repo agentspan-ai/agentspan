@@ -157,7 +157,7 @@ builder.addEdge('retrieve', 'grade');
 builder.addEdge('grade', 'generate');
 builder.addEdge('generate', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "document_grader_agent" });
 
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',

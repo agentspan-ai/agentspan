@@ -100,7 +100,7 @@ builder.addEdge('pros_node', 'merge');
 builder.addEdge('cons_node', 'merge');
 builder.addEdge('merge', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "parallel_analysis" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

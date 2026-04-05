@@ -36,6 +36,7 @@ const graph = createReactAgent({
   llm,
   tools: [],
   prompt: new SystemMessage(TUTOR_SYSTEM_PROMPT),
+  name: "socratic_tutor",
 });
 
 // Add agentspan metadata for extraction

@@ -112,7 +112,7 @@ builder.addConditionalEdges('reflect', shouldContinue, {
 });
 builder.addEdge('finalize', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "reflection_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

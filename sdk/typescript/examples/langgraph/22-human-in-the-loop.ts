@@ -120,7 +120,7 @@ builder.addConditionalEdges('review', routeAfterReview, {
 builder.addEdge('finalize', END);
 builder.addEdge('revise', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "email_hitl_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

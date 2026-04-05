@@ -104,6 +104,7 @@ const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
 const graph = createReactAgent({
   llm,
   tools: [searchTool, summarizeTool, citeSourceTool],
+  name: "research_agent",
 });
 
 // Add agentspan metadata for extraction
