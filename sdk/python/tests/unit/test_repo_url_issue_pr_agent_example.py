@@ -574,3 +574,27 @@ class TestPipelineStructure:
         assert "always call push_review_branch first" in publisher.instructions
         assert "Never ask the user for REPO, WORKDIR, BRANCH, ISSUE" in publisher.instructions
         assert publisher.required_tools == ["push_review_branch"]
+
+    def test_review_branch_mode_tightens_fix_review_loop(self):
+        from repo_url_issue_pr_agent import build_pipeline
+
+        with patch.dict(os.environ, {"AGENTSPAN_REVIEW_BRANCH_ONLY": "true"}, clear=True):
+            pipeline = build_pipeline(
+                "https://github.com/pytest-dev/pytest-asyncio", 1334, ""
+            )
+
+        repo_analyst = pipeline.agents[2]
+        fixer = pipeline.agents[3].agents[0]
+        reviewer = pipeline.agents[3].agents[1]
+        coding_loop = pipeline.agents[3]
+
+        assert "never try to create it again" in fixer.instructions
+        assert "Prefer small Python scripts for code edits" in fixer.instructions
+        assert "hand off to reviewer with honest results" in fixer.instructions
+        assert "Optimize for deciding whether the current branch is reviewable" in reviewer.instructions
+        assert "Keep analysis tight and practical" in repo_analyst.instructions
+        assert "stop after two fixer turns or one reviewer pass without approval" in coding_loop.instructions
+        assert repo_analyst.max_turns == 8
+        assert fixer.max_turns == 12
+        assert reviewer.max_turns == 8
+        assert coding_loop.max_turns == 16

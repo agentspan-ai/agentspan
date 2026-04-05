@@ -858,6 +858,41 @@ def build_pipeline(
         if is_review_branch_only()
         else ""
     )
+    review_branch_analysis_note = (
+        "\n\nReview-branch mode rules:\n"
+        "- Keep analysis tight and practical; stop once you can identify the likely file(s), smallest test target, and root-cause hypothesis.\n"
+        "- Prefer one or two focused repo-inspection commands over broad recursive searches.\n"
+        "- Do not spend turns repeating the same search with different shell syntax.\n"
+        if is_review_branch_only()
+        else ""
+    )
+    review_branch_fixer_note = (
+        "\n\nReview-branch mode rules:\n"
+        "- The issue branch from IMPLEMENTATION_DOSSIER already exists. Use `git checkout <BRANCH>` if needed, but never try to create it again.\n"
+        "- Prefer targeted tests from TEST_STRATEGY before running the full TEST_CMD.\n"
+        "- Prefer small Python scripts for code edits over fragile `sed`/`xargs` one-liners when changing source or tests.\n"
+        "- After the first material edit plus validation attempt, hand off to reviewer with honest results instead of silently retrying many shell variations.\n"
+        "- If the branch has a focused diff but validation is incomplete, still hand off to reviewer so publisher can push the branch for manual review.\n"
+        "- Do not spend more than two turns retrying shell syntax or dependency installation.\n"
+        if is_review_branch_only()
+        else ""
+    )
+    review_branch_reviewer_note = (
+        "\n\nReview-branch mode rules:\n"
+        "- Optimize for deciding whether the current branch is reviewable, not for perfect publication readiness.\n"
+        "- Re-run only the smallest relevant validation needed to judge the current diff.\n"
+        "- If the branch is understandable but not publication-ready, emit HANDOFF_TO_FIXER with concise feedback after one review pass.\n"
+        "- Keep feedback short and actionable so the loop can finish before publisher runs.\n"
+        if is_review_branch_only()
+        else ""
+    )
+    review_branch_loop_note = (
+        "\n8. In review-branch mode, cap the loop aggressively so publisher still runs before the top-level timeout.\n"
+        "9. In review-branch mode, stop after two fixer turns or one reviewer pass without approval.\n"
+        "10. Preserve the latest handoff verbatim so publisher can push the branch even if approval was not reached.\n"
+        if is_review_branch_only()
+        else ""
+    )
     forced_issue_note = (
         f"Forced issue: #{issue_number}." if issue_number else "No forced issue."
     )
@@ -985,7 +1020,7 @@ SUCCESS_CRITERIA: <observable acceptance criteria>
     repo_analyst = Agent(
         name="repo_analyst",
         model=model,
-        instructions="""\
+        instructions=f"""\
 You are doing a deep implementation analysis before any edits happen.
 
 You receive TARGET_ISSUE_READY with the cloned repository path.
@@ -1008,6 +1043,7 @@ Execution rules:
 - The execute_code tool input must be executable code only: no prose, no markdown fences, no labels like WORKDIR:, run:, content:, or def:.
 - Do not start bash snippets with variable-assignment lines like WORKDIR=...; inline the real path directly in commands.
 - Default to bash for repo inspection. Use python only for actual Python scripts.
+{review_branch_analysis_note}
 
 Output EXACTLY:
 
@@ -1026,15 +1062,15 @@ RISK_NOTES: <what could easily go wrong>
         local_code_execution=True,
         allowed_languages=["python", "bash", "javascript", "typescript"],
         allowed_commands=code_commands,
-        max_turns=20,
+        max_turns=8 if is_review_branch_only() else 20,
         max_tokens=stage_max_tokens(12000),
-        timeout_seconds=stage_timeout_seconds(1800, 600),
+        timeout_seconds=420 if is_review_branch_only() else stage_timeout_seconds(1800, 600),
     )
 
     fixer = Agent(
         name="fixer",
         model=model,
-        instructions="""\
+        instructions=f"""\
 You are implementing the issue fix.
 
 You receive IMPLEMENTATION_DOSSIER with repo context, target files, and a test strategy.
@@ -1057,6 +1093,7 @@ Execution rules:
 - The execute_code tool input must be executable code only: no prose, no markdown fences, no labels like WORKDIR:, run:, content:, or def:.
 - Do not start bash snippets with variable-assignment lines like WORKDIR=...; inline the real path directly in commands.
 - Default to bash for edits, git commands, and tests. Use python only for actual Python scripts.
+{review_branch_fixer_note}
 
 When ready, output:
 
@@ -1075,15 +1112,15 @@ SMOKE_OUTPUT: <results or "not needed">
         allowed_languages=["python", "bash", "javascript", "typescript"],
         allowed_commands=code_commands,
         include_contents="none",
-        max_turns=35,
+        max_turns=12 if is_review_branch_only() else 35,
         max_tokens=stage_max_tokens(12000),
-        timeout_seconds=stage_timeout_seconds(2400, 900),
+        timeout_seconds=300 if is_review_branch_only() else stage_timeout_seconds(2400, 900),
     )
 
     reviewer = Agent(
         name="reviewer",
         model=model,
-        instructions="""\
+        instructions=f"""\
 You are the final quality gate before a public PR.
 
 Review checklist:
@@ -1103,6 +1140,7 @@ Execution rules:
 - The execute_code tool input must be executable code only: no prose, no markdown fences, no labels like WORKDIR:, run:, content:, or def:.
 - Do not start bash snippets with variable-assignment lines like WORKDIR=...; inline the real path directly in commands.
 - Default to bash for validation commands. Use python only for actual Python scripts.
+{review_branch_reviewer_note}
 
 If anything is weak, output:
 
@@ -1143,15 +1181,15 @@ PR_BODY: |
         allowed_languages=["python", "bash", "javascript", "typescript"],
         allowed_commands=code_commands,
         include_contents="none",
-        max_turns=18,
+        max_turns=8 if is_review_branch_only() else 18,
         max_tokens=stage_max_tokens(10000),
-        timeout_seconds=stage_timeout_seconds(1800, 600),
+        timeout_seconds=240 if is_review_branch_only() else stage_timeout_seconds(1800, 600),
     )
 
     coding_review_loop = Agent(
         name="coding_review_loop",
         model=model,
-        instructions="""\
+        instructions=f"""\
 Run the implementation/review loop.
 
 Rules:
@@ -1162,6 +1200,7 @@ Rules:
 5. Maximum 3 review rounds.
 6. If quality never reaches publication level, stop without opening a PR.
 7. When stopping without approval, preserve the latest handoff content verbatim so downstream review-branch mode still has WORKDIR and BRANCH.
+{review_branch_loop_note}
 """,
         agents=[fixer, reviewer],
         strategy=Strategy.SWARM,
@@ -1169,9 +1208,9 @@ Rules:
             OnTextMention(text="HANDOFF_TO_REVIEWER", target="reviewer"),
             OnTextMention(text="HANDOFF_TO_FIXER", target="fixer"),
         ],
-        max_turns=50,
+        max_turns=16 if is_review_branch_only() else 50,
         max_tokens=stage_max_tokens(12000),
-        timeout_seconds=stage_timeout_seconds(3600, 900),
+        timeout_seconds=420 if is_review_branch_only() else stage_timeout_seconds(3600, 900),
     )
 
     publisher = Agent(
