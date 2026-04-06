@@ -1252,7 +1252,7 @@ REASON: <tool error summary>
             required_tools=["push_review_branch"],
             max_turns=6,
             max_tokens=stage_max_tokens(4000),
-            timeout_seconds=180,
+            timeout_seconds=300,
         )
     else:
         publisher = Agent(
