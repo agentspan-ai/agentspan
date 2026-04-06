@@ -54,6 +54,7 @@ repositories {
 
 springBoot {
     mainClass = 'dev.agentspan.runtime.AgentRuntime'
+    buildInfo()
 }
 
 dependencies {
