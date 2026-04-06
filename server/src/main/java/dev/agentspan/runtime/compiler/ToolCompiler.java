@@ -98,8 +98,7 @@ public class ToolCompiler {
             Map.entry("generate_video", "GENERATE_VIDEO"),
             Map.entry("rag_index", "LLM_INDEX_TEXT"),
             Map.entry("rag_search", "LLM_SEARCH_INDEX"),
-            Map.entry("pull_workflow_messages", "PULL_WORKFLOW_MESSAGES")
-    );
+            Map.entry("pull_workflow_messages", "PULL_WORKFLOW_MESSAGES"));
 
     // ── Public API ───────────────────────────────────────────────────────
 
@@ -270,9 +269,19 @@ public class ToolCompiler {
         Map<String, Object> wmqConfig = new LinkedHashMap<>();
 
         if (tools != null) {
-            Set<String> serverSideTypes = Set.of("http", "mcp", "agent_tool", "cli",
-                    "generate_image", "generate_audio", "generate_video", "generate_pdf",
-                    "rag_index", "rag_search", "human", "pull_workflow_messages");
+            Set<String> serverSideTypes = Set.of(
+                    "http",
+                    "mcp",
+                    "agent_tool",
+                    "cli",
+                    "generate_image",
+                    "generate_audio",
+                    "generate_video",
+                    "generate_pdf",
+                    "rag_index",
+                    "rag_search",
+                    "human",
+                    "pull_workflow_messages");
 
             for (ToolConfig tool : tools) {
                 String toolType = tool.getToolType() != null ? tool.getToolType() : "worker";
@@ -349,7 +358,8 @@ public class ToolCompiler {
         String humanJson = JavaScriptBuilder.toJson(humanConfig);
         String wmqJson = JavaScriptBuilder.toJson(wmqConfig);
 
-        String script = JavaScriptBuilder.enrichToolsScript(httpJson, mcpJson, mediaJson, agentToolJson, ragJson, cliJson, humanJson, wmqJson);
+        String script = JavaScriptBuilder.enrichToolsScript(
+                httpJson, mcpJson, mediaJson, agentToolJson, ragJson, cliJson, humanJson, wmqJson);
 
         String enrichRef = agentName + "_" + p + "enrich_tools";
 
@@ -1483,7 +1493,8 @@ public class ToolCompiler {
         String ragJson = JavaScriptBuilder.toJson(ragConfig);
         String humanJson = JavaScriptBuilder.toJson(humanConfig);
         String wmqJson = JavaScriptBuilder.toJson(wmqConfig);
-        String script = JavaScriptBuilder.enrichToolsScriptDynamic(httpJson, mediaJson, agentToolJson, ragJson, humanJson, wmqJson);
+        String script = JavaScriptBuilder.enrichToolsScriptDynamic(
+                httpJson, mediaJson, agentToolJson, ragJson, humanJson, wmqJson);
 
         String enrichRef = agentName + "_" + p + "enrich_tools";
 
