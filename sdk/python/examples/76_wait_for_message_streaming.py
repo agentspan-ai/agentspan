@@ -9,8 +9,8 @@ Demonstrates:
     - runtime.send_message() to push payloads into the Workflow Message Queue
 
 The agent starts, immediately waits for a message, processes whatever it
-receives, then waits again.  The caller drives the conversation by sending
-messages and reading streamed events between each one.
+receives (by calling wait_for_message again), then waits again.  The caller
+drives the conversation by sending messages and reading streamed events.
 
 Requirements:
     - Conductor server with WMQ support (conductor.workflow-message-queue.enabled=true)
@@ -26,9 +26,10 @@ from settings import settings
 
 
 @tool
-def report_result(summary: str) -> str:
-    """Report the result of a completed task back to the caller."""
-    return f"Reported: {summary}"
+def execute_task(task: str) -> str:
+    """Execute a task and return the result."""
+    print(f"\n    *** EXECUTING: {task} ***\n")
+    return f"Completed: {task}"
 
 
 receive_message = wait_for_message_tool(
@@ -42,14 +43,13 @@ receive_message = wait_for_message_tool(
 agent = Agent(
     name="reactive_agent",
     model=settings.llm_model,
-    tools=[receive_message, report_result],
+    tools=[receive_message, execute_task],
     max_turns=10000,
     instructions=(
-        "You are a reactive agent. Loop forever: "
+        "You are a reactive agent. Repeat this cycle indefinitely without stopping: "
         "1. Call wait_for_message to receive your next instruction. "
-        "2. Perform the task described in the 'task' field. "
-        "3. Call report_result with a one-sentence summary of what you did. "
-        "4. Return to step 1."
+        "2. Call execute_task with the 'task' value from the message payload. "
+        "3. Go back to step 1 immediately — never stop."
     ),
 )
 
@@ -64,13 +64,14 @@ with AgentRuntime() as runtime:
     print(f"Agent started: {handle.execution_id}\n")
 
     # Push messages from a background thread while we stream events on the main thread
+    # Wait long enough between sends for the agent to finish processing each message
     def sender():
         for task in TASKS:
-            time.sleep(3)
+            time.sleep(8)
             print(f"\n  [caller] sending -> {task!r}")
             runtime.send_message(handle.execution_id, {"task": task})
         # Give the agent time to finish the last task then cancel
-        time.sleep(10)
+        time.sleep(15)
         runtime.cancel(handle.execution_id, reason="example complete")
 
     threading.Thread(target=sender, daemon=True).start()
