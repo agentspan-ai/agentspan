@@ -509,7 +509,7 @@ class TestRuntimeLifecycle:
         runtime._workflow_client.terminate_workflow = MagicMock()
         runtime.cancel("wf-1", reason="done")
         runtime._workflow_client.terminate_workflow.assert_called_once_with(
-            execution_id="wf-1", reason="done"
+            workflow_id="wf-1", reason="done"
         )
 
     def test_send_message_delegates(self, runtime):
