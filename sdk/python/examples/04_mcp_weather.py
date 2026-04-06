@@ -29,11 +29,15 @@ from agentspan.agents import Agent, AgentRuntime, mcp_tool
 from settings import settings
 
 # Create MCP tool from the weather server — Conductor discovers tools at runtime
+# ${MCP_TEST_API_KEY} is resolved server-side from the credential store.
+# Store it with: agentspan credentials set --name MCP_TEST_API_KEY
 weather = mcp_tool(
     server_url="http://localhost:3001/mcp",
     name="weather_mcp",
     description="Weather and air quality tools via MCP, use it to get current and historical weather information for "
                 "a city",
+    headers={"Authorization": "Bearer ${MCP_TEST_API_KEY}"},
+    credentials=["MCP_TEST_API_KEY"],
 )
 
 agent = Agent(

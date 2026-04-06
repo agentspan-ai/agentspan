@@ -27,6 +27,8 @@ const MCP_TEST_SERVER_SPEC = 'http://localhost:3001/api-docs';
 const mathApi = apiTool({
   url: MCP_TEST_SERVER_SPEC,
   name: 'mcp_test_tools',
+  headers: { Authorization: 'Bearer ${HTTP_TEST_API_KEY}' },
+  credentials: ['HTTP_TEST_API_KEY'],
   maxTools: 10, // 65 ops — filter to top 10 most relevant
 });
 
@@ -41,6 +43,8 @@ export const mathAgent = new Agent({
 
 const stringApi = apiTool({
   url: MCP_TEST_SERVER_SPEC,
+  headers: { Authorization: 'Bearer ${HTTP_TEST_API_KEY}' },
+  credentials: ['HTTP_TEST_API_KEY'],
   toolNames: ['string_reverse', 'string_uppercase', 'string_length'],
 });
 
@@ -83,6 +87,8 @@ const calculate = tool(
 
 const collectionApi = apiTool({
   url: MCP_TEST_SERVER_SPEC,
+  headers: { Authorization: 'Bearer ${HTTP_TEST_API_KEY}' },
+  credentials: ['HTTP_TEST_API_KEY'],
   toolNames: ['collection_sort', 'collection_unique', 'collection_flatten'],
   maxTools: 10,
 });

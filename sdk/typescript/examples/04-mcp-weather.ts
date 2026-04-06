@@ -27,11 +27,15 @@ import { Agent, AgentRuntime, mcpTool } from '@agentspan-ai/sdk';
 import { llmModel } from './settings';
 
 // Create MCP tool from the weather server — Conductor discovers tools at runtime
+// ${MCP_TEST_API_KEY} is resolved server-side from the credential store.
+// Store it with: agentspan credentials set --name MCP_TEST_API_KEY
 const weather = mcpTool({
   serverUrl: 'http://localhost:3001/mcp',
   name: 'weather_mcp',
   description:
     'Weather and air quality tools via MCP, use it to get current and historical weather information for a city',
+  headers: { Authorization: 'Bearer ${MCP_TEST_API_KEY}' },
+  credentials: ['MCP_TEST_API_KEY'],
 });
 
 export const agent = new Agent({

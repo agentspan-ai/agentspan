@@ -39,6 +39,8 @@ MCP_TEST_SERVER_SPEC = "http://localhost:3001/api-docs"
 math_api = api_tool(
     url=MCP_TEST_SERVER_SPEC,
     name="mcp_test_tools",
+    headers={"Authorization": "Bearer ${HTTP_TEST_API_KEY}"},
+    credentials=["HTTP_TEST_API_KEY"],
     max_tools=10,  # 65 ops — filter to top 10 most relevant
 )
 
@@ -57,6 +59,8 @@ math_agent = Agent(
 
 string_api = api_tool(
     url=MCP_TEST_SERVER_SPEC,
+    headers={"Authorization": "Bearer ${HTTP_TEST_API_KEY}"},
+    credentials=["HTTP_TEST_API_KEY"],
     tool_names=["string_reverse", "string_uppercase", "string_length"],
 )
 
@@ -88,6 +92,8 @@ def calculate(expression: str) -> dict:
 
 collection_api = api_tool(
     url=MCP_TEST_SERVER_SPEC,
+    headers={"Authorization": "Bearer ${HTTP_TEST_API_KEY}"},
+    credentials=["HTTP_TEST_API_KEY"],
     tool_names=["collection_sort", "collection_unique", "collection_flatten"],
     max_tools=10,
 )

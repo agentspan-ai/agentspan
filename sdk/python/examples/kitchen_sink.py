@@ -234,6 +234,7 @@ mcp_fact_checker = mcp_tool(
     name="fact_checker",
     description="Verify factual claims using knowledge base.",
     tool_names=["verify_claim", "check_source"],
+    headers={"Authorization": "Bearer ${MCP_AUTH_TOKEN}"},
     credentials=["MCP_AUTH_TOKEN"],
 )
 

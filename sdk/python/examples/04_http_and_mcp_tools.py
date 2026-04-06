@@ -29,11 +29,15 @@ def format_report(title: str, body: str) -> dict:
 
 
 # HTTP tool (pure server-side, no worker needed)
+# ${HTTP_TEST_API_KEY} is resolved server-side from the credential store.
+# Store it with: agentspan credentials set --name HTTP_TEST_API_KEY
 reverse_api = http_tool(
     name="reverse_string",
     description="Reverse a string using the HTTP API",
     url="http://localhost:3001/api/string/reverse",
     method="POST",
+    headers={"Authorization": "Bearer ${HTTP_TEST_API_KEY}"},
+    credentials=["HTTP_TEST_API_KEY"],
     input_schema={
         "type": "object",
         "properties": {
@@ -44,17 +48,20 @@ reverse_api = http_tool(
 )
 
 # MCP tools (discovered from MCP server at runtime)
-# Requires a running MCP server — uncomment and point to your MCP endpoint
-# github_tools = mcp_tool(
-#     server_url="http://localhost:3001/mcp",
-#     name="github",
-#     description="GitHub operations via MCP",
-# )
+# ${MCP_TEST_API_KEY} is resolved server-side from the credential store.
+# Store it with: agentspan credentials set --name MCP_TEST_API_KEY
+mcp_test_tools = mcp_tool(
+    server_url="http://localhost:3001/mcp",
+    name="mcp_test_tools",
+    description="Deterministic test tools via MCP — math, string, collection, encoding, hash, datetime, validation, and conversion operations.",
+    headers={"Authorization": "Bearer ${MCP_TEST_API_KEY}"},
+    credentials=["MCP_TEST_API_KEY"],
+)
 
 agent = Agent(
     name="http_tools_demo",
     model=settings.llm_model,
-    tools=[format_report, reverse_api],
+    tools=[format_report, reverse_api, mcp_test_tools],
     instructions=(
         "You can reverse strings and format reports. "
         "When asked to reverse a string, use reverse_string first, then format_report with the result."
@@ -66,7 +73,7 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
             agent,
-            "Reverse the string 'hello world', then write a report with the result.",
+            "Reverse the string 'hello world' and add 33 and 21 append the result to that string, then write a report with the result.",
         )
         result.print_result()
 

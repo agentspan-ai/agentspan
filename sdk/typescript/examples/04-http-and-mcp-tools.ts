@@ -40,11 +40,15 @@ const formatReport = tool(
 );
 
 // HTTP tool (pure server-side, no worker needed)
+// ${HTTP_TEST_API_KEY} is resolved server-side from the credential store.
+// Store it with: agentspan credentials set --name HTTP_TEST_API_KEY
 const reverseApi = httpTool({
   name: 'reverse_string',
   description: 'Reverse a string using the HTTP API',
   url: 'http://localhost:3001/api/string/reverse',
   method: 'POST',
+  headers: { Authorization: 'Bearer ${HTTP_TEST_API_KEY}' },
+  credentials: ['HTTP_TEST_API_KEY'],
   inputSchema: {
     type: 'object',
     properties: {
@@ -55,17 +59,21 @@ const reverseApi = httpTool({
 });
 
 // MCP tools (discovered from MCP server at runtime)
-// Requires a running MCP server — uncomment and point to your MCP endpoint
-// const githubTools = mcpTool({
-//   serverUrl: 'http://localhost:3001/mcp',
-//   name: 'github',
-//   description: 'GitHub operations via MCP',
-// });
+// ${MCP_TEST_API_KEY} is resolved server-side from the credential store.
+// Store it with: agentspan credentials set --name MCP_TEST_API_KEY
+const mcpTestTools = mcpTool({
+  serverUrl: 'http://localhost:3001/mcp',
+  name: 'mcp_test_tools',
+  description:
+    'Deterministic test tools via MCP — math, string, collection, encoding, hash, datetime, validation, and conversion operations.',
+  headers: { Authorization: 'Bearer ${MCP_TEST_API_KEY}' },
+  credentials: ['MCP_TEST_API_KEY'],
+});
 
 export const agent = new Agent({
   name: 'http_tools_demo',
   model: llmModel,
-  tools: [formatReport, reverseApi],
+  tools: [formatReport, reverseApi, mcpTestTools],
   instructions:
     'You can reverse strings and format reports. ' +
     'When asked to reverse a string, use reverse_string first, then format_report with the result.',
@@ -76,7 +84,7 @@ async function main() {
   try {
     const result = await runtime.run(
       agent,
-      "Reverse the string 'hello world', then write a report with the result.",
+      "Reverse the string 'hello world' and add 33 and 21 append the result to that string, then write a report with the result.",
     );
     result.printResult();
 

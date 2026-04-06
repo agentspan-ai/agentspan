@@ -277,6 +277,7 @@ const mcpFactChecker = mcpTool({
   name: 'fact_checker',
   description: 'Verify factual claims using knowledge base.',
   toolNames: ['verify_claim', 'check_source'],
+  headers: { Authorization: 'Bearer ${MCP_AUTH_TOKEN}' },
   credentials: ['MCP_AUTH_TOKEN'],
 });
 
