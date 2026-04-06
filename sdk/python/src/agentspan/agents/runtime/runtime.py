@@ -3601,10 +3601,12 @@ class AgentRuntime:
                             and task_status == "COMPLETED"
                         ):
                             fn_name = task_type.lower()
+                            raw_args = getattr(task, "input_data", None) or {}
+                            clean_args = {k: v for k, v in raw_args.items() if k != "__agentspan_ctx__"}
                             yield AgentEvent(
                                 type=EventType.TOOL_CALL,
                                 tool_name=fn_name,
-                                args=getattr(task, "input_data", None),
+                                args=clean_args,
                                 execution_id=execution_id,
                             )
                             yield AgentEvent(
@@ -4109,10 +4111,12 @@ class AgentRuntime:
                             and task_status == "COMPLETED"
                         ):
                             fn_name = task_type.lower()
+                            raw_args = getattr(task, "input_data", None) or {}
+                            clean_args = {k: v for k, v in raw_args.items() if k != "__agentspan_ctx__"}
                             yield AgentEvent(
                                 type=EventType.TOOL_CALL,
                                 tool_name=fn_name,
-                                args=getattr(task, "input_data", None),
+                                args=clean_args,
                                 execution_id=execution_id,
                             )
                             yield AgentEvent(

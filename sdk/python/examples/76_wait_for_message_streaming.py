@@ -26,30 +26,31 @@ from settings import settings
 
 
 @tool
-def execute_task(task: str) -> str:
-    """Execute a task and return the result."""
-    print(f"\n    *** EXECUTING: {task} ***\n")
-    return f"Completed: {task}"
+def respond(answer: str) -> str:
+    """Send your answer back to the caller."""
+    print(f"\n    >> {answer}\n")
+    return "ok"
 
 
 receive_message = wait_for_message_tool(
     name="wait_for_message",
     description=(
         "Wait for the next instruction from the caller. "
-        "The message payload contains a 'task' field describing what to do."
+        "The message payload contains a 'task' field with the request."
     ),
 )
 
 agent = Agent(
     name="reactive_agent",
     model=settings.llm_model,
-    tools=[receive_message, execute_task],
+    tools=[receive_message, respond],
     max_turns=10000,
     instructions=(
         "You are a reactive agent. Repeat this cycle indefinitely without stopping: "
         "1. Call wait_for_message to receive your next instruction. "
-        "2. Call execute_task with the 'task' value from the message payload. "
-        "3. Go back to step 1 immediately — never stop."
+        "2. Think through the task in the 'task' field and formulate a complete answer. "
+        "3. Call respond() with your full answer. "
+        "4. Go back to step 1 immediately — never stop."
     ),
 )
 
