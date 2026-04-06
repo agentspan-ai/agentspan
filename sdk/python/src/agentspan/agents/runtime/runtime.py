@@ -4472,7 +4472,7 @@ class AgentRuntime:
 
     def cancel(self, execution_id: str, reason: str = "") -> None:
         """Cancel an agent execution."""
-        self._workflow_client.terminate_workflow(execution_id=execution_id, reason=reason)
+        self._workflow_client.terminate_workflow(workflow_id=execution_id, reason=reason)
 
     # ── Async status / interaction ───────────────────────────────────
 
@@ -4533,7 +4533,7 @@ class AgentRuntime:
         await loop.run_in_executor(
             None,
             lambda: self._workflow_client.terminate_workflow(
-                execution_id=execution_id,
+                workflow_id=execution_id,
                 reason=reason,
             ),
         )
