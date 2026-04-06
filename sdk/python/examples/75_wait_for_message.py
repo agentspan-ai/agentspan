@@ -63,7 +63,7 @@ with AgentRuntime() as runtime:
         print(f"  -> sending: {msg!r}")
         runtime.send_message(handle.execution_id, {"task": msg})
 
-    # Let the agent process all messages before exiting
-    time.sleep(10)
+    # Let the agent process all messages before exiting (~5-6s per message)
+    time.sleep(30)
     runtime.cancel(handle.execution_id)
     print("\nDone.")
