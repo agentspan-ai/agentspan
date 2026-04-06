@@ -1,18 +1,1 @@
 rootProject.name = 'agentspan-runtime'
-
-// Temporarily substitute published conductor artifacts with the local workspace build.
-// Remove this block once the WMQ changes are merged and released.
-includeBuild('../../conductor') {
-    dependencySubstitution {
-        substitute module('org.conductoross:conductor-core') using project(':conductor-core')
-        substitute module('org.conductoross:conductor-rest') using project(':conductor-rest')
-        substitute module('org.conductoross:conductor-common') using project(':conductor-common')
-        substitute module('org.conductoross:conductor-ai') using project(':conductor-ai')
-        substitute module('org.conductoross:conductor-postgres-persistence') using project(':conductor-postgres-persistence')
-        substitute module('org.conductoross:conductor-postgres-external-storage') using project(':conductor-postgres-external-storage')
-        substitute module('org.conductoross:conductor-sqlite-persistence') using project(':conductor-sqlite-persistence')
-        substitute module('org.conductoross:conductor-http-task') using project(':conductor-http-task')
-        substitute module('org.conductoross:conductor-json-jq-task') using project(':conductor-json-jq-task')
-        substitute module('org.conductoross:conductor-metrics') using project(':conductor-metrics')
-    }
-}
