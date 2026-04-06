@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { serializeLangChain } from '../../../src/frameworks/langchain-serializer.js';
-import { ConfigurationError } from '../../../src/errors.js';
 
 describe('serializeLangChain', () => {
   describe('full extraction', () => {
@@ -201,18 +200,21 @@ describe('serializeLangChain', () => {
     });
   });
 
-  describe('error cases', () => {
-    it('throws ConfigurationError when no model found', () => {
+  describe('fallback cases', () => {
+    it('falls through to passthrough when no model found', () => {
       const mockExecutor = {
         invoke: () => {},
         lc_namespace: ['langchain'],
         tools: [{ name: 'tool', func: () => {} }],
       };
 
-      expect(() => serializeLangChain(mockExecutor)).toThrow(ConfigurationError);
+      const [config, workers] = serializeLangChain(mockExecutor);
+      expect(config._worker_name).toBeDefined();
+      expect(workers).toHaveLength(1);
+      expect(workers[0].func).toBeNull();
     });
 
-    it('throws ConfigurationError when no tools found', () => {
+    it('falls through to passthrough when no tools found', () => {
       const mockExecutor = {
         invoke: () => {},
         lc_namespace: ['langchain'],
@@ -220,28 +222,21 @@ describe('serializeLangChain', () => {
         tools: [],
       };
 
-      expect(() => serializeLangChain(mockExecutor)).toThrow(ConfigurationError);
+      const [config, workers] = serializeLangChain(mockExecutor);
+      expect(config._worker_name).toBeDefined();
+      expect(workers).toHaveLength(1);
     });
 
-    it('throws ConfigurationError when tools is not an array', () => {
+    it('falls through to passthrough when tools is not an array', () => {
       const mockExecutor = {
         invoke: () => {},
         lc_namespace: ['langchain'],
         agent: { llm: { model_name: 'gpt-4o', constructor: { name: 'ChatOpenAI' } } },
       };
 
-      expect(() => serializeLangChain(mockExecutor)).toThrow(ConfigurationError);
-    });
-
-    it('error message includes model status', () => {
-      const mockExecutor = {
-        invoke: () => {},
-        lc_namespace: ['langchain'],
-        agent: { llm: { model_name: 'gpt-4o', constructor: { name: 'ChatOpenAI' } } },
-        tools: [],
-      };
-
-      expect(() => serializeLangChain(mockExecutor)).toThrow(/Tools: 0/);
+      const [config, workers] = serializeLangChain(mockExecutor);
+      expect(config._worker_name).toBeDefined();
+      expect(workers).toHaveLength(1);
     });
   });
 

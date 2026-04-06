@@ -610,13 +610,19 @@ public class JavaScriptBuilder {
             if (oa && ('' + oa).indexOf('3.') === 0) {
                 format = 'openapi3';
                 var servers = get(spec, 'servers');
-                var specBase = '' + get(servers && servers[0] ? servers[0] : {}, 'url');
+                var rawBase = (servers && servers[0]) ? get(servers[0], 'url') : null;
+                var specBase = rawBase ? '' + rawBase : '';
                 // If baseUrl is relative (starts with /), prepend the spec URL's origin
                 if (specBase && specBase.indexOf('/') === 0) {
                     var m = specUrl.match(/^(https?:\\/\\/[^\\/]+)/);
                     specBase = (m ? m[1] : '') + specBase;
                 }
-                baseUrl = specBase || specUrl.replace(/\\/[^\\/]*\\.(json|yaml).*$/, '');
+                // Fallback: derive origin from the spec URL
+                if (!specBase) {
+                    var m2 = specUrl.match(/^(https?:\\/\\/[^\\/]+)/);
+                    specBase = m2 ? m2[1] : specUrl.replace(/\\/[^\\/]*\\.(json|yaml).*$/, '');
+                }
+                baseUrl = specBase;
                 var paths = get(spec, 'paths');
                 if (paths) {
                     for (var path in paths) {

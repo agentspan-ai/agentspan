@@ -102,7 +102,7 @@ builder.addConditionalEdges('fetch', shouldRecover, {
 builder.addEdge('process', END);
 builder.addEdge('recover', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "error_recovery_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

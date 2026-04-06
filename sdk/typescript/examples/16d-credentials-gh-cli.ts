@@ -39,7 +39,7 @@ async function main() {
   try {
     const result = await runtime.run(
     agent,
-    "List the 5 most recently updated repos for the 'agentspan'",
+    "List the 5 most recently updated repos for the 'agentspan' and list the URL for the repo",
     );
     result.printResult();
 

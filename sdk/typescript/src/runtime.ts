@@ -152,23 +152,43 @@ export class AgentRuntime {
         events.push(event);
       }
 
-      // Get final status for token usage
-      let tokenUsage;
-      try {
-        const status = await this._getStatus(executionId, options?.signal);
-        tokenUsage = (status as unknown as Record<string, unknown>).tokenUsage as
-          | AgentResult['tokenUsage']
-          | undefined;
-      } catch {
-        // Non-critical
-      }
-
       // Build result from stream
       const result = await agentStream.getResult();
-      if (tokenUsage) {
-        (result as unknown as Record<string, unknown>).tokenUsage = tokenUsage;
+      const resultRec = result as unknown as Record<string, unknown>;
+      resultRec.correlationId = correlationId;
+
+      // Enrich with execution data (toolCalls, messages, tokenUsage)
+      try {
+        const execution = await this._fetchExecution(executionId, options?.signal);
+        if (execution) {
+          const toolCalls = _extractToolCalls(execution);
+          if (toolCalls.length > 0) {
+            resultRec.toolCalls = toolCalls;
+          }
+
+          const messages = _extractMessages(execution);
+          if (messages.length > 0) {
+            resultRec.messages = messages;
+          }
+
+          const tokenUsage = _extractTokenUsage(execution);
+          if (tokenUsage) {
+            resultRec.tokenUsage = tokenUsage;
+          }
+
+          // Fill output from execution if stream returned null or junk
+          // (server sometimes returns workflow state like {result: [], finishReason: "TOOL_CALLS"})
+          if (_isOutputJunk(resultRec.output)) {
+            const execOutput = _extractOutput(execution);
+            if (execOutput != null) {
+              resultRec.output = typeof execOutput === 'string'
+                ? { result: execOutput } : execOutput;
+            }
+          }
+        }
+      } catch {
+        // Non-critical — fall back to stream-only result
       }
-      (result as unknown as Record<string, unknown>).correlationId = correlationId;
 
       return result;
     } finally {
@@ -235,12 +255,34 @@ export class AgentRuntime {
         while (true) {
           const status = await this._getStatus(executionId, options?.signal);
           if (TERMINAL_STATUSES.has(status.status)) {
-            return makeAgentResult({
+            const resultData: Parameters<typeof makeAgentResult>[0] = {
               output: status.output,
               executionId,
               correlationId,
               status: status.status,
-            });
+            };
+
+            try {
+              const execution = await this._fetchExecution(executionId, options?.signal);
+              if (execution) {
+                resultData.toolCalls = _extractToolCalls(execution) as unknown[];
+                resultData.messages = _extractMessages(execution);
+                resultData.tokenUsage = _extractTokenUsage(execution) ?? undefined;
+
+                // Replace junk output with execution data
+                if (_isOutputJunk(resultData.output)) {
+                  const execOutput = _extractOutput(execution);
+                  if (execOutput != null) {
+                    resultData.output = typeof execOutput === 'string'
+                      ? { result: execOutput } : execOutput;
+                  }
+                }
+              }
+            } catch {
+              // Non-critical
+            }
+
+            return makeAgentResult(resultData);
           }
           await sleep(pollIntervalMs);
         }
@@ -462,7 +504,23 @@ export class AgentRuntime {
   }
 
   /**
+   * Fetch the full execution data (tasks, variables, output, tokenUsage).
+   * Mirrors Python SDK's _fetch_agent_workflow: GET /agent/execution/{id}
+   */
+  private async _fetchExecution(
+    executionId: string,
+    signal?: AbortSignal,
+  ): Promise<Record<string, unknown> | null> {
+    try {
+      return await this._httpRequest('GET', `/agent/execution/${executionId}`, undefined, signal);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Recursively collect all ToolDefs with handlers from an agent tree.
+   * Walks agent.agents AND agents nested inside agentTool() configs.
    */
   private _collectToolDefs(agent: Agent): ToolDef[] {
     const defs: ToolDef[] = [];
@@ -472,6 +530,13 @@ export class AgentRuntime {
         const def = getToolDef(t);
         if (def.func != null) {
           defs.push(def);
+        }
+        // Walk into agents referenced via agentTool() — their tools need workers too
+        if (def.toolType === 'agent_tool' && def.config?.agent) {
+          const innerAgent = def.config.agent as Agent;
+          if (innerAgent.tools || innerAgent.agents) {
+            defs.push(...this._collectToolDefs(innerAgent));
+          }
         }
       } catch {
         // Skip unrecognized tool formats
@@ -1039,10 +1104,10 @@ export class AgentRuntime {
   /**
    * Serialize a framework agent into (rawConfig, workers) using extraction.
    */
-  private _serializeFramework(agent: object, frameworkId: FrameworkId) {
+  private _serializeFramework(agent: object, frameworkId: FrameworkId, options?: { model?: unknown }) {
     switch (frameworkId) {
       case 'langgraph':
-        return serializeLangGraph(agent);
+        return serializeLangGraph(agent, options?.model != null ? { model: options.model } : undefined);
       case 'langchain':
         return serializeLangChain(agent);
       case 'openai':
@@ -1060,6 +1125,7 @@ export class AgentRuntime {
    */
   private _registerExtractedWorkers(
     workers: { name: string; func?: Function | null }[],
+    credentials?: string[],
   ): void {
     for (const worker of workers) {
       if (worker.func) {
@@ -1072,7 +1138,7 @@ export class AgentRuntime {
           delete cleanInput['method'];
           delete cleanInput['__agentspan_ctx__'];
           return fn(cleanInput);
-        });
+        }, credentials);
       }
     }
   }
@@ -1116,9 +1182,9 @@ export class AgentRuntime {
     options?: RunOptions,
   ): Promise<AgentResult> {
     const correlationId = generateCorrelationId();
-    const [rawConfig, workers] = this._serializeFramework(agent, frameworkId);
+    const [rawConfig, workers] = this._serializeFramework(agent, frameworkId, { model: options?.model });
 
-    this._registerExtractedWorkers(workers);
+    this._registerExtractedWorkers(workers, options?.credentials);
 
     this.workerManager.startPolling();
 
@@ -1159,7 +1225,44 @@ export class AgentRuntime {
 
       // Build result from stream
       const result = await agentStream.getResult();
-      (result as unknown as Record<string, unknown>).correlationId = correlationId;
+      const resultRec = result as unknown as Record<string, unknown>;
+      resultRec.correlationId = correlationId;
+
+      // Enrich with execution data (messages, toolCalls, tokenUsage, output)
+      // mirroring what the Python SDK does via get_workflow + _fetch_agent_workflow
+      try {
+        const execution = await this._fetchExecution(executionId, options?.signal);
+        if (execution) {
+          // Extract output from execution if stream returned null or junk
+          if (_isOutputJunk(resultRec.output)) {
+            const execOutput = _extractOutput(execution);
+            if (execOutput != null) {
+              resultRec.output = typeof execOutput === 'string'
+                ? { result: execOutput } : execOutput;
+            }
+          }
+
+          // Extract messages from execution variables
+          const messages = _extractMessages(execution);
+          if (messages.length > 0) {
+            resultRec.messages = messages;
+          }
+
+          // Extract tool calls from execution tasks
+          const toolCalls = _extractToolCalls(execution);
+          if (toolCalls.length > 0) {
+            resultRec.toolCalls = toolCalls;
+          }
+
+          // Extract token usage
+          const tokenUsage = _extractTokenUsage(execution);
+          if (tokenUsage) {
+            resultRec.tokenUsage = tokenUsage;
+          }
+        }
+      } catch {
+        // Non-critical — fall back to stream-only result
+      }
 
       return result;
     } finally {
@@ -1177,9 +1280,9 @@ export class AgentRuntime {
     options?: RunOptions,
   ): Promise<AgentHandle> {
     const correlationId = generateCorrelationId();
-    const [rawConfig, workers] = this._serializeFramework(agent, frameworkId);
+    const [rawConfig, workers] = this._serializeFramework(agent, frameworkId, { model: options?.model });
 
-    this._registerExtractedWorkers(workers);
+    this._registerExtractedWorkers(workers, options?.credentials);
 
     this.workerManager.startPolling();
 
@@ -1211,12 +1314,34 @@ export class AgentRuntime {
         while (true) {
           const status = await this._getStatus(executionId, options?.signal);
           if (TERMINAL_STATUSES.has(status.status)) {
-            return makeAgentResult({
+            const resultData: Parameters<typeof makeAgentResult>[0] = {
               output: status.output,
               executionId,
               correlationId,
               status: status.status,
-            });
+            };
+
+            try {
+              const execution = await this._fetchExecution(executionId, options?.signal);
+              if (execution) {
+                resultData.toolCalls = _extractToolCalls(execution) as unknown[];
+                resultData.messages = _extractMessages(execution);
+                resultData.tokenUsage = _extractTokenUsage(execution) ?? undefined;
+
+                // Replace junk output with execution data
+                if (_isOutputJunk(resultData.output)) {
+                  const execOutput = _extractOutput(execution);
+                  if (execOutput != null) {
+                    resultData.output = typeof execOutput === 'string'
+                      ? { result: execOutput } : execOutput;
+                  }
+                }
+              }
+            } catch {
+              // Non-critical
+            }
+
+            return makeAgentResult(resultData);
           }
           await sleep(pollIntervalMs);
         }
@@ -1355,4 +1480,154 @@ function generateCorrelationId(): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ── Execution extraction helpers (mirrors Python SDK) ────
+
+/**
+ * Detect "junk" output from the server — workflow state objects that
+ * aren't the actual LLM response (e.g. {result: [], finishReason: "TOOL_CALLS"}).
+ */
+function _isOutputJunk(output: unknown): boolean {
+  if (output == null) return true;
+  if (typeof output !== 'object' || Array.isArray(output)) return false;
+  const obj = output as Record<string, unknown>;
+  const result = obj.result;
+  // {result: null, ...} or {result: [], finishReason: ...}
+  if (result === null && 'finishReason' in obj) return true;
+  if (Array.isArray(result) && result.length === 0) return true;
+  return false;
+}
+
+/** System task types that are never user-defined tool calls. */
+const SYSTEM_TASK_TYPES = new Set([
+  'LLM_CHAT_COMPLETE',
+  'SWITCH',
+  'DO_WHILE',
+  'INLINE',
+  'SET_VARIABLE',
+  'FORK',
+  'FORK_JOIN_DYNAMIC',
+  'JOIN',
+  'SUB_WORKFLOW',
+]);
+
+/** Internal keys to strip from tool call input. */
+const INTERNAL_KEYS = ['_agent_state', 'method', '__humanTaskDefinition'];
+
+/**
+ * Extract output from a full execution response.
+ * Mirrors Python's wf.output extraction with fallback to messages.
+ *
+ * The server sometimes returns workflow state as output
+ * (e.g. {result: [], finishReason: "TOOL_CALLS"}) instead of the
+ * actual LLM text response.  When that happens, fall back to the
+ * last assistant message in execution.variables.messages.
+ */
+function _extractOutput(execution: Record<string, unknown>): unknown {
+  const output = execution.output;
+
+  // Try workflow output first
+  if (output != null && typeof output === 'object' && !Array.isArray(output)) {
+    const obj = output as Record<string, unknown>;
+    const result = 'result' in obj ? obj.result : undefined;
+    // Usable if result is a non-empty string or non-empty object/array
+    if (result != null && result !== '') {
+      if (Array.isArray(result) && result.length === 0) {
+        // empty array — fall through to messages
+      } else {
+        return result;
+      }
+    }
+  } else if (output != null) {
+    // Primitive or array — return directly
+    return output;
+  }
+
+  // Fallback: last assistant message content from execution variables
+  const variables = execution.variables as Record<string, unknown> | undefined;
+  if (variables && Array.isArray(variables.messages)) {
+    for (let i = variables.messages.length - 1; i >= 0; i--) {
+      const msg = variables.messages[i] as Record<string, unknown>;
+      if (msg.role === 'assistant' && msg.content) {
+        return msg.content;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Extract conversation messages from execution variables.
+ * Mirrors Python's _extract_messages: wf.variables.messages
+ */
+function _extractMessages(execution: Record<string, unknown>): unknown[] {
+  const variables = execution.variables as Record<string, unknown> | undefined;
+  if (variables && Array.isArray(variables.messages)) {
+    return variables.messages;
+  }
+  return [];
+}
+
+/**
+ * Extract tool calls from execution tasks.
+ * Mirrors Python's _extract_tool_calls: filters for call_* refs, skips system tasks.
+ */
+function _extractToolCalls(execution: Record<string, unknown>): unknown[] {
+  const tasks = execution.tasks as Array<Record<string, unknown>> | undefined;
+  if (!Array.isArray(tasks)) return [];
+
+  const toolCalls: unknown[] = [];
+  for (const task of tasks) {
+    const taskType = String(task.taskType ?? task.task_type ?? '').toUpperCase();
+    const ref = String(task.referenceTaskName ?? task.reference_task_name ?? '');
+
+    // The call_ prefix is the compiler's marker for tool invocations.
+    // Any task with a call_ ref is a user-initiated tool call, regardless
+    // of whether the underlying task type is HTTP, CALL_MCP_TOOL, SIMPLE, etc.
+    if (!ref.startsWith('call_')) continue;
+    // Skip only orchestration-level system tasks (these never have call_ refs,
+    // but guard against edge cases)
+    if (SYSTEM_TASK_TYPES.has(taskType)) continue;
+
+    const inputData = { ...(task.inputData ?? task.input_data ?? {}) as Record<string, unknown> };
+    for (const k of INTERNAL_KEYS) {
+      delete inputData[k];
+    }
+
+    // Use the tool name from inputData.method (set by compiler) if available
+    const toolName = String(inputData.method ?? taskType).toLowerCase();
+    delete inputData.method;
+
+    toolCalls.push({
+      name: toolName,
+      args: inputData,
+      result: task.outputData ?? task.output_data ?? {},
+    });
+  }
+  return toolCalls;
+}
+
+/**
+ * Extract aggregated token usage from execution.
+ * Mirrors Python's _extract_token_usage: reads tokenUsage from execution data.
+ */
+function _extractTokenUsage(
+  execution: Record<string, unknown>,
+): { promptTokens: number; completionTokens: number; totalTokens: number } | null {
+  const tokenUsage = execution.tokenUsage as Record<string, unknown> | undefined;
+  if (!tokenUsage) return null;
+
+  const prompt = Number(tokenUsage.promptTokens ?? 0);
+  const completion = Number(tokenUsage.completionTokens ?? 0);
+  let total = Number(tokenUsage.totalTokens ?? 0);
+
+  if (!prompt && !completion && !total) return null;
+
+  if (total === 0 && (prompt > 0 || completion > 0)) {
+    total = prompt + completion;
+  }
+
+  return { promptTokens: prompt, completionTokens: completion, totalTokens: total };
 }

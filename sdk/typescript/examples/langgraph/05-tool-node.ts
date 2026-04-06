@@ -79,7 +79,7 @@ const builder = new StateGraph(MessagesAnnotation)
   .addConditionalEdges('agent', toolsCondition)
   .addEdge('tools', 'agent');
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "tool_node_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

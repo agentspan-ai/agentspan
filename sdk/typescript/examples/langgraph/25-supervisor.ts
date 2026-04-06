@@ -118,7 +118,7 @@ builder.addEdge('researcher', 'supervisor');
 builder.addEdge('writer', 'supervisor');
 builder.addEdge('editor', 'supervisor');
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "supervisor_multiagent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

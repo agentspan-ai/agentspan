@@ -10,7 +10,6 @@ import { ConfigurationError } from './errors.js';
 import { ClaudeCode } from './claude-code.js';
 import type { CliConfigOptions } from './cli-config.js';
 import { makeCliTool } from './cli-config.js';
-import { resolveCliCredentials } from './cli-credentials.js';
 
 // ── Validation constants ──────────────────────────────────
 
@@ -292,27 +291,6 @@ export class Agent {
       this.tools.push(cliTool);
     }
 
-    // ── CLI credential auto-mapping ───────────────────────
-    if (
-      this.cliConfig?.enabled !== false &&
-      this.cliConfig?.allowedCommands &&
-      this.cliConfig.allowedCommands.length > 0
-    ) {
-      try {
-        const autoMapped = resolveCliCredentials(
-          this.cliConfig.allowedCommands,
-          this.credentials,
-        );
-        if (autoMapped.length > 0 && !this.credentials) {
-          (this as { credentials: (string | CredentialFile)[] }).credentials =
-            autoMapped;
-        }
-      } catch (err) {
-        throw new ConfigurationError(
-          err instanceof Error ? err.message : String(err),
-        );
-      }
-    }
   }
 
   // ── Claude Code detection ───────────────────────────────
@@ -343,6 +321,7 @@ export class Agent {
       // Flatten: merge other into existing sequential pipeline
       return new Agent({
         name: [...this.agents, other].map((a) => a.name).join('_'),
+        model: this.model,
         agents: [...this.agents, other],
         strategy: 'sequential',
       });
@@ -351,6 +330,7 @@ export class Agent {
     // Create new sequential pipeline
     return new Agent({
       name: `${this.name}_${other.name}`,
+      model: this.model,
       agents: [this, other],
       strategy: 'sequential',
     });

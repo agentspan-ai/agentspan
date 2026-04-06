@@ -109,7 +109,7 @@ builder.addEdge(START, 'api_call');
 builder.addEdge('api_call', 'format');
 builder.addEdge('format', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "retry_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

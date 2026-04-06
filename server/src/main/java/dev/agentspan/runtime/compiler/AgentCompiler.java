@@ -2404,6 +2404,7 @@ public class AgentCompiler {
                 LlmNodeResult llmResult = buildLlmNodeTasks(
                         config, nodeSpec, llmStateExpr, usedRefs, workerRef, nodeName, retryPolicies.get(nodeName));
                 tasks.addAll(llmResult.tasks());
+                lastTaskRef = llmResult.lastTaskRef();
                 lastStateRef = llmResult.lastStateRef();
 
                 log.debug("Graph node '{}' compiled as LLM node (with skip-llm SWITCH)", nodeName);

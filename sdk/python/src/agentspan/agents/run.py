@@ -199,15 +199,17 @@ def plan(
 ) -> Any:
     """Compile an agent to a workflow definition without executing it.
 
-    Returns a :class:`WorkflowDef` that can be inspected or exported.
-    Does NOT register workflows, start workers, or execute anything.
+    Returns the raw server response with ``workflowDef`` and
+    ``requiredWorkers`` keys.  Does NOT register workflows, start
+    workers, or execute anything.
 
     Args:
         agent: The :class:`Agent` to compile.
         runtime: Optional custom :class:`AgentRuntime`.
 
     Returns:
-        A workflow definition object with ``name``, ``tasks``, etc.
+        A dict with ``workflowDef`` (the Conductor workflow definition)
+        and ``requiredWorkers``.
 
     Example::
 
@@ -218,9 +220,9 @@ def plan(
             return f"Hello {name}"
 
         agent = Agent(name="greeter", model="openai/gpt-4o", tools=[greet])
-        wf_def = plan(agent)
-        print(wf_def.name)   # "agent_greeter"
-        print(wf_def.tasks)  # list of task definitions
+        result = plan(agent)
+        print(result["workflowDef"]["name"])   # "greeter"
+        print(result["workflowDef"]["tasks"])  # list of task definitions
     """
     rt = runtime or _get_default_runtime()
     return rt.plan(agent)

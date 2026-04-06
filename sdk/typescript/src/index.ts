@@ -162,12 +162,6 @@ export {
   injectCredentials,
 } from './credentials.js';
 
-// ── CLI Credential Mapping ──────────────────────────────
-export {
-  CLI_CREDENTIAL_MAP,
-  resolveCliCredentials,
-} from './cli-credentials.js';
-
 // ── Guardrails ──────────────────────────────────────────
 export type {
   GuardrailOptions,

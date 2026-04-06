@@ -98,7 +98,11 @@ including REPO, BRANCH, ISSUE, AUTHOR, DETAILS, and SUMMARY.
 5. Commit and push your changes.
 6. Say HANDOFF_TO_QA with REPO, BRANCH, and a summary of CHANGES.
 """,
-    local_code_execution=True,
+    cli_config=CliConfig(
+        allowed_commands=["gh", "git", "mktemp", "rm", "ls", "cat", "mkdir", "cp"],
+        allow_shell=True,
+        timeout=120,
+    ),
 )
 
 qa_tester = Agent(
@@ -110,7 +114,11 @@ You are a QA engineer. Clone the repo, review changes, run tests.
 If bugs found: say HANDOFF_TO_CODER with what to fix.
 If good: say QA_APPROVED with REPO/BRANCH/SUMMARY.
 """,
-    local_code_execution=True,
+    cli_config=CliConfig(
+        allowed_commands=["gh", "git", "mktemp", "rm", "ls", "cat"],
+        allow_shell=True,
+        timeout=120,
+    ),
     max_tokens=60000,
     max_turns=15,
 )

@@ -24,7 +24,9 @@ import type { FrameworkId } from '../types.js';
 function hasInvokeAndGetGraph(obj: any): boolean {
   return (
     typeof obj?.invoke === 'function' &&
-    (typeof obj?.getGraph === 'function' || obj?.nodes instanceof Map)
+    (typeof obj?.getGraph === 'function' ||
+      obj?.nodes instanceof Map ||
+      (typeof obj?.nodes === 'object' && obj?.nodes !== null && typeof obj?.builder === 'object'))
   );
 }
 

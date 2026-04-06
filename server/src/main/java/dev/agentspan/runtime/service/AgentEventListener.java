@@ -5,7 +5,6 @@
 
 package dev.agentspan.runtime.service;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -22,7 +21,6 @@ import com.netflix.conductor.core.listener.WorkflowStatusListener;
 import com.netflix.conductor.model.TaskModel;
 import com.netflix.conductor.model.WorkflowModel;
 
-import dev.agentspan.runtime.credentials.CredentialResolutionService;
 import dev.agentspan.runtime.credentials.ExecutionTokenService;
 import dev.agentspan.runtime.model.AgentSSEEvent;
 
@@ -52,9 +50,6 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
     @Autowired(required = false)
     private ExecutionTokenService executionTokenService;
 
-    @Autowired(required = false)
-    private CredentialResolutionService credentialResolutionService;
-
     @Autowired
     public AgentEventListener(AgentStreamRegistry streamRegistry, MeterRegistry meterRegistry) {
         this.streamRegistry = streamRegistry;
@@ -78,11 +73,6 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
         String taskRef = task.getReferenceTaskName();
         logger.debug("onTaskScheduled: wfId={}, type={}, ref={}", wfId, taskType, taskRef);
 
-        // Resolve ${NAME} credential placeholders in MCP task headers
-        if ("CALL_MCP_TOOL".equals(taskType)) {
-            resolveMcpCredentialHeaders(task);
-        }
-
         if ("LLM_CHAT_COMPLETE".equals(taskType)) {
             emit(wfId, AgentSSEEvent.thinking(wfId, taskRef));
         } else if ("SUB_WORKFLOW".equals(taskType)) {
@@ -94,8 +84,6 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
             String target = extractHandoffTarget(taskRef);
             emit(wfId, AgentSSEEvent.handoff(wfId, target));
         }
-        // Note: HUMAN tasks emit WAITING via AgentHumanTask.start(), not here.
-        // Conductor does NOT call TaskStatusListener for system tasks.
     }
 
     @Override
@@ -114,6 +102,7 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
         String wfId = task.getWorkflowInstanceId();
         String taskRef = task.getReferenceTaskName();
         logger.debug("onTaskCompleted: wfId={}, type={}, ref={}", wfId, task.getTaskType(), taskRef);
+
         Map<String, Object> output = task.getOutputData();
         if (output == null) output = Map.of();
 
@@ -377,61 +366,6 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
     }
 
     // ── Internal ─────────────────────────────────────────────────────
-
-    /**
-     * Resolve ${NAME} credential placeholders in CALL_MCP_TOOL task headers.
-     * MCP is a worker task (not a system task), so we resolve before the worker picks it up.
-     */
-    @SuppressWarnings("unchecked")
-    private void resolveMcpCredentialHeaders(TaskModel task) {
-        if (executionTokenService == null || credentialResolutionService == null) return;
-
-        Map<String, Object> input = task.getInputData();
-        Object headers = input.get("headers");
-        Object ctx = input.get("__agentspan_ctx__");
-
-        if (!(headers instanceof Map<?, ?> headerMap) || ctx == null) return;
-
-        // Check for ${NAME} patterns
-        boolean hasPlaceholders = false;
-        Pattern p = Pattern.compile("\\$\\{(\\w+)}");
-        for (Object v : headerMap.values()) {
-            if (v != null && p.matcher(String.valueOf(v)).find()) {
-                hasPlaceholders = true;
-                break;
-            }
-        }
-        if (!hasPlaceholders) return;
-
-        // Extract userId from execution token
-        String token = null;
-        if (ctx instanceof Map<?, ?> ctxMap) {
-            token = (String) ctxMap.get("execution_token");
-        } else if (ctx instanceof String s) {
-            token = s;
-        }
-        if (token == null) return;
-
-        try {
-            String userId = executionTokenService.validate(token).userId();
-            Map<String, String> resolved = new LinkedHashMap<>();
-            for (Map.Entry<?, ?> entry : headerMap.entrySet()) {
-                String value = String.valueOf(entry.getValue());
-                Matcher m = p.matcher(value);
-                StringBuilder sb = new StringBuilder();
-                while (m.find()) {
-                    String credName = m.group(1);
-                    String credValue = credentialResolutionService.resolve(userId, credName);
-                    m.appendReplacement(sb, Matcher.quoteReplacement(credValue != null ? credValue : ""));
-                }
-                m.appendTail(sb);
-                resolved.put(String.valueOf(entry.getKey()), sb.toString());
-            }
-            input.put("headers", resolved);
-        } catch (Exception e) {
-            logger.warn("Failed to resolve MCP credential headers: {}", e.getMessage());
-        }
-    }
 
     private void emit(String executionId, AgentSSEEvent event) {
         try {

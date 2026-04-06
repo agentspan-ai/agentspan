@@ -124,7 +124,7 @@ const builder = new StateGraph(MessagesAnnotation)
   .addConditionalEdges('agent', toolsCondition)
   .addEdge('tools', 'agent');
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "tool_call_chain_agent" });
 
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',

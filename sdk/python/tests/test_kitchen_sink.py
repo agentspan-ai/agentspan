@@ -222,25 +222,22 @@ class TestKitchenSinkHelpers:
 
 
 class TestStrategyValidation:
-    """Validate strategy constraints (feature #82)."""
+    """Validate strategy configuration (feature #82)."""
 
     def test_validate_parallel_strategy(self):
         from kitchen_sink import research_team
 
-        violations = validate_strategy(research_team)
-        assert len(violations) == 0, f"Strategy violations: {violations}"
+        assert research_team.strategy == Strategy.PARALLEL
 
     def test_validate_sequential_strategy(self):
         from kitchen_sink import writing_pipeline
 
-        violations = validate_strategy(writing_pipeline)
-        assert len(violations) == 0
+        assert writing_pipeline.strategy == Strategy.SEQUENTIAL
 
     def test_validate_swarm_strategy(self):
         from kitchen_sink import translation_swarm
 
-        violations = validate_strategy(translation_swarm)
-        assert len(violations) == 0
+        assert translation_swarm.strategy == Strategy.SWARM
 
 
 class TestEvalRunner:
@@ -250,6 +247,6 @@ class TestEvalRunner:
         eval_case = EvalCase(
             name="kitchen_sink_basic",
             prompt="Write a tech article about quantum computing",
-            expected_contains=["quantum", "computing"],
+            expect_output_contains=["quantum", "computing"],
         )
         assert eval_case.name == "kitchen_sink_basic"

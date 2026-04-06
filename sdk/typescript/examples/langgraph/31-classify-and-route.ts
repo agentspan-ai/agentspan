@@ -129,7 +129,7 @@ builder.addEdge('sports', END);
 builder.addEdge('technology', END);
 builder.addEdge('cooking', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "classify_and_route_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

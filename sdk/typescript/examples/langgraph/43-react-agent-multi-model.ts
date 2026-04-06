@@ -71,7 +71,7 @@ const dayOfWeekTool = new DynamicStructuredTool({
 const tools = [getTodayTool, daysBetweenTool, dayOfWeekTool];
 const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
 
-const graph = createReactAgent({ llm, tools });
+const graph = createReactAgent({ llm, tools, name: "multi_model_agent" });
 
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',

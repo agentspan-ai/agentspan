@@ -14,7 +14,7 @@ import { AgentRuntime } from '@agentspan-ai/sdk';
 // Build the graph
 // ---------------------------------------------------------------------------
 const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
-const graph = createReactAgent({ llm, tools: [] });
+const graph = createReactAgent({ llm, tools: [], name: "hello_world_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

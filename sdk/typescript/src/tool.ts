@@ -369,18 +369,19 @@ export interface McpToolOptions {
 }
 
 export function mcpTool(opts: McpToolOptions): ToolDef {
+  // Wire config uses snake_case keys to match server expectations (Python SDK is reference)
   const config: Record<string, unknown> = {
-    serverUrl: opts.serverUrl,
+    server_url: opts.serverUrl,
   };
   if (opts.headers) config.headers = opts.headers;
-  if (opts.toolNames) config.toolNames = opts.toolNames;
-  if (opts.maxTools !== undefined) config.maxTools = opts.maxTools;
+  if (opts.toolNames) config.tool_names = opts.toolNames;
+  config.max_tools = opts.maxTools ?? 64;
   if (opts.credentials) config.credentials = opts.credentials;
 
   return serverTool(
     'mcp',
-    opts.name ?? 'mcp_tool',
-    opts.description ?? 'MCP tool',
+    opts.name ?? 'mcp_tools',
+    opts.description ?? `MCP tools from ${opts.serverUrl}`,
     undefined,
     config,
   );
@@ -399,18 +400,19 @@ export interface ApiToolOptions {
 }
 
 export function apiTool(opts: ApiToolOptions): ToolDef {
+  // Wire config uses snake_case keys to match server expectations (Python SDK is reference)
   const config: Record<string, unknown> = {
     url: opts.url,
   };
   if (opts.headers) config.headers = opts.headers;
-  if (opts.toolNames) config.toolNames = opts.toolNames;
-  if (opts.maxTools !== undefined) config.maxTools = opts.maxTools;
+  if (opts.toolNames) config.tool_names = opts.toolNames;
+  config.max_tools = opts.maxTools ?? 64;
   if (opts.credentials) config.credentials = opts.credentials;
 
   return serverTool(
     'api',
-    opts.name ?? 'api_tool',
-    opts.description ?? 'API tool',
+    opts.name ?? 'api_tools',
+    opts.description ?? `API tools from ${opts.url}`,
     undefined,
     config,
   );
@@ -438,8 +440,20 @@ export function agentTool(
   // Extract name from agent for defaults
   const agentObj = agent as { name?: string };
   const agentName = agentObj.name ?? 'agent';
-  const name = opts?.name ?? `${agentName}_tool`;
-  const description = opts?.description ?? `Run ${agentName} as a tool`;
+  const name = opts?.name ?? agentName;
+  const description = opts?.description ?? `Invoke the ${agentName} agent`;
+
+  // Input schema matching Python: { request: string } required
+  const inputSchema = {
+    type: 'object',
+    properties: {
+      request: {
+        type: 'string',
+        description: 'The request or question to send to this agent.',
+      },
+    },
+    required: ['request'],
+  };
 
   const config: Record<string, unknown> = {
     agent,
@@ -449,7 +463,7 @@ export function agentTool(
     config.retryDelaySeconds = opts.retryDelaySeconds;
   if (opts?.optional !== undefined) config.optional = opts.optional;
 
-  return serverTool('agent_tool', name, description, undefined, config);
+  return serverTool('agent_tool', name, description, inputSchema, config);
 }
 
 // ── humanTool ─────────────────────────────────────────────
@@ -461,11 +475,23 @@ export interface HumanToolOptions {
 }
 
 export function humanTool(opts: HumanToolOptions): ToolDef {
+  // Default inputSchema matches Python: { question: string, required }
+  const defaultSchema = {
+    type: 'object',
+    properties: {
+      question: {
+        type: 'string',
+        description: 'The question or prompt to present to the human.',
+      },
+    },
+    required: ['question'],
+  };
+
   return serverTool(
     'human',
     opts.name,
     opts.description,
-    opts.inputSchema ? toJsonSchema(opts.inputSchema) : undefined,
+    opts.inputSchema ? toJsonSchema(opts.inputSchema) : defaultSchema,
     {},
   );
 }
@@ -484,17 +510,34 @@ export interface ImageToolOptions {
 
 export function imageTool(opts: ImageToolOptions): ToolDef {
   const config: Record<string, unknown> = {
+    taskType: 'GENERATE_IMAGE',
     llmProvider: opts.llmProvider,
     model: opts.model,
   };
   if (opts.style) config.style = opts.style;
   if (opts.size) config.size = opts.size;
 
+  // Default inputSchema matches Python
+  const defaultSchema = {
+    type: 'object',
+    properties: {
+      prompt: { type: 'string', description: 'Text description of the image to generate.' },
+      style: { type: 'string', description: "Image style: 'vivid' or 'natural'." },
+      width: { type: 'integer', description: 'Image width in pixels.', default: 1024 },
+      height: { type: 'integer', description: 'Image height in pixels.', default: 1024 },
+      size: { type: 'string', description: "Image size (e.g. '1024x1024'). Alternative to width/height." },
+      n: { type: 'integer', description: 'Number of images to generate.', default: 1 },
+      outputFormat: { type: 'string', description: "Output format: 'png', 'jpg', or 'webp'.", default: 'png' },
+      weight: { type: 'number', description: 'Image weight parameter.' },
+    },
+    required: ['prompt'],
+  };
+
   return serverTool(
     'generate_image',
     opts.name,
     opts.description,
-    opts.inputSchema ? toJsonSchema(opts.inputSchema) : undefined,
+    opts.inputSchema ? toJsonSchema(opts.inputSchema) : defaultSchema,
     config,
   );
 }
@@ -514,6 +557,7 @@ export interface AudioToolOptions {
 
 export function audioTool(opts: AudioToolOptions): ToolDef {
   const config: Record<string, unknown> = {
+    taskType: 'GENERATE_AUDIO',
     llmProvider: opts.llmProvider,
     model: opts.model,
   };
@@ -521,11 +565,24 @@ export function audioTool(opts: AudioToolOptions): ToolDef {
   if (opts.speed !== undefined) config.speed = opts.speed;
   if (opts.format) config.format = opts.format;
 
+  // Default inputSchema matches Python
+  const defaultSchema = {
+    type: 'object',
+    properties: {
+      text: { type: 'string', description: 'Text to convert to speech.' },
+      voice: { type: 'string', description: 'Voice to use.', enum: ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'], default: 'alloy' },
+      speed: { type: 'number', description: 'Speech speed multiplier (0.25 to 4.0).', default: 1.0 },
+      responseFormat: { type: 'string', description: "Audio format: 'mp3', 'wav', 'opus', 'aac', or 'flac'.", default: 'mp3' },
+      n: { type: 'integer', description: 'Number of audio outputs to generate.', default: 1 },
+    },
+    required: ['text'],
+  };
+
   return serverTool(
     'generate_audio',
     opts.name,
     opts.description,
-    opts.inputSchema ? toJsonSchema(opts.inputSchema) : undefined,
+    opts.inputSchema ? toJsonSchema(opts.inputSchema) : defaultSchema,
     config,
   );
 }
@@ -547,6 +604,7 @@ export interface VideoToolOptions {
 
 export function videoTool(opts: VideoToolOptions): ToolDef {
   const config: Record<string, unknown> = {
+    taskType: 'GENERATE_VIDEO',
     llmProvider: opts.llmProvider,
     model: opts.model,
   };
@@ -556,11 +614,39 @@ export function videoTool(opts: VideoToolOptions): ToolDef {
   if (opts.style) config.style = opts.style;
   if (opts.aspectRatio) config.aspectRatio = opts.aspectRatio;
 
+  // Default inputSchema matches Python
+  const defaultSchema = {
+    type: 'object',
+    properties: {
+      prompt: { type: 'string', description: 'Text description of the video scene.' },
+      inputImage: { type: 'string', description: 'Base64-encoded or URL image for image-to-video generation.' },
+      duration: { type: 'integer', description: 'Video duration in seconds.', default: 5 },
+      width: { type: 'integer', description: 'Video width in pixels.', default: 1280 },
+      height: { type: 'integer', description: 'Video height in pixels.', default: 720 },
+      fps: { type: 'integer', description: 'Frames per second.', default: 24 },
+      outputFormat: { type: 'string', description: "Video format (e.g. 'mp4').", default: 'mp4' },
+      style: { type: 'string', description: "Video style (e.g. 'cinematic', 'natural')." },
+      motion: { type: 'string', description: "Movement intensity (e.g. 'slow', 'normal', 'extreme')." },
+      seed: { type: 'integer', description: 'Seed for reproducibility.' },
+      guidanceScale: { type: 'number', description: 'Prompt adherence strength (1.0 to 20.0).' },
+      aspectRatio: { type: 'string', description: "Aspect ratio (e.g. '16:9', '1:1')." },
+      negativePrompt: { type: 'string', description: 'Description of what to exclude from the video.' },
+      personGeneration: { type: 'string', description: 'Controls for human figure generation.' },
+      resolution: { type: 'string', description: "Quality level (e.g. '720p', '1080p')." },
+      generateAudio: { type: 'boolean', description: 'Whether to generate audio with the video.' },
+      size: { type: 'string', description: "Video size specification (e.g. '1280x720')." },
+      n: { type: 'integer', description: 'Number of videos to generate.', default: 1 },
+      maxDurationSeconds: { type: 'integer', description: 'Maximum duration ceiling in seconds.' },
+      maxCostDollars: { type: 'number', description: 'Maximum cost limit in dollars.' },
+    },
+    required: ['prompt'],
+  };
+
   return serverTool(
     'generate_video',
     opts.name,
     opts.description,
-    opts.inputSchema ? toJsonSchema(opts.inputSchema) : undefined,
+    opts.inputSchema ? toJsonSchema(opts.inputSchema) : defaultSchema,
     config,
   );
 }
@@ -577,16 +663,40 @@ export interface PdfToolOptions {
 }
 
 export function pdfTool(opts?: PdfToolOptions): ToolDef {
-  const config: Record<string, unknown> = {};
+  const config: Record<string, unknown> = { taskType: 'GENERATE_PDF' };
   if (opts?.pageSize) config.pageSize = opts.pageSize;
   if (opts?.theme) config.theme = opts.theme;
   if (opts?.fontSize !== undefined) config.fontSize = opts.fontSize;
 
+  // Default inputSchema matches Python
+  const defaultSchema = {
+    type: 'object',
+    properties: {
+      markdown: { type: 'string', description: 'Markdown text to convert to PDF.' },
+      pageSize: {
+        type: 'string',
+        description: 'Page size: A4, LETTER, LEGAL, A3, or A5.',
+        default: 'A4',
+      },
+      theme: {
+        type: 'string',
+        description: "Style preset: 'default' or 'compact'.",
+        default: 'default',
+      },
+      baseFontSize: {
+        type: 'number',
+        description: 'Base font size in points.',
+        default: 11,
+      },
+    },
+    required: ['markdown'],
+  };
+
   return serverTool(
     'generate_pdf',
     opts?.name ?? 'generate_pdf',
-    opts?.description ?? 'Generate a PDF document',
-    opts?.inputSchema ? toJsonSchema(opts.inputSchema) : undefined,
+    opts?.description ?? 'Generate a PDF document from markdown text.',
+    opts?.inputSchema ? toJsonSchema(opts.inputSchema) : defaultSchema,
     config,
   );
 }
@@ -608,20 +718,30 @@ export interface SearchToolOptions {
 
 export function searchTool(opts: SearchToolOptions): ToolDef {
   const config: Record<string, unknown> = {
-    vectorDb: opts.vectorDb,
+    taskType: 'LLM_SEARCH_INDEX',
+    vectorDB: opts.vectorDb,
+    namespace: opts.namespace ?? 'default_ns',
     index: opts.index,
     embeddingModelProvider: opts.embeddingModelProvider,
     embeddingModel: opts.embeddingModel,
-    namespace: opts.namespace ?? 'default_ns',
     maxResults: opts.maxResults ?? 5,
   };
   if (opts.dimensions !== undefined) config.dimensions = opts.dimensions;
+
+  // Default inputSchema matches Python
+  const defaultSchema = {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: 'The search query.' },
+    },
+    required: ['query'],
+  };
 
   return serverTool(
     'rag_search',
     opts.name,
     opts.description,
-    opts.inputSchema ? toJsonSchema(opts.inputSchema) : undefined,
+    opts.inputSchema ? toJsonSchema(opts.inputSchema) : defaultSchema,
     config,
   );
 }
@@ -644,21 +764,36 @@ export interface IndexToolOptions {
 
 export function indexTool(opts: IndexToolOptions): ToolDef {
   const config: Record<string, unknown> = {
-    vectorDb: opts.vectorDb,
+    taskType: 'LLM_INDEX_TEXT',
+    vectorDB: opts.vectorDb,
+    namespace: opts.namespace ?? 'default_ns',
     index: opts.index,
     embeddingModelProvider: opts.embeddingModelProvider,
     embeddingModel: opts.embeddingModel,
-    namespace: opts.namespace ?? 'default_ns',
   };
   if (opts.chunkSize !== undefined) config.chunkSize = opts.chunkSize;
   if (opts.chunkOverlap !== undefined) config.chunkOverlap = opts.chunkOverlap;
   if (opts.dimensions !== undefined) config.dimensions = opts.dimensions;
 
+  // Default inputSchema matches Python
+  const defaultSchema = {
+    type: 'object',
+    properties: {
+      text: { type: 'string', description: 'The text content to index.' },
+      docId: { type: 'string', description: 'Unique document identifier.' },
+      metadata: {
+        type: 'object',
+        description: 'Optional metadata to store with the document.',
+      },
+    },
+    required: ['text', 'docId'],
+  };
+
   return serverTool(
     'rag_index',
     opts.name,
     opts.description,
-    opts.inputSchema ? toJsonSchema(opts.inputSchema) : undefined,
+    opts.inputSchema ? toJsonSchema(opts.inputSchema) : defaultSchema,
     config,
   );
 }

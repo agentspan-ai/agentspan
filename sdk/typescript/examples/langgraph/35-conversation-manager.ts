@@ -115,7 +115,7 @@ builder.addEdge(START, 'summarize');
 builder.addEdge('summarize', 'respond');
 builder.addEdge('respond', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "conversation_manager" });
 
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',

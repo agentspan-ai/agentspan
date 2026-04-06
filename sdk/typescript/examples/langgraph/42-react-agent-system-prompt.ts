@@ -82,6 +82,7 @@ const graph = createReactAgent({
   llm,
   tools,
   prompt: new SystemMessage(SYSTEM_PROMPT),
+  name: "travel_assistant_agent",
 });
 
 (graph as any)._agentspan = {

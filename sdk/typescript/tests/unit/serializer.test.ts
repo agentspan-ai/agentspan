@@ -51,8 +51,10 @@ describe('serializeAgent() — simple agent', () => {
 
     expect(config.name).toBe('simple');
     expect(config.model).toBe('openai/gpt-4o');
-    // Default maxTurns (25) is omitted
-    expect(config).not.toHaveProperty('maxTurns');
+    // Default values are always emitted (matching Python)
+    expect(config.maxTurns).toBe(25);
+    expect(config.timeoutSeconds).toBe(0);
+    expect(config.external).toBe(false);
     // No strategy without agents
     expect(config).not.toHaveProperty('strategy');
     // No tools
@@ -735,7 +737,8 @@ describe('serializeTool() — all tool types', () => {
     const config = serializer.serializeTool(t);
     expect(config.toolType).toBe('rag_search');
     const c = config.config as Record<string, unknown>;
-    expect(c.vectorDb).toBe('pinecone');
+    expect(c.vectorDB).toBe('pinecone');
+    expect(c.taskType).toBe('LLM_SEARCH_INDEX');
     expect(c.namespace).toBe('default_ns');
     expect(c.maxResults).toBe(5);
   });
@@ -753,6 +756,8 @@ describe('serializeTool() — all tool types', () => {
     const config = serializer.serializeTool(t);
     expect(config.toolType).toBe('rag_index');
     const c = config.config as Record<string, unknown>;
+    expect(c.taskType).toBe('LLM_INDEX_TEXT');
+    expect(c.vectorDB).toBe('weaviate');
     expect(c.chunkSize).toBe(512);
   });
 

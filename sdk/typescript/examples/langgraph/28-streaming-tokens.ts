@@ -49,7 +49,7 @@ const builder = new StateGraph(StreamState);
 builder.addNode('generate', generate);
 builder.addEdge(START, 'generate');
 builder.addEdge('generate', END);
-const graph = builder.compile();
+const graph = builder.compile({ name: "streaming_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

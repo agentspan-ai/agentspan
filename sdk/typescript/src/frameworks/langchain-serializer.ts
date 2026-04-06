@@ -1,13 +1,12 @@
 /**
- * LangChain AgentExecutor serializer — full extraction.
+ * LangChain AgentExecutor serializer — full extraction with passthrough fallback.
  *
  * Extracts model and tools from a LangChain AgentExecutor or Runnable,
  * producing (rawConfig, WorkerInfo[]) for server-side workflow compilation.
  *
- * No passthrough fallback — throws ConfigurationError if extraction fails.
+ * Falls through to passthrough if extraction fails — never throws.
  */
 
-import { ConfigurationError } from '../errors.js';
 import type { WorkerInfo } from './serializer.js';
 
 const _DEFAULT_NAME = 'langchain_agent';
@@ -17,7 +16,7 @@ const _DEFAULT_NAME = 'langchain_agent';
 /**
  * Serialize a LangChain AgentExecutor into (rawConfig, WorkerInfo[]).
  *
- * @throws ConfigurationError if model and tools cannot be extracted.
+ * Falls through to passthrough if model and tools cannot be extracted.
  */
 export function serializeLangChain(
   executor: unknown,
@@ -38,12 +37,12 @@ export function serializeLangChain(
     return _serializeFullExtraction(name, modelStr, tools);
   }
 
-  // No extraction possible — throw error
-  throw new ConfigurationError(
-    `Cannot extract from LangChain executor. ` +
-    `Model: ${modelStr ?? 'not found'}, Tools: ${tools.length}. ` +
-    `Use AgentExecutor with an LLM and tools, or create a native agentspan Agent.`,
-  );
+  // Passthrough fallback — run entire executor in a single worker
+  const workerName = name;
+  return [
+    { name, _worker_name: workerName },
+    [{ name: workerName, description: `Passthrough worker for ${name}`, inputSchema: {}, func: null }],
+  ];
 }
 
 // ── Wrapper metadata extraction ─────────────────────────

@@ -121,7 +121,7 @@ builder.addConditionalEdges('generate_documents', fanOut, ['summarize_doc']);
 builder.addEdge('summarize_doc', 'reduce');
 builder.addEdge('reduce', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "map_reduce_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

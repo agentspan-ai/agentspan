@@ -54,6 +54,12 @@ public class AgentHumanTask extends WorkflowSystemTask {
         if (input != null) {
             pendingTool.put("tool_name", input.get("tool_name"));
             pendingTool.put("parameters", input.get("parameters"));
+            if (input.get("response_schema") != null) {
+                pendingTool.put("response_schema", input.get("response_schema"));
+            }
+            if (input.get("response_ui_schema") != null) {
+                pendingTool.put("response_ui_schema", input.get("response_ui_schema"));
+            }
         }
         pendingTool.put("taskRefName", taskRef);
 

@@ -2,3 +2,4 @@ node_modules/
 dist/
 .env
 output/
+examples/_configs/

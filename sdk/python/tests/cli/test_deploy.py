@@ -19,9 +19,9 @@ def _make_agent(name):
     return SimpleNamespace(name=name)
 
 
-def _make_deployment_info(agent_name, workflow_name):
+def _make_deployment_info(agent_name, registered_name):
     """Create a minimal DeploymentInfo-like object."""
-    return SimpleNamespace(agent_name=agent_name, workflow_name=workflow_name)
+    return SimpleNamespace(agent_name=agent_name, registered_name=registered_name)
 
 
 class TestDeployMain:
@@ -45,8 +45,8 @@ class TestDeployMain:
 
         result = json.loads(captured.getvalue())
         assert result == [
-            {"agent_name": "alpha", "workflow_name": "wf_alpha", "success": True, "error": None},
-            {"agent_name": "beta", "workflow_name": "wf_beta", "success": True, "error": None},
+            {"agent_name": "alpha", "registered_name": "wf_alpha", "success": True, "error": None},
+            {"agent_name": "beta", "registered_name": "wf_beta", "success": True, "error": None},
         ]
         mock_discover.assert_called_once_with(["myapp"])
 
@@ -96,19 +96,19 @@ class TestDeployMain:
 
         assert result[0] == {
             "agent_name": "ok_agent",
-            "workflow_name": "wf_ok",
+            "registered_name": "wf_ok",
             "success": True,
             "error": None,
         }
         assert result[1] == {
             "agent_name": "bad_agent",
-            "workflow_name": None,
+            "registered_name": None,
             "success": False,
             "error": "server connection refused",
         }
         assert result[2] == {
             "agent_name": "ok2_agent",
-            "workflow_name": "wf_ok2",
+            "registered_name": "wf_ok2",
             "success": True,
             "error": None,
         }

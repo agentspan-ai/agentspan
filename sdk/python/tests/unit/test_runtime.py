@@ -802,17 +802,21 @@ class TestRuntimePlan:
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
 
-    def test_plan_returns_workflow_def(self, runtime):
+    def test_plan_returns_raw_server_response(self, runtime):
         agent = Agent(name="test", model="openai/gpt-4o")
-        mock_wf = MagicMock()
-        mock_wf.to_workflow_def.return_value = {"name": "test_wf", "tasks": []}
+        server_response = {
+            "workflowDef": {"name": "test_wf", "tasks": []},
+            "requiredWorkers": [],
+        }
 
-        # plan() calls _compile_agent() which calls _compile_via_server() (HTTP)
-        runtime._compile_agent = MagicMock(return_value=mock_wf)
-        result = runtime.plan(agent)
+        # plan() POSTs directly to /agent/compile and returns the raw response
+        mock_post = _mock_requests_post(server_response)
+        with patch("requests.post", mock_post):
+            result = runtime.plan(agent)
 
-        mock_wf.to_workflow_def.assert_called_once()
-        runtime._compile_agent.assert_called_once_with(agent)
+        assert "workflowDef" in result
+        assert result["workflowDef"]["name"] == "test_wf"
+        assert result["requiredWorkers"] == []
 
     def test_compile_via_server_wraps_config_in_start_request(self, runtime):
         """_compile_via_server sends agentConfig wrapped in a StartRequest payload."""

@@ -100,7 +100,7 @@ builder.addEdge(START, 'retrieve');
 builder.addEdge('retrieve', 'generate');
 builder.addEdge('generate', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "qa_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

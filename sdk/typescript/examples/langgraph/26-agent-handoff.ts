@@ -111,7 +111,7 @@ builder.addEdge('billing', END);
 builder.addEdge('technical', END);
 builder.addEdge('general', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "agent_handoff" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

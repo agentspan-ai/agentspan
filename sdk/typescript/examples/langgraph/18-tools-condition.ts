@@ -73,7 +73,7 @@ const builder = new StateGraph(MessagesAnnotation)
   .addConditionalEdges('agent', toolsCondition)
   .addEdge('tools', 'agent');
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "weather_timezone_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

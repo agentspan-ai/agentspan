@@ -37,7 +37,7 @@ def create_adk_agent():
 
     agent = Agent(
         name="github_checker",
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         instruction="You check GitHub authentication status.",
         tools=[FunctionTool(check_github_auth)],
     )

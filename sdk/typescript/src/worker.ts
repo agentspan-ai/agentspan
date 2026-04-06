@@ -481,8 +481,14 @@ export class WorkerManager {
           }
         }
 
+        // Conductor expects outputData to be an object; wrap primitives
+        // (mirrors Python SDK: if isinstance(result, dict) → use as-is, else → {result: ...})
+        const outputData = (result != null && typeof result === 'object' && !Array.isArray(result))
+          ? result
+          : { result };
+
         recordSuccess(worker.taskName);
-        await this.reportSuccess(task.taskId, task.workflowInstanceId, result);
+        await this.reportSuccess(task.taskId, task.workflowInstanceId, outputData);
       } catch (error) {
         recordFailure(worker.taskName);
         const isTerminal = error instanceof TerminalToolError;

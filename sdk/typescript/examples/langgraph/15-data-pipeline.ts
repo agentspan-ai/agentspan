@@ -122,7 +122,7 @@ builder.addEdge('clean', 'analyze');
 builder.addEdge('analyze', 'report_node');
 builder.addEdge('report_node', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "data_pipeline" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

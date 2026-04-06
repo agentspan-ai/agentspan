@@ -320,7 +320,7 @@ const subAgentBuilder = new StateGraph(MessagesAnnotation)
   .addConditionalEdges('agent', toolsCondition)
   .addEdge('tools', 'agent');
 
-const subAgentGraph = subAgentBuilder.compile();
+const subAgentGraph = subAgentBuilder.compile({ name: "research_sub_agent" });
 
 // ---------------------------------------------------------------------------
 // Wrap sub-agent as a tool for the orchestrator
@@ -374,7 +374,7 @@ const orchBuilder = new StateGraph(MessagesAnnotation)
   .addConditionalEdges('orchestrator', toolsCondition)
   .addEdge('tools', 'orchestrator');
 
-const graph = orchBuilder.compile();
+const graph = orchBuilder.compile({ name: "research_orchestrator" });
 
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',

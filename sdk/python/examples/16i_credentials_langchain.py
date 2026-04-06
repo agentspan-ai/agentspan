@@ -1,12 +1,12 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Credentials — LangChain AgentExecutor with credential injection.
+"""Credentials — LangChain agent with credential injection.
 
 Demonstrates:
-    - runtime.run(executor, credentials=["GITHUB_TOKEN"]) for LangChain
+    - runtime.run(agent, credentials=["GITHUB_TOKEN"]) for LangChain
     - Same pattern as LangGraph — credentials resolved from server
-      and injected into os.environ before the executor runs
+      and injected into os.environ before the agent runs
 
 Setup (one-time):
     agentspan credentials set --name GITHUB_TOKEN
@@ -25,11 +25,9 @@ from settings import settings
 
 
 def create_langchain_agent():
-    """Create a LangChain AgentExecutor with a tool that uses GITHUB_TOKEN."""
-    from langchain.agents import AgentExecutor, create_openai_tools_agent
-    from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+    """Create a LangChain agent with a tool that uses GITHUB_TOKEN."""
+    from langchain.agents import create_agent
     from langchain_core.tools import tool as lc_tool
-    from langchain_openai import ChatOpenAI
 
     @lc_tool
     def check_github_token() -> str:
@@ -40,37 +38,37 @@ def create_langchain_agent():
         return "GitHub token is NOT available"
 
     model_str = settings.llm_model
+    # create_agent accepts "provider:model" format (e.g. "openai:gpt-4o")
     if "/" in model_str:
-        model_str = model_str.split("/", 1)[1]
+        provider, model = model_str.split("/", 1)
+        model_str = f"{provider}:{model}"
 
-    llm = ChatOpenAI(model=model_str)
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are a helpful assistant. Use tools when asked."),
-        ("human", "{input}"),
-        MessagesPlaceholder("agent_scratchpad"),
-    ])
-    agent = create_openai_tools_agent(llm, [check_github_token], prompt)
-    executor = AgentExecutor(agent=agent, tools=[check_github_token])
-    return executor
+    agent = create_agent(
+        model_str,
+        tools=[check_github_token],
+        system_prompt="You are a helpful assistant. Use tools when asked.",
+    )
+    return agent
 
 
 if __name__ == "__main__":
-    executor = create_langchain_agent()
+    agent = create_langchain_agent()
 
     with AgentRuntime() as runtime:
         result = runtime.run(
-            executor,
+            agent,
             "Check if the GitHub token is set",
             credentials=["GITHUB_TOKEN"],
         )
         result.print_result()
 
+        print('\nStarting another run passing the credentials')
+
         # Production pattern:
         # 1. Deploy once during CI/CD:
-        # runtime.deploy(executor)
+        # runtime.deploy(agent)
         # CLI alternative:
         # agentspan deploy --package examples.16i_credentials_langchain
         #
         # 2. In a separate long-lived worker process:
-        # runtime.serve(executor)
-
+        # runtime.serve(agent)

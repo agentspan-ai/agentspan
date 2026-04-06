@@ -1,6 +1,7 @@
 {
   "name": "examples",
   "private": true,
+  "type": "module",
   "description": "TypeScript examples for building and running AI agents on Agentspan",
   "dependencies": {
     "@agentspan-ai/sdk": "file:..",

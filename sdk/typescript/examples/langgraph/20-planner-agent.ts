@@ -122,7 +122,7 @@ builder.addEdge('plan', 'execute');
 builder.addEdge('execute', 'review_node');
 builder.addEdge('review_node', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "planner_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

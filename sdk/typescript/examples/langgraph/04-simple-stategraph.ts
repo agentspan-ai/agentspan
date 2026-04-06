@@ -70,7 +70,7 @@ builder.addEdge('validate', 'refine');
 builder.addEdge('refine', 'generate');
 builder.addEdge('generate', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "query_pipeline" });
 
 // Add agentspan metadata for extraction (no LLM in this pipeline example)
 (graph as any)._agentspan = {
