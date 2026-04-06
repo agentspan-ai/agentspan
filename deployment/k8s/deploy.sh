@@ -2,7 +2,7 @@
 # deploy.sh — Deploy Agentspan to a Kubernetes cluster
 #
 # Usage:
-#   ./deployment/deploy.sh [options]
+#   ./deployment/k8s/deploy.sh [options]
 #
 # Options:
 #   --namespace  <name>    Kubernetes namespace (default: agentspan)
@@ -14,12 +14,12 @@
 #   - kubectl configured and pointing at your cluster
 #   - docker (for building the image)
 #   - ingress-nginx controller installed in the cluster
-#   - Edit deployment/k8s/secret.yaml with your credentials FIRST
+#   - Edit deployment/k8s/agentspan/secret.yaml with your credentials FIRST
 #
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-K8S_DIR="$REPO_ROOT/deployment/k8s"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+K8S_DIR="$REPO_ROOT/deployment/k8s/agentspan"
 
 NAMESPACE="${NAMESPACE:-agentspan}"
 CONTEXT="${CONTEXT:-}"
@@ -67,7 +67,7 @@ echo ""
 
 # Refuse to proceed with placeholder password
 if grep -q "changeme" "$K8S_DIR/secret.yaml"; then
-  fail "secret.yaml still contains the default placeholder password.\nEdit deployment/k8s/secret.yaml before deploying."
+  fail "secret.yaml still contains the default placeholder password.\nEdit deployment/k8s/agentspan/secret.yaml before deploying."
 fi
 
 # ── Build & push image ─────────────────────────────────────────────────────────
@@ -122,7 +122,7 @@ echo "Load balancer IP : $INGRESS_IP"
 echo ""
 echo "Next steps:"
 echo "  1. Point your domain DNS A record → $INGRESS_IP"
-echo "  2. Update 'host:' in deployment/k8s/ingress.yaml to your domain"
+echo "  2. Update 'host:' in deployment/k8s/agentspan/ingress.yaml to your domain"
 echo "  3. (Optional) Set up TLS — see deployment/README.md"
 echo "  4. Open http://<your-domain>"
 echo ""
