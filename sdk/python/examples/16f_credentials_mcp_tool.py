@@ -8,18 +8,20 @@ Demonstrates:
     - ${MCP_API_KEY} in headers resolved server-side before MCP calls
     - MCP server authentication handled transparently
 
-Setup (one-time):
-    agentspan credentials set --name MCP_API_KEY
+MCP Test Server Setup (mcp-testkit):
+    pip install mcp-testkit
 
-MCP Weather Server Setup:
-    # Install and start the weather MCP server (runs on port 3001):
-    npx -y @philschmid/weather-mcp
+    # Start with auth (to demonstrate credential resolution):
+    mcp-testkit --transport http --auth <secret>
+
+    # Store credentials via CLI or Agentspan UI:
+    agentspan credentials set --name MCP_API_KEY --value <secret>
 
 Requirements:
     - Agentspan server running at AGENTSPAN_SERVER_URL
-    - AGENTSPAN_LLM_MODEL set (or defaults to openai/gpt-5.4)
-    - MCP server running on http://localhost:3001/mcp (see setup above)
-    - MCP_API_KEY stored via `agentspan credentials set`
+    - AGENTSPAN_LLM_MODEL set (or defaults to openai/gpt-4o-mini)
+    - mcp-testkit running on http://localhost:3001 (see setup above)
+    - MCP_API_KEY stored via CLI or Agentspan UI
 """
 
 from agentspan.agents import Agent, AgentRuntime

@@ -8,9 +8,22 @@
  *
  * These tools execute entirely server-side — no TypeScript worker process needed.
  *
+ * MCP Test Server Setup (mcp-testkit):
+ *   pip install mcp-testkit
+ *
+ *   # Start without auth:
+ *   mcp-testkit --transport http
+ *
+ *   # Or start with auth (requires storing the secret as a credential):
+ *   mcp-testkit --transport http --auth <secret>
+ *
+ *   # Store credentials via CLI or Agentspan UI:
+ *   agentspan credentials set --name HTTP_TEST_API_KEY --value <secret>
+ *   agentspan credentials set --name MCP_TEST_API_KEY --value <secret>
+ *
  * Requirements:
  *   - Conductor server with LLM support
- *   - MCP test server running on http://localhost:3001 (see tests/e2e/mcp-test-server)
+ *   - mcp-testkit running on http://localhost:3001 (see setup above)
  *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
@@ -41,7 +54,6 @@ const formatReport = tool(
 
 // HTTP tool (pure server-side, no worker needed)
 // ${HTTP_TEST_API_KEY} is resolved server-side from the credential store.
-// Store it with: agentspan credentials set --name HTTP_TEST_API_KEY
 const reverseApi = httpTool({
   name: 'reverse_string',
   description: 'Reverse a string using the HTTP API',
@@ -60,7 +72,6 @@ const reverseApi = httpTool({
 
 // MCP tools (discovered from MCP server at runtime)
 // ${MCP_TEST_API_KEY} is resolved server-side from the credential store.
-// Store it with: agentspan credentials set --name MCP_TEST_API_KEY
 const mcpTestTools = mcpTool({
   serverUrl: 'http://localhost:3001/mcp',
   name: 'mcp_test_tools',

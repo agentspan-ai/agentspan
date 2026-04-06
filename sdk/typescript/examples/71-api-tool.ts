@@ -10,11 +10,24 @@
  *   3. Mixing apiTool with other tool types
  *   4. Large API with credential auth (GitHub)
  *
+ * MCP Test Server Setup (mcp-testkit) — required for examples 1-3:
+ *   pip install mcp-testkit
+ *
+ *   # Start without auth:
+ *   mcp-testkit --transport http
+ *
+ *   # Or start with auth (requires storing the secret as a credential):
+ *   mcp-testkit --transport http --auth <secret>
+ *
+ *   # Store credentials via CLI or Agentspan UI:
+ *   agentspan credentials set --name HTTP_TEST_API_KEY --value <secret>
+ *
  * Requirements:
  *   - Conductor server with LLM support
  *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
- *   - MCP test server running on http://localhost:3001 (for examples 1-3)
+ *   - mcp-testkit running on http://localhost:3001 (for examples 1-3, see setup above)
+ *   - For GitHub example: agentspan credentials set --name GITHUB_TOKEN --value ghp_xxx
  */
 
 import { Agent, AgentRuntime, apiTool, tool } from '@agentspan-ai/sdk';

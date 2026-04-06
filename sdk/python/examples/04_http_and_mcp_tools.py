@@ -10,9 +10,22 @@ Demonstrates:
 
 These tools execute entirely server-side — no Python worker process needed.
 
+MCP Test Server Setup (mcp-testkit):
+    pip install mcp-testkit
+
+    # Start without auth:
+    mcp-testkit --transport http
+
+    # Or start with auth (requires storing the secret as a credential):
+    mcp-testkit --transport http --auth <secret>
+
+    # Store credentials via CLI or Agentspan UI:
+    agentspan credentials set --name HTTP_TEST_API_KEY --value <secret>
+    agentspan credentials set --name MCP_TEST_API_KEY --value <secret>
+
 Requirements:
     - Conductor server with LLM support
-    - MCP test server running on http://localhost:3001 (see tests/e2e/mcp-test-server)
+    - mcp-testkit running on http://localhost:3001 (see setup above)
     - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
@@ -30,7 +43,6 @@ def format_report(title: str, body: str) -> dict:
 
 # HTTP tool (pure server-side, no worker needed)
 # ${HTTP_TEST_API_KEY} is resolved server-side from the credential store.
-# Store it with: agentspan credentials set --name HTTP_TEST_API_KEY
 reverse_api = http_tool(
     name="reverse_string",
     description="Reverse a string using the HTTP API",
@@ -49,7 +61,6 @@ reverse_api = http_tool(
 
 # MCP tools (discovered from MCP server at runtime)
 # ${MCP_TEST_API_KEY} is resolved server-side from the credential store.
-# Store it with: agentspan credentials set --name MCP_TEST_API_KEY
 mcp_test_tools = mcp_tool(
     server_url="http://localhost:3001/mcp",
     name="mcp_test_tools",

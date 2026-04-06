@@ -2,23 +2,28 @@
  * MCP Weather — using Conductor's MCP system tasks for live weather.
  *
  * Demonstrates the mcpTool() function which uses Conductor's built-in
- * LIST_MCP_TOOLS and CALL_MCP_TOOL system tasks. The MCP weather server
- * provides real weather data, and the Conductor server handles all MCP
- * protocol communication — no worker process needed.
+ * LIST_MCP_TOOLS and CALL_MCP_TOOL system tasks. The MCP test server
+ * provides deterministic weather data, and the Conductor server handles all
+ * MCP protocol communication — no worker process needed.
  *
  * Flow:
  *   ListMcpTools -> LLM (picks tool) -> CallMcpTool -> Final LLM
  *
- * MCP Weather Server Setup:
- *   # Install and start the weather MCP server (runs on port 3001):
- *   npx -y @philschmid/weather-mcp
+ * MCP Test Server Setup (mcp-testkit):
+ *   pip install mcp-testkit
  *
- *   # Verify it's running:
- *   curl http://localhost:3001/mcp
+ *   # Start without auth:
+ *   mcp-testkit --transport http
+ *
+ *   # Or start with auth (requires storing the secret as a credential):
+ *   mcp-testkit --transport http --auth <secret>
+ *
+ *   # Store credentials via CLI or Agentspan UI:
+ *   agentspan credentials set --name MCP_TEST_API_KEY --value <secret>
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - MCP weather server running on http://localhost:3001/mcp (see setup above)
+ *   - mcp-testkit running on http://localhost:3001 (see setup above)
  *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
@@ -26,9 +31,8 @@
 import { Agent, AgentRuntime, mcpTool } from '@agentspan-ai/sdk';
 import { llmModel } from './settings';
 
-// Create MCP tool from the weather server — Conductor discovers tools at runtime
+// Create MCP tool — Conductor discovers tools from mcp-testkit at runtime
 // ${MCP_TEST_API_KEY} is resolved server-side from the credential store.
-// Store it with: agentspan credentials set --name MCP_TEST_API_KEY
 const weather = mcpTool({
   serverUrl: 'http://localhost:3001/mcp',
   name: 'weather_mcp',

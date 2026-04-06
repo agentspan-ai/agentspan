@@ -19,10 +19,24 @@ Demonstrates:
     - Extended thinking, planner mode, required_tools, include_contents
     - GPTAssistantAgent, agent_tool(), scatter_gather()
 
+MCP Test Server Setup (mcp-testkit):
+    pip install mcp-testkit
+
+    # Start without auth:
+    mcp-testkit --transport http
+
+    # Or start with auth (requires storing the secret as a credential):
+    mcp-testkit --transport http --auth <secret>
+
+    # Store credentials via CLI or Agentspan UI:
+    agentspan credentials set --name MCP_AUTH_TOKEN --value <secret>
+    agentspan credentials set --name SEARCH_API_KEY --value <key>
+
 Requirements:
     - Conductor server with LLM support
     - AGENTSPAN_SERVER_URL, AGENTSPAN_LLM_MODEL env vars
-    - For full execution: Docker, MCP server, credential store configured
+    - mcp-testkit running on http://localhost:3001 (for MCP/HTTP tools)
+    - For full execution: Docker, credential store configured
 """
 
 import asyncio
