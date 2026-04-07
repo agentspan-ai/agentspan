@@ -155,6 +155,7 @@ def build_agent() -> Agent:
         model=settings.llm_model,
         tools=[receive_message, reply_to_user, run_task],
         max_turns=10000,
+        stateful=True,
         instructions=(
             "You are a helpful conversational assistant in an interactive REPL. "
             "Repeat indefinitely:\n\n"

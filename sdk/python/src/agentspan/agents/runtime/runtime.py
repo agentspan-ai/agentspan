@@ -399,6 +399,7 @@ class AgentRuntime:
         timeout: Optional[int] = None,
         credentials: Optional[List[str]] = None,
         context: Optional[Dict[str, Any]] = None,
+        run_id: Optional[str] = None,
     ) -> str:
         """Start an agent via the server's /api/agent/start endpoint.
 
@@ -429,6 +430,8 @@ class AgentRuntime:
             payload["timeoutSeconds"] = timeout
         if credentials:
             payload["credentials"] = credentials
+        if run_id:
+            payload["runId"] = run_id
         url = self._agent_api_url("/start")
         resp = req_lib.post(url, json=payload, headers=self._agent_api_headers(), timeout=30)
         try:
@@ -459,6 +462,7 @@ class AgentRuntime:
         timeout: Optional[int] = None,
         credentials: Optional[List[str]] = None,
         context: Optional[Dict[str, Any]] = None,
+        run_id: Optional[str] = None,
     ) -> str:
         """Async version of :meth:`_start_via_server`."""
         from agentspan.agents.config_serializer import AgentConfigSerializer
@@ -480,6 +484,8 @@ class AgentRuntime:
             payload["timeoutSeconds"] = timeout
         if credentials:
             payload["credentials"] = credentials
+        if run_id:
+            payload["runId"] = run_id
         data = await self._http.start_agent(payload)
         execution_id = data.get("executionId", "")
         required_workers: Optional[set] = None
@@ -717,7 +723,7 @@ class AgentRuntime:
             self._registered_tool_names.update(worker_names)
 
     def _prepare_workers(
-        self, agent: Agent, *, required_workers: Optional[set] = None
+        self, agent: Agent, *, required_workers: Optional[set] = None, domain: Optional[str] = None
     ) -> None:
         """Register and start workers without compiling.
 
@@ -741,7 +747,7 @@ class AgentRuntime:
             logger.info("Server expects workers: %s", sorted(required_workers))
 
         # Register worker functions locally
-        self._register_workers(agent, required_workers=required_workers)
+        self._register_workers(agent, required_workers=required_workers, domain=domain)
 
         # Start worker polling if needed
         if self._config.auto_start_workers and self._has_worker_tools(agent):
@@ -886,7 +892,7 @@ class AgentRuntime:
         return names
 
     def _register_workers(
-        self, agent: Agent, *, required_workers: Optional[set] = None
+        self, agent: Agent, *, required_workers: Optional[set] = None, domain: Optional[str] = None
     ) -> None:
         """Register all workers needed for SDK-side execution.
 
@@ -953,7 +959,7 @@ class AgentRuntime:
         # 1. Tools (and tool-level guardrails) — always registered
         if agent.tools:
             tc = ToolRegistry()
-            tc.register_tool_workers(agent.tools, agent.name)
+            tc.register_tool_workers(agent.tools, agent.name, domain=domain)
             for t in agent.tools:
                 from agentspan.agents.tool import get_tool_def
 
@@ -2326,6 +2332,8 @@ class AgentRuntime:
 
         logger.info("Executing agent '%s'", agent.name)
 
+        run_id = uuid.uuid4().hex if getattr(agent, "stateful", False) else None
+
         # Start via server first to get requiredWorkers, then register
         # locally.  Conductor queues tasks so workers can start polling
         # immediately after registration without missing work.
@@ -2338,9 +2346,10 @@ class AgentRuntime:
             timeout=timeout,
             credentials=credentials,
             context=context,
+            run_id=run_id,
         )
 
-        self._prepare_workers(agent, required_workers=required_workers)
+        self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
 
         self._register_workflow_credentials(execution_id, credentials)
 
@@ -3435,6 +3444,8 @@ class AgentRuntime:
 
         correlation_id = str(uuid.uuid4())
 
+        run_id = uuid.uuid4().hex if getattr(agent, "stateful", False) else None
+
         # Start via server first to get requiredWorkers, then register locally
         effective_timeout = agent.timeout_seconds if agent.timeout_seconds > 0 else None
         execution_id, required_workers = self._start_via_server(
@@ -3445,9 +3456,10 @@ class AgentRuntime:
             idempotency_key=idempotency_key,
             timeout=effective_timeout,
             context=context,
+            run_id=run_id,
         )
 
-        self._prepare_workers(agent, required_workers=required_workers)
+        self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
 
         return AgentHandle(execution_id=execution_id, runtime=self, correlation_id=correlation_id)
 
@@ -3824,6 +3836,8 @@ class AgentRuntime:
 
         logger.info("Executing agent '%s' (async)", agent.name)
 
+        run_id = uuid.uuid4().hex if getattr(agent, "stateful", False) else None
+
         # Start via server first to get requiredWorkers, then register locally
         execution_id, required_workers = await self._start_via_server_async(
             agent,
@@ -3834,9 +3848,10 @@ class AgentRuntime:
             timeout=timeout,
             credentials=credentials,
             context=context,
+            run_id=run_id,
         )
 
-        self._prepare_workers(agent, required_workers=required_workers)
+        self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
         self._register_workflow_credentials(execution_id, credentials)
 
         effective_timeout = timeout or (
@@ -3956,6 +3971,8 @@ class AgentRuntime:
 
         correlation_id = str(uuid.uuid4())
 
+        run_id = uuid.uuid4().hex if getattr(agent, "stateful", False) else None
+
         # Start via server first to get requiredWorkers, then register locally
         effective_timeout = agent.timeout_seconds if agent.timeout_seconds > 0 else None
         execution_id, required_workers = await self._start_via_server_async(
@@ -3966,9 +3983,10 @@ class AgentRuntime:
             idempotency_key=idempotency_key,
             timeout=effective_timeout,
             context=context,
+            run_id=run_id,
         )
 
-        self._prepare_workers(agent, required_workers=required_workers)
+        self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
 
         return AgentHandle(execution_id=execution_id, runtime=self, correlation_id=correlation_id)
 

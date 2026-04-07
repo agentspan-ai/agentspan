@@ -253,6 +253,29 @@ public class AgentService {
         collectDynamicTransferNames(config, startWorkerNames);
         List<String> requiredWorkers = new ArrayList<>(startWorkerNames);
 
+        // Domain-based task routing for stateful agents.
+        // Route only Python worker tasks to the run-specific domain.
+        // We cannot use "*" because that would also route system tasks like
+        // LLM_CHAT_COMPLETE to the domain, where no worker polls them.
+        // startWorkerNames has static SIMPLE tasks; we also add worker tool
+        // names from the config since they are dispatched dynamically via
+        // FORK_JOIN_DYNAMIC and are absent from the compiled WorkflowDef.
+        if (request.getRunId() != null && !request.getRunId().isEmpty()) {
+            Map<String, String> taskToDomain = new HashMap<>();
+            for (String taskName : startWorkerNames) {
+                taskToDomain.put(taskName, request.getRunId());
+            }
+            collectWorkerToolNames(config, taskToDomain, request.getRunId());
+            if (!taskToDomain.isEmpty()) {
+                startReq.setTaskToDomain(taskToDomain);
+                log.info(
+                        "Stateful agent '{}': routing {} worker task(s) to domain '{}'",
+                        config.getName(),
+                        taskToDomain.size(),
+                        request.getRunId());
+            }
+        }
+
         // Idempotency: use the key as correlationId and check for existing executions
         if (request.getIdempotencyKey() != null && !request.getIdempotencyKey().isEmpty()) {
             startReq.setCorrelationId(request.getIdempotencyKey());
@@ -1172,6 +1195,28 @@ public class AgentService {
         if (config.getAgents() != null) {
             for (AgentConfig sub : config.getAgents()) {
                 collectDynamicTransferNames(sub, names);
+            }
+        }
+    }
+
+    /**
+     * Collect worker tool task names from the agent config for domain routing.
+     * Worker tools (@tool functions with type "worker" or "cli") are dispatched
+     * dynamically via FORK_JOIN_DYNAMIC and must be explicitly added to taskToDomain.
+     */
+    private void collectWorkerToolNames(AgentConfig config, Map<String, String> taskToDomain, String domain) {
+        if (config == null) return;
+        if (config.getTools() != null) {
+            for (ToolConfig tool : config.getTools()) {
+                String type = tool.getToolType();
+                if (type == null || "worker".equals(type) || "cli".equals(type)) {
+                    taskToDomain.put(tool.getName(), domain);
+                }
+            }
+        }
+        if (config.getAgents() != null) {
+            for (AgentConfig sub : config.getAgents()) {
+                collectWorkerToolNames(sub, taskToDomain, domain);
             }
         }
     }
