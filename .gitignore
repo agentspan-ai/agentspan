@@ -27,3 +27,4 @@ node_modules/
 /ui/dist
 /ui/dist
 /ui/e2e-results
+server/src/main/resources/static/
