@@ -158,6 +158,9 @@ cp .env.example .env
 Edit `.env` — set at minimum:
 
 ```bash
+# Generate and set the encryption master key
+AGENTSPAN_MASTER_KEY=$(openssl rand -base64 32)
+
 # Change the database password
 POSTGRES_PASSWORD=your-strong-password
 
@@ -223,7 +226,7 @@ kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/late
 
 ### Step 1 — Secrets
 
-Edit `deployment/k8s/secret.yaml`. **Never commit this file with real values.**
+Edit `deployment/k8s/agentspan/secret.yaml`. **Never commit this file with real values.**
 
 ```yaml
 apiVersion: v1
@@ -233,6 +236,7 @@ metadata:
   namespace: agentspan
 type: Opaque
 stringData:
+  AGENTSPAN_MASTER_KEY: "..."                  # openssl rand -base64 32
   POSTGRES_PASSWORD: "your-strong-password"    # required
   POSTGRES_USER: "agentspan"
   OPENAI_API_KEY: "sk-..."                     # at least one LLM key
@@ -244,7 +248,7 @@ stringData:
 
 ### Step 2 — Config
 
-Non-sensitive settings go in `deployment/k8s/configmap.yaml` (safe to commit):
+Non-sensitive settings go in `deployment/k8s/agentspan/configmap.yaml` (safe to commit):
 
 ```yaml
 data:
@@ -258,7 +262,7 @@ data:
 
 ### Step 3 — Domain
 
-Edit `deployment/k8s/ingress.yaml`, replace `agentspan.example.com` with your domain:
+Edit `deployment/k8s/agentspan/ingress.yaml`, replace `agentspan.example.com` with your domain:
 
 ```yaml
 rules:
@@ -269,23 +273,23 @@ rules:
 
 ```bash
 # Deploy everything in order
-kubectl apply -f deployment/k8s/namespace.yaml
-kubectl apply -f deployment/k8s/configmap.yaml
-kubectl apply -f deployment/k8s/secret.yaml
-kubectl apply -f deployment/k8s/postgres.yaml
+kubectl apply -f deployment/k8s/agentspan/namespace.yaml
+kubectl apply -f deployment/k8s/agentspan/configmap.yaml
+kubectl apply -f deployment/k8s/agentspan/secret.yaml
+kubectl apply -f deployment/k8s/agentspan/postgres.yaml
 kubectl rollout status statefulset/agentspan-postgres -n agentspan
-kubectl apply -f deployment/k8s/server.yaml
+kubectl apply -f deployment/k8s/agentspan/server.yaml
 kubectl rollout status deployment/agentspan-server -n agentspan
-kubectl apply -f deployment/k8s/ingress.yaml
-kubectl apply -f deployment/k8s/hpa.yaml
+kubectl apply -f deployment/k8s/agentspan/ingress.yaml
+kubectl apply -f deployment/k8s/agentspan/hpa.yaml
 ```
 
 Or use the deploy script:
 
 ```bash
-./deployment/deploy.sh
-./deployment/deploy.sh --image registry.example.com/agentspan/server:v1.2.0
-./deployment/deploy.sh --skip-build --context my-cluster-context
+./deployment/k8s/deploy.sh
+./deployment/k8s/deploy.sh --image registry.example.com/agentspan/server:v1.2.0
+./deployment/k8s/deploy.sh --skip-build --context my-cluster-context
 ```
 
 ### Step 5 — DNS
@@ -324,7 +328,7 @@ kubectl delete namespace agentspan
 
 The default HPA scales between 3 and 10 replicas based on CPU (70%) and memory (80%). All replicas share the same PostgreSQL database — no additional coordination needed.
 
-To change limits, edit `deployment/k8s/hpa.yaml` or set Helm values (see section 8).
+To change limits, edit `deployment/k8s/agentspan/hpa.yaml` or set Helm values (see section 8).
 
 ---
 
@@ -338,6 +342,7 @@ Best for: GitOps, templated multi-environment deployments.
 helm install agentspan ./deployment/helm/agentspan \
   --namespace agentspan \
   --create-namespace \
+  --set secrets.masterKey=$(openssl rand -base64 32) \
   --set secrets.postgresPassword=your-strong-password \
   --set secrets.openaiApiKey=sk-...
 ```
@@ -400,13 +405,13 @@ POSTGRES_DB=agentspan
 
 ### Kubernetes — update configmap + secret
 
-`deployment/k8s/configmap.yaml`:
+`deployment/k8s/agentspan/configmap.yaml`:
 ```yaml
 POSTGRES_HOST: "your-rds-endpoint.rds.amazonaws.com"
 POSTGRES_DB: "agentspan"
 ```
 
-`deployment/k8s/secret.yaml`:
+`deployment/k8s/agentspan/secret.yaml`:
 ```yaml
 POSTGRES_USER: "agentspan"
 POSTGRES_PASSWORD: "your-password"
@@ -435,7 +440,7 @@ When using the bundled PostgreSQL StatefulSet on cloud K8s, set the right storag
 | GCP GKE | _(default — no change needed)_ |
 | Azure AKS | `managed-premium` |
 
-Edit `deployment/k8s/postgres.yaml` or set `postgres.persistence.storageClass` in Helm values.
+Edit `deployment/k8s/agentspan/postgres.yaml` or set `postgres.persistence.storageClass` in Helm values.
 
 ---
 
@@ -446,7 +451,7 @@ Edit `deployment/k8s/postgres.yaml` or set `postgres.persistence.storageClass` i
 **Step 1** — Create a ClusterIssuer:
 
 ```yaml
-# deployment/k8s/cluster-issuer.yaml
+# deployment/k8s/agentspan/cluster-issuer.yaml
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
@@ -464,10 +469,10 @@ spec:
 ```
 
 ```bash
-kubectl apply -f deployment/k8s/cluster-issuer.yaml
+kubectl apply -f deployment/k8s/agentspan/cluster-issuer.yaml
 ```
 
-**Step 2** — Uncomment TLS in `deployment/k8s/ingress.yaml`:
+**Step 2** — Uncomment TLS in `deployment/k8s/agentspan/ingress.yaml`:
 
 ```yaml
 metadata:
@@ -609,6 +614,7 @@ Run a backup before every upgrade.
 ## 13. Production Checklist
 
 ### Security
+- [ ] `AGENTSPAN_MASTER_KEY` set to a generated key (`openssl rand -base64 32`)
 - [ ] `POSTGRES_PASSWORD` changed from `changeme` to a strong password
 - [ ] TLS / HTTPS enabled
 - [ ] K8s secrets managed via Sealed Secrets or a cloud secrets manager
@@ -641,6 +647,12 @@ Run a backup before every upgrade.
 ## 14. Configuration Reference
 
 All env vars. **Bold** = sensitive — set in K8s Secret or `.env`, never in ConfigMap or git.
+
+### Encryption
+
+| Variable | Default | Description |
+|---|---|---|
+| **`AGENTSPAN_MASTER_KEY`** | _(auto-generated)_ | AES-256-GCM key for credential encryption (base64-encoded 32 bytes). Generate with `openssl rand -base64 32`. **Required in production** — auto-generated keys are ephemeral in containers. |
 
 ### Server
 

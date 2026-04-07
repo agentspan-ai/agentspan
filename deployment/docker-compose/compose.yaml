@@ -30,6 +30,8 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
+      AGENTSPAN_MASTER_KEY: "${AGENTSPAN_MASTER_KEY:-}"
+
       SPRING_PROFILES_ACTIVE: "${SPRING_PROFILES_ACTIVE:-postgres}"
       SPRING_DATASOURCE_URL: "jdbc:postgresql://${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-agentspan}"
       SPRING_DATASOURCE_USERNAME: "${POSTGRES_USER:-agentspan}"

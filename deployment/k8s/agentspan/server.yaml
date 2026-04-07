@@ -33,6 +33,12 @@ spec:
           # Pass JVM options as JAVA_TOOL_OPTIONS so the JVM picks them up
           # without needing to modify the Dockerfile ENTRYPOINT.
           env:
+            # Encryption master key
+            - name: AGENTSPAN_MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentspan-secrets
+                  key: AGENTSPAN_MASTER_KEY
             - name: JAVA_TOOL_OPTIONS
               valueFrom:
                 configMapKeyRef:

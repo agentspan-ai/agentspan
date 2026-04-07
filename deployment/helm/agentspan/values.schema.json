@@ -57,6 +57,7 @@
       "properties": {
         "existingSecret": { "type": "string" },
         "create": { "type": "boolean" },
+        "masterKey": { "type": "string" },
         "postgresUser": { "type": "string", "minLength": 1 },
         "postgresPassword": { "type": "string", "minLength": 1 }
       },

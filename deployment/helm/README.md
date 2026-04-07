@@ -12,6 +12,7 @@ This directory contains a Helm chart for deploying Agentspan on Kubernetes.
 helm upgrade --install agentspan ./deployment/helm/agentspan \
   --namespace agentspan \
   --create-namespace \
+  --set secrets.masterKey=$(openssl rand -base64 32) \
   --set secrets.postgresPassword='change-me'
 ```
 
@@ -23,6 +24,7 @@ helm upgrade --install agentspan ./deployment/helm/agentspan \
   --create-namespace \
   --set ingress.enabled=false \
   --set image.pullPolicy=IfNotPresent \
+  --set secrets.masterKey=$(openssl rand -base64 32) \
   --set secrets.postgresPassword='change-me'
 ```
 
