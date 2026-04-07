@@ -1,89 +1,103 @@
-import { describe, it, expect, vi } from 'vitest';
-import { mockRun } from '../../../src/testing/mock.js';
+import { describe, it, expect } from 'vitest';
+import { MockEvent, mockRun } from '../../../src/testing/mock.js';
 import { Agent } from '../../../src/agent.js';
-import { tool } from '../../../src/tool.js';
-import { z } from 'zod';
 
-// ── Helper: create a simple tool ────────────────────────
+describe('MockEvent', () => {
+  it('creates a thinking event', () => {
+    const ev = MockEvent.thinking('hmm...');
+    expect(ev.type).toBe('thinking');
+    expect(ev.content).toBe('hmm...');
+  });
 
-function makeGreetTool() {
-  return tool(
-    async (args: { name?: string }) => `Hello, ${args.name ?? 'world'}!`,
-    {
-      name: 'greet',
-      description: 'Greet someone',
-      inputSchema: z.object({ name: z.string().optional() }),
-    },
-  );
-}
+  it('creates a tool_call event', () => {
+    const ev = MockEvent.toolCall('search', { query: 'test' });
+    expect(ev.type).toBe('tool_call');
+    expect(ev.toolName).toBe('search');
+    expect(ev.args).toEqual({ query: 'test' });
+  });
 
-function makeFailTool() {
-  return tool(
-    async () => {
-      throw new Error('Tool failed');
-    },
-    {
-      name: 'fail_tool',
-      description: 'A tool that always fails',
-      inputSchema: z.object({}),
-    },
-  );
-}
+  it('creates a tool_call event with default empty args', () => {
+    const ev = MockEvent.toolCall('search');
+    expect(ev.args).toEqual({});
+  });
 
-// ── Tests ────────────────────────────────────────────────
+  it('creates a tool_result event', () => {
+    const ev = MockEvent.toolResult('search', [{ title: 'result' }]);
+    expect(ev.type).toBe('tool_result');
+    expect(ev.toolName).toBe('search');
+    expect(ev.result).toEqual([{ title: 'result' }]);
+  });
+
+  it('creates a handoff event', () => {
+    const ev = MockEvent.handoff('specialist');
+    expect(ev.type).toBe('handoff');
+    expect(ev.target).toBe('specialist');
+  });
+
+  it('creates a message event', () => {
+    const ev = MockEvent.message('hello');
+    expect(ev.type).toBe('message');
+    expect(ev.content).toBe('hello');
+  });
+
+  it('creates a guardrail_pass event', () => {
+    const ev = MockEvent.guardrailPass('no_pii', 'clean');
+    expect(ev.type).toBe('guardrail_pass');
+    expect(ev.guardrailName).toBe('no_pii');
+    expect(ev.content).toBe('clean');
+  });
+
+  it('creates a guardrail_fail event', () => {
+    const ev = MockEvent.guardrailFail('no_pii', 'PII detected');
+    expect(ev.type).toBe('guardrail_fail');
+    expect(ev.guardrailName).toBe('no_pii');
+    expect(ev.content).toBe('PII detected');
+  });
+
+  it('creates a waiting event', () => {
+    const ev = MockEvent.waiting('awaiting input');
+    expect(ev.type).toBe('waiting');
+    expect(ev.content).toBe('awaiting input');
+  });
+
+  it('creates a done event', () => {
+    const ev = MockEvent.done({ answer: 42 });
+    expect(ev.type).toBe('done');
+    expect(ev.output).toEqual({ answer: 42 });
+  });
+
+  it('creates an error event', () => {
+    const ev = MockEvent.error('something broke');
+    expect(ev.type).toBe('error');
+    expect(ev.content).toBe('something broke');
+  });
+});
 
 describe('mockRun', () => {
-  it('executes agent tools and returns AgentResult', async () => {
-    const greet = makeGreetTool();
-    const agent = new Agent({
-      name: 'test-agent',
-      model: 'gpt-4',
-      tools: [greet],
+  it('builds AgentResult from scripted events', () => {
+    const agent = new Agent({ name: 'test-agent' });
+    const result = mockRun(agent, 'Hello', {
+      events: [
+        MockEvent.thinking('processing...'),
+        MockEvent.done('Hello back!'),
+      ],
     });
-
-    const result = await mockRun(agent, 'Say hello');
 
     expect(result.status).toBe('COMPLETED');
-    expect(result.finishReason).toBe('stop');
-    expect(result.isSuccess).toBe(true);
-    expect(result.output).toBeDefined();
-    expect(JSON.stringify(result.output)).toContain('test-agent');
-    expect(result.messages).toHaveLength(1);
-    expect(result.messages[0]).toEqual({ role: 'user', content: 'Say hello' });
+    expect(result.output).toEqual({ result: 'Hello back!' });
+    expect(result.executionId).toBe('mock');
+    expect(result.events).toHaveLength(2);
   });
 
-  it('generates tool_call and tool_result events', async () => {
-    const greet = makeGreetTool();
-    const agent = new Agent({
-      name: 'test-agent',
-      tools: [greet],
+  it('collects tool calls from events', () => {
+    const agent = new Agent({ name: 'test-agent' });
+    const result = mockRun(agent, 'search', {
+      events: [
+        MockEvent.toolCall('search', { query: 'test' }),
+        MockEvent.toolResult('search', ['result1']),
+        MockEvent.done('found it'),
+      ],
     });
-
-    const result = await mockRun(agent, 'hi');
-
-    const toolCallEvents = result.events.filter(
-      (e) => e.type === 'tool_call',
-    );
-    const toolResultEvents = result.events.filter(
-      (e) => e.type === 'tool_result',
-    );
-
-    expect(toolCallEvents).toHaveLength(1);
-    expect(toolCallEvents[0].toolName).toBe('greet');
-
-    expect(toolResultEvents).toHaveLength(1);
-    expect(toolResultEvents[0].toolName).toBe('greet');
-    expect(toolResultEvents[0].result).toBe('Hello, world!');
-  });
-
-  it('populates toolCalls array', async () => {
-    const greet = makeGreetTool();
-    const agent = new Agent({
-      name: 'test-agent',
-      tools: [greet],
-    });
-
-    const result = await mockRun(agent, 'hi');
 
     expect(result.toolCalls).toHaveLength(1);
     const tc = result.toolCalls[0] as {
@@ -91,118 +105,104 @@ describe('mockRun', () => {
       args: unknown;
       result: unknown;
     };
-    expect(tc.name).toBe('greet');
-    expect(tc.result).toBe('Hello, world!');
+    expect(tc.name).toBe('search');
+    expect(tc.args).toEqual({ query: 'test' });
+    expect(tc.result).toEqual(['result1']);
   });
 
-  it('emits a done event', async () => {
-    const agent = new Agent({ name: 'empty-agent' });
-    const result = await mockRun(agent, 'test');
-
-    const doneEvents = result.events.filter((e) => e.type === 'done');
-    expect(doneEvents).toHaveLength(1);
-  });
-
-  it('uses mockTools to override tool implementations', async () => {
-    const greet = makeGreetTool();
-    const agent = new Agent({
-      name: 'test-agent',
-      tools: [greet],
+  it('sets FAILED status on error event', () => {
+    const agent = new Agent({ name: 'test-agent' });
+    const result = mockRun(agent, 'fail', {
+      events: [MockEvent.error('boom')],
     });
 
-    const mockFn = vi.fn().mockResolvedValue('Mocked greeting!');
-
-    const result = await mockRun(agent, 'hi', {
-      mockTools: { greet: mockFn },
-    });
-
-    expect(mockFn).toHaveBeenCalledOnce();
-    const tc = result.toolCalls[0] as {
-      name: string;
-      result: unknown;
-    };
-    expect(tc.result).toBe('Mocked greeting!');
+    expect(result.status).toBe('FAILED');
   });
 
-  it('handles tool errors with error events', async () => {
-    const fail = makeFailTool();
-    const agent = new Agent({
-      name: 'test-agent',
-      tools: [fail],
+  it('stores prompt in messages', () => {
+    const agent = new Agent({ name: 'test-agent' });
+    const result = mockRun(agent, 'my prompt', {
+      events: [MockEvent.done('ok')],
     });
 
-    const result = await mockRun(agent, 'try');
-
-    const errorEvents = result.events.filter((e) => e.type === 'error');
-    expect(errorEvents).toHaveLength(1);
-    expect(errorEvents[0].content).toContain('Tool failed');
-    // The result should still be COMPLETED because mockRun always returns COMPLETED
-    expect(result.status).toBe('COMPLETED');
+    expect(result.messages).toHaveLength(2);
+    expect(result.messages[0]).toEqual({ role: 'user', content: 'my prompt' });
   });
 
-  it('handles agent with no tools', async () => {
-    const agent = new Agent({ name: 'no-tools' });
-    const result = await mockRun(agent, 'test');
+  it('handles empty events list', () => {
+    const agent = new Agent({ name: 'test-agent' });
+    const result = mockRun(agent, 'test', { events: [] });
 
     expect(result.status).toBe('COMPLETED');
     expect(result.toolCalls).toHaveLength(0);
-    // Only the done event
-    expect(result.events).toHaveLength(1);
-    expect(result.events[0].type).toBe('done');
+    expect(result.events).toHaveLength(0);
   });
 
-  it('includes prompt in output', async () => {
+  it('flushes pending tool call without result', () => {
     const agent = new Agent({ name: 'test-agent' });
-    const result = await mockRun(agent, 'my specific prompt');
-
-    expect(JSON.stringify(result.output)).toContain('my specific prompt');
-  });
-
-  it('handles multiple tools', async () => {
-    const greet = makeGreetTool();
-    const fail = makeFailTool();
-    const agent = new Agent({
-      name: 'multi',
-      tools: [greet, fail],
+    const result = mockRun(agent, 'test', {
+      events: [
+        MockEvent.toolCall('search', { q: 'test' }),
+        MockEvent.done('done'),
+      ],
+      autoExecuteTools: false,
     });
 
-    const result = await mockRun(agent, 'test');
-
-    // greet succeeds, fail errors
-    const toolCallEvents = result.events.filter(
-      (e) => e.type === 'tool_call',
-    );
-    expect(toolCallEvents).toHaveLength(2);
-
-    const errorEvents = result.events.filter((e) => e.type === 'error');
-    expect(errorEvents).toHaveLength(1);
-
-    // Only greet should be in toolCalls (fail_tool threw)
     expect(result.toolCalls).toHaveLength(1);
+    const tc = result.toolCalls[0] as { name: string; result?: unknown };
+    expect(tc.name).toBe('search');
+    expect(tc.result).toBeUndefined();
   });
 
-  it('accepts mockCredentials option', async () => {
-    const agent = new Agent({ name: 'creds-agent' });
-    const result = await mockRun(agent, 'test', {
-      mockCredentials: { API_KEY: 'mock-key-123' },
+  it('auto-executes tool functions when available', () => {
+    const searchFn = (args: Record<string, unknown>) => `found: ${args.q}`;
+    const agent = new Agent({
+      name: 'test-agent',
+      tools: [{ name: 'search', func: searchFn, description: 'search', inputSchema: {}, toolType: 'worker' }],
+    });
+    const result = mockRun(agent, 'test', {
+      events: [
+        MockEvent.toolCall('search', { q: 'hello' }),
+        MockEvent.done('ok'),
+      ],
     });
 
-    expect(result.status).toBe('COMPLETED');
+    expect(result.toolCalls).toHaveLength(1);
+    const tc = result.toolCalls[0] as { name: string; result: unknown };
+    expect(tc.result).toBe('found: hello');
+    // Auto-execute should add a tool_result event
+    expect(result.events.filter((e) => e.type === 'tool_result')).toHaveLength(1);
   });
 
-  it('accepts sessionId option', async () => {
-    const agent = new Agent({ name: 'session-agent' });
-    const result = await mockRun(agent, 'test', {
-      sessionId: 'sess-abc',
+  it('skips auto-execute when autoExecuteTools is false', () => {
+    const agent = new Agent({ name: 'test-agent' });
+    const result = mockRun(agent, 'test', {
+      events: [
+        MockEvent.toolCall('search', { q: 'hello' }),
+        MockEvent.toolResult('search', 'manual result'),
+        MockEvent.done('ok'),
+      ],
+      autoExecuteTools: false,
     });
 
-    expect(result.status).toBe('COMPLETED');
+    expect(result.toolCalls).toHaveLength(1);
+    const tc = result.toolCalls[0] as { name: string; result: unknown };
+    expect(tc.result).toBe('manual result');
   });
 
-  it('generates a executionId starting with mock-', async () => {
-    const agent = new Agent({ name: 'test' });
-    const result = await mockRun(agent, 'hi');
+  it('handles multiple tool calls', () => {
+    const agent = new Agent({ name: 'test-agent' });
+    const result = mockRun(agent, 'test', {
+      events: [
+        MockEvent.toolCall('search', { q: 'a' }),
+        MockEvent.toolResult('search', 'r1'),
+        MockEvent.toolCall('fetch', { url: 'b' }),
+        MockEvent.toolResult('fetch', 'r2'),
+        MockEvent.done('done'),
+      ],
+      autoExecuteTools: false,
+    });
 
-    expect(result.executionId).toMatch(/^mock-\d+$/);
+    expect(result.toolCalls).toHaveLength(2);
   });
 });
