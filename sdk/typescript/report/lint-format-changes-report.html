@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TypeScript SDK — Lint &amp; Format Changes Report</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --surface: #f6f8fa;
+    --border: #d0d7de;
+    --text: #1f2328;
+    --text-muted: #656d76;
+    --accent: #0969da;
+    --green: #1a7f37;
+    --green-bg: #dafbe1;
+    --red: #cf222e;
+    --red-bg: #ffebe9;
+    --yellow: #9a6700;
+    --yellow-bg: #fff8c5;
+    --orange: #bc4c00;
+    --orange-bg: #fff1e5;
+    --purple: #8250df;
+    --purple-bg: #fbefff;
+    --blue-bg: #ddf4ff;
+    --cyan: #0e7490;
+    --cyan-bg: #e0f7fa;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); padding: 2rem; line-height: 1.6; max-width: 1400px; margin: 0 auto; }
+  h1 { font-size: 1.6rem; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; margin: 2rem 0 0.75rem; color: var(--accent); border-bottom: 2px solid var(--border); padding-bottom: 0.5rem; }
+  h3 { font-size: 1rem; margin: 1.25rem 0 0.5rem; color: var(--text); }
+  .meta { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1.5rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* Summary cards */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.75rem; margin: 1rem 0; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; text-align: center; }
+  .card .value { font-size: 1.8rem; font-weight: 700; }
+  .card .label { font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.25rem; }
+  .card.green .value { color: var(--green); }
+  .card.red .value { color: var(--red); }
+  .card.yellow .value { color: var(--yellow); }
+  .card.accent .value { color: var(--accent); }
+
+  /* Tags */
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; margin-right: 3px; cursor: pointer; transition: opacity 0.2s; border: 1px solid transparent; }
+  .tag:hover { opacity: 0.75; }
+  .tag-format { background: var(--blue-bg); color: var(--accent); border-color: #b6d9f7; }
+  .tag-dead-code { background: var(--red-bg); color: var(--red); border-color: #ffc1c0; }
+  .tag-semantic { background: var(--purple-bg); color: var(--purple); border-color: #e2c5f5; }
+  .tag-safe { background: var(--green-bg); color: var(--green); border-color: #aceebb; }
+  .tag-test { background: var(--yellow-bg); color: var(--yellow); border-color: #ecd578; }
+  .tag-config { background: var(--cyan-bg); color: var(--cyan); border-color: #a7d8de; }
+  .tag-suppressed { background: var(--orange-bg); color: var(--orange); border-color: #f5c5a0; }
+
+  /* Filter bar */
+  .filters { margin: 0.75rem 0; display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+  .filters label { font-size: 0.8rem; color: var(--text-muted); margin-right: 0.25rem; font-weight: 600; }
+  .filter-btn { background: var(--surface); border: 1px solid var(--border); color: var(--text-muted); padding: 4px 12px; border-radius: 16px; font-size: 0.75rem; cursor: pointer; transition: all 0.15s; }
+  .filter-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 0; margin: 1rem 0 0; border-bottom: 2px solid var(--border); }
+  .tab { padding: 0.6rem 1.25rem; cursor: pointer; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  .tab .count { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1px 7px; font-size: 0.72rem; margin-left: 5px; font-weight: 400; }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+  th, td { padding: 0.5rem 0.6rem; text-align: left; border-bottom: 1px solid var(--border); }
+  th { background: var(--surface); color: var(--text-muted); font-weight: 600; position: sticky; top: 0; z-index: 1; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  tr:hover td { background: #f0f6ff; }
+  tr.hidden { display: none; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace; font-size: 0.8rem; }
+  .add { color: var(--green); }
+  .del { color: var(--red); }
+  .file { font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace; font-size: 0.78rem; color: var(--accent); }
+
+  /* Collapsible details */
+  details { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin: 0.75rem 0; }
+  details summary { padding: 0.75rem 1rem; cursor: pointer; font-weight: 600; font-size: 0.88rem; user-select: none; }
+  details summary:hover { color: var(--accent); }
+  details[open] summary { border-bottom: 1px solid var(--border); }
+  .detail-body { padding: 1rem; font-size: 0.85rem; }
+  .detail-body p { margin: 0.5rem 0; }
+  .detail-body code { background: #eff1f3; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; }
+  .detail-body ul { padding-left: 1.25rem; }
+  .detail-body li { margin: 0.3rem 0; }
+  .detail-body table { margin: 0.5rem 0; }
+
+  /* Risk */
+  .risk-none { color: var(--green); font-weight: 600; font-size: 0.8rem; }
+  .risk-low { color: var(--yellow); font-weight: 600; font-size: 0.8rem; }
+
+  /* Search */
+  .search-box { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 8px; width: 300px; font-size: 0.85rem; margin-bottom: 0.75rem; }
+  .search-box:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(9,105,218,0.15); }
+
+  /* Scroll wrapper */
+  .table-wrap { max-height: 600px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+  .table-wrap::-webkit-scrollbar { width: 8px; }
+  .table-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  /* Stats bar */
+  .stat-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin: 0.5rem 0; background: #e1e4e8; }
+  .stat-bar .seg-format { background: var(--accent); }
+  .stat-bar .seg-semantic { background: var(--purple); }
+  .stat-bar .seg-dead { background: var(--red); }
+
+  @media (max-width: 768px) {
+    body { padding: 1rem; }
+    .cards { grid-template-columns: repeat(3, 1fr); }
+    .search-box { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Lint &amp; Format Changes Report</h1>
+<p class="meta">Branch: <code>bugfix/use-lint</code> &middot; Date: 2026-04-07 &middot; Scope: <code>sdk/typescript/</code></p>
+
+<div class="cards">
+  <div class="card accent"><div class="value">85</div><div class="label">Files Changed</div></div>
+  <div class="card green"><div class="value">8,429</div><div class="label">Lines Added</div></div>
+  <div class="card red"><div class="value">6,554</div><div class="label">Lines Removed</div></div>
+  <div class="card green"><div class="value">0</div><div class="label">Lint Errors</div></div>
+  <div class="card yellow"><div class="value">297</div><div class="label">Lint Warnings</div></div>
+  <div class="card green"><div class="value">0</div><div class="label">Prettier Violations</div></div>
+</div>
+
+<h2>Change Breakdown</h2>
+<div style="display:flex; gap:2rem; flex-wrap:wrap; margin:0.5rem 0 1rem;">
+  <div>
+    <strong style="font-size:0.85rem;">src/</strong>
+    <span style="font-size:0.8rem; color:var(--text-muted);"> — 38 files, <span class="add">+1,774</span> / <span class="del">-1,828</span></span>
+  </div>
+  <div>
+    <strong style="font-size:0.85rem;">tests/</strong>
+    <span style="font-size:0.8rem; color:var(--text-muted);"> — 38 files, <span class="add">+4,884</span> / <span class="del">-4,714</span></span>
+  </div>
+  <div>
+    <strong style="font-size:0.85rem;">config/tooling</strong>
+    <span style="font-size:0.8rem; color:var(--text-muted);"> — 9 files</span>
+  </div>
+</div>
+<div class="stat-bar" title="Blue=format, Purple=semantic, Red=dead code">
+  <div class="seg-format" style="width:88%"></div>
+  <div class="seg-semantic" style="width:7%"></div>
+  <div class="seg-dead" style="width:5%"></div>
+</div>
+<p style="font-size:0.75rem; color:var(--text-muted); margin-top:0.25rem;">
+  <span style="display:inline-block;width:10px;height:10px;background:var(--accent);border-radius:2px;vertical-align:middle;"></span> Format only (88%)
+  <span style="display:inline-block;width:10px;height:10px;background:var(--purple);border-radius:2px;vertical-align:middle;margin-left:12px;"></span> Semantic (7%)
+  <span style="display:inline-block;width:10px;height:10px;background:var(--red);border-radius:2px;vertical-align:middle;margin-left:12px;"></span> Dead code removal (5%)
+</p>
+
+<h2>Tag Legend</h2>
+<ul style="list-style:none; padding:0; margin:0 0 0.75rem;">
+  <li style="padding:0.35rem 0;"><span class="tag tag-format">FORMAT</span> Prettier auto-format (whitespace, quotes, commas)</li>
+  <li style="padding:0.35rem 0;"><span class="tag tag-dead-code">DEAD CODE</span> Removed unused imports/vars/functions</li>
+  <li style="padding:0.35rem 0;"><span class="tag tag-semantic">SEMANTIC</span> Logic-preserving but structurally different</li>
+  <li style="padding:0.35rem 0;"><span class="tag tag-safe">SAFE</span> Zero risk, no behavior change</li>
+  <li style="padding:0.35rem 0;"><span class="tag tag-test">TEST</span> Change in test code</li>
+  <li style="padding:0.35rem 0;"><span class="tag tag-config">CONFIG</span> Configuration/tooling</li>
+  <li style="padding:0.35rem 0;"><span class="tag tag-suppressed">SUPPRESSED</span> Warning suppressed via eslint-disable</li>
+</ul>
+
+<h2>Filter &amp; Search</h2>
+<input class="search-box" id="search" type="text" placeholder="Search files..." oninput="filterTable()">
+<div class="filters">
+  <label>Show:</label>
+  <button class="filter-btn active" data-filter="all" onclick="setFilter('all')">All</button>
+  <button class="filter-btn" data-filter="semantic" onclick="setFilter('semantic')">Semantic Only</button>
+  <button class="filter-btn" data-filter="dead-code" onclick="setFilter('dead-code')">Dead Code</button>
+  <button class="filter-btn" data-filter="format-only" onclick="setFilter('format-only')">Format Only</button>
+  <button class="filter-btn" data-filter="suppressed" onclick="setFilter('suppressed')">Suppressed</button>
+</div>
+
+<h2>File Changes</h2>
+
+<div class="tabs">
+  <div class="tab active" data-tab="src" onclick="switchTab('src')">src/<span class="count">38</span></div>
+  <div class="tab" data-tab="tests" onclick="switchTab('tests')">tests/<span class="count">38</span></div>
+</div>
+
+<!-- SRC TAB -->
+<div class="tab-panel active" id="panel-src">
+<div class="table-wrap">
+<table class="file-table" id="table-src">
+<thead>
+  <tr>
+    <th>File</th>
+    <th class="num">+</th>
+    <th class="num">-</th>
+    <th>Tags</th>
+    <th>Description</th>
+    <th>Risk</th>
+  </tr>
+</thead>
+<tbody>
+  <tr data-tags="format dead-code">
+    <td class="file">agent.ts</td>
+    <td class="num add">+31</td>
+    <td class="num del">-57</td>
+    <td><span class="tag tag-format">FORMAT</span><span class="tag tag-dead-code">DEAD CODE</span></td>
+    <td>Removed unused <code>PromptTemplateInterface</code> import</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">callback.ts</td>
+    <td class="num add">+7</td>
+    <td class="num del">-7</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">claude-code.ts</td>
+    <td class="num add">+9</td>
+    <td class="num del">-9</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format dead-code">
+    <td class="file">cli-config.ts</td>
+    <td class="num add">+39</td>
+    <td class="num del">-43</td>
+    <td><span class="tag tag-format">FORMAT</span><span class="tag tag-dead-code">DEAD CODE</span></td>
+    <td>Removed unused <code>execSync</code> import</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format semantic">
+    <td class="file">code-execution.ts</td>
+    <td class="num add">+116</td>
+    <td class="num del">-76</td>
+    <td><span class="tag tag-format">FORMAT</span><span class="tag tag-semantic">SEMANTIC</span></td>
+    <td>Removed <code>const executor = this</code> alias, used <code>this</code> directly (arrow fn)</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">config.ts</td>
+    <td class="num add">+21</td>
+    <td class="num del">-37</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">credentials.ts</td>
+    <td class="num add">+19</td>
+    <td class="num del">-34</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">discovery.ts</td>
+    <td class="num add">+4</td>
+    <td class="num del">-4</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">errors.ts</td>
+    <td class="num add">+15</td>
+    <td class="num del">-15</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">ext.ts</td>
+    <td class="num add">+3</td>
+    <td class="num del">-3</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">frameworks/detect.ts</td>
+    <td class="num add">+29</td>
+    <td class="num del">-31</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">frameworks/langchain-serializer.ts</td>
+    <td class="num add">+57</td>
+    <td class="num del">-46</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format semantic dead-code">
+    <td class="file">frameworks/langgraph-serializer.ts</td>
+    <td class="num add">+309</td>
+    <td class="num del">-260</td>
+    <td><span class="tag tag-format">FORMAT</span><span class="tag tag-semantic">SEMANTIC</span><span class="tag tag-dead-code">DEAD CODE</span></td>
+    <td><code>hasOwnProperty</code> &rarr; <code>Object.hasOwn</code> (2x), removed unused catch binding</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format dead-code suppressed">
+    <td class="file">frameworks/serializer.ts</td>
+    <td class="num add">+47</td>
+    <td class="num del">-59</td>
+    <td><span class="tag tag-format">FORMAT</span><span class="tag tag-dead-code">DEAD CODE</span><span class="tag tag-suppressed">SUPPRESSED</span></td>
+    <td>Removed unused import, eslint-disable on <code>require()</code></td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">guardrail.ts</td>
+    <td class="num add">+26</td>
+    <td class="num del">-37</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">handoff.ts</td>
+    <td class="num add">+9</td>
+    <td class="num del">-9</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">index.ts</td>
+    <td class="num add">+46</td>
+    <td class="num del">-77</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only (collapsed multi-line re-exports)</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">memory.ts</td>
+    <td class="num add">+13</td>
+    <td class="num del">-15</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">result.ts</td>
+    <td class="num add">+36</td>
+    <td class="num del">-36</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format dead-code">
+    <td class="file">runtime.ts</td>
+    <td class="num add">+214</td>
+    <td class="num del">-186</td>
+    <td><span class="tag tag-format">FORMAT</span><span class="tag tag-dead-code">DEAD CODE</span></td>
+    <td>Removed unused <code>OnToolResult</code>, <code>OnTextMention</code>, <code>OnCondition</code> imports</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">serializer.ts</td>
+    <td class="num add">+36</td>
+    <td class="num del">-51</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">skill.ts</td>
+    <td class="num add">+110</td>
+    <td class="num del">-121</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">stream.ts</td>
+    <td class="num add">+46</td>
+    <td class="num del">-54</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">termination.ts</td>
+    <td class="num add">+17</td>
+    <td class="num del">-16</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">testing/assertions.ts</td>
+    <td class="num add">+11</td>
+    <td class="num del">-30</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">testing/eval.ts</td>
+    <td class="num add">+16</td>
+    <td class="num del">-36</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">testing/expect.ts</td>
+    <td class="num add">+9</td>
+    <td class="num del">-23</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">testing/index.ts</td>
+    <td class="num add">+10</td>
+    <td class="num del">-15</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format dead-code">
+    <td class="file">testing/mock.ts</td>
+    <td class="num add">+12</td>
+    <td class="num del">-13</td>
+    <td><span class="tag tag-format">FORMAT</span><span class="tag tag-dead-code">DEAD CODE</span></td>
+    <td>Removed unused <code>ConfigurationError</code> import</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">testing/recording.ts</td>
+    <td class="num add">+8</td>
+    <td class="num del">-8</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">testing/strategy.ts</td>
+    <td class="num add">+3</td>
+    <td class="num del">-5</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format dead-code">
+    <td class="file">tool.ts</td>
+    <td class="num add">+182</td>
+    <td class="num del">-195</td>
+    <td><span class="tag tag-format">FORMAT</span><span class="tag tag-dead-code">DEAD CODE</span></td>
+    <td>Removed unused <code>zodSchemaToJson</code> fn &amp; unused type params <code>TInput</code>/<code>TOutput</code></td>
+    <td><span class="risk-low">Low</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">tracing.ts</td>
+    <td class="num add">+1</td>
+    <td class="num del">-1</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only (quote style)</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">types.ts</td>
+    <td class="num add">+54</td>
+    <td class="num del">-59</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format dead-code">
+    <td class="file">worker.ts</td>
+    <td class="num add">+58</td>
+    <td class="num del">-54</td>
+    <td><span class="tag tag-format">FORMAT</span><span class="tag tag-dead-code">DEAD CODE</span></td>
+    <td>Prefixed unused <code>taskName</code>, <code>config</code> params with <code>_</code></td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format semantic">
+    <td class="file">wrappers/ai.ts</td>
+    <td class="num add">+66</td>
+    <td class="num del">-44</td>
+    <td><span class="tag tag-format">FORMAT</span><span class="tag tag-semantic">SEMANTIC</span></td>
+    <td>Dead assignment: <code>let provider = "openai"</code> &rarr; <code>let provider: string</code></td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format semantic">
+    <td class="file">wrappers/langchain.ts</td>
+    <td class="num add">+46</td>
+    <td class="num del">-33</td>
+    <td><span class="tag tag-format">FORMAT</span><span class="tag tag-semantic">SEMANTIC</span></td>
+    <td>Same dead assignment fix</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format semantic">
+    <td class="file">wrappers/langgraph.ts</td>
+    <td class="num add">+39</td>
+    <td class="num del">-29</td>
+    <td><span class="tag tag-format">FORMAT</span><span class="tag tag-semantic">SEMANTIC</span></td>
+    <td>Same dead assignment fix</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+</tbody>
+</table>
+</div>
+</div>
+
+<!-- TESTS TAB -->
+<div class="tab-panel" id="panel-tests">
+<div class="table-wrap">
+<table class="file-table" id="table-tests">
+<thead>
+  <tr>
+    <th>File</th>
+    <th class="num">+</th>
+    <th class="num">-</th>
+    <th>Tags</th>
+    <th>Description</th>
+    <th>Risk</th>
+  </tr>
+</thead>
+<tbody>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">_subgraph-debug.ts</td>
+    <td class="num add">+57</td>
+    <td class="num del">-40</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format semantic">
+    <td class="file">_worker-harness.ts</td>
+    <td class="num add">+75</td>
+    <td class="num del">-42</td>
+    <td><span class="tag tag-format">FORMAT</span><span class="tag tag-semantic">SEMANTIC</span></td>
+    <td>Added comments to 7 empty <code>catch {}</code> blocks</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">cli-bin/deploy.test.ts</td>
+    <td class="num add">+26</td>
+    <td class="num del">-20</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">cli-bin/discover.test.ts</td>
+    <td class="num add">+10</td>
+    <td class="num del">-10</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">compare-wire-format.ts</td>
+    <td class="num add">+149</td>
+    <td class="num del">-151</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">count-workers.ts</td>
+    <td class="num add">+25</td>
+    <td class="num del">-18</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">dump-agent-configs.ts</td>
+    <td class="num add">+233</td>
+    <td class="num del">-238</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/agent.test.ts</td>
+    <td class="num add">+120</td>
+    <td class="num del">-116</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/callback.test.ts</td>
+    <td class="num add">+31</td>
+    <td class="num del">-35</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/cli-config.test.ts</td>
+    <td class="num add">+156</td>
+    <td class="num del">-104</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/code-execution.test.ts</td>
+    <td class="num add">+59</td>
+    <td class="num del">-59</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/config.test.ts</td>
+    <td class="num add">+102</td>
+    <td class="num del">-112</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/context-passing.test.ts</td>
+    <td class="num add">+7</td>
+    <td class="num del">-7</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/credentials.test.ts</td>
+    <td class="num add">+126</td>
+    <td class="num del">-136</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/frameworks/detect.test.ts</td>
+    <td class="num add">+92</td>
+    <td class="num del">-92</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/frameworks/langchain.test.ts</td>
+    <td class="num add">+123</td>
+    <td class="num del">-108</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/frameworks/langgraph.test.ts</td>
+    <td class="num add">+425</td>
+    <td class="num del">-303</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/frameworks/serializer.test.ts</td>
+    <td class="num add">+157</td>
+    <td class="num del">-142</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/guardrail.test.ts</td>
+    <td class="num add">+153</td>
+    <td class="num del">-160</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/handoff.test.ts</td>
+    <td class="num add">+58</td>
+    <td class="num del">-64</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/kitchen-sink-structural.test.ts</td>
+    <td class="num add">+189</td>
+    <td class="num del">-178</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/memory.test.ts</td>
+    <td class="num add">+124</td>
+    <td class="num del">-124</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/result.test.ts</td>
+    <td class="num add">+159</td>
+    <td class="num del">-159</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/runtime.test.ts</td>
+    <td class="num add">+177</td>
+    <td class="num del">-162</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/serializer.test.ts</td>
+    <td class="num add">+392</td>
+    <td class="num del">-380</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/skill.test.ts</td>
+    <td class="num add">+99</td>
+    <td class="num del">-99</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/stream.test.ts</td>
+    <td class="num add">+91</td>
+    <td class="num del">-189</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/swarm-workers.test.ts</td>
+    <td class="num add">+267</td>
+    <td class="num del">-252</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/termination.test.ts</td>
+    <td class="num add">+81</td>
+    <td class="num del">-81</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/testing/assertions.test.ts</td>
+    <td class="num add">+69</td>
+    <td class="num del">-80</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/testing/expect.test.ts</td>
+    <td class="num add">+73</td>
+    <td class="num del">-87</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/testing/mock.test.ts</td>
+    <td class="num add">+77</td>
+    <td class="num del">-86</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/testing/strategy.test.ts</td>
+    <td class="num add">+36</td>
+    <td class="num del">-36</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/tool.test.ts</td>
+    <td class="num add">+266</td>
+    <td class="num del">-275</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/worker.test.ts</td>
+    <td class="num add">+314</td>
+    <td class="num del">-290</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/wrappers/ai.test.ts</td>
+    <td class="num add">+89</td>
+    <td class="num del">-89</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format" data-format-only="true">
+    <td class="file">unit/wrappers/langchain.test.ts</td>
+    <td class="num add">+82</td>
+    <td class="num del">-82</td>
+    <td><span class="tag tag-format">FORMAT</span></td>
+    <td>Prettier only</td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+  <tr data-tags="format semantic">
+    <td class="file">unit/wrappers/langgraph.test.ts</td>
+    <td class="num add">+115</td>
+    <td class="num del">-108</td>
+    <td><span class="tag tag-format">FORMAT</span><span class="tag tag-semantic">SEMANTIC</span></td>
+    <td>Fixed constant condition: <code>typeof 123</code> &rarr; <code>typeof prompt</code></td>
+    <td><span class="risk-none">None</span></td>
+  </tr>
+</tbody>
+</table>
+</div>
+</div>
+
+<h2>Semantic Changes Detail</h2>
+
+<details>
+  <summary>1. Removed unused imports &amp; variables <span class="tag tag-dead-code">DEAD CODE</span> &mdash; 8 files, 14 instances</summary>
+  <div class="detail-body">
+    <table>
+      <tr><th>File</th><th>Removed</th></tr>
+      <tr><td><code>src/agent.ts</code></td><td><code>PromptTemplateInterface</code> import</td></tr>
+      <tr><td><code>src/cli-config.ts</code></td><td><code>execSync</code> import (only <code>spawnSync</code> used)</td></tr>
+      <tr><td><code>src/frameworks/langgraph-serializer.ts</code></td><td>Unused <code>e</code> catch binding, prefixed <code>nodeName</code> with <code>_</code></td></tr>
+      <tr><td><code>src/frameworks/serializer.ts</code></td><td><code>ConfigurationError</code> import</td></tr>
+      <tr><td><code>src/runtime.ts</code></td><td><code>OnToolResult</code>, <code>OnTextMention</code>, <code>OnCondition</code> imports</td></tr>
+      <tr><td><code>src/testing/mock.ts</code></td><td><code>ConfigurationError</code> import</td></tr>
+      <tr><td><code>src/tool.ts</code></td><td>Entire <code>zodSchemaToJson</code> async fn (sync <code>toJsonSchema</code> exists), unused <code>TInput</code>/<code>TOutput</code> type params</td></tr>
+      <tr><td><code>src/worker.ts</code></td><td>Prefixed unused <code>taskName</code>, <code>config</code> params with <code>_</code></td></tr>
+    </table>
+    <p><strong>Risk:</strong> <span class="risk-none">None</span> &mdash; static analysis confirmed zero usage.</p>
+  </div>
+</details>
+
+<details>
+  <summary>2. Replaced <code>hasOwnProperty</code> with <code>Object.hasOwn</code> <span class="tag tag-semantic">SEMANTIC</span> &mdash; 1 file, 2 instances</summary>
+  <div class="detail-body">
+    <ul>
+      <li><code>src/frameworks/langgraph-serializer.ts:685</code> &mdash; <code>proto.hasOwnProperty("invoke")</code> &rarr; <code>Object.hasOwn(proto, "invoke")</code></li>
+      <li><code>src/frameworks/langgraph-serializer.ts:1058</code> &mdash; same</li>
+    </ul>
+    <p><strong>Risk:</strong> <span class="risk-none">None</span> &mdash; Node 16+ supported. Functionally identical, safer on null-prototype objects.</p>
+  </div>
+</details>
+
+<details>
+  <summary>3. Removed dead assignments <span class="tag tag-semantic">SEMANTIC</span> &mdash; 3 files, 3 instances</summary>
+  <div class="detail-body">
+    <ul>
+      <li><code>src/wrappers/ai.ts</code> &mdash; <code>let provider = "openai"</code> &rarr; <code>let provider: string</code></li>
+      <li><code>src/wrappers/langchain.ts</code> &mdash; same</li>
+      <li><code>src/wrappers/langgraph.ts</code> &mdash; same</li>
+    </ul>
+    <p>All branches assign before read. Initial <code>"openai"</code> was dead.</p>
+    <p><strong>Risk:</strong> <span class="risk-none">None</span></p>
+  </div>
+</details>
+
+<details>
+  <summary>4. Removed <code>this</code> alias <span class="tag tag-semantic">SEMANTIC</span> &mdash; 1 file, 1 instance</summary>
+  <div class="detail-body">
+    <ul>
+      <li><code>src/code-execution.ts</code> &mdash; removed <code>const executor = this</code>, changed <code>executor.execute(...)</code> to <code>this.execute(...)</code></li>
+    </ul>
+    <p>Already inside arrow function &mdash; <code>this</code> captured lexically.</p>
+    <p><strong>Risk:</strong> <span class="risk-none">None</span></p>
+  </div>
+</details>
+
+<details>
+  <summary>5. Suppressed <code>require()</code> warning <span class="tag tag-suppressed">SUPPRESSED</span> &mdash; 1 file, 1 instance</summary>
+  <div class="detail-body">
+    <ul>
+      <li><code>src/frameworks/serializer.ts</code> &mdash; <code>eslint-disable</code> on <code>require("zod-to-json-schema")</code></li>
+    </ul>
+    <p>Sync context prevents <code>import()</code>. Making it async would cascade through callers.</p>
+    <p><strong>Risk:</strong> <span class="risk-none">None</span> &mdash; comment only.</p>
+  </div>
+</details>
+
+<details>
+  <summary>6. Fixed empty catch blocks <span class="tag tag-semantic">SEMANTIC</span> &mdash; 1 test file, 7 instances</summary>
+  <div class="detail-body">
+    <ul>
+      <li><code>tests/_worker-harness.ts</code> &mdash; added descriptive comments inside 7 empty <code>catch {}</code> blocks</li>
+    </ul>
+    <p><strong>Risk:</strong> <span class="risk-none">None</span> &mdash; comment only.</p>
+  </div>
+</details>
+
+<details>
+  <summary>7. Fixed constant condition <span class="tag tag-semantic">SEMANTIC</span> &mdash; 1 test file, 1 instance</summary>
+  <div class="detail-body">
+    <ul>
+      <li><code>tests/unit/wrappers/langgraph.test.ts</code> &mdash; <code>typeof 123 === "string"</code> (always false) &rarr; <code>typeof prompt === "string"</code> (variable typed <code>unknown</code>)</li>
+    </ul>
+    <p>Test still validates same behavior (non-string prompts yield <code>undefined</code>).</p>
+    <p><strong>Risk:</strong> <span class="risk-none">None</span></p>
+  </div>
+</details>
+
+<h2>Remaining Warnings (297)</h2>
+<div class="cards">
+  <div class="card yellow"><div class="value">~130</div><div class="label">no-explicit-any</div></div>
+  <div class="card yellow"><div class="value">~57</div><div class="label">no-unsafe-function-type</div></div>
+  <div class="card yellow"><div class="value">~110</div><div class="label">Other warnings</div></div>
+</div>
+<p style="margin-top:0.75rem; color:var(--text-muted); font-size:0.85rem;">All 297 warnings are non-blocking. Address incrementally in future PRs.</p>
+
+<h2>Verification</h2>
+<table style="max-width:500px;">
+  <tr><th>Check</th><th>Result</th></tr>
+  <tr><td><code>npm run lint</code></td><td><span class="risk-none">0 errors</span>, 297 warnings</td></tr>
+  <tr><td><code>npm run format:check</code></td><td><span class="risk-none">All files pass</span></td></tr>
+  <tr><td><code>npm run typecheck</code></td><td><span class="risk-none">Clean</span></td></tr>
+  <tr><td><code>npm test</code></td><td>35/36 pass (1 pre-existing)</td></tr>
+</table>
+
+<script>
+let activeFilter = 'all';
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + tab));
+}
+
+function setFilter(filter) {
+  activeFilter = filter;
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.filter === filter);
+  });
+  filterTable();
+}
+
+function filterTable() {
+  const query = document.getElementById('search').value.toLowerCase();
+  document.querySelectorAll('.file-table tbody tr').forEach(row => {
+    const file = row.querySelector('.file')?.textContent?.toLowerCase() || '';
+    const desc = row.textContent.toLowerCase();
+    const tags = row.dataset.tags || '';
+    const isFormatOnly = row.dataset.formatOnly === 'true';
+    const matchesSearch = !query || file.includes(query) || desc.includes(query);
+    let matchesFilter = true;
+    if (activeFilter === 'format-only') matchesFilter = isFormatOnly;
+    else if (activeFilter !== 'all') matchesFilter = tags.includes(activeFilter);
+    row.classList.toggle('hidden', !(matchesSearch && matchesFilter));
+  });
+}
+</script>
+
+</body>
+</html>
