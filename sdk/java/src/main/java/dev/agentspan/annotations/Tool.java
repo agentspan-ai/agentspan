@@ -40,8 +40,8 @@ public @interface Tool {
     /** If true, the tool is served externally (not by this SDK). */
     boolean external() default false;
 
-    /** Maximum execution time in seconds. */
-    int timeoutSeconds() default 120;
+    /** Maximum execution time in seconds. 0 means no explicit timeout (server default applies). */
+    int timeoutSeconds() default 0;
 
     /** Credential environment variable names required by this tool. */
     String[] credentials() default {};

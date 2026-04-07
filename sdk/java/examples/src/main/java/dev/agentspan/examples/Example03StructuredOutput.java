@@ -50,7 +50,7 @@ public class Example03StructuredOutput {
         List<ToolDef> tools = ToolRegistry.fromInstance(weatherTools);
 
         Agent agent = Agent.builder()
-            .name("weather_structured")
+            .name("weather_reporter")
             .model(Settings.LLM_MODEL)
             .instructions(
                 "You are a weather assistant. Use the get_weather_data tool and return a structured weather report. "

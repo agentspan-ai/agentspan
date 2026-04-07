@@ -230,6 +230,7 @@ public class AgentConfigSerializer {
         toolMap.put("name", tool.getName());
         toolMap.put("description", tool.getDescription());
         toolMap.put("inputSchema", tool.getInputSchema());
+        toolMap.put("outputSchema", Map.of("type", "object", "additionalProperties", Map.of()));
         toolMap.put("toolType", tool.getToolType());
 
         if (tool.isApprovalRequired()) {
@@ -238,11 +239,24 @@ public class AgentConfigSerializer {
         if (tool.getTimeoutSeconds() > 0) {
             toolMap.put("timeoutSeconds", tool.getTimeoutSeconds());
         }
-        if (tool.getConfig() != null && !tool.getConfig().isEmpty()) {
-            toolMap.put("config", tool.getConfig());
+
+        // Credentials must be nested inside config so the server includes them
+        // in the execution token's declared_names (matches Python SDK behaviour).
+        List<String> creds = tool.getCredentials();
+        Map<String, Object> toolConfig = tool.getConfig();
+        if (creds != null && !creds.isEmpty()) {
+            Map<String, Object> merged = new LinkedHashMap<>();
+            if (toolConfig != null) merged.putAll(toolConfig);
+            merged.put("credentials", creds);
+            toolMap.put("config", merged);
+        } else if (toolConfig != null && !toolConfig.isEmpty()) {
+            toolMap.put("config", toolConfig);
         }
-        if (tool.getCredentials() != null && !tool.getCredentials().isEmpty()) {
-            toolMap.put("credentials", tool.getCredentials());
+
+        if (tool.getGuardrails() != null && !tool.getGuardrails().isEmpty()) {
+            toolMap.put("guardrails", tool.getGuardrails().stream()
+                .map(g -> serializeGuardrail(g, tool.getName()))
+                .collect(java.util.stream.Collectors.toList()));
         }
 
         return toolMap;
