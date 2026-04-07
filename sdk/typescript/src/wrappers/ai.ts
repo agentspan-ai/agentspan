@@ -21,12 +21,12 @@ let _ai: any = null;
 async function _loadAI(): Promise<any> {
   if (_ai) return _ai;
   try {
-    _ai = await import('ai');
+    _ai = await import("ai");
     return _ai;
   } catch {
     throw new Error(
       `The 'ai' package is required by @agentspan-ai/sdk/vercel-ai but was not found. ` +
-      `Install it with: npm install ai`,
+        `Install it with: npm install ai`,
     );
   }
 }
@@ -37,7 +37,7 @@ let _aiModule: Record<string, unknown> | null = null;
 try {
   // Use dynamic import to load the module
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  _aiModule = require('ai');
+  _aiModule = require("ai");
 } catch {
   // Will be loaded lazily on first use
 }
@@ -59,26 +59,26 @@ try {
  * Some models use .modelName or .model instead.
  */
 export function extractModelString(model: unknown): string {
-  if (typeof model === 'string') return model;
-  if (typeof model !== 'object' || model === null) return 'openai/gpt-4o-mini';
+  if (typeof model === "string") return model;
+  if (typeof model !== "object" || model === null) return "openai/gpt-4o-mini";
 
   const m = model as Record<string, unknown>;
 
   // AI SDK v4 model objects: .modelId and .provider
   const modelId =
-    (typeof m.modelId === 'string' && m.modelId) ||
-    (typeof m.modelName === 'string' && m.modelName) ||
-    (typeof m.model === 'string' && m.model) ||
-    'gpt-4o-mini';
+    (typeof m.modelId === "string" && m.modelId) ||
+    (typeof m.modelName === "string" && m.modelName) ||
+    (typeof m.model === "string" && m.model) ||
+    "gpt-4o-mini";
 
   // Already has provider prefix
-  if (modelId.includes('/')) return modelId;
+  if (modelId.includes("/")) return modelId;
 
   // Extract provider from .provider string (e.g., 'openai.chat' -> 'openai')
-  let provider = 'openai';
-  if (typeof m.provider === 'string' && m.provider) {
-    provider = m.provider.split('.')[0];
-  } else if (typeof m.providerId === 'string' && m.providerId) {
+  let provider: string;
+  if (typeof m.provider === "string" && m.provider) {
+    provider = m.provider.split(".")[0];
+  } else if (typeof m.providerId === "string" && m.providerId) {
     provider = m.providerId;
   } else {
     // Infer from model name
@@ -89,11 +89,17 @@ export function extractModelString(model: unknown): string {
 }
 
 function _inferProviderFromModelName(modelName: string): string {
-  if (modelName.startsWith('gpt-') || modelName.startsWith('o1') || modelName.startsWith('o3') || modelName.startsWith('o4')) return 'openai';
-  if (modelName.includes('claude')) return 'anthropic';
-  if (modelName.includes('gemini')) return 'google';
-  if (modelName.includes('llama') || modelName.includes('mixtral')) return 'groq';
-  return 'openai';
+  if (
+    modelName.startsWith("gpt-") ||
+    modelName.startsWith("o1") ||
+    modelName.startsWith("o3") ||
+    modelName.startsWith("o4")
+  )
+    return "openai";
+  if (modelName.includes("claude")) return "anthropic";
+  if (modelName.includes("gemini")) return "google";
+  if (modelName.includes("llama") || modelName.includes("mixtral")) return "groq";
+  return "openai";
 }
 
 // ── Tool extraction ─────────────────────────────────────
@@ -107,7 +113,7 @@ function _inferProviderFromModelName(modelName: string): string {
  * - .description?: string
  */
 function _extractTools(tools: Record<string, unknown> | undefined): unknown[] {
-  if (!tools || typeof tools !== 'object') return [];
+  if (!tools || typeof tools !== "object") return [];
   return Object.values(tools);
 }
 
@@ -115,18 +121,23 @@ function _extractTools(tools: Record<string, unknown> | undefined): unknown[] {
 
 export function mapFinishReason(reason: string | undefined): string {
   switch (reason) {
-    case 'stop': return 'stop';
-    case 'length': return 'length';
-    case 'tool_calls':
-    case 'tool-calls': return 'tool-calls';
-    case 'content-filter': return 'content-filter';
-    default: return reason ?? 'stop';
+    case "stop":
+      return "stop";
+    case "length":
+      return "length";
+    case "tool_calls":
+    case "tool-calls":
+      return "tool-calls";
+    case "content-filter":
+      return "content-filter";
+    default:
+      return reason ?? "stop";
   }
 }
 
 // ── generateText wrapper ────────────────────────────────
 
-import { Agent, AgentRuntime } from '../index.js';
+import { Agent, AgentRuntime } from "../index.js";
 
 /**
  * Wrapped generateText that runs on agentspan.
@@ -134,7 +145,9 @@ import { Agent, AgentRuntime } from '../index.js';
  * Intercepts the options object, extracts model/tools/system/prompt,
  * compiles to an Agent, runs on agentspan, returns the same result type.
  */
-export async function generateText(options: Record<string, unknown>): Promise<Record<string, unknown>> {
+export async function generateText(
+  options: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
   const model = options.model;
   const tools = options.tools as Record<string, unknown> | undefined;
   const system = options.system as string | undefined;
@@ -150,7 +163,7 @@ export async function generateText(options: Record<string, unknown>): Promise<Re
 
   // Build native Agent
   const agent = new Agent({
-    name: 'vercel_ai_agent',
+    name: "vercel_ai_agent",
     model: modelStr,
     instructions: system,
     tools: toolObjects,
@@ -160,22 +173,25 @@ export async function generateText(options: Record<string, unknown>): Promise<Re
   // Run on agentspan
   const runtime = new AgentRuntime();
   try {
-    const promptStr = prompt ?? (messages ? JSON.stringify(messages) : '');
+    const promptStr = prompt ?? (messages ? JSON.stringify(messages) : "");
     const result = await runtime.run(agent, promptStr);
 
     // Map agentspan result back to Vercel AI SDK result format
     return {
-      text: typeof result.output?.result === 'string'
-        ? result.output.result
-        : JSON.stringify(result.output),
+      text:
+        typeof result.output?.result === "string"
+          ? result.output.result
+          : JSON.stringify(result.output),
       toolCalls: result.toolCalls ?? [],
       toolResults: [],
       finishReason: mapFinishReason(result.finishReason),
-      usage: result.tokenUsage ? {
-        promptTokens: result.tokenUsage.promptTokens,
-        completionTokens: result.tokenUsage.completionTokens,
-        totalTokens: result.tokenUsage.totalTokens,
-      } : undefined,
+      usage: result.tokenUsage
+        ? {
+            promptTokens: result.tokenUsage.promptTokens,
+            completionTokens: result.tokenUsage.completionTokens,
+            totalTokens: result.tokenUsage.totalTokens,
+          }
+        : undefined,
       steps: [],
       response: {},
       warnings: [],
@@ -195,7 +211,9 @@ export async function generateText(options: Record<string, unknown>): Promise<Re
  * For now, this delegates to generateText and wraps the result
  * in a stream-compatible interface. Full streaming will be added later.
  */
-export async function streamText(options: Record<string, unknown>): Promise<Record<string, unknown>> {
+export async function streamText(
+  options: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
   // For now, run as generateText and return a stream-like wrapper
   const result = await generateText(options);
 
@@ -205,13 +223,17 @@ export async function streamText(options: Record<string, unknown>): Promise<Reco
       yield result.text as string;
     })(),
     fullStream: (async function* () {
-      yield { type: 'text-delta', textDelta: result.text as string };
+      yield { type: "text-delta", textDelta: result.text as string };
     })(),
     toAIStream: () => {
-      throw new Error('toAIStream() is not supported in the agentspan wrapper. Use textStream instead.');
+      throw new Error(
+        "toAIStream() is not supported in the agentspan wrapper. Use textStream instead.",
+      );
     },
     toTextStreamResponse: () => {
-      throw new Error('toTextStreamResponse() is not supported in the agentspan wrapper. Use textStream instead.');
+      throw new Error(
+        "toTextStreamResponse() is not supported in the agentspan wrapper. Use textStream instead.",
+      );
     },
   };
 }
@@ -226,12 +248,12 @@ export function getAIModule(): Record<string, unknown> {
   if (_aiModule) return _aiModule;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    _aiModule = require('ai');
+    _aiModule = require("ai");
     return _aiModule!;
   } catch {
     throw new Error(
       `The 'ai' package is required by @agentspan-ai/sdk/vercel-ai but was not found. ` +
-      `Install it with: npm install ai`,
+        `Install it with: npm install ai`,
     );
   }
 }

@@ -21,12 +21,12 @@ function _loadLangGraph(): Record<string, unknown> {
   if (_lgModule) return _lgModule;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    _lgModule = require('@langchain/langgraph/prebuilt');
+    _lgModule = require("@langchain/langgraph/prebuilt");
     return _lgModule!;
   } catch {
     throw new Error(
       `The '@langchain/langgraph' package is required by @agentspan-ai/sdk/langgraph but was not found. ` +
-      `Install it with: npm install @langchain/langgraph`,
+        `Install it with: npm install @langchain/langgraph`,
     );
   }
 }
@@ -41,7 +41,7 @@ export interface AgentspanMetadata {
   model: string;
   tools: unknown[];
   instructions?: string;
-  framework: 'langgraph';
+  framework: "langgraph";
 }
 
 // ── Model extraction from LLM ───────────────────────────
@@ -55,32 +55,36 @@ export interface AgentspanMetadata {
  * - ChatGoogleGenerativeAI: .model or .modelName
  */
 export function extractModelFromLLM(llm: unknown): string {
-  if (typeof llm === 'string') return llm;
-  if (typeof llm !== 'object' || llm === null) return 'openai/gpt-4o-mini';
+  if (typeof llm === "string") return llm;
+  if (typeof llm !== "object" || llm === null) return "openai/gpt-4o-mini";
 
   const l = llm as Record<string, unknown>;
 
   const modelName =
-    (typeof l.model === 'string' && l.model) ||
-    (typeof l.modelName === 'string' && l.modelName) ||
-    (typeof l.model_name === 'string' && l.model_name) ||
-    'gpt-4o-mini';
+    (typeof l.model === "string" && l.model) ||
+    (typeof l.modelName === "string" && l.modelName) ||
+    (typeof l.model_name === "string" && l.model_name) ||
+    "gpt-4o-mini";
 
   // Already has provider prefix
-  if (modelName.includes('/')) return modelName;
+  if (modelName.includes("/")) return modelName;
 
   // Infer provider from class name
-  const className = llm.constructor?.name ?? '';
-  let provider = 'openai';
+  const className = llm.constructor?.name ?? "";
+  let provider: string;
 
-  if (className.includes('Anthropic') || className.includes('anthropic')) {
-    provider = 'anthropic';
-  } else if (className.includes('Google') || className.includes('Gemini') || className.includes('google')) {
-    provider = 'google_gemini';
-  } else if (className.includes('Bedrock') || className.includes('bedrock')) {
-    provider = 'bedrock';
-  } else if (className.includes('OpenAI') || className.includes('openai')) {
-    provider = 'openai';
+  if (className.includes("Anthropic") || className.includes("anthropic")) {
+    provider = "anthropic";
+  } else if (
+    className.includes("Google") ||
+    className.includes("Gemini") ||
+    className.includes("google")
+  ) {
+    provider = "google_gemini";
+  } else if (className.includes("Bedrock") || className.includes("bedrock")) {
+    provider = "bedrock";
+  } else if (className.includes("OpenAI") || className.includes("openai")) {
+    provider = "openai";
   } else {
     // Infer from model name
     provider = _inferProviderFromModel(modelName);
@@ -90,10 +94,16 @@ export function extractModelFromLLM(llm: unknown): string {
 }
 
 function _inferProviderFromModel(modelName: string): string {
-  if (modelName.startsWith('gpt-') || modelName.startsWith('o1') || modelName.startsWith('o3') || modelName.startsWith('o4')) return 'openai';
-  if (modelName.includes('claude')) return 'anthropic';
-  if (modelName.includes('gemini')) return 'google_gemini';
-  return 'openai';
+  if (
+    modelName.startsWith("gpt-") ||
+    modelName.startsWith("o1") ||
+    modelName.startsWith("o3") ||
+    modelName.startsWith("o4")
+  )
+    return "openai";
+  if (modelName.includes("claude")) return "anthropic";
+  if (modelName.includes("gemini")) return "google_gemini";
+  return "openai";
 }
 
 // ── createReactAgent wrapper ────────────────────────────
@@ -108,10 +118,10 @@ function _inferProviderFromModel(modelName: string): string {
  */
 export function createReactAgent(options: Record<string, unknown>): unknown {
   const original = _loadLangGraph().createReactAgent as Function;
-  if (typeof original !== 'function') {
+  if (typeof original !== "function") {
     throw new Error(
       `createReactAgent not found in '@langchain/langgraph/prebuilt'. ` +
-      `Ensure you have a compatible version installed.`,
+        `Ensure you have a compatible version installed.`,
     );
   }
 
@@ -129,8 +139,8 @@ export function createReactAgent(options: Record<string, unknown>): unknown {
   const metadata: AgentspanMetadata = {
     model: modelStr,
     tools,
-    instructions: typeof prompt === 'string' ? prompt : undefined,
-    framework: 'langgraph',
+    instructions: typeof prompt === "string" ? prompt : undefined,
+    framework: "langgraph",
   };
 
   (graph as Record<string, unknown>)._agentspan = metadata;
