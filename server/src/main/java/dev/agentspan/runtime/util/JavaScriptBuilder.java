@@ -226,14 +226,16 @@ public class JavaScriptBuilder {
             String agentToolConfigJson,
             String ragConfigJson,
             String cliConfigJson,
-            String humanConfigJson) {
+            String humanConfigJson,
+            String wmqConfigJson) {
         return iife("  var httpCfg = " + httpConfigJson + ";" + "  var mcpCfg = "
                 + mcpConfigJson + ";" + "  var mediaCfg = "
                 + mediaConfigJson + ";" + "  var agentToolCfg = "
                 + agentToolConfigJson + ";" + "  var ragCfg = "
                 + ragConfigJson + ";" + "  var cliCfg = "
                 + cliConfigJson + ";" + "  var humanCfg = "
-                + humanConfigJson + ";" + "  var agentState = $.agentState || {};"
+                + humanConfigJson + ";" + "  var wmqCfg = "
+                + wmqConfigJson + ";" + "  var agentState = $.agentState || {};"
                 + "  var tcs = $.toolCalls || [];"
                 + "  var result = [];"
                 + "  for (var i = 0; i < tcs.length; i++) {"
@@ -320,6 +322,12 @@ public class JavaScriptBuilder {
                 + "      for (var k in inp) { hInputs[k] = inp[k]; }"
                 + "      if (humanCfg[n].description) hInputs._description = humanCfg[n].description;"
                 + "      t.inputParameters = hInputs;"
+                + "      t.optional = false;"
+                + "    } else if (wmqCfg[n]) {"
+                + "      t.type = 'PULL_WORKFLOW_MESSAGES';"
+                + "      t.name = n;"
+                + "      t.inputParameters = {batchSize: wmqCfg[n].batchSize || 1};"
+                + "      t.retryCount = 0;"
                 + "      t.optional = false;"
                 + "    }"
                 + "    if (t.type === 'SIMPLE') {"
@@ -780,14 +788,16 @@ public class JavaScriptBuilder {
             String mediaConfigJson,
             String agentToolConfigJson,
             String ragConfigJson,
-            String humanConfigJson) {
+            String humanConfigJson,
+            String wmqConfigJson) {
         return iife("  var httpCfg = " + httpConfigJson + ";" + "  var mcpCfg = $.mcpConfig || {};"
                 + "  var apiCfg = $.apiConfig || {};"
                 + "  var mediaCfg = "
                 + mediaConfigJson + ";" + "  var agentToolCfg = "
                 + agentToolConfigJson + ";" + "  var ragCfg = "
                 + ragConfigJson + ";" + "  var humanCfg = "
-                + humanConfigJson + ";" + "  var agentState = $.agentState || {};"
+                + humanConfigJson + ";" + "  var wmqCfg = "
+                + wmqConfigJson + ";" + "  var agentState = $.agentState || {};"
                 + "  var tcs = $.toolCalls || [];"
                 + "  var result = [];"
                 + "  for (var i = 0; i < tcs.length; i++) {"
@@ -907,6 +917,12 @@ public class JavaScriptBuilder {
                 + "      for (var k in inp) { hInputs[k] = inp[k]; }"
                 + "      if (humanCfg[n].description) hInputs._description = humanCfg[n].description;"
                 + "      t.inputParameters = hInputs;"
+                + "      t.optional = false;"
+                + "    } else if (wmqCfg[n]) {"
+                + "      t.type = 'PULL_WORKFLOW_MESSAGES';"
+                + "      t.name = n;"
+                + "      t.inputParameters = {batchSize: wmqCfg[n].batchSize || 1};"
+                + "      t.retryCount = 0;"
                 + "      t.optional = false;"
                 + "    }"
                 + "    if (t.type === 'SIMPLE') {"

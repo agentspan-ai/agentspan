@@ -513,9 +513,9 @@ class TestRuntimeLifecycle:
         )
 
     def test_send_message_delegates(self, runtime):
-        runtime.respond = MagicMock()
+        runtime._workflow_client.send_message = MagicMock()
         runtime.send_message("wf-1", "hello")
-        runtime.respond.assert_called_once_with("wf-1", {"message": "hello"})
+        runtime._workflow_client.send_message.assert_called_once_with("wf-1", {"message": "hello"})
 
     def test_context_manager(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):

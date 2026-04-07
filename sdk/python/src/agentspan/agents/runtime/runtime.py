@@ -3601,10 +3601,12 @@ class AgentRuntime:
                             and task_status == "COMPLETED"
                         ):
                             fn_name = task_type.lower()
+                            raw_args = getattr(task, "input_data", None) or {}
+                            clean_args = {k: v for k, v in raw_args.items() if k != "__agentspan_ctx__"}
                             yield AgentEvent(
                                 type=EventType.TOOL_CALL,
                                 tool_name=fn_name,
-                                args=getattr(task, "input_data", None),
+                                args=clean_args,
                                 execution_id=execution_id,
                             )
                             yield AgentEvent(
@@ -3652,7 +3654,7 @@ class AgentRuntime:
                                 execution_id=execution_id,
                             )
 
-            # Detect HUMAN tasks waiting for input (execution stays RUNNING)
+            # Detect HUMAN and PULL_WORKFLOW_MESSAGES tasks waiting for input
             has_waiting_human = False
             if hasattr(wf, "tasks") and wf.tasks:
                 for task in wf.tasks:
@@ -3668,6 +3670,16 @@ class AgentRuntime:
                             yield AgentEvent(
                                 type=EventType.WAITING,
                                 content=f"Waiting for human input ({task_ref})",
+                                execution_id=execution_id,
+                            )
+                    elif task_type == "PULL_WORKFLOW_MESSAGES" and task_status == "IN_PROGRESS":
+                        has_waiting_human = True
+                        if task_id and task_id not in seen_human_task_ids:
+                            seen_human_task_ids.add(task_id)
+                            task_ref = getattr(task, "reference_task_name", "")
+                            yield AgentEvent(
+                                type=EventType.WAITING,
+                                content=f"Waiting for message ({task_ref})",
                                 execution_id=execution_id,
                             )
 
@@ -4099,10 +4111,12 @@ class AgentRuntime:
                             and task_status == "COMPLETED"
                         ):
                             fn_name = task_type.lower()
+                            raw_args = getattr(task, "input_data", None) or {}
+                            clean_args = {k: v for k, v in raw_args.items() if k != "__agentspan_ctx__"}
                             yield AgentEvent(
                                 type=EventType.TOOL_CALL,
                                 tool_name=fn_name,
-                                args=getattr(task, "input_data", None),
+                                args=clean_args,
                                 execution_id=execution_id,
                             )
                             yield AgentEvent(
@@ -4144,7 +4158,7 @@ class AgentRuntime:
                                 execution_id=execution_id,
                             )
 
-            # Detect HUMAN tasks
+            # Detect HUMAN and PULL_WORKFLOW_MESSAGES tasks waiting for input
             has_waiting_human = False
             if hasattr(wf, "tasks") and wf.tasks:
                 for task in wf.tasks:
@@ -4159,6 +4173,16 @@ class AgentRuntime:
                             yield AgentEvent(
                                 type=EventType.WAITING,
                                 content=f"Waiting for human input ({task_ref})",
+                                execution_id=execution_id,
+                            )
+                    elif task_type == "PULL_WORKFLOW_MESSAGES" and task_status == "IN_PROGRESS":
+                        has_waiting_human = True
+                        if task_id and task_id not in seen_human_task_ids:
+                            seen_human_task_ids.add(task_id)
+                            task_ref = getattr(task, "reference_task_name", "")
+                            yield AgentEvent(
+                                type=EventType.WAITING,
+                                content=f"Waiting for message ({task_ref})",
                                 execution_id=execution_id,
                             )
 
@@ -4458,9 +4482,16 @@ class AgentRuntime:
         """Reject a pending human-in-the-loop task."""
         self.respond(execution_id, {"approved": False, "reason": reason})
 
-    def send_message(self, execution_id: str, message: str) -> None:
-        """Send a message to a waiting agent."""
-        self.respond(execution_id, {"message": message})
+    def send_message(self, execution_id: str, message: Any) -> None:
+        """Push a message into the agent's Workflow Message Queue (WMQ).
+
+        The agent must have called a ``wait_for_message`` tool (backed by a
+        ``PULL_WORKFLOW_MESSAGES`` task) for the message to be consumed.
+        *message* can be any JSON-serialisable value; plain strings are wrapped
+        automatically so the LLM receives ``{"message": value}``.
+        """
+        payload = message if isinstance(message, dict) else {"message": message}
+        self._workflow_client.send_message(execution_id, payload)
 
     def pause(self, execution_id: str) -> None:
         """Pause an agent execution."""
@@ -4513,9 +4544,11 @@ class AgentRuntime:
         """Async version of :meth:`reject`."""
         await self.respond_async(execution_id, {"approved": False, "reason": reason})
 
-    async def send_message_async(self, execution_id: str, message: str) -> None:
+    async def send_message_async(self, execution_id: str, message: Any) -> None:
         """Async version of :meth:`send_message`."""
-        await self.respond_async(execution_id, {"message": message})
+        payload = message if isinstance(message, dict) else {"message": message}
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self._workflow_client.send_message, execution_id, payload)
 
     async def pause_async(self, execution_id: str) -> None:
         """Async version of :meth:`pause`."""
@@ -4744,6 +4777,7 @@ class AgentRuntime:
             "JOIN",
             "SUB_WORKFLOW",
             "HUMAN",
+            "PULL_WORKFLOW_MESSAGES",
             "TERMINATE",
             "HTTP",
             "CALL_MCP_TOOL",

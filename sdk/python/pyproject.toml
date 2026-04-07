@@ -10,7 +10,7 @@ readme = "README.md"
 license = {text = "MIT License"}
 requires-python = ">=3.10"
 dependencies = [
-    "conductor-python>=1.3.6",
+    "conductor-python>=1.3.10",
     "httpx>=0.24",
     "cloudpickle>=2.0",
 ]

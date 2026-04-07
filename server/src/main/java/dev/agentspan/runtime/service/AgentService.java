@@ -666,7 +666,8 @@ public class AgentService {
         // Register dispatch task for this agent's tools
         if (config.getTools() != null) {
             for (ToolConfig tool : config.getTools()) {
-                if ("worker".equals(tool.getToolType()) && !registered.contains(tool.getName())) {
+                String tt = tool.getToolType();
+                if ("worker".equals(tt) && !registered.contains(tool.getName())) {
                     registerTaskDef(tool.getName());
                     registered.add(tool.getName());
                 }
