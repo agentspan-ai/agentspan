@@ -18,9 +18,9 @@ export default tseslint.config(
       ],
       "@typescript-eslint/no-unsafe-function-type": "warn",
       "@typescript-eslint/no-this-alias": "warn",
-      "@typescript-eslint/no-require-imports": "warn",
-      "no-prototype-builtins": "warn",
-      "no-useless-assignment": "warn",
+      "@typescript-eslint/no-require-imports": "error",
+      "no-prototype-builtins": "error",
+      "no-useless-assignment": "error",
     },
   },
 );
