@@ -28,7 +28,6 @@ from settings import settings
 @tool
 def respond(answer: str) -> str:
     """Send your answer back to the caller."""
-    print(f"\n    >> {answer}\n")
     return "ok"
 
 
@@ -81,11 +80,9 @@ with AgentRuntime() as runtime:
         if event.type == EventType.THINKING:
             print(f"  [thinking] {event.content}")
 
-        elif event.type == EventType.TOOL_CALL:
-            print(f"  [tool_call] {event.tool_name}({event.args})")
-
-        elif event.type == EventType.TOOL_RESULT:
-            print(f"  [tool_result] {event.tool_name} -> {event.result}")
+        elif event.type == EventType.TOOL_CALL and event.tool_name == "respond":
+            args = event.args or {}
+            print(f"  [answer] {args.get('answer', '')}")
 
         elif event.type == EventType.WAITING:
             print(f"  [waiting] {event.content}")
