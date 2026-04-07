@@ -1,17 +1,15 @@
 /**
  * 05 — Advanced Patterns
  *
- * Record/replay for regression tests, LLM-based evaluation with
- * CorrectnessEval, strategy validation, and complex multi-agent
- * compositions.
+ * Record/replay for regression tests, strategy validation,
+ * nested agent strategies, and complex multi-agent compositions.
  *
  * Covers:
  *   - record() / replay() for fixture-based testing
- *   - CorrectnessEval with rubrics (integration)
- *   - validateStrategy() for structural checks
+ *   - validateStrategy() for structural trace checks
  *   - Nested agent strategies
  *   - Complex tool interaction patterns
- *   - Session ID for conversation continuity
+ *   - Event sequence assertions
  *
  * Run:
  *   npx vitest run examples/mock_tests/05-advanced-patterns.test.ts
@@ -24,8 +22,9 @@ import * as os from "os";
 import * as fs from "fs";
 import { Agent, tool } from "@agentspan-ai/sdk";
 import {
+  MockEvent,
   mockRun,
-  expectResult,
+  expect as agentExpect,
   record,
   replay,
   validateStrategy,
@@ -34,6 +33,8 @@ import {
   assertToolUsed,
   assertNoErrors,
   assertStatus,
+  assertEventSequence,
+  assertToolCallOrder,
 } from "@agentspan-ai/sdk/testing";
 
 // ── Tools ────────────────────────────────────────────────────────────
@@ -77,15 +78,6 @@ const trackShipment = tool(
   },
 );
 
-const escalateToManager = tool(
-  async (args: { issue: string }) => `Escalated: ${args.issue}`,
-  {
-    name: "escalate_to_manager",
-    description: "Escalate an issue to a human manager.",
-    inputSchema: z.object({ issue: z.string() }),
-  },
-);
-
 // ═════════════════════════════════════════════════════════════════════
 // 1. RECORD / REPLAY — fixture-based regression tests
 // ═════════════════════════════════════════════════════════════════════
@@ -120,28 +112,28 @@ const ecommerceSupport = new Agent({
 });
 
 describe("Record / Replay", () => {
-  it("records a run to a fixture file and replays it", async () => {
+  it("records a result to a fixture file and replays it", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agentspan-test-"));
     const fixturePath = path.join(tmpDir, "shipping-run.json");
 
     try {
-      // Record an execution — use the shipping agent directly
-      const result = await record(
-        shippingAgent,
-        "Track my package TRK-001",
-        {
-          fixturePath,
-          mockTools: {
-            track_shipment: async () => ({
-              trackingId: "TRK-001",
-              status: "delivered",
-            }),
-          },
-        },
-      );
+      // Create a result with scripted events
+      const result = mockRun(shippingAgent, "Track my package TRK-001", {
+        events: [
+          MockEvent.toolCall("track_shipment", { trackingId: "TRK-001" }),
+          MockEvent.toolResult("track_shipment", {
+            trackingId: "TRK-001",
+            status: "delivered",
+          }),
+          MockEvent.done({ result: "Package TRK-001 has been delivered." }),
+        ],
+      });
 
-      expectResult(result).toBeCompleted();
+      agentExpect(result).completed();
       assertToolUsed(result, "track_shipment");
+
+      // Record to fixture file
+      record(result, fixturePath);
 
       // Verify fixture file was created
       expect(fs.existsSync(fixturePath)).toBe(true);
@@ -150,39 +142,35 @@ describe("Record / Replay", () => {
       const replayed = replay(fixturePath);
 
       // Same assertions pass on the replayed result
-      expectResult(replayed).toBeCompleted();
+      agentExpect(replayed).completed();
       assertToolUsed(replayed, "track_shipment");
     } finally {
-      // Cleanup
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
 
-  it("replayed result preserves events", async () => {
+  it("replayed result preserves events and tool calls", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agentspan-test-"));
     const fixturePath = path.join(tmpDir, "inventory-run.json");
 
     try {
-      const original = await record(
-        inventoryAgent,
-        "Is item X in stock?",
-        {
-          fixturePath,
-          mockTools: {
-            check_inventory: async () => ({
-              productId: "X",
-              inStock: true,
-              quantity: 50,
-            }),
-          },
-        },
-      );
+      const original = mockRun(inventoryAgent, "Is item X in stock?", {
+        events: [
+          MockEvent.toolCall("check_inventory", { productId: "X" }),
+          MockEvent.toolResult("check_inventory", {
+            productId: "X",
+            inStock: true,
+            quantity: 50,
+          }),
+          MockEvent.done({ result: "Yes, 50 units in stock." }),
+        ],
+      });
 
+      record(original, fixturePath);
       const replayed = replay(fixturePath);
 
       // Event counts should match
       expect(replayed.events.length).toBe(original.events.length);
-
       // Tool calls should match
       expect(replayed.toolCalls.length).toBe(original.toolCalls.length);
     } finally {
@@ -196,12 +184,18 @@ describe("Record / Replay", () => {
 // ═════════════════════════════════════════════════════════════════════
 
 describe("Strategy Validation", () => {
-  it("validates handoff strategy", () => {
-    // validateStrategy checks the agent's declared strategy
-    validateStrategy(ecommerceSupport, "handoff");
+  it("validates handoff strategy against trace", () => {
+    const result = mockRun(ecommerceSupport, "Track my package", {
+      events: [
+        MockEvent.handoff("shipping-specialist"),
+        MockEvent.done({ result: "Tracked." }),
+      ],
+    });
+
+    expect(() => validateStrategy(ecommerceSupport, result)).not.toThrow();
   });
 
-  it("validates parallel strategy", () => {
+  it("validates parallel strategy against trace", () => {
     const parallelTeam = new Agent({
       name: "parallel-team",
       model: "openai/gpt-4o",
@@ -209,10 +203,18 @@ describe("Strategy Validation", () => {
       strategy: "parallel",
     });
 
-    validateStrategy(parallelTeam, "parallel");
+    const result = mockRun(parallelTeam, "Check both", {
+      events: [
+        MockEvent.handoff("inventory-specialist"),
+        MockEvent.handoff("shipping-specialist"),
+        MockEvent.done({ result: "Both checked." }),
+      ],
+    });
+
+    expect(() => validateStrategy(parallelTeam, result)).not.toThrow();
   });
 
-  it("validates sequential strategy", () => {
+  it("validates sequential strategy against trace", () => {
     const sequentialPipeline = new Agent({
       name: "sequential-pipeline",
       model: "openai/gpt-4o",
@@ -220,13 +222,34 @@ describe("Strategy Validation", () => {
       strategy: "sequential",
     });
 
-    validateStrategy(sequentialPipeline, "sequential");
+    const result = mockRun(sequentialPipeline, "Check then process", {
+      events: [
+        MockEvent.handoff("inventory-specialist"),
+        MockEvent.handoff("returns-specialist"),
+        MockEvent.done({ result: "Done." }),
+      ],
+    });
+
+    expect(() => validateStrategy(sequentialPipeline, result)).not.toThrow();
   });
 
-  it("throws on strategy mismatch", () => {
-    expect(() => {
-      validateStrategy(ecommerceSupport, "parallel");
-    }).toThrow();
+  it("throws on strategy violation", () => {
+    // Sequential pipeline but only one agent ran
+    const sequentialPipeline = new Agent({
+      name: "sequential-pipeline",
+      model: "openai/gpt-4o",
+      agents: [inventoryAgent, returnsAgent],
+      strategy: "sequential",
+    });
+
+    const result = mockRun(sequentialPipeline, "Partial run", {
+      events: [
+        MockEvent.handoff("inventory-specialist"),
+        MockEvent.done({ result: "Only one ran." }),
+      ],
+    });
+
+    expect(() => validateStrategy(sequentialPipeline, result)).toThrow();
   });
 });
 
@@ -267,11 +290,16 @@ const researchPipeline = new Agent({
 });
 
 describe("Nested Strategies", () => {
-  it("parallel research feeds into sequential report writing", async () => {
-    const result = await mockRun(
-      researchPipeline,
-      "Analyze the cloud computing market",
-    );
+  it("parallel research feeds into sequential report writing", () => {
+    const result = mockRun(researchPipeline, "Analyze the cloud computing market", {
+      events: [
+        MockEvent.handoff("research-phase"),
+        MockEvent.handoff("market-researcher"),
+        MockEvent.handoff("competitor-analyst"),
+        MockEvent.handoff("report-writer"),
+        MockEvent.done({ result: "Market analysis report complete." }),
+      ],
+    });
 
     assertAgentRan(result, "market-researcher");
     assertAgentRan(result, "competitor-analyst");
@@ -279,12 +307,16 @@ describe("Nested Strategies", () => {
     assertNoErrors(result);
   });
 
-  it("validates outer strategy", () => {
-    validateStrategy(researchPipeline, "sequential");
-  });
+  it("validates outer sequential strategy", () => {
+    const result = mockRun(researchPipeline, "Analyze something", {
+      events: [
+        MockEvent.handoff("research-phase"),
+        MockEvent.handoff("report-writer"),
+        MockEvent.done({ result: "Done." }),
+      ],
+    });
 
-  it("validates inner strategy", () => {
-    validateStrategy(parallelResearch, "parallel");
+    expect(() => validateStrategy(researchPipeline, result)).not.toThrow();
   });
 });
 
@@ -293,10 +325,7 @@ describe("Nested Strategies", () => {
 // ═════════════════════════════════════════════════════════════════════
 
 describe("Complex Tool Patterns", () => {
-  it("tracks tool call ordering via callLog", async () => {
-    const callLog: Array<{ tool: string; args: unknown }> = [];
-
-    // Use a single agent with both tools to test call ordering
+  it("tracks tool call ordering with assertToolCallOrder", () => {
     const multiToolAgent = new Agent({
       name: "multi-tool-agent",
       model: "openai/gpt-4o",
@@ -304,35 +333,26 @@ describe("Complex Tool Patterns", () => {
       tools: [checkInventory, trackShipment],
     });
 
-    const result = await mockRun(
+    const result = mockRun(
       multiToolAgent,
       "Check stock for item P-1 and track shipment TRK-P1",
       {
-        mockTools: {
-          check_inventory: async (args: { productId: string }) => {
-            callLog.push({ tool: "check_inventory", args });
-            return { productId: args.productId, inStock: true, quantity: 10 };
-          },
-          track_shipment: async (args: { trackingId: string }) => {
-            callLog.push({ tool: "track_shipment", args });
-            return { trackingId: args.trackingId, status: "shipped" };
-          },
-        },
+        events: [
+          MockEvent.toolCall("check_inventory", { productId: "P-1" }),
+          MockEvent.toolResult("check_inventory", { productId: "P-1", inStock: true, quantity: 10 }),
+          MockEvent.toolCall("track_shipment", { trackingId: "TRK-P1" }),
+          MockEvent.toolResult("track_shipment", { trackingId: "TRK-P1", status: "shipped" }),
+          MockEvent.done({ result: "Item P-1 in stock; TRK-P1 shipped." }),
+        ],
       },
     );
 
-    // Both tools should have been called
-    const toolNames = callLog.map((c) => c.tool);
-    expect(toolNames).toContain("check_inventory");
-    expect(toolNames).toContain("track_shipment");
-
-    // check_inventory should come before track_shipment
-    const inventoryIdx = toolNames.indexOf("check_inventory");
-    const shipmentIdx = toolNames.indexOf("track_shipment");
-    expect(inventoryIdx).toBeLessThan(shipmentIdx);
+    assertToolUsed(result, "check_inventory");
+    assertToolUsed(result, "track_shipment");
+    assertToolCallOrder(result, ["check_inventory", "track_shipment"]);
   });
 
-  it("handles concurrent tool calls in parallel agents", async () => {
+  it("handles concurrent tool calls in parallel agents", () => {
     const parallelTools = new Agent({
       name: "parallel-tools",
       model: "openai/gpt-4o",
@@ -340,14 +360,19 @@ describe("Complex Tool Patterns", () => {
       strategy: "parallel",
     });
 
-    const result = await mockRun(
+    const result = mockRun(
       parallelTools,
       "Check inventory and track shipment simultaneously",
       {
-        mockTools: {
-          check_inventory: async () => ({ inStock: true }),
-          track_shipment: async () => ({ status: "delivered" }),
-        },
+        events: [
+          MockEvent.handoff("inventory-specialist"),
+          MockEvent.toolCall("check_inventory", { productId: "X" }),
+          MockEvent.toolResult("check_inventory", { inStock: true }),
+          MockEvent.handoff("shipping-specialist"),
+          MockEvent.toolCall("track_shipment", { trackingId: "TRK-1" }),
+          MockEvent.toolResult("track_shipment", { status: "delivered" }),
+          MockEvent.done({ result: "Both checked." }),
+        ],
       },
     );
 
@@ -358,57 +383,20 @@ describe("Complex Tool Patterns", () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════
-// 5. SESSION ID FOR CONVERSATION CONTINUITY
+// 5. EVENT SEQUENCE ASSERTIONS
 // ═════════════════════════════════════════════════════════════════════
 
-describe("Session Management", () => {
-  it("uses custom session ID for continuity", async () => {
-    const result = await mockRun(
-      inventoryAgent,
-      "Is item X in stock?",
-      {
-        sessionId: "session-abc-123",
-        mockTools: {
-          check_inventory: async () => ({
-            productId: "X",
-            inStock: true,
-          }),
-        },
-      },
-    );
+describe("Event Sequence Assertions", () => {
+  it("verifies event type subsequence", () => {
+    const result = mockRun(inventoryAgent, "Check stock", {
+      events: [
+        MockEvent.thinking("Let me check..."),
+        MockEvent.toolCall("check_inventory", { productId: "Y" }),
+        MockEvent.toolResult("check_inventory", { inStock: true }),
+        MockEvent.done({ result: "In stock." }),
+      ],
+    });
 
-    expectResult(result).toBeCompleted();
-    assertToolUsed(result, "check_inventory");
-  });
-
-  it("different sessions are independent", async () => {
-    const result1 = await mockRun(
-      inventoryAgent,
-      "Check item A",
-      {
-        sessionId: "session-1",
-        mockTools: {
-          check_inventory: async () => ({ productId: "A", inStock: true }),
-        },
-      },
-    );
-
-    const result2 = await mockRun(
-      inventoryAgent,
-      "Check item B",
-      {
-        sessionId: "session-2",
-        mockTools: {
-          check_inventory: async () => ({ productId: "B", inStock: false }),
-        },
-      },
-    );
-
-    expectResult(result1).toBeCompleted();
-    expectResult(result2).toBeCompleted();
-
-    // Both should have used the tool independently
-    assertToolUsed(result1, "check_inventory");
-    assertToolUsed(result2, "check_inventory");
+    assertEventSequence(result, ["thinking", "tool_call", "tool_result", "done"]);
   });
 });

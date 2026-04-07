@@ -1,90 +1,115 @@
-import type { AgentResult, AgentEvent } from '../types.js';
-import { Agent } from '../agent.js';
+// ── Record and replay agent execution traces ─────────────────────────
+//
+// Usage:
+//   record(result, "tests/recordings/weather.json");
+//   const replayed = replay("tests/recordings/weather.json");
+
+import type { AgentResult, AgentEvent, TokenUsage } from '../types.js';
 import { makeAgentResult } from '../result.js';
-import { mockRun, type MockRunOptions } from './mock.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-/**
- * Fixture format stored on disk.
- */
-export interface RecordingFixture {
-  agent: { name: string; model?: string };
-  prompt: string;
-  events: AgentEvent[];
-  result: {
-    output: Record<string, unknown>;
-    executionId: string;
-    status: string;
-    finishReason: string;
-    error?: string;
-    toolCalls: unknown[];
-    messages: unknown[];
-  };
-  timestamp: number;
+// ── Serialization helpers ────────────────────────────────────────────
+
+function eventToDict(event: AgentEvent): Record<string, unknown> {
+  const d: Record<string, unknown> = { type: event.type };
+  if (event.content != null) d.content = event.content;
+  if (event.toolName != null) d.toolName = event.toolName;
+  if (event.args != null) d.args = event.args;
+  if (event.result !== undefined) d.result = event.result;
+  if (event.target != null) d.target = event.target;
+  if (event.output !== undefined) d.output = event.output;
+  if (event.executionId) d.executionId = event.executionId;
+  if (event.guardrailName != null) d.guardrailName = event.guardrailName;
+  if (event.timestamp != null) d.timestamp = event.timestamp;
+  return d;
 }
 
-/**
- * Options for recording an agent execution.
- */
-export interface RecordOptions extends MockRunOptions {
-  /** Path to write the JSON fixture file. */
-  fixturePath: string;
+function dictToEvent(d: Record<string, unknown>): AgentEvent {
+  return {
+    type: (d.type as string) ?? '',
+    content: d.content as string | undefined,
+    toolName: d.toolName as string | undefined,
+    args: d.args as Record<string, unknown> | undefined,
+    result: d.result,
+    target: d.target as string | undefined,
+    output: d.output,
+    executionId: d.executionId as string | undefined,
+    guardrailName: d.guardrailName as string | undefined,
+    timestamp: d.timestamp as number | undefined,
+  };
 }
 
-/**
- * Run an agent via mockRun, capture all events to a JSON fixture file, and return the result.
- */
-export async function record(
-  agent: Agent,
-  prompt: string,
-  options: RecordOptions,
-): Promise<AgentResult> {
-  const { fixturePath, ...mockOptions } = options;
-  const result = await mockRun(agent, prompt, mockOptions);
-
-  const fixture: RecordingFixture = {
-    agent: { name: agent.name, model: agent.model },
-    prompt,
-    events: result.events,
-    result: {
-      output: result.output,
-      executionId: result.executionId,
-      status: result.status,
-      finishReason: result.finishReason,
-      error: result.error,
-      toolCalls: result.toolCalls,
-      messages: result.messages,
-    },
-    timestamp: Date.now(),
+function resultToDict(result: AgentResult): Record<string, unknown> {
+  const d: Record<string, unknown> = {
+    output: result.output,
+    executionId: result.executionId,
+    messages: result.messages,
+    toolCalls: result.toolCalls,
+    status: result.status,
+    finishReason: result.finishReason,
+    metadata: result.metadata,
+    events: result.events.map(eventToDict),
   };
+  if (result.correlationId) d.correlationId = result.correlationId;
+  if (result.error) d.error = result.error;
+  if (result.tokenUsage) {
+    d.tokenUsage = {
+      promptTokens: result.tokenUsage.promptTokens,
+      completionTokens: result.tokenUsage.completionTokens,
+      totalTokens: result.tokenUsage.totalTokens,
+    };
+  }
+  if (result.subResults) d.subResults = result.subResults;
+  return d;
+}
 
-  // Ensure directory exists
-  const dir = path.dirname(fixturePath);
+function dictToResult(d: Record<string, unknown>): AgentResult {
+  let tokenUsage: TokenUsage | undefined;
+  if (d.tokenUsage) {
+    const tu = d.tokenUsage as Record<string, number>;
+    tokenUsage = {
+      promptTokens: tu.promptTokens ?? 0,
+      completionTokens: tu.completionTokens ?? 0,
+      totalTokens: tu.totalTokens ?? 0,
+    };
+  }
+
+  return makeAgentResult({
+    output: d.output,
+    executionId: d.executionId as string,
+    correlationId: d.correlationId as string | undefined,
+    messages: (d.messages as unknown[]) ?? [],
+    toolCalls: (d.toolCalls as unknown[]) ?? [],
+    status: d.status as string,
+    finishReason: d.finishReason as string,
+    error: d.error as string | undefined,
+    tokenUsage,
+    metadata: d.metadata as Record<string, unknown> | undefined,
+    events: ((d.events as Record<string, unknown>[]) ?? []).map(dictToEvent),
+    subResults: d.subResults as Record<string, unknown> | undefined,
+  });
+}
+
+// ── Public API ───────────────────────────────────────────────────────
+
+/**
+ * Save an AgentResult to a JSON file.
+ */
+export function record(result: AgentResult, filePath: string): void {
+  const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
-
-  fs.writeFileSync(fixturePath, JSON.stringify(fixture, null, 2), 'utf-8');
-
-  return result;
+  const data = resultToDict(result);
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
 }
 
 /**
- * Load a JSON fixture and reconstruct an AgentResult.
+ * Load a recorded AgentResult from a JSON file.
  */
-export function replay(fixturePath: string): AgentResult {
-  const content = fs.readFileSync(fixturePath, 'utf-8');
-  const fixture = JSON.parse(content) as RecordingFixture;
-
-  return makeAgentResult({
-    output: fixture.result.output,
-    executionId: fixture.result.executionId,
-    status: fixture.result.status,
-    finishReason: fixture.result.finishReason,
-    error: fixture.result.error,
-    events: fixture.events,
-    toolCalls: fixture.result.toolCalls,
-    messages: fixture.result.messages,
-  });
+export function replay(filePath: string): AgentResult {
+  const content = fs.readFileSync(filePath, 'utf-8');
+  const data = JSON.parse(content) as Record<string, unknown>;
+  return dictToResult(data);
 }

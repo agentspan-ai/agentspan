@@ -1,240 +1,304 @@
+// ── Eval runner — correctness testing for agent behavior ─────────────
+//
+// Runs real prompts through agents and evaluates whether the agent's
+// behavior matches expectations. Uses structural checks, not LLM judges.
+
 import type { AgentResult } from '../types.js';
+import type { Agent } from '../agent.js';
+import {
+  assertStatus,
+  assertNoErrors,
+  assertToolUsed,
+  assertToolNotUsed,
+  assertToolCalledWith,
+  assertHandoffTo,
+  assertOutputContains,
+  assertOutputMatches,
+} from './assertions.js';
+import { validateStrategy } from './strategy.js';
 
-/**
- * Result of an LLM-based correctness evaluation.
- */
-export interface EvalResult {
-  /** Whether the weighted average score meets the pass threshold. */
-  passed: boolean;
-  /** Per-rubric numeric scores (1-5 scale). */
-  scores: Record<string, number>;
-  /** Weighted average across all rubric scores. */
-  weightedAverage: number;
-  /** Per-rubric reasoning from the judge. */
-  reasoning: Record<string, string>;
-}
+// ── Types ────────────────────────────────────────────────────────────
 
-/**
- * A single rubric criterion for evaluation.
- */
-export interface Rubric {
+export interface EvalCase {
   name: string;
-  description: string;
-  weight?: number;
+  agent: Agent;
+  prompt: string;
+  expectTools?: string[];
+  expectToolsNotUsed?: string[];
+  expectToolArgs?: Record<string, Record<string, unknown>>;
+  expectHandoffTo?: string;
+  expectNoHandoffTo?: string[];
+  expectOutputContains?: string[];
+  expectOutputMatches?: string;
+  expectStatus?: string;
+  expectNoErrors?: boolean;
+  validateOrchestration?: boolean;
+  customAssertions?: Array<(result: AgentResult) => void>;
+  tags?: string[];
 }
 
-/**
- * Options for CorrectnessEval.evaluate().
- */
-export interface EvaluateOptions {
-  /** Rubric criteria to evaluate against. */
-  rubrics: Rubric[];
-  /** Minimum weighted average score to pass (default 3.5). */
-  passThreshold?: number;
+export interface EvalCheckResult {
+  check: string;
+  passed: boolean;
+  message: string;
 }
 
-/**
- * Options for constructing a CorrectnessEval.
- */
-export interface CorrectnessEvalOptions {
-  /** LLM model identifier for the judge. */
-  model: string;
-  /** Max chars of output to send to the judge (default 3000). */
-  maxOutputChars?: number;
-  /** Max tokens for judge response (default 300). */
-  maxTokens?: number;
-  /** Base URL for the LLM API endpoint. */
-  endpoint?: string;
-  /** API key for the LLM endpoint. */
-  apiKey?: string;
+export interface EvalCaseResult {
+  name: string;
+  passed: boolean;
+  checks: EvalCheckResult[];
+  result?: AgentResult;
+  error?: string;
+  tags: string[];
 }
 
-/**
- * LLM-based correctness evaluator.
- *
- * Constructs a prompt with rubric criteria and the agent's output,
- * sends it to an LLM judge, and parses the scores.
- */
-export class CorrectnessEval {
-  readonly model: string;
-  readonly maxOutputChars: number;
-  readonly maxTokens: number;
-  readonly endpoint: string;
-  readonly apiKey: string;
+export interface EvalSuiteResult {
+  cases: EvalCaseResult[];
+  allPassed: boolean;
+  passCount: number;
+  failCount: number;
+  total: number;
+  failedCases(): EvalCaseResult[];
+  printSummary(): void;
+}
 
-  constructor(options: CorrectnessEvalOptions) {
-    this.model = options.model;
-    this.maxOutputChars = options.maxOutputChars ?? 3000;
-    this.maxTokens = options.maxTokens ?? 300;
-    this.endpoint =
-      options.endpoint ?? 'https://api.openai.com/v1/chat/completions';
-    this.apiKey = options.apiKey ?? '';
-  }
+export interface Runtime {
+  run(agent: Agent, prompt: string): Promise<AgentResult>;
+}
 
-  /**
-   * Build the judge prompt from rubrics and agent output.
-   */
-  buildPrompt(result: AgentResult, rubrics: Rubric[]): string {
-    const outputStr = JSON.stringify(result.output).slice(
-      0,
-      this.maxOutputChars,
-    );
-    const rubricLines = rubrics
-      .map(
-        (r, i) =>
-          `${i + 1}. ${r.name} (weight: ${r.weight ?? 1}): ${r.description}`,
-      )
-      .join('\n');
+// ── Helpers ──────────────────────────────────────────────────────────
 
-    return `You are an AI judge evaluating an agent's output quality.
-
-## Agent Output
-${outputStr}
-
-## Agent Status
-Status: ${result.status}
-Finish Reason: ${result.finishReason}
-Tool Calls: ${result.toolCalls.length}
-Events: ${result.events.length}
-
-## Rubrics
-Score each rubric on a 1-5 scale (1=poor, 5=excellent):
-${rubricLines}
-
-## Response Format
-Respond ONLY with valid JSON in this exact format:
-{
-  "scores": { "rubric_name": <number>, ... },
-  "reasoning": { "rubric_name": "<explanation>", ... }
-}`;
-  }
-
-  /**
-   * Evaluate an agent result against rubric criteria.
-   *
-   * Calls an LLM endpoint to judge the output quality.
-   * Falls back to a default passing result if the endpoint is unavailable.
-   */
-  async evaluate(
-    result: AgentResult,
-    options: EvaluateOptions,
-  ): Promise<EvalResult> {
-    const { rubrics, passThreshold = 3.5 } = options;
-    const prompt = this.buildPrompt(result, rubrics);
-
-    try {
-      const response = await fetch(this.endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
-        },
-        body: JSON.stringify({
-          model: this.model,
-          messages: [{ role: 'user', content: prompt }],
-          max_tokens: this.maxTokens,
-          temperature: 0,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Judge API returned ${response.status}`);
-      }
-
-      const data = (await response.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-      };
-      const content = data.choices?.[0]?.message?.content ?? '';
-      return this.parseResponse(content, rubrics, passThreshold);
-    } catch {
-      // If the LLM call fails, return a default result with mid-range scores
-      return this.defaultResult(rubrics, passThreshold);
-    }
-  }
-
-  /**
-   * Parse the LLM judge response into an EvalResult.
-   */
-  private parseResponse(
-    content: string,
-    rubrics: Rubric[],
-    passThreshold: number,
-  ): EvalResult {
-    try {
-      // Try to extract JSON from the response
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        return this.defaultResult(rubrics, passThreshold);
-      }
-
-      const parsed = JSON.parse(jsonMatch[0]) as {
-        scores?: Record<string, number>;
-        reasoning?: Record<string, string>;
-      };
-
-      const scores: Record<string, number> = {};
-      const reasoning: Record<string, string> = {};
-
-      for (const r of rubrics) {
-        scores[r.name] = parsed.scores?.[r.name] ?? 3;
-        reasoning[r.name] = parsed.reasoning?.[r.name] ?? '';
-      }
-
-      const weightedAverage = this.computeWeightedAverage(scores, rubrics);
-
-      return {
-        passed: weightedAverage >= passThreshold,
-        scores,
-        weightedAverage,
-        reasoning,
-      };
-    } catch {
-      return this.defaultResult(rubrics, passThreshold);
-    }
-  }
-
-  /**
-   * Compute weighted average of scores.
-   */
-  private computeWeightedAverage(
-    scores: Record<string, number>,
-    rubrics: Rubric[],
-  ): number {
-    let totalWeight = 0;
-    let weightedSum = 0;
-
-    for (const r of rubrics) {
-      const weight = r.weight ?? 1;
-      const score = scores[r.name] ?? 0;
-      totalWeight += weight;
-      weightedSum += score * weight;
-    }
-
-    return totalWeight > 0 ? weightedSum / totalWeight : 0;
-  }
-
-  /**
-   * Create a default result when the LLM judge is unavailable.
-   */
-  private defaultResult(
-    rubrics: Rubric[],
-    passThreshold: number,
-  ): EvalResult {
-    const scores: Record<string, number> = {};
-    const reasoning: Record<string, string> = {};
-
-    for (const r of rubrics) {
-      scores[r.name] = 3;
-      reasoning[r.name] = 'Default score (judge unavailable)';
-    }
-
-    const weightedAverage = this.computeWeightedAverage(scores, rubrics);
-
+function check(
+  name: string,
+  fn: () => void,
+): EvalCheckResult {
+  try {
+    fn();
+    return { check: name, passed: true, message: '' };
+  } catch (err) {
     return {
-      passed: weightedAverage >= passThreshold,
-      scores,
-      weightedAverage,
-      reasoning,
+      check: name,
+      passed: false,
+      message: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+function assertNoHandoff(result: AgentResult, agentName: string): void {
+  const handoffs = result.events.filter(
+    (ev) => ev.type === 'handoff' && ev.target === agentName,
+  );
+  if (handoffs.length > 0) {
+    throw new Error(
+      `Expected NO handoff to '${agentName}', but ${handoffs.length} occurred.`,
+    );
+  }
+}
+
+function makeSuiteResult(cases: EvalCaseResult[]): EvalSuiteResult {
+  return {
+    cases,
+    get allPassed() {
+      return cases.every((c) => c.passed);
+    },
+    get passCount() {
+      return cases.filter((c) => c.passed).length;
+    },
+    get failCount() {
+      return cases.filter((c) => !c.passed).length;
+    },
+    get total() {
+      return cases.length;
+    },
+    failedCases() {
+      return cases.filter((c) => !c.passed);
+    },
+    printSummary() {
+      const width = 60;
+      console.log(`\n${'='.repeat(width)}`);
+      console.log(' Agent Correctness Eval Results');
+      console.log(`${'='.repeat(width)}`);
+
+      for (const c of cases) {
+        const icon = c.passed ? 'PASS' : 'FAIL';
+        console.log(`\n  [${icon}] ${c.name}`);
+        if (!c.passed) {
+          for (const ch of c.checks) {
+            if (!ch.passed) {
+              console.log(`         x ${ch.check}: ${ch.message}`);
+            }
+          }
+          if (c.error) {
+            console.log(`         x Error: ${c.error}`);
+          }
+        }
+      }
+
+      const passCount = cases.filter((c) => c.passed).length;
+      const failCount = cases.filter((c) => !c.passed).length;
+      console.log(`\n${'─'.repeat(width)}`);
+      console.log(`  ${passCount}/${cases.length} passed, ${failCount} failed`);
+      console.log(`${'='.repeat(width)}\n`);
+    },
+  };
+}
+
+// ── CorrectnessEval ──────────────────────────────────────────────────
+
+export class CorrectnessEval {
+  private readonly runtime: Runtime;
+
+  constructor(runtime: Runtime) {
+    this.runtime = runtime;
+  }
+
+  async run(
+    cases: EvalCase[],
+    opts?: { tags?: string[] },
+  ): Promise<EvalSuiteResult> {
+    const results: EvalCaseResult[] = [];
+
+    for (const evalCase of cases) {
+      if (
+        opts?.tags &&
+        opts.tags.length > 0 &&
+        !(evalCase.tags ?? []).some((t) => opts.tags!.includes(t))
+      ) {
+        continue;
+      }
+      const caseResult = await this.runCase(evalCase);
+      results.push(caseResult);
+    }
+
+    return makeSuiteResult(results);
+  }
+
+  private async runCase(evalCase: EvalCase): Promise<EvalCaseResult> {
+    const checks: EvalCheckResult[] = [];
+    let agentResult: AgentResult | undefined;
+
+    try {
+      agentResult = await this.runtime.run(evalCase.agent, evalCase.prompt);
+    } catch (err) {
+      return {
+        name: evalCase.name,
+        passed: false,
+        checks: [],
+        error: `Agent execution failed: ${err}`,
+        tags: evalCase.tags ?? [],
+      };
+    }
+
+    // Status check
+    const expectStatus = evalCase.expectStatus ?? 'COMPLETED';
+    checks.push(
+      check('status', () => assertStatus(agentResult!, expectStatus)),
+    );
+
+    // No errors
+    if (evalCase.expectNoErrors !== false) {
+      checks.push(
+        check('no_errors', () => assertNoErrors(agentResult!)),
+      );
+    }
+
+    // Tool expectations
+    if (evalCase.expectTools) {
+      for (const toolName of evalCase.expectTools) {
+        checks.push(
+          check(`tool_used:${toolName}`, () =>
+            assertToolUsed(agentResult!, toolName),
+          ),
+        );
+      }
+    }
+
+    if (evalCase.expectToolsNotUsed) {
+      for (const toolName of evalCase.expectToolsNotUsed) {
+        checks.push(
+          check(`tool_not_used:${toolName}`, () =>
+            assertToolNotUsed(agentResult!, toolName),
+          ),
+        );
+      }
+    }
+
+    if (evalCase.expectToolArgs) {
+      for (const [toolName, args] of Object.entries(evalCase.expectToolArgs)) {
+        checks.push(
+          check(`tool_args:${toolName}`, () =>
+            assertToolCalledWith(agentResult!, toolName, args),
+          ),
+        );
+      }
+    }
+
+    // Handoff expectations
+    if (evalCase.expectHandoffTo) {
+      checks.push(
+        check(`handoff_to:${evalCase.expectHandoffTo}`, () =>
+          assertHandoffTo(agentResult!, evalCase.expectHandoffTo!),
+        ),
+      );
+    }
+
+    if (evalCase.expectNoHandoffTo) {
+      for (const agentName of evalCase.expectNoHandoffTo) {
+        checks.push(
+          check(`no_handoff_to:${agentName}`, () =>
+            assertNoHandoff(agentResult!, agentName),
+          ),
+        );
+      }
+    }
+
+    // Output expectations
+    if (evalCase.expectOutputContains) {
+      for (const text of evalCase.expectOutputContains) {
+        checks.push(
+          check(`output_contains:'${text}'`, () =>
+            assertOutputContains(agentResult!, text, {
+              caseSensitive: false,
+            }),
+          ),
+        );
+      }
+    }
+
+    if (evalCase.expectOutputMatches) {
+      checks.push(
+        check(`output_matches:'${evalCase.expectOutputMatches}'`, () =>
+          assertOutputMatches(agentResult!, evalCase.expectOutputMatches!),
+        ),
+      );
+    }
+
+    // Strategy validation
+    if (evalCase.validateOrchestration !== false) {
+      checks.push(
+        check('strategy_validation', () =>
+          validateStrategy(evalCase.agent, agentResult!),
+        ),
+      );
+    }
+
+    // Custom assertions
+    if (evalCase.customAssertions) {
+      for (let i = 0; i < evalCase.customAssertions.length; i++) {
+        const fn = evalCase.customAssertions[i];
+        checks.push(
+          check(`custom_${i}`, () => fn(agentResult!)),
+        );
+      }
+    }
+
+    const passed = checks.every((c) => c.passed);
+    return {
+      name: evalCase.name,
+      passed,
+      checks,
+      result: agentResult,
+      tags: evalCase.tags ?? [],
     };
   }
 }

@@ -1,5 +1,8 @@
-import { describe, it, expect } from 'vitest';
-import { expectResult } from '../../../src/testing/expect.js';
+import { describe, it, expect as vitestExpect } from 'vitest';
+import {
+  expect as agentExpect,
+  AgentResultExpectation,
+} from '../../../src/testing/expect.js';
 import { makeAgentResult } from '../../../src/result.js';
 import type { AgentEvent } from '../../../src/types.js';
 
@@ -7,8 +10,8 @@ import type { AgentEvent } from '../../../src/types.js';
 
 function completedResult(extras?: {
   events?: AgentEvent[];
-  output?: Record<string, unknown>;
-  tokenUsage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+  output?: unknown;
+  toolCalls?: unknown[];
 }) {
   return makeAgentResult({
     executionId: 'wf-test',
@@ -16,7 +19,7 @@ function completedResult(extras?: {
     finishReason: 'stop',
     output: extras?.output ?? { result: 'done' },
     events: extras?.events ?? [],
-    tokenUsage: extras?.tokenUsage,
+    toolCalls: extras?.toolCalls,
   });
 }
 
@@ -31,138 +34,215 @@ function failedResult(error?: string) {
 
 // ── Tests ────────────────────────────────────────────────
 
-describe('expectResult', () => {
-  describe('toBeCompleted', () => {
-    it('passes for COMPLETED result', () => {
-      expect(() => expectResult(completedResult()).toBeCompleted()).not.toThrow();
-    });
-
-    it('throws for FAILED result', () => {
-      expect(() => expectResult(failedResult()).toBeCompleted()).toThrow(
-        /Expected COMPLETED, got FAILED/,
-      );
-    });
-
-    it('includes error message in thrown error', () => {
-      expect(() =>
-        expectResult(failedResult('timeout')).toBeCompleted(),
-      ).toThrow(/timeout/);
-    });
+describe('expect (fluent API)', () => {
+  it('returns an AgentResultExpectation', () => {
+    const e = agentExpect(completedResult());
+    vitestExpect(e).toBeInstanceOf(AgentResultExpectation);
   });
 
-  describe('toBeFailed', () => {
-    it('passes for FAILED result', () => {
-      expect(() => expectResult(failedResult()).toBeFailed()).not.toThrow();
-    });
-
-    it('throws for COMPLETED result', () => {
-      expect(() => expectResult(completedResult()).toBeFailed()).toThrow(
-        /Expected failed status/,
-      );
-    });
-  });
-
-  describe('toContainOutput', () => {
-    it('passes when output contains text', () => {
-      const result = completedResult({ output: { result: 'Hello World' } });
-      expect(() => expectResult(result).toContainOutput('Hello')).not.toThrow();
-    });
-
-    it('throws when output does not contain text', () => {
-      const result = completedResult({ output: { result: 'Goodbye' } });
-      expect(() => expectResult(result).toContainOutput('Hello')).toThrow(
-        /Output does not contain "Hello"/,
-      );
-    });
-  });
-
-  describe('toHaveUsedTool', () => {
-    it('passes when tool_call event exists', () => {
-      const result = completedResult({
-        events: [{ type: 'tool_call', toolName: 'search' }],
-      });
-      expect(() =>
-        expectResult(result).toHaveUsedTool('search'),
+  describe('completed / failed / status', () => {
+    it('completed() passes for COMPLETED result', () => {
+      vitestExpect(() =>
+        agentExpect(completedResult()).completed(),
       ).not.toThrow();
     });
 
-    it('throws when tool was not used', () => {
-      const result = completedResult({ events: [] });
-      expect(() => expectResult(result).toHaveUsedTool('search')).toThrow(
-        /Tool "search" was not used/,
-      );
+    it('completed() throws for FAILED result', () => {
+      vitestExpect(() =>
+        agentExpect(failedResult()).completed(),
+      ).toThrow(/FAILED/);
     });
 
-    it('throws when different tool was used', () => {
-      const result = completedResult({
-        events: [{ type: 'tool_call', toolName: 'fetch' }],
-      });
-      expect(() => expectResult(result).toHaveUsedTool('search')).toThrow(
-        /Tool "search" was not used/,
-      );
+    it('failed() passes for FAILED result', () => {
+      vitestExpect(() =>
+        agentExpect(failedResult()).failed(),
+      ).not.toThrow();
+    });
+
+    it('status() checks exact status', () => {
+      vitestExpect(() =>
+        agentExpect(completedResult()).status('COMPLETED'),
+      ).not.toThrow();
+
+      vitestExpect(() =>
+        agentExpect(completedResult()).status('FAILED'),
+      ).toThrow();
     });
   });
 
-  describe('toHavePassedGuardrail', () => {
-    it('passes when guardrail_pass event exists', () => {
+  describe('noErrors', () => {
+    it('passes when no errors', () => {
+      vitestExpect(() =>
+        agentExpect(completedResult()).noErrors(),
+      ).not.toThrow();
+    });
+
+    it('throws when error events exist', () => {
+      const result = completedResult({
+        events: [{ type: 'error', content: 'x' }],
+      });
+      vitestExpect(() => agentExpect(result).noErrors()).toThrow();
+    });
+  });
+
+  describe('usedTool / didNotUseTool', () => {
+    it('usedTool passes when tool was used', () => {
+      const result = completedResult({
+        toolCalls: [{ name: 'search', args: {} }],
+      });
+      vitestExpect(() =>
+        agentExpect(result).usedTool('search'),
+      ).not.toThrow();
+    });
+
+    it('usedTool with args checks args', () => {
+      const result = completedResult({
+        toolCalls: [{ name: 'search', args: { q: 'test' } }],
+      });
+      vitestExpect(() =>
+        agentExpect(result).usedTool('search', { args: { q: 'test' } }),
+      ).not.toThrow();
+    });
+
+    it('didNotUseTool passes when tool was not used', () => {
+      const result = completedResult({ toolCalls: [] });
+      vitestExpect(() =>
+        agentExpect(result).didNotUseTool('search'),
+      ).not.toThrow();
+    });
+  });
+
+  describe('toolCallOrder / toolsUsedExactly', () => {
+    it('toolCallOrder validates subsequence', () => {
+      const result = completedResult({
+        toolCalls: [
+          { name: 'search' },
+          { name: 'filter' },
+          { name: 'format' },
+        ],
+      });
+      vitestExpect(() =>
+        agentExpect(result).toolCallOrder(['search', 'format']),
+      ).not.toThrow();
+    });
+
+    it('toolsUsedExactly validates set equality', () => {
+      const result = completedResult({
+        toolCalls: [{ name: 'search' }, { name: 'format' }],
+      });
+      vitestExpect(() =>
+        agentExpect(result).toolsUsedExactly(['format', 'search']),
+      ).not.toThrow();
+    });
+  });
+
+  describe('outputContains / outputMatches / outputType', () => {
+    it('outputContains checks substring', () => {
+      const result = completedResult({ output: { result: 'Hello World' } });
+      vitestExpect(() =>
+        agentExpect(result).outputContains('Hello'),
+      ).not.toThrow();
+    });
+
+    it('outputMatches checks regex', () => {
+      const result = completedResult({ output: { result: 'order #123' } });
+      vitestExpect(() =>
+        agentExpect(result).outputMatches(/order #\d+/),
+      ).not.toThrow();
+    });
+
+    it('outputType checks typeof', () => {
+      const result = completedResult({ output: { result: 'test' } });
+      vitestExpect(() =>
+        agentExpect(result).outputType('object'),
+      ).not.toThrow();
+    });
+  });
+
+  describe('eventsContain / eventSequence', () => {
+    it('eventsContain checks event type existence', () => {
+      const result = completedResult({
+        events: [{ type: 'thinking', content: 'hmm' }],
+      });
+      vitestExpect(() =>
+        agentExpect(result).eventsContain('thinking'),
+      ).not.toThrow();
+    });
+
+    it('eventSequence checks subsequence', () => {
+      const result = completedResult({
+        events: [
+          { type: 'thinking' },
+          { type: 'tool_call', toolName: 'x' },
+          { type: 'done' },
+        ],
+      });
+      vitestExpect(() =>
+        agentExpect(result).eventSequence(['thinking', 'done']),
+      ).not.toThrow();
+    });
+  });
+
+  describe('handoffTo / agentRan', () => {
+    it('handoffTo checks handoff events', () => {
+      const result = completedResult({
+        events: [{ type: 'handoff', target: 'billing' }],
+      });
+      vitestExpect(() =>
+        agentExpect(result).handoffTo('billing'),
+      ).not.toThrow();
+    });
+
+    it('agentRan delegates to handoffTo', () => {
+      const result = completedResult({
+        events: [{ type: 'handoff', target: 'billing' }],
+      });
+      vitestExpect(() =>
+        agentExpect(result).agentRan('billing'),
+      ).not.toThrow();
+    });
+  });
+
+  describe('guardrailPassed / guardrailFailed', () => {
+    it('guardrailPassed checks guardrail_pass events', () => {
       const result = completedResult({
         events: [{ type: 'guardrail_pass', guardrailName: 'no_pii' }],
       });
-      expect(() =>
-        expectResult(result).toHavePassedGuardrail('no_pii'),
+      vitestExpect(() =>
+        agentExpect(result).guardrailPassed('no_pii'),
       ).not.toThrow();
     });
 
-    it('throws when guardrail did not pass', () => {
-      const result = completedResult({ events: [] });
-      expect(() =>
-        expectResult(result).toHavePassedGuardrail('no_pii'),
-      ).toThrow(/Guardrail "no_pii" did not pass/);
+    it('guardrailFailed checks guardrail_fail events', () => {
+      const result = completedResult({
+        events: [
+          { type: 'guardrail_fail', guardrailName: 'policy', content: 'bad' },
+        ],
+      });
+      vitestExpect(() =>
+        agentExpect(result).guardrailFailed('policy'),
+      ).not.toThrow();
     });
   });
 
-  describe('toHaveFinishReason', () => {
-    it('passes when finish reason matches', () => {
-      expect(() =>
-        expectResult(completedResult()).toHaveFinishReason('stop'),
-      ).not.toThrow();
-    });
-
-    it('throws when finish reason does not match', () => {
-      expect(() =>
-        expectResult(completedResult()).toHaveFinishReason('error'),
-      ).toThrow(/Expected finish reason "error", got "stop"/);
-    });
-  });
-
-  describe('toHaveTokenUsageBelow', () => {
-    it('passes when token usage is below max', () => {
+  describe('maxTurns', () => {
+    it('passes when within limit', () => {
       const result = completedResult({
-        tokenUsage: { promptTokens: 50, completionTokens: 30, totalTokens: 80 },
+        events: [{ type: 'tool_call', toolName: 'x' }, { type: 'done' }],
       });
-      expect(() =>
-        expectResult(result).toHaveTokenUsageBelow(100),
-      ).not.toThrow();
+      vitestExpect(() => agentExpect(result).maxTurns(5)).not.toThrow();
     });
 
-    it('throws when token usage exceeds max', () => {
+    it('throws when exceeding limit', () => {
       const result = completedResult({
-        tokenUsage: {
-          promptTokens: 100,
-          completionTokens: 200,
-          totalTokens: 300,
-        },
+        events: [
+          { type: 'tool_call', toolName: 'a' },
+          { type: 'tool_call', toolName: 'b' },
+          { type: 'tool_call', toolName: 'c' },
+          { type: 'done' },
+        ],
       });
-      expect(() =>
-        expectResult(result).toHaveTokenUsageBelow(250),
-      ).toThrow(/Token usage 300 exceeds 250/);
-    });
-
-    it('passes when no token usage is set (no usage to exceed)', () => {
-      const result = completedResult();
-      expect(() =>
-        expectResult(result).toHaveTokenUsageBelow(100),
-      ).not.toThrow();
+      vitestExpect(() => agentExpect(result).maxTurns(2)).toThrow();
     });
   });
 
@@ -170,30 +250,31 @@ describe('expectResult', () => {
     it('supports chaining multiple assertions', () => {
       const result = completedResult({
         output: { result: 'Hello World' },
+        toolCalls: [{ name: 'search', args: { q: 'test' } }],
         events: [
           { type: 'tool_call', toolName: 'search' },
           { type: 'guardrail_pass', guardrailName: 'safety' },
+          { type: 'done' },
         ],
       });
 
-      expect(() =>
-        expectResult(result)
-          .toBeCompleted()
-          .toContainOutput('Hello')
-          .toHaveUsedTool('search')
-          .toHavePassedGuardrail('safety')
-          .toHaveFinishReason('stop'),
+      vitestExpect(() =>
+        agentExpect(result)
+          .completed()
+          .noErrors()
+          .usedTool('search')
+          .outputContains('Hello')
+          .guardrailPassed('safety')
+          .maxTurns(10),
       ).not.toThrow();
     });
 
     it('throws on first failing assertion in chain', () => {
-      const result = failedResult();
-
-      expect(() =>
-        expectResult(result)
-          .toBeCompleted() // This should throw
-          .toContainOutput('test'),
-      ).toThrow(/Expected COMPLETED/);
+      vitestExpect(() =>
+        agentExpect(failedResult())
+          .completed()
+          .noErrors(),
+      ).toThrow();
     });
   });
 });

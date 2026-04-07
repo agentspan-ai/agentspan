@@ -5,10 +5,10 @@
  *
  * Covers:
  *   - Creating a single agent with tools
- *   - mockRun() with mock tool implementations
+ *   - MockEvent factory + mockRun with scripted events
  *   - Basic status and output assertions
  *   - Tool usage assertions
- *   - The fluent expectResult() API
+ *   - The fluent expect() API
  *
  * Run:
  *   npx vitest run examples/mock_tests/01-basic-agent.test.ts
@@ -18,8 +18,9 @@ import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import { Agent, tool } from "@agentspan-ai/sdk";
 import {
+  MockEvent,
   mockRun,
-  expectResult,
+  expect as agentExpect,
   assertStatus,
   assertNoErrors,
   assertToolUsed,
@@ -64,15 +65,17 @@ const assistant = new Agent({
 // ── Tests ────────────────────────────────────────────────────────────
 
 describe("Basic Completion", () => {
-  it("completes successfully with mock tools", async () => {
-    const result = await mockRun(assistant, "What's the weather in Tokyo?", {
-      mockTools: {
-        get_weather: async (args: { city: string }) => ({
+  it("completes successfully with scripted tool events", () => {
+    const result = mockRun(assistant, "What's the weather in Tokyo?", {
+      events: [
+        MockEvent.toolCall("get_weather", { city: "Tokyo" }),
+        MockEvent.toolResult("get_weather", {
           temperature: 72,
           condition: "Sunny",
-          city: args.city,
+          city: "Tokyo",
         }),
-      },
+        MockEvent.done({ result: "It's 72°F and Sunny in Tokyo." }),
+      ],
     });
 
     assertStatus(result, "COMPLETED");
@@ -80,19 +83,25 @@ describe("Basic Completion", () => {
     assertToolUsed(result, "get_weather");
   });
 
-  it("handles multiple tool calls", async () => {
-    const result = await mockRun(
+  it("handles multiple tool calls", () => {
+    const result = mockRun(
       assistant,
       "What's the weather and time in London?",
       {
-        mockTools: {
-          get_weather: async () => ({
+        events: [
+          MockEvent.toolCall("get_weather", { city: "London" }),
+          MockEvent.toolResult("get_weather", {
             temperature: 55,
             condition: "Rainy",
             city: "London",
           }),
-          get_time: async () => ({ time: "7:30 PM", timezone: "Europe/London" }),
-        },
+          MockEvent.toolCall("get_time", { timezone: "Europe/London" }),
+          MockEvent.toolResult("get_time", {
+            time: "7:30 PM",
+            timezone: "Europe/London",
+          }),
+          MockEvent.done({ result: "London: 55°F Rainy, 7:30 PM" }),
+        ],
       },
     );
 
@@ -101,68 +110,76 @@ describe("Basic Completion", () => {
     assertNoErrors(result);
   });
 
-  it("completes without using any tools", async () => {
-    const result = await mockRun(assistant, "Hello, how are you?");
+  it("completes without using any tools", () => {
+    const result = mockRun(assistant, "Hello, how are you?", {
+      events: [MockEvent.done("Hello! I'm doing great.")],
+    });
 
     assertStatus(result, "COMPLETED");
     assertNoErrors(result);
   });
 });
 
-describe("Fluent expectResult API", () => {
-  it("chains status + output + tool checks", async () => {
-    const result = await mockRun(assistant, "Weather in Paris?", {
-      mockTools: {
-        get_weather: async () => ({
+describe("Fluent expect API", () => {
+  it("chains status + tool checks", () => {
+    const result = mockRun(assistant, "Weather in Paris?", {
+      events: [
+        MockEvent.toolCall("get_weather", { city: "Paris" }),
+        MockEvent.toolResult("get_weather", {
           temperature: 60,
           condition: "Cloudy",
           city: "Paris",
         }),
-      },
+        MockEvent.done({ result: "It's 60°F and Cloudy in Paris." }),
+      ],
     });
 
-    expectResult(result).toBeCompleted().toHaveUsedTool("get_weather");
+    agentExpect(result).completed().usedTool("get_weather");
   });
 
-  it("verifies output contains text", async () => {
-    const result = await mockRun(assistant, "What time is it in NYC?", {
-      mockTools: {
-        get_time: async () => ({ time: "2:30 PM", timezone: "America/New_York" }),
-      },
+  it("verifies output contains text", () => {
+    const result = mockRun(assistant, "What time is it in NYC?", {
+      events: [
+        MockEvent.toolCall("get_time", { timezone: "America/New_York" }),
+        MockEvent.toolResult("get_time", {
+          time: "2:30 PM",
+          timezone: "America/New_York",
+        }),
+        MockEvent.done({ result: "It's 2:30 PM in NYC." }),
+      ],
     });
 
-    expectResult(result).toBeCompleted().toHaveUsedTool("get_time");
+    agentExpect(result).completed().usedTool("get_time").outputContains("2:30 PM");
   });
 });
 
 describe("Error Scenarios", () => {
-  it("detects failed status", async () => {
+  it("detects failed status via error event", () => {
     const failAgent = new Agent({
       name: "fail-agent",
       model: "openai/gpt-4o",
       instructions: "You always fail.",
     });
 
-    const result = await mockRun(failAgent, "Do something impossible", {
-      mockTools: {},
+    const result = mockRun(failAgent, "Do something impossible", {
+      events: [MockEvent.error("Cannot process request")],
     });
 
-    // The result status depends on execution — verify it's not undefined
-    expect(result.status).toBeDefined();
+    assertStatus(result, "FAILED");
   });
 });
 
-describe("Mock Credentials", () => {
-  it("injects mock credentials into tool context", async () => {
-    const result = await mockRun(assistant, "Weather check", {
-      mockTools: {
-        get_weather: async () => ({ temperature: 70, city: "Test" }),
-      },
-      mockCredentials: {
-        WEATHER_API_KEY: "test-key-123",
-      },
+describe("Auto-Execute Tools", () => {
+  it("auto-executes tool functions when available", () => {
+    const result = mockRun(assistant, "Weather check", {
+      events: [
+        MockEvent.toolCall("get_weather", { city: "Test" }),
+        MockEvent.done({ result: "Weather checked." }),
+      ],
+      // autoExecuteTools defaults to true — tool func will run
     });
 
-    expectResult(result).toBeCompleted();
+    assertToolUsed(result, "get_weather");
+    agentExpect(result).completed();
   });
 });

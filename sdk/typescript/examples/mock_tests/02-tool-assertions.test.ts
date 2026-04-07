@@ -2,14 +2,14 @@
  * 02 — Tool Assertion Deep-Dive
  *
  * Thorough testing of tool usage: argument validation, call ordering,
- * mock tool implementations, and output validation.
+ * tool assertion functions, and output validation.
  *
  * Covers:
- *   - mockTools for overriding tool behavior
- *   - assertToolUsed / assertNoErrors
- *   - expectResult fluent chain with toContainOutput
+ *   - MockEvent for scripting tool call / result events
+ *   - assertToolUsed / assertToolNotUsed / assertToolCalledWith
+ *   - assertToolCallOrder / assertToolsUsedExactly
+ *   - expect() fluent chain with outputContains
  *   - Testing tool call sequences
- *   - Custom mock implementations
  *
  * Run:
  *   npx vitest run examples/mock_tests/02-tool-assertions.test.ts
@@ -19,9 +19,14 @@ import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import { Agent, tool } from "@agentspan-ai/sdk";
 import {
+  MockEvent,
   mockRun,
-  expectResult,
+  expect as agentExpect,
   assertToolUsed,
+  assertToolNotUsed,
+  assertToolCalledWith,
+  assertToolCallOrder,
+  assertToolsUsedExactly,
   assertNoErrors,
   assertStatus,
 } from "@agentspan-ai/sdk/testing";
@@ -99,56 +104,66 @@ const shopAgent = new Agent({
 
 // ── Tests ────────────────────────────────────────────────────────────
 
-describe("Mock Tool Implementations", () => {
-  it("overrides tool behavior with mockTools", async () => {
-    const result = await mockRun(shopAgent, "Search for red shoes", {
-      mockTools: {
-        search_products: async (args: { query: string }) => [
+describe("Tool Assertions", () => {
+  it("assertToolUsed detects used tool", () => {
+    const result = mockRun(shopAgent, "Search for red shoes", {
+      events: [
+        MockEvent.toolCall("search_products", { query: "red shoes" }),
+        MockEvent.toolResult("search_products", [
           { name: "Red Running Shoe", price: 89.99 },
           { name: "Red Heel", price: 129.99 },
-        ],
-      },
+        ]),
+        MockEvent.done({ result: "Found 2 red shoes." }),
+      ],
     });
 
     assertToolUsed(result, "search_products");
-    expectResult(result).toBeCompleted();
+    agentExpect(result).completed();
   });
 
-  it("mock returns empty results", async () => {
-    const result = await mockRun(shopAgent, "Search for unicorn saddles", {
-      mockTools: {
-        search_products: async () => [],
-      },
+  it("assertToolNotUsed verifies tool was not called", () => {
+    const result = mockRun(shopAgent, "Search for unicorn saddles", {
+      events: [
+        MockEvent.toolCall("search_products", { query: "unicorn saddles" }),
+        MockEvent.toolResult("search_products", []),
+        MockEvent.done({ result: "No results found." }),
+      ],
     });
 
     assertToolUsed(result, "search_products");
+    assertToolNotUsed(result, "checkout");
     assertNoErrors(result);
+  });
+
+  it("assertToolCalledWith checks args (subset match)", () => {
+    const result = mockRun(shopAgent, "Search for laptops", {
+      events: [
+        MockEvent.toolCall("search_products", { query: "laptops", maxResults: 3 }),
+        MockEvent.toolResult("search_products", [
+          { name: "MacBook Pro", price: 2499 },
+        ]),
+        MockEvent.done({ result: "Found laptops." }),
+      ],
+    });
+
+    assertToolCalledWith(result, "search_products", { query: "laptops" });
   });
 });
 
 describe("Full Shopping Flow", () => {
-  it("executes search → details → cart → checkout", async () => {
-    const toolCallOrder: string[] = [];
-
-    const result = await mockRun(shopAgent, "Find a widget and buy it", {
-      mockTools: {
-        search_products: async (args: { query: string }) => {
-          toolCallOrder.push("search_products");
-          return [{ id: "W-1", name: "Widget" }];
-        },
-        get_product_details: async (args: { productId: string }) => {
-          toolCallOrder.push("get_product_details");
-          return { id: args.productId, name: "Widget", stock: 42 };
-        },
-        add_to_cart: async (args: { productId: string; quantity: number }) => {
-          toolCallOrder.push("add_to_cart");
-          return { success: true };
-        },
-        checkout: async (args: { paymentMethod: string }) => {
-          toolCallOrder.push("checkout");
-          return { orderId: "ORD-001", status: "confirmed" };
-        },
-      },
+  it("executes search → details → cart → checkout in order", () => {
+    const result = mockRun(shopAgent, "Find a widget and buy it", {
+      events: [
+        MockEvent.toolCall("search_products", { query: "widget" }),
+        MockEvent.toolResult("search_products", [{ id: "W-1", name: "Widget" }]),
+        MockEvent.toolCall("get_product_details", { productId: "W-1" }),
+        MockEvent.toolResult("get_product_details", { id: "W-1", name: "Widget", stock: 42 }),
+        MockEvent.toolCall("add_to_cart", { productId: "W-1", quantity: 1 }),
+        MockEvent.toolResult("add_to_cart", { success: true }),
+        MockEvent.toolCall("checkout", { paymentMethod: "credit_card" }),
+        MockEvent.toolResult("checkout", { orderId: "ORD-001", status: "confirmed" }),
+        MockEvent.done({ result: "Order ORD-001 confirmed!" }),
+      ],
     });
 
     // All tools were used
@@ -157,8 +172,16 @@ describe("Full Shopping Flow", () => {
     assertToolUsed(result, "add_to_cart");
     assertToolUsed(result, "checkout");
 
-    // Verify ordering via our tracking array
-    expect(toolCallOrder).toEqual([
+    // Verify ordering with assertToolCallOrder (subsequence check)
+    assertToolCallOrder(result, [
+      "search_products",
+      "get_product_details",
+      "add_to_cart",
+      "checkout",
+    ]);
+
+    // Verify exact tool set with assertToolsUsedExactly
+    assertToolsUsedExactly(result, [
       "search_products",
       "get_product_details",
       "add_to_cart",
@@ -168,17 +191,20 @@ describe("Full Shopping Flow", () => {
 });
 
 describe("Output Validation", () => {
-  it("tool result contains expected data", async () => {
-    const result = await mockRun(shopAgent, "Place my order", {
-      mockTools: {
-        checkout: async () => ({
+  it("tool result is captured in events", () => {
+    const result = mockRun(shopAgent, "Place my order", {
+      events: [
+        MockEvent.toolCall("checkout", { paymentMethod: "credit_card" }),
+        MockEvent.toolResult("checkout", {
           orderId: "ORD-12345",
           status: "confirmed",
         }),
-      },
+        MockEvent.done({ result: "Order confirmed!" }),
+      ],
+      autoExecuteTools: false,
     });
 
-    expectResult(result).toBeCompleted();
+    agentExpect(result).completed();
 
     // Verify the tool result was captured in events
     const toolResult = result.events.find(
@@ -191,56 +217,59 @@ describe("Output Validation", () => {
     });
   });
 
-  it("output contains structured data", async () => {
-    const result = await mockRun(shopAgent, "Search for laptops", {
-      mockTools: {
-        search_products: async () => [
+  it("output contains expected text", () => {
+    const result = mockRun(shopAgent, "Search for laptops", {
+      events: [
+        MockEvent.toolCall("search_products", { query: "laptops" }),
+        MockEvent.toolResult("search_products", [
           { name: "MacBook Pro", price: 2499 },
           { name: "ThinkPad X1", price: 1799 },
-        ],
-      },
+        ]),
+        MockEvent.done({ result: "Found 2 laptops: MacBook Pro and ThinkPad X1." }),
+      ],
     });
 
-    expectResult(result).toBeCompleted();
-    // Verify the result has events
-    expect(result.events.length).toBeGreaterThan(0);
+    agentExpect(result).completed().outputContains("MacBook");
   });
 });
 
-describe("Error in Mock Tools", () => {
-  it("handles tool that throws an error", async () => {
-    const result = await mockRun(shopAgent, "Search for broken item", {
-      mockTools: {
-        search_products: async () => {
-          throw new Error("Database connection failed");
-        },
-      },
+describe("Error in Tool Execution", () => {
+  it("error event marks result as FAILED", () => {
+    const result = mockRun(shopAgent, "Search for broken item", {
+      events: [
+        MockEvent.toolCall("search_products", { query: "broken" }),
+        MockEvent.error("Database connection failed"),
+      ],
     });
 
-    // The agent should handle the error gracefully
-    expect(result.status).toBeDefined();
+    assertStatus(result, "FAILED");
   });
 
-  it("handles missing mock tool gracefully", async () => {
-    // Only mock one tool — others use default implementations
-    const result = await mockRun(shopAgent, "Quick search", {
-      mockTools: {
-        search_products: async () => [{ name: "Item" }],
-      },
+  it("thinking + tool + done flow completes successfully", () => {
+    const result = mockRun(shopAgent, "Quick search", {
+      events: [
+        MockEvent.thinking("Let me search for that..."),
+        MockEvent.toolCall("search_products", { query: "item" }),
+        MockEvent.toolResult("search_products", [{ name: "Item" }]),
+        MockEvent.done({ result: "Found 1 item." }),
+      ],
     });
 
     assertToolUsed(result, "search_products");
+    assertNoErrors(result);
   });
 });
 
-describe("Token Usage Validation", () => {
-  it("checks token usage is within budget", async () => {
-    const result = await mockRun(shopAgent, "Simple question", {
-      mockTools: {
-        search_products: async () => [{ name: "Item" }],
-      },
+describe("Max Turns Assertion", () => {
+  it("verifies turn count stays within budget", () => {
+    const result = mockRun(shopAgent, "Simple question", {
+      events: [
+        MockEvent.toolCall("search_products", { query: "item" }),
+        MockEvent.toolResult("search_products", [{ name: "Item" }]),
+        MockEvent.done({ result: "Found it." }),
+      ],
     });
 
-    expectResult(result).toBeCompleted().toHaveTokenUsageBelow(100000);
+    agentExpect(result).completed().maxTurns(5);
   });
 });

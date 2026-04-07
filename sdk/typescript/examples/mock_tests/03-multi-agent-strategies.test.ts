@@ -2,15 +2,14 @@
  * 03 — Multi-Agent Strategy Tests
  *
  * Test orchestration strategies: handoff, sequential, parallel, router.
- * Each section defines agents, mocks the expected behavior, and asserts
- * correctness.
+ * Each section scripts the expected event sequences using MockEvent.
  *
  * Covers:
  *   - Handoff — parent delegates to the right specialist
  *   - Sequential pipeline — agents run in order
  *   - Parallel execution — all agents must run
  *   - Router — dedicated planner picks one agent
- *   - assertAgentRan / assertHandoffTo
+ *   - assertHandoffTo / assertAgentRan / validateStrategy
  *
  * Run:
  *   npx vitest run examples/mock_tests/03-multi-agent-strategies.test.ts
@@ -20,13 +19,15 @@ import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import { Agent, tool } from "@agentspan-ai/sdk";
 import {
+  MockEvent,
   mockRun,
-  expectResult,
+  expect as agentExpect,
   assertAgentRan,
   assertHandoffTo,
   assertToolUsed,
   assertNoErrors,
   assertStatus,
+  validateStrategy,
 } from "@agentspan-ai/sdk/testing";
 
 // ── Tools ────────────────────────────────────────────────────────────
@@ -46,19 +47,6 @@ const runQuery = tool(
     name: "run_query",
     description: "Execute a database query.",
     inputSchema: z.object({ sql: z.string() }),
-  },
-);
-
-const sendNotification = tool(
-  async (args: { channel: string; message: string }) =>
-    `Sent to ${args.channel}: ${args.message}`,
-  {
-    name: "send_notification",
-    description: "Send a notification.",
-    inputSchema: z.object({
-      channel: z.string(),
-      message: z.string(),
-    }),
   },
 );
 
@@ -89,53 +77,46 @@ const triageAgent = new Agent({
 });
 
 describe("Handoff Strategy", () => {
-  it("routes docs question to docs specialist", async () => {
-    const result = await mockRun(
-      triageAgent,
-      "How do I configure logging?",
-      {
-        mockTools: {
-          search_docs: async (args: { query: string }) =>
-            `Set LOG_LEVEL=debug in your config. Query: ${args.query}`,
-        },
-      },
-    );
+  it("routes docs question to docs specialist", () => {
+    const result = mockRun(triageAgent, "How do I configure logging?", {
+      events: [
+        MockEvent.handoff("docs-specialist"),
+        MockEvent.toolCall("search_docs", { query: "configure logging" }),
+        MockEvent.toolResult("search_docs", "Set LOG_LEVEL=debug in your config."),
+        MockEvent.done({ result: "Set LOG_LEVEL=debug in your config." }),
+      ],
+    });
 
     assertHandoffTo(result, "docs-specialist");
     assertToolUsed(result, "search_docs");
     assertNoErrors(result);
   });
 
-  it("db specialist runs its tool when targeted directly", async () => {
-    // Test the db-specialist directly to verify tool execution in isolation
-    const result = await mockRun(
-      dbAgent,
-      "How many users signed up today?",
-      {
-        mockTools: {
-          run_query: async () => [{ count: 150 }],
-        },
-      },
-    );
+  it("db specialist runs its tool when targeted directly", () => {
+    const result = mockRun(dbAgent, "How many users signed up today?", {
+      events: [
+        MockEvent.toolCall("run_query", { sql: "SELECT COUNT(*) FROM users WHERE created_at = CURRENT_DATE" }),
+        MockEvent.toolResult("run_query", [{ count: 150 }]),
+        MockEvent.done({ result: "150 users signed up today." }),
+      ],
+    });
 
     assertToolUsed(result, "run_query");
     assertNoErrors(result);
   });
 
-  it("triage agent produces handoff event", async () => {
-    const result = await mockRun(
-      triageAgent,
-      "Show me the user table schema",
-      {
-        mockTools: {
-          run_query: async () => [{ col: "id" }, { col: "name" }],
-        },
-      },
-    );
+  it("triage agent produces handoff event", () => {
+    const result = mockRun(triageAgent, "Show me the user table schema", {
+      events: [
+        MockEvent.handoff("db-specialist"),
+        MockEvent.toolCall("run_query", { sql: "DESCRIBE users" }),
+        MockEvent.toolResult("run_query", [{ col: "id" }, { col: "name" }]),
+        MockEvent.done({ result: "User table has columns: id, name." }),
+      ],
+    });
 
-    // In mock mode, handoff goes to the first sub-agent
-    assertHandoffTo(result, "docs-specialist");
-    expectResult(result).toBeCompleted();
+    assertHandoffTo(result, "db-specialist");
+    agentExpect(result).completed();
   });
 });
 
@@ -170,16 +151,17 @@ const contentPipeline = new Agent({
 });
 
 describe("Sequential Strategy", () => {
-  it("runs all agents in order", async () => {
-    const result = await mockRun(
-      contentPipeline,
-      "Write a guide on API testing",
-      {
-        mockTools: {
-          search_docs: async () => "API testing best practices...",
-        },
-      },
-    );
+  it("runs all agents in order", () => {
+    const result = mockRun(contentPipeline, "Write a guide on API testing", {
+      events: [
+        MockEvent.handoff("researcher"),
+        MockEvent.toolCall("search_docs", { query: "API testing" }),
+        MockEvent.toolResult("search_docs", "API testing best practices..."),
+        MockEvent.handoff("drafter"),
+        MockEvent.handoff("reviewer"),
+        MockEvent.done({ result: "API testing guide completed." }),
+      ],
+    });
 
     assertAgentRan(result, "researcher");
     assertAgentRan(result, "drafter");
@@ -187,24 +169,41 @@ describe("Sequential Strategy", () => {
     assertNoErrors(result);
   });
 
-  it("researcher uses search tool before drafter runs", async () => {
-    const executionOrder: string[] = [];
-
-    const result = await mockRun(
-      contentPipeline,
-      "Write about microservices",
-      {
-        mockTools: {
-          search_docs: async () => {
-            executionOrder.push("search_docs");
-            return "Microservices patterns...";
-          },
-        },
-      },
-    );
+  it("researcher uses search tool before drafter runs", () => {
+    const result = mockRun(contentPipeline, "Write about microservices", {
+      events: [
+        MockEvent.handoff("researcher"),
+        MockEvent.toolCall("search_docs", { query: "microservices" }),
+        MockEvent.toolResult("search_docs", "Microservices patterns..."),
+        MockEvent.handoff("drafter"),
+        MockEvent.handoff("reviewer"),
+        MockEvent.done({ result: "Microservices guide completed." }),
+      ],
+    });
 
     assertToolUsed(result, "search_docs");
-    expect(executionOrder).toContain("search_docs");
+    // Verify search happens before drafter's handoff
+    const events = result.events;
+    const searchIdx = events.findIndex(
+      (e) => e.type === "tool_call" && e.toolName === "search_docs",
+    );
+    const drafterIdx = events.findIndex(
+      (e) => e.type === "handoff" && e.target === "drafter",
+    );
+    expect(searchIdx).toBeLessThan(drafterIdx);
+  });
+
+  it("validates sequential strategy against trace", () => {
+    const result = mockRun(contentPipeline, "Write something", {
+      events: [
+        MockEvent.handoff("researcher"),
+        MockEvent.handoff("drafter"),
+        MockEvent.handoff("reviewer"),
+        MockEvent.done({ result: "Done." }),
+      ],
+    });
+
+    expect(() => validateStrategy(contentPipeline, result)).not.toThrow();
   });
 });
 
@@ -238,8 +237,15 @@ const auditTeam = new Agent({
 });
 
 describe("Parallel Strategy", () => {
-  it("all auditors run", async () => {
-    const result = await mockRun(auditTeam, "Audit the checkout page");
+  it("all auditors run", () => {
+    const result = mockRun(auditTeam, "Audit the checkout page", {
+      events: [
+        MockEvent.handoff("security-auditor"),
+        MockEvent.handoff("performance-auditor"),
+        MockEvent.handoff("accessibility-auditor"),
+        MockEvent.done({ result: "Audit complete." }),
+      ],
+    });
 
     assertAgentRan(result, "security-auditor");
     assertAgentRan(result, "performance-auditor");
@@ -247,14 +253,18 @@ describe("Parallel Strategy", () => {
     assertNoErrors(result);
   });
 
-  it("output reflects all perspectives", async () => {
-    const result = await mockRun(auditTeam, "Audit the dashboard");
+  it("validates parallel strategy against trace", () => {
+    const result = mockRun(auditTeam, "Audit the dashboard", {
+      events: [
+        MockEvent.handoff("security-auditor"),
+        MockEvent.handoff("performance-auditor"),
+        MockEvent.handoff("accessibility-auditor"),
+        MockEvent.done({ result: "All perspectives covered." }),
+      ],
+    });
 
-    expectResult(result).toBeCompleted();
-    // Each agent should contribute to the result
-    assertAgentRan(result, "security-auditor");
-    assertAgentRan(result, "performance-auditor");
-    assertAgentRan(result, "accessibility-auditor");
+    agentExpect(result).completed();
+    expect(() => validateStrategy(auditTeam, result)).not.toThrow();
   });
 });
 
@@ -290,28 +300,29 @@ const bugTriage = new Agent({
 });
 
 describe("Router Strategy", () => {
-  it("routes to a sub-agent via the router", async () => {
-    const result = await mockRun(
-      bugTriage,
-      "The /users endpoint returns 500",
-      {
-        mockTools: {
-          run_query: async () => [{ error: "null pointer" }],
-        },
-      },
-    );
+  it("routes to a sub-agent via the router", () => {
+    const result = mockRun(bugTriage, "The /users endpoint returns 500", {
+      events: [
+        MockEvent.handoff("backend"),
+        MockEvent.toolCall("run_query", { sql: "SHOW ERRORS" }),
+        MockEvent.toolResult("run_query", [{ error: "null pointer" }]),
+        MockEvent.done({ result: "Found null pointer error in /users endpoint." }),
+      ],
+    });
 
-    // In mock mode, router strategy hands off to the first sub-agent
     assertHandoffTo(result, "backend");
     assertToolUsed(result, "run_query");
   });
 
-  it("completes successfully", async () => {
-    const result = await mockRun(
-      bugTriage,
-      "The submit button is invisible on mobile",
-    );
+  it("completes successfully with router strategy", () => {
+    const result = mockRun(bugTriage, "The submit button is invisible on mobile", {
+      events: [
+        MockEvent.handoff("frontend"),
+        MockEvent.done({ result: "Fixed CSS visibility issue." }),
+      ],
+    });
 
-    expectResult(result).toBeCompleted();
+    agentExpect(result).completed();
+    assertHandoffTo(result, "frontend");
   });
 });

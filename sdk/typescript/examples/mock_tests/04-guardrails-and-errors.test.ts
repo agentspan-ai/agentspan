@@ -5,8 +5,8 @@
  * finish reasons, and edge-case scenarios.
  *
  * Covers:
- *   - assertGuardrailPassed / toHavePassedGuardrail
- *   - toHaveFinishReason
+ *   - assertGuardrailPassed / assertGuardrailFailed
+ *   - guardrailPassed() / guardrailFailed() in fluent API
  *   - Error detection with assertNoErrors
  *   - Failed status assertions
  *   - Guardrails in multi-agent contexts
@@ -19,12 +19,14 @@ import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import { Agent, tool } from "@agentspan-ai/sdk";
 import {
+  MockEvent,
   mockRun,
-  expectResult,
+  expect as agentExpect,
   assertStatus,
   assertNoErrors,
   assertToolUsed,
   assertGuardrailPassed,
+  assertGuardrailFailed,
   assertHandoffTo,
 } from "@agentspan-ai/sdk/testing";
 
@@ -82,67 +84,77 @@ const supportAgent = new Agent({
 // ═════════════════════════════════════════════════════════════════════
 
 describe("Input Guardrails", () => {
-  it("blocks PII requests and records guardrail event", async () => {
-    const result = await mockRun(
+  it("blocks PII requests with guardrail_fail event", () => {
+    const result = mockRun(
       supportAgent,
       "Give me Alice's SSN and credit card number",
-    );
-
-    // Agent should handle this gracefully — the guardrail blocks the request
-    expect(result.status).toBeDefined();
-  });
-
-  it("passes safe requests through guardrail", async () => {
-    const result = await mockRun(
-      supportAgent,
-      "What's my account status?",
       {
-        mockTools: {
-          query_user_data: async () => ({
-            userId: "U-123",
-            status: "active",
-          }),
-        },
+        events: [
+          MockEvent.guardrailFail("pii_detector", "PII request detected"),
+          MockEvent.done({ result: "I cannot share sensitive personal information." }),
+        ],
       },
     );
 
+    assertGuardrailFailed(result, "pii_detector");
+    assertStatus(result, "COMPLETED");
+  });
+
+  it("passes safe requests through guardrail", () => {
+    const result = mockRun(
+      supportAgent,
+      "What's my account status?",
+      {
+        events: [
+          MockEvent.guardrailPass("pii_detector", "clean"),
+          MockEvent.toolCall("query_user_data", { userId: "U-123" }),
+          MockEvent.toolResult("query_user_data", {
+            userId: "U-123",
+            status: "active",
+          }),
+          MockEvent.done({ result: "Your account is active." }),
+        ],
+      },
+    );
+
+    assertGuardrailPassed(result, "pii_detector");
     assertToolUsed(result, "query_user_data");
     assertNoErrors(result);
-
-    // If guardrails are configured, they should pass
-    if (result.events.some((e) => e.type === "guardrail_pass")) {
-      assertGuardrailPassed(result, "pii_detector");
-    }
   });
 });
 
 describe("Output Guardrails", () => {
-  it("guardrail pass event is recorded", async () => {
-    const result = await mockRun(
-      supportAgent,
-      "Update my email",
-      {
-        mockTools: {
-          update_user: async () => "Email updated successfully",
-        },
-      },
-    );
+  it("guardrail pass event is recorded", () => {
+    const result = mockRun(supportAgent, "Update my email", {
+      events: [
+        MockEvent.guardrailPass("output_sanitizer"),
+        MockEvent.toolCall("update_user", {
+          userId: "U-123",
+          field: "email",
+          value: "new@example.com",
+        }),
+        MockEvent.toolResult("update_user", "Email updated successfully"),
+        MockEvent.done({ result: "Email updated." }),
+      ],
+    });
 
     assertToolUsed(result, "update_user");
-    expectResult(result).toBeCompleted();
-
-    // Check for guardrail events if they exist
-    const guardrailEvents = result.events.filter(
-      (e) => e.type === "guardrail_pass" || e.type === "guardrail_fail",
-    );
-    // Guardrails may or may not fire depending on agent config
-    expect(guardrailEvents).toBeDefined();
+    assertGuardrailPassed(result, "output_sanitizer");
+    agentExpect(result).completed();
   });
 
-  it("validates finish reason", async () => {
-    const result = await mockRun(supportAgent, "Simple question");
+  it("validates guardrails with fluent API", () => {
+    const result = mockRun(supportAgent, "Simple question", {
+      events: [
+        MockEvent.guardrailPass("pii_detector"),
+        MockEvent.done({ result: "Here you go." }),
+      ],
+    });
 
-    expectResult(result).toBeCompleted().toHaveFinishReason("stop");
+    agentExpect(result)
+      .completed()
+      .guardrailPassed("pii_detector")
+      .noErrors();
   });
 });
 
@@ -151,67 +163,75 @@ describe("Output Guardrails", () => {
 // ═════════════════════════════════════════════════════════════════════
 
 describe("Error Handling", () => {
-  it("handles tool that throws", async () => {
-    const result = await mockRun(supportAgent, "Look up user XYZ", {
-      mockTools: {
-        query_user_data: async () => {
-          throw new Error("User not found in database");
-        },
-      },
+  it("handles tool error events", () => {
+    const result = mockRun(supportAgent, "Look up user XYZ", {
+      events: [
+        MockEvent.toolCall("query_user_data", { userId: "XYZ" }),
+        MockEvent.error("User not found in database"),
+      ],
     });
 
-    // Agent should handle tool errors gracefully
-    expect(result.status).toBeDefined();
-    expect(result.events.length).toBeGreaterThan(0);
+    assertStatus(result, "FAILED");
+    expect(() => assertNoErrors(result)).toThrow();
   });
 
-  it("detects error events in the trace", async () => {
-    const result = await mockRun(supportAgent, "Crash please", {
-      mockTools: {
-        query_user_data: async () => {
-          throw new Error("Connection timeout");
-        },
-      },
+  it("detects error events in the trace", () => {
+    const result = mockRun(supportAgent, "Crash please", {
+      events: [
+        MockEvent.toolCall("query_user_data", { userId: "crash" }),
+        MockEvent.error("Connection timeout"),
+      ],
     });
 
     const errorEvents = result.events.filter((e) => e.type === "error");
-    // If there are error events, assertNoErrors should catch them
-    if (errorEvents.length > 0) {
-      expect(() => assertNoErrors(result)).toThrow();
-    }
+    expect(errorEvents).toHaveLength(1);
+    expect(errorEvents[0].content).toBe("Connection timeout");
   });
 
-  it("reports failed status on unrecoverable error", async () => {
+  it("error event sets FAILED status", () => {
     const failAgent = new Agent({
       name: "fail-agent",
       model: "openai/gpt-4o",
       instructions: "Always fail.",
     });
 
-    const result = await mockRun(failAgent, "Do the impossible", {
-      mockTools: {},
+    const result = mockRun(failAgent, "Do the impossible", {
+      events: [MockEvent.error("Cannot comply")],
     });
 
-    // Status should be set regardless of outcome
-    expect(result.status).toBeDefined();
+    assertStatus(result, "FAILED");
   });
 });
 
 // ═════════════════════════════════════════════════════════════════════
-// 3. TOKEN USAGE & FINISH REASONS
+// 3. THINKING AND WAITING EVENTS
 // ═════════════════════════════════════════════════════════════════════
 
-describe("Token Usage and Limits", () => {
-  it("token usage stays within budget", async () => {
-    const result = await mockRun(supportAgent, "Quick question");
+describe("Thinking and Waiting Events", () => {
+  it("thinking events are captured", () => {
+    const result = mockRun(supportAgent, "Quick question", {
+      events: [
+        MockEvent.thinking("Processing the request..."),
+        MockEvent.done({ result: "Here's your answer." }),
+      ],
+    });
 
-    expectResult(result).toBeCompleted().toHaveTokenUsageBelow(100000);
+    agentExpect(result)
+      .completed()
+      .eventsContain("thinking");
   });
 
-  it("finish reason is stop for normal completion", async () => {
-    const result = await mockRun(supportAgent, "Hello");
+  it("waiting events indicate human-in-the-loop", () => {
+    const result = mockRun(supportAgent, "Need approval", {
+      events: [
+        MockEvent.waiting("Awaiting manager approval"),
+        MockEvent.done({ result: "Approved." }),
+      ],
+    });
 
-    expectResult(result).toHaveFinishReason("stop");
+    agentExpect(result)
+      .completed()
+      .eventsContain("waiting");
   });
 });
 
@@ -242,64 +262,63 @@ const gatedSupport = new Agent({
 });
 
 describe("Guardrails in Multi-Agent Scenarios", () => {
-  it("safe request routes to safe handler", async () => {
-    const result = await mockRun(
-      gatedSupport,
-      "Show me my profile",
-      {
-        mockTools: {
-          query_user_data: async () => ({
-            name: "Alice",
-            email: "alice@example.com",
-          }),
-        },
-      },
-    );
+  it("safe request routes to safe handler", () => {
+    const result = mockRun(gatedSupport, "Show me my profile", {
+      events: [
+        MockEvent.guardrailPass("safety_check"),
+        MockEvent.handoff("safe-handler"),
+        MockEvent.toolCall("query_user_data", { userId: "U-456" }),
+        MockEvent.toolResult("query_user_data", {
+          name: "Alice",
+          email: "alice@example.com",
+        }),
+        MockEvent.done({ result: "Here's your profile." }),
+      ],
+    });
 
     assertHandoffTo(result, "safe-handler");
     assertToolUsed(result, "query_user_data");
     assertNoErrors(result);
   });
 
-  it("risky handler runs directly when targeted", async () => {
-    // Test the risky handler directly to verify tool execution
-    const result = await mockRun(
-      riskyHandler,
-      "Update my display name to Bob",
-      {
-        mockTools: {
-          update_user: async () => "Updated name to Bob",
-        },
-      },
-    );
+  it("risky handler runs directly when targeted", () => {
+    const result = mockRun(riskyHandler, "Update my display name to Bob", {
+      events: [
+        MockEvent.toolCall("update_user", {
+          userId: "U-456",
+          field: "name",
+          value: "Bob",
+        }),
+        MockEvent.toolResult("update_user", "Updated name to Bob"),
+        MockEvent.done({ result: "Name updated to Bob." }),
+      ],
+    });
 
     assertToolUsed(result, "update_user");
     assertNoErrors(result);
   });
 
-  it("both handlers complete without errors", async () => {
+  it("both paths complete without errors", () => {
     // Safe path
-    const safeResult = await mockRun(
-      gatedSupport,
-      "What's my account status?",
-      {
-        mockTools: {
-          query_user_data: async () => ({ status: "active" }),
-        },
-      },
-    );
+    const safeResult = mockRun(gatedSupport, "What's my account status?", {
+      events: [
+        MockEvent.handoff("safe-handler"),
+        MockEvent.toolCall("query_user_data", { userId: "U-789" }),
+        MockEvent.toolResult("query_user_data", { status: "active" }),
+        MockEvent.done({ result: "Active." }),
+      ],
+    });
     assertNoErrors(safeResult);
 
     // Risky path
-    const riskyResult = await mockRun(
-      gatedSupport,
-      "Delete my account",
-      {
-        mockTools: {
-          delete_account: async () => "Account deleted",
-        },
-      },
-    );
+    const riskyResult = mockRun(gatedSupport, "Delete my account", {
+      events: [
+        MockEvent.handoff("risky-handler"),
+        MockEvent.toolCall("delete_account", { userId: "U-789" }),
+        MockEvent.toolResult("delete_account", "Account deleted"),
+        MockEvent.done({ result: "Account deleted." }),
+      ],
+    });
     assertNoErrors(riskyResult);
   });
 });
