@@ -44,6 +44,7 @@ agent = Agent(
     model=settings.llm_model,
     tools=[receive_message, respond],
     max_turns=10000,
+    stateful=True,
     instructions=(
         "You are a reactive agent. Repeat this cycle indefinitely without stopping: "
         "1. Call wait_for_message to receive your next instruction. "

@@ -87,6 +87,7 @@ def build_researcher(runtime: AgentRuntime, writer_execution_id: str) -> Agent:
         model=settings.llm_model,
         tools=[receive_topic, forward_to_writer, stop_pipeline],
         max_turns=10000,
+        stateful=True,
         instructions=(
             "You are a Researcher agent. Repeat indefinitely:\n"
             "1. Call wait_for_topic to receive the next message.\n"
@@ -123,6 +124,7 @@ def build_writer() -> Agent:
         model=settings.llm_model,
         tools=[receive_notes, publish],
         max_turns=10000,
+        stateful=True,
         instructions=(
             "You are a Writer agent. Repeat indefinitely:\n"
             "1. Call wait_for_notes to receive the next message.\n"

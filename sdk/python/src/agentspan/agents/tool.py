@@ -79,6 +79,7 @@ class ToolDef:
     guardrails: List[Any] = field(default_factory=list)
     isolated: bool = True
     credentials: List[Any] = field(default_factory=list)
+    stateful: bool = False
 
 
 # ── @tool decorator ─────────────────────────────────────────────────────
@@ -98,6 +99,7 @@ def tool(
     guardrails: Optional[List[Any]] = None,
     isolated: bool = True,
     credentials: Optional[List[Any]] = None,
+    stateful: bool = False,
 ) -> Callable[[F], F]: ...
 
 
@@ -111,6 +113,7 @@ def tool(
     guardrails: Optional[List[Any]] = None,
     isolated: bool = True,
     credentials: Optional[List[Any]] = None,
+    stateful: bool = False,
 ) -> Any:
     """Register a Python function as a Conductor agent tool.
 
@@ -156,6 +159,7 @@ def tool(
             guardrails=list(guardrails) if guardrails else [],
             isolated=isolated,
             credentials=list(credentials) if credentials else [],
+            stateful=stateful,
         )
 
         @functools.wraps(fn)

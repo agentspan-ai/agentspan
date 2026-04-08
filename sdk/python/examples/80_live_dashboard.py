@@ -97,6 +97,7 @@ def build_monitor() -> Agent:
         model=settings.llm_model,
         tools=[receive_batch, display_dashboard],
         max_turns=10000,
+        stateful=True,
         instructions=(
             "You are a real-time metrics monitor. Repeat indefinitely:\n"
             "1. Call receive_metrics — you will get a batch of 1–10 metric samples.\n"
@@ -165,6 +166,7 @@ def build_feeder(runtime: AgentRuntime) -> Agent:
         model=settings.llm_model,
         tools=[receive_signal, push_metrics_batch, stop_monitor],
         max_turns=10000,
+        stateful=True,
         instructions=(
             "You are a metrics Feeder agent. Repeat indefinitely:\n"
             "1. Call receive_signal to get the next instruction.\n"

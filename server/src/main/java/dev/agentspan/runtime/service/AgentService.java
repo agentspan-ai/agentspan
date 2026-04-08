@@ -1208,8 +1208,7 @@ public class AgentService {
         if (config == null) return;
         if (config.getTools() != null) {
             for (ToolConfig tool : config.getTools()) {
-                String type = tool.getToolType();
-                if (type == null || "worker".equals(type) || "cli".equals(type)) {
+                if (tool.isStateful()) {
                     taskToDomain.put(tool.getName(), domain);
                 }
             }

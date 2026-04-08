@@ -77,6 +77,21 @@ def _passthrough_task_def(name: str) -> Any:
     return td
 
 
+def _has_stateful_tools(agent: Any) -> bool:
+    """Return True if the agent is stateful or any @tool has stateful=True."""
+    from agentspan.agents.tool import get_tool_defs
+
+    if getattr(agent, "stateful", False):
+        return True
+    for td in get_tool_defs(getattr(agent, "tools", [])):
+        if getattr(td, "stateful", False):
+            return True
+    for sub in getattr(agent, "agents", []):
+        if _has_stateful_tools(sub):
+            return True
+    return False
+
+
 # Thread count for system-level async workers (guardrails, handoff checks, etc.).
 # User-defined tool workers keep the per-worker default from @worker_task.
 _SYSTEM_WORKER_THREADS = 10
@@ -959,7 +974,10 @@ class AgentRuntime:
         # 1. Tools (and tool-level guardrails) — always registered
         if agent.tools:
             tc = ToolRegistry()
-            tc.register_tool_workers(agent.tools, agent.name, domain=domain)
+            tc.register_tool_workers(
+                agent.tools, agent.name, domain=domain,
+                agent_stateful=getattr(agent, "stateful", False),
+            )
             for t in agent.tools:
                 from agentspan.agents.tool import get_tool_def
 
@@ -2332,7 +2350,7 @@ class AgentRuntime:
 
         logger.info("Executing agent '%s'", agent.name)
 
-        run_id = uuid.uuid4().hex if getattr(agent, "stateful", False) else None
+        run_id = uuid.uuid4().hex if _has_stateful_tools(agent) else None
 
         # Start via server first to get requiredWorkers, then register
         # locally.  Conductor queues tasks so workers can start polling
@@ -3444,7 +3462,7 @@ class AgentRuntime:
 
         correlation_id = str(uuid.uuid4())
 
-        run_id = uuid.uuid4().hex if getattr(agent, "stateful", False) else None
+        run_id = uuid.uuid4().hex if _has_stateful_tools(agent) else None
 
         # Start via server first to get requiredWorkers, then register locally
         effective_timeout = agent.timeout_seconds if agent.timeout_seconds > 0 else None
@@ -3836,7 +3854,7 @@ class AgentRuntime:
 
         logger.info("Executing agent '%s' (async)", agent.name)
 
-        run_id = uuid.uuid4().hex if getattr(agent, "stateful", False) else None
+        run_id = uuid.uuid4().hex if _has_stateful_tools(agent) else None
 
         # Start via server first to get requiredWorkers, then register locally
         execution_id, required_workers = await self._start_via_server_async(
@@ -3971,7 +3989,7 @@ class AgentRuntime:
 
         correlation_id = str(uuid.uuid4())
 
-        run_id = uuid.uuid4().hex if getattr(agent, "stateful", False) else None
+        run_id = uuid.uuid4().hex if _has_stateful_tools(agent) else None
 
         # Start via server first to get requiredWorkers, then register locally
         effective_timeout = agent.timeout_seconds if agent.timeout_seconds > 0 else None

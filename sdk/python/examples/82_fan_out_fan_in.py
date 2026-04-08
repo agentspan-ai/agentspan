@@ -90,6 +90,7 @@ def build_collector() -> Agent:
         model=settings.llm_model,
         tools=[receive_result, save_report],
         max_turns=10000,
+        stateful=True,
         instructions=(
             f"You are a Collector agent. You receive individual worker answers and "
             f"aggregate them. There are always {NUM_WORKERS} workers "
@@ -145,6 +146,7 @@ def build_worker(worker_name: str, runtime: AgentRuntime, collector_id: str) -> 
         model=settings.llm_model,
         tools=[receive_task, submit_answer, stop_collector],
         max_turns=10000,
+        stateful=True,
         instructions=(
             f"You are Worker {worker_name.upper()}, one of {NUM_WORKERS} parallel analysts. "
             "Repeat indefinitely:\n"
@@ -189,6 +191,7 @@ def build_orchestrator(runtime: AgentRuntime, worker_ids: list) -> Agent:
         model=settings.llm_model,
         tools=[receive_question, fan_out, stop_all_workers],
         max_turns=10000,
+        stateful=True,
         instructions=(
             "You are an Orchestrator agent. Repeat indefinitely:\n"
             "1. Call receive_question to get the next question or stop signal.\n"

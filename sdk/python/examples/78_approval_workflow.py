@@ -102,6 +102,7 @@ agent = Agent(
     model=settings.llm_model,
     tools=[receive_message, execute_task, flag_for_approval, log_rejection],
     max_turns=10000,
+    stateful=True,
     instructions=(
         "You are an operations agent that processes system commands with a safety gate. "
         "Repeat this cycle indefinitely:\n\n"

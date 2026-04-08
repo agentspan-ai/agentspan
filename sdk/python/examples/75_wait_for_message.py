@@ -43,6 +43,7 @@ agent = Agent(
     model=settings.llm_model,
     tools=[receive_message, execute_task],
     max_turns=10000,
+    stateful=True,
     instructions=(
         "You are a task-execution agent that runs forever in a loop. "
         "Repeat this cycle indefinitely: "
