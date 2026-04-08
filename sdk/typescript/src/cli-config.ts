@@ -32,9 +32,9 @@
  *   });
  */
 
-import { execSync, spawnSync } from 'child_process';
-import { TerminalToolError } from './errors.js';
-import type { ToolDef } from './types.js';
+import { spawnSync } from "child_process";
+import { TerminalToolError } from "./errors.js";
+import type { ToolDef } from "./types.js";
 
 // ── CliConfigOptions ──────────────────────────────────────
 
@@ -74,7 +74,7 @@ function validateCliCommand(command: string, allowedCommands: string[]): void {
   if (!allowedCommands.includes(base)) {
     throw new Error(
       `Command '${base}' is not allowed. ` +
-        `Allowed commands: ${[...allowedCommands].sort().join(', ')}`,
+        `Allowed commands: ${[...allowedCommands].sort().join(", ")}`,
     );
   }
 }
@@ -88,54 +88,53 @@ function validateCliCommand(command: string, allowedCommands: string[]): void {
  * The tool name is prefixed with the agent name to avoid collisions
  * when multiple agents define CLI tools with different allowed commands.
  */
-export function makeCliTool(
-  config: CliConfigOptions,
-  agentName: string,
-): ToolDef {
+export function makeCliTool(config: CliConfigOptions, agentName: string): ToolDef {
   const allowedCommands = config.allowedCommands ?? [];
   const timeout = config.timeout ?? 30;
   const workingDir = config.workingDir;
   const allowShell = config.allowShell ?? false;
-  const taskName = agentName ? `${agentName}_run_command` : 'run_command';
+  const taskName = agentName ? `${agentName}_run_command` : "run_command";
 
   // Build dynamic description
   let desc = `Run a CLI command directly. Timeout: ${timeout}s.`;
   if (allowedCommands.length > 0) {
-    desc += ` Allowed commands: ${[...allowedCommands].sort().join(', ')}.`;
+    desc += ` Allowed commands: ${[...allowedCommands].sort().join(", ")}.`;
   }
   if (!allowShell) {
-    desc += ' Shell mode is disabled — do not set shell=true.';
+    desc += " Shell mode is disabled — do not set shell=true.";
   }
-  desc += ' If you need to save a command\'s output for later pipeline steps, set context_key. Well-known keys: repo, branch, working_dir, issue_number, pr_url, commit_sha.';
+  desc +=
+    " If you need to save a command's output for later pipeline steps, set context_key. Well-known keys: repo, branch, working_dir, issue_number, pr_url, commit_sha.";
 
   return {
     name: taskName,
     description: desc,
     inputSchema: {
-      type: 'object',
+      type: "object",
       properties: {
-        command: { type: 'string', description: 'The CLI command to execute' },
+        command: { type: "string", description: "The CLI command to execute" },
         args: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Command arguments',
+          type: "array",
+          items: { type: "string" },
+          description: "Command arguments",
         },
         cwd: {
-          type: 'string',
-          description: 'Working directory for the command',
+          type: "string",
+          description: "Working directory for the command",
         },
         shell: {
-          type: 'boolean',
-          description: 'Whether to run via shell',
+          type: "boolean",
+          description: "Whether to run via shell",
         },
         context_key: {
-          type: 'string',
-          description: 'If set, saves stdout to context state under this key on success. Well-known keys: repo, branch, working_dir, issue_number, pr_url, commit_sha.',
+          type: "string",
+          description:
+            "If set, saves stdout to context state under this key on success. Well-known keys: repo, branch, working_dir, issue_number, pr_url, commit_sha.",
         },
       },
-      required: ['command'],
+      required: ["command"],
     },
-    toolType: 'worker',
+    toolType: "worker",
     config: { allowedCommands: [...allowedCommands] },
     func: async (args: Record<string, unknown>) => {
       // Extract context fields before command processing
@@ -145,11 +144,11 @@ export function makeCliTool(
       delete args.context_key;
 
       const command = args.command as string;
-      if (!command || typeof command !== 'string') {
+      if (!command || typeof command !== "string") {
         return {
-          status: 'error',
-          stdout: '',
-          stderr: 'No command provided.',
+          status: "error",
+          stdout: "",
+          stderr: "No command provided.",
         };
       }
 
@@ -159,9 +158,7 @@ export function makeCliTool(
       // Shell gate
       const useShell = args.shell === true;
       if (useShell && !allowShell) {
-        throw new Error(
-          'Shell mode is disabled for this agent. Do not set shell=true.',
-        );
+        throw new Error("Shell mode is disabled for this agent. Do not set shell=true.");
       }
 
       // Normalise args
@@ -171,32 +168,31 @@ export function makeCliTool(
       }
 
       // Resolve working directory
-      const effectiveCwd =
-        (args.cwd as string) || workingDir || undefined;
+      const effectiveCwd = (args.cwd as string) || workingDir || undefined;
 
       // Use spawnSync to capture both stdout and stderr on success
       // (execSync only returns stdout, losing stderr from commands like gh clone)
       const result = spawnSync(command, cmdArgs.map(String), {
         timeout: timeout * 1000,
-        encoding: 'utf-8',
+        encoding: "utf-8",
         cwd: effectiveCwd,
-        shell: useShell ? '/bin/sh' : undefined,
-        stdio: ['pipe', 'pipe', 'pipe'],
+        shell: useShell ? "/bin/sh" : undefined,
+        stdio: ["pipe", "pipe", "pipe"],
       });
 
       if (result.error) {
         const err = result.error as NodeJS.ErrnoException & { killed?: boolean; signal?: string };
-        if (err.killed || result.signal === 'SIGTERM') {
+        if (err.killed || result.signal === "SIGTERM") {
           throw new TerminalToolError(`Command timed out after ${timeout}s`);
         }
-        if (err.message?.includes('ENOENT')) {
+        if (err.message?.includes("ENOENT")) {
           throw new TerminalToolError(`Command not found: ${command}`);
         }
         throw new TerminalToolError(err.message ?? String(err));
       }
 
-      const stdout = result.stdout ?? '';
-      const stderr = result.stderr ?? '';
+      const stdout = result.stdout ?? "";
+      const stderr = result.stderr ?? "";
 
       if (result.status === 0) {
         if (contextKey && toolContext) {
@@ -204,11 +200,11 @@ export function makeCliTool(
           const value = stdout.trim() || stderr.trim();
           if (value) toolContext.state[contextKey] = value;
         }
-        return { status: 'success', exit_code: 0, stdout, stderr };
+        return { status: "success", exit_code: 0, stdout, stderr };
       }
 
       return {
-        status: 'error',
+        status: "error",
         exit_code: result.status ?? 1,
         stdout,
         stderr,

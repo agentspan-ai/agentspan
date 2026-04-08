@@ -3,17 +3,17 @@
  * Usage: npx tsx tests/count-workers.ts [framework]
  * Frameworks: langgraph (default), openai, adk
  */
-import { readdirSync } from 'fs';
-import { join } from 'path';
-import { execSync } from 'child_process';
+import { readdirSync } from "fs";
+import { join } from "path";
+import { execSync } from "child_process";
 
-const framework = process.argv[2] || 'langgraph';
-const sdkRoot = join(import.meta.dirname!, '..');
-const examplesDir = join(sdkRoot, 'examples', framework);
-const harness = join(sdkRoot, 'tests', '_worker-harness.ts');
+const framework = process.argv[2] || "langgraph";
+const sdkRoot = join(import.meta.dirname!, "..");
+const examplesDir = join(sdkRoot, "examples", framework);
+const harness = join(sdkRoot, "tests", "_worker-harness.ts");
 
 const files = readdirSync(examplesDir)
-  .filter(f => f.match(/^\d+.*\.ts$/) && !f.includes('README'))
+  .filter((f) => f.match(/^\d+.*\.ts$/) && !f.includes("README"))
   .sort();
 
 interface Result {
@@ -27,29 +27,36 @@ interface Result {
 const results: Result[] = [];
 
 for (const file of files) {
-  const num = file.match(/^(\d+)/)?.[1] ?? '';
+  const num = file.match(/^(\d+)/)?.[1] ?? "";
   const filePath = join(examplesDir, file);
 
   try {
-    const output = execSync(
-      `npx tsx "${harness}" "${filePath}"`,
-      { cwd: sdkRoot, timeout: 15000, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
-    ).trim();
+    const output = execSync(`npx tsx "${harness}" "${filePath}"`, {
+      cwd: sdkRoot,
+      timeout: 15000,
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+    }).trim();
 
-    const lines = output.split('\n').filter(l => l.trim());
+    const lines = output.split("\n").filter((l) => l.trim());
     const jsonLine = lines[lines.length - 1];
     const data = JSON.parse(jsonLine);
     results.push({ example: num, ...data });
   } catch (e: any) {
-    const stdout = e.stdout?.toString()?.trim() ?? '';
-    const lines = stdout.split('\n').filter((l: string) => l.trim());
+    const stdout = e.stdout?.toString()?.trim() ?? "";
+    const lines = stdout.split("\n").filter((l: string) => l.trim());
     try {
       const jsonLine = lines[lines.length - 1];
       const data = JSON.parse(jsonLine);
       results.push({ example: num, ...data });
     } catch {
-      const stderr = (e.stderr?.toString() ?? '').slice(0, 100);
-      results.push({ example: num, workers: -1, hasGraph: false, error: stderr || e.message?.slice(0, 60) });
+      const stderr = (e.stderr?.toString() ?? "").slice(0, 100);
+      results.push({
+        example: num,
+        workers: -1,
+        hasGraph: false,
+        error: stderr || e.message?.slice(0, 60),
+      });
     }
   }
 }

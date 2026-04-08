@@ -1,7 +1,7 @@
-import type { AgentEvent, AgentResult, AgentStatus } from './types.js';
-import { stripInternalEventKeys } from './types.js';
-import { AgentAPIError, SSETimeoutError, AgentspanError } from './errors.js';
-import { makeAgentResult } from './result.js';
+import type { AgentEvent, AgentResult, AgentStatus } from "./types.js";
+import { stripInternalEventKeys } from "./types.js";
+import { AgentAPIError, SSETimeoutError, AgentspanError } from "./errors.js";
+import { makeAgentResult } from "./result.js";
 
 // ── Constants ───────────────────────────────────────────
 
@@ -38,7 +38,7 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
     this.headers = headers;
     this.executionId = executionId;
     this.respondFn = respondFn;
-    this.serverUrl = serverUrl ?? '';
+    this.serverUrl = serverUrl ?? "";
   }
 
   // ── AsyncIterable implementation ─────────────────────
@@ -48,7 +48,7 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
   }
 
   private async *_streamEvents(): AsyncIterableIterator<AgentEvent> {
-    let lastEventId = '';
+    let lastEventId = "";
     let retries = 0;
 
     try {
@@ -77,8 +77,8 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
           // Set lastEventId for reconnection
           if (this.events.length > 0) {
             const lastEvent = this.events[this.events.length - 1];
-            if (lastEvent && (lastEvent as unknown as Record<string, unknown>)['_eventId']) {
-              lastEventId = String((lastEvent as unknown as Record<string, unknown>)['_eventId']);
+            if (lastEvent && (lastEvent as unknown as Record<string, unknown>)["_eventId"]) {
+              lastEventId = String((lastEvent as unknown as Record<string, unknown>)["_eventId"]);
             }
           }
         }
@@ -95,46 +95,42 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
   private async *_connectAndStream(lastEventId: string): AsyncIterableIterator<AgentEvent> {
     const requestHeaders: Record<string, string> = {
       ...this.headers,
-      Accept: 'text/event-stream',
-      'Cache-Control': 'no-cache',
+      Accept: "text/event-stream",
+      "Cache-Control": "no-cache",
     };
 
     if (lastEventId) {
-      requestHeaders['Last-Event-ID'] = lastEventId;
+      requestHeaders["Last-Event-ID"] = lastEventId;
     }
 
     const response = await fetch(this.url, {
-      method: 'GET',
+      method: "GET",
       headers: requestHeaders,
     });
 
     if (!response.ok) {
       const body = await response.text();
-      throw new AgentAPIError(
-        `SSE connection failed: ${response.status}`,
-        response.status,
-        body,
-      );
+      throw new AgentAPIError(`SSE connection failed: ${response.status}`, response.status, body);
     }
 
     if (!response.body) {
-      throw new AgentspanError('SSE response has no body');
+      throw new AgentspanError("SSE response has no body");
     }
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
 
-    let buffer = '';
-    let currentEventType = '';
-    let currentEventId = '';
-    let currentData = '';
+    let buffer = "";
+    let currentEventType = "";
+    let currentEventId = "";
+    let currentData = "";
     let lastRealEventTime = Date.now();
 
     try {
       while (!this.done) {
         // Check for SSE timeout
         if (Date.now() - lastRealEventTime > SSE_TIMEOUT_MS) {
-          throw new SSETimeoutError('No real events received within timeout window');
+          throw new SSETimeoutError("No real events received within timeout window");
         }
 
         const readPromise = reader.read();
@@ -151,7 +147,7 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
         if (timedOut) {
           // Timeout on read — check if SSE timeout exceeded
           if (Date.now() - lastRealEventTime > SSE_TIMEOUT_MS) {
-            throw new SSETimeoutError('No real events received within timeout window');
+            throw new SSETimeoutError("No real events received within timeout window");
           }
           continue;
         }
@@ -164,7 +160,7 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
               lastRealEventTime = Date.now();
               this.events.push(event);
               yield event;
-              if (event.type === 'done') {
+              if (event.type === "done") {
                 this.done = true;
               }
             }
@@ -173,12 +169,12 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
         }
 
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
+        const lines = buffer.split("\n");
         // Keep last incomplete line in buffer
-        buffer = lines.pop() ?? '';
+        buffer = lines.pop() ?? "";
 
         for (const line of lines) {
-          if (line === '') {
+          if (line === "") {
             // Blank line: dispatch event
             if (currentData || currentEventType) {
               const event = this._parseSSEBlock(currentEventType, currentEventId, currentData);
@@ -186,26 +182,26 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
                 lastRealEventTime = Date.now();
                 this.events.push(event);
                 yield event;
-                if (event.type === 'done') {
+                if (event.type === "done") {
                   this.done = true;
                   return;
                 }
               }
             }
-            currentEventType = '';
-            currentEventId = '';
-            currentData = '';
-          } else if (line.startsWith(':')) {
+            currentEventType = "";
+            currentEventId = "";
+            currentData = "";
+          } else if (line.startsWith(":")) {
             // Comment/heartbeat — skip but don't update lastRealEventTime
             continue;
-          } else if (line.startsWith('event:')) {
+          } else if (line.startsWith("event:")) {
             currentEventType = line.slice(6).trim();
-          } else if (line.startsWith('id:')) {
+          } else if (line.startsWith("id:")) {
             currentEventId = line.slice(3).trim();
-          } else if (line.startsWith('data:')) {
+          } else if (line.startsWith("data:")) {
             const dataContent = line.slice(5).trim();
             if (currentData) {
-              currentData += '\n' + dataContent;
+              currentData += "\n" + dataContent;
             } else {
               currentData = dataContent;
             }
@@ -224,11 +220,7 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
   /**
    * Parse an SSE block into an AgentEvent.
    */
-  private _parseSSEBlock(
-    eventType: string,
-    eventId: string,
-    data: string,
-  ): AgentEvent | null {
+  private _parseSSEBlock(eventType: string, eventId: string, data: string): AgentEvent | null {
     if (!data && !eventType) return null;
 
     let parsed: Record<string, unknown> = {};
@@ -242,7 +234,7 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
     }
 
     // Determine type: event field takes priority, then data.type
-    const type = eventType || (parsed.type as string) || 'message';
+    const type = eventType || (parsed.type as string) || "message";
 
     const event: AgentEvent = {
       type,
@@ -251,7 +243,7 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
 
     // Store event ID internally for reconnection
     if (eventId) {
-      (event as unknown as Record<string, unknown>)['_eventId'] = eventId;
+      (event as unknown as Record<string, unknown>)["_eventId"] = eventId;
     }
 
     // Strip internal keys from args
@@ -276,7 +268,7 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
 
         if (status.isWaiting) {
           const waitEvent: AgentEvent = {
-            type: 'waiting',
+            type: "waiting",
             executionId: this.executionId,
             timestamp: Date.now(),
           };
@@ -286,7 +278,7 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
 
         if (status.isComplete) {
           const doneEvent: AgentEvent = {
-            type: 'done',
+            type: "done",
             output: status.output,
             executionId: this.executionId,
             timestamp: Date.now(),
@@ -311,7 +303,7 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
     const url = `${this.serverUrl}/agent/${this.executionId}/status`;
     try {
       const response = await fetch(url, {
-        method: 'GET',
+        method: "GET",
         headers: this.headers,
       });
 
@@ -366,8 +358,8 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
     }
 
     // Find the done event
-    const doneEvent = this.events.find((e) => e.type === 'done');
-    const errorEvent = this.events.findLast((e) => e.type === 'error');
+    const doneEvent = this.events.find((e) => e.type === "done");
+    const errorEvent = this.events.findLast((e) => e.type === "error");
 
     // Poll the server for the real terminal status — the done SSE event
     // signals stream end, NOT workflow success.
@@ -377,18 +369,18 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
         const statusUrl = `${this.serverUrl}/agent/${this.executionId}/status`;
         const resp = await fetch(statusUrl, { headers: this.headers });
         if (resp.ok) {
-          serverStatus = await resp.json() as Record<string, unknown>;
+          serverStatus = (await resp.json()) as Record<string, unknown>;
         }
       } catch {
         // Fall back to stream-based inference
       }
     }
 
-    const status = (serverStatus?.status as string)
-      ?? (errorEvent ? 'FAILED' : (doneEvent ? 'COMPLETED' : 'COMPLETED'));
+    const status =
+      (serverStatus?.status as string) ??
+      (errorEvent ? "FAILED" : doneEvent ? "COMPLETED" : "COMPLETED");
     const output = (serverStatus?.output as unknown) ?? doneEvent?.output ?? null;
-    const error = (serverStatus?.reasonForIncompletion as string)
-      ?? errorEvent?.content;
+    const error = (serverStatus?.reasonForIncompletion as string) ?? errorEvent?.content;
 
     return makeAgentResult({
       output,
