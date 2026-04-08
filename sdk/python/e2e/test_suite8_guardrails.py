@@ -1,4 +1,4 @@
-"""Suite 10: Guardrails — compilation, runtime behavior, and on_fail policies.
+"""Suite 8: Guardrails — compilation, runtime behavior, and on_fail policies.
 
 Tests every guardrail dimension:
   - Types: custom function, regex (block/allow), LLM judge

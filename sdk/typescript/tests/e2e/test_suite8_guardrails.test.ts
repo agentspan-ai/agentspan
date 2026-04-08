@@ -1,5 +1,5 @@
 /**
- * Suite 10: Guardrails — compilation and runtime behavior.
+ * Suite 8: Guardrails — compilation and runtime behavior.
  *
  * Tests guardrail types (regex, custom), positions (input, output),
  * on_fail policies (raise, retry), and max_retries escalation.
@@ -162,7 +162,7 @@ function findTool(ad: Record<string, unknown>, name: string) {
 
 // ── Tests ───────────────────────────────────────────────────────────────
 
-describe('Suite 10: Guardrails', { timeout: 600_000 }, () => {
+describe('Suite 8: Guardrails', { timeout: 600_000 }, () => {
   it('plan reflects all guardrails correctly', async () => {
     const agent = new Agent({
       name: 'e2e_ts_gr_compile',

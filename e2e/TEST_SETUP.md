@@ -47,7 +47,7 @@ Both SDKs implement identical test suites:
 | 5 — HTTP Tools | `test_suite5_http_tools.py` | `test_suite5_http_tools.test.ts` |
 | 6 — PDF Tools | `test_suite6_pdf_tools.py` | `test_suite6_pdf_tools.test.ts` |
 | 7 — Media Tools | `test_suite7_media_tools.py` | `test_suite7_media_tools.test.ts` |
-| 10 — Guardrails | `test_suite10_guardrails.py` | `test_suite10_guardrails.test.ts` |
+| 8 — Guardrails | `test_suite8_guardrails.py` | `test_suite8_guardrails.test.ts` |
 
 ## Running
 
@@ -90,7 +90,7 @@ npx vitest run tests/e2e/test_suite4_mcp_tools.test.ts            # suite 4 only
 npx vitest run tests/e2e/test_suite5_http_tools.test.ts           # suite 5 only
 npx vitest run tests/e2e/test_suite6_pdf_tools.test.ts            # suite 6 only
 npx vitest run tests/e2e/test_suite7_media_tools.test.ts          # suite 7 only
-npx vitest run tests/e2e/test_suite10_guardrails.test.ts          # suite 10 only
+npx vitest run tests/e2e/test_suite8_guardrails.test.ts           # suite 8 only
 ```
 
 ## Environment Variables
