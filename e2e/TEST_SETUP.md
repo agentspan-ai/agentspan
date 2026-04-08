@@ -1,16 +1,19 @@
-# E2E Test Setup — Python SDK
+# E2E Test Setup — Python & TypeScript SDKs
+
+Both SDKs have 1:1 matching test suites with identical file naming, test coverage, and algorithmic validation.
 
 ## Prerequisites
 
 - Agentspan server running (default: `http://localhost:6767`)
 - Agentspan CLI built (`cli/agentspan`)
 - Python SDK installed (`uv sync --extra testing`)
-- `mcp-testkit` running (default: `http://localhost:3001`, only needed for Suite 1 kitchen sink test)
+- TypeScript SDK built (`cd sdk/typescript && npm install && npm run build`)
+- `mcp-testkit` running (default: `http://localhost:3001`, needed for Suites 1, 4, 5)
 - LLM API keys:
-  - `OPENAI_API_KEY` — required for agent execution (Suites 2, 3) and stored in the server's credential store
+  - `OPENAI_API_KEY` — required for agent execution (Suites 2–7, 10)
   - `ANTHROPIC_API_KEY` — required for LLM-as-judge (Suite 1, default judge model is Claude Sonnet)
-  - If using OpenAI as the judge instead, only `OPENAI_API_KEY` is needed (set `AGENTSPAN_JUDGE_MODEL=gpt-4o-mini`)
   - `GITHUB_TOKEN` — required for Suite 3 CLI tools test (gh CLI authentication)
+  - `GOOGLE_AI_API_KEY` — optional, for Gemini image test in Suite 7
 - `gh` CLI installed (only needed for Suite 3)
 
 ### Server master key
@@ -31,7 +34,24 @@ rm -f agent-runtime.db* ~/.agentspan/master.key
 1. When adding e2e make sure not to use LLM for validation unless we are doing this for judging quality/output/evals
 2. Write a test, then validate that the test is actually valid. make it fail, assert that it did fail so we know its corect
 
+## Test Suite Parity
+
+Both SDKs implement identical test suites:
+
+| Suite | File (Python) | File (TypeScript) |
+|-------|--------------|-------------------|
+| 1 — Basic Validation | `test_suite1_basic_validation.py` | `test_suite1_basic_validation.test.ts` |
+| 2 — Tool Calling | `test_suite2_tool_calling.py` | `test_suite2_tool_calling.test.ts` |
+| 3 — CLI Tools | `test_suite3_cli_tools.py` | `test_suite3_cli_tools.test.ts` |
+| 4 — MCP Tools | `test_suite4_mcp_tools.py` | `test_suite4_mcp_tools.test.ts` |
+| 5 — HTTP Tools | `test_suite5_http_tools.py` | `test_suite5_http_tools.test.ts` |
+| 6 — PDF Tools | `test_suite6_pdf_tools.py` | `test_suite6_pdf_tools.test.ts` |
+| 7 — Media Tools | `test_suite7_media_tools.py` | `test_suite7_media_tools.test.ts` |
+| 10 — Guardrails | `test_suite10_guardrails.py` | `test_suite10_guardrails.test.ts` |
+
 ## Running
+
+### Python
 
 ```bash
 # Full automated run (build + start services + test + report)
@@ -51,6 +71,26 @@ uv run pytest e2e/test_suite4_mcp_tools.py -v         # suite 4 only
 uv run pytest e2e/test_suite5_http_tools.py -v        # suite 5 only
 uv run pytest e2e/test_suite6_pdf_tools.py -v         # suite 6 only
 uv run pytest e2e/test_suite7_media_tools.py -v       # suite 7 only
+```
+
+### TypeScript
+
+```bash
+# Manual run (server already running)
+cd sdk/typescript
+export AGENTSPAN_SERVER_URL=http://localhost:6767/api
+export AGENTSPAN_CLI_PATH=../../cli/agentspan
+export MCP_TESTKIT_URL=http://localhost:3001
+
+npx vitest run tests/e2e/                                         # all suites
+npx vitest run tests/e2e/test_suite1_basic_validation.test.ts     # suite 1 only
+npx vitest run tests/e2e/test_suite2_tool_calling.test.ts         # suite 2 only
+npx vitest run tests/e2e/test_suite3_cli_tools.test.ts            # suite 3 only
+npx vitest run tests/e2e/test_suite4_mcp_tools.test.ts            # suite 4 only
+npx vitest run tests/e2e/test_suite5_http_tools.test.ts           # suite 5 only
+npx vitest run tests/e2e/test_suite6_pdf_tools.test.ts            # suite 6 only
+npx vitest run tests/e2e/test_suite7_media_tools.test.ts          # suite 7 only
+npx vitest run tests/e2e/test_suite10_guardrails.test.ts          # suite 10 only
 ```
 
 ## Environment Variables
