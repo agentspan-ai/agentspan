@@ -228,15 +228,17 @@ public class Agent {
             return this;
         }
 
-        /** Set the list of tools the agent can use. */
+        /** Add tools to the agent (accumulates, does not replace). */
         public Builder tools(List<ToolDef> tools) {
-            this.tools = tools;
+            if (this.tools == null) this.tools = new ArrayList<>();
+            this.tools.addAll(tools);
             return this;
         }
 
-        /** Set tools with varargs. */
+        /** Add tools with varargs (accumulates, does not replace). */
         public Builder tools(ToolDef... tools) {
-            this.tools = Arrays.asList(tools);
+            if (this.tools == null) this.tools = new ArrayList<>();
+            this.tools.addAll(Arrays.asList(tools));
             return this;
         }
 

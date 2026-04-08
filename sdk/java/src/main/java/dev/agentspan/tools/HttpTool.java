@@ -41,6 +41,8 @@ public class HttpTool {
         private String url;
         private String method = "GET";
         private Map<String, String> headers = new HashMap<>();
+        private List<String> accept = new ArrayList<>();
+        private String contentType;
         private Map<String, Object> inputSchema;
         private List<String> credentials = new ArrayList<>();
 
@@ -56,6 +58,21 @@ public class HttpTool {
 
         public Builder headers(Map<String, String> headers) {
             this.headers = new HashMap<>(headers);
+            return this;
+        }
+
+        public Builder accept(String... accept) {
+            this.accept = new ArrayList<>(List.of(accept));
+            return this;
+        }
+
+        public Builder accept(List<String> accept) {
+            this.accept = new ArrayList<>(accept);
+            return this;
+        }
+
+        public Builder contentType(String contentType) {
+            this.contentType = contentType;
             return this;
         }
 
@@ -88,6 +105,8 @@ public class HttpTool {
             config.put("url", url);
             config.put("method", method);
             config.put("headers", headers);
+            if (!accept.isEmpty()) config.put("accept", accept);
+            if (contentType != null) config.put("contentType", contentType);
 
             // Build a basic input schema if not provided
             Map<String, Object> schema = inputSchema;

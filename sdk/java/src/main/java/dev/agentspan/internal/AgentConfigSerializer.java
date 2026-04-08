@@ -230,7 +230,9 @@ public class AgentConfigSerializer {
         toolMap.put("name", tool.getName());
         toolMap.put("description", tool.getDescription());
         toolMap.put("inputSchema", tool.getInputSchema());
-        toolMap.put("outputSchema", Map.of("type", "object", "additionalProperties", Map.of()));
+        if ("worker".equals(tool.getToolType())) {
+            toolMap.put("outputSchema", Map.of("type", "object", "additionalProperties", Map.of()));
+        }
         toolMap.put("toolType", tool.getToolType());
 
         if (tool.isApprovalRequired()) {

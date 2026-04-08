@@ -1,0 +1,96 @@
+{
+  "examples": [
+    {
+      "id": "01",
+      "java_class": "Example01BasicAgent",
+      "python_file": "01_basic_agent.py",
+      "notes": "Basic agent — name, model, instructions only"
+    },
+    {
+      "id": "02",
+      "java_class": "Example02Tools",
+      "python_file": "02a_simple_tools.py",
+      "notes": "Worker tools — inputSchema, outputSchema, toolType (02a avoids approval-required tool)"
+    },
+    {
+      "id": "03",
+      "java_class": "Example03StructuredOutput",
+      "python_file": "03_structured_output.py",
+      "notes": "Structured output — outputType.schema structure"
+    },
+    {
+      "id": "04",
+      "java_class": "Example04HttpAndMcpTools",
+      "python_file": "04_http_and_mcp_tools.py",
+      "notes": "HTTP + MCP tools — config structure, no outputSchema on http tools"
+    },
+    {
+      "id": "05",
+      "java_class": "Example05Handoffs",
+      "python_file": "05_handoffs.py",
+      "notes": "Handoffs — nested agents, strategy"
+    },
+    {
+      "id": "06",
+      "java_class": "Example06SequentialPipeline",
+      "python_file": "06_sequential_pipeline.py",
+      "notes": "Sequential strategy"
+    },
+    {
+      "id": "07",
+      "java_class": "Example07ParallelAgents",
+      "python_file": "07_parallel_agents.py",
+      "notes": "Parallel strategy"
+    },
+    {
+      "id": "08",
+      "java_class": "Example08RouterAgent",
+      "python_file": "08_router_agent.py",
+      "notes": "Router strategy + router agent"
+    },
+    {
+      "id": "10",
+      "java_class": "Example10Guardrails",
+      "python_file": "10_guardrails.py",
+      "notes": "Custom guardrails — position, onFail, guardrailType, taskName"
+    },
+    {
+      "id": "17",
+      "java_class": "Example17SwarmOrchestration",
+      "python_file": "17_swarm_orchestration.py",
+      "notes": "Swarm strategy"
+    },
+    {
+      "id": "19",
+      "java_class": "Example19ComposableTermination",
+      "python_file": "19_composable_termination.py",
+      "notes": "Termination condition structure"
+    },
+    {
+      "id": "21",
+      "java_class": "Example21RegexGuardrails",
+      "python_file": "21_regex_guardrails.py",
+      "notes": "Regex guardrail — patterns, mode fields"
+    },
+    {
+      "id": "22",
+      "java_class": "Example22LlmGuardrails",
+      "python_file": "22_llm_guardrails.py",
+      "notes": "LLM guardrail — model, policy fields"
+    },
+    {
+      "id": "13",
+      "java_class": "Example13HierarchicalAgents",
+      "python_file": "13_hierarchical_agents.py",
+      "notes": "Hierarchical — deeply nested agents"
+    }
+  ],
+  "skip": [
+    {"java_class": "Example09HumanInTheLoop",   "reason": "requires human interaction, blocks"},
+    {"java_class": "Example11Streaming",         "reason": "streaming — no agentDef diff needed"},
+    {"java_class": "Example12LongRunning",       "reason": "long running — structural diff same as Example01"},
+    {"java_class": "Example14ExistingWorkers",   "reason": "external workers — no local serialization"},
+    {"java_class": "Example16CredentialsTool",   "reason": "requires external credentials"},
+    {"java_class": "Example18ManualSelection",   "reason": "requires human interaction"}
+  ]
+}
