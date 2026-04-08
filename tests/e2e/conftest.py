@@ -67,3 +67,34 @@ def assert_required_workers_returned(start_response: dict):
     """Assert the server returned requiredWorkers in the start response."""
     assert "requiredWorkers" in start_response or "required_workers" in start_response, \
         f"Server did not return requiredWorkers. Keys: {list(start_response.keys())}"
+
+
+@pytest.fixture(autouse=True)
+def _clear_conductor_worker_registry():
+    """Clear the Conductor global worker registry between tests.
+
+    The Conductor SDK stores ``@worker_task``-decorated functions in a
+    module-level dict keyed by ``(task_name, domain)``
+    (``_decorated_functions`` in ``conductor.client.automator.task_handler``).
+    With pytest-xdist, each gw process runs tests sequentially in the same
+    Python process.  Without cleanup, this dict accumulates every tool
+    registered across all prior tests in that process.
+
+    The accumulation is harmful: each new ``AgentRuntime`` calls
+    ``get_registered_workers()`` which iterates the entire dict and spawns
+    a multiprocessing worker process per entry.  By the 10th test in a gw
+    process, a runtime may spawn 5–10 worker processes simultaneously.
+    On a resource-constrained CI machine running several gw processes in
+    parallel this causes some worker processes to fail to start, leaving
+    their Conductor tasks in queue until ``response_timeout_seconds``
+    expires — previously 3600 s, now 120 s.
+
+    Clearing the dict after each test ensures every test starts with exactly
+    the workers it registered, regardless of test order or gw assignment.
+    """
+    yield
+    try:
+        from conductor.client.automator.task_handler import _decorated_functions
+        _decorated_functions.clear()
+    except ImportError:
+        pass

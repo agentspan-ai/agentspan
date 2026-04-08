@@ -46,6 +46,11 @@ def _default_task_def(name: str) -> Any:
 
     Timeout is 0 (no timeout) — the agent configuration controls execution
     duration, not the task definition.
+
+    response_timeout_seconds is 120 (2 minutes): if a worker fails to pick
+    up and respond to a task within 2 minutes, Conductor marks it as timed
+    out and retries.  Keeping this short prevents multi-hour CI hangs when
+    worker processes fail to start due to resource pressure.
     """
     from conductor.client.http.models.task_def import TaskDef
 
@@ -54,7 +59,7 @@ def _default_task_def(name: str) -> Any:
     td.retry_logic = "LINEAR_BACKOFF"
     td.retry_delay_seconds = 2
     td.timeout_seconds = 0
-    td.response_timeout_seconds = 3600
+    td.response_timeout_seconds = 120
     td.timeout_policy = "RETRY"
     return td
 
@@ -64,6 +69,9 @@ def _passthrough_task_def(name: str) -> Any:
 
     Timeout is 0 (no timeout) — the agent configuration controls execution
     duration, not the task definition.
+
+    response_timeout_seconds is 120 (2 minutes): same reasoning as
+    _default_task_def.
     """
     from conductor.client.http.models.task_def import TaskDef
 
@@ -72,7 +80,7 @@ def _passthrough_task_def(name: str) -> Any:
     td.retry_logic = "LINEAR_BACKOFF"
     td.retry_delay_seconds = 2
     td.timeout_seconds = 0
-    td.response_timeout_seconds = 3600
+    td.response_timeout_seconds = 120
     td.timeout_policy = "RETRY"
     return td
 
