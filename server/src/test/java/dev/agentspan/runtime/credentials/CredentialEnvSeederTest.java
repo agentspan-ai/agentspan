@@ -143,8 +143,7 @@ class CredentialEnvSeederTest {
         jdbc.update(
                 "INSERT INTO credentials_store (user_id, name, encrypted_value, created_at, updated_at) "
                         + "VALUES (:uid, :n, :enc, :now, :now)",
-                Map.of("uid", ANONYMOUS_USER_ID, "n", "ANTHROPIC_API_KEY",
-                        "enc", staleBytes, "now", now));
+                Map.of("uid", ANONYMOUS_USER_ID, "n", "ANTHROPIC_API_KEY", "enc", staleBytes, "now", now));
 
         Function<String, String> envLookup =
                 name -> "ANTHROPIC_API_KEY".equals(name) ? "sk-fresh-after-rotation" : null;

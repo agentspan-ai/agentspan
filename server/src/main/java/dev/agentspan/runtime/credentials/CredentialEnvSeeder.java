@@ -133,8 +133,10 @@ public class CredentialEnvSeeder implements ApplicationRunner {
             try {
                 existing = storeProvider.get(ANONYMOUS_USER_ID, name);
             } catch (Exception e) {
-                log.warn("Credential '{}' could not be decrypted (master key mismatch?) — "
-                        + "re-seeding from environment variable", name);
+                log.warn(
+                        "Credential '{}' could not be decrypted (master key mismatch?) — "
+                                + "re-seeding from environment variable",
+                        name);
                 storeProvider.delete(ANONYMOUS_USER_ID, name);
                 storeProvider.set(ANONYMOUS_USER_ID, name, value);
                 created++;
