@@ -157,7 +157,7 @@ try:
 
         # Agent responds with no tool calls on stop — DoWhile exits as COMPLETED.
         runtime.send_message(execution_id, {"stop": True})
-        time.sleep(5)
+        handle.join(timeout=30)
         print("\nDone.")
 finally:
     shutil.rmtree(_ipc_dir, ignore_errors=True)

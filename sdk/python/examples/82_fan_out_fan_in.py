@@ -138,7 +138,6 @@ def build_worker(worker_name: str, runtime: AgentRuntime, collector_id: str) -> 
     def stop_collector() -> str:
         """Forward the stop signal to the Collector and write a shutdown sentinel."""
         runtime.send_message(collector_id, {"stop": True})
-        (_ipc_dir / f"worker_{worker_name}_stopped").touch()
         return "stop forwarded"
 
     return Agent(
@@ -183,7 +182,6 @@ def build_orchestrator(runtime: AgentRuntime, worker_ids: list) -> Agent:
         """Send stop signals to all workers and write a shutdown sentinel."""
         for wid in worker_ids:
             runtime.send_message(wid, {"stop": True})
-        (_ipc_dir / "orchestrator_stopped").touch()
         return "stop sent to all workers"
 
     return Agent(
@@ -218,12 +216,14 @@ try:
 
         # Start Workers — Orchestrator needs their IDs.
         worker_ids: list = []
+        worker_handles: list = []
         for name in WORKER_NAMES:
             wh = runtime.start(
                 build_worker(name, runtime, collector_id),
                 f"Begin. You are worker {name.upper()}. Wait for tasks.",
             )
             worker_ids.append(wh.execution_id)
+            worker_handles.append(wh)
             print(f"Worker {name:5s}  started: {wh.execution_id}")
 
         # Start Orchestrator last.
@@ -271,12 +271,11 @@ try:
         # Shutdown: Orchestrator → Workers → Collector (via stop_collector_<name>).
         runtime.send_message(orchestrator_id, {"stop": True})
 
-        while not (_ipc_dir / "orchestrator_stopped").exists():
-            time.sleep(0.1)
-
-        for name in WORKER_NAMES:
-            while not (_ipc_dir / f"worker_{name}_stopped").exists():
-                time.sleep(0.1)
+        # Wait for all agents to reach terminal state before the runtime exits.
+        orch_handle.join(timeout=60)
+        for wh in worker_handles:
+            wh.join(timeout=30)
+        collector_handle.join(timeout=30)
 
         print("Done.")
 finally:

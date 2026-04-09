@@ -158,7 +158,6 @@ def build_feeder(runtime: AgentRuntime) -> Agent:
         """Send the stop signal to the Monitor agent and notify the main process."""
         monitor_id = _MONITOR_ID_FILE.read_text().strip()
         runtime.send_message(monitor_id, {"stop": True})
-        (_ipc_dir / "feeder_stopped").touch()
         return "stop sent"
 
     return Agent(
@@ -234,10 +233,9 @@ try:
         print(f"\nAll {EXPECTED_DISPLAYS} batch reports received. Sending stop signal...\n")
         runtime.send_message(feeder_id, {"stop": True})
 
-        # Wait for stop_monitor() to complete before the runtime exits
-        # (workers are killed when AgentRuntime.__exit__ runs).
-        while not (_ipc_dir / "feeder_stopped").exists():
-            time.sleep(0.1)
+        # Wait for both agents to reach terminal state before the runtime exits.
+        feeder_handle.join(timeout=30)
+        monitor_handle.join(timeout=30)
 
         print("Done.")
 finally:

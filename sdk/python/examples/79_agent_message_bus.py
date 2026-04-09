@@ -79,7 +79,6 @@ def build_researcher(runtime: AgentRuntime, writer_execution_id: str) -> Agent:
     def stop_pipeline() -> str:
         """Forward the stop signal to the Writer and signal the main process."""
         runtime.send_message(writer_execution_id, {"stop": True})
-        (_ipc_dir / "pipeline_stopped").touch()
         return "done"
 
     return Agent(
@@ -163,10 +162,9 @@ try:
         # the Writer, then responds with no further tool calls so both loops exit.
         runtime.send_message(researcher_id, {"stop": True})
 
-        # Wait for stop_pipeline to confirm it ran before exiting (workers are killed
-        # when AgentRuntime exits — stop_pipeline must complete first)
-        while not (_ipc_dir / "pipeline_stopped").exists():
-            time.sleep(0.1)
+        # Wait for both agents to reach terminal state before the runtime exits.
+        researcher_handle.join(timeout=30)
+        writer_handle.join(timeout=30)
 
         print("Done.")
 finally:
