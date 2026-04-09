@@ -137,9 +137,13 @@ public class CredentialEnvSeeder implements ApplicationRunner {
                         "Credential '{}' could not be decrypted (master key mismatch?) — "
                                 + "re-seeding from environment variable",
                         name);
-                storeProvider.delete(ANONYMOUS_USER_ID, name);
-                storeProvider.set(ANONYMOUS_USER_ID, name, value);
-                created++;
+                try {
+                    storeProvider.delete(ANONYMOUS_USER_ID, name);
+                    storeProvider.set(ANONYMOUS_USER_ID, name, value);
+                    created++;
+                } catch (Exception re) {
+                    log.warn("Credential '{}' could not be re-seeded — skipping: {}", name, re.getMessage());
+                }
                 continue;
             }
 
@@ -152,9 +156,13 @@ public class CredentialEnvSeeder implements ApplicationRunner {
                 continue;
             }
 
-            storeProvider.set(ANONYMOUS_USER_ID, name, value);
-            log.info("Credential seeded from environment: {}", name);
-            created++;
+            try {
+                storeProvider.set(ANONYMOUS_USER_ID, name, value);
+                log.info("Credential seeded from environment: {}", name);
+                created++;
+            } catch (Exception e) {
+                log.warn("Credential '{}' could not be seeded — skipping: {}", name, e.getMessage());
+            }
         }
 
         if (created > 0 || skipped > 0) {
