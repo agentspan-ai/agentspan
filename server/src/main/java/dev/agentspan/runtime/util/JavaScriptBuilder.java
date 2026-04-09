@@ -1210,7 +1210,6 @@ public class JavaScriptBuilder {
                         + "return parts.join('\\n\\n');");
     }
 
-
     /**
      * Namespaced parallel merge script: merges parent context with
      * each child's context namespaced under its agent name.
