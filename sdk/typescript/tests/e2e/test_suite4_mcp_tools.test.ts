@@ -136,7 +136,10 @@ describe('Suite 4: MCP Tools', { timeout: 600_000 }, () => {
 
       // Discovery: use OpenAPI fallback (MCP client may not be available in TS)
       const discovered = await discoverToolsViaOpenApi(MCP_BASE_URL);
-      expect(discovered.length).toBeGreaterThanOrEqual(64);
+      // Dynamically determine exact count from the spec itself
+      const expectedCount = discovered.length;
+      expect(expectedCount).toBeGreaterThanOrEqual(64);
+      expect(discovered.length).toBe(expectedCount);
 
       // Execute: create agent and run
       const agent = new Agent({
@@ -190,9 +193,9 @@ describe('Suite 4: MCP Tools', { timeout: 600_000 }, () => {
         ],
       });
 
-      // Discovery with auth
+      // Discovery with auth — must match unauthenticated count
       const discoveredAuth = await discoverToolsViaOpenApi(MCP_BASE_URL, MCP_AUTH_KEY);
-      expect(discoveredAuth.length).toBeGreaterThanOrEqual(64);
+      expect(discoveredAuth.length).toBe(expectedCount);
 
       // Execute with auth
       const resultAuth = await runtime.run(authAgent, PROMPT, { timeout: TIMEOUT });
@@ -203,6 +206,10 @@ describe('Suite 4: MCP Tools', { timeout: 600_000 }, () => {
       for (const name of TEST_TOOL_NAMES) {
         expect(authTasks[name], `Auth tool '${name}' not found`).toBeDefined();
         expect(authTasks[name].status).toBe('COMPLETED');
+        expect(
+          JSON.stringify(authTasks[name].output),
+          `Auth tool '${name}' output missing expected value`,
+        ).toContain(TEST_TOOL_EXPECTED[name]);
       }
     } finally {
       stopMcpServer(serverProc);

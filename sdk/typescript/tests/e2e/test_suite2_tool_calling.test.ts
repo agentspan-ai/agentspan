@@ -107,7 +107,31 @@ describe('Suite 2: Tool Calling / Credential Lifecycle', { timeout: 300_000 }, (
     expect(result1.executionId).toBeTruthy();
     expect(['COMPLETED', 'FAILED', 'TERMINATED']).toContain(result1.status);
 
-    // ── Step 3: Add credentials ──────────────────────────────────
+    // ── Step 3: Env-var security — values in env must NOT leak ──
+    try {
+      process.env.E2E_TS_CRED_A = 'from-env-aaa';
+      process.env.E2E_TS_CRED_B = 'from-env-bbb';
+
+      const resultEnv = await runtime.run(agent, 'Call all three tools.', {
+        timeout: TIMEOUT,
+      });
+      expect(resultEnv.executionId).toBeTruthy();
+      expect(['COMPLETED', 'FAILED', 'TERMINATED']).toContain(resultEnv.status);
+
+      const outputEnv = getOutputText(resultEnv as unknown as { output: unknown });
+      // "fro" = first 3 chars of "from-env-aaa" / "from-env-bbb"
+      // These env values must NOT appear in output — credentials come from
+      // the credential store, not the process environment.
+      expect(
+        outputEnv,
+        `[Env security] env-var values leaked into output: ${outputEnv.slice(0, 300)}`,
+      ).not.toContain('fro');
+    } finally {
+      delete process.env.E2E_TS_CRED_A;
+      delete process.env.E2E_TS_CRED_B;
+    }
+
+    // ── Step 4: Add credentials ──────────────────────────────────
     credentialSet(CRED_A, 'secret-aaa-value');
     credentialSet(CRED_B, 'secret-bbb-value');
 
@@ -122,7 +146,7 @@ describe('Suite 2: Tool Calling / Credential Lifecycle', { timeout: 300_000 }, (
     // "sec" = first 3 chars of "secret-aaa-value"
     expect(output2, `[With creds] output=${output2.slice(0, 300)}`).toContain('sec');
 
-    // ── Step 4: Update credentials ───────────────────────────────
+    // ── Step 5: Update credentials ───────────────────────────────
     credentialSet(CRED_A, 'newval-xxx-updated');
     credentialSet(CRED_B, 'newval-yyy-updated');
 

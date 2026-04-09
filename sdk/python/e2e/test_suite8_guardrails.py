@@ -295,7 +295,7 @@ def _tool_by_name(ad, name):
 
 
 @pytest.mark.timeout(600)
-class TestSuite10Guardrails:
+class TestSuite8Guardrails:
     """Guardrails: compilation, on_fail policies, escalation."""
 
     # ── Compilation ───────────────────────────────────────────────────
@@ -430,7 +430,11 @@ class TestSuite10Guardrails:
         assert result.status in ("COMPLETED", "FAILED", "TERMINATED"), (
             f"[Email] Unexpected status. {diag}"
         )
-        if result.status == "COMPLETED":
+        if result.status in ("FAILED", "TERMINATED"):
+            # Guardrail escalated — acceptable behavior
+            pass
+        else:
+            # status is COMPLETED — output MUST be clean
             output = _get_output_text(result)
             email_re = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
             assert not email_re.search(output), (
@@ -451,7 +455,11 @@ class TestSuite10Guardrails:
         assert result.status in ("COMPLETED", "FAILED", "TERMINATED"), (
             f"[Secrets] Unexpected status. {diag}"
         )
-        if result.status == "COMPLETED":
+        if result.status in ("FAILED", "TERMINATED"):
+            # Guardrail escalated — acceptable behavior
+            pass
+        else:
+            # status is COMPLETED — output MUST be clean
             output = _get_output_text(result)
             secrets_re = re.compile(r"\bpassword\b|\bsecret\b|\btoken\b", re.I)
             assert not secrets_re.search(output), (

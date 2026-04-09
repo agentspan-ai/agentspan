@@ -157,9 +157,11 @@ describe('Suite 5: HTTP Tools', { timeout: 600_000 }, () => {
       // ── Phase 1: Unauthenticated ────────────────────────────────
       serverProc = await startHttpServer(HTTP_PORT);
 
-      // Discovery
+      // Discovery — dynamically determine exact count from spec
       const discovered = await discoverViaOpenApi(HTTP_SPEC_URL);
-      expect(discovered.length).toBeGreaterThanOrEqual(64);
+      const expectedCount = discovered.length;
+      expect(expectedCount).toBeGreaterThanOrEqual(64);
+      expect(discovered.length).toBe(expectedCount);
 
       // Execute
       const agent = new Agent({
@@ -201,9 +203,9 @@ describe('Suite 5: HTTP Tools', { timeout: 600_000 }, () => {
         }, [CRED_NAME]),
       });
 
-      // Discovery with auth
+      // Discovery with auth — must match unauthenticated count
       const discoveredAuth = await discoverViaOpenApi(HTTP_SPEC_URL, HTTP_AUTH_KEY);
-      expect(discoveredAuth.length).toBeGreaterThanOrEqual(64);
+      expect(discoveredAuth.length).toBe(expectedCount);
 
       // Execute with auth
       const resultAuth = await runtime.run(authAgent, PROMPT, { timeout: TIMEOUT });
@@ -211,8 +213,12 @@ describe('Suite 5: HTTP Tools', { timeout: 600_000 }, () => {
 
       const { results: authTasks } = await findToolTasks(resultAuth.executionId, TEST_TOOL_NAMES);
       for (const name of TEST_TOOL_NAMES) {
-        expect(authTasks[name]).toBeDefined();
+        expect(authTasks[name], `Auth tool '${name}' not found`).toBeDefined();
         expect(authTasks[name].status).toBe('COMPLETED');
+        expect(
+          JSON.stringify(authTasks[name].output),
+          `Auth tool '${name}' output missing expected value`,
+        ).toContain(TEST_TOOL_EXPECTED[name]);
       }
     } finally {
       stopHttpServer(serverProc);

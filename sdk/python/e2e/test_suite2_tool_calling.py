@@ -160,6 +160,32 @@ def _tool_diagnostics(execution_id: str) -> str:
     return "\n  ".join(["Tool tasks:"] + tool_tasks)
 
 
+def _find_tool_tasks_for(execution_id: str) -> dict:
+    """Fetch workflow and extract tool task results by tool name.
+
+    Checks referenceTaskName, taskDefName, and taskType for tool name matches.
+    Returns a dict keyed by tool name with status, output, reason, ref.
+    """
+    wf = _get_workflow(execution_id)
+    tool_names = ["free_tool", "paid_tool_a", "paid_tool_b"]
+    results = {}
+    for task in wf.get("tasks", []):
+        ref = task.get("referenceTaskName", "")
+        task_def = task.get("taskDefName", "")
+        task_type = task.get("taskType", "")
+        for name in tool_names:
+            if name in results:
+                continue
+            if name in ref or name == task_def or name == task_type:
+                results[name] = {
+                    "status": task.get("status", ""),
+                    "output": task.get("outputData", {}),
+                    "reason": task.get("reasonForIncompletion", ""),
+                    "ref": ref,
+                }
+    return results
+
+
 def _credential_audit(agent: Agent) -> str:
     """Cross-reference agent tool credential requirements with the server store.
 
@@ -300,6 +326,17 @@ class TestSuite2ToolCalling:
             f"  {_tool_diagnostics(result.execution_id)}"
         )
 
+        # Verify via workflow tasks: paid tools should NOT have succeeded
+        tool_tasks_s2 = _find_tool_tasks_for(result.execution_id)
+        for paid in ("paid_tool_a", "paid_tool_b"):
+            if paid in tool_tasks_s2:
+                task_info = tool_tasks_s2[paid]
+                assert task_info["status"] != "COMPLETED", (
+                    f"[Step 2: No credentials] {paid} has status COMPLETED "
+                    f"but credentials were not set — it should have failed.\n"
+                    f"  task={task_info}"
+                )
+
         # ── Step 3: Env vars should NOT be read ─────────────────────
         os.environ[CRED_A] = "from-env-aaa"
         os.environ[CRED_B] = "from-env-bbb"
@@ -334,6 +371,49 @@ class TestSuite2ToolCalling:
         )
         _assert_run_completed(result_with_creds, "Step 4: With credentials", agent)
 
+        # Primary: validate via workflow task data
+        tool_tasks_s4 = _find_tool_tasks_for(result_with_creds.execution_id)
+
+        assert "free_tool" in tool_tasks_s4, (
+            f"[Step 4] free_tool task not found in workflow.\n"
+            f"  found_tasks={list(tool_tasks_s4.keys())}"
+        )
+        assert tool_tasks_s4["free_tool"]["status"] == "COMPLETED", (
+            f"[Step 4] free_tool not COMPLETED.\n"
+            f"  task={tool_tasks_s4['free_tool']}"
+        )
+
+        assert "paid_tool_a" in tool_tasks_s4, (
+            f"[Step 4] paid_tool_a task not found in workflow.\n"
+            f"  found_tasks={list(tool_tasks_s4.keys())}"
+        )
+        assert tool_tasks_s4["paid_tool_a"]["status"] == "COMPLETED", (
+            f"[Step 4] paid_tool_a not COMPLETED.\n"
+            f"  task={tool_tasks_s4['paid_tool_a']}"
+        )
+        s4_paid_a_output = str(tool_tasks_s4["paid_tool_a"]["output"])
+        assert "sec" in s4_paid_a_output, (
+            f"[Step 4] paid_tool_a output should contain 'sec' "
+            f"(first 3 chars of 'secret-aaa-value').\n"
+            f"  task_output={s4_paid_a_output}"
+        )
+
+        assert "paid_tool_b" in tool_tasks_s4, (
+            f"[Step 4] paid_tool_b task not found in workflow.\n"
+            f"  found_tasks={list(tool_tasks_s4.keys())}"
+        )
+        assert tool_tasks_s4["paid_tool_b"]["status"] == "COMPLETED", (
+            f"[Step 4] paid_tool_b not COMPLETED.\n"
+            f"  task={tool_tasks_s4['paid_tool_b']}"
+        )
+        s4_paid_b_output = str(tool_tasks_s4["paid_tool_b"]["output"])
+        assert "sec" in s4_paid_b_output, (
+            f"[Step 4] paid_tool_b output should contain 'sec' "
+            f"(first 3 chars of 'secret-bbb-value').\n"
+            f"  task_output={s4_paid_b_output}"
+        )
+
+        # Secondary: also check LLM output text
         output_creds = _get_output_text(result_with_creds)
 
         assert "free" in output_creds.lower(), (
@@ -362,6 +442,25 @@ class TestSuite2ToolCalling:
         )
         _assert_run_completed(result_updated, "Step 5: Updated credentials", agent)
 
+        # Primary: validate via workflow task data
+        tool_tasks_s5 = _find_tool_tasks_for(result_updated.execution_id)
+
+        assert "paid_tool_a" in tool_tasks_s5, (
+            f"[Step 5] paid_tool_a task not found in workflow.\n"
+            f"  found_tasks={list(tool_tasks_s5.keys())}"
+        )
+        assert tool_tasks_s5["paid_tool_a"]["status"] == "COMPLETED", (
+            f"[Step 5] paid_tool_a not COMPLETED.\n"
+            f"  task={tool_tasks_s5['paid_tool_a']}"
+        )
+        s5_paid_a_output = str(tool_tasks_s5["paid_tool_a"]["output"])
+        assert "new" in s5_paid_a_output, (
+            f"[Step 5] paid_tool_a output should contain 'new' "
+            f"(first 3 chars of 'newval-xxx-updated').\n"
+            f"  task_output={s5_paid_a_output}"
+        )
+
+        # Secondary: also check LLM output text
         output_updated = _get_output_text(result_updated)
 
         assert "new" in output_updated, (
@@ -373,18 +472,3 @@ class TestSuite2ToolCalling:
             f"  {_tool_diagnostics(result_updated.execution_id)}"
         )
 
-    def _find_tool_tasks(self, execution_id: str) -> dict:
-        """Fetch workflow and extract tool task results by reference name."""
-        wf = _get_workflow(execution_id)
-        results = {}
-        for task in wf.get("tasks", []):
-            ref = task.get("referenceTaskName", "")
-            for tool_name in ["free_tool", "paid_tool_a", "paid_tool_b"]:
-                if tool_name in ref:
-                    results[tool_name] = {
-                        "status": task.get("status", ""),
-                        "output": task.get("outputData", {}),
-                        "reason": task.get("reasonForIncompletion", ""),
-                        "ref": ref,
-                    }
-        return results

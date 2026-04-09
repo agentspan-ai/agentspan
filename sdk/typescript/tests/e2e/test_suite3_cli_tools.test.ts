@@ -13,7 +13,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execSync } from 'node:child_process';
 import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
-import type { GuardrailResult } from '@agentspan-ai/sdk';
 import {
   checkServerHealth,
   MODEL,
@@ -121,13 +120,11 @@ function makeAgent() {
 // ── Tests ───────────────────────────────────────────────────────────────
 
 describe('Suite 3: CLI Tools', { timeout: 600_000 }, () => {
-  it('CLI credential lifecycle', async () => {
-    const realToken = process.env.GITHUB_TOKEN;
-    if (!realToken) {
-      console.log('GITHUB_TOKEN not set — skipping Suite 3');
-      return;
-    }
+  it.skipIf(!process.env.GITHUB_TOKEN)('CLI credential lifecycle', async () => {
+    const realToken = process.env.GITHUB_TOKEN!;
 
+    // Runtime check: gh CLI must be installed. Cannot use skipIf since
+    // it requires executing a subprocess — not a simple env var check.
     try {
       execSync('gh --version', { timeout: 5_000 });
     } catch {

@@ -87,6 +87,17 @@ const G9_ALWAYS_FAIL = new RegexGuardrail({
   maxRetries: 1,
 });
 
+// G5: Tool output function (fix) — forces JSON
+const G5_FORCE_JSON = guardrail(
+  (content: string): GuardrailResult => {
+    if (content.trim().startsWith('{') || content.trim().startsWith('[')) {
+      return { passed: true };
+    }
+    return { passed: false, message: 'Output must be JSON.', fixedOutput: '{"fixed": true}' };
+  },
+  { name: 'force_json', position: 'output', onFail: 'fix' },
+);
+
 // ── Tools ───────────────────────────────────────────────────────────────
 
 const safeQuery = tool(
@@ -99,6 +110,20 @@ const safeQuery = tool(
       type: 'object',
       properties: { query: { type: 'string' } },
       required: ['query'],
+    },
+  },
+);
+
+const formatOutputTool = tool(
+  async (args: { text: string }) => args.text,
+  {
+    name: 'format_output',
+    description: 'Return the text. Output guardrail forces JSON format.',
+    guardrails: [G5_FORCE_JSON],
+    inputSchema: {
+      type: 'object',
+      properties: { text: { type: 'string' } },
+      required: ['text'],
     },
   },
 );
@@ -163,11 +188,13 @@ function findTool(ad: Record<string, unknown>, name: string) {
 // ── Tests ───────────────────────────────────────────────────────────────
 
 describe('Suite 8: Guardrails', { timeout: 600_000 }, () => {
+  // ── Compilation tests ─────────────────────────────────────────────────
+
   it('plan reflects all guardrails correctly', async () => {
     const agent = new Agent({
       name: 'e2e_ts_gr_compile',
       model: MODEL,
-      tools: [safeQuery, redactTool, strictTool, normalTool],
+      tools: [safeQuery, formatOutputTool, redactTool, strictTool, normalTool],
       guardrails: [G1_BLOCK_INPUT.toGuardrailDef(), G3_NO_SECRETS.toGuardrailDef()],
     });
 
@@ -196,6 +223,20 @@ describe('Suite 8: Guardrails', { timeout: 600_000 }, () => {
     expect(sqGuards[0].name).toBe('no_sql_injection');
     expect(sqGuards[0].onFail).toBe('raise');
 
+    const fo = findTool(ad, 'format_output');
+    expect(fo).toBeDefined();
+    const foGuards = (fo!.guardrails ?? []) as Record<string, unknown>[];
+    expect(foGuards.length).toBeGreaterThanOrEqual(1);
+    expect(foGuards[0].name).toBe('force_json');
+    expect(foGuards[0].onFail).toBe('fix');
+
+    const rd = findTool(ad, 'redact_tool');
+    expect(rd).toBeDefined();
+    const rdGuards = (rd!.guardrails ?? []) as Record<string, unknown>[];
+    expect(rdGuards.length).toBeGreaterThanOrEqual(1);
+    expect(rdGuards[0].name).toBe('no_email');
+    expect(rdGuards[0].guardrailType).toBe('regex');
+
     const st = findTool(ad, 'strict_tool');
     expect(st).toBeDefined();
     const stGuards = (st!.guardrails ?? []) as Record<string, unknown>[];
@@ -203,6 +244,35 @@ describe('Suite 8: Guardrails', { timeout: 600_000 }, () => {
     expect(stGuards[0].name).toBe('always_fail');
     expect(stGuards[0].maxRetries).toBe(1);
   });
+
+  it('clean agent compiles with zero guardrails', async () => {
+    const agent = new Agent({ name: 'clean', model: MODEL, tools: [normalTool] });
+    const plan = (await runtime.plan(agent)) as Record<string, unknown>;
+    const ad = getAgentDef(plan);
+    expect((ad.guardrails as unknown[])?.length ?? 0).toBe(0);
+    const tools = (ad.tools ?? []) as Record<string, unknown>[];
+    expect(tools.some((t) => t.name === 'normal_tool')).toBe(true);
+  });
+
+  it('tool output fix guardrail compiles correctly', async () => {
+    const agent = new Agent({
+      name: 'fix_test',
+      model: MODEL,
+      instructions: 'Call format_output with the text provided.',
+      tools: [formatOutputTool],
+    });
+    const plan = (await runtime.plan(agent)) as Record<string, unknown>;
+    const ad = getAgentDef(plan);
+    const fo = findTool(ad, 'format_output');
+    expect(fo, 'format_output not in plan').toBeDefined();
+    const foGuards = (fo!.guardrails ?? []) as Record<string, unknown>[];
+    expect(foGuards.length).toBeGreaterThanOrEqual(1);
+    expect(foGuards[0].name).toBe('force_json');
+    expect(foGuards[0].onFail).toBe('fix');
+    expect(foGuards[0].guardrailType).toBe('custom');
+  });
+
+  // ── Runtime tests ─────────────────────────────────────────────────────
 
   it('tool input raise — SQL injection blocked', async () => {
     const agent = new Agent({
@@ -237,11 +307,16 @@ describe('Suite 8: Guardrails', { timeout: 600_000 }, () => {
       { timeout: TIMEOUT },
     );
 
-    expect(['COMPLETED', 'FAILED', 'TERMINATED']).toContain(result.status);
+    const diag = runDiagnostic(result as unknown as Record<string, unknown>);
+    expect(['COMPLETED', 'FAILED', 'TERMINATED'], `[Email] Unexpected status. ${diag}`).toContain(result.status);
     if (result.status === 'COMPLETED') {
+      // MUST check content when COMPLETED — guardrail should have stripped the email
       const output = getOutputText(result as unknown as { output: unknown });
-      expect(output).not.toMatch(/[\w.+-]+@[\w-]+\.[\w.-]+/);
+      expect(output, `[Email] Email still in output. output=${output.slice(0, 300)}`).not.toMatch(
+        /[\w.+-]+@[\w-]+\.[\w.-]+/,
+      );
     }
+    // If FAILED/TERMINATED, that's acceptable (guardrail escalated)
   });
 
   it('agent output secrets blocked', async () => {
@@ -256,11 +331,16 @@ describe('Suite 8: Guardrails', { timeout: 600_000 }, () => {
       timeout: TIMEOUT,
     });
 
-    expect(['COMPLETED', 'FAILED', 'TERMINATED']).toContain(result.status);
+    const diag = runDiagnostic(result as unknown as Record<string, unknown>);
+    expect(['COMPLETED', 'FAILED', 'TERMINATED'], `[Secrets] Unexpected status. ${diag}`).toContain(result.status);
     if (result.status === 'COMPLETED') {
+      // MUST check content when COMPLETED — guardrail should have blocked secrets
       const output = getOutputText(result as unknown as { output: unknown });
-      expect(output).not.toMatch(/\bpassword\b/i);
+      expect(output, `[Secrets] Secret word in output. output=${output.slice(0, 300)}`).not.toMatch(
+        /\bpassword\b|\bsecret\b|\btoken\b/i,
+      );
     }
+    // If FAILED/TERMINATED, that's acceptable (guardrail escalated)
   });
 
   it('max_retries escalation — always-fail → FAILED', async () => {
