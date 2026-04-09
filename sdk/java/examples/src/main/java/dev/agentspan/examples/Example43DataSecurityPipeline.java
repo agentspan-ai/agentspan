@@ -122,7 +122,6 @@ public class Example43DataSecurityPipeline {
         Agent pipeline = Agent.builder()
             .name("data_security_pipeline")
             .model(Settings.LLM_MODEL)
-            .instructions("Run the data security pipeline: collect, validate/redact, then respond.")
             .agents(collector, validator, responder)
             .strategy(Strategy.SEQUENTIAL)
             .build();

@@ -7,6 +7,7 @@ import dev.agentspan.Agent;
 import dev.agentspan.Agentspan;
 import dev.agentspan.annotations.Tool;
 import dev.agentspan.enums.Strategy;
+import dev.agentspan.handoff.OnTextMention;
 import dev.agentspan.internal.ToolRegistry;
 import dev.agentspan.model.AgentResult;
 import dev.agentspan.model.ToolDef;
@@ -87,6 +88,9 @@ public class Example64SwarmWithTools {
                 + "order_specialist for shipping/order questions.")
             .agents(billingSpecialist, orderSpecialist)
             .strategy(Strategy.SWARM)
+            .handoffs(
+                OnTextMention.of("billing", "billing_specialist"),
+                OnTextMention.of("order", "order_specialist"))
             .maxTurns(3)
             .build();
 

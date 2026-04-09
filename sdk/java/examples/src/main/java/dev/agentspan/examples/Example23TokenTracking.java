@@ -31,16 +31,14 @@ public class Example23TokenTracking {
 
     static class MathTools {
         @Tool(name = "calculate", description = "Evaluate a mathematical expression")
-        public Map<String, Object> calculate(String expression) {
+        public String calculate(String expression) {
             try {
-                // Evaluate safe mathematical expressions
-                // Using javax.script for safe evaluation
                 javax.script.ScriptEngineManager mgr = new javax.script.ScriptEngineManager();
                 javax.script.ScriptEngine engine = mgr.getEngineByName("js");
                 Object result = engine.eval(expression);
-                return Map.of("expression", expression, "result", result);
+                return String.valueOf(result);
             } catch (Exception e) {
-                return Map.of("expression", expression, "error", e.getMessage());
+                return "Error: " + e.getMessage();
             }
         }
     }

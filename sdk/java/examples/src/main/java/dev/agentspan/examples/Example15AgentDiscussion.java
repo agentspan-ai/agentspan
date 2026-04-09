@@ -50,7 +50,6 @@ public class Example15AgentDiscussion {
         Agent discussion = Agent.builder()
             .name("discussion")
             .model(Settings.LLM_MODEL)
-            .instructions("Facilitate the debate between the optimist and the skeptic.")
             .agents(optimist, skeptic)
             .strategy(Strategy.ROUND_ROBIN)
             .maxTurns(6)
@@ -74,9 +73,6 @@ public class Example15AgentDiscussion {
         Agent pipeline = Agent.builder()
             .name("debate_pipeline")
             .model(Settings.LLM_MODEL)
-            .instructions(
-                "Run the debate first, then pass the full transcript "
-                + "to the summarizer for a balanced conclusion.")
             .agents(discussion, summarizer)
             .strategy(Strategy.SEQUENTIAL)
             .build();

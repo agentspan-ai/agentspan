@@ -109,7 +109,6 @@ public class Example42SecurityTesting {
         Agent pipeline = Agent.builder()
             .name("security_test_pipeline")
             .model(Settings.LLM_MODEL)
-            .instructions("Run the red team test, then evaluate the result.")
             .agents(redTeam, target, evaluator)
             .strategy(Strategy.SEQUENTIAL)
             .build();

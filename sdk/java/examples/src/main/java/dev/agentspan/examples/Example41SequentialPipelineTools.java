@@ -88,9 +88,21 @@ public class Example41SequentialPipelineTools {
         }
     }
 
+    @SuppressWarnings("unchecked")
     public static void main(String[] args) {
         List<ToolDef> conceptTools = ToolRegistry.fromInstance(new ConceptTools());
-        List<ToolDef> scriptTools = ToolRegistry.fromInstance(new ScriptTools());
+        List<ToolDef> rawScriptTools = ToolRegistry.fromInstance(new ScriptTools());
+        // Python's write_scene has dialogue with a default "" — only first 3 params required
+        ToolDef rawWriteScene = rawScriptTools.get(0);
+        Map<String, Object> wsSchema = new java.util.LinkedHashMap<>((Map<String, Object>) rawWriteScene.getInputSchema());
+        wsSchema.put("required", java.util.List.of("scene_number", "location", "action"));
+        ToolDef writeSceneTool = ToolDef.builder()
+            .name(rawWriteScene.getName()).description(rawWriteScene.getDescription())
+            .inputSchema(wsSchema).outputSchema(rawWriteScene.getOutputSchema())
+            .toolType(rawWriteScene.getToolType()).func(rawWriteScene.getFunc())
+            .build();
+        List<ToolDef> scriptTools = new java.util.ArrayList<>(rawScriptTools);
+        scriptTools.set(0, writeSceneTool);
         List<ToolDef> visualTools = ToolRegistry.fromInstance(new VisualTools());
         List<ToolDef> audioTools = ToolRegistry.fromInstance(new AudioTools());
         List<ToolDef> producerTools = ToolRegistry.fromInstance(new ProducerTools());
@@ -149,9 +161,6 @@ public class Example41SequentialPipelineTools {
         Agent pipeline = Agent.builder()
             .name("movie_production_pipeline")
             .model(Settings.LLM_MODEL)
-            .instructions(
-                "Run each stage in sequence: concept development, scriptwriting, "
-                + "visual direction, audio design, and final production assembly.")
             .agents(conceptDeveloper, scriptwriter, visualDirector, audioDesigner, producer)
             .strategy(Strategy.SEQUENTIAL)
             .build();

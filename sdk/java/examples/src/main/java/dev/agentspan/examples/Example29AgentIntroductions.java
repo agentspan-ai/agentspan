@@ -65,7 +65,6 @@ public class Example29AgentIntroductions {
         Agent designReview = Agent.builder()
             .name("design_review")
             .model(Settings.LLM_MODEL)
-            .instructions("Facilitate a design review discussion between the team members.")
             .agents(architect, securityEngineer, productManager)
             .strategy(Strategy.ROUND_ROBIN)
             .maxTurns(6)

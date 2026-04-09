@@ -49,7 +49,6 @@ public class Example16RandomStrategy {
         Agent brainstorm = Agent.builder()
             .name("brainstorm")
             .model(Settings.LLM_MODEL)
-            .instructions("Coordinate diverse perspectives on the given problem.")
             .agents(creative, practical, critical)
             .strategy(Strategy.RANDOM)
             .maxTurns(6)

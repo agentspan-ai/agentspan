@@ -177,17 +177,33 @@ def _norm_tool(t: dict) -> dict:
     t["name"] = "__TOOL__"
     t["description"] = "__TOOL_DESC__"
     if "inputSchema" in t:
-        t["inputSchema"] = _anon_schema(t["inputSchema"])
+        schema = t["inputSchema"]
+        # Drop empty inputSchemas (type: object, no properties or empty properties)
+        if not schema.get("properties"):
+            t.pop("inputSchema")
+        else:
+            t["inputSchema"] = _anon_schema(schema)
     if "outputSchema" in t:
         t["outputSchema"] = _anon_schema(t["outputSchema"])
     if "config" in t:
         cfg = t["config"]
         if "credentials" in cfg:
             cfg["credentials"] = ["__CRED__"] * len(cfg["credentials"])
-        # Normalize URL/server values
-        for key in ("url", "serverUrl", "mcpServer"):
+        # Normalize URL/server values (both camelCase and snake_case variants) → single key
+        url_val = None
+        for key in ("url", "serverUrl", "server_url", "mcpServer"):
             if key in cfg:
-                cfg[key] = "__URL__"
+                url_val = "__URL__"
+                cfg.pop(key)
+        if url_val is not None:
+            cfg["serverUrl"] = url_val
+        # Normalize MCP-specific fields that vary between SDKs
+        for key in ("tool_names", "max_tools", "workflowName"):
+            if key in cfg:
+                cfg.pop(key)
+        # Normalize agentConfig (agent-as-tool) recursively
+        if "agentConfig" in cfg:
+            cfg["agentConfig"] = _norm_agent(cfg["agentConfig"])
     if "guardrails" in t:
         t["guardrails"] = [_norm_guardrail(g) for g in t["guardrails"]]
     return t

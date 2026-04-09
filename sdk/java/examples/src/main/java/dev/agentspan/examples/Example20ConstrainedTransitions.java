@@ -56,7 +56,6 @@ public class Example20ConstrainedTransitions {
         Agent codeReview = Agent.builder()
             .name("code_review")
             .model(Settings.LLM_MODEL)
-            .instructions("Facilitate a structured code review between developer, reviewer, and approver.")
             .agents(developer, reviewer, approver)
             .strategy(Strategy.ROUND_ROBIN)
             .maxTurns(6)

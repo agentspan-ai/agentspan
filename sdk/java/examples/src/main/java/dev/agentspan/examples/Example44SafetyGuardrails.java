@@ -70,8 +70,20 @@ public class Example44SafetyGuardrails {
         }
     }
 
+    @SuppressWarnings("unchecked")
     public static void main(String[] args) {
-        List<ToolDef> safetyTools = ToolRegistry.fromInstance(new SafetyTools());
+        List<ToolDef> rawSafetyTools = ToolRegistry.fromInstance(new SafetyTools());
+        // Python's sanitize_response has pii_types with a default "" — only text is required
+        ToolDef rawSanitize = rawSafetyTools.get(1); // sanitize_response is second tool
+        Map<String, Object> ssSchema = new java.util.LinkedHashMap<>((Map<String, Object>) rawSanitize.getInputSchema());
+        ssSchema.put("required", java.util.List.of("text"));
+        ToolDef sanitizeTool = ToolDef.builder()
+            .name(rawSanitize.getName()).description(rawSanitize.getDescription())
+            .inputSchema(ssSchema).outputSchema(rawSanitize.getOutputSchema())
+            .toolType(rawSanitize.getToolType()).func(rawSanitize.getFunc())
+            .build();
+        List<ToolDef> safetyTools = new java.util.ArrayList<>(rawSafetyTools);
+        safetyTools.set(1, sanitizeTool);
 
         // Main assistant generates responses
         Agent assistant = Agent.builder()
@@ -99,7 +111,6 @@ public class Example44SafetyGuardrails {
         Agent pipeline = Agent.builder()
             .name("safety_pipeline")
             .model(Settings.LLM_MODEL)
-            .instructions("Generate a response, then have the safety checker scan and sanitize it.")
             .agents(assistant, safetyChecker)
             .strategy(Strategy.SEQUENTIAL)
             .build();

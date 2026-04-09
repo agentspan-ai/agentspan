@@ -39,7 +39,6 @@ public class Example66HandoffToParallel {
         Agent deepAnalysis = Agent.builder()
             .name("deep_analysis")
             .model(Settings.LLM_MODEL)
-            .instructions("Coordinate in-depth analysis across market and risk dimensions.")
             .agents(
                 Agent.builder()
                     .name("market_analyst_66")

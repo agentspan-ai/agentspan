@@ -58,7 +58,16 @@ public class Example51SharedState {
     }
 
     public static void main(String[] args) {
-        List<ToolDef> tools = ToolRegistry.fromInstance(new ShoppingListTools());
+        List<ToolDef> rawTools = ToolRegistry.fromInstance(new ShoppingListTools());
+        // getMethods() order is not guaranteed — find by name and match Python order:
+        // [add_item, get_list, clear_list]
+        ToolDef addItem = rawTools.stream()
+            .filter(t -> "add_item".equals(t.getName())).findFirst().get();
+        ToolDef getList = rawTools.stream()
+            .filter(t -> "get_list".equals(t.getName())).findFirst().get();
+        ToolDef clearList = rawTools.stream()
+            .filter(t -> "clear_list".equals(t.getName())).findFirst().get();
+        List<ToolDef> tools = List.of(addItem, getList, clearList);
 
         Agent agent = Agent.builder()
             .name("shopping_assistant_51")

@@ -41,7 +41,6 @@ public class Example67RouterToSequential {
         Agent researchPipeline = Agent.builder()
             .name("research_pipeline_67")
             .model(Settings.LLM_MODEL)
-            .instructions("Run the researcher first, then pass findings to the writer.")
             .agents(
                 Agent.builder()
                     .name("researcher_67")
@@ -77,7 +76,6 @@ public class Example67RouterToSequential {
         Agent team = Agent.builder()
             .name("team_67")
             .model(Settings.LLM_MODEL)
-            .instructions("Route requests to the appropriate sub-agent or pipeline.")
             .agents(quickAnswer, researchPipeline)
             .strategy(Strategy.ROUTER)
             .router(selector)

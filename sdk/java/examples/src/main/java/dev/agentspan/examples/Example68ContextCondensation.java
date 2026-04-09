@@ -41,7 +41,7 @@ public class Example68ContextCondensation {
     private static final Map<String, Map<String, Object>> DOMAIN_DATA = buildDomainData();
 
     static class AnalystTools {
-        @Tool(name = "fetch_domain_data_68",
+        @Tool(name = "fetch_domain_data",
               description = "Fetch market data, statistics, and key facts for a technology domain")
         public Map<String, Object> fetchDomainData(String domain) {
             String key = domain.toLowerCase().trim();
@@ -65,7 +65,7 @@ public class Example68ContextCondensation {
             .tools(analystTools)
             .instructions(
                 "You are an expert technology analyst. When asked to analyse a domain:\n" +
-                "1. Call fetch_domain_data_68 to get raw facts.\n" +
+                "1. Call fetch_domain_data to get raw facts.\n" +
                 "2. Write a structured analysis covering: Executive Summary, Market Overview, " +
                 "Key Players, Use Cases, Recent Breakthroughs, and 5-Year Outlook.\n" +
                 "Be specific and reference the data. Minimum 300 words.")
@@ -80,15 +80,14 @@ public class Example68ContextCondensation {
             .tools(List.of(AgentTool.from(deepAnalyst)))
             .instructions(
                 "You are a research director compiling a technology landscape report. " +
-                "Process ONE domain per turn — call deep_analyst_68 for exactly ONE domain, " +
+                "Process ONE domain per turn — call deep_analyst for exactly ONE domain, " +
                 "wait for the result, then call it for the next domain. " +
                 "After ALL domains are done, write a 5-bullet cross-domain executive summary.")
-            .maxTurns(60)
             .build();
 
         AgentResult result = Agentspan.run(orchestrator,
             "Produce comprehensive analyses for each of the following " + domains.size() +
-            " technology domains by calling deep_analyst_68 ONCE PER DOMAIN, " +
+            " technology domains by calling deep_analyst ONCE PER DOMAIN, " +
             "one at a time. Complete all domains, then summarise cross-domain trends. " +
             "Domains: " + domainList + ".");
         result.printResult();

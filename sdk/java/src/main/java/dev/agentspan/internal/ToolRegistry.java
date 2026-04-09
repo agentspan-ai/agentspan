@@ -15,6 +15,8 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -152,7 +154,7 @@ public class ToolRegistry {
             // Skip ToolContext parameters
             if (param.getType() == ToolContext.class) continue;
 
-            Map<String, Object> propSchema = typeToJsonSchema(param.getType());
+            Map<String, Object> propSchema = typeToJsonSchema(param.getParameterizedType());
             props.put(param.getName(), propSchema);
             required.add(param.getName());
         }
@@ -161,6 +163,32 @@ public class ToolRegistry {
         if (!required.isEmpty()) {
             schema.put("required", required);
         }
+        return schema;
+    }
+
+    /**
+     * Convert a Java generic type (including parameterized types like {@code List<Double>})
+     * to a JSON Schema type descriptor.
+     */
+    public static Map<String, Object> typeToJsonSchema(Type type) {
+        if (type instanceof ParameterizedType) {
+            ParameterizedType pt = (ParameterizedType) type;
+            Class<?> raw = (Class<?>) pt.getRawType();
+            if (List.class.isAssignableFrom(raw)) {
+                Map<String, Object> schema = new LinkedHashMap<>();
+                schema.put("type", "array");
+                Type[] typeArgs = pt.getActualTypeArguments();
+                if (typeArgs.length > 0) {
+                    schema.put("items", typeToJsonSchema(typeArgs[0]));
+                }
+                return schema;
+            }
+            return typeToJsonSchema(raw);
+        } else if (type instanceof Class) {
+            return typeToJsonSchema((Class<?>) type);
+        }
+        Map<String, Object> schema = new LinkedHashMap<>();
+        schema.put("type", "object");
         return schema;
     }
 

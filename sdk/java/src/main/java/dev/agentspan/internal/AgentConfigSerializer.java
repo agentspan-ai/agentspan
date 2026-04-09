@@ -164,9 +164,12 @@ public class AgentConfigSerializer {
             agentMap.put("includeContents", agent.getIncludeContents());
         }
 
-        // Thinking budget (extended reasoning)
+        // Thinking config (extended reasoning)
         if (agent.getThinkingBudgetTokens() != null) {
-            agentMap.put("thinkingBudgetTokens", agent.getThinkingBudgetTokens());
+            Map<String, Object> thinkingConfig = new LinkedHashMap<>();
+            thinkingConfig.put("enabled", true);
+            thinkingConfig.put("budgetTokens", agent.getThinkingBudgetTokens());
+            agentMap.put("thinkingConfig", thinkingConfig);
         }
 
         // Introduction (prepended to conversation in multi-agent discussions)

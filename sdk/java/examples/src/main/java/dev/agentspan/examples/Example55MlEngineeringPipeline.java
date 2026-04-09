@@ -11,26 +11,24 @@ import dev.agentspan.model.AgentResult;
 /**
  * Example 55 — ML Engineering Pipeline (multi-agent ML workflow)
  *
- * <p>Deploys a five-stage pipeline:
- * <ol>
- *   <li>Data analysis — analyze dataset, recommend approaches</li>
- *   <li>Model exploration — (parallel) linear, tree, neural network strategies</li>
- *   <li>Evaluation — compare and select best model</li>
- *   <li>Refinement — optimizer → validator × 2 rounds (sequential)</li>
- *   <li>Report — final executive summary</li>
- * </ol>
+ * <p>Deploys a five-stage pipeline that flattens into 8 sequential agents,
+ * matching Python's {@code >>} operator which inlines nested sequential chains:
  *
  * <pre>
  * ml_pipeline (SEQUENTIAL)
  * ├── data_analyst
- * ├── model_exploration (PARALLEL)
- * │   ├── linear_modeler
- * │   ├── tree_modeler
- * │   └── nn_modeler
+ * ├── model_exploration (PARALLEL: linear, tree, nn)
  * ├── evaluator
- * ├── refinement (SEQUENTIAL: optimizer_r1 → validator_r1 → optimizer_r2 → validator_r2)
+ * ├── optimizer_r1
+ * ├── validator_r1
+ * ├── optimizer_r2
+ * ├── validator_r2
  * └── reporter
  * </pre>
+ *
+ * <p>Note: Python's {@code >>} flattens nested sequential chains, so
+ * {@code evaluator >> refinement >> reporter} inlines refinement's 4 sub-agents
+ * directly into the top-level sequential list.
  */
 public class Example55MlEngineeringPipeline {
 
@@ -41,8 +39,8 @@ public class Example55MlEngineeringPipeline {
             .name("data_analyst")
             .model(Settings.LLM_MODEL)
             .instructions(
-                "Analyze the dataset described. Provide: key features, data quality "
-                + "issues, preprocessing steps, and which model families to try.")
+                "Analyze the dataset. Provide: key features, data quality issues, "
+                + "preprocessing steps, and which model families to try.")
             .build();
 
         // ── Phase 2: Parallel Model Exploration ────────────────────────────
@@ -50,7 +48,6 @@ public class Example55MlEngineeringPipeline {
         Agent modelExploration = Agent.builder()
             .name("model_exploration")
             .model(Settings.LLM_MODEL)
-            .instructions("Coordinate parallel model exploration across three approaches.")
             .agents(
                 Agent.builder()
                     .name("linear_modeler")
@@ -77,39 +74,36 @@ public class Example55MlEngineeringPipeline {
             .name("evaluator")
             .model(Settings.LLM_MODEL)
             .instructions(
-                "Compare the three modeling approaches. Select the best. "
+                "Compare the three approaches. Select the best. "
                 + "Output: 'Selected model: [name]' with justification.")
             .build();
 
-        // ── Phase 4: Iterative Refinement (SEQUENTIAL: 2 optimizer-validator rounds) ─
+        // ── Phase 4: Iterative Refinement — inlined 4 agents ──────────────
+        // Python's >> flattens nested sequential chains, so these 4 agents
+        // appear directly in the top-level sequential list.
 
-        Agent refinement = Agent.builder()
-            .name("refinement")
+        Agent optimizerR1 = Agent.builder()
+            .name("optimizer_r1")
             .model(Settings.LLM_MODEL)
-            .instructions("Run iterative refinement cycles to improve the selected model.")
-            .agents(
-                Agent.builder()
-                    .name("optimizer_r1")
-                    .model(Settings.LLM_MODEL)
-                    .instructions("Suggest hyperparameter values with rationale.")
-                    .build(),
-                Agent.builder()
-                    .name("validator_r1")
-                    .model(Settings.LLM_MODEL)
-                    .instructions("Review suggestions. Provide actionable feedback.")
-                    .build(),
-                Agent.builder()
-                    .name("optimizer_r2")
-                    .model(Settings.LLM_MODEL)
-                    .instructions("Refine based on feedback from the validator.")
-                    .build(),
-                Agent.builder()
-                    .name("validator_r2")
-                    .model(Settings.LLM_MODEL)
-                    .instructions("Final recommendation: ready for deployment?")
-                    .build()
-            )
-            .strategy(Strategy.SEQUENTIAL)
+            .instructions("Suggest hyperparameter values with rationale.")
+            .build();
+
+        Agent validatorR1 = Agent.builder()
+            .name("validator_r1")
+            .model(Settings.LLM_MODEL)
+            .instructions("Review suggestions. Provide actionable feedback.")
+            .build();
+
+        Agent optimizerR2 = Agent.builder()
+            .name("optimizer_r2")
+            .model(Settings.LLM_MODEL)
+            .instructions("Refine based on feedback.")
+            .build();
+
+        Agent validatorR2 = Agent.builder()
+            .name("validator_r2")
+            .model(Settings.LLM_MODEL)
+            .instructions("Final recommendation: ready for deployment?")
             .build();
 
         // ── Phase 5: Report ────────────────────────────────────────────────
@@ -118,27 +112,24 @@ public class Example55MlEngineeringPipeline {
             .name("reporter")
             .model(Settings.LLM_MODEL)
             .instructions(
-                "Write an executive summary of the full ML pipeline. Include: "
-                + "dataset characteristics, selected model, final hyperparameters, "
-                + "deployment recommendation.")
+                "Write a concise ML pipeline report: dataset, selected model, "
+                + "hyperparameters, expected performance, next steps. Under 200 words.")
             .build();
 
-        // ── Full pipeline ──────────────────────────────────────────────────
+        // ── Full pipeline (flat 8-agent sequential list) ───────────────────
 
         Agent mlPipeline = Agent.builder()
             .name("ml_pipeline")
             .model(Settings.LLM_MODEL)
-            .instructions(
-                "Run the full ML engineering pipeline: data analysis, parallel model "
-                + "exploration, evaluation, iterative refinement, then final report.")
-            .agents(dataAnalyst, modelExploration, evaluator, refinement, reporter)
+            .agents(dataAnalyst, modelExploration, evaluator,
+                    optimizerR1, validatorR1, optimizerR2, validatorR2,
+                    reporter)
             .strategy(Strategy.SEQUENTIAL)
+            .timeoutSeconds(120000)
             .build();
 
         AgentResult result = Agentspan.run(mlPipeline,
-            "Build a churn prediction model for a SaaS company. "
-            + "The dataset has 50,000 users with 20 features including usage metrics, "
-            + "support tickets, billing history, and login frequency.");
+            "Build a model for California housing prices...");
         result.printResult();
 
         Agentspan.shutdown();

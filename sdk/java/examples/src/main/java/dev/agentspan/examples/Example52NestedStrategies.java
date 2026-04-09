@@ -48,7 +48,6 @@ public class Example52NestedStrategies {
         Agent researchPhase = Agent.builder()
             .name("research_phase_52")
             .model(Settings.LLM_MODEL)
-            .instructions("Coordinate the research team. Run all analysts in parallel.")
             .agents(marketAnalyst, riskAnalyst)
             .strategy(Strategy.PARALLEL)
             .build();
@@ -68,9 +67,6 @@ public class Example52NestedStrategies {
         Agent pipeline = Agent.builder()
             .name("research_pipeline_52")
             .model(Settings.LLM_MODEL)
-            .instructions(
-                "Run the research phase first (parallel), then pass the combined "
-                + "output to the summarizer for an executive summary.")
             .agents(researchPhase, summarizer)
             .strategy(Strategy.SEQUENTIAL)
             .build();

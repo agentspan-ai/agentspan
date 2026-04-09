@@ -60,19 +60,11 @@ public class Example02bMultiStepTools {
             return Map.of("customer_id", customerId, "transactions", List.of());
         }
 
-        @Tool(name = "calculate_total", description = "Calculate the sum of amounts given as a comma-separated string, e.g. '120.0,45.5,230.0'")
-        public Map<String, Object> calculateTotal(String amountsCsv) {
-            String[] parts = amountsCsv.split(",");
+        @Tool(name = "calculate_total", description = "Calculate the sum of a list of amounts")
+        public Map<String, Object> calculateTotal(List<Double> amounts) {
             double total = 0;
-            int count = 0;
-            for (String part : parts) {
-                String trimmed = part.trim();
-                if (!trimmed.isEmpty()) {
-                    total += Double.parseDouble(trimmed);
-                    count++;
-                }
-            }
-            return Map.of("total", Math.round(total * 100.0) / 100.0, "count", count);
+            for (double a : amounts) total += a;
+            return Map.of("total", Math.round(total * 100.0) / 100.0, "count", amounts.size());
         }
 
         @Tool(name = "send_summary_email", description = "Send a summary email to a customer")

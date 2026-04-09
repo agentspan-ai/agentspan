@@ -23,6 +23,9 @@ public class Settings {
     public static final String LLM_MODEL =
         ENV.getOrDefault("AGENTSPAN_LLM_MODEL", "openai/gpt-4o");
 
+    public static final String SECONDARY_LLM_MODEL =
+        ENV.getOrDefault("AGENT_SECONDARY_LLM_MODEL", "openai/gpt-4o-mini");
+
     public static final String AUTH_KEY =
         ENV.get("AGENTSPAN_AUTH_KEY");
 

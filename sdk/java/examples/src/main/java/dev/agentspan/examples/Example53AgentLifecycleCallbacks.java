@@ -29,27 +29,27 @@ import java.util.Map;
  */
 public class Example53AgentLifecycleCallbacks {
 
-    // ── Handler 1: Timing ─────────────────────────────────────────────
+    // ── Handler 1: Timing (agent lifecycle) ──────────────────────────
 
     static class TimingHandler extends CallbackHandler {
         private long t0;
 
         @Override
-        public Map<String, Object> onModelStart(Map<String, Object> kwargs) {
+        public Map<String, Object> onAgentStart(Map<String, Object> kwargs) {
             t0 = System.currentTimeMillis();
-            System.out.println("  [timing] LLM call started");
+            System.out.println("  [timing] Agent started");
             return null;
         }
 
         @Override
-        public Map<String, Object> onModelEnd(Map<String, Object> kwargs) {
+        public Map<String, Object> onAgentEnd(Map<String, Object> kwargs) {
             long elapsed = System.currentTimeMillis() - t0;
-            System.out.println("  [timing] LLM call finished — " + elapsed + "ms");
+            System.out.println("  [timing] Agent finished — " + elapsed + "ms");
             return null;
         }
     }
 
-    // ── Handler 2: Logging ─────────────────────────────────────────────
+    // ── Handler 2: Logging (model + tool lifecycle) ───────────────────
 
     static class LoggingHandler extends CallbackHandler {
 
@@ -68,6 +68,18 @@ public class Example53AgentLifecycleCallbacks {
                 ? ((String) result).substring(0, Math.min(80, ((String) result).length()))
                 : "";
             System.out.println("  [log] LLM responded: " + snippet);
+            return null;
+        }
+
+        @Override
+        public Map<String, Object> onToolStart(Map<String, Object> kwargs) {
+            System.out.println("  [log] Tool call started");
+            return null;
+        }
+
+        @Override
+        public Map<String, Object> onToolEnd(Map<String, Object> kwargs) {
+            System.out.println("  [log] Tool call finished");
             return null;
         }
     }
