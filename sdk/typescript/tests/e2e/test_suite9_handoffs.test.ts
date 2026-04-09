@@ -83,31 +83,43 @@ const doData = tool(
 
 // ── Child agents ─────────────────────────────────────────────────────────
 
-const mathAgent = new Agent({
-  name: 'math_agent',
-  model: MODEL,
-  instructions:
-    'You are a math agent. When asked to compute something, call do_math with the expression. ' +
-    'For example, for "3+4" call do_math with expr="3+4".',
-  tools: [doMath],
-});
+// Factory functions (fresh instances per test, matching Python pattern)
+function makeMathAgent() {
+  return new Agent({
+    name: 'math_agent',
+    model: MODEL,
+    instructions:
+      'You are a math agent. When asked to compute something, call do_math with the expression. ' +
+      'For example, for "3+4" call do_math with expr="3+4".',
+    tools: [doMath],
+  });
+}
 
-const textAgent = new Agent({
-  name: 'text_agent',
-  model: MODEL,
-  instructions:
-    'You are a text agent. When asked to reverse text, call do_text with the text. ' +
-    'For example, for "hello" call do_text with text="hello".',
-  tools: [doText],
-});
+function makeTextAgent() {
+  return new Agent({
+    name: 'text_agent',
+    model: MODEL,
+    instructions:
+      'You are a text agent. When asked to reverse text, call do_text with the text. ' +
+      'For example, for "hello" call do_text with text="hello".',
+    tools: [doText],
+  });
+}
 
-const dataAgent = new Agent({
-  name: 'data_agent',
-  model: MODEL,
-  instructions:
-    'You are a data agent. When asked to query data, call do_data with the query.',
-  tools: [doData],
-});
+function makeDataAgent() {
+  return new Agent({
+    name: 'data_agent',
+    model: MODEL,
+    instructions:
+      'You are a data agent. When asked to query data, call do_data with the query.',
+    tools: [doData],
+  });
+}
+
+// Shared references for compile-only tests
+const mathAgent = makeMathAgent();
+const textAgent = makeTextAgent();
+const dataAgent = makeDataAgent();
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -152,56 +164,56 @@ describe('Suite 9: Agent Handoffs', { timeout: 1_800_000 }, () => { // 30 min fo
       'manual',
     ] as const;
 
-    for (const strategy of strategies) {
-      const children = [
-        new Agent({ name: `${strategy}_child1`, model: MODEL, instructions: 'Child 1.' }),
-        new Agent({ name: `${strategy}_child2`, model: MODEL, instructions: 'Child 2.' }),
-      ];
+    // Shared children (matching Python pattern)
+    const childA = new Agent({ name: 'child_a', model: MODEL, instructions: 'Child A.' });
+    const childB = new Agent({ name: 'child_b', model: MODEL, instructions: 'Child B.' });
+    const routerLead = new Agent({ name: 'router_lead', model: MODEL, instructions: 'Route tasks.' });
 
+    for (const strategy of strategies) {
       const opts: Record<string, unknown> = {
         name: `e2e_ts_${strategy}_parent`,
         model: MODEL,
         instructions: `Parent with ${strategy} strategy.`,
-        agents: children,
+        agents: [childA, childB],
         strategy,
       };
 
-      // Router strategy requires a router agent
       if (strategy === 'router') {
-        opts.router = new Agent({
-          name: `${strategy}_router_lead`,
-          model: MODEL,
-          instructions: 'Route tasks.',
-        });
+        opts.router = routerLead;
       }
 
       const parent = new Agent(opts as unknown as AgentOptions);
       const plan = (await runtime.plan(parent)) as Record<string, unknown>;
+
+      // Assert plan has required top-level keys
+      expect(plan.workflowDef, `[${strategy}] plan missing workflowDef`).toBeDefined();
+      expect(plan.requiredWorkers, `[${strategy}] plan missing requiredWorkers`).toBeDefined();
+
       const ad = getAgentDef(plan);
 
-      // Assert strategy is set correctly
-      expect(
-        ad.strategy,
-        `Strategy '${strategy}' not reflected in agentDef`,
-      ).toBe(strategy);
+      // Assert strategy
+      expect(ad.strategy, `Strategy '${strategy}' not reflected`).toBe(strategy);
 
-      // Assert sub-agents are present
+      // Assert sub-agents
       const agents = (ad.agents ?? []) as Record<string, unknown>[];
-      expect(
-        agents.length,
-        `Strategy '${strategy}' should have at least 2 sub-agents`,
-      ).toBeGreaterThanOrEqual(2);
-
+      expect(agents.length, `[${strategy}] should have 2 sub-agents`).toBeGreaterThanOrEqual(2);
       const agentNames = agents.map((a) => a.name as string);
-      expect(
-        agentNames,
-        `Strategy '${strategy}' missing child1`,
-      ).toContain(`${strategy}_child1`);
-      expect(
-        agentNames,
-        `Strategy '${strategy}' missing child2`,
-      ).toContain(`${strategy}_child2`);
+      expect(agentNames, `[${strategy}] missing child_a`).toContain('child_a');
+      expect(agentNames, `[${strategy}] missing child_b`).toContain('child_b');
     }
+  });
+
+  it('router requires router argument', () => {
+    // Pure SDK validation — no server needed
+    expect(() => {
+      new Agent({
+        name: 'bad_router',
+        model: MODEL,
+        agents: [mathAgent, textAgent],
+        strategy: 'router',
+        // Missing router= argument
+      });
+    }).toThrow();
   });
 
   // ── Runtime tests ─────────────────────────────────────────────────────
@@ -232,8 +244,8 @@ describe('Suite 9: Agent Handoffs', { timeout: 1_800_000 }, () => { // 30 min fo
     const subWorkflows = findTasksByType(tasks, 'SUB_WORKFLOW');
     expect(
       subWorkflows.length,
-      `[Sequential] Expected SUB_WORKFLOW tasks. All tasks: ${tasks.map((t) => `${t.referenceTaskName}[${t.taskType}]`).join(', ')}`,
-    ).toBeGreaterThanOrEqual(1);
+      `[Sequential] Expected at least 2 SUB_WORKFLOW tasks. All tasks: ${tasks.map((t) => `${t.referenceTaskName}[${t.taskType}]`).join(', ')}`,
+    ).toBeGreaterThanOrEqual(2);
 
     // Verify both child agents executed via sub-workflow completion
     const completedRefs = subWorkflows
@@ -298,8 +310,8 @@ describe('Suite 9: Agent Handoffs', { timeout: 1_800_000 }, () => { // 30 min fo
       name: 'e2e_ts_handoff_run',
       model: MODEL,
       instructions:
-        'You are a customer support router. Route text-related tasks to text_agent ' +
-        'and math-related tasks to math_agent.',
+        'You route requests. If the user needs math, delegate to math_agent. ' +
+        'If the user needs text manipulation, delegate to text_agent.',
       agents: [mathAgent, textAgent],
       strategy: 'handoff',
     });
@@ -360,9 +372,7 @@ describe('Suite 9: Agent Handoffs', { timeout: 1_800_000 }, () => { // 30 min fo
     const tasks = await getWorkflowTasks(result.executionId);
     const subWorkflows = findTasksByType(tasks, 'SUB_WORKFLOW');
     const mathSubs = subWorkflows.filter(
-      (t) =>
-        String(t.referenceTaskName ?? '').includes('math') ||
-        JSON.stringify(t.inputData ?? {}).includes('math'),
+      (t) => String(t.referenceTaskName ?? '').toLowerCase().includes('math'),
     );
     expect(
       mathSubs.length,
@@ -402,9 +412,7 @@ describe('Suite 9: Agent Handoffs', { timeout: 1_800_000 }, () => { // 30 min fo
     const tasks = await getWorkflowTasks(result.executionId);
     const subWorkflows = findTasksByType(tasks, 'SUB_WORKFLOW');
     const textSubs = subWorkflows.filter(
-      (t) =>
-        String(t.referenceTaskName ?? '').includes('text') ||
-        JSON.stringify(t.inputData ?? {}).includes('text_agent'),
+      (t) => String(t.referenceTaskName ?? '').toLowerCase().includes('text'),
     );
     expect(
       textSubs.length,
@@ -413,19 +421,8 @@ describe('Suite 9: Agent Handoffs', { timeout: 1_800_000 }, () => { // 30 min fo
   });
 
   it('pipe operator creates sequential pipeline', async () => {
-    // Use fresh agents to avoid stale state from prior tests
-    const freshMath = new Agent({
-      name: 'math_agent',
-      model: MODEL,
-      instructions: 'You do math. Call do_math with the expression.',
-      tools: [doMath],
-    });
-    const freshText = new Agent({
-      name: 'text_agent',
-      model: MODEL,
-      instructions: 'You reverse text. Call do_text with the text.',
-      tools: [doText],
-    });
+    const freshMath = makeMathAgent();
+    const freshText = makeTextAgent();
     const pipeline = freshMath.pipe(freshText);
 
     // Verify the pipeline is a sequential agent
@@ -434,6 +431,12 @@ describe('Suite 9: Agent Handoffs', { timeout: 1_800_000 }, () => { // 30 min fo
     expect(pipeline.agents[0].name).toBe('math_agent');
     expect(pipeline.agents[1].name).toBe('text_agent');
 
+    // Verify plan compiles with sequential strategy
+    const plan = (await runtime.plan(pipeline)) as Record<string, unknown>;
+    const ad = getAgentDef(plan);
+    expect(ad.strategy, '[Pipe] plan strategy').toBe('sequential');
+
+    // Run
     const result = await runtime.run(
       pipeline,
       'Compute 2+3 then reverse hello',
@@ -444,12 +447,24 @@ describe('Suite 9: Agent Handoffs', { timeout: 1_800_000 }, () => { // 30 min fo
     expect(result.executionId).toBeTruthy();
     expect(result.status, `[Pipe] ${diag}`).toBe('COMPLETED');
 
-    // Verify SUB_WORKFLOW tasks exist
+    // Verify at least 2 SUB_WORKFLOW tasks, both children completed
     const tasks = await getWorkflowTasks(result.executionId);
     const subWorkflows = findTasksByType(tasks, 'SUB_WORKFLOW');
     expect(
       subWorkflows.length,
-      `[Pipe] Expected SUB_WORKFLOW tasks. All tasks: ${tasks.map((t) => `${t.referenceTaskName}[${t.taskType}]`).join(', ')}`,
-    ).toBeGreaterThanOrEqual(1);
+      `[Pipe] Expected at least 2 SUB_WORKFLOW tasks. All tasks: ${tasks.map((t) => `${t.referenceTaskName}[${t.taskType}]`).join(', ')}`,
+    ).toBeGreaterThanOrEqual(2);
+
+    const completedRefs = subWorkflows
+      .filter((t) => t.status === 'COMPLETED')
+      .map((t) => t.referenceTaskName);
+    expect(
+      completedRefs.some((r) => r.toLowerCase().includes('math')),
+      `[Pipe] math_agent sub-workflow not COMPLETED. Refs: ${completedRefs}`,
+    ).toBe(true);
+    expect(
+      completedRefs.some((r) => r.toLowerCase().includes('text')),
+      `[Pipe] text_agent sub-workflow not COMPLETED. Refs: ${completedRefs}`,
+    ).toBe(true);
   });
 });

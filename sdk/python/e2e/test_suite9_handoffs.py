@@ -66,8 +66,8 @@ def _math_agent(model):
         name="math_agent",
         model=model,
         instructions=(
-            "You do math. When asked to compute something, call do_math "
-            "with the expression. Report the result verbatim."
+            "You are a math agent. When asked to compute something, call do_math "
+            'with the expression. For example, for "3+4" call do_math with expr="3+4".'
         ),
         tools=[do_math],
     )
@@ -78,8 +78,8 @@ def _text_agent(model):
         name="text_agent",
         model=model,
         instructions=(
-            "You reverse text. When asked to reverse something, call do_text "
-            "with the text. Report the result verbatim."
+            "You are a text agent. When asked to reverse text, call do_text "
+            'with the text. For example, for "hello" call do_text with text="hello".'
         ),
         tools=[do_text],
     )
@@ -90,8 +90,8 @@ def _data_agent(model):
         name="data_agent",
         model=model,
         instructions=(
-            "You query data. When asked about data, call do_data "
-            "with the query. Report the result verbatim."
+            "You are a data agent. When asked to query data, call do_data "
+            "with the query."
         ),
         tools=[do_data],
     )
@@ -241,7 +241,7 @@ def _find_fork_tasks(execution_id):
 # ===================================================================
 
 
-@pytest.mark.timeout(600)
+@pytest.mark.timeout(1800)  # 30 min — multi-agent tests are slow
 class TestSuite9Handoffs:
     """Agent handoffs: compilation, orchestration strategies, runtime execution."""
 
@@ -539,6 +539,7 @@ class TestSuite9Handoffs:
             ),
             agents=[_math_agent(model), _text_agent(model)],
             strategy=Strategy.SWARM,
+            max_turns=5,
             handoffs=[
                 OnTextMention(text="reverse", target="text_agent"),
                 OnTextMention(text="compute", target="math_agent"),
