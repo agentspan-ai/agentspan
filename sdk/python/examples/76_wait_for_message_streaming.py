@@ -71,9 +71,9 @@ with AgentRuntime() as runtime:
             time.sleep(8)
             print(f"\n  [caller] sending -> {task!r}")
             runtime.send_message(handle.execution_id, {"task": task})
-        # Give the agent time to finish the last task then cancel
+        # Give the agent time to finish the last task then stop gracefully
         time.sleep(15)
-        runtime.cancel(handle.execution_id, reason="example complete")
+        handle.stop()
 
     threading.Thread(target=sender, daemon=True).start()
 

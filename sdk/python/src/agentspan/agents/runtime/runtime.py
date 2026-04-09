@@ -4634,6 +4634,70 @@ class AgentRuntime:
             run_id=domain,
         )
 
+    def stop(self, execution_id: str) -> None:
+        """Gracefully stop an agent execution.
+
+        Sets the ``_stop_requested`` workflow variable to ``true``.  The
+        agent's DoWhile loop checks this flag on each iteration and exits
+        when it is set.  The execution reaches ``COMPLETED`` status with
+        the last LLM output preserved.
+
+        Also sends a WMQ unblock message for agents waiting on a blocking
+        ``PULL_WORKFLOW_MESSAGES`` task.
+
+        This is deterministic — it does not depend on the LLM following
+        stop instructions in the prompt.
+
+        For immediate termination (``TERMINATED`` status), use
+        :meth:`cancel` instead.
+
+        Args:
+            execution_id: The Conductor execution ID.
+        """
+        import requests as req_lib
+
+        url = self._agent_api_url(f"/{execution_id}/stop")
+        resp = req_lib.post(url, headers=self._agent_api_headers(), timeout=30)
+        try:
+            resp.raise_for_status()
+        except req_lib.exceptions.HTTPError as exc:
+            _raise_api_error(exc, url=url)
+
+        # Also unblock any blocking PULL_WORKFLOW_MESSAGES wait.
+        try:
+            self._workflow_client.send_message(
+                execution_id, {"_signal": "stop"}
+            )
+        except Exception:
+            pass  # best-effort — agent may not have a WMQ tool
+
+    def signal(self, execution_id: str, message: str) -> None:
+        """Inject a persistent signal into a running agent's context.
+
+        Sets the ``_signal_injection`` workflow variable.  The agent's
+        context injection reads this variable on each iteration and
+        prepends it to the LLM's user message as ``[SIGNALS]...[/SIGNALS]``.
+
+        The signal persists until overwritten by another ``signal()`` call.
+        To clear it, call ``signal(execution_id, "")``.
+
+        This works on **all** agents — no ``wait_for_message_tool`` needed.
+        It's a separate channel from WMQ: ``signal()`` writes to a workflow
+        variable, ``send_message()`` writes to the message queue.
+
+        Args:
+            execution_id: The Conductor execution ID.
+            message: The signal text.  Empty string clears the signal.
+        """
+        import requests as req_lib
+
+        url = self._agent_api_url(f"/{execution_id}/signal")
+        resp = req_lib.post(url, json={"message": message}, headers=self._agent_api_headers(), timeout=30)
+        try:
+            resp.raise_for_status()
+        except req_lib.exceptions.HTTPError as exc:
+            _raise_api_error(exc, url=url)
+
     async def resume_async(
         self,
         execution_id: str,
@@ -4729,6 +4793,22 @@ class AgentRuntime:
                 reason=reason,
             ),
         )
+
+    async def stop_async(self, execution_id: str) -> None:
+        """Async version of :meth:`stop`."""
+        await self._http.stop(execution_id)
+        # Also unblock any blocking PULL_WORKFLOW_MESSAGES wait.
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None, self._workflow_client.send_message, execution_id, {"_signal": "stop"}
+            )
+        except Exception:
+            pass
+
+    async def signal_async(self, execution_id: str, message: str) -> None:
+        """Async version of :meth:`signal`."""
+        await self._http.signal(execution_id, message)
 
     # ── Session continuity helpers ────────────────────────────────────
 

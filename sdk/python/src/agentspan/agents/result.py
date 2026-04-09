@@ -59,6 +59,7 @@ class FinishReason(str, Enum):
     TIMEOUT = "timeout"  # Execution timed out
     GUARDRAIL = "guardrail"  # Blocked by guardrail
     REJECTED = "rejected"  # HITL tool was rejected
+    STOPPED = "stopped"  # Graceful stop via handle.stop()
 
 
 # ── TokenUsage ──────────────────────────────────────────────────────────
@@ -282,6 +283,19 @@ class AgentHandle:
         """Cancel the agent workflow."""
         self._runtime.cancel(self.execution_id, reason)
 
+    def stop(self) -> None:
+        """Gracefully stop the agent execution.
+
+        The loop exits after the current iteration completes.  The
+        execution reaches ``COMPLETED`` status with the last LLM output
+        preserved.  This is deterministic — it does not depend on the LLM
+        following stop instructions.
+
+        For immediate termination (``TERMINATED`` status), use
+        :meth:`cancel` instead.
+        """
+        self._runtime.stop(self.execution_id)
+
     # ── Streaming ────────────────────────────────────────────────────
 
     def stream(self) -> "AgentStream":
@@ -330,6 +344,10 @@ class AgentHandle:
     async def cancel_async(self, reason: str = "") -> None:
         """Async version of :meth:`cancel`."""
         await self._runtime.cancel_async(self.execution_id, reason)
+
+    async def stop_async(self) -> None:
+        """Async version of :meth:`stop`."""
+        await self._runtime.stop_async(self.execution_id)
 
     def stream_async(self) -> "AsyncAgentStream":
         """Async streaming view. Returns an :class:`AsyncAgentStream`."""

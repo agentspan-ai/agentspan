@@ -209,12 +209,13 @@ public class AgentCompiler {
         // Build termination condition
         String guardrailContinue = buildGuardrailContinue(guardrailRefs);
         String termCondition = String.format(
-                "if ( $.%s['iteration'] < %d && ($.%s['finishReason'] == 'LENGTH' || $.%s['finishReason'] == 'MAX_TOKENS' || (%s)) ) { true; } else { false; }",
+                "if ( $.%s['iteration'] < %d && $._stop_requested != true && ($.%s['finishReason'] == 'LENGTH' || $.%s['finishReason'] == 'MAX_TOKENS' || (%s)) ) { true; } else { false; }",
                 loopRef, maxTurns, llmRef, llmRef, guardrailContinue);
 
         Map<String, Object> loopInputs = new LinkedHashMap<>();
         loopInputs.put(loopRef, "${" + loopRef + "}");
         loopInputs.put(llmRef, "${" + llmRef + "}");
+        loopInputs.put("_stop_requested", "${workflow.variables._stop_requested}");
         addGuardrailInputs(loopInputs, guardrailRefs);
         WorkflowTask loop = buildDoWhile(loopRef, termCondition, loopTasks, loopInputs);
 
@@ -320,7 +321,7 @@ public class AgentCompiler {
         // Build loop body
         List<WorkflowTask> loopTasks = new ArrayList<>();
 
-        // Context injection: prepend _agent_state JSON to user prompt (with size limits)
+        // Context injection: prepend _agent_state JSON + signals to user prompt (with size limits)
         String ctxInjectRef = config.getName() + "_ctx_inject";
         WorkflowTask ctxInject = new WorkflowTask();
         ctxInject.setType("INLINE");
@@ -328,6 +329,7 @@ public class AgentCompiler {
         Map<String, Object> ctxInjectInputs = new LinkedHashMap<>();
         ctxInjectInputs.put("evaluatorType", "graaljs");
         ctxInjectInputs.put("state", "${workflow.variables._agent_state}");
+        ctxInjectInputs.put("signals", "${workflow.variables._signal_injection}");
         ctxInjectInputs.put("prompt", "${workflow.input.prompt}");
         ctxInjectInputs.put("maxSize", contextMaxSizeBytes);
         ctxInjectInputs.put("maxValueSize", contextMaxValueSizeBytes);
@@ -442,7 +444,7 @@ public class AgentCompiler {
 
         StringBuilder termCondition = new StringBuilder();
         termCondition.append(String.format(
-                "if ( $.%s['iteration'] < %d && ($.%s['finishReason'] == 'LENGTH' || $.%s['finishReason'] == 'MAX_TOKENS' || %s)",
+                "if ( $.%s['iteration'] < %d && $._stop_requested != true && ($.%s['finishReason'] == 'LENGTH' || $.%s['finishReason'] == 'MAX_TOKENS' || %s)",
                 loopRef, maxTurns, llmRef, llmRef, loopReason));
         if (stopWhenRef != null) {
             termCondition.append(String.format(" && $.%s.should_continue == true", stopWhenRef));
@@ -455,6 +457,7 @@ public class AgentCompiler {
         Map<String, Object> loopInputs = new LinkedHashMap<>();
         loopInputs.put(loopRef, "${" + loopRef + "}");
         loopInputs.put(llmRef, "${" + llmRef + "}");
+        loopInputs.put("_stop_requested", "${workflow.variables._stop_requested}");
         if (stopWhenRef != null) loopInputs.put(stopWhenRef, "${" + stopWhenRef + "}");
         if (terminationRef != null) loopInputs.put(terminationRef, "${" + terminationRef + "}");
         addGuardrailInputs(loopInputs, guardrailRefs);
@@ -488,6 +491,8 @@ public class AgentCompiler {
         // Initialize workflow variables
         Map<String, Object> initVars = new LinkedHashMap<>();
         initVars.put("_agent_state", "${" + ctxResolveRef + ".output.result}");
+        initVars.put("_stop_requested", false);
+        initVars.put("_signal_injection", "");
         if (hasApproval) {
             // Pre-initialize to empty string so the system message doesn't
             // have null content on the first loop iteration.
@@ -655,7 +660,7 @@ public class AgentCompiler {
         // Build loop body
         List<WorkflowTask> loopTasks = new ArrayList<>();
 
-        // Context injection for hybrid loop (with size limits)
+        // Context injection for hybrid loop (with size limits + signals)
         String hybridCtxInjectRef = config.getName() + "_ctx_inject";
         WorkflowTask hybridCtxInject = new WorkflowTask();
         hybridCtxInject.setType("INLINE");
@@ -663,6 +668,7 @@ public class AgentCompiler {
         Map<String, Object> hybridCtxInjectInputs = new LinkedHashMap<>();
         hybridCtxInjectInputs.put("evaluatorType", "graaljs");
         hybridCtxInjectInputs.put("state", "${workflow.variables._agent_state}");
+        hybridCtxInjectInputs.put("signals", "${workflow.variables._signal_injection}");
         hybridCtxInjectInputs.put("prompt", "${workflow.input.prompt}");
         hybridCtxInjectInputs.put("maxSize", contextMaxSizeBytes);
         hybridCtxInjectInputs.put("maxValueSize", contextMaxValueSizeBytes);
@@ -746,12 +752,13 @@ public class AgentCompiler {
         }
 
         String termCondition = String.format(
-                "if ( $.%s['iteration'] < %d && ($.%s['finishReason'] == 'LENGTH' || $.%s['finishReason'] == 'MAX_TOKENS' || (%s && %s)) ) { true; } else { false; }",
+                "if ( $.%s['iteration'] < %d && $._stop_requested != true && ($.%s['finishReason'] == 'LENGTH' || $.%s['finishReason'] == 'MAX_TOKENS' || (%s && %s)) ) { true; } else { false; }",
                 loopRef, maxTurns, llmRef, llmRef, loopReason, notTransfer);
 
         Map<String, Object> loopInputs = new LinkedHashMap<>();
         loopInputs.put(loopRef, "${" + loopRef + "}");
         loopInputs.put(llmRef, "${" + llmRef + "}");
+        loopInputs.put("_stop_requested", "${workflow.variables._stop_requested}");
         loopInputs.put(checkTransferRef, "${" + checkTransferRef + "}");
         addGuardrailInputs(loopInputs, guardrailRefs);
         WorkflowTask loop = buildDoWhile(loopRef, termCondition, loopTasks, loopInputs);
@@ -790,6 +797,8 @@ public class AgentCompiler {
         // Initialize workflow variables
         Map<String, Object> initHybridVars = new LinkedHashMap<>();
         initHybridVars.put("_agent_state", "${" + hybridCtxResolveRef + ".output.result}");
+        initHybridVars.put("_stop_requested", false);
+        initHybridVars.put("_signal_injection", "");
         if (hasApproval) {
             initHybridVars.put("_human_feedback", "");
         }

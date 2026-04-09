@@ -177,6 +177,19 @@ public class AgentController {
         agentService.cancelAgent(executionId, reason);
     }
 
+    /** Gracefully stop an agent execution (loop exits after current iteration). */
+    @PostMapping("/{executionId}/stop")
+    public void stopAgent(@PathVariable String executionId) {
+        agentService.stopAgent(executionId);
+    }
+
+    /** Inject a persistent signal into a running agent's context. */
+    @PostMapping("/{executionId}/signal")
+    public void signalAgent(@PathVariable String executionId, @RequestBody Map<String, Object> body) {
+        String message = body != null ? (String) body.getOrDefault("message", "") : "";
+        agentService.signalAgent(executionId, message);
+    }
+
     /**
      * Get the current status of an agent execution.
      * Lightweight polling fallback when SSE is not available.
