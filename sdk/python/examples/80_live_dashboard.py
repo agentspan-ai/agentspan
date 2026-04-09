@@ -45,11 +45,14 @@ Requirements:
 
 import json
 import math
+import os
 import random
 import shutil
 import tempfile
 import time
 from pathlib import Path
+
+os.environ.setdefault("AGENTSPAN_LOG_LEVEL", "WARNING")
 
 from settings import settings
 

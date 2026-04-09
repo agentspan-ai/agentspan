@@ -40,10 +40,13 @@ Requirements:
 """
 
 import json
+import os
 import shutil
 import tempfile
 import time
 from pathlib import Path
+
+os.environ.setdefault("AGENTSPAN_LOG_LEVEL", "WARNING")
 
 from agentspan.agents import Agent, AgentRuntime, tool, wait_for_message_tool
 from settings import settings
