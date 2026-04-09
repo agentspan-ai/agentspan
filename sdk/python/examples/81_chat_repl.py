@@ -17,6 +17,15 @@ Key WMQ concept — bidirectional conversation loop:
     prompts again.  Workers run as separate OS processes so the reply is
     communicated via the shared filesystem rather than an in-process queue.
 
+Resume support:
+    The REPL saves the execution_id to a session file on start.  On subsequent
+    runs, pass ``--resume`` to reconnect to the same workflow.  ``resume()``
+    fetches the workflow from the server, extracts the worker domain from
+    ``taskToDomain``, and re-registers tools under that domain — so stateful
+    agents resume correctly.  Conversation history is not restored in the
+    console (it lives on the server), but the agent retains its server-side
+    state across restarts.
+
 Ephemeral tools via /tool <name>:
     Conductor compiles tool definitions into a workflow at startup — you cannot
     add new Conductor task types mid-execution.  However, a single generic
@@ -40,11 +49,16 @@ Requirements:
     - AGENTSPAN_LLM_MODEL=anthropic/claude-sonnet-4-20250514 as environment variable
 """
 
+import argparse
 import json
+import os
 import shutil
 import tempfile
 import time
 from pathlib import Path
+
+# Keep conductor worker startup logs silent by default; set AGENTSPAN_LOG_LEVEL=INFO to see them.
+os.environ.setdefault("AGENTSPAN_LOG_LEVEL", "WARNING")
 
 from settings import settings
 
@@ -80,6 +94,7 @@ _TASK_IMPLEMENTATIONS: dict = {
                      )),
 }
 
+SESSION_FILE = Path("/tmp/agentspan_chat_repl.session")
 
 # ---------------------------------------------------------------------------
 # Filesystem IPC setup
@@ -183,7 +198,11 @@ Commands:
   <message>           Send a message to the agent
   /tool <name>        Activate an ephemeral task tool (see list below)
   /tools              List available ephemeral tasks
-  quit / exit         End the session
+  /disconnect         Exit without stopping — session can be resumed later
+  quit / exit         End the session (stops the agent)
+
+Resume a previous session:
+  python 81_chat_repl.py --resume
 
 Available ephemeral tasks:
 """ + "\n".join(f"  {name:12s}  {desc}" for name, (desc, _) in _TASK_IMPLEMENTATIONS.items())
@@ -198,15 +217,47 @@ def _wait_for_reply() -> str:
     return reply
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Chat REPL with a long-running agent via WMQ.")
+    parser.add_argument(
+        "--resume", action="store_true",
+        help="Resume a previous session instead of starting a new one.",
+    )
+    parser.add_argument(
+        "--session-file", type=Path, default=SESSION_FILE,
+        help="Path to the session file storing the execution ID.",
+    )
+    return parser.parse_args()
+
+
 try:
+    args = parse_args()
     active_tasks: dict[str, str] = {}
     _write_registry(active_tasks)
+    agent = build_agent()
 
     with AgentRuntime() as runtime:
-        handle = runtime.start(build_agent(), "Begin. Wait for the user's first message.")
-        execution_id = handle.execution_id
-        print(f"Agent started: {execution_id}")
-        time.sleep(4)
+        if args.resume:
+            if not args.session_file.exists():
+                print(f"No session file found at {args.session_file}")
+                print("Start a new session first (without --resume).")
+                raise SystemExit(1)
+
+            saved_eid = args.session_file.read_text().strip()
+            print(f"Resuming session: {saved_eid}")
+
+            # resume() fetches the workflow from the server, extracts the
+            # domain from taskToDomain, and re-registers workers under it.
+            handle = runtime.resume(saved_eid, agent)
+            execution_id = handle.execution_id
+            print(f"Workers re-registered under domain: {handle.run_id}")
+        else:
+            handle = runtime.start(agent, "Begin. Wait for the user's first message.")
+            execution_id = handle.execution_id
+            args.session_file.write_text(execution_id)
+            print(f"Agent started: {execution_id}")
+            print(f"Domain (run_id): {handle.run_id}")
+            print(f"Session saved to {args.session_file}")
 
         print("\n" + "=" * 60)
         print("Chat REPL — type 'help' for commands, 'quit' to exit")
@@ -216,6 +267,7 @@ try:
             try:
                 user_input = input("You: ").strip()
             except (EOFError, KeyboardInterrupt):
+                print("\n\nDisconnected (Ctrl+C). Resume later with --resume.")
                 break
 
             if not user_input:
@@ -225,6 +277,13 @@ try:
                 runtime.send_message(execution_id, {"stop": True})
                 reply = _wait_for_reply()
                 print(f"Agent: {reply}\n")
+                # Clean up session file — agent is stopped
+                if args.session_file.exists():
+                    args.session_file.unlink()
+                break
+
+            if user_input.lower() == "/disconnect":
+                print("Disconnected. Resume later with: python 81_chat_repl.py --resume")
                 break
 
             if user_input.lower() == "help":

@@ -233,11 +233,16 @@ class AgentHandle:
     """
 
     def __init__(
-        self, execution_id: str, runtime: Any, correlation_id: Optional[str] = None
+        self,
+        execution_id: str,
+        runtime: Any,
+        correlation_id: Optional[str] = None,
+        run_id: Optional[str] = None,
     ) -> None:
         self.execution_id = execution_id
         self.correlation_id = correlation_id
         self._runtime = runtime
+        self.run_id = run_id  # domain UUID for stateful agents; None for stateless
 
     # ── Status ──────────────────────────────────────────────────────
 
@@ -270,8 +275,8 @@ class AgentHandle:
         self._runtime.pause(self.execution_id)
 
     def resume(self) -> None:
-        """Resume a paused agent workflow."""
-        self._runtime.resume(self.execution_id)
+        """Resume a paused agent execution."""
+        self._runtime._resume_workflow(self.execution_id)
 
     def cancel(self, reason: str = "") -> None:
         """Cancel the agent workflow."""
@@ -320,7 +325,7 @@ class AgentHandle:
 
     async def resume_async(self) -> None:
         """Async version of :meth:`resume`."""
-        await self._runtime.resume_async(self.execution_id)
+        await self._runtime._resume_workflow_async(self.execution_id)
 
     async def cancel_async(self, reason: str = "") -> None:
         """Async version of :meth:`cancel`."""

@@ -3487,7 +3487,9 @@ class AgentRuntime:
 
         self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
 
-        return AgentHandle(execution_id=execution_id, runtime=self, correlation_id=correlation_id)
+        return AgentHandle(
+            execution_id=execution_id, runtime=self, correlation_id=correlation_id, run_id=run_id
+        )
 
     # ── Streaming execution ─────────────────────────────────────────
 
@@ -4014,7 +4016,9 @@ class AgentRuntime:
 
         self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
 
-        return AgentHandle(execution_id=execution_id, runtime=self, correlation_id=correlation_id)
+        return AgentHandle(
+            execution_id=execution_id, runtime=self, correlation_id=correlation_id, run_id=run_id
+        )
 
     async def stream_async(
         self,
@@ -4541,13 +4545,124 @@ class AgentRuntime:
         """Pause an agent execution."""
         self._workflow_client.pause_workflow(execution_id)
 
-    def resume(self, execution_id: str) -> None:
-        """Resume a paused agent execution."""
+    def _resume_workflow(self, execution_id: str) -> None:
+        """Resume a paused Conductor workflow (internal — called by AgentHandle.resume())."""
         self._workflow_client.resume_workflow(execution_id)
 
     def cancel(self, execution_id: str, reason: str = "") -> None:
         """Cancel an agent execution."""
         self._workflow_client.terminate_workflow(workflow_id=execution_id, reason=reason)
+
+    # ── Resume (re-attach to existing execution) ─────────────────────
+
+    def _extract_domain(self, execution_id: str) -> Optional[str]:
+        """Extract the worker domain from a workflow's taskToDomain mapping.
+
+        Returns the domain UUID if the workflow uses domain-based routing
+        (stateful agents), or ``None`` for stateless agents.
+        """
+        try:
+            wf = self._workflow_client.get_workflow(execution_id, include_tasks=False)
+            task_to_domain = getattr(wf, "task_to_domain", None) or {}
+            domains = {v for v in task_to_domain.values() if v}
+            if len(domains) == 1:
+                return domains.pop()
+            if len(domains) > 1:
+                # Multiple distinct domains — pick the most common one
+                from collections import Counter
+                counts = Counter(v for v in task_to_domain.values() if v)
+                return counts.most_common(1)[0][0]
+            return None
+        except Exception as exc:
+            logger.debug("Could not extract domain for %s: %s", execution_id, exc)
+            return None
+
+    def resume(
+        self,
+        execution_id: str,
+        agent: Any,
+        *,
+        timeout: Optional[int] = None,
+    ) -> AgentHandle:
+        """Re-attach to an existing agent execution and re-register workers.
+
+        Fetches the workflow from the server, extracts the worker domain
+        from its ``taskToDomain`` mapping (for stateful agents), and
+        re-registers tool workers under that domain.  Returns an
+        :class:`AgentHandle` for continued interaction.
+
+        This works across process restarts: the workflow is durable on the
+        server, and the domain is derived from the server — no ``run_id``
+        needs to be persisted by the caller.
+
+        Args:
+            execution_id: The Conductor execution ID from a previous
+                :meth:`start` call.
+            agent: The same :class:`Agent` definition that was originally
+                executed.  Its tools are re-registered as workers.
+            timeout: Not used directly — reserved for future use.
+
+        Returns:
+            An :class:`AgentHandle` bound to this runtime with workers
+            polling under the correct domain.
+
+        Example — stateless::
+
+            handle = runtime.start(agent, "Analyze reports")
+            eid = handle.execution_id
+            # ... later, even in a new AgentRuntime ...
+            handle = runtime.resume(eid, agent)
+            result = handle.join(timeout=120)
+
+        Example — stateful (domain extracted automatically)::
+
+            handle = runtime.start(stateful_agent, "Run pipeline")
+            eid = handle.execution_id
+            # ... runtime closed, workers died ...
+            # In a new runtime:
+            handle = runtime.resume(eid, stateful_agent)
+            # Workers re-registered under the original domain
+            runtime.send_message(eid, {"task": "continue"})
+        """
+        domain = self._extract_domain(execution_id)
+
+        self._prepare_workers(agent, domain=domain)
+
+        return AgentHandle(
+            execution_id=execution_id,
+            runtime=self,
+            run_id=domain,
+        )
+
+    async def resume_async(
+        self,
+        execution_id: str,
+        agent: Any,
+        *,
+        timeout: Optional[int] = None,
+    ) -> AgentHandle:
+        """Async version of :meth:`resume`.
+
+        Re-attaches to an existing agent execution, extracts the worker
+        domain from the server, and re-registers tool workers.
+
+        Args:
+            execution_id: The Conductor execution ID.
+            agent: The same :class:`Agent` definition originally executed.
+            timeout: Reserved for future use.
+
+        Returns:
+            An :class:`AgentHandle`.
+        """
+        domain = self._extract_domain(execution_id)
+
+        self._prepare_workers(agent, domain=domain)
+
+        return AgentHandle(
+            execution_id=execution_id,
+            runtime=self,
+            run_id=domain,
+        )
 
     # ── Async status / interaction ───────────────────────────────────
 
@@ -4599,8 +4714,8 @@ class AgentRuntime:
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, self._workflow_client.pause_workflow, execution_id)
 
-    async def resume_async(self, execution_id: str) -> None:
-        """Async version of :meth:`resume`."""
+    async def _resume_workflow_async(self, execution_id: str) -> None:
+        """Async version of :meth:`_resume_workflow` (internal — called by AgentHandle.resume_async())."""
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, self._workflow_client.resume_workflow, execution_id)
 

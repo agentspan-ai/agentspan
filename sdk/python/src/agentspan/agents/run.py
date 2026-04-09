@@ -470,6 +470,64 @@ async def start_async(
     )
 
 
+def resume(
+    execution_id: str,
+    agent: Agent,
+    *,
+    runtime: Optional[Any] = None,
+) -> AgentHandle:
+    """Re-attach to an existing agent execution and re-register workers.
+
+    Convenience wrapper around :meth:`AgentRuntime.resume`.  Fetches the
+    workflow from the server, extracts the worker domain from its
+    ``taskToDomain`` mapping, and re-registers tool workers.
+
+    Args:
+        execution_id: The Conductor execution ID from a previous
+            :func:`start` call.
+        agent: The same :class:`Agent` definition originally executed.
+        runtime: Optional custom :class:`AgentRuntime`.
+
+    Returns:
+        An :class:`AgentHandle` bound to the runtime with workers
+        polling under the correct domain.
+
+    Example::
+
+        from agentspan.agents import Agent, start, resume
+
+        agent = Agent(name="worker", model="openai/gpt-4o", tools=[...])
+        handle = start(agent, "Long job")
+        eid = handle.execution_id
+
+        # Later (even after a restart):
+        handle = resume(eid, agent)
+        result = handle.join(timeout=120)
+    """
+    rt = runtime or _get_default_runtime()
+    return rt.resume(execution_id, agent)
+
+
+async def resume_async(
+    execution_id: str,
+    agent: Agent,
+    *,
+    runtime: Optional[Any] = None,
+) -> AgentHandle:
+    """Async version of :func:`resume`.
+
+    Args:
+        execution_id: The Conductor execution ID.
+        agent: The same :class:`Agent` definition originally executed.
+        runtime: Optional custom :class:`AgentRuntime`.
+
+    Returns:
+        An :class:`AgentHandle`.
+    """
+    rt = runtime or _get_default_runtime()
+    return await rt.resume_async(execution_id, agent)
+
+
 async def stream_async(
     agent: Optional[Agent] = None,
     prompt: "Optional[Any]" = None,
