@@ -37,7 +37,7 @@ public class AuthUserSeeder {
                 userRepository.createIfNotExists(entry.getUsername(), name, entry.getEmail(), entry.getPassword());
                 log.info("Ensured user exists: {}", entry.getUsername());
             } catch (Exception e) {
-                log.warn("Failed to seed user '{}' — skipping: {}", entry.getUsername(), e.getMessage());
+                log.warn("Failed to seed user '{}' — skipping", entry.getUsername(), e);
             }
         }
     }

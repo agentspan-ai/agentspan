@@ -163,6 +163,41 @@ class CredentialEnvSeederTest {
     }
 
     @Test
+    void seeder_propagates_nonDecryptionExceptions() throws Exception {
+        // A non-AEADBadTagException from get() must propagate — e.g. a transient DB failure
+        // should NOT silently delete a valid credential.
+        CredentialStoreProvider failingStore = new CredentialStoreProvider() {
+            @Override
+            public String get(String userId, String name) {
+                throw new IllegalStateException("DB connection lost", new RuntimeException("timeout"));
+            }
+
+            @Override
+            public void set(String userId, String name, String value) {}
+
+            @Override
+            public void delete(String userId, String name) {}
+
+            @Override
+            public java.util.List<dev.agentspan.runtime.model.credentials.CredentialMeta> list(String userId) {
+                return java.util.List.of();
+            }
+        };
+
+        Function<String, String> envLookup = name -> "ANTHROPIC_API_KEY".equals(name) ? "sk-value" : null;
+
+        CredentialEnvSeeder seeder = new CredentialEnvSeeder(failingStore, envLookup);
+        var field = CredentialEnvSeeder.class.getDeclaredField("credentialsStore");
+        field.setAccessible(true);
+        field.set(seeder, "built-in");
+
+        // Non-key-mismatch exception must propagate — seeder should NOT swallow it
+        assertThatThrownBy(() -> seeder.run(new org.springframework.boot.DefaultApplicationArguments()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("DB connection lost");
+    }
+
+    @Test
     void seeder_storesGitHubCredentials_inRealDb() throws Exception {
         Function<String, String> envLookup = name -> switch (name) {
             case "GH_TOKEN" -> "ghp-test-gh-token";
