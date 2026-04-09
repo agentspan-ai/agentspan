@@ -31,6 +31,7 @@ PYTHON_SDK_DIR = SDK_DIR / "python"
 CONFIG_FILE = SDK_DIR / "parity_examples.json"
 REPORT_FILE = SDK_DIR / "java" / "PARITY_REPORT.md"
 SERVER_URL = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:6767")
+LLM_MODEL = os.environ.get("AGENTSPAN_LLM_MODEL", "openai/gpt-4o-mini")
 
 # ── Data types ────────────────────────────────────────────────────────────────
 
@@ -74,7 +75,7 @@ def filter_examples(examples: list, ids: list[str]) -> list:
 # ── Running examples ──────────────────────────────────────────────────────────
 
 def run_java_example(java_class: str, timeout: int = 120) -> dict:
-    env = {**os.environ, "AGENTSPAN_SERVER_URL": SERVER_URL}
+    env = {**os.environ, "AGENTSPAN_SERVER_URL": SERVER_URL, "AGENTSPAN_LLM_MODEL": LLM_MODEL}
     cmd = [
         "mvn", "-q", "exec:java",
         f"-Dexec.mainClass=dev.agentspan.examples.{java_class}",
@@ -90,7 +91,7 @@ def run_java_example(java_class: str, timeout: int = 120) -> dict:
 
 
 def run_python_example(python_file: str, timeout: int = 120) -> dict:
-    env = {**os.environ, "AGENTSPAN_SERVER_URL": SERVER_URL}
+    env = {**os.environ, "AGENTSPAN_SERVER_URL": SERVER_URL, "AGENTSPAN_LLM_MODEL": LLM_MODEL}
     cmd = ["bash", "-c",
            f"source .venv/bin/activate && python examples/{python_file}"]
     result = subprocess.run(cmd, capture_output=True, text=True,
@@ -332,11 +333,12 @@ def main():
                   "python_file": ex["python_file"], "gaps": [], "error": None}
 
         try:
+            ex_timeout = ex.get("timeout", args.timeout)
             print(f"      Running Java...")
-            java_def = run_java_example(ex["java_class"], timeout=args.timeout)
+            java_def = run_java_example(ex["java_class"], timeout=ex_timeout)
 
             print(f"      Running Python...")
-            py_def = run_python_example(ex["python_file"], timeout=args.timeout)
+            py_def = run_python_example(ex["python_file"], timeout=ex_timeout)
 
             java_norm = normalize(java_def)
             py_norm = normalize(py_def)

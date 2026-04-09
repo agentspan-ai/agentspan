@@ -83,11 +83,13 @@ public class ToolRegistry {
             };
 
             List<String> credentials = Arrays.asList(ann.credentials());
+            Map<String, Object> outputSchema = typeToJsonSchema(method.getReturnType());
 
             tools.add(new ToolDef.Builder()
                 .name(name)
                 .description(ann.description())
                 .inputSchema(schema)
+                .outputSchema(outputSchema)
                 .func(func)
                 .approvalRequired(ann.approvalRequired())
                 .timeoutSeconds(ann.timeoutSeconds())
@@ -179,6 +181,7 @@ public class ToolRegistry {
             schema.put("type", "boolean");
         } else if (Map.class.isAssignableFrom(type)) {
             schema.put("type", "object");
+            schema.put("additionalProperties", new java.util.LinkedHashMap<>());
         } else if (List.class.isAssignableFrom(type)
                 || type.isArray()) {
             schema.put("type", "array");

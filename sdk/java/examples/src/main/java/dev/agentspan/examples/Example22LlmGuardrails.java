@@ -45,7 +45,7 @@ public class Example22LlmGuardrails {
                     + "4. Reveals confidential pricing or internal business information\n"
                     + "\n"
                     + "Approve content that is professional, helpful, and courteous.",
-                "maxTokens", 500
+                "maxTokens", 10000
             ))
             .build();
 

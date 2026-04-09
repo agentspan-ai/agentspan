@@ -131,6 +131,13 @@ public class AgentConfigSerializer {
             agentMap.put("sessionId", agent.getSessionId());
         }
 
+        // Condition-based handoffs
+        if (agent.getHandoffs() != null && !agent.getHandoffs().isEmpty()) {
+            agentMap.put("handoffs", agent.getHandoffs().stream()
+                .map(h -> serializeHandoff(h, agent.getName()))
+                .collect(java.util.stream.Collectors.toList()));
+        }
+
         // Allowed transitions (constrained handoff paths)
         if (agent.getAllowedTransitions() != null && !agent.getAllowedTransitions().isEmpty()) {
             agentMap.put("allowedTransitions", agent.getAllowedTransitions());
@@ -231,7 +238,9 @@ public class AgentConfigSerializer {
         toolMap.put("description", tool.getDescription());
         toolMap.put("inputSchema", tool.getInputSchema());
         if ("worker".equals(tool.getToolType())) {
-            toolMap.put("outputSchema", Map.of("type", "object", "additionalProperties", Map.of()));
+            Map<String, Object> outSchema = tool.getOutputSchema();
+            toolMap.put("outputSchema", outSchema != null ? outSchema
+                : Map.of("type", "object", "additionalProperties", Map.of()));
         }
         toolMap.put("toolType", tool.getToolType());
 
@@ -262,6 +271,27 @@ public class AgentConfigSerializer {
         }
 
         return toolMap;
+    }
+
+    private Map<String, Object> serializeHandoff(dev.agentspan.handoff.Handoff h, String agentName) {
+        Map<String, Object> hMap = new LinkedHashMap<>();
+        hMap.put("target", h.getTarget());
+        if (h instanceof dev.agentspan.handoff.OnTextMention) {
+            dev.agentspan.handoff.OnTextMention otm = (dev.agentspan.handoff.OnTextMention) h;
+            hMap.put("type", "on_text_mention");
+            hMap.put("text", otm.getText());
+        } else if (h instanceof dev.agentspan.handoff.OnToolResult) {
+            dev.agentspan.handoff.OnToolResult otr = (dev.agentspan.handoff.OnToolResult) h;
+            hMap.put("type", "on_tool_result");
+            hMap.put("toolName", otr.getToolName());
+            if (otr.getResultContains() != null) {
+                hMap.put("resultContains", otr.getResultContains());
+            }
+        } else {
+            hMap.put("type", "on_condition");
+            hMap.put("taskName", agentName + "_handoff_" + h.getTarget());
+        }
+        return hMap;
     }
 
     private Map<String, Object> serializeGuardrail(GuardrailDef g, String agentName) {

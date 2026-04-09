@@ -43,7 +43,7 @@ public class Example04HttpAndMcpTools {
 
     static class ReportTools {
         @Tool(name = "format_report", description = "Format raw data into a readable report")
-        public String formatReport(String data) {
+        public String formatReport(Map<String, Object> data) {
             return "Report: " + data;
         }
     }
@@ -68,10 +68,12 @@ public class Example04HttpAndMcpTools {
                     "method",  Map.of("type", "string", "const", "tools/call"),
                     "params",  Map.of(
                         "type", "object",
+                        "additionalProperties", false,
                         "properties", Map.of(
                             "name",      Map.of("type", "string", "const", "get_current_weather"),
                             "arguments", Map.of(
                                 "type", "object",
+                                "additionalProperties", false,
                                 "properties", Map.of("city", Map.of("type", "string")),
                                 "required", List.of("city")
                             )

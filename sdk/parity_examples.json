@@ -16,7 +16,8 @@
       "id": "03",
       "java_class": "Example03StructuredOutput",
       "python_file": "03_structured_output.py",
-      "notes": "Structured output — outputType.schema structure"
+      "notes": "Structured output — outputType.schema structure",
+      "timeout": 300
     },
     {
       "id": "04",

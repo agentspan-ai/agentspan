@@ -11,6 +11,7 @@ import dev.agentspan.model.AgentResult;
 import dev.agentspan.model.ToolDef;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Example 02 — Tool-Using Agent
@@ -20,45 +21,30 @@ import java.util.List;
  */
 public class Example02Tools {
 
-    // Define tools in a class with @Tool annotations
-    static class WeatherTools {
+    static class AgentTools {
 
         @Tool(name = "get_weather", description = "Get the current weather for a city")
-        public String getWeather(String city) {
-            // In a real app, this would call a weather API
-            return String.format("Weather in %s: Sunny, 72°F (22°C), Wind: 5mph NW", city);
+        public Map<String, Object> getWeather(String city) {
+            return Map.of("city", city, "temp_f", 72, "condition", "Sunny");
         }
 
-        @Tool(name = "get_forecast", description = "Get the 3-day weather forecast for a city")
-        public String getForecast(String city, int days) {
-            if (days < 1 || days > 7) {
-                return "Error: days must be between 1 and 7";
-            }
-            StringBuilder forecast = new StringBuilder(String.format("Forecast for %s:\n", city));
-            String[] conditions = {"Sunny", "Partly Cloudy", "Rainy", "Stormy", "Clear", "Foggy", "Windy"};
-            for (int i = 1; i <= days; i++) {
-                String condition = conditions[i % conditions.length];
-                int temp = 65 + (i * 3);
-                forecast.append(String.format("  Day %d: %s, %d°F\n", i, condition, temp));
-            }
-            return forecast.toString();
+        @Tool(name = "get_stock_price", description = "Get the current stock price for a ticker symbol")
+        public Map<String, Object> getStockPrice(String symbol) {
+            return Map.of("symbol", symbol, "price", 182.50, "change", "+1.2%");
         }
     }
 
     public static void main(String[] args) {
-        // Discover @Tool methods via reflection
-        WeatherTools weatherTools = new WeatherTools();
-        List<ToolDef> tools = ToolRegistry.fromInstance(weatherTools);
+        List<ToolDef> tools = ToolRegistry.fromInstance(new AgentTools());
 
         Agent agent = Agent.builder()
-            .name("weather_assistant")
+            .name("weather_stock_agent")
             .model(Settings.LLM_MODEL)
-            .instructions("You are a helpful weather assistant. Use the provided tools to answer weather questions.")
             .tools(tools)
+            .instructions("You are a helpful assistant. Use tools to answer questions.")
             .build();
 
-        AgentResult result = Agentspan.run(agent,
-            "What's the weather like in San Francisco? Also get me a 3-day forecast.");
+        AgentResult result = Agentspan.run(agent, "What's the weather like in San Francisco?");
         result.printResult();
 
         Agentspan.shutdown();

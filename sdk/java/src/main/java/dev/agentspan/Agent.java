@@ -4,6 +4,7 @@
 package dev.agentspan;
 
 import dev.agentspan.enums.Strategy;
+import dev.agentspan.handoff.Handoff;
 import dev.agentspan.model.GuardrailDef;
 import dev.agentspan.model.PromptTemplate;
 import dev.agentspan.model.ToolDef;
@@ -52,6 +53,7 @@ public class Agent {
     private final TerminationCondition termination;
     private final Class<?> outputType;
     private final String sessionId;
+    private final List<Handoff> handoffs;
     private final Map<String, List<String>> allowedTransitions;
     private final boolean planner;
     private final boolean localCodeExecution;
@@ -81,6 +83,7 @@ public class Agent {
         this.termination = builder.termination;
         this.outputType = builder.outputType;
         this.sessionId = builder.sessionId;
+        this.handoffs = builder.handoffs != null ? new ArrayList<>(builder.handoffs) : new ArrayList<>();
         this.allowedTransitions = builder.allowedTransitions;
         this.planner = builder.planner;
         this.localCodeExecution = builder.localCodeExecution;
@@ -148,6 +151,7 @@ public class Agent {
     public TerminationCondition getTermination() { return termination; }
     public Class<?> getOutputType() { return outputType; }
     public String getSessionId() { return sessionId; }
+    public List<Handoff> getHandoffs() { return handoffs; }
     public Map<String, List<String>> getAllowedTransitions() { return allowedTransitions; }
     public boolean isPlanner() { return planner; }
     public boolean isLocalCodeExecution() { return localCodeExecution; }
@@ -197,6 +201,7 @@ public class Agent {
         private TerminationCondition termination;
         private Class<?> outputType;
         private String sessionId;
+        private List<Handoff> handoffs;
         private Map<String, List<String>> allowedTransitions;
         private boolean planner = false;
         private boolean localCodeExecution = false;
@@ -318,6 +323,16 @@ public class Agent {
          * Restrict which agents can transfer to which other agents.
          * Keys are source agent names; values are lists of allowed target names.
          */
+        public Builder handoffs(List<Handoff> handoffs) {
+            this.handoffs = new ArrayList<>(handoffs);
+            return this;
+        }
+
+        public Builder handoffs(Handoff... handoffs) {
+            this.handoffs = new ArrayList<>(Arrays.asList(handoffs));
+            return this;
+        }
+
         public Builder allowedTransitions(Map<String, List<String>> allowedTransitions) {
             this.allowedTransitions = allowedTransitions;
             return this;

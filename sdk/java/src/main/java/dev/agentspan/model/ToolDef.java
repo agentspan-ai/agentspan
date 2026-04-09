@@ -19,6 +19,7 @@ public class ToolDef {
     private final String name;
     private final String description;
     private final Map<String, Object> inputSchema;
+    private final Map<String, Object> outputSchema;
     private final Function<Map<String, Object>, Object> func;
     private final boolean approvalRequired;
     private final int timeoutSeconds;
@@ -33,6 +34,7 @@ public class ToolDef {
         this.name = builder.name;
         this.description = builder.description;
         this.inputSchema = builder.inputSchema;
+        this.outputSchema = builder.outputSchema;
         this.func = builder.func;
         this.approvalRequired = builder.approvalRequired;
         this.timeoutSeconds = builder.timeoutSeconds;
@@ -46,6 +48,7 @@ public class ToolDef {
     public String getName() { return name; }
     public String getDescription() { return description; }
     public Map<String, Object> getInputSchema() { return inputSchema; }
+    public Map<String, Object> getOutputSchema() { return outputSchema; }
     public Function<Map<String, Object>, Object> getFunc() { return func; }
     public boolean isApprovalRequired() { return approvalRequired; }
     public int getTimeoutSeconds() { return timeoutSeconds; }
@@ -63,6 +66,7 @@ public class ToolDef {
         private String name;
         private String description = "";
         private Map<String, Object> inputSchema;
+        private Map<String, Object> outputSchema;
         private Function<Map<String, Object>, Object> func;
         private boolean approvalRequired = false;
         private int timeoutSeconds = 0;
@@ -75,6 +79,7 @@ public class ToolDef {
         public Builder name(String name) { this.name = name; return this; }
         public Builder description(String description) { this.description = description; return this; }
         public Builder inputSchema(Map<String, Object> inputSchema) { this.inputSchema = inputSchema; return this; }
+        public Builder outputSchema(Map<String, Object> outputSchema) { this.outputSchema = outputSchema; return this; }
         public Builder func(Function<Map<String, Object>, Object> func) { this.func = func; return this; }
         public Builder approvalRequired(boolean approvalRequired) { this.approvalRequired = approvalRequired; return this; }
         public Builder timeoutSeconds(int timeoutSeconds) { this.timeoutSeconds = timeoutSeconds; return this; }

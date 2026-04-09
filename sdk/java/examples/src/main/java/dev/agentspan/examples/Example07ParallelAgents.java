@@ -49,7 +49,6 @@ public class Example07ParallelAgents {
         Agent analysisTeam = Agent.builder()
             .name("analysis_team")
             .model(Settings.LLM_MODEL)
-            .instructions("Coordinate the analysis team and synthesize their findings.")
             .agents(technicalAnalyst, businessAnalyst, riskAnalyst)
             .strategy(Strategy.PARALLEL)
             .build();

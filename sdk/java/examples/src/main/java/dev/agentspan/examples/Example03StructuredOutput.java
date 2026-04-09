@@ -11,6 +11,7 @@ import dev.agentspan.model.AgentResult;
 import dev.agentspan.model.ToolDef;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Example 03 — Structured Output
@@ -22,26 +23,22 @@ public class Example03StructuredOutput {
     /** Structured output type for weather data. */
     public static class WeatherReport {
         public String city;
-        public double temperatureCelsius;
-        public String conditions;
-        public int humidity;
-        public String windSpeed;
+        public double temperature;
+        public String condition;
         public String recommendation;
 
         @Override
         public String toString() {
             return String.format(
-                "WeatherReport{city=%s, temp=%.1f°C, conditions=%s, humidity=%d%%, wind=%s, rec=%s}",
-                city, temperatureCelsius, conditions, humidity, windSpeed, recommendation);
+                "WeatherReport{city=%s, temp=%.1f, condition=%s, rec=%s}",
+                city, temperature, condition, recommendation);
         }
     }
 
     static class WeatherTools {
-        @Tool(name = "get_weather_data", description = "Get detailed weather data for a city")
-        public String getWeatherData(String city) {
-            return String.format(
-                "city=%s temperature=22.5 conditions=Partly Cloudy humidity=65 wind=15km/h NW",
-                city);
+        @Tool(name = "get_weather", description = "Get current weather data for a city")
+        public Map<String, Object> getWeather(String city) {
+            return Map.of("city", city, "temp_f", 72, "condition", "Sunny", "humidity", 45);
         }
     }
 
@@ -52,14 +49,12 @@ public class Example03StructuredOutput {
         Agent agent = Agent.builder()
             .name("weather_reporter")
             .model(Settings.LLM_MODEL)
-            .instructions(
-                "You are a weather assistant. Use the get_weather_data tool and return a structured weather report. "
-                + "Include a recommendation for what to wear or bring based on conditions.")
+            .instructions("You are a weather reporter. Get the weather and provide a recommendation.")
             .tools(tools)
             .outputType(WeatherReport.class)
             .build();
 
-        AgentResult result = Agentspan.run(agent, "Get the weather report for Tokyo");
+        AgentResult result = Agentspan.run(agent, "What's the weather in NYC?");
         result.printResult();
 
         // Get the typed output
@@ -68,8 +63,8 @@ public class Example03StructuredOutput {
             if (report != null) {
                 System.out.println("\nTyped output:");
                 System.out.println("  City: " + report.city);
-                System.out.println("  Temperature: " + report.temperatureCelsius + "°C");
-                System.out.println("  Conditions: " + report.conditions);
+                System.out.println("  Temperature: " + report.temperature);
+                System.out.println("  Condition: " + report.condition);
                 System.out.println("  Recommendation: " + report.recommendation);
             }
         }

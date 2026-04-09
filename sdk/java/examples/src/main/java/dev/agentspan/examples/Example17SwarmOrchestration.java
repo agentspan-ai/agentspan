@@ -6,6 +6,7 @@ package dev.agentspan.examples;
 import dev.agentspan.Agent;
 import dev.agentspan.Agentspan;
 import dev.agentspan.enums.Strategy;
+import dev.agentspan.handoff.OnTextMention;
 import dev.agentspan.model.AgentResult;
 
 /**
@@ -55,6 +56,10 @@ public class Example17SwarmOrchestration {
                 + "Use the transfer tools available to you.")
             .agents(refundAgent, techAgent)
             .strategy(Strategy.SWARM)
+            .handoffs(
+                OnTextMention.of("refund", "refund_specialist"),
+                OnTextMention.of("technical", "tech_support")
+            )
             .maxTurns(3)
             .build();
 

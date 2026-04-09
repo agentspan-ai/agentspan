@@ -11,18 +11,33 @@ import java.util.Map;
  */
 public class TextMentionTermination extends TerminationCondition {
     private final String text;
+    private final boolean caseSensitive;
 
     public TextMentionTermination(String text) {
-        this.text = text;
+        this(text, false);
     }
 
-    /** Create a TextMentionTermination for the given text. */
+    public TextMentionTermination(String text, boolean caseSensitive) {
+        this.text = text;
+        this.caseSensitive = caseSensitive;
+    }
+
+    /** Create a TextMentionTermination for the given text (case-insensitive). */
     public static TextMentionTermination of(String text) {
-        return new TextMentionTermination(text);
+        return new TextMentionTermination(text, false);
+    }
+
+    /** Create a TextMentionTermination with explicit case sensitivity. */
+    public static TextMentionTermination of(String text, boolean caseSensitive) {
+        return new TextMentionTermination(text, caseSensitive);
     }
 
     public String getText() {
         return text;
+    }
+
+    public boolean isCaseSensitive() {
+        return caseSensitive;
     }
 
     @Override
@@ -30,6 +45,7 @@ public class TextMentionTermination extends TerminationCondition {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("type", "text_mention");
         map.put("text", text);
+        map.put("caseSensitive", caseSensitive);
         return map;
     }
 }
