@@ -35,6 +35,7 @@ import com.netflix.conductor.core.execution.WorkflowExecutor;
 import com.netflix.conductor.dao.ExecutionDAO;
 import com.netflix.conductor.dao.MetadataDAO;
 import com.netflix.conductor.service.ExecutionService;
+import com.netflix.conductor.model.WorkflowModel;
 import com.netflix.conductor.service.WorkflowService;
 
 import dev.agentspan.runtime.auth.RequestContextHolder;
@@ -485,7 +486,7 @@ public class AgentService {
     public void stopAgent(String executionId) {
         // Set the stop flag — the DoWhile loop condition checks this variable.
         // Get the workflow model, update its variables map, and persist.
-        com.netflix.conductor.model.WorkflowModel workflow = executionDAO.getWorkflow(executionId, false);
+        WorkflowModel workflow = executionDAO.getWorkflow(executionId, false);
         workflow.getVariables().put("_stop_requested", true);
         executionDAO.updateWorkflow(workflow);
         // Note: the SDK also sends a WMQ unblock message via the Conductor client
@@ -500,7 +501,7 @@ public class AgentService {
      * LLM's user message as {@code [SIGNALS]...[/SIGNALS]}.</p>
      */
     public void signalAgent(String executionId, String message) {
-        com.netflix.conductor.model.WorkflowModel workflow = executionDAO.getWorkflow(executionId, false);
+        WorkflowModel workflow = executionDAO.getWorkflow(executionId, false);
         workflow.getVariables().put("_signal_injection", message != null ? message : "");
         executionDAO.updateWorkflow(workflow);
     }
