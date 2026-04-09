@@ -133,16 +133,20 @@ public class CredentialEnvSeeder implements ApplicationRunner {
             try {
                 existing = storeProvider.get(ANONYMOUS_USER_ID, name);
             } catch (Exception e) {
+                if (!(e.getCause() instanceof javax.crypto.AEADBadTagException)) {
+                    throw e; // not a key mismatch — propagate (e.g. DB connection failure)
+                }
                 log.warn(
                         "Credential '{}' could not be decrypted (master key mismatch?) — "
                                 + "re-seeding from environment variable",
-                        name);
+                        name,
+                        e);
                 try {
                     storeProvider.delete(ANONYMOUS_USER_ID, name);
                     storeProvider.set(ANONYMOUS_USER_ID, name, value);
                     created++;
                 } catch (Exception re) {
-                    log.warn("Credential '{}' could not be re-seeded — skipping: {}", name, re.getMessage());
+                    log.warn("Credential '{}' could not be re-seeded — skipping", name, re);
                 }
                 continue;
             }
