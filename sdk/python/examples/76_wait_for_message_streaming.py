@@ -64,15 +64,16 @@ with AgentRuntime() as runtime:
     handle = runtime.start(agent, "Begin. Wait for your first instruction.")
     print(f"Agent started: {handle.execution_id}\n")
 
-    # Push messages from a background thread while we stream events on the main thread
-    # Wait long enough between sends for the agent to finish processing each message
+    # Push messages from a background thread while we stream events on the main thread.
+    # Wait long enough between sends for the agent to finish processing each message.
+    # No sleep after the last send — handle.stream() on the main thread is already the
+    # barrier: it blocks until DONE, which only fires once the workflow reaches a
+    # terminal state (after stop() sets the flag and the current iteration completes).
     def sender():
         for task in TASKS:
             time.sleep(8)
             print(f"\n  [caller] sending -> {task!r}")
             runtime.send_message(handle.execution_id, {"task": task})
-        # Give the agent time to finish the last task then stop gracefully
-        time.sleep(15)
         handle.stop()
 
     threading.Thread(target=sender, daemon=True).start()
