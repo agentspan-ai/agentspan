@@ -129,7 +129,18 @@ public class CredentialEnvSeeder implements ApplicationRunner {
                 continue;
             }
 
-            String existing = storeProvider.get(ANONYMOUS_USER_ID, name);
+            String existing;
+            try {
+                existing = storeProvider.get(ANONYMOUS_USER_ID, name);
+            } catch (Exception e) {
+                log.warn("Credential '{}' could not be decrypted (master key mismatch?) — "
+                        + "re-seeding from environment variable", name);
+                storeProvider.delete(ANONYMOUS_USER_ID, name);
+                storeProvider.set(ANONYMOUS_USER_ID, name, value);
+                created++;
+                continue;
+            }
+
             if (existing != null) {
                 log.warn(
                         "Credential '{}' already exists in store — skipping env import. "
