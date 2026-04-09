@@ -16,7 +16,7 @@
  *   const result = await runtime.run(openaiAgent, prompt, { credentials: ["GITHUB_TOKEN"] });
  *
  * Setup (one-time):
- *   agentspan credentials set --name GITHUB_TOKEN
+ *   agentspan credentials set GITHUB_TOKEN <your-github-token>
  *
  * Requirements:
  *   - Agentspan server running at AGENTSPAN_SERVER_URL
