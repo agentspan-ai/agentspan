@@ -45,11 +45,14 @@ Requirements:
 
 import json
 import math
+import os
 import random
 import shutil
 import tempfile
 import time
 from pathlib import Path
+
+os.environ.setdefault("AGENTSPAN_LOG_LEVEL", "WARNING")
 
 from settings import settings
 
@@ -75,8 +78,7 @@ def build_monitor() -> Agent:
         name="receive_metrics",
         description=(
             "Dequeue the next batch of up to 10 metric samples. "
-            "Each sample has 'metric', 'host', and 'value' fields. "
-            "A stop signal looks like {stop: true}."
+            "Each sample has 'metric', 'host', and 'value' fields."
         ),
         batch_size=10,
     )
@@ -101,14 +103,12 @@ def build_monitor() -> Agent:
         instructions=(
             "You are a real-time metrics monitor. Repeat indefinitely:\n"
             "1. Call receive_metrics — you will get a batch of 1–10 metric samples.\n"
-            "2. If any sample contains 'stop: true' (or the batch itself is a stop signal), "
-            "   respond with 'Shutting down.' and call no further tools.\n"
-            "3. Otherwise, compute per-metric statistics across the batch:\n"
+            "2. Compute per-metric statistics across the batch:\n"
             "   - Count of samples per metric name\n"
             "   - Min, max, and average value\n"
-            "4. Call display_dashboard with a compact one-line summary string like:\n"
+            "3. Call display_dashboard with a compact one-line summary string like:\n"
             "   'Batch 3 | cpu_pct: n=4 min=12.1 max=87.3 avg=45.2 | mem_mb: n=3 …'\n"
-            "5. Return to step 1 immediately."
+            "4. Return to step 1 immediately."
         ),
     )
 
@@ -122,7 +122,7 @@ def build_feeder(runtime: AgentRuntime) -> Agent:
 
     receive_signal = wait_for_message_tool(
         name="receive_signal",
-        description="Wait for a control signal from the orchestrator ({batches: N} or {stop: true}).",
+        description="Wait for a control signal from the orchestrator ({batches: N}).",
     )
 
     @tool
@@ -153,27 +153,18 @@ def build_feeder(runtime: AgentRuntime) -> Agent:
         (_BATCH_DIR / f"batch_{batch_number}_{time.time_ns()}.done").touch()
         return f"Pushed {len(samples)} samples in batch {batch_number}: {json.dumps(samples)}"
 
-    @tool
-    def stop_monitor() -> str:
-        """Send the stop signal to the Monitor agent and notify the main process."""
-        monitor_id = _MONITOR_ID_FILE.read_text().strip()
-        runtime.send_message(monitor_id, {"stop": True})
-        return "stop sent"
-
     return Agent(
         name="feeder_agent",
         model=settings.llm_model,
-        tools=[receive_signal, push_metrics_batch, stop_monitor],
+        tools=[receive_signal, push_metrics_batch],
         max_turns=10000,
         stateful=True,
         instructions=(
             "You are a metrics Feeder agent. Repeat indefinitely:\n"
             "1. Call receive_signal to get the next instruction.\n"
-            "2. If the signal contains 'stop: true', call stop_monitor() then respond "
-            "   with 'Stopping.' and call no further tools.\n"
-            "3. If the signal contains 'batches: N', call push_metrics_batch N times "
+            "2. If the signal contains 'batches: N', call push_metrics_batch N times "
             "   (once per batch, incrementing batch_number from 1 to N).\n"
-            "4. Return to step 1 immediately."
+            "3. Return to step 1 immediately."
         ),
     )
 
@@ -230,10 +221,9 @@ try:
                     seen.add(p.name)
             time.sleep(0.05)
 
-        print(f"\nAll {EXPECTED_DISPLAYS} batch reports received. Sending stop signal...\n")
-        runtime.send_message(feeder_id, {"stop": True})
-
-        # Wait for both agents to reach terminal state before the runtime exits.
+        print(f"\nAll {EXPECTED_DISPLAYS} batch reports received. Stopping...\n")
+        feeder_handle.stop()
+        monitor_handle.stop()
         feeder_handle.join(timeout=30)
         monitor_handle.join(timeout=30)
 

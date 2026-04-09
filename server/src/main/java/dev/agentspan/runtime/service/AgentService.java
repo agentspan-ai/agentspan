@@ -32,7 +32,9 @@ import com.netflix.conductor.common.run.WorkflowSummary;
 import com.netflix.conductor.core.exception.NotFoundException;
 import com.netflix.conductor.core.execution.StartWorkflowInput;
 import com.netflix.conductor.core.execution.WorkflowExecutor;
+import com.netflix.conductor.dao.ExecutionDAO;
 import com.netflix.conductor.dao.MetadataDAO;
+import com.netflix.conductor.model.WorkflowModel;
 import com.netflix.conductor.service.ExecutionService;
 import com.netflix.conductor.service.WorkflowService;
 
@@ -56,6 +58,7 @@ public class AgentService {
 
     private final AgentCompiler agentCompiler;
     private final NormalizerRegistry normalizerRegistry;
+    private final ExecutionDAO executionDAO;
     private final MetadataDAO metadataDAO;
     private final WorkflowExecutor workflowExecutor;
     private final WorkflowService workflowService;
@@ -70,6 +73,7 @@ public class AgentService {
     AgentService(
             AgentCompiler agentCompiler,
             NormalizerRegistry normalizerRegistry,
+            ExecutionDAO executionDAO,
             MetadataDAO metadataDAO,
             WorkflowExecutor workflowExecutor,
             WorkflowService workflowService,
@@ -79,6 +83,7 @@ public class AgentService {
             ExecutionTokenService executionTokenService) {
         this.agentCompiler = agentCompiler;
         this.normalizerRegistry = normalizerRegistry;
+        this.executionDAO = executionDAO;
         this.metadataDAO = metadataDAO;
         this.workflowExecutor = workflowExecutor;
         this.workflowService = workflowService;
@@ -468,6 +473,37 @@ public class AgentService {
     /** Cancel a running agent execution. */
     public void cancelAgent(String executionId, String reason) {
         workflowService.terminateWorkflow(executionId, reason != null ? reason : "Cancelled by user");
+    }
+
+    /**
+     * Gracefully stop an agent execution by setting the _stop_requested flag.
+     *
+     * <p>The loop exits after the current iteration completes and the workflow
+     * reaches COMPLETED status with the last LLM output as the result.
+     * Also sends a WMQ message to unblock agents waiting on
+     * PULL_WORKFLOW_MESSAGES.</p>
+     */
+    public void stopAgent(String executionId) {
+        // Set the stop flag — the DoWhile loop condition checks this variable.
+        // Get the workflow model, update its variables map, and persist.
+        WorkflowModel workflow = executionDAO.getWorkflow(executionId, false);
+        workflow.getVariables().put("_stop_requested", true);
+        executionDAO.updateWorkflow(workflow);
+        // Note: the SDK also sends a WMQ unblock message via the Conductor client
+        // to wake agents blocked on PULL_WORKFLOW_MESSAGES.
+    }
+
+    /**
+     * Inject a persistent signal into a running agent's context.
+     *
+     * <p>Sets the {@code _signal_injection} workflow variable. The context
+     * injection script reads this on each iteration and prepends it to the
+     * LLM's user message as {@code [SIGNALS]...[/SIGNALS]}.</p>
+     */
+    public void signalAgent(String executionId, String message) {
+        WorkflowModel workflow = executionDAO.getWorkflow(executionId, false);
+        workflow.getVariables().put("_signal_injection", message != null ? message : "");
+        executionDAO.updateWorkflow(workflow);
     }
 
     /**

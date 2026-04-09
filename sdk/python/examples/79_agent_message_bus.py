@@ -8,13 +8,9 @@ Demonstrates:
       into another running agent's WMQ via runtime.send_message()
     - A tool that closes over an execution_id to forward results downstream
     - Parallel agent pipelines: researcher → writer running concurrently
-    - Filesystem-based IPC: forward_to_writer and stop_pipeline write sentinel
-      files so the main thread knows exactly when to send the stop signal —
-      no fixed sleeps, no streaming
-    - Stop signal propagation: the main script sends one stop to the Researcher,
-      which forwards it to the Writer via stop_pipeline() before itself stopping;
-      both workflows exit cleanly as COMPLETED (no tool calls on stop = DoWhile
-      loop condition goes false naturally)
+    - Filesystem-based IPC: forward_to_writer writes sentinel files so the main
+      thread knows when all topics have been forwarded
+    - Deterministic stop: handle.stop() exits each agent's loop gracefully
 
 How this differs from 06_sequential_pipeline:
     The >> operator in example 06 compiles a static DAG upfront — the workflow
@@ -38,10 +34,13 @@ Requirements:
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
+import os
 import shutil
 import tempfile
 import time
 from pathlib import Path
+
+os.environ.setdefault("AGENTSPAN_LOG_LEVEL", "WARNING")
 
 from agentspan.agents import Agent, AgentRuntime, tool, wait_for_message_tool
 from settings import settings
@@ -64,7 +63,7 @@ def build_researcher(runtime: AgentRuntime, writer_execution_id: str) -> Agent:
 
     receive_topic = wait_for_message_tool(
         name="wait_for_topic",
-        description="Wait for the next research topic or a stop signal ({stop: true}).",
+        description="Wait for the next research topic.",
     )
 
     @tool
@@ -75,27 +74,19 @@ def build_researcher(runtime: AgentRuntime, writer_execution_id: str) -> Agent:
         (_FORWARDED_DIR / f"{time.time_ns()}.done").touch()
         return "forwarded"
 
-    @tool
-    def stop_pipeline() -> str:
-        """Forward the stop signal to the Writer and signal the main process."""
-        runtime.send_message(writer_execution_id, {"stop": True})
-        return "done"
-
     return Agent(
         name="researcher",
         model=settings.llm_model,
-        tools=[receive_topic, forward_to_writer, stop_pipeline],
+        tools=[receive_topic, forward_to_writer],
         max_turns=10000,
         stateful=True,
         instructions=(
             "You are a Researcher agent. Repeat indefinitely:\n"
             "1. Call wait_for_topic to receive the next message.\n"
-            "2. If the message contains 'stop: true', call stop_pipeline() then respond "
-            "   with 'Stopping.' and call no further tools.\n"
-            "3. Otherwise, write three concise bullet-point research notes on the topic "
+            "2. Write three concise bullet-point research notes on the topic "
             "   using your own knowledge.\n"
-            "4. Call forward_to_writer(topic, notes) with the topic and your bullet points.\n"
-            "5. Return to step 1 immediately."
+            "3. Call forward_to_writer(topic, notes) with the topic and your bullet points.\n"
+            "4. Return to step 1 immediately."
         ),
     )
 
@@ -107,7 +98,7 @@ def build_writer() -> Agent:
         name="wait_for_notes",
         description=(
             "Wait for research notes from the Researcher agent. "
-            "The payload contains 'topic' and 'notes' fields, or a stop signal ({stop: true})."
+            "The payload contains 'topic' and 'notes' fields."
         ),
     )
 
@@ -127,11 +118,9 @@ def build_writer() -> Agent:
         instructions=(
             "You are a Writer agent. Repeat indefinitely:\n"
             "1. Call wait_for_notes to receive the next message.\n"
-            "2. If the message contains 'stop: true', respond with 'Stopping.' and call "
-            "   no further tools.\n"
-            "3. Otherwise, turn the notes into a single polished paragraph (3–4 sentences).\n"
-            "4. Call publish(topic, paragraph) with the topic and your paragraph.\n"
-            "5. Return to step 1 immediately."
+            "2. Turn the notes into a single polished paragraph (3–4 sentences).\n"
+            "3. Call publish(topic, paragraph) with the topic and your paragraph.\n"
+            "4. Return to step 1 immediately."
         ),
     )
 
@@ -158,11 +147,9 @@ try:
         while len(list(_FORWARDED_DIR.iterdir())) < len(TOPICS):
             time.sleep(0.1)
 
-        # Send stop to Researcher — it calls stop_pipeline() to forward the stop to
-        # the Writer, then responds with no further tool calls so both loops exit.
-        runtime.send_message(researcher_id, {"stop": True})
-
-        # Wait for both agents to reach terminal state before the runtime exits.
+        # Deterministic stop — no stop-handling instructions needed.
+        researcher_handle.stop()
+        writer_handle.stop()
         researcher_handle.join(timeout=30)
         writer_handle.join(timeout=30)
 

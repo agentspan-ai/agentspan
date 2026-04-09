@@ -353,7 +353,7 @@ class TestFinishReasonEnum:
         assert FinishReason.REJECTED == "rejected"
 
     def test_all_values(self):
-        assert len(FinishReason) == 8
+        assert len(FinishReason) == 9
 
 
 class TestAgentResultProperties:

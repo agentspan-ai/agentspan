@@ -18,7 +18,10 @@ Requirements:
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
+import os
 import time
+
+os.environ.setdefault("AGENTSPAN_LOG_LEVEL", "WARNING")
 
 from agentspan.agents import Agent, AgentRuntime, wait_for_message_tool, tool
 from settings import settings
@@ -64,7 +67,8 @@ with AgentRuntime() as runtime:
         print(f"  -> sending: {msg!r}")
         runtime.send_message(handle.execution_id, {"task": msg})
 
-    # Let the agent process all messages before exiting (~5-6s per message)
+    # Let the agent process all messages (~5-6s per message)
     time.sleep(30)
-    runtime.cancel(handle.execution_id)
+    handle.stop()
+    handle.join(timeout=30)
     print("\nDone.")

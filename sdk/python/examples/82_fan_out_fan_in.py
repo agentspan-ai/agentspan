@@ -72,7 +72,7 @@ def build_collector() -> Agent:
         name="receive_result",
         description=(
             "Wait for the next worker result. "
-            "Payload: {question, worker_name, answer} or a stop signal {stop: true}."
+            "Payload: {question, worker_name, answer}."
         ),
     )
 
@@ -98,12 +98,10 @@ def build_collector() -> Agent:
             "Repeat indefinitely:\n"
             f"1. Call receive_result {NUM_WORKERS} times to collect all answers for "
             "   one question (they share the same 'question' field).\n"
-            "2. If any result is a stop signal {stop: true}, respond with 'Stopping.' "
-            "   and call no further tools.\n"
-            "3. Build a side-by-side comparison: for each worker list their name and "
+            "2. Build a side-by-side comparison: for each worker list their name and "
             "   a one-sentence summary of their answer.\n"
-            "4. Call save_report(question, report) with the formatted report string.\n"
-            "5. Return to step 1."
+            "3. Call save_report(question, report) with the formatted report string.\n"
+            "4. Return to step 1."
         ),
     )
 
@@ -115,10 +113,7 @@ def build_collector() -> Agent:
 def build_worker(worker_name: str, runtime: AgentRuntime, collector_id: str) -> Agent:
     receive_task = wait_for_message_tool(
         name=f"receive_task_{worker_name}",
-        description=(
-            f"Wait for the next task for worker {worker_name}. "
-            "Payload: {question} or a stop signal {stop: true}."
-        ),
+        description=f"Wait for the next task for worker {worker_name}. Payload: {{question}}.",
     )
 
     # Tool names must be unique across all workers so Conductor routes each
@@ -134,28 +129,19 @@ def build_worker(worker_name: str, runtime: AgentRuntime, collector_id: str) -> 
         (_ANSWERS_DIR / f"{worker_name}_{time.time_ns()}.done").touch()
         return "submitted"
 
-    @tool(name=f"stop_collector_{worker_name}")
-    def stop_collector() -> str:
-        """Forward the stop signal to the Collector and write a shutdown sentinel."""
-        runtime.send_message(collector_id, {"stop": True})
-        return "stop forwarded"
-
     return Agent(
         name=f"worker_{worker_name}",
         model=settings.llm_model,
-        tools=[receive_task, submit_answer, stop_collector],
+        tools=[receive_task, submit_answer],
         max_turns=10000,
         stateful=True,
         instructions=(
             f"You are Worker {worker_name.upper()}, one of {NUM_WORKERS} parallel analysts. "
             "Repeat indefinitely:\n"
             f"1. Call receive_task_{worker_name} to get the next assignment.\n"
-            "2. If the payload contains 'stop: true', call "
-            f"   stop_collector_{worker_name}() then respond with 'Stopping.' "
-            "   and call no further tools.\n"
-            "3. Otherwise write a concise 2–3 sentence answer to the question.\n"
-            f"4. Call submit_answer_{worker_name}(question, answer).\n"
-            "5. Return to step 1 immediately."
+            "2. Write a concise 2–3 sentence answer to the question.\n"
+            f"3. Call submit_answer_{worker_name}(question, answer).\n"
+            "4. Return to step 1 immediately."
         ),
     )
 
@@ -167,7 +153,7 @@ def build_worker(worker_name: str, runtime: AgentRuntime, collector_id: str) -> 
 def build_orchestrator(runtime: AgentRuntime, worker_ids: list) -> Agent:
     receive_question = wait_for_message_tool(
         name="receive_question",
-        description="Wait for the next question to fan out, or a stop signal {stop: true}.",
+        description="Wait for the next question to fan out.",
     )
 
     @tool
@@ -177,26 +163,17 @@ def build_orchestrator(runtime: AgentRuntime, worker_ids: list) -> Agent:
             runtime.send_message(wid, {"question": question})
         return f"broadcasted to {len(worker_ids)} workers"
 
-    @tool
-    def stop_all_workers() -> str:
-        """Send stop signals to all workers and write a shutdown sentinel."""
-        for wid in worker_ids:
-            runtime.send_message(wid, {"stop": True})
-        return "stop sent to all workers"
-
     return Agent(
         name="orchestrator_agent",
         model=settings.llm_model,
-        tools=[receive_question, fan_out, stop_all_workers],
+        tools=[receive_question, fan_out],
         max_turns=10000,
         stateful=True,
         instructions=(
             "You are an Orchestrator agent. Repeat indefinitely:\n"
-            "1. Call receive_question to get the next question or stop signal.\n"
-            "2. If the payload contains 'stop: true', call stop_all_workers() then "
-            "   respond with 'Stopping.' and call no further tools.\n"
-            "3. Otherwise call fan_out(question) to broadcast to all workers.\n"
-            "4. Return to step 1 immediately."
+            "1. Call receive_question to get the next question.\n"
+            "2. Call fan_out(question) to broadcast to all workers.\n"
+            "3. Return to step 1 immediately."
         ),
     )
 
@@ -268,10 +245,11 @@ try:
 
         print(f"All {len(QUESTIONS)} reports received. Shutting down...\n")
 
-        # Shutdown: Orchestrator → Workers → Collector (via stop_collector_<name>).
-        runtime.send_message(orchestrator_id, {"stop": True})
-
-        # Wait for all agents to reach terminal state before the runtime exits.
+        # Deterministic stop — no stop-handling instructions needed.
+        orch_handle.stop()
+        for wh in worker_handles:
+            wh.stop()
+        collector_handle.stop()
         orch_handle.join(timeout=60)
         for wh in worker_handles:
             wh.join(timeout=30)

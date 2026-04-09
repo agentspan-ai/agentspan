@@ -126,9 +126,8 @@ def build_agent() -> Agent:
     receive_message = wait_for_message_tool(
         name="wait_for_message",
         description=(
-            "Wait for the next user message or a control signal. "
+            "Wait for the next user message or control signal. "
             "User messages have a 'text' field. "
-            "Stop signal: {stop: true}. "
             "New-tool notification: {tool_registered: name, tool_description: desc}."
         ),
     )
@@ -175,16 +174,14 @@ def build_agent() -> Agent:
             "You are a helpful conversational assistant in an interactive REPL. "
             "Repeat indefinitely:\n\n"
             "1. Call wait_for_message to receive the next event.\n"
-            "2. If the message contains 'stop: true', respond with 'Goodbye!' "
-            "   and call no further tools.\n"
-            "3. If the message contains 'tool_registered', acknowledge the new "
+            "2. If the message contains 'tool_registered', acknowledge the new "
             "   capability in your reply: say what the tool does and that you can "
             "   now use it. Call reply_to_user with your acknowledgment.\n"
-            "4. Otherwise, respond naturally to the user's 'text' field. "
+            "3. Otherwise, respond naturally to the user's 'text' field. "
             "   If a registered ephemeral task (via run_task) would help answer "
             "   the user's question, call it first and incorporate the result. "
             "   Always call reply_to_user with your final response.\n"
-            "5. Return to step 1 immediately."
+            "4. Return to step 1 immediately."
         ),
     )
 
@@ -274,9 +271,8 @@ try:
                 continue
 
             if user_input.lower() in ("quit", "exit"):
-                runtime.send_message(execution_id, {"stop": True})
-                reply = _wait_for_reply()
-                print(f"Agent: {reply}\n")
+                handle.stop()
+                print("Agent stopped.\n")
                 # Clean up session file — agent is stopped
                 if args.session_file.exists():
                     args.session_file.unlink()

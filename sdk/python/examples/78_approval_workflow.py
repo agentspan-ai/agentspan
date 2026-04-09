@@ -40,10 +40,13 @@ Requirements:
 """
 
 import json
+import os
 import shutil
 import tempfile
 import time
 from pathlib import Path
+
+os.environ.setdefault("AGENTSPAN_LOG_LEVEL", "WARNING")
 
 from agentspan.agents import Agent, AgentRuntime, tool, wait_for_message_tool
 from settings import settings
@@ -107,16 +110,14 @@ agent = Agent(
         "You are an operations agent that processes system commands with a safety gate. "
         "Repeat this cycle indefinitely:\n\n"
         "1. Call wait_for_message to receive the next message.\n"
-        "2. If the message contains 'stop: true', respond with 'Stopping.' and call no "
-        "   further tools.\n"
-        "3. Otherwise assess the task:\n"
+        "2. Assess the task:\n"
         "   - SAFE (status checks, reads, listing): call execute_task immediately.\n"
         "   - RISKY (deletes, restarts, permission changes, writes): call flag_for_approval "
         "     with the task and a brief reason. It will block until the operator decides "
         "     and return 'approve' or 'reject'.\n"
-        "4. If flag_for_approval returned 'approve', call execute_task. "
+        "3. If flag_for_approval returned 'approve', call execute_task. "
         "   If it returned 'reject', call log_rejection.\n"
-        "5. Return to step 1 immediately."
+        "4. Return to step 1 immediately."
     ),
 )
 
@@ -155,8 +156,8 @@ try:
                 req.with_suffix(".decision").write_text(decision)
             time.sleep(0.1)
 
-        # Agent responds with no tool calls on stop — DoWhile exits as COMPLETED.
-        runtime.send_message(execution_id, {"stop": True})
+        # Deterministic stop — no stop-handling instructions needed.
+        handle.stop()
         handle.join(timeout=30)
         print("\nDone.")
 finally:

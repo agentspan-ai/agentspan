@@ -18,8 +18,11 @@ Requirements:
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
+import os
 import threading
 import time
+
+os.environ.setdefault("AGENTSPAN_LOG_LEVEL", "WARNING")
 
 from agentspan.agents import Agent, AgentRuntime, EventType, wait_for_message_tool, tool
 from settings import settings
@@ -64,16 +67,17 @@ with AgentRuntime() as runtime:
     handle = runtime.start(agent, "Begin. Wait for your first instruction.")
     print(f"Agent started: {handle.execution_id}\n")
 
-    # Push messages from a background thread while we stream events on the main thread
-    # Wait long enough between sends for the agent to finish processing each message
+    # Push messages from a background thread while we stream events on the main thread.
+    # Wait long enough between sends for the agent to finish processing each message.
+    # No sleep after the last send — handle.stream() on the main thread is already the
+    # barrier: it blocks until DONE, which only fires once the workflow reaches a
+    # terminal state (after stop() sets the flag and the current iteration completes).
     def sender():
         for task in TASKS:
             time.sleep(8)
             print(f"\n  [caller] sending -> {task!r}")
             runtime.send_message(handle.execution_id, {"task": task})
-        # Give the agent time to finish the last task then cancel
-        time.sleep(15)
-        runtime.cancel(handle.execution_id, reason="example complete")
+        handle.stop()
 
     threading.Thread(target=sender, daemon=True).start()
 
