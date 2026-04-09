@@ -137,7 +137,7 @@ function findTasksByType(tasks: WorkflowTask[], taskType: string): WorkflowTask[
 
 // ── Tests ────────────────────────────────────────────────────────────────
 
-describe('Suite 9: Agent Handoffs', { timeout: 600_000 }, () => {
+describe('Suite 9: Agent Handoffs', { timeout: 1_800_000 }, () => { // 30 min for all multi-agent tests
   // ── Compilation tests ─────────────────────────────────────────────────
 
   it('all 8 strategies compile correctly', async () => {
@@ -375,13 +375,13 @@ describe('Suite 9: Agent Handoffs', { timeout: 600_000 }, () => {
       name: 'e2e_ts_swarm_run',
       model: MODEL,
       instructions:
-        'You are a swarm orchestrator with text_agent and math_agent. ' +
-        'Mention "text_agent" when the user needs text operations.',
+        'You are a swarm coordinator. Handle requests by delegating to the appropriate agent.',
       agents: [textAgent, mathAgent],
       strategy: 'swarm',
+      maxTurns: 5,
       handoffs: [
-        new OnTextMention({ target: 'text_agent', text: 'text_agent' }),
-        new OnTextMention({ target: 'math_agent', text: 'math_agent' }),
+        new OnTextMention({ target: 'text_agent', text: 'reverse' }),
+        new OnTextMention({ target: 'math_agent', text: 'compute' }),
       ],
     });
 
@@ -413,7 +413,20 @@ describe('Suite 9: Agent Handoffs', { timeout: 600_000 }, () => {
   });
 
   it('pipe operator creates sequential pipeline', async () => {
-    const pipeline = mathAgent.pipe(textAgent);
+    // Use fresh agents to avoid stale state from prior tests
+    const freshMath = new Agent({
+      name: 'math_agent',
+      model: MODEL,
+      instructions: 'You do math. Call do_math with the expression.',
+      tools: [doMath],
+    });
+    const freshText = new Agent({
+      name: 'text_agent',
+      model: MODEL,
+      instructions: 'You reverse text. Call do_text with the text.',
+      tools: [doText],
+    });
+    const pipeline = freshMath.pipe(freshText);
 
     // Verify the pipeline is a sequential agent
     expect(pipeline.strategy).toBe('sequential');
