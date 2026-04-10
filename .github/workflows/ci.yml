@@ -106,6 +106,7 @@ jobs:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       AGENTSPAN_SERVER_URL: http://localhost:6767/api
       AGENTSPAN_CLI_PATH: ../../cli/agentspan
+      AGENTSPAN_MASTER_KEY: "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA="
       AGENTSPAN_AUTO_START_SERVER: "false"
     steps:
       - uses: actions/checkout@v4
@@ -180,6 +181,7 @@ jobs:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       AGENTSPAN_SERVER_URL: http://localhost:6767/api
       AGENTSPAN_CLI_PATH: ../../cli/agentspan
+      AGENTSPAN_MASTER_KEY: "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA="
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4

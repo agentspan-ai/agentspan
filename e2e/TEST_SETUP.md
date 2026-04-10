@@ -19,15 +19,16 @@ Both SDKs have 1:1 matching test suites with identical file naming, test coverag
 
 ### Server master key
 
-The server encrypts credentials with AES-256-GCM using a master key. **You must set `AGENTSPAN_MASTER_KEY`** before starting the server, otherwise the server auto-generates a key that is lost on restart — causing HTTP 500 on all credential operations.
+The server encrypts credentials with AES-256-GCM using a master key. Set `AGENTSPAN_MASTER_KEY` before starting the server so the key survives restarts. Without it, the server auto-generates a key that is lost on restart — causing HTTP 500 when decrypting credentials from a prior session.
 
 ```bash
-# Use a stable key for e2e (the orchestrator sets this automatically)
+# The orchestrator sets this automatically. For manual runs:
 export AGENTSPAN_MASTER_KEY="MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA="
 java -jar server/build/libs/agentspan-runtime.jar --server.port=6767
+```
 
-# If you get AEADBadTagException on startup, the DB was encrypted with a different key.
-# Delete the stale DB and restart:
+**Troubleshooting:** If you get `AEADBadTagException` on startup, the DB was encrypted with a different key. Delete the stale DB and restart:
+```bash
 rm -f agent-runtime.db* ~/.agentspan/master.key
 ```
 
