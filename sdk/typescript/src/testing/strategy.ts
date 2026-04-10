@@ -1,5 +1,5 @@
-import type { Strategy } from '../types.js';
-import { Agent } from '../agent.js';
+import type { Strategy } from "../types.js";
+import { Agent } from "../agent.js";
 
 /**
  * Validate that an agent's strategy matches the expected value.
@@ -7,8 +7,6 @@ import { Agent } from '../agent.js';
  */
 export function validateStrategy(agent: Agent, expected: Strategy): void {
   if (agent.strategy !== expected) {
-    throw new Error(
-      `Expected strategy "${expected}", got "${agent.strategy}"`,
-    );
+    throw new Error(`Expected strategy "${expected}", got "${agent.strategy}"`);
   }
 }

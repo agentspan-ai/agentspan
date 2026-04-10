@@ -2,7 +2,7 @@
  * Multi-agent — sequential pipeline with two agents.
  */
 
-import { Agent, AgentRuntime } from '../../src/index.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
 import { llmModel } from '../settings.js';
 
 const researcher = new Agent({
@@ -41,6 +41,4 @@ async function main() {
 export { pipeline as agent };
 export const prompt = 'Quantum computing';
 
-if (process.argv[1]?.includes('03-multi-agent')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

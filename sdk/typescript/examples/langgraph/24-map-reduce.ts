@@ -11,7 +11,7 @@
 import { StateGraph, START, END, Annotation, Send } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // LLM
@@ -121,7 +121,7 @@ builder.addConditionalEdges('generate_documents', fanOut, ['summarize_doc']);
 builder.addEdge('summarize_doc', 'reduce');
 builder.addEdge('reduce', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "map_reduce_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
@@ -155,7 +155,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('24-map-reduce.ts') || process.argv[1]?.endsWith('24-map-reduce.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

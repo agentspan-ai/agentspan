@@ -109,11 +109,14 @@ class ServerPool:
         port = self._base_port
         assignments: dict[str, int] = {}
 
-        # Assign ports — skip ALL occupied ports to guarantee a free slot
+        # Assign ports — reuse if an agentspan server is already running there
         for model_name in models:
-            while _port_in_use(port):
-                port += 1
-            assignments[model_name] = port
+            if _port_in_use(port) and _is_agentspan_server(port):
+                assignments[model_name] = port
+            else:
+                while _port_in_use(port):
+                    port += 1
+                assignments[model_name] = port
             port += 1
 
         server_env = {**os.environ, **(extra_env or {})}
@@ -121,6 +124,16 @@ class ServerPool:
         # Start servers in parallel
         def _start_one(model_name: str, assigned_port: int) -> ServerInstance:
             url = f"http://localhost:{assigned_port}/api"
+
+            # Reuse pre-existing agentspan server
+            if _is_agentspan_server(assigned_port):
+                return ServerInstance(
+                    port=assigned_port,
+                    url=url,
+                    model_name=model_name,
+                    process=None,
+                    we_started=False,
+                )
 
             # Start server
             cmd = ["agentspan", "server", "start", "-p", str(assigned_port)]

@@ -10,9 +10,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Sub-agent tools --------------------------------------------------------
 
@@ -23,9 +22,13 @@ const checkBalance = tool(
   {
     name: 'check_balance',
     description: 'Check the balance of a bank account.',
-    inputSchema: z.object({
-      accountId: z.string().describe('The account ID to check'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        accountId: { type: 'string', description: 'The account ID to check' },
+      },
+      required: ['accountId'],
+    },
   },
 );
 
@@ -36,9 +39,13 @@ const lookupOrder = tool(
   {
     name: 'lookup_order',
     description: 'Look up the status of an order.',
-    inputSchema: z.object({
-      orderId: z.string().describe('The order ID to look up'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        orderId: { type: 'string', description: 'The order ID to look up' },
+      },
+      required: ['orderId'],
+    },
   },
 );
 
@@ -49,9 +56,13 @@ const getPricing = tool(
   {
     name: 'get_pricing',
     description: 'Get pricing information for a product.',
-    inputSchema: z.object({
-      product: z.string().describe('The product to get pricing for'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        product: { type: 'string', description: 'The product to get pricing for' },
+      },
+      required: ['product'],
+    },
   },
 );
 
@@ -89,7 +100,6 @@ export const support = new Agent({
   strategy: 'handoff',
 });
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -112,6 +122,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('05-handoffs.ts') || process.argv[1]?.endsWith('05-handoffs.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

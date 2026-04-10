@@ -19,8 +19,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime } from '../src';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, OnTextMention } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // ── Level 3: Individual specialists ─────────────────────────
 
@@ -88,15 +88,17 @@ export const ceo = new Agent({
   instructions:
     'You are the CEO. Route requests to the right department: ' +
     'engineering_lead for technical/development questions, ' +
-    'marketing_lead for marketing/content/SEO questions. ' +
-    'Delegate the entire request to the appropriate lead.',
+    'marketing_lead for marketing/content/SEO questions.',
   agents: [engineeringLead, marketingLead],
-  strategy: 'handoff',
+  handoffs: [
+    new OnTextMention({ text: 'engineering_lead', target: 'engineering_lead' }),
+    new OnTextMention({ text: 'marketing_lead', target: 'marketing_lead' }),
+  ],
+  strategy: 'swarm',
 });
 
 // ── Run ───────────────────────────────────────────────────
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -104,7 +106,7 @@ async function main() {
     const result = await runtime.run(
     ceo,
     'Design a REST API for a user management system with authentication ' +
-    'and then come up with a marketing campaign for the system',
+    'and then ask marketing team to come up with a marketing campaign for the system with details on how to run these campaign',
     );
     result.printResult();
 
@@ -121,6 +123,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('13-hierarchical-agents.ts') || process.argv[1]?.endsWith('13-hierarchical-agents.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

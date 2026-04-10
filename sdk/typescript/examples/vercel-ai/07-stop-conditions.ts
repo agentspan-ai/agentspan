@@ -15,7 +15,7 @@ import {
   AgentRuntime,
   MaxMessage,
   TextMention,
-} from '../../src/index.js';
+} from '@agentspan-ai/sdk';
 
 // ── Tool state ───────────────────────────────────────────
 let analysisStepCount = 0;
@@ -89,7 +89,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('07-stop-conditions.ts') || process.argv[1]?.endsWith('07-stop-conditions.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

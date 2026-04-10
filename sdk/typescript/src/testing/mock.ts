@@ -1,8 +1,7 @@
-import type { AgentResult, AgentEvent } from '../types.js';
-import { Agent } from '../agent.js';
-import { makeAgentResult } from '../result.js';
-import { getToolDef } from '../tool.js';
-import { ConfigurationError } from '../errors.js';
+import type { AgentResult, AgentEvent } from "../types.js";
+import { Agent } from "../agent.js";
+import { makeAgentResult } from "../result.js";
+import { getToolDef } from "../tool.js";
 
 /**
  * Options for mockRun.
@@ -50,30 +49,30 @@ export async function mockRun(
     if (!fn) continue;
 
     const args = {};
-    events.push({ type: 'tool_call', toolName: def.name, args });
+    events.push({ type: "tool_call", toolName: def.name, args });
     try {
       const result = await fn(args);
-      events.push({ type: 'tool_result', toolName: def.name, result });
+      events.push({ type: "tool_result", toolName: def.name, result });
       toolCalls.push({ name: def.name, args, result });
     } catch (err) {
-      events.push({ type: 'error', content: String(err) });
+      events.push({ type: "error", content: String(err) });
     }
   }
 
   events.push({
-    type: 'done',
+    type: "done",
     output: { result: `Mock execution of ${agent.name}` },
   });
 
   return makeAgentResult({
-    executionId: 'mock-' + Date.now(),
+    executionId: "mock-" + Date.now(),
     output: {
       result: `Mock execution of ${agent.name} with prompt: ${prompt}`,
     },
-    status: 'COMPLETED',
-    finishReason: 'stop',
+    status: "COMPLETED",
+    finishReason: "stop",
     events,
     toolCalls,
-    messages: [{ role: 'user', content: prompt }],
+    messages: [{ role: "user", content: prompt }],
   });
 }

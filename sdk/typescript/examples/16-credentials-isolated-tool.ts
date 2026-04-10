@@ -16,7 +16,7 @@
  *
  * Setup (one-time, via CLI):
  *   agentspan login                                     # authenticate
- *   agentspan credentials set --name GITHUB_TOKEN       # enter token when prompted
+ *   agentspan credentials set GITHUB_TOKEN <your-github-token> # enter token when prompted
  *
  * Requirements:
  *   - Agentspan server running at AGENTSPAN_SERVER_URL
@@ -24,8 +24,8 @@
  *   - GITHUB_TOKEN stored via `agentspan credentials set` OR set in process.env
  */
 
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Isolated tool: list GitHub repos -----------------------------------------
 
@@ -135,7 +135,6 @@ export const agent = new Agent({
 
 // -- Run ----------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -158,6 +157,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('16-credentials-isolated-tool.ts') || process.argv[1]?.endsWith('16-credentials-isolated-tool.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

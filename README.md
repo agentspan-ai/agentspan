@@ -1,8 +1,8 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="assets/logo-light.svg">
-    <img src="assets/logo-light.svg" alt="Agentspan" width="400">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/agentspan-logo-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/agentspan-logo-light.png">
+    <img src="assets/agentspan-logo-light.png" alt="Agentspan" width="360">
   </picture>
 </p>
 
@@ -13,15 +13,15 @@
   <a href="https://pypi.org/project/agentspan/"><img src="https://img.shields.io/pypi/dm/agentspan?color=blue" alt="Downloads"></a>
   <a href="https://github.com/agentspan-ai/agentspan/stargazers"><img src="https://img.shields.io/github/stars/agentspan-ai/agentspan?style=social" alt="Stars"></a>
   <a href="https://github.com/agentspan-ai/agentspan/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
-  <a href="https://discord.gg/agentspan"><img src="https://img.shields.io/discord/1234567890?label=Discord&logo=discord&color=5865F2" alt="Discord"></a>
+  <a href="https://discord.com/invite/ajcA66JcKq"><img src="https://img.shields.io/discord/1488604882259939528?label=Discord&logo=discord&color=5865F2" alt="Discord"></a>
   <a href="https://github.com/agentspan-ai/agentspan/actions"><img src="https://img.shields.io/github/actions/workflow/status/agentspan-ai/agentspan/ci.yml?label=CI" alt="CI"></a>
 </p>
 
 <p align="center">
-  <a href="https://docs.agentspan.dev">Docs</a> &bull;
+  <a href="https://agentspan.ai/docs">Docs</a> &bull;
   <a href="#quickstart">Quickstart</a> &bull;
   <a href="#examples">180+ Examples</a> &bull;
-  <a href="https://discord.gg/agentspan">Discord</a> &bull;
+  <a href="https://discord.com/invite/ajcA66JcKq">Discord</a> &bull;
   <a href="docs/python-sdk/api-reference.md">API Reference</a>
 </p>
 
@@ -32,17 +32,27 @@
 ## Quickstart (60 seconds)
 
 ```bash
-# 1. Install
-npm install -g @agentspan-ai/agentspan          # installs the CLI
-pip install agentspan                         # installs the Python SDK
-export OPENAI_API_KEY=sk-...                  # or any supported provider
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.sh | sh
 
-# 2. Start the server
-agentspan server start                        # runs on localhost:6767 with UI
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.ps1 | iex
+```
+## Install SDKs
+```bash
+# Python
+pip install agentspan   # Python
+# Typescript
+npm install @agentspan-ai/sdk            # TypeScript
+```
+
+```bash
+export OPENAI_API_KEY=sk-...   # or any supported provider
+agentspan server start         # runs on localhost:6767 with UI
 ```
 
 ```python
-# 3. Run your first agent (save as hello.py, run with: python hello.py)
+# hello.py — run with: python hello.py
 from agentspan.agents import Agent, AgentRuntime, tool
 
 @tool
@@ -57,16 +67,19 @@ with AgentRuntime() as runtime:
     result.print_result()
 ```
 
-That's it. The server auto-starts workers, compiles your agent to a durable execution, and executes it. Open `http://localhost:6767` to see the visual execution UI.
+Open `http://localhost:6767` to see the visual execution UI.
 
-<details><summary>Alternative install methods</summary>
+<details><summary>Alternative CLI install methods</summary>
 
 ```bash
-# CLI alternative (if you don't have npm)
-curl -fsSL https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.sh | sh
+# npm
+npm install -g @agentspan-ai/agentspan
 
-# Python SDK with uv
-uv pip install agentspan
+# Windows — CMD / double-click
+curl -fsSL https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.bat -o install.bat && install.bat
+
+# From source
+cd cli && go build -o agentspan .
 
 # Verify setup
 agentspan doctor
@@ -100,7 +113,7 @@ agentspan doctor
 
 ## Why Agentspan?
 
-Every other agent SDK runs agents in-memory. When the process dies, the agent dies. Agentspan compiles your agents to durable executions that execute on a server — giving you reliability, observability, and distributed scaling out of the box.
+Agentspan is the execution layer, not the replacement. Use native Agentspan agents, or bring LangGraph, the OpenAI Agents SDK, or Google ADK — pass your existing agent to `runtime.run()` and it gains crash recovery, human-in-the-loop pauses, and full execution history. Your definitions stay unchanged.
 
 | | CrewAI | LangChain | AutoGen | OpenAI Agents | **Agentspan** |
 |---|---|---|---|---|---|
@@ -130,7 +143,7 @@ Every other agent SDK runs agents in-memory. When the process dies, the agent di
 
 7. **Server-side tools** — HTTP endpoints and MCP servers execute as server-side tasks. No worker needed. MCP auto-discovered at compile time.
 
-8. **Full observability** — OpenTelemetry, Prometheus, visual execution UI, execution history, token/cost tracking.
+8. **Full observability** — Prometheus metrics, visual execution UI, execution history, token usage tracking. OpenTelemetry available (opt-in via config).
 
 9. **Framework compatible** — Works with Google ADK, OpenAI Agents SDK, LangChain, and LangGraph. [180+ examples](sdk/python/examples/).
 
@@ -196,11 +209,11 @@ Store API keys and secrets once on the server. Tools resolve them automatically 
 **Step 1: Store credentials on the server**
 
 ```bash
-agentspan credential store GITHUB_TOKEN ghp_xxxxxxxxxxxx
-agentspan credential store SEARCH_API_KEY xxx-your-key
+agentspan credentials set GITHUB_TOKEN ghp_xxxxxxxxxxxx
+agentspan credentials set SEARCH_API_KEY xxx-your-key
 ```
 
-Credentials are encrypted at rest (AES-256-GCM). List them with `agentspan credential list`.
+Credentials are encrypted at rest (AES-256-GCM). List them with `agentspan credentials list`.
 
 **Step 2: Declare which credentials a tool needs**
 
@@ -625,77 +638,13 @@ pipeline = SequentialAgent(name="pipeline", sub_agents=[researcher, writer])
 
 ## Deployment
 
-### Development (SQLite — zero setup)
+| Environment | Guide |
+|---|---|
+| Local (dev) | `agentspan server start` — zero config, SQLite |
+| Single server | [Docker / Docker Compose](deployment/README.md) |
+| Production | [Kubernetes + Helm](deployment/README.md) |
 
-The default setup uses SQLite with WAL mode. No external database needed.
-
-```bash
-agentspan server start
-```
-
-Data is stored in `agent-runtime.db` in the working directory.
-
-### Production (PostgreSQL)
-
-For production workloads, use PostgreSQL for durability and concurrent access.
-
-**1. Start PostgreSQL with Docker Compose:**
-
-```bash
-cd deployment/docker-compose
-cp .env.example .env
-docker compose up -d postgres
-```
-
-This starts PostgreSQL 16 on port 5432 with:
-- User: `agentspan` (default)
-- Password: `changeme` (default)
-- Database: `agentspan` (default)
-
-**2. Start the server with the Postgres profile:**
-
-```bash
-SPRING_PROFILES_ACTIVE=postgres agentspan server start
-```
-
-Or configure the database connection directly:
-
-```bash
-export SPRING_DATASOURCE_URL=jdbc:postgresql://your-host:5432/conductor
-export SPRING_DATASOURCE_USERNAME=your_user
-export SPRING_DATASOURCE_PASSWORD=your_password
-export SPRING_PROFILES_ACTIVE=postgres
-agentspan server start
-```
-
-### Docker Deployment
-
-Run the Agentspan server and PostgreSQL together using the deployment Compose stack:
-
-```bash
-cd deployment/docker-compose
-cp .env.example .env
-docker compose up -d
-```
-
-Compose files:
-- `deployment/docker-compose/compose.yaml`
-- `deployment/docker-compose/.env.example`
-- `deployment/docker-compose/README.md`
-
-### Configuration Reference
-
-The server auto-enables LLM providers when their API key is set. No manual integration setup needed.
-
-| Setting | Env Var | Default |
-|---|---|---|
-| Server port | `SERVER_PORT` | `6767` |
-| Database backend | `SPRING_PROFILES_ACTIVE` | `default` (SQLite) |
-| SQLite path | `SPRING_DATASOURCE_URL` | `jdbc:sqlite:agent-runtime.db` |
-| Postgres URL | `SPRING_DATASOURCE_URL` | `jdbc:postgresql://localhost:5432/conductor` |
-| Postgres user | `SPRING_DATASOURCE_USERNAME` | `postgres` |
-| Postgres password | `SPRING_DATASOURCE_PASSWORD` | `postgres` |
-| Postgres pool size | `SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE` | `8` |
+Full deployment guide → **[deployment/README.md](deployment/README.md)**
 
 ## Project Structure
 
@@ -735,7 +684,7 @@ agentspan doctor           # Check system dependencies
 
 We're building Agentspan in the open and would love your help.
 
-- **[Discord](https://discord.gg/agentspan)** — Ask questions, share what you're building, get help
+- **[Discord](https://discord.com/invite/ajcA66JcKq)** — Ask questions, share what you're building, get help
 - **[GitHub Issues](https://github.com/agentspan-ai/agentspan/issues)** — Bug reports and feature requests
 - **[Contributing Guide](CONTRIBUTING.md)** — How to contribute code, docs, and examples
 

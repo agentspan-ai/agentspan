@@ -11,7 +11,7 @@
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // LLM
@@ -118,7 +118,7 @@ builder.addEdge('researcher', 'supervisor');
 builder.addEdge('writer', 'supervisor');
 builder.addEdge('editor', 'supervisor');
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "supervisor_multiagent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
@@ -152,7 +152,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('25-supervisor.ts') || process.argv[1]?.endsWith('25-supervisor.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

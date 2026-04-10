@@ -9,7 +9,7 @@
  */
 
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // State schema
@@ -70,7 +70,7 @@ builder.addEdge('validate', 'refine');
 builder.addEdge('refine', 'generate');
 builder.addEdge('generate', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "query_pipeline" });
 
 // Add agentspan metadata for extraction (no LLM in this pipeline example)
 (graph as any)._agentspan = {
@@ -102,7 +102,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('04-simple-stategraph.ts') || process.argv[1]?.endsWith('04-simple-stategraph.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

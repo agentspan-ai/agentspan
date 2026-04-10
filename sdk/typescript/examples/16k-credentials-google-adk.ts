@@ -15,7 +15,7 @@
  *   const result = await runtime.run(adkAgent, prompt, { credentials: ["GITHUB_TOKEN"] });
  *
  * Setup (one-time):
- *   agentspan credentials set --name GITHUB_TOKEN
+ *   agentspan credentials set GITHUB_TOKEN <your-github-token>
  *
  * Requirements:
  *   - Agentspan server running at AGENTSPAN_SERVER_URL
@@ -23,8 +23,8 @@
  *   - GITHUB_TOKEN stored via `agentspan credentials set`
  */
 
-import { Agent, AgentRuntime, tool, getCredential } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool, getCredential } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // Mirrors a Google ADK FunctionTool that checks for a credential
 const checkGithubAuth = tool(
@@ -59,7 +59,6 @@ export const agent = new Agent({
 
 // -- Run ----------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -82,6 +81,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('16k-credentials-google-adk.ts') || process.argv[1]?.endsWith('16k-credentials-google-adk.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

@@ -29,7 +29,7 @@
 
 **Agentspan** is a distributed, durable runtime for running AI agents that survive crashes, scale across machines, and pause for human approval for days — not minutes.
 
-Every other agent SDK runs agents in-memory. When the process dies, the agent dies. Agentspan compiles your agents to durable executions that execute on a server, giving you reliability, observability, and distributed scaling out of the box.
+Agentspan is the execution layer, not the replacement. Use native Agentspan agents, or bring LangGraph, the OpenAI Agents SDK, or Google ADK — pass your existing agent to `runtime.run()` and it gains crash recovery, human-in-the-loop pauses, and full execution history. Your definitions stay unchanged.
 
 ```python
 from agentspan.agents import Agent, AgentRuntime, tool
@@ -55,7 +55,7 @@ Your agent code compiles to a durable, server-side execution. The server manages
 | | CrewAI | LangChain | AutoGen | OpenAI Agents | **Agentspan**                                                          |
 |---|---|---|---|---|------------------------------------------------------------------------|
 | **Execution model** | In-memory | Checkpoints | In-memory | Client-side loop | **Durable executions**                                                 |
-| **Crash recovery** | Manual replay from checkpoints | Resume from checkpointer (Postgres, Redis) | None (v0.4) | None (Temporal add-on available) | **Automatic — execution resumes exactly where it left off**            |
+| **Crash recovery** | Manual replay from checkpoints | Resume from checkpointer (Postgres, Redis) | None (v0.4) | None | **Automatic — execution resumes exactly where it left off**            |
 | **Tool scaling** | Single process | Single process (Platform for managed scaling) | Distributed runtime | Single process | **Distributed workers in any language (Python, Java, Go, etc.)**       |
 | **Human approval** | Stdin-blocking (minutes) | `interrupt()` + checkpointer (days) | Stdin-blocking (minutes) | In-process | **Durable pause — approve from any process, any machine, days later**  |
 | **Cross-process access** | None | Thread ID + checkpointer (rebuild graph) | None | `response_id` (continue only) | **Execution ID — status, approve, pause, resume, cancel from anywhere** |

@@ -6,22 +6,24 @@
  *   - ${MCP_API_KEY} in headers resolved server-side before MCP calls
  *   - MCP server authentication handled transparently
  *
- * Setup (one-time):
- *   agentspan credentials set --name MCP_API_KEY
+ * MCP Test Server Setup (mcp-testkit):
+ *   pip install mcp-testkit
  *
- * MCP Weather Server Setup:
- *   # Install and start the weather MCP server (runs on port 3001):
- *   npx -y @philschmid/weather-mcp
+ *   # Start with auth (to demonstrate credential resolution):
+ *   mcp-testkit --transport http --auth <secret>
+ *
+ *   # Store credentials via CLI or Agentspan UI:
+ *   agentspan credentials set MCP_API_KEY <secret>
  *
  * Requirements:
  *   - Agentspan server running at AGENTSPAN_SERVER_URL
  *   - AGENTSPAN_LLM_MODEL set (or defaults to openai/gpt-4o-mini)
- *   - MCP server running on http://localhost:3001/mcp (see setup above)
- *   - MCP_API_KEY stored via `agentspan credentials set`
+ *   - mcp-testkit running on http://localhost:3001 (see setup above)
+ *   - MCP_API_KEY stored via CLI or Agentspan UI
  */
 
-import { Agent, AgentRuntime, mcpTool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, mcpTool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // MCP tool with credential-bearing headers.
 // ${MCP_API_KEY} is resolved server-side before each MCP call.
@@ -42,7 +44,6 @@ export const agent = new Agent({
 
 // -- Run ----------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -62,6 +63,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('16f-credentials-mcp-tool.ts') || process.argv[1]?.endsWith('16f-credentials-mcp-tool.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

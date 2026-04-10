@@ -11,7 +11,7 @@
  *   - Git configured with push access to the repo
  */
 
-import { Agent, AgentRuntime, OnTextMention } from '../src/index.js';
+import { Agent, AgentRuntime, OnTextMention } from '@agentspan-ai/sdk';
 import { randomBytes } from 'crypto';
 
 const REPO = 'agentspan/codingexamples';
@@ -110,7 +110,6 @@ const prompt =
   'Pick an open issue from the GitHub repository, implement the ' +
   'feature or fix the bug, get it reviewed by QA, and create a PR.';
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -154,6 +153,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('60a-github-coding-agent-simple.ts') || process.argv[1]?.endsWith('60a-github-coding-agent-simple.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

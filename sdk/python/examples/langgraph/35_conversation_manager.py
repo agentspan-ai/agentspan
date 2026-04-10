@@ -106,6 +106,11 @@ builder.add_edge("respond", END)
 graph = builder.compile(name="conversation_manager")
 
 if __name__ == "__main__":
+    turns = [
+        "Hi! I'm learning about machine learning.",
+        "Can you explain what neural networks are?",
+        "What's the difference between supervised and unsupervised learning?",
+    ]
     with AgentRuntime() as runtime:
         for turn in turns:
             result = runtime.run(graph, turn, session_id="user-session-001")

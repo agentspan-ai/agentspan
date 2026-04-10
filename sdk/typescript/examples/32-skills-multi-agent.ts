@@ -15,9 +15,8 @@
  *   - conductor skill installed (https://github.com/conductor-oss/conductor-skills)
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, OnTextMention, agentTool, skill, tool } from '../src/index.js';
-import { llmModel, secondaryLlmModel } from './settings.js';
+import { Agent, AgentRuntime, OnTextMention, agentTool, skill, tool } from '@agentspan-ai/sdk';
+import { llmModel, secondaryLlmModel } from './settings';
 
 // ── Load skills ────────────────────────────────────────────────────
 const dg = skill('~/.claude/skills/dg', { model: llmModel });
@@ -42,7 +41,13 @@ const runTests = tool(
   {
     name: 'run_tests',
     description: 'Run unit tests on the provided code (simulated).',
-    inputSchema: z.object({ code: z.string().describe('Code to test') }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        code: { type: 'string', description: 'Code to test' },
+      },
+      required: ['code'],
+    },
   },
 );
 
@@ -303,9 +308,4 @@ async function main() {
   }
 }
 
-if (
-  process.argv[1]?.endsWith('32-skills-multi-agent.ts') ||
-  process.argv[1]?.endsWith('32-skills-multi-agent.js')
-) {
-  main().catch(console.error);
-}
+main().catch(console.error);

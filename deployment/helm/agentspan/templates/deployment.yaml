@@ -50,6 +50,11 @@ spec:
               containerPort: 6767
               protocol: TCP
           env:
+            - name: AGENTSPAN_MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "agentspan.secretName" . }}
+                  key: AGENTSPAN_MASTER_KEY
             - name: JAVA_TOOL_OPTIONS
               valueFrom:
                 configMapKeyRef:

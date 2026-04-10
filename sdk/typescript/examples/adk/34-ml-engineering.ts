@@ -29,7 +29,7 @@
  */
 
 import { LlmAgent, SequentialAgent, ParallelAgent, LoopAgent } from '@google/adk';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
@@ -201,7 +201,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('34-ml-engineering.ts') || process.argv[1]?.endsWith('34-ml-engineering.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

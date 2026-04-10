@@ -20,9 +20,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 const lookupCustomer = tool(
   async (args: { email: string }) => {
@@ -35,9 +34,13 @@ const lookupCustomer = tool(
   {
     name: 'lookup_customer',
     description: 'Look up a customer by email address.',
-    inputSchema: z.object({
-      email: z.string().describe('Customer email address'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email: { type: 'string', description: 'Customer email address' },
+      },
+      required: ['email'],
+    },
   },
 );
 
@@ -56,10 +59,14 @@ const getTransactions = tool(
   {
     name: 'get_transactions',
     description: 'Get recent transactions for a customer.',
-    inputSchema: z.object({
-      customer_id: z.string().describe('Customer ID'),
-      limit: z.number().describe('Maximum number of transactions to return'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        customer_id: { type: 'string', description: 'Customer ID' },
+        limit: { type: 'number', description: 'Maximum number of transactions to return' },
+      },
+      required: ['customer_id', 'limit'],
+    },
   },
 );
 
@@ -71,9 +78,13 @@ const calculateTotal = tool(
   {
     name: 'calculate_total',
     description: 'Calculate the sum of a list of amounts.',
-    inputSchema: z.object({
-      amounts: z.array(z.number()).describe('List of amounts to sum'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        amounts: { type: 'array', items: { type: 'number' }, description: 'List of amounts to sum' },
+      },
+      required: ['amounts'],
+    },
   },
 );
 
@@ -84,11 +95,15 @@ const sendSummaryEmail = tool(
   {
     name: 'send_summary_email',
     description: 'Send a summary email to a customer.',
-    inputSchema: z.object({
-      to: z.string().describe('Recipient email address'),
-      subject: z.string().describe('Email subject'),
-      body: z.string().describe('Email body'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to: { type: 'string', description: 'Recipient email address' },
+        subject: { type: 'string', description: 'Email subject' },
+        body: { type: 'string', description: 'Email body' },
+      },
+      required: ['to', 'subject', 'body'],
+    },
   },
 );
 
@@ -102,7 +117,6 @@ export const agent = new Agent({
     'Use the tools step by step.',
 });
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -126,6 +140,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('02b-multi-step-tools.ts') || process.argv[1]?.endsWith('02b-multi-step-tools.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

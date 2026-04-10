@@ -1,7 +1,7 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Conductor Agents SDK — durable, scalable, observable AI agents.
+"""Agentspan Agents SDK — durable, scalable, observable AI agents.
 
 This is the public API surface.  Import everything you need from here::
 
@@ -39,7 +39,7 @@ from agentspan.agents.claude_code import ClaudeCode
 
 # Callback handlers
 from agentspan.agents.callback import CallbackHandler
-from agentspan.agents.cli_config import CliConfig
+from agentspan.agents.cli_config import CliConfig, TerminalToolError
 
 # Code execution
 from agentspan.agents.code_execution_config import CodeExecutionConfig
@@ -106,6 +106,8 @@ from agentspan.agents.run import (
     deploy,
     deploy_async,
     plan,
+    resume,
+    resume_async,
     run,
     run_async,
     serve,
@@ -193,6 +195,7 @@ from agentspan.agents.tool import (
     search_tool,
     tool,
     video_tool,
+    wait_for_message_tool,
 )
 
 # Tracing (optional — only activates if opentelemetry is installed)
@@ -221,6 +224,7 @@ __all__ = [
     "http_tool",
     "human_tool",
     "mcp_tool",
+    "wait_for_message_tool",
     "image_tool",
     "audio_tool",
     "video_tool",
@@ -233,6 +237,8 @@ __all__ = [
     "deploy",
     "deploy_async",
     "plan",
+    "resume",
+    "resume_async",
     "run",
     "run_async",
     "serve",
@@ -277,6 +283,7 @@ __all__ = [
     # Code execution
     "CodeExecutionConfig",
     "CliConfig",
+    "TerminalToolError",
     "CodeExecutor",
     "LocalCodeExecutor",
     "DockerCodeExecutor",

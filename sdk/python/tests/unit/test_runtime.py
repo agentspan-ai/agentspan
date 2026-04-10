@@ -502,20 +502,20 @@ class TestRuntimeLifecycle:
 
     def test_resume_delegates(self, runtime):
         runtime._workflow_client.resume_workflow = MagicMock()
-        runtime.resume("wf-1")
+        runtime._resume_workflow("wf-1")
         runtime._workflow_client.resume_workflow.assert_called_once_with("wf-1")
 
     def test_cancel_delegates(self, runtime):
         runtime._workflow_client.terminate_workflow = MagicMock()
         runtime.cancel("wf-1", reason="done")
         runtime._workflow_client.terminate_workflow.assert_called_once_with(
-            execution_id="wf-1", reason="done"
+            workflow_id="wf-1", reason="done"
         )
 
     def test_send_message_delegates(self, runtime):
-        runtime.respond = MagicMock()
+        runtime._workflow_client.send_message = MagicMock()
         runtime.send_message("wf-1", "hello")
-        runtime.respond.assert_called_once_with("wf-1", {"message": "hello"})
+        runtime._workflow_client.send_message.assert_called_once_with("wf-1", {"message": "hello"})
 
     def test_context_manager(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
@@ -802,17 +802,21 @@ class TestRuntimePlan:
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
 
-    def test_plan_returns_workflow_def(self, runtime):
+    def test_plan_returns_raw_server_response(self, runtime):
         agent = Agent(name="test", model="openai/gpt-4o")
-        mock_wf = MagicMock()
-        mock_wf.to_workflow_def.return_value = {"name": "test_wf", "tasks": []}
+        server_response = {
+            "workflowDef": {"name": "test_wf", "tasks": []},
+            "requiredWorkers": [],
+        }
 
-        # plan() calls _compile_agent() which calls _compile_via_server() (HTTP)
-        runtime._compile_agent = MagicMock(return_value=mock_wf)
-        result = runtime.plan(agent)
+        # plan() POSTs directly to /agent/compile and returns the raw response
+        mock_post = _mock_requests_post(server_response)
+        with patch("requests.post", mock_post):
+            result = runtime.plan(agent)
 
-        mock_wf.to_workflow_def.assert_called_once()
-        runtime._compile_agent.assert_called_once_with(agent)
+        assert "workflowDef" in result
+        assert result["workflowDef"]["name"] == "test_wf"
+        assert result["requiredWorkers"] == []
 
     def test_compile_via_server_wraps_config_in_start_request(self, runtime):
         """_compile_via_server sends agentConfig wrapped in a StartRequest payload."""
@@ -1052,6 +1056,51 @@ class TestRuntimeRunGuardrails:
 
         with pytest.raises(ValueError, match="Input guardrail"):
             runtime.start(agent, "bad prompt")
+
+
+class TestExecutionInputValidation:
+    """Validate that execution requires prompt, media, or context."""
+
+    @pytest.fixture()
+    def runtime(self):
+        with patch("conductor.client.orkes_clients.OrkesClients"):
+            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
+                from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
+
+                config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
+                return AgentRuntime(config=config)
+
+    def test_run_rejects_blank_input_without_media_or_context(self, runtime):
+        agent = Agent(name="test", model="openai/gpt-4o")
+        runtime._start_via_server = MagicMock()
+
+        with pytest.raises(ValueError, match="non-empty prompt"):
+            runtime.run(agent, "   ")
+
+        runtime._start_via_server.assert_not_called()
+
+    def test_start_allows_blank_prompt_with_context(self, runtime):
+        agent = Agent(name="test", model="openai/gpt-4o")
+        runtime._prepare_workers = MagicMock()
+        runtime._start_via_server = MagicMock(return_value=("wf-ctx", None))
+
+        handle = runtime.start(agent, "   ", context={"repo": "acme"})
+
+        assert handle.execution_id == "wf-ctx"
+        call_kwargs = runtime._start_via_server.call_args
+        assert call_kwargs[1]["context"] == {"repo": "acme"}
+
+    def test_start_allows_blank_prompt_with_media(self, runtime):
+        agent = Agent(name="test", model="openai/gpt-4o")
+        runtime._prepare_workers = MagicMock()
+        runtime._start_via_server = MagicMock(return_value=("wf-media", None))
+
+        handle = runtime.start(agent, "   ", media=["https://example.com/cat.png"])
+
+        assert handle.execution_id == "wf-media"
+        call_kwargs = runtime._start_via_server.call_args
+        assert call_kwargs[1]["media"] == ["https://example.com/cat.png"]
 
 
 class TestRunPopulatesToolCalls:
@@ -1680,6 +1729,18 @@ class TestStartViaServer:
         payload = call_kwargs[1]["json"]
         assert payload["media"] == ["https://img.png"]
 
+    def test_start_via_server_passes_context(self, runtime):
+        """_start_via_server includes context in the payload."""
+        agent = Agent(name="test", model="openai/gpt-4o")
+
+        mock_post = _mock_requests_post({"executionId": "wf-1"})
+        with patch("requests.post", mock_post):
+            runtime._start_via_server(agent, "describe", context={"repo": "acme"})
+
+        call_kwargs = mock_post.call_args
+        payload = call_kwargs[1]["json"]
+        assert payload["context"] == {"repo": "acme"}
+
     def test_start_via_server_passes_idempotency_key(self, runtime):
         """Idempotency key is included in the payload when provided."""
         agent = Agent(name="test", model="openai/gpt-4o")
@@ -1731,6 +1792,20 @@ class TestStartFrameworkViaServer:
 
         payload = mock_post.call_args[1]["json"]
         assert payload["credentials"] == ["OPENAI_API_KEY"]
+
+    def test_start_framework_via_server_passes_context(self, runtime):
+        """Framework start payload includes context."""
+        mock_post = _mock_requests_post({"executionId": "wf-fw-1"})
+        with patch("requests.post", mock_post):
+            runtime._start_framework_via_server(
+                framework="openai",
+                raw_config={"name": "fw_agent"},
+                prompt="hello",
+                context={"repo": "acme"},
+            )
+
+        payload = mock_post.call_args[1]["json"]
+        assert payload["context"] == {"repo": "acme"}
 
 
 class TestFrameworkCredentials:
@@ -1934,6 +2009,11 @@ class TestResolvePrompt:
         """Plain string prompt is returned as-is."""
         rt, _ = runtime
         assert rt._resolve_prompt("Hello world") == "Hello world"
+
+    def test_none_resolves_to_empty_string(self, runtime):
+        """None prompt resolves to an empty string instead of literal 'None'."""
+        rt, _ = runtime
+        assert rt._resolve_prompt(None) == ""
 
     def test_template_resolved(self, runtime):
         """PromptTemplate fetches and substitutes variables."""

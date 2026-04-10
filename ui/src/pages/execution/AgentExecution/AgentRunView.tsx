@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Box, Chip, IconButton, Tooltip, Typography } from "@mui/material";
-import { Graph, ListBullets } from "@phosphor-icons/react";
+import { Box, Chip, CircularProgress, IconButton, Tooltip, Typography } from "@mui/material";
+import { ArrowLeft, Graph, ListBullets } from "@phosphor-icons/react";
+import { getModelIconPath } from "./agentExecutionUtils";
 import { AgentRunData, AgentStatus, AgentStrategy } from "./types";
 import { formatDuration, formatTokens } from "./agentExecutionUtils";
 import { AgentExecutionDiagram } from "./AgentExecutionDiagram";
@@ -83,7 +84,7 @@ function StrategyChip({ strategy }: { strategy: AgentStrategy }) {
 
 // ─── Agent run header ─────────────────────────────────────────────────────────
 
-function AgentRunHeader({ agentRun, isRoot }: { agentRun: AgentRunData; isRoot?: boolean }) {
+function AgentRunHeader({ agentRun, isRoot, onBack }: { agentRun: AgentRunData; isRoot?: boolean; onBack?: () => void }) {
   const promptTok = agentRun.totalTokens.promptTokens;
   const completionTok = agentRun.totalTokens.completionTokens;
   const hasTokens = promptTok + completionTok > 0;
@@ -103,8 +104,19 @@ function AgentRunHeader({ agentRun, isRoot }: { agentRun: AgentRunData; isRoot?:
         flexShrink: 0,
       }}
     >
-      {/* Left: name + model */}
+      {/* Left: back button + name + model */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
+        {onBack && (
+          <Tooltip title="Back to parent agent" placement="bottom">
+            <IconButton
+              size="small"
+              onClick={onBack}
+              sx={{ width: 28, height: 28, borderRadius: 1, color: "text.secondary", "&:hover": { backgroundColor: "action.hover" } }}
+            >
+              <ArrowLeft size={16} />
+            </IconButton>
+          </Tooltip>
+        )}
         <Typography
           sx={{
             fontWeight: 700,
@@ -139,11 +151,11 @@ function AgentRunHeader({ agentRun, isRoot }: { agentRun: AgentRunData; isRoot?:
               label={agentRun.model}
               size="small"
               sx={{
-                height: 18,
-                fontSize: "0.7rem",
-                fontWeight: 400,
+                height: 20,
+                fontSize: "0.75rem",
+                fontWeight: 500,
                 backgroundColor: "transparent",
-                color: "text.disabled",
+                color: "text.primary",
                 border: "1px solid",
                 borderColor: "divider",
                 "& .MuiChip-label": { px: 0.75 },
@@ -243,6 +255,9 @@ export function AgentRunView({ agentRun, onDrillIn, onBack, isRoot }: AgentRunVi
 
   return (
     <Box sx={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      {/* Agent identity bar: name + model + strategy + back button */}
+      <AgentRunHeader agentRun={agentRun} isRoot={isRoot} onBack={onBack} />
+
       {/* Top bar: back button + turn bar + view-mode toggle */}
       <Box
         sx={{
@@ -317,9 +332,51 @@ export function AgentRunView({ agentRun, onDrillIn, onBack, isRoot }: AgentRunVi
                 backgroundImage: "url('/diagramDotBg.svg')",
               }}
             >
-              <Typography variant="body2" color="text.secondary">
-                No execution data
-              </Typography>
+              <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, maxWidth: 480, px: 3 }}>
+                {agentRun.status === AgentStatus.RUNNING && (
+                  <CircularProgress size={28} sx={{ color: "#f59e0b" }} />
+                )}
+                <Typography sx={{ fontWeight: 700, fontSize: "1rem", color: "text.primary" }}>
+                  {agentRun.agentName}
+                </Typography>
+                {agentRun.model && (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                    {(() => {
+                      const icon = getModelIconPath(agentRun.model);
+                      return icon ? <img src={icon} style={{ width: 16, height: 16, objectFit: "contain" }} alt="" /> : null;
+                    })()}
+                    <Typography sx={{ fontSize: "0.8rem", color: "text.secondary" }}>
+                      {agentRun.model}
+                    </Typography>
+                  </Box>
+                )}
+                {agentRun.input && (
+                  <Box
+                    sx={{
+                      mt: 0.5,
+                      px: 2,
+                      py: 1.5,
+                      borderRadius: 2,
+                      backgroundColor: "#f8f9fa",
+                      border: "1px solid",
+                      borderColor: "divider",
+                      width: "100%",
+                    }}
+                  >
+                    <Typography sx={{ fontSize: "0.7rem", fontWeight: 600, color: "text.disabled", mb: 0.5, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      Input
+                    </Typography>
+                    <Typography sx={{ fontSize: "0.8rem", color: "text.secondary", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                      {agentRun.input.length > 500 ? agentRun.input.slice(0, 500) + "..." : agentRun.input}
+                    </Typography>
+                  </Box>
+                )}
+                {agentRun.status === AgentStatus.RUNNING && (
+                  <Typography variant="caption" color="text.disabled">
+                    Waiting for agent to start processing...
+                  </Typography>
+                )}
+              </Box>
             </Box>
           ) : viewMode === "diagram" ? (
             <AgentExecutionDiagram

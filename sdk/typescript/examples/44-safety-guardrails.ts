@@ -20,9 +20,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Safety tools -------------------------------------------------------------
 
@@ -52,9 +51,13 @@ const checkPii = tool(
   {
     name: 'check_pii',
     description: 'Check text for personally identifiable information (PII).',
-    inputSchema: z.object({
-      text: z.string().describe('The text to scan for PII'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'The text to scan for PII' },
+      },
+      required: ['text'],
+    },
   },
 );
 
@@ -84,13 +87,14 @@ const sanitizeResponse = tool(
   {
     name: 'sanitize_response',
     description: 'Remove or mask PII from a response before delivering to user.',
-    inputSchema: z.object({
-      text: z.string().describe('The response text to sanitize'),
-      piiTypes: z
-        .string()
-        .optional()
-        .describe('Comma-separated PII types detected'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'The response text to sanitize' },
+        piiTypes: { type: 'string', description: 'Comma-separated PII types detected' },
+      },
+      required: ['text'],
+    },
   },
 );
 
@@ -121,7 +125,6 @@ export const safetyChecker = new Agent({
 // Pipeline: generate -> check and sanitize
 const pipeline = assistant.pipe(safetyChecker);
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -145,6 +148,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('44-safety-guardrails.ts') || process.argv[1]?.endsWith('44-safety-guardrails.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

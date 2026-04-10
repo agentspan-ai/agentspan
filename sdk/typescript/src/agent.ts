@@ -1,16 +1,9 @@
-import type {
-  Strategy,
-  CredentialFile,
-  CodeExecutionConfig,
-  CliConfig,
-  PromptTemplate as PromptTemplateInterface,
-} from './types.js';
-import { agentTool } from './tool.js';
-import { ConfigurationError } from './errors.js';
-import { ClaudeCode } from './claude-code.js';
-import type { CliConfigOptions } from './cli-config.js';
-import { makeCliTool } from './cli-config.js';
-import { resolveCliCredentials } from './cli-credentials.js';
+import type { Strategy, CredentialFile, CodeExecutionConfig, CliConfig } from "./types.js";
+import { agentTool } from "./tool.js";
+import { ConfigurationError } from "./errors.js";
+import { ClaudeCode } from "./claude-code.js";
+import type { CliConfigOptions } from "./cli-config.js";
+import { makeCliTool } from "./cli-config.js";
 
 // ── Validation constants ──────────────────────────────────
 
@@ -31,11 +24,7 @@ export class PromptTemplate {
   readonly variables?: Record<string, string>;
   readonly version?: number;
 
-  constructor(
-    name: string,
-    variables?: Record<string, string>,
-    version?: number,
-  ) {
+  constructor(name: string, variables?: Record<string, string>, version?: number) {
     this.name = name;
     this.variables = variables;
     this.version = version;
@@ -80,16 +69,8 @@ export interface CallbackHandler {
   onAgentEnd?(agentName: string, result: unknown): Promise<void>;
   onModelStart?(agentName: string, messages: unknown[]): Promise<void>;
   onModelEnd?(agentName: string, response: unknown): Promise<void>;
-  onToolStart?(
-    agentName: string,
-    toolName: string,
-    args: unknown,
-  ): Promise<void>;
-  onToolEnd?(
-    agentName: string,
-    toolName: string,
-    result: unknown,
-  ): Promise<void>;
+  onToolStart?(agentName: string, toolName: string, args: unknown): Promise<void>;
+  onToolEnd?(agentName: string, toolName: string, result: unknown): Promise<void>;
 }
 
 /**
@@ -127,7 +108,7 @@ export interface AgentOptions {
   metadata?: Record<string, unknown>;
   callbacks?: CallbackHandler[];
   planner?: boolean;
-  includeContents?: 'default' | 'none';
+  includeContents?: "default" | "none";
   thinkingBudgetTokens?: number;
   requiredTools?: string[];
   gate?: GateCondition;
@@ -149,10 +130,7 @@ export interface AgentOptions {
 export class Agent {
   readonly name: string;
   readonly model?: string;
-  readonly instructions?:
-    | string
-    | PromptTemplate
-    | ((...args: unknown[]) => string);
+  readonly instructions?: string | PromptTemplate | ((...args: unknown[]) => string);
   readonly tools: unknown[];
   readonly agents: Agent[];
   readonly strategy?: Strategy;
@@ -173,7 +151,7 @@ export class Agent {
   readonly metadata?: Record<string, unknown>;
   readonly callbacks: CallbackHandler[];
   readonly planner: boolean;
-  readonly includeContents?: 'default' | 'none';
+  readonly includeContents?: "default" | "none";
   readonly thinkingBudgetTokens?: number;
   readonly requiredTools?: string[];
   readonly gate?: GateCondition;
@@ -246,7 +224,7 @@ export class Agent {
     }
 
     // ── Strategy validation ───────────────────────────────
-    if (this.strategy === 'router' && !this.router) {
+    if (this.strategy === "router" && !this.router) {
       throw new ConfigurationError(
         `Agent '${this.name}' uses strategy='router' but no 'router' parameter was provided. ` +
           `Provide an Agent or function as the router.`,
@@ -256,7 +234,7 @@ export class Agent {
     // Validate claude-code tools are all strings
     if (this.isClaudeCode && this.tools.length > 0) {
       for (const t of this.tools) {
-        if (typeof t !== 'string') {
+        if (typeof t !== "string") {
           throw new Error(
             `Claude Code agent '${this.name}' tools must be strings ` +
               `(e.g. 'Read', 'Edit', 'Bash'), got ${typeof t}`,
@@ -291,28 +269,6 @@ export class Agent {
       );
       this.tools.push(cliTool);
     }
-
-    // ── CLI credential auto-mapping ───────────────────────
-    if (
-      this.cliConfig?.enabled !== false &&
-      this.cliConfig?.allowedCommands &&
-      this.cliConfig.allowedCommands.length > 0
-    ) {
-      try {
-        const autoMapped = resolveCliCredentials(
-          this.cliConfig.allowedCommands,
-          this.credentials,
-        );
-        if (autoMapped.length > 0 && !this.credentials) {
-          (this as { credentials: (string | CredentialFile)[] }).credentials =
-            autoMapped;
-        }
-      } catch (err) {
-        throw new ConfigurationError(
-          err instanceof Error ? err.message : String(err),
-        );
-      }
-    }
   }
 
   // ── Claude Code detection ───────────────────────────────
@@ -321,7 +277,7 @@ export class Agent {
    * True if this agent uses the Claude Agent SDK runtime.
    */
   get isClaudeCode(): boolean {
-    return typeof this.model === 'string' && this.model.startsWith('claude-code');
+    return typeof this.model === "string" && this.model.startsWith("claude-code");
   }
 
   /**
@@ -339,20 +295,22 @@ export class Agent {
    * `a.pipe(b).pipe(c)` → Agent with agents: [a, b, c], NOT nested.
    */
   pipe(other: Agent): Agent {
-    if (this.strategy === 'sequential' && this.agents.length > 0) {
+    if (this.strategy === "sequential" && this.agents.length > 0) {
       // Flatten: merge other into existing sequential pipeline
       return new Agent({
-        name: [...this.agents, other].map((a) => a.name).join('_'),
+        name: [...this.agents, other].map((a) => a.name).join("_"),
+        model: this.model,
         agents: [...this.agents, other],
-        strategy: 'sequential',
+        strategy: "sequential",
       });
     }
 
     // Create new sequential pipeline
     return new Agent({
       name: `${this.name}_${other.name}`,
+      model: this.model,
       agents: [this, other],
-      strategy: 'sequential',
+      strategy: "sequential",
     });
   }
 }
@@ -410,10 +368,10 @@ export function scatterGather(options: ScatterGatherOptions): Agent {
     }),
   );
 
-  const resolvedModel = options.model ?? options.workers[0]?.model ?? 'openai/gpt-4o';
-  const workerNames = options.workers.map((w) => w.name).join(', ');
+  const resolvedModel = options.model ?? options.workers[0]?.model ?? "openai/gpt-4o";
+  const workerNames = options.workers.map((w) => w.name).join(", ");
   const prefix = SCATTER_GATHER_PREFIX(workerNames);
-  const userInstructions = options.instructions ?? options.coordinatorInstructions ?? '';
+  const userInstructions = options.instructions ?? options.coordinatorInstructions ?? "";
   const fullInstructions = userInstructions ? `${prefix}\n${userInstructions}` : prefix;
 
   const allTools = [...workerTools, ...(options.tools ?? [])];
@@ -429,18 +387,14 @@ export function scatterGather(options: ScatterGatherOptions): Agent {
 
 // ── @AgentDec decorator ───────────────────────────────────
 
-const AGENT_DECORATOR_KEY = Symbol('AGENT_DECORATOR');
+const AGENT_DECORATOR_KEY = Symbol("AGENT_DECORATOR");
 
 /**
  * Class method decorator that marks a method as an agent definition.
  * Use `agentsFrom(instance)` to extract decorated methods as Agent instances.
  */
-export function AgentDec(options: Omit<AgentOptions, 'instructions'> & { instructions?: string }) {
-  return function (
-    target: object,
-    propertyKey: string,
-    descriptor: PropertyDescriptor,
-  ): void {
+export function AgentDec(options: Omit<AgentOptions, "instructions"> & { instructions?: string }) {
+  return function (target: object, propertyKey: string, descriptor: PropertyDescriptor): void {
     if (!descriptor.value) return;
 
     Object.defineProperty(descriptor.value, AGENT_DECORATOR_KEY, {
@@ -461,13 +415,13 @@ export function agentsFrom(instance: object): Agent[] {
   const propertyNames = Object.getOwnPropertyNames(proto);
 
   for (const key of propertyNames) {
-    if (key === 'constructor') continue;
+    if (key === "constructor") continue;
     const descriptor = Object.getOwnPropertyDescriptor(proto, key);
-    if (!descriptor?.value || typeof descriptor.value !== 'function') continue;
+    if (!descriptor?.value || typeof descriptor.value !== "function") continue;
 
-    const metadata = (descriptor.value as Record<symbol, unknown>)[
-      AGENT_DECORATOR_KEY
-    ] as (AgentOptions & { _methodName: string }) | undefined;
+    const metadata = (descriptor.value as Record<symbol, unknown>)[AGENT_DECORATOR_KEY] as
+      | (AgentOptions & { _methodName: string })
+      | undefined;
 
     if (!metadata) continue;
 
@@ -503,7 +457,7 @@ export function agentsFrom(instance: object): Agent[] {
  */
 export function agent(
   fn: (...args: unknown[]) => string,
-  options: Omit<AgentOptions, 'instructions'> & { name: string },
+  options: Omit<AgentOptions, "instructions"> & { name: string },
 ): Agent {
   return new Agent({
     ...options,

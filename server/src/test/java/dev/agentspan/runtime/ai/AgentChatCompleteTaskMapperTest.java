@@ -252,6 +252,53 @@ class AgentChatCompleteTaskMapperTest {
         assertThat(AgentChatCompleteTaskMapper.truncate(null, 10)).isEqualTo("");
     }
 
+    @Test
+    void testSanitizeMessages_dropsBlankTextOnlyMessages() {
+        ChatCompletion cc = new ChatCompletion();
+        cc.getMessages().add(new ChatMessage(ChatMessage.Role.system, "You are helpful."));
+        cc.getMessages().add(new ChatMessage(ChatMessage.Role.user, "   "));
+
+        mapper.sanitizeMessages(cc);
+
+        assertThat(cc.getMessages()).hasSize(1);
+        assertThat(cc.getMessages().get(0).getRole()).isEqualTo(ChatMessage.Role.system);
+    }
+
+    @Test
+    void testSanitizeMessages_keepsMediaOnlyUserMessage() {
+        ChatCompletion cc = new ChatCompletion();
+        ChatMessage user = new ChatMessage(ChatMessage.Role.user, "   ");
+        user.setMedia(List.of("https://example.com/cat.png"));
+        cc.getMessages().add(user);
+
+        mapper.sanitizeMessages(cc);
+
+        assertThat(cc.getMessages()).hasSize(1);
+        assertThat(cc.getMessages().get(0).getRole()).isEqualTo(ChatMessage.Role.user);
+        assertThat(cc.getMessages().get(0).getMessage()).isNull();
+        assertThat(cc.getMessages().get(0).getMedia()).containsExactly("https://example.com/cat.png");
+    }
+
+    @Test
+    void testValidateRunnableConversation_rejectsMissingUserInput() {
+        ChatCompletion cc = new ChatCompletion();
+        cc.getMessages().add(new ChatMessage(ChatMessage.Role.system, "You are helpful."));
+
+        assertThatThrownBy(() -> mapper.validateRunnableConversation(cc))
+                .isInstanceOf(com.netflix.conductor.core.exception.TerminateWorkflowException.class)
+                .hasMessageContaining("No non-empty user prompt or media");
+    }
+
+    @Test
+    void testValidateRunnableConversation_acceptsMediaOnlyUserInput() {
+        ChatCompletion cc = new ChatCompletion();
+        ChatMessage user = new ChatMessage(ChatMessage.Role.user, "");
+        user.setMedia(List.of("https://example.com/cat.png"));
+        cc.getMessages().add(user);
+
+        assertThatCode(() -> mapper.validateRunnableConversation(cc)).doesNotThrowAnyException();
+    }
+
     // ── Token limit detection tests ─────────────────────────────────
 
     @Test

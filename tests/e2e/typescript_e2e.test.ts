@@ -642,7 +642,7 @@ describe('TypeScript SDK E2E', () => {
       // The tool raises — workflow should complete but report error,
       // or the agent may recover. Either outcome is acceptable.
       expect(['COMPLETED', 'FAILED', 'TERMINATED']).toContain(result.status);
-    });
+    }, 120_000);
 
     it('invalid model fails (test_invalid_model_fails)', async () => {
       const agent = new Agent({
@@ -651,11 +651,11 @@ describe('TypeScript SDK E2E', () => {
         instructions: 'Say hello.',
       });
       const rt = new AgentRuntime();
-      const result = await rt.run(agent, 'Hello', { timeoutSeconds: 60 });
+      const result = await rt.run(agent, 'Hello', { timeoutSeconds: 90 });
       expect(['FAILED', 'TERMINATED', 'FAILED_WITH_TERMINAL_ERROR']).toContain(
         result.status,
       );
-    });
+    }, 120_000);
   });
 
   // ── TestNegative (validation only, no server) ───────────

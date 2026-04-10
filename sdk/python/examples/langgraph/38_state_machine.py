@@ -128,6 +128,16 @@ builder.add_edge("summarize", END)
 graph = builder.compile(name="order_state_machine")
 
 if __name__ == "__main__":
+    initial_state = {
+        "order_id": "ORD-2025-001",
+        "items": ["Widget A", "Gadget B"],
+        "customer": "Alice Johnson",
+        "current_status": "pending",
+        "status_history": [],
+        "shipping_address": "123 Main St, Springfield",
+        "tracking_number": "",
+        "summary": "",
+    }
     with AgentRuntime() as runtime:
         result = runtime.run(graph, str(initial_state))
         print(f"Status: {result.status}")

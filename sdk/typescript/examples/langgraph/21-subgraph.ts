@@ -11,7 +11,7 @@
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
 
@@ -82,7 +82,7 @@ analysisBuilder.addEdge(START, 'sentiment_node');
 analysisBuilder.addEdge('sentiment_node', 'keywords_node');
 analysisBuilder.addEdge('keywords_node', 'summarize');
 analysisBuilder.addEdge('summarize', END);
-const analysisSubgraph = analysisBuilder.compile();
+const analysisSubgraph = analysisBuilder.compile({ name: "analysis_subgraph" });
 
 // ---------------------------------------------------------------------------
 // Parent graph state schema
@@ -156,7 +156,7 @@ parentBuilder.addEdge('prepare', 'analysis');
 parentBuilder.addEdge('analysis', 'build_report');
 parentBuilder.addEdge('build_report', END);
 
-const graph = parentBuilder.compile();
+const graph = parentBuilder.compile({ name: "document_pipeline_with_subgraph" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
@@ -194,7 +194,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('21-subgraph.ts') || process.argv[1]?.endsWith('21-subgraph.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

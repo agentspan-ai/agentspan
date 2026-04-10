@@ -3,7 +3,7 @@ import {
   CredentialAuthError,
   CredentialRateLimitError,
   CredentialServiceError,
-} from './errors.js';
+} from "./errors.js";
 
 // ── Module-level credential context ──────────────────────
 
@@ -44,33 +44,31 @@ export function clearCredentialContext(): void {
  * 1. Primary: taskInput.__agentspan_ctx__.executionToken
  * 2. Fallback: taskInput.workflowInput?.__agentspan_ctx__.executionToken
  */
-export function extractExecutionToken(
-  taskInput: Record<string, unknown>,
-): string | null {
+export function extractExecutionToken(taskInput: Record<string, unknown>): string | null {
   // Primary path
   const ctx = taskInput.__agentspan_ctx__;
-  if (ctx != null && typeof ctx === 'object') {
+  if (ctx != null && typeof ctx === "object") {
     const ctxObj = ctx as Record<string, unknown>;
-    if (typeof ctxObj.executionToken === 'string') {
+    if (typeof ctxObj.executionToken === "string") {
       return ctxObj.executionToken;
     }
     // Also support snake_case from wire format
-    if (typeof ctxObj.execution_token === 'string') {
+    if (typeof ctxObj.execution_token === "string") {
       return ctxObj.execution_token;
     }
   }
 
   // Fallback path: workflowInput.__agentspan_ctx__
   const workflowInput = taskInput.workflowInput;
-  if (workflowInput != null && typeof workflowInput === 'object') {
+  if (workflowInput != null && typeof workflowInput === "object") {
     const wiObj = workflowInput as Record<string, unknown>;
     const wiCtx = wiObj.__agentspan_ctx__;
-    if (wiCtx != null && typeof wiCtx === 'object') {
+    if (wiCtx != null && typeof wiCtx === "object") {
       const wiCtxObj = wiCtx as Record<string, unknown>;
-      if (typeof wiCtxObj.executionToken === 'string') {
+      if (typeof wiCtxObj.executionToken === "string") {
         return wiCtxObj.executionToken;
       }
-      if (typeof wiCtxObj.execution_token === 'string') {
+      if (typeof wiCtxObj.execution_token === "string") {
         return wiCtxObj.execution_token;
       }
     }
@@ -103,9 +101,9 @@ export async function resolveCredentials(
 
   try {
     response = await fetch(url, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
         ...headers,
       },
       body: JSON.stringify({ token: executionToken, names }),
@@ -117,11 +115,11 @@ export async function resolveCredentials(
   }
 
   if (!response.ok) {
-    const body = await response.text().catch(() => '');
+    const body = await response.text().catch(() => "");
 
     if (response.status === 404) {
       // Try to extract credential name from response
-      let credName = names.join(', ');
+      let credName = names.join(", ");
       try {
         const parsed = JSON.parse(body);
         if (parsed.name) credName = parsed.name;
@@ -133,27 +131,19 @@ export async function resolveCredentials(
     }
 
     if (response.status === 401) {
-      throw new CredentialAuthError(
-        body || 'Credential authentication failed',
-      );
+      throw new CredentialAuthError(body || "Credential authentication failed");
     }
 
     if (response.status === 429) {
-      throw new CredentialRateLimitError(
-        body || 'Credential rate limit exceeded',
-      );
+      throw new CredentialRateLimitError(body || "Credential rate limit exceeded");
     }
 
     if (response.status >= 500) {
-      throw new CredentialServiceError(
-        body || `Credential service error (${response.status})`,
-      );
+      throw new CredentialServiceError(body || `Credential service error (${response.status})`);
     }
 
     // Other errors
-    throw new CredentialServiceError(
-      `Credential resolution failed (${response.status}): ${body}`,
-    );
+    throw new CredentialServiceError(`Credential resolution failed (${response.status}): ${body}`);
   }
 
   const data = (await response.json()) as Record<string, string>;
@@ -171,17 +161,12 @@ export async function resolveCredentials(
 export async function getCredential(name: string): Promise<string> {
   if (!_credentialContext) {
     throw new CredentialAuthError(
-      'No credential context available. getCredential() must be called during worker execution.',
+      "No credential context available. getCredential() must be called during worker execution.",
     );
   }
 
   const { serverUrl, headers, executionToken } = _credentialContext;
-  const resolved = await resolveCredentials(
-    serverUrl,
-    headers,
-    executionToken,
-    [name],
-  );
+  const resolved = await resolveCredentials(serverUrl, headers, executionToken, [name]);
 
   const value = resolved[name];
   if (value === undefined) {

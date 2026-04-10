@@ -12,8 +12,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime } from '../src';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Parallel research phase -------------------------------------------------
 
@@ -55,7 +55,6 @@ export const summarizer = new Agent({
 
 const pipeline = parallelResearch.pipe(summarizer);
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -78,6 +77,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('52-nested-strategies.ts') || process.argv[1]?.endsWith('52-nested-strategies.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

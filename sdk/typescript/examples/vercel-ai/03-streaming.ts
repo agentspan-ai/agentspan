@@ -7,7 +7,7 @@
 
 import { tool as aiTool } from 'ai';
 import { z } from 'zod';
-import { Agent, AgentRuntime } from '../../src/index.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
 
 // ── Vercel AI SDK tool ───────────────────────────────────
 const weatherTool = aiTool({
@@ -59,7 +59,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('03-streaming.ts') || process.argv[1]?.endsWith('03-streaming.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

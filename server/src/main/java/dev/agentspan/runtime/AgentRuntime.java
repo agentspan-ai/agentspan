@@ -70,7 +70,7 @@ public class AgentRuntime implements ApplicationRunner {
         log.info("│  Server Port      : {}", padRight(port, 51) + "│");
         log.info("├────────────────────────────────────────────────────────────────────────┤");
         log.info("│  Server URL       : {}", padRight(serverUrl, 51) + "│");
-        log.info("│  Swagger UI       : {}", padRight(serverUrl + "/swagger-ui/index.html", 51) + "│");
+        log.info("│  API Docs         : {}", padRight(serverUrl + "/docs/", 51) + "│");
         log.info("└────────────────────────────────────────────────────────────────────────┘");
         log.info("\n\n\n");
 

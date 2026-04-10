@@ -65,7 +65,8 @@ if __name__ == "__main__":
     # ── Plan: compile without executing ──────────────────────────────────
 
     with AgentRuntime() as runtime:
-        workflow_def = runtime.plan(agent)
+        result = runtime.plan(agent)
+        workflow_def = result["workflowDef"]
 
         # The returned dict shows exactly what Conductor will execute
         print(f"Workflow name: {workflow_def['name']}")
@@ -82,4 +83,4 @@ if __name__ == "__main__":
 
         # Full JSON for CI/CD validation or export
         print("\n--- Full workflow JSON ---")
-        print(json.dumps(workflow_def, indent=2, default=str))
+        print(json.dumps(result, indent=2, default=str))

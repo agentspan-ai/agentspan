@@ -15,7 +15,7 @@
 
 import { Agent, tool, setTracingDisabled } from '@openai/agents';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 setTracingDisabled(true);
 
@@ -103,7 +103,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('02-function-tools.ts') || process.argv[1]?.endsWith('02-function-tools.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

@@ -29,6 +29,9 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

@@ -1,4 +1,4 @@
-import type { AgentResult } from '../types.js';
+import type { AgentResult } from "../types.js";
 
 /**
  * Result of an LLM-based correctness evaluation.
@@ -66,25 +66,18 @@ export class CorrectnessEval {
     this.model = options.model;
     this.maxOutputChars = options.maxOutputChars ?? 3000;
     this.maxTokens = options.maxTokens ?? 300;
-    this.endpoint =
-      options.endpoint ?? 'https://api.openai.com/v1/chat/completions';
-    this.apiKey = options.apiKey ?? '';
+    this.endpoint = options.endpoint ?? "https://api.openai.com/v1/chat/completions";
+    this.apiKey = options.apiKey ?? "";
   }
 
   /**
    * Build the judge prompt from rubrics and agent output.
    */
   buildPrompt(result: AgentResult, rubrics: Rubric[]): string {
-    const outputStr = JSON.stringify(result.output).slice(
-      0,
-      this.maxOutputChars,
-    );
+    const outputStr = JSON.stringify(result.output).slice(0, this.maxOutputChars);
     const rubricLines = rubrics
-      .map(
-        (r, i) =>
-          `${i + 1}. ${r.name} (weight: ${r.weight ?? 1}): ${r.description}`,
-      )
-      .join('\n');
+      .map((r, i) => `${i + 1}. ${r.name} (weight: ${r.weight ?? 1}): ${r.description}`)
+      .join("\n");
 
     return `You are an AI judge evaluating an agent's output quality.
 
@@ -115,23 +108,20 @@ Respond ONLY with valid JSON in this exact format:
    * Calls an LLM endpoint to judge the output quality.
    * Falls back to a default passing result if the endpoint is unavailable.
    */
-  async evaluate(
-    result: AgentResult,
-    options: EvaluateOptions,
-  ): Promise<EvalResult> {
+  async evaluate(result: AgentResult, options: EvaluateOptions): Promise<EvalResult> {
     const { rubrics, passThreshold = 3.5 } = options;
     const prompt = this.buildPrompt(result, rubrics);
 
     try {
       const response = await fetch(this.endpoint, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
         },
         body: JSON.stringify({
           model: this.model,
-          messages: [{ role: 'user', content: prompt }],
+          messages: [{ role: "user", content: prompt }],
           max_tokens: this.maxTokens,
           temperature: 0,
         }),
@@ -144,7 +134,7 @@ Respond ONLY with valid JSON in this exact format:
       const data = (await response.json()) as {
         choices?: Array<{ message?: { content?: string } }>;
       };
-      const content = data.choices?.[0]?.message?.content ?? '';
+      const content = data.choices?.[0]?.message?.content ?? "";
       return this.parseResponse(content, rubrics, passThreshold);
     } catch {
       // If the LLM call fails, return a default result with mid-range scores
@@ -155,11 +145,7 @@ Respond ONLY with valid JSON in this exact format:
   /**
    * Parse the LLM judge response into an EvalResult.
    */
-  private parseResponse(
-    content: string,
-    rubrics: Rubric[],
-    passThreshold: number,
-  ): EvalResult {
+  private parseResponse(content: string, rubrics: Rubric[], passThreshold: number): EvalResult {
     try {
       // Try to extract JSON from the response
       const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -177,7 +163,7 @@ Respond ONLY with valid JSON in this exact format:
 
       for (const r of rubrics) {
         scores[r.name] = parsed.scores?.[r.name] ?? 3;
-        reasoning[r.name] = parsed.reasoning?.[r.name] ?? '';
+        reasoning[r.name] = parsed.reasoning?.[r.name] ?? "";
       }
 
       const weightedAverage = this.computeWeightedAverage(scores, rubrics);
@@ -196,10 +182,7 @@ Respond ONLY with valid JSON in this exact format:
   /**
    * Compute weighted average of scores.
    */
-  private computeWeightedAverage(
-    scores: Record<string, number>,
-    rubrics: Rubric[],
-  ): number {
+  private computeWeightedAverage(scores: Record<string, number>, rubrics: Rubric[]): number {
     let totalWeight = 0;
     let weightedSum = 0;
 
@@ -216,16 +199,13 @@ Respond ONLY with valid JSON in this exact format:
   /**
    * Create a default result when the LLM judge is unavailable.
    */
-  private defaultResult(
-    rubrics: Rubric[],
-    passThreshold: number,
-  ): EvalResult {
+  private defaultResult(rubrics: Rubric[], passThreshold: number): EvalResult {
     const scores: Record<string, number> = {};
     const reasoning: Record<string, string> = {};
 
     for (const r of rubrics) {
       scores[r.name] = 3;
-      reasoning[r.name] = 'Default score (judge unavailable)';
+      reasoning[r.name] = "Default score (judge unavailable)";
     }
 
     const weightedAverage = this.computeWeightedAverage(scores, rubrics);

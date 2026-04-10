@@ -12,9 +12,10 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import * as readline from 'node:readline/promises';
+import { stdin, stdout } from 'node:process';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 const checkBalance = tool(
   async (args: { accountId: string }) => {
@@ -23,9 +24,13 @@ const checkBalance = tool(
   {
     name: 'check_balance',
     description: 'Check the balance of an account.',
-    inputSchema: z.object({
-      accountId: z.string().describe('The account ID'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        accountId: { type: 'string', description: 'The account ID' },
+      },
+      required: ['accountId'],
+    },
   },
 );
 
@@ -42,11 +47,15 @@ const transferFunds = tool(
     name: 'transfer_funds',
     description:
       'Request a funds transfer; runtime pauses for human approval before execution.',
-    inputSchema: z.object({
-      fromAcct: z.string().describe('Source account'),
-      toAcct: z.string().describe('Destination account'),
-      amount: z.number().describe('Amount to transfer'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        fromAcct: { type: 'string', description: 'Source account' },
+        toAcct: { type: 'string', description: 'Destination account' },
+        amount: { type: 'number', description: 'Amount to transfer' },
+      },
+      required: ['fromAcct', 'toAcct', 'amount'],
+    },
     approvalRequired: true,
   },
 );
@@ -62,32 +71,64 @@ export const agent = new Agent({
     'human approval before the transfer executes.',
 });
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('09-human-in-the-loop.ts') || process.argv[1]?.endsWith('09-human-in-the-loop.js')) {
-  const runtime = new AgentRuntime();
-  try {
-    const result = await runtime.run(agent, "What's the balance on ACC-789?");
-    result.printResult();
-
-    // Production pattern:
-    // 1. Deploy once during CI/CD:
-    // await runtime.deploy(agent);
-    // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples --agents banker
-    //
-    // 2. In a separate long-lived worker process:
-    // await runtime.serve(agent);
-
-    // Interactive HITL alternative:
-    // const result = runtime.stream(
-    //   agent,
-    //   'Transfer $500 from ACC-789 to ACC-456. ' +
-    //     'Check the balance first, then use transfer_funds.',
-    // );
-    // for await (const event of result) {
-    //   if (event.type === 'waiting') await result.approve();
-    // }
-  } finally {
-    await runtime.shutdown();
+async function promptHuman(
+  rl: readline.Interface,
+  pendingTool: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const schema = (pendingTool.response_schema ?? {}) as Record<string, unknown>;
+  const props = (schema.properties ?? {}) as Record<string, Record<string, unknown>>;
+  const response: Record<string, unknown> = {};
+  for (const [field, fs] of Object.entries(props)) {
+    const desc = (fs.description || fs.title || field) as string;
+    if (fs.type === 'boolean') {
+      const val = await rl.question(`  ${desc} (y/n): `);
+      response[field] = ['y', 'yes'].includes(val.trim().toLowerCase());
+    } else {
+      response[field] = await rl.question(`  ${desc}: `);
+    }
   }
+  return response;
+}
+
+const rl = readline.createInterface({ input: stdin, output: stdout });
+const runtime = new AgentRuntime();
+try {
+  const handle = await runtime.start(
+    agent,
+    'Transfer $500 from ACC-789 to ACC-456. Check the balance first.',
+  );
+  console.log(`Started: ${handle.executionId}\n`);
+
+  for await (const event of handle.stream()) {
+    if (event.type === 'thinking') {
+      console.log(`  [thinking] ${event.content}`);
+    } else if (event.type === 'tool_call') {
+      console.log(`  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`);
+    } else if (event.type === 'tool_result') {
+      console.log(`  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result).slice(0, 100)}`);
+    } else if (event.type === 'waiting') {
+      const status = await handle.getStatus();
+      const pt = (status.pendingTool ?? {}) as Record<string, unknown>;
+      console.log('\n--- Human input required ---');
+      const response = await promptHuman(rl, pt);
+      await handle.respond(response);
+      console.log();
+    } else if (event.type === 'done') {
+      console.log(`\nDone: ${JSON.stringify(event.output)}`);
+    }
+  }
+
+  // Non-interactive alternative (no HITL, will block on human tasks):
+  // const result = await runtime.run(agent, "What's the balance on ACC-789?");
+  // result.printResult();
+
+  // Production pattern:
+  // 1. Deploy once during CI/CD:
+  // await runtime.deploy(agent);
+  //
+  // 2. In a separate long-lived worker process:
+  // await runtime.serve(agent);
+} finally {
+  rl.close();
+  await runtime.shutdown();
 }

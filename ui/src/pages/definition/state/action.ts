@@ -262,6 +262,22 @@ export const changeToTaskTab = assign({
   previousTab: ({ openedTab }: DefinitionMachineContext, _event) => openedTab,
 });
 
+export const highlightSelectedTaskInCode = sendTo(
+  "codeMachine",
+  (_context: DefinitionMachineContext, event: any) => {
+    const crumbs = event?.node?.data?.crumbs;
+    const lastCrumb = crumbs && crumbs.length > 0 ? _last(crumbs) : null;
+    const ref = (lastCrumb as any)?.ref || "";
+    return {
+      type: "HIGHLIGHT_TEXT_REFERENCE",
+      reference: {
+        textReference: `"taskReferenceName": "${ref}"`,
+        referenceReason: "info" as const,
+      },
+    };
+  },
+);
+
 export const changeToPreviousTab = assign<DefinitionMachineContext>({
   openedTab: ({ previousTab, openedTab }: DefinitionMachineContext) =>
     previousTab === openedTab ? LeftPaneTabs.WORKFLOW_TAB : previousTab,

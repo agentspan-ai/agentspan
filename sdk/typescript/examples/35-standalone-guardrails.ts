@@ -17,8 +17,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { guardrail } from '../src/index.js';
-import type { GuardrailResult, GuardrailDef } from '../src/index.js';
+import { guardrail } from '@agentspan-ai/sdk';
+import type { GuardrailResult, GuardrailDef } from '@agentspan-ai/sdk';
 
 // -- Define guardrails -------------------------------------------------------
 
@@ -117,11 +117,8 @@ function runStandalone(): void {
 
 // ============================================================================
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('35-standalone-guardrails.ts') || process.argv[1]?.endsWith('35-standalone-guardrails.js')) {
-  runStandalone();
+runStandalone();
 
-  console.log('-'.repeat(60));
-  console.log('To run guardrails as Conductor workers (no agent needed):');
-  console.log('  npx tsx examples/35-standalone-guardrails.ts --workers');
-}
+console.log('-'.repeat(60));
+console.log('To run guardrails as Conductor workers (no agent needed):');
+console.log('  npx tsx examples/35-standalone-guardrails.ts --workers');

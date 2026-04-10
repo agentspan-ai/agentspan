@@ -20,6 +20,7 @@ import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
 import com.netflix.conductor.common.run.SearchResult;
 import com.netflix.conductor.common.run.Workflow;
 import com.netflix.conductor.common.run.WorkflowSummary;
+import com.netflix.conductor.core.exception.NotFoundException;
 
 import dev.agentspan.runtime.model.AgentExecutionDetail;
 import dev.agentspan.runtime.model.AgentRun;
@@ -31,6 +32,7 @@ import dev.agentspan.runtime.model.InjectTaskRequest;
 import dev.agentspan.runtime.model.InjectTaskResponse;
 import dev.agentspan.runtime.model.StartRequest;
 import dev.agentspan.runtime.model.StartResponse;
+import dev.agentspan.runtime.model.TaskListResponse;
 import dev.agentspan.runtime.service.AgentDagService;
 import dev.agentspan.runtime.service.AgentService;
 
@@ -175,6 +177,19 @@ public class AgentController {
         agentService.cancelAgent(executionId, reason);
     }
 
+    /** Gracefully stop an agent execution (loop exits after current iteration). */
+    @PostMapping("/{executionId}/stop")
+    public void stopAgent(@PathVariable String executionId) {
+        agentService.stopAgent(executionId);
+    }
+
+    /** Inject a persistent signal into a running agent's context. */
+    @PostMapping("/{executionId}/signal")
+    public void signalAgent(@PathVariable String executionId, @RequestBody Map<String, Object> body) {
+        String message = body != null ? (String) body.getOrDefault("message", "") : "";
+        agentService.signalAgent(executionId, message);
+    }
+
     /**
      * Get the current status of an agent execution.
      * Lightweight polling fallback when SSE is not available.
@@ -209,11 +224,17 @@ public class AgentController {
     /**
      * Create a bare tracking execution for sub-agent display.
      * The execution has no tasks in its definition; tasks are injected via injectTask.
-     * Stays RUNNING permanently — completion is a future enhancement.
      */
     @PostMapping("/execution")
     public CreateTrackingWorkflowResponse createTrackingExecution(@RequestBody CreateTrackingWorkflowRequest req) {
         return agentDagService.createTrackingWorkflow(req);
+    }
+
+    /** Mark a tracking execution as COMPLETED. */
+    @PostMapping("/execution/{executionId}/complete")
+    public void completeTrackingExecution(
+            @PathVariable String executionId, @RequestBody(required = false) Map<String, Object> output) {
+        agentDagService.completeTrackingWorkflow(executionId, output);
     }
 
     // ── Execution lifecycle (UI) ────────────────────────────────────
@@ -252,7 +273,7 @@ public class AgentController {
 
     /** Get paginated task list for an execution. */
     @GetMapping("/executions/{executionId}/tasks")
-    public List<Task> getExecutionTasks(
+    public TaskListResponse getExecutionTasks(
             @PathVariable String executionId,
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "15") int count,
@@ -273,8 +294,7 @@ public class AgentController {
         Task task = wf.getTasks().stream()
                 .filter(t -> refTaskName.equals(t.getReferenceTaskName()))
                 .reduce((first, second) -> second)
-                .orElseThrow(() ->
-                        new com.netflix.conductor.core.exception.NotFoundException("Task not found: " + refTaskName));
+                .orElseThrow(() -> new NotFoundException("Task not found: " + refTaskName));
         TaskResult taskResult = new TaskResult(task);
         taskResult.setStatus(TaskResult.Status.valueOf(status));
         taskResult.setWorkerId(workerid);

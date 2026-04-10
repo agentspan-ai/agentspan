@@ -10,8 +10,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime } from '../src';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Quick check (single agent) ----------------------------------------------
 
@@ -61,7 +61,6 @@ export const coordinator = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -110,6 +109,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('66-handoff-to-parallel.ts') || process.argv[1]?.endsWith('66-handoff-to-parallel.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

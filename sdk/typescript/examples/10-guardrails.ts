@@ -23,7 +23,6 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
 import {
   Agent,
   AgentRuntime,
@@ -31,9 +30,9 @@ import {
   LLMGuardrail,
   guardrail,
   tool,
-} from '../src/index.js';
-import type { GuardrailResult } from '../src/index.js';
-import { llmModel } from './settings.js';
+} from '@agentspan-ai/sdk';
+import type { GuardrailResult } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // ── Tools ─────────────────────────────────────────────────
 
@@ -49,9 +48,13 @@ const getOrderStatus = tool(
   {
     name: 'get_order_status',
     description: 'Look up the current status of an order.',
-    inputSchema: z.object({
-      orderId: z.string().describe('The order ID to look up'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        orderId: { type: 'string', description: 'The order ID to look up' },
+      },
+      required: ['orderId'],
+    },
   },
 );
 
@@ -70,9 +73,13 @@ const getCustomerInfo = tool(
   {
     name: 'get_customer_info',
     description: 'Retrieve customer details including payment info on file.',
-    inputSchema: z.object({
-      customerId: z.string().describe('The customer ID to look up'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        customerId: { type: 'string', description: 'The customer ID to look up' },
+      },
+      required: ['customerId'],
+    },
   },
 );
 
@@ -150,7 +157,6 @@ export const agent = new Agent({
 
 // ── Run ───────────────────────────────────────────────────
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -184,6 +190,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('10-guardrails.ts') || process.argv[1]?.endsWith('10-guardrails.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

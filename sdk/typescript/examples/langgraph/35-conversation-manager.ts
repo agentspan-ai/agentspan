@@ -11,7 +11,7 @@
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
 
@@ -115,7 +115,7 @@ builder.addEdge(START, 'summarize');
 builder.addEdge('summarize', 'respond');
 builder.addEdge('respond', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "conversation_manager" });
 
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',
@@ -158,7 +158,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('35-conversation-manager.ts') || process.argv[1]?.endsWith('35-conversation-manager.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

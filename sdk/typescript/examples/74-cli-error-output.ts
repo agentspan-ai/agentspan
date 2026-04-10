@@ -11,8 +11,8 @@
  *   - AGENTSPAN_LLM_MODEL   (e.g. openai/gpt-4o-mini)
  */
 
-import { Agent, AgentRuntime } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 export const agent = new Agent({
   name: 'cli_error_tester',
@@ -57,6 +57,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.includes('74-cli-error-output')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

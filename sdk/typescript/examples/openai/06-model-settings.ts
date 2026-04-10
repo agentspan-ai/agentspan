@@ -14,7 +14,7 @@
  */
 
 import { Agent, setTracingDisabled } from '@openai/agents';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 setTracingDisabled(true);
 
@@ -79,7 +79,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('06-model-settings.ts') || process.argv[1]?.endsWith('06-model-settings.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

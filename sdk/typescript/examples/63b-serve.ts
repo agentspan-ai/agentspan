@@ -16,9 +16,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Tools (same definitions as 63-deploy.ts) --------------------------------
 
@@ -29,9 +28,13 @@ const searchDocs = tool(
   {
     name: 'search_docs',
     description: 'Search internal documentation.',
-    inputSchema: z.object({
-      query: z.string().describe('Search query string'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search query string' },
+      },
+      required: ['query'],
+    },
   },
 );
 
@@ -42,9 +45,13 @@ const checkStatus = tool(
   {
     name: 'check_status',
     description: 'Check service health status.',
-    inputSchema: z.object({
-      service: z.string().describe('Name of the service to check'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        service: { type: 'string', description: 'Name of the service to check' },
+      },
+      required: ['service'],
+    },
   },
 );
 
@@ -66,23 +73,20 @@ export const opsBot = new Agent({
 
 // -- Serve: register workers and block ---------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('63b-serve.ts') || process.argv[1]?.endsWith('63b-serve.js')) {
-  const runtime = new AgentRuntime();
-  try {
-    const result = await runtime.run(opsBot, 'Check the status of the API gateway.');
-    result.printResult();
+const runtime = new AgentRuntime();
+try {
+  const result = await runtime.run(opsBot, 'Check the status of the API gateway.');
+  result.printResult();
 
-    // Production pattern:
-    // 1. Deploy once during CI/CD:
-    // await runtime.deploy(docAssistant);
-    // await runtime.deploy(opsBot);
-    // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples --agents doc_assistant
-    //
-    // 2. In a separate long-lived worker process:
-    // await runtime.serve(docAssistant, opsBot);
-  } finally {
-    await runtime.shutdown();
-  }
+  // Production pattern:
+  // 1. Deploy once during CI/CD:
+  // await runtime.deploy(docAssistant);
+  // await runtime.deploy(opsBot);
+  // CLI alternative:
+  // agentspan deploy --package sdk/typescript/examples --agents doc_assistant
+  //
+  // 2. In a separate long-lived worker process:
+  // await runtime.serve(docAssistant, opsBot);
+} finally {
+  await runtime.shutdown();
 }

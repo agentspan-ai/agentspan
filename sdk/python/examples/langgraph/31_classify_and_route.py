@@ -122,6 +122,11 @@ for node in ["science", "history", "sports", "technology", "cooking"]:
 graph = builder.compile(name="classify_and_route_agent")
 
 if __name__ == "__main__":
+    questions = [
+        "What causes a solar eclipse?",
+        "Who won the FIFA World Cup in 2022?",
+        "How do I make a simple pasta carbonara?",
+    ]
     with AgentRuntime() as runtime:
         for q in questions:
             print(f"\nQ: {q}")

@@ -7,6 +7,8 @@ package dev.agentspan.runtime.credentials;
 import java.util.List;
 import java.util.function.Function;
 
+import javax.crypto.AEADBadTagException;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -133,7 +135,7 @@ public class CredentialEnvSeeder implements ApplicationRunner {
             try {
                 existing = storeProvider.get(ANONYMOUS_USER_ID, name);
             } catch (Exception e) {
-                if (!(e.getCause() instanceof javax.crypto.AEADBadTagException)) {
+                if (!(e.getCause() instanceof AEADBadTagException)) {
                     throw e; // not a key mismatch — propagate (e.g. DB connection failure)
                 }
                 log.warn(

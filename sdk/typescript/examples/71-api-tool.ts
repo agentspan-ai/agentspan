@@ -4,48 +4,68 @@
  * Demonstrates apiTool(), which points to an API spec and automatically
  * discovers all operations as agent tools. No manual tool definitions needed.
  *
- * Three patterns shown:
- *   1. OpenAPI 3.x spec URL
- *   2. Base URL (server auto-discovers /openapi.json, etc.)
+ * Four patterns shown:
+ *   1. OpenAPI 3.x spec URL (local MCP test server with 65 deterministic tools)
+ *   2. Filtered operations — whitelist specific endpoints via toolNames
  *   3. Mixing apiTool with other tool types
+ *   4. Large API with credential auth (GitHub)
+ *
+ * MCP Test Server Setup (mcp-testkit) — required for examples 1-3:
+ *   pip install mcp-testkit
+ *
+ *   # Start without auth:
+ *   mcp-testkit --transport http
+ *
+ *   # Or start with auth (requires storing the secret as a credential):
+ *   mcp-testkit --transport http --auth <secret>
+ *
+ *   # Store credentials via CLI or Agentspan UI:
+ *   agentspan credentials set HTTP_TEST_API_KEY <secret>
  *
  * Requirements:
  *   - Conductor server with LLM support
  *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
+ *   - mcp-testkit running on http://localhost:3001 (for examples 1-3, see setup above)
+ *   - For GitHub example: agentspan credentials set GITHUB_TOKEN ghp_xxx
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, apiTool, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, apiTool, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
-// -- Example 1: OpenAPI spec -------------------------------------------------
+const MCP_TEST_SERVER_SPEC = 'http://localhost:3001/api-docs';
 
-const petstore = apiTool({
-  url: 'https://petstore3.swagger.io/api/v3/openapi.json',
-  name: 'petstore',
-  maxTools: 20,
+// -- Example 1: OpenAPI spec (full discovery) --------------------------------
+
+const mathApi = apiTool({
+  url: MCP_TEST_SERVER_SPEC,
+  name: 'mcp_test_tools',
+  headers: { Authorization: 'Bearer ${HTTP_TEST_API_KEY}' },
+  credentials: ['HTTP_TEST_API_KEY'],
+  maxTools: 10, // 65 ops — filter to top 10 most relevant
 });
 
-export const petAgent = new Agent({
-  name: 'pet_store_assistant',
+export const mathAgent = new Agent({
+  name: 'math_assistant',
   model: llmModel,
-  instructions: 'You help users manage a pet store. Use the available API tools.',
-  tools: [petstore],
+  instructions: 'You are a math assistant. Use the API tools to compute results.',
+  tools: [mathApi],
 });
 
-// -- Example 2: Base URL (auto-discovery) ------------------------------------
+// -- Example 2: Filtered operations (toolNames whitelist) --------------------
 
-const weather = apiTool({
-  url: 'https://api.weather.com',
-  toolNames: ['getCurrentWeather', 'getForecast'],
+const stringApi = apiTool({
+  url: MCP_TEST_SERVER_SPEC,
+  headers: { Authorization: 'Bearer ${HTTP_TEST_API_KEY}' },
+  credentials: ['HTTP_TEST_API_KEY'],
+  toolNames: ['string_reverse', 'string_uppercase', 'string_length'],
 });
 
-export const weatherAgent = new Agent({
-  name: 'weather_assistant',
+export const stringAgent = new Agent({
+  name: 'string_assistant',
   model: llmModel,
-  instructions: 'You provide weather information.',
-  tools: [weather],
+  instructions: 'You are a string manipulation assistant.',
+  tools: [stringApi],
 });
 
 // -- Example 3: Mix apiTool with other tool types ----------------------------
@@ -68,14 +88,21 @@ const calculate = tool(
   {
     name: 'calculate',
     description: 'Evaluate a math expression.',
-    inputSchema: z.object({
-      expression: z.string().describe('A mathematical expression'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        expression: { type: 'string', description: 'A mathematical expression' },
+      },
+      required: ['expression'],
+    },
   },
 );
 
-const petstoreApi = apiTool({
-  url: 'https://petstore3.swagger.io/api/v3/openapi.json',
+const collectionApi = apiTool({
+  url: MCP_TEST_SERVER_SPEC,
+  headers: { Authorization: 'Bearer ${HTTP_TEST_API_KEY}' },
+  credentials: ['HTTP_TEST_API_KEY'],
+  toolNames: ['collection_sort', 'collection_unique', 'collection_flatten'],
   maxTools: 10,
 });
 
@@ -83,9 +110,9 @@ export const multiToolAgent = new Agent({
   name: 'multi_tool_assistant',
   model: llmModel,
   instructions:
-    'You are a versatile assistant. Use API tools for pet store operations, ' +
+    'You are a versatile assistant. Use API tools for collection operations, ' +
     'and the calculator for math. Pick the best tool for each request.',
-  tools: [petstoreApi, calculate],
+  tools: [collectionApi, calculate],
 });
 
 // -- Example 4: Large API with credential auth -------------------------------
@@ -115,33 +142,41 @@ export const githubAgent = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Example 1: Petstore
-    console.log('=== Petstore API ===');
-    const result = await runtime.run(petAgent, "List all available pets with status 'available'");
+    // Example 1: Math via OpenAPI-discovered tools
+    console.log('=== Math API ===');
+    const result = await runtime.run(mathAgent, 'What is 15 + 27? Also compute 8 factorial.');
     result.printResult();
+
+    // Example 2: Filtered string tools
+    console.log('\n=== String API (filtered) ===');
+    const result2 = await runtime.run(
+      stringAgent,
+      "Reverse the string 'hello world' and tell me its length.",
+    );
+    result2.printResult();
 
     // Example 3: Mixed tools
     console.log('\n=== Mixed Tools ===');
-    const result2 = await runtime.run(multiToolAgent, "What's sqrt(144)? Also find pets named 'doggie'.");
-    result2.printResult();
+    const result3 = await runtime.run(
+      multiToolAgent,
+      'Sort [3,1,4,1,5,9] and also compute sqrt(144).',
+    );
+    result3.printResult();
 
     // Production pattern:
     // 1. Deploy once during CI/CD:
-    // await runtime.deploy(petAgent);
+    // await runtime.deploy(mathAgent);
     // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples --agents pet_store_assistant
+    // agentspan deploy --package sdk/typescript/examples --agents math_assistant
     //
     // 2. In a separate long-lived worker process:
-    // await runtime.serve(petAgent);
+    // await runtime.serve(mathAgent);
   } finally {
     await runtime.shutdown();
   }
 }
 
-if (process.argv[1]?.endsWith('71-api-tool.ts') || process.argv[1]?.endsWith('71-api-tool.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

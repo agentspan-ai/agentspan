@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { auditToolEvents, type ToolAuditEntry } from '../../../validation/checks/event-audit.js';
+import { auditToolEvents } from '../../../validation/checks/event-audit.js';
 import type { AgentEvent } from '../../../src/types.js';
 
 describe('auditToolEvents', () => {

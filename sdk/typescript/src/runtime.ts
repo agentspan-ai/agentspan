@@ -7,37 +7,36 @@ import type {
   ToolDef,
   GuardrailDef,
   FrameworkId,
-} from './types.js';
-import { AgentAPIError, AgentspanError } from './errors.js';
-import { AgentConfig } from './config.js';
-import type { AgentConfigOptions } from './config.js';
-import { Agent } from './agent.js';
-import type { CallbackHandler } from './agent.js';
-import { AgentConfigSerializer } from './serializer.js';
-import { getToolDef } from './tool.js';
-import { WorkerManager } from './worker.js';
-import { AgentStream } from './stream.js';
-import { makeAgentResult } from './result.js';
-import { TERMINAL_STATUSES } from './result.js';
-import type { TerminationCondition } from './termination.js';
-import { OnToolResult, OnTextMention, OnCondition } from './handoff.js';
-import type { HandoffContext } from './handoff.js';
-import { detectFramework } from './frameworks/detect.js';
-import { serializeFrameworkAgent } from './frameworks/serializer.js';
-import { serializeLangGraph } from './frameworks/langgraph-serializer.js';
-import { serializeLangChain } from './frameworks/langchain-serializer.js';
-import { createSkillWorkers } from './skill.js';
+} from "./types.js";
+import { AgentAPIError, AgentspanError } from "./errors.js";
+import { AgentConfig } from "./config.js";
+import type { AgentConfigOptions } from "./config.js";
+import { Agent } from "./agent.js";
+import type { CallbackHandler } from "./agent.js";
+import { AgentConfigSerializer } from "./serializer.js";
+import { getToolDef } from "./tool.js";
+import { WorkerManager } from "./worker.js";
+import { AgentStream } from "./stream.js";
+import { makeAgentResult } from "./result.js";
+import { TERMINAL_STATUSES } from "./result.js";
+import type { TerminationCondition } from "./termination.js";
+import type { HandoffContext } from "./handoff.js";
+import { detectFramework } from "./frameworks/detect.js";
+import { serializeFrameworkAgent } from "./frameworks/serializer.js";
+import { serializeLangGraph } from "./frameworks/langgraph-serializer.js";
+import { serializeLangChain } from "./frameworks/langchain-serializer.js";
+import { createSkillWorkers } from "./skill.js";
 
 /**
  * Callback method → wire position mapping (must match serializer.ts).
  */
 const CALLBACK_POSITION_MAP: Record<string, string> = {
-  onAgentStart: 'before_agent',
-  onAgentEnd: 'after_agent',
-  onModelStart: 'before_model',
-  onModelEnd: 'after_model',
-  onToolStart: 'before_tool',
-  onToolEnd: 'after_tool',
+  onAgentStart: "before_agent",
+  onAgentEnd: "after_agent",
+  onModelStart: "before_model",
+  onModelEnd: "after_model",
+  onToolStart: "before_tool",
+  onToolEnd: "after_tool",
 };
 
 // ── AgentHandle ─────────────────────────────────────────
@@ -121,12 +120,7 @@ export class AgentRuntime {
     await this._registerToolWorkers(nativeAgent);
 
     // Start agent — response may include requiredWorkers
-    const startResponse = await this._httpRequest(
-      'POST',
-      '/agent/start',
-      payload,
-      options?.signal,
-    );
+    const startResponse = await this._httpRequest("POST", "/agent/start", payload, options?.signal);
 
     const executionId = startResponse.executionId as string;
     const requiredWorkers = this._parseRequiredWorkers(startResponse);
@@ -152,23 +146,43 @@ export class AgentRuntime {
         events.push(event);
       }
 
-      // Get final status for token usage
-      let tokenUsage;
-      try {
-        const status = await this._getStatus(executionId, options?.signal);
-        tokenUsage = (status as unknown as Record<string, unknown>).tokenUsage as
-          | AgentResult['tokenUsage']
-          | undefined;
-      } catch {
-        // Non-critical
-      }
-
       // Build result from stream
       const result = await agentStream.getResult();
-      if (tokenUsage) {
-        (result as unknown as Record<string, unknown>).tokenUsage = tokenUsage;
+      const resultRec = result as unknown as Record<string, unknown>;
+      resultRec.correlationId = correlationId;
+
+      // Enrich with execution data (toolCalls, messages, tokenUsage)
+      try {
+        const execution = await this._fetchExecution(executionId, options?.signal);
+        if (execution) {
+          const toolCalls = _extractToolCalls(execution);
+          if (toolCalls.length > 0) {
+            resultRec.toolCalls = toolCalls;
+          }
+
+          const messages = _extractMessages(execution);
+          if (messages.length > 0) {
+            resultRec.messages = messages;
+          }
+
+          const tokenUsage = _extractTokenUsage(execution);
+          if (tokenUsage) {
+            resultRec.tokenUsage = tokenUsage;
+          }
+
+          // Fill output from execution if stream returned null or junk
+          // (server sometimes returns workflow state like {result: [], finishReason: "TOOL_CALLS"})
+          if (_isOutputJunk(resultRec.output)) {
+            const execOutput = _extractOutput(execution);
+            if (execOutput != null) {
+              resultRec.output =
+                typeof execOutput === "string" ? { result: execOutput } : execOutput;
+            }
+          }
+        }
+      } catch {
+        // Non-critical — fall back to stream-only result
       }
-      (result as unknown as Record<string, unknown>).correlationId = correlationId;
 
       return result;
     } finally {
@@ -211,12 +225,7 @@ export class AgentRuntime {
     await this._registerToolWorkers(nativeAgent);
 
     // Start agent — response may include requiredWorkers
-    const startResponse = await this._httpRequest(
-      'POST',
-      '/agent/start',
-      payload,
-      options?.signal,
-    );
+    const startResponse = await this._httpRequest("POST", "/agent/start", payload, options?.signal);
 
     const executionId = startResponse.executionId as string;
     const requiredWorkers = this._parseRequiredWorkers(startResponse);
@@ -235,12 +244,34 @@ export class AgentRuntime {
         while (true) {
           const status = await this._getStatus(executionId, options?.signal);
           if (TERMINAL_STATUSES.has(status.status)) {
-            return makeAgentResult({
+            const resultData: Parameters<typeof makeAgentResult>[0] = {
               output: status.output,
               executionId,
               correlationId,
               status: status.status,
-            });
+            };
+
+            try {
+              const execution = await this._fetchExecution(executionId, options?.signal);
+              if (execution) {
+                resultData.toolCalls = _extractToolCalls(execution) as unknown[];
+                resultData.messages = _extractMessages(execution);
+                resultData.tokenUsage = _extractTokenUsage(execution) ?? undefined;
+
+                // Replace junk output with execution data
+                if (_isOutputJunk(resultData.output)) {
+                  const execOutput = _extractOutput(execution);
+                  if (execOutput != null) {
+                    resultData.output =
+                      typeof execOutput === "string" ? { result: execOutput } : execOutput;
+                  }
+                }
+              }
+            } catch {
+              // Non-critical
+            }
+
+            return makeAgentResult(resultData);
           }
           await sleep(pollIntervalMs);
         }
@@ -251,25 +282,23 @@ export class AgentRuntime {
       approve: (output?) =>
         this._respond(executionId, { approved: true, ...output }, options?.signal),
 
-      reject: (reason?) =>
-        this._respond(executionId, { approved: false, reason }, options?.signal),
+      reject: (reason?) => this._respond(executionId, { approved: false, reason }, options?.signal),
 
-      send: (message) =>
-        this._respond(executionId, { message }, options?.signal),
+      send: (message) => this._respond(executionId, { message }, options?.signal),
 
       pause: () =>
-        this._httpRequest('PUT', `/agent/${executionId}/pause`, undefined, options?.signal).then(
+        this._httpRequest("PUT", `/agent/${executionId}/pause`, undefined, options?.signal).then(
           () => {},
         ),
 
       resume: () =>
-        this._httpRequest('PUT', `/agent/${executionId}/resume`, undefined, options?.signal).then(
+        this._httpRequest("PUT", `/agent/${executionId}/resume`, undefined, options?.signal).then(
           () => {},
         ),
 
       cancel: () =>
         this._httpRequest(
-          'DELETE',
+          "DELETE",
           `/agent/${executionId}/cancel`,
           undefined,
           options?.signal,
@@ -318,7 +347,7 @@ export class AgentRuntime {
       payload = this.serializer.serialize(agent as Agent);
     }
 
-    const response = await this._httpRequest('POST', '/agent/deploy', payload);
+    const response = await this._httpRequest("POST", "/agent/deploy", payload);
     return response as unknown as DeploymentInfo;
   }
 
@@ -329,7 +358,7 @@ export class AgentRuntime {
    */
   async plan(agent: Agent): Promise<object> {
     const payload = this.serializer.serialize(agent);
-    const response = await this._httpRequest('POST', '/agent/compile', payload);
+    const response = await this._httpRequest("POST", "/agent/compile", payload);
     return response;
   }
 
@@ -361,8 +390,8 @@ export class AgentRuntime {
         this.workerManager.stopPolling();
         resolve();
       };
-      process.on('SIGINT', onSignal);
-      process.on('SIGTERM', onSignal);
+      process.on("SIGINT", onSignal);
+      process.on("SIGTERM", onSignal);
     });
   }
 
@@ -384,10 +413,10 @@ export class AgentRuntime {
     const headers: Record<string, string> = {};
 
     if (this.config.apiKey) {
-      headers['Authorization'] = `Bearer ${this.config.apiKey}`;
+      headers["Authorization"] = `Bearer ${this.config.apiKey}`;
     } else if (this.config.authKey && this.config.authSecret) {
-      headers['X-Auth-Key'] = this.config.authKey;
-      headers['X-Auth-Secret'] = this.config.authSecret;
+      headers["X-Auth-Key"] = this.config.authKey;
+      headers["X-Auth-Secret"] = this.config.authSecret;
     }
 
     return headers;
@@ -408,7 +437,7 @@ export class AgentRuntime {
       method,
       headers: {
         ...this.authHeaders,
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
     };
 
@@ -432,7 +461,7 @@ export class AgentRuntime {
     }
 
     const text = await response.text();
-    if (!text || text.trim() === '') return {};
+    if (!text || text.trim() === "") return {};
 
     try {
       return JSON.parse(text);
@@ -446,7 +475,7 @@ export class AgentRuntime {
    */
   private async _getStatus(executionId: string, signal?: AbortSignal): Promise<AgentStatus> {
     const response = await this._httpRequest(
-      'GET',
+      "GET",
       `/agent/${executionId}/status`,
       undefined,
       signal,
@@ -458,11 +487,27 @@ export class AgentRuntime {
    * Send a respond payload to a waiting agent.
    */
   private async _respond(executionId: string, body: unknown, signal?: AbortSignal): Promise<void> {
-    await this._httpRequest('POST', `/agent/${executionId}/respond`, body, signal);
+    await this._httpRequest("POST", `/agent/${executionId}/respond`, body, signal);
+  }
+
+  /**
+   * Fetch the full execution data (tasks, variables, output, tokenUsage).
+   * Mirrors Python SDK's _fetch_agent_workflow: GET /agent/execution/{id}
+   */
+  private async _fetchExecution(
+    executionId: string,
+    signal?: AbortSignal,
+  ): Promise<Record<string, unknown> | null> {
+    try {
+      return await this._httpRequest("GET", `/agent/execution/${executionId}`, undefined, signal);
+    } catch {
+      return null;
+    }
   }
 
   /**
    * Recursively collect all ToolDefs with handlers from an agent tree.
+   * Walks agent.agents AND agents nested inside agentTool() configs.
    */
   private _collectToolDefs(agent: Agent): ToolDef[] {
     const defs: ToolDef[] = [];
@@ -472,6 +517,13 @@ export class AgentRuntime {
         const def = getToolDef(t);
         if (def.func != null) {
           defs.push(def);
+        }
+        // Walk into agents referenced via agentTool() — their tools need workers too
+        if (def.toolType === "agent_tool" && def.config?.agent) {
+          const innerAgent = def.config.agent as Agent;
+          if (innerAgent.tools || innerAgent.agents) {
+            defs.push(...this._collectToolDefs(innerAgent));
+          }
         }
       } catch {
         // Skip unrecognized tool formats
@@ -490,9 +542,7 @@ export class AgentRuntime {
    * Parse the requiredWorkers list from a server response.
    * Returns a Set<string> if present, or null for fallback (older servers).
    */
-  private _parseRequiredWorkers(
-    response: Record<string, unknown>,
-  ): Set<string> | null {
+  private _parseRequiredWorkers(response: Record<string, unknown>): Set<string> | null {
     const raw = response.requiredWorkers;
     if (Array.isArray(raw)) {
       return new Set(raw.map(String));
@@ -510,15 +560,18 @@ export class AgentRuntime {
     for (const def of toolDefs) {
       const handler = def.func!;
       // Extract credential names (string only; CredentialFile handled at serialization)
-      const credNames = def.credentials
-        ?.filter((c): c is string => typeof c === 'string')
-        ?? undefined;
-      this.workerManager.addWorker(def.name, async (inputData) => {
-        const toolContext = inputData['__toolContext__'];
-        // Remove internal injection
-        delete inputData['__toolContext__'];
-        return handler(inputData, toolContext);
-      }, credNames);
+      const credNames =
+        def.credentials?.filter((c): c is string => typeof c === "string") ?? undefined;
+      this.workerManager.addWorker(
+        def.name,
+        async (inputData) => {
+          const toolContext = inputData["__toolContext__"];
+          // Remove internal injection
+          delete inputData["__toolContext__"];
+          return handler(inputData, toolContext);
+        },
+        credNames,
+      );
     }
 
     // Register custom guardrail workers from tools
@@ -551,7 +604,10 @@ export class AgentRuntime {
     if (agent.termination) {
       const taskName = `${agent.name}_termination`;
       if (isNeeded(taskName)) {
-        await this._registerTerminationWorker(agent.name, agent.termination as TerminationCondition);
+        await this._registerTerminationWorker(
+          agent.name,
+          agent.termination as TerminationCondition,
+        );
       }
     }
 
@@ -587,18 +643,24 @@ export class AgentRuntime {
     }
 
     // Gate (callable)
-    if (agent.gate && typeof agent.gate.fn === 'function') {
+    if (agent.gate && typeof agent.gate.fn === "function") {
       const taskName = `${agent.name}_gate`;
       if (isNeeded(taskName)) {
-        await this._registerGateWorker(agent.name, agent.gate.fn as (...args: unknown[]) => unknown);
+        await this._registerGateWorker(
+          agent.name,
+          agent.gate.fn as (...args: unknown[]) => unknown,
+        );
       }
     }
 
     // Router (function, not Agent)
-    if (agent.router && typeof agent.router === 'function') {
+    if (agent.router && typeof agent.router === "function") {
       const taskName = `${agent.name}_router_fn`;
       if (isNeeded(taskName)) {
-        await this._registerRouterWorker(agent.name, agent.router as (...args: unknown[]) => string);
+        await this._registerRouterWorker(
+          agent.name,
+          agent.router as (...args: unknown[]) => string,
+        );
       }
     }
 
@@ -625,7 +687,7 @@ export class AgentRuntime {
     }
 
     // Handoff check worker (swarm handoff detection)
-    if (agent.handoffs.length > 0 || agent.strategy === 'swarm') {
+    if (agent.handoffs.length > 0 || agent.strategy === "swarm") {
       const taskName = `${agent.name}_handoff_check`;
       if (isNeeded(taskName)) {
         await this._registerHandoffCheckWorker(agent);
@@ -633,7 +695,7 @@ export class AgentRuntime {
     }
 
     // Process selection worker (manual strategy)
-    if (agent.strategy === 'manual' && agent.agents.length > 0) {
+    if (agent.strategy === "manual" && agent.agents.length > 0) {
       const taskName = `${agent.name}_process_selection`;
       if (isNeeded(taskName)) {
         await this._registerProcessSelectionWorker(agent);
@@ -657,14 +719,14 @@ export class AgentRuntime {
   ): Promise<void> {
     const taskName = `${agentName}_termination`;
     this.workerManager.addWorker(taskName, async (inputData) => {
-      const result = String(inputData['result'] ?? '');
-      const iteration = Number(inputData['iteration'] ?? 0);
-      const messages = Array.isArray(inputData['messages']) ? inputData['messages'] : [];
+      const result = String(inputData["result"] ?? "");
+      const iteration = Number(inputData["iteration"] ?? 0);
+      const messages = Array.isArray(inputData["messages"]) ? inputData["messages"] : [];
       try {
         const outcome = cond.shouldTerminate({ result, messages, iteration });
         return { should_continue: !outcome.shouldTerminate, reason: outcome.reason };
       } catch {
-        return { should_continue: true, reason: '' };
+        return { should_continue: true, reason: "" };
       }
     });
   }
@@ -678,13 +740,13 @@ export class AgentRuntime {
     const taskName = gDef.taskName!;
     const fn = gDef.func!;
     this.workerManager.addWorker(taskName, async (inputData) => {
-      const content = String(inputData['content'] ?? '');
+      const content = String(inputData["content"] ?? "");
       try {
         const result = await fn(content);
         return {
           passed: result.passed ?? true,
-          message: result.message ?? '',
-          on_fail: gDef.onFail ?? 'raise',
+          message: result.message ?? "",
+          on_fail: gDef.onFail ?? "raise",
           fixed_output: result.fixedOutput,
           guardrail_name: gDef.name,
           should_continue: result.passed ?? true,
@@ -693,7 +755,7 @@ export class AgentRuntime {
         return {
           passed: false,
           message: err instanceof Error ? err.message : String(err),
-          on_fail: gDef.onFail ?? 'raise',
+          on_fail: gDef.onFail ?? "raise",
           guardrail_name: gDef.name,
           should_continue: false,
         };
@@ -712,8 +774,8 @@ export class AgentRuntime {
   ): Promise<void> {
     const taskName = `${agentName}_stop_when`;
     this.workerManager.addWorker(taskName, async (inputData) => {
-      const result = String(inputData['result'] ?? '');
-      const iteration = Number(inputData['iteration'] ?? 0);
+      const result = String(inputData["result"] ?? "");
+      const iteration = Number(inputData["iteration"] ?? 0);
       try {
         const shouldStop = stopWhenFn([result], iteration);
         return { should_continue: !shouldStop };
@@ -736,15 +798,15 @@ export class AgentRuntime {
     for (const [methodName, wirePosition] of Object.entries(CALLBACK_POSITION_MAP)) {
       // Check if any handler implements this method
       const handlers = callbacks.filter(
-        (h) => typeof (h as Record<string, unknown>)[methodName] === 'function',
+        (h) => typeof (h as Record<string, unknown>)[methodName] === "function",
       );
       if (handlers.length === 0) continue;
 
       const taskName = `${agentName}_${wirePosition}`;
       if (requiredWorkers != null && !requiredWorkers.has(taskName)) continue;
       this.workerManager.addWorker(taskName, async (inputData) => {
-        const messages = inputData['messages'] ?? null;
-        const llmResult = inputData['llm_result'] ?? null;
+        const messages = inputData["messages"] ?? null;
+        const llmResult = inputData["llm_result"] ?? null;
         try {
           let result: unknown = {};
           for (const handler of handlers) {
@@ -756,7 +818,7 @@ export class AgentRuntime {
             const data = messages ?? llmResult;
             result = await fn.call(handler, agentName, data);
           }
-          return typeof result === 'object' && result !== null ? result : {};
+          return typeof result === "object" && result !== null ? result : {};
         } catch {
           return {};
         }
@@ -775,15 +837,15 @@ export class AgentRuntime {
   ): Promise<void> {
     const taskName = `${agentName}_gate`;
     this.workerManager.addWorker(taskName, async (inputData) => {
-      const result = String(inputData['result'] ?? '');
+      const result = String(inputData["result"] ?? "");
       try {
         const decision = await gateFn(result);
-        if (typeof decision === 'string') {
+        if (typeof decision === "string") {
           return { decision };
         }
-        return { decision: decision ? 'continue' : 'stop' };
+        return { decision: decision ? "continue" : "stop" };
       } catch {
-        return { decision: 'continue' };
+        return { decision: "continue" };
       }
     });
   }
@@ -799,12 +861,12 @@ export class AgentRuntime {
   ): Promise<void> {
     const taskName = `${agentName}_router_fn`;
     this.workerManager.addWorker(taskName, async (inputData) => {
-      const prompt = String(inputData['prompt'] ?? '');
+      const prompt = String(inputData["prompt"] ?? "");
       try {
         const selected = await routerFn(prompt);
         return { selected_agent: selected };
       } catch {
-        return { selected_agent: '' };
+        return { selected_agent: "" };
       }
     });
   }
@@ -874,14 +936,17 @@ export class AgentRuntime {
   private async _registerCheckTransferWorker(agentName: string): Promise<void> {
     const taskName = `${agentName}_check_transfer`;
     this.workerManager.addWorker(taskName, async (inputData) => {
-      const toolCalls = Array.isArray(inputData['tool_calls']) ? inputData['tool_calls'] : [];
+      const toolCalls = Array.isArray(inputData["tool_calls"]) ? inputData["tool_calls"] : [];
       for (const tc of toolCalls) {
-        const name = typeof tc === 'object' && tc !== null ? String((tc as Record<string, unknown>).name ?? '') : '';
-        if (name.includes('_transfer_to_')) {
-          return { is_transfer: true, transfer_to: name.split('_transfer_to_')[1] };
+        const name =
+          typeof tc === "object" && tc !== null
+            ? String((tc as Record<string, unknown>).name ?? "")
+            : "";
+        if (name.includes("_transfer_to_")) {
+          return { is_transfer: true, transfer_to: name.split("_transfer_to_")[1] };
         }
       }
-      return { is_transfer: false, transfer_to: '' };
+      return { is_transfer: false, transfer_to: "" };
     });
   }
 
@@ -897,7 +962,7 @@ export class AgentRuntime {
     const handoffConditions = agent.handoffs;
 
     // Parent agent is "0", sub-agents are "1", "2", ...
-    const nameToIdx: Record<string, string> = { [agent.name]: '0' };
+    const nameToIdx: Record<string, string> = { [agent.name]: "0" };
     agent.agents.forEach((sub, i) => {
       nameToIdx[sub.name] = String(i + 1);
     });
@@ -912,22 +977,22 @@ export class AgentRuntime {
 
     const isTransferTruthy = (val: unknown): boolean => {
       if (val === true) return true;
-      if (typeof val === 'string') return val.trim().toLowerCase() === 'true';
+      if (typeof val === "string") return val.trim().toLowerCase() === "true";
       return false;
     };
 
     const isAllowed = (sourceIdx: string, targetName: string): boolean => {
       if (!allowed) return true;
-      const sourceName = idxToName[sourceIdx] ?? '';
+      const sourceName = idxToName[sourceIdx] ?? "";
       return (allowed[sourceName] ?? []).includes(targetName);
     };
 
     this.workerManager.addWorker(taskName, async (inputData) => {
-      const result = String(inputData['result'] ?? '');
-      const activeAgent = String(inputData['active_agent'] ?? '0');
-      const conversation = String(inputData['conversation'] ?? '');
-      const isTransfer = inputData['is_transfer'];
-      const transferTo = String(inputData['transfer_to'] ?? '');
+      const result = String(inputData["result"] ?? "");
+      const activeAgent = String(inputData["active_agent"] ?? "0");
+      const conversation = String(inputData["conversation"] ?? "");
+      const isTransfer = inputData["is_transfer"];
+      const transferTo = String(inputData["transfer_to"] ?? "");
 
       // Priority 1: Transfer tool detected
       if (isTransferTruthy(isTransfer)) {
@@ -954,13 +1019,16 @@ export class AgentRuntime {
       const context: HandoffContext = {
         result,
         messages: conversation,
-        toolName: '',
-        toolResult: '',
+        toolName: "",
+        toolResult: "",
       };
       for (const cond of handoffConditions) {
         // Check if the condition object supports shouldHandoff evaluation
-        const condObj = cond as { target?: string; shouldHandoff?: (ctx: HandoffContext) => boolean };
-        if (typeof condObj.shouldHandoff === 'function' && condObj.target) {
+        const condObj = cond as {
+          target?: string;
+          shouldHandoff?: (ctx: HandoffContext) => boolean;
+        };
+        if (typeof condObj.shouldHandoff === "function" && condObj.target) {
           if (condObj.shouldHandoff(context)) {
             if (isAllowed(activeAgent, condObj.target)) {
               const targetIdx = nameToIdx[condObj.target] ?? activeAgent;
@@ -991,13 +1059,13 @@ export class AgentRuntime {
     });
 
     this.workerManager.addWorker(taskName, async (inputData) => {
-      const humanOutput = inputData['human_output'];
+      const humanOutput = inputData["human_output"];
       if (humanOutput == null) {
-        return { selected: '0' };
+        return { selected: "0" };
       }
-      if (typeof humanOutput === 'object' && humanOutput !== null) {
+      if (typeof humanOutput === "object" && humanOutput !== null) {
         const obj = humanOutput as Record<string, unknown>;
-        const selected = String(obj.selected ?? obj.agent ?? '0');
+        const selected = String(obj.selected ?? obj.agent ?? "0");
         if (selected in nameToIdx) {
           return { selected: nameToIdx[selected] };
         }
@@ -1011,11 +1079,11 @@ export class AgentRuntime {
    * Normalize a guardrail from any input format to GuardrailDef (if it has a func).
    */
   private _normalizeGuardrailDef(g: unknown): GuardrailDef | null {
-    if (g == null || typeof g !== 'object') return null;
+    if (g == null || typeof g !== "object") return null;
 
     // Already a GuardrailDef with func
     const obj = g as Record<string, unknown>;
-    if (typeof obj.func === 'function') {
+    if (typeof obj.func === "function") {
       return obj as unknown as GuardrailDef;
     }
 
@@ -1028,9 +1096,9 @@ export class AgentRuntime {
    */
   private _deriveWorkerName(agent: object, frameworkId: FrameworkId): string {
     const a = agent as Record<string, unknown>;
-    if (typeof a.id === 'string' && a.id.length > 0) return a.id;
-    if (typeof a.name === 'string' && a.name.length > 0) return a.name;
-    if (agent.constructor && agent.constructor.name !== 'Object') {
+    if (typeof a.id === "string" && a.id.length > 0) return a.id;
+    if (typeof a.name === "string" && a.name.length > 0) return a.name;
+    if (agent.constructor && agent.constructor.name !== "Object") {
       return agent.constructor.name;
     }
     return `${frameworkId}_agent`;
@@ -1039,16 +1107,23 @@ export class AgentRuntime {
   /**
    * Serialize a framework agent into (rawConfig, workers) using extraction.
    */
-  private _serializeFramework(agent: object, frameworkId: FrameworkId) {
+  private _serializeFramework(
+    agent: object,
+    frameworkId: FrameworkId,
+    options?: { model?: unknown },
+  ) {
     switch (frameworkId) {
-      case 'langgraph':
-        return serializeLangGraph(agent);
-      case 'langchain':
+      case "langgraph":
+        return serializeLangGraph(
+          agent,
+          options?.model != null ? { model: options.model } : undefined,
+        );
+      case "langchain":
         return serializeLangChain(agent);
-      case 'openai':
-      case 'google_adk':
+      case "openai":
+      case "google_adk":
         return serializeFrameworkAgent(agent);
-      case 'skill':
+      case "skill":
         return this._serializeSkill(agent as Agent);
       default:
         throw new AgentspanError(`Unsupported framework: ${frameworkId}`);
@@ -1060,19 +1135,24 @@ export class AgentRuntime {
    */
   private _registerExtractedWorkers(
     workers: { name: string; func?: Function | null }[],
+    credentials?: string[],
   ): void {
     for (const worker of workers) {
       if (worker.func) {
         const fn = worker.func;
-        this.workerManager.addWorker(worker.name, async (inputData) => {
-          const cleanInput = { ...inputData };
-          delete cleanInput['__workflowInstanceId__'];
-          delete cleanInput['__toolContext__'];
-          delete cleanInput['_agent_state'];
-          delete cleanInput['method'];
-          delete cleanInput['__agentspan_ctx__'];
-          return fn(cleanInput);
-        });
+        this.workerManager.addWorker(
+          worker.name,
+          async (inputData) => {
+            const cleanInput = { ...inputData };
+            delete cleanInput["__workflowInstanceId__"];
+            delete cleanInput["__toolContext__"];
+            delete cleanInput["_agent_state"];
+            delete cleanInput["method"];
+            delete cleanInput["__agentspan_ctx__"];
+            return fn(cleanInput);
+          },
+          credentials,
+        );
       }
     }
   }
@@ -1091,7 +1171,7 @@ export class AgentRuntime {
     const workers = skillWorkers.map((sw) => ({
       name: sw.name,
       func: (inputData: Record<string, unknown>) => {
-        const command = (inputData.command as string) ?? '';
+        const command = (inputData.command as string) ?? "";
         return sw.func(command);
       },
     }));
@@ -1116,9 +1196,11 @@ export class AgentRuntime {
     options?: RunOptions,
   ): Promise<AgentResult> {
     const correlationId = generateCorrelationId();
-    const [rawConfig, workers] = this._serializeFramework(agent, frameworkId);
+    const [rawConfig, workers] = this._serializeFramework(agent, frameworkId, {
+      model: options?.model,
+    });
 
-    this._registerExtractedWorkers(workers);
+    this._registerExtractedWorkers(workers, options?.credentials);
 
     this.workerManager.startPolling();
 
@@ -1133,8 +1215,8 @@ export class AgentRuntime {
       };
 
       const startResponse = await this._httpRequest(
-        'POST',
-        '/agent/start',
+        "POST",
+        "/agent/start",
         startPayload,
         options?.signal,
       );
@@ -1159,7 +1241,44 @@ export class AgentRuntime {
 
       // Build result from stream
       const result = await agentStream.getResult();
-      (result as unknown as Record<string, unknown>).correlationId = correlationId;
+      const resultRec = result as unknown as Record<string, unknown>;
+      resultRec.correlationId = correlationId;
+
+      // Enrich with execution data (messages, toolCalls, tokenUsage, output)
+      // mirroring what the Python SDK does via get_workflow + _fetch_agent_workflow
+      try {
+        const execution = await this._fetchExecution(executionId, options?.signal);
+        if (execution) {
+          // Extract output from execution if stream returned null or junk
+          if (_isOutputJunk(resultRec.output)) {
+            const execOutput = _extractOutput(execution);
+            if (execOutput != null) {
+              resultRec.output =
+                typeof execOutput === "string" ? { result: execOutput } : execOutput;
+            }
+          }
+
+          // Extract messages from execution variables
+          const messages = _extractMessages(execution);
+          if (messages.length > 0) {
+            resultRec.messages = messages;
+          }
+
+          // Extract tool calls from execution tasks
+          const toolCalls = _extractToolCalls(execution);
+          if (toolCalls.length > 0) {
+            resultRec.toolCalls = toolCalls;
+          }
+
+          // Extract token usage
+          const tokenUsage = _extractTokenUsage(execution);
+          if (tokenUsage) {
+            resultRec.tokenUsage = tokenUsage;
+          }
+        }
+      } catch {
+        // Non-critical — fall back to stream-only result
+      }
 
       return result;
     } finally {
@@ -1177,9 +1296,11 @@ export class AgentRuntime {
     options?: RunOptions,
   ): Promise<AgentHandle> {
     const correlationId = generateCorrelationId();
-    const [rawConfig, workers] = this._serializeFramework(agent, frameworkId);
+    const [rawConfig, workers] = this._serializeFramework(agent, frameworkId, {
+      model: options?.model,
+    });
 
-    this._registerExtractedWorkers(workers);
+    this._registerExtractedWorkers(workers, options?.credentials);
 
     this.workerManager.startPolling();
 
@@ -1193,8 +1314,8 @@ export class AgentRuntime {
     };
 
     const startResponse = await this._httpRequest(
-      'POST',
-      '/agent/start',
+      "POST",
+      "/agent/start",
       startPayload,
       options?.signal,
     );
@@ -1211,12 +1332,34 @@ export class AgentRuntime {
         while (true) {
           const status = await this._getStatus(executionId, options?.signal);
           if (TERMINAL_STATUSES.has(status.status)) {
-            return makeAgentResult({
+            const resultData: Parameters<typeof makeAgentResult>[0] = {
               output: status.output,
               executionId,
               correlationId,
               status: status.status,
-            });
+            };
+
+            try {
+              const execution = await this._fetchExecution(executionId, options?.signal);
+              if (execution) {
+                resultData.toolCalls = _extractToolCalls(execution) as unknown[];
+                resultData.messages = _extractMessages(execution);
+                resultData.tokenUsage = _extractTokenUsage(execution) ?? undefined;
+
+                // Replace junk output with execution data
+                if (_isOutputJunk(resultData.output)) {
+                  const execOutput = _extractOutput(execution);
+                  if (execOutput != null) {
+                    resultData.output =
+                      typeof execOutput === "string" ? { result: execOutput } : execOutput;
+                  }
+                }
+              }
+            } catch {
+              // Non-critical
+            }
+
+            return makeAgentResult(resultData);
           }
           await sleep(pollIntervalMs);
         }
@@ -1227,25 +1370,23 @@ export class AgentRuntime {
       approve: (output?) =>
         this._respond(executionId, { approved: true, ...output }, options?.signal),
 
-      reject: (reason?) =>
-        this._respond(executionId, { approved: false, reason }, options?.signal),
+      reject: (reason?) => this._respond(executionId, { approved: false, reason }, options?.signal),
 
-      send: (message) =>
-        this._respond(executionId, { message }, options?.signal),
+      send: (message) => this._respond(executionId, { message }, options?.signal),
 
       pause: () =>
-        this._httpRequest('PUT', `/agent/${executionId}/pause`, undefined, options?.signal).then(
+        this._httpRequest("PUT", `/agent/${executionId}/pause`, undefined, options?.signal).then(
           () => {},
         ),
 
       resume: () =>
-        this._httpRequest('PUT', `/agent/${executionId}/resume`, undefined, options?.signal).then(
+        this._httpRequest("PUT", `/agent/${executionId}/resume`, undefined, options?.signal).then(
           () => {},
         ),
 
       cancel: () =>
         this._httpRequest(
-          'DELETE',
+          "DELETE",
           `/agent/${executionId}/cancel`,
           undefined,
           options?.signal,
@@ -1290,7 +1431,11 @@ export function configure(options: AgentConfigOptions): AgentRuntime {
  * Run an agent using the singleton runtime.
  * Accepts native Agent instances or framework agent objects.
  */
-export function run(agent: Agent | object, prompt: string, options?: RunOptions): Promise<AgentResult> {
+export function run(
+  agent: Agent | object,
+  prompt: string,
+  options?: RunOptions,
+): Promise<AgentResult> {
   return getRuntime().run(agent, prompt, options);
 }
 
@@ -1298,7 +1443,11 @@ export function run(agent: Agent | object, prompt: string, options?: RunOptions)
  * Start an agent using the singleton runtime.
  * Accepts native Agent instances or framework agent objects.
  */
-export function start(agent: Agent | object, prompt: string, options?: RunOptions): Promise<AgentHandle> {
+export function start(
+  agent: Agent | object,
+  prompt: string,
+  options?: RunOptions,
+): Promise<AgentHandle> {
   return getRuntime().start(agent, prompt, options);
 }
 
@@ -1306,7 +1455,11 @@ export function start(agent: Agent | object, prompt: string, options?: RunOption
  * Stream an agent using the singleton runtime.
  * Accepts native Agent instances or framework agent objects.
  */
-export function stream(agent: Agent | object, prompt: string, options?: RunOptions): Promise<AgentStream> {
+export function stream(
+  agent: Agent | object,
+  prompt: string,
+  options?: RunOptions,
+): Promise<AgentStream> {
   return getRuntime().stream(agent, prompt, options);
 }
 
@@ -1345,9 +1498,9 @@ function generateCorrelationId(): string {
     return crypto.randomUUID();
   } catch {
     // Fallback for environments without crypto.randomUUID
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
       const r = (Math.random() * 16) | 0;
-      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      const v = c === "x" ? r : (r & 0x3) | 0x8;
       return v.toString(16);
     });
   }
@@ -1355,4 +1508,154 @@ function generateCorrelationId(): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ── Execution extraction helpers (mirrors Python SDK) ────
+
+/**
+ * Detect "junk" output from the server — workflow state objects that
+ * aren't the actual LLM response (e.g. {result: [], finishReason: "TOOL_CALLS"}).
+ */
+function _isOutputJunk(output: unknown): boolean {
+  if (output == null) return true;
+  if (typeof output !== "object" || Array.isArray(output)) return false;
+  const obj = output as Record<string, unknown>;
+  const result = obj.result;
+  // {result: null, ...} or {result: [], finishReason: ...}
+  if (result === null && "finishReason" in obj) return true;
+  if (Array.isArray(result) && result.length === 0) return true;
+  return false;
+}
+
+/** System task types that are never user-defined tool calls. */
+const SYSTEM_TASK_TYPES = new Set([
+  "LLM_CHAT_COMPLETE",
+  "SWITCH",
+  "DO_WHILE",
+  "INLINE",
+  "SET_VARIABLE",
+  "FORK",
+  "FORK_JOIN_DYNAMIC",
+  "JOIN",
+  "SUB_WORKFLOW",
+]);
+
+/** Internal keys to strip from tool call input. */
+const INTERNAL_KEYS = ["_agent_state", "method", "__humanTaskDefinition"];
+
+/**
+ * Extract output from a full execution response.
+ * Mirrors Python's wf.output extraction with fallback to messages.
+ *
+ * The server sometimes returns workflow state as output
+ * (e.g. {result: [], finishReason: "TOOL_CALLS"}) instead of the
+ * actual LLM text response.  When that happens, fall back to the
+ * last assistant message in execution.variables.messages.
+ */
+function _extractOutput(execution: Record<string, unknown>): unknown {
+  const output = execution.output;
+
+  // Try workflow output first
+  if (output != null && typeof output === "object" && !Array.isArray(output)) {
+    const obj = output as Record<string, unknown>;
+    const result = "result" in obj ? obj.result : undefined;
+    // Usable if result is a non-empty string or non-empty object/array
+    if (result != null && result !== "") {
+      if (Array.isArray(result) && result.length === 0) {
+        // empty array — fall through to messages
+      } else {
+        return result;
+      }
+    }
+  } else if (output != null) {
+    // Primitive or array — return directly
+    return output;
+  }
+
+  // Fallback: last assistant message content from execution variables
+  const variables = execution.variables as Record<string, unknown> | undefined;
+  if (variables && Array.isArray(variables.messages)) {
+    for (let i = variables.messages.length - 1; i >= 0; i--) {
+      const msg = variables.messages[i] as Record<string, unknown>;
+      if (msg.role === "assistant" && msg.content) {
+        return msg.content;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Extract conversation messages from execution variables.
+ * Mirrors Python's _extract_messages: wf.variables.messages
+ */
+function _extractMessages(execution: Record<string, unknown>): unknown[] {
+  const variables = execution.variables as Record<string, unknown> | undefined;
+  if (variables && Array.isArray(variables.messages)) {
+    return variables.messages;
+  }
+  return [];
+}
+
+/**
+ * Extract tool calls from execution tasks.
+ * Mirrors Python's _extract_tool_calls: filters for call_* refs, skips system tasks.
+ */
+function _extractToolCalls(execution: Record<string, unknown>): unknown[] {
+  const tasks = execution.tasks as Array<Record<string, unknown>> | undefined;
+  if (!Array.isArray(tasks)) return [];
+
+  const toolCalls: unknown[] = [];
+  for (const task of tasks) {
+    const taskType = String(task.taskType ?? task.task_type ?? "").toUpperCase();
+    const ref = String(task.referenceTaskName ?? task.reference_task_name ?? "");
+
+    // The call_ prefix is the compiler's marker for tool invocations.
+    // Any task with a call_ ref is a user-initiated tool call, regardless
+    // of whether the underlying task type is HTTP, CALL_MCP_TOOL, SIMPLE, etc.
+    if (!ref.startsWith("call_")) continue;
+    // Skip only orchestration-level system tasks (these never have call_ refs,
+    // but guard against edge cases)
+    if (SYSTEM_TASK_TYPES.has(taskType)) continue;
+
+    const inputData = { ...((task.inputData ?? task.input_data ?? {}) as Record<string, unknown>) };
+    for (const k of INTERNAL_KEYS) {
+      delete inputData[k];
+    }
+
+    // Use the tool name from inputData.method (set by compiler) if available
+    const toolName = String(inputData.method ?? taskType).toLowerCase();
+    delete inputData.method;
+
+    toolCalls.push({
+      name: toolName,
+      args: inputData,
+      result: task.outputData ?? task.output_data ?? {},
+    });
+  }
+  return toolCalls;
+}
+
+/**
+ * Extract aggregated token usage from execution.
+ * Mirrors Python's _extract_token_usage: reads tokenUsage from execution data.
+ */
+function _extractTokenUsage(
+  execution: Record<string, unknown>,
+): { promptTokens: number; completionTokens: number; totalTokens: number } | null {
+  const tokenUsage = execution.tokenUsage as Record<string, unknown> | undefined;
+  if (!tokenUsage) return null;
+
+  const prompt = Number(tokenUsage.promptTokens ?? 0);
+  const completion = Number(tokenUsage.completionTokens ?? 0);
+  let total = Number(tokenUsage.totalTokens ?? 0);
+
+  if (!prompt && !completion && !total) return null;
+
+  if (total === 0 && (prompt > 0 || completion > 0)) {
+    total = prompt + completion;
+  }
+
+  return { promptTokens: prompt, completionTokens: completion, totalTokens: total };
 }

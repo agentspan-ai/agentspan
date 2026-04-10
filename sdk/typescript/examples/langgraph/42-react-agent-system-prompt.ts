@@ -12,7 +12,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // Tool definitions
@@ -82,6 +82,7 @@ const graph = createReactAgent({
   llm,
   tools,
   prompt: new SystemMessage(SYSTEM_PROMPT),
+  name: "travel_assistant_agent",
 });
 
 (graph as any)._agentspan = {
@@ -118,7 +119,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('42-react-agent-system-prompt.ts') || process.argv[1]?.endsWith('42-react-agent-system-prompt.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

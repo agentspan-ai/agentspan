@@ -1,0 +1,218 @@
+---
+# ── Agentspan Server Deployment ───────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentspan-server
+  namespace: agentspan
+  labels:
+    app: agentspan-server
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: agentspan-server
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: agentspan-server
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: server
+          image: agentspan/server:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 6767
+              name: http
+          # Pass JVM options as JAVA_TOOL_OPTIONS so the JVM picks them up
+          # without needing to modify the Dockerfile ENTRYPOINT.
+          env:
+            # Encryption master key
+            - name: AGENTSPAN_MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentspan-secrets
+                  key: AGENTSPAN_MASTER_KEY
+            - name: JAVA_TOOL_OPTIONS
+              valueFrom:
+                configMapKeyRef:
+                  name: agentspan-config
+                  key: JAVA_OPTS
+            - name: SPRING_PROFILES_ACTIVE
+              valueFrom:
+                configMapKeyRef:
+                  name: agentspan-config
+                  key: SPRING_PROFILES_ACTIVE
+            # PostgreSQL connection
+            - name: POSTGRES_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: agentspan-config
+                  key: POSTGRES_HOST
+            - name: POSTGRES_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: agentspan-config
+                  key: POSTGRES_PORT
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: agentspan-config
+                  key: POSTGRES_DB
+            # Kubernetes expands $(VAR) in env values only after prior env vars are set.
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)"
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: agentspan-secrets
+                  key: POSTGRES_USER
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: agentspan-secrets
+                  key: POSTGRES_PASSWORD
+            # LLM API keys (empty keys are ignored by the server)
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentspan-secrets
+                  key: ANTHROPIC_API_KEY
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentspan-secrets
+                  key: OPENAI_API_KEY
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentspan-secrets
+                  key: GEMINI_API_KEY
+            - name: MISTRAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentspan-secrets
+                  key: MISTRAL_API_KEY
+            - name: COHERE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentspan-secrets
+                  key: COHERE_API_KEY
+            - name: XAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentspan-secrets
+                  key: XAI_API_KEY
+            - name: PERPLEXITY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentspan-secrets
+                  key: PERPLEXITY_API_KEY
+            - name: AZURE_OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentspan-secrets
+                  key: AZURE_OPENAI_API_KEY
+            - name: AZURE_OPENAI_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: agentspan-secrets
+                  key: AZURE_OPENAI_ENDPOINT
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: agentspan-secrets
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentspan-secrets
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: AWS_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: agentspan-secrets
+                  key: AWS_REGION
+            - name: GOOGLE_CLOUD_PROJECT
+              valueFrom:
+                secretKeyRef:
+                  name: agentspan-secrets
+                  key: GOOGLE_CLOUD_PROJECT
+            - name: LOGGING_LEVEL_ROOT
+              valueFrom:
+                configMapKeyRef:
+                  name: agentspan-config
+                  key: LOGGING_LEVEL_ROOT
+            - name: LOGGING_LEVEL_DEV_AGENTSPAN
+              valueFrom:
+                configMapKeyRef:
+                  name: agentspan-config
+                  key: LOGGING_LEVEL_DEV_AGENTSPAN
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "2000m"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 6767
+            initialDelaySeconds: 45
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 6767
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 6767
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 12   # Allow up to 2 min for startup
+
+---
+# ── Server ClusterIP Service ──────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentspan-server
+  namespace: agentspan
+  labels:
+    app: agentspan-server
+spec:
+  type: ClusterIP
+  selector:
+    app: agentspan-server
+  ports:
+    - port: 6767
+      targetPort: 6767
+      protocol: TCP
+      name: http
+
+---
+# ── PodDisruptionBudget — ensure at least 2 replicas stay up during rollouts ──
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: agentspan-server-pdb
+  namespace: agentspan
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: agentspan-server

@@ -277,7 +277,7 @@ def _needs_context(func):
         return False
 
 
-def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
+def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None, credential_names=None):
     """Create a Conductor worker wrapper for a @tool function.
 
     The wrapper accepts a ``Task`` object so it can extract metadata
@@ -288,7 +288,13 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
     If *guardrails* are provided, they wrap the tool execution:
     - Pre-execution guardrails check the input parameters.
     - Post-execution guardrails check the tool result.
+
+    If *credential_names* are provided (e.g. for framework-extracted tools),
+    they are captured in the closure and used as the primary source of
+    credential names at invocation time.
     """
+    # Capture credential names in closure for framework-extracted tools
+    _closure_cred_names = list(credential_names) if credential_names else []
     # Store tool_def in module-level registry so it's accessible across
     # spawn-mode multiprocessing boundaries (closures are not picklable).
     if tool_def is not None:
@@ -402,23 +408,28 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
             agent_state = task.input_data.pop("_agent_state", None) or {}
 
             # ── Credential fetching ───────────────────────────────────────
-            # Look up tool_def from multiple sources:
-            # 1. Module-level registry (works with fork, not spawn)
-            # 2. Closure variable tool_def (works with fork)
-            # 3. _tool_def attribute on tool_func (works everywhere)
-            _td = _tool_def_registry.get(tool_name) or tool_def
-            raw_credentials = list(getattr(_td, "credentials", [])) if _td else _get_credential_names_from_tool(tool_func)
-            # Normalize: CredentialFile → env_var string, keep strings as-is
-            from agentspan.agents.runtime.credentials.types import CredentialFile
-            credential_names = [
-                c.env_var if isinstance(c, CredentialFile) else c
-                for c in raw_credentials
-                if isinstance(c, (str, CredentialFile))
-            ]
-            # Fallback: workflow-level credentials (for framework-extracted tools)
-            if not credential_names and task.workflow_instance_id:
-                with _workflow_credentials_lock:
-                    credential_names = list(_workflow_credentials.get(task.workflow_instance_id, []))
+            # Priority order for credential names:
+            # 1. Closure-captured credentials (framework-extracted tools via
+            #    _register_framework_workers → make_tool_worker(credential_names=...))
+            # 2. tool_def from registry or closure (native @tool decorated)
+            # 3. _tool_def attribute on tool_func
+            # 4. Workflow-level fallback (_workflow_credentials dict)
+            if _closure_cred_names:
+                credential_names = list(_closure_cred_names)
+            else:
+                _td = _tool_def_registry.get(tool_name) or tool_def
+                raw_credentials = list(getattr(_td, "credentials", [])) if _td else _get_credential_names_from_tool(tool_func)
+                # Normalize: CredentialFile → env_var string, keep strings as-is
+                from agentspan.agents.runtime.credentials.types import CredentialFile
+                credential_names = [
+                    c.env_var if isinstance(c, CredentialFile) else c
+                    for c in raw_credentials
+                    if isinstance(c, (str, CredentialFile))
+                ]
+                # Fallback: workflow-level credentials (for framework-extracted tools)
+                if not credential_names and task.workflow_instance_id:
+                    with _workflow_credentials_lock:
+                        credential_names = list(_workflow_credentials.get(task.workflow_instance_id, []))
             resolved_credentials = {}
             if credential_names:
                 token = _extract_execution_token(task)

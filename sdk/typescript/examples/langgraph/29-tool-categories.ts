@@ -12,7 +12,7 @@ import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // LLM
@@ -164,7 +164,7 @@ const allTools = [
   dayOfWeekTool,
 ];
 
-const graph = createReactAgent({ llm, tools: allTools });
+const graph = createReactAgent({ llm, tools: allTools, name: "tool_categories_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
@@ -198,7 +198,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('29-tool-categories.ts') || process.argv[1]?.endsWith('29-tool-categories.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

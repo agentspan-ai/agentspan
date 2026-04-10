@@ -19,9 +19,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Data tools ---------------------------------------------------------------
 
@@ -48,9 +47,13 @@ const fetchUserData = tool(
   {
     name: 'fetch_user_data',
     description: 'Fetch user data from the database.',
-    inputSchema: z.object({
-      userId: z.string().describe("The user's identifier"),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        userId: { type: 'string', description: 'The user\'s identifier' },
+      },
+      required: ['userId'],
+    },
   },
 );
 
@@ -75,9 +78,13 @@ const redactSensitiveFields = tool(
   {
     name: 'redact_sensitive_fields',
     description: 'Redact sensitive fields from data before responding to users.',
-    inputSchema: z.object({
-      data: z.string().describe('JSON string of user data to redact'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        data: { type: 'string', description: 'JSON string of user data to redact' },
+      },
+      required: ['data'],
+    },
   },
 );
 
@@ -120,7 +127,6 @@ export const responder = new Agent({
 // Sequential pipeline enforces data flow: collect -> validate -> respond
 const pipeline = collector.pipe(validator).pipe(responder);
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -143,6 +149,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('43-data-security-pipeline.ts') || process.argv[1]?.endsWith('43-data-security-pipeline.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

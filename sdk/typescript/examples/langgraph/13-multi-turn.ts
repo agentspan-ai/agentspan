@@ -11,7 +11,7 @@
 import { MemorySaver } from '@langchain/langgraph';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // Build the graph with checkpointer
@@ -26,6 +26,7 @@ const graph = createReactAgent({
     'You are an interview preparation coach. ' +
     'Remember what the user tells you about their background, skills, and target role. ' +
     'Build on previous messages to give increasingly personalized advice.',
+  name: "interview_coach",
 });
 
 // Add agentspan metadata for extraction
@@ -90,7 +91,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('13-multi-turn.ts') || process.argv[1]?.endsWith('13-multi-turn.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

@@ -10,7 +10,7 @@
 
 import { tool as aiTool } from 'ai';
 import { z } from 'zod';
-import { Agent, AgentRuntime } from '../../src/index.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
 
 // ── Vercel AI SDK tool (auto-detected by superset tool system) ──
 const weatherTool = aiTool({
@@ -54,7 +54,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('01-basic-agent.ts') || process.argv[1]?.endsWith('01-basic-agent.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);
