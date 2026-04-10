@@ -1735,11 +1735,54 @@ function _getToolSchema(toolObj: unknown): Record<string, unknown> {
   for (const key of ["params_json_schema", "input_schema", "parameters", "schema"]) {
     const val = t[key];
     if (val && typeof val === "object" && !Array.isArray(val)) {
-      return val as Record<string, unknown>;
+      const obj = val as Record<string, unknown>;
+      // Already a JSON Schema — return as-is
+      if (obj.type === "object" && obj.properties) {
+        return obj;
+      }
+      // Zod schema detected (has _def + parse) — convert to JSON Schema
+      if (obj._def && typeof obj.parse === "function") {
+        const converted = _zodToJsonSchema(obj);
+        if (converted) return converted;
+      }
+      // Unknown object — return as-is (may be a valid schema in another format)
+      return obj;
     }
   }
 
   return { type: "object", properties: {} };
+}
+
+/**
+ * Convert a Zod schema to JSON Schema.
+ * Tries zodToJsonSchema (zod-to-json-schema package), then Zod v4 built-in.
+ * Returns null if conversion fails.
+ */
+function _zodToJsonSchema(zodSchema: Record<string, unknown>): Record<string, unknown> | null {
+  // Try zod-to-json-schema package (works with Zod v3)
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { zodToJsonSchema } = require("zod-to-json-schema");
+    const result = zodToJsonSchema(zodSchema);
+    if (result && typeof result === "object" && (result as any).type) {
+      const { $schema, ...rest } = result as Record<string, unknown>;
+      return rest;
+    }
+  } catch {
+    // Package not installed — try alternatives
+  }
+
+  // Try Zod v4 built-in toJSONSchema
+  try {
+    const z = require("zod");
+    if (typeof z.toJSONSchema === "function") {
+      return z.toJSONSchema(zodSchema);
+    }
+  } catch {
+    // Not available
+  }
+
+  return null;
 }
 
 function _getToolCallable(toolObj: unknown): Function | null {
