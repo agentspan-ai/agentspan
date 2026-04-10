@@ -154,7 +154,8 @@ public class AgentConfigSerializer {
             codeExec.put("enabled", true);
             List<String> langs = agent.getAllowedLanguages();
             codeExec.put("allowedLanguages", langs != null && !langs.isEmpty() ? langs : List.of("python"));
-            codeExec.put("allowedCommands", new ArrayList<>());
+            List<String> cmds = agent.getAllowedCommands();
+            codeExec.put("allowedCommands", cmds != null ? cmds : new ArrayList<>());
             codeExec.put("timeout", agent.getCodeExecutionTimeout() > 0 ? agent.getCodeExecutionTimeout() : 30);
             agentMap.put("codeExecution", codeExec);
         }
@@ -175,6 +176,28 @@ public class AgentConfigSerializer {
         // Introduction (prepended to conversation in multi-agent discussions)
         if (agent.getIntroduction() != null && !agent.getIntroduction().isEmpty()) {
             agentMap.put("introduction", agent.getIntroduction());
+        }
+
+        // Required tools (tool names the agent must invoke)
+        if (agent.getRequiredTools() != null && !agent.getRequiredTools().isEmpty()) {
+            agentMap.put("requiredTools", agent.getRequiredTools());
+        }
+
+        // Agent-level credentials
+        if (agent.getCredentials() != null && !agent.getCredentials().isEmpty()) {
+            agentMap.put("credentials", agent.getCredentials());
+        }
+
+        // Metadata (arbitrary key-value pairs attached to the workflow)
+        if (agent.getMetadata() != null && !agent.getMetadata().isEmpty()) {
+            agentMap.put("metadata", agent.getMetadata());
+        }
+
+        // Stop when (early-exit condition worker task)
+        if (agent.getStopWhenTaskName() != null && !agent.getStopWhenTaskName().isEmpty()) {
+            Map<String, Object> stopWhen = new LinkedHashMap<>();
+            stopWhen.put("taskName", agent.getStopWhenTaskName());
+            agentMap.put("stopWhen", stopWhen);
         }
 
         // Callbacks (before/after model hooks — legacy single-function style)

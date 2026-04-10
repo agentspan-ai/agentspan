@@ -66,6 +66,11 @@ public class Agent {
     private final Function<Map<String, Object>, Map<String, Object>> beforeModelCallback;
     private final Function<Map<String, Object>, Map<String, Object>> afterModelCallback;
     private final List<CallbackHandler> callbacks;
+    private final List<String> requiredTools;
+    private final List<String> credentials;
+    private final Map<String, Object> metadata;
+    private final List<String> allowedCommands;
+    private final String stopWhenTaskName;
 
     private Agent(Builder builder) {
         this.name = builder.name;
@@ -96,6 +101,11 @@ public class Agent {
         this.beforeModelCallback = builder.beforeModelCallback;
         this.afterModelCallback = builder.afterModelCallback;
         this.callbacks = builder.callbacks != null ? new ArrayList<>(builder.callbacks) : new ArrayList<>();
+        this.requiredTools = builder.requiredTools != null ? new ArrayList<>(builder.requiredTools) : new ArrayList<>();
+        this.credentials = builder.credentials != null ? new ArrayList<>(builder.credentials) : new ArrayList<>();
+        this.metadata = builder.metadata;
+        this.allowedCommands = builder.allowedCommands != null ? new ArrayList<>(builder.allowedCommands) : new ArrayList<>();
+        this.stopWhenTaskName = builder.stopWhenTaskName;
     }
 
     /**
@@ -164,6 +174,11 @@ public class Agent {
     public Function<Map<String, Object>, Map<String, Object>> getBeforeModelCallback() { return beforeModelCallback; }
     public Function<Map<String, Object>, Map<String, Object>> getAfterModelCallback() { return afterModelCallback; }
     public List<CallbackHandler> getCallbacks() { return callbacks; }
+    public List<String> getRequiredTools() { return requiredTools; }
+    public List<String> getCredentials() { return credentials; }
+    public Map<String, Object> getMetadata() { return metadata; }
+    public List<String> getAllowedCommands() { return allowedCommands; }
+    public String getStopWhenTaskName() { return stopWhenTaskName; }
 
     public static Builder builder() {
         return new Builder();
@@ -214,6 +229,11 @@ public class Agent {
         private Function<Map<String, Object>, Map<String, Object>> beforeModelCallback;
         private Function<Map<String, Object>, Map<String, Object>> afterModelCallback;
         private List<CallbackHandler> callbacks;
+        private List<String> requiredTools;
+        private List<String> credentials;
+        private Map<String, Object> metadata;
+        private List<String> allowedCommands;
+        private String stopWhenTaskName;
 
         /** Set the agent name (required). Must match {@code ^[a-zA-Z_][a-zA-Z0-9_-]*$}. */
         public Builder name(String name) {
@@ -443,6 +463,67 @@ public class Agent {
         /** Varargs convenience for callbacks. */
         public Builder callbacks(CallbackHandler... callbacks) {
             this.callbacks = Arrays.asList(callbacks);
+            return this;
+        }
+
+        /**
+         * Enforce that specific tool names are called during the agent's run.
+         * Matches Python's {@code required_tools} parameter.
+         */
+        public Builder requiredTools(List<String> requiredTools) {
+            this.requiredTools = requiredTools;
+            return this;
+        }
+
+        /** Varargs convenience for requiredTools. */
+        public Builder requiredTools(String... requiredTools) {
+            this.requiredTools = Arrays.asList(requiredTools);
+            return this;
+        }
+
+        /**
+         * Agent-level credential names to inject into the execution context.
+         * Matches Python's {@code credentials} parameter.
+         */
+        public Builder credentials(List<String> credentials) {
+            this.credentials = credentials;
+            return this;
+        }
+
+        /** Varargs convenience for credentials. */
+        public Builder credentials(String... credentials) {
+            this.credentials = Arrays.asList(credentials);
+            return this;
+        }
+
+        /**
+         * Arbitrary metadata attached to the agent / workflow definition.
+         * Matches Python's {@code metadata} parameter.
+         */
+        public Builder metadata(Map<String, Object> metadata) {
+            this.metadata = metadata;
+            return this;
+        }
+
+        /**
+         * Shell commands allowed when {@code localCodeExecution} is enabled.
+         * Matches Python's {@code allowed_commands} parameter.
+         * Java always emits an empty list if not set.
+         */
+        public Builder allowedCommands(List<String> allowedCommands) {
+            this.allowedCommands = allowedCommands;
+            return this;
+        }
+
+        /**
+         * Name of a Conductor worker task that acts as an early-exit condition.
+         * The worker returns {@code {"stop": true}} to end the agent loop.
+         * Matches Python's {@code stop_when} parameter.
+         *
+         * @param taskName the worker task name (also used as the workflow task reference)
+         */
+        public Builder stopWhen(String taskName) {
+            this.stopWhenTaskName = taskName;
             return this;
         }
 
