@@ -360,6 +360,7 @@ class Agent:
         required_tools: Optional[List[str]] = None,
         gate: Optional[Any] = None,
         credentials: Optional[List[Any]] = None,
+        stateful: bool = False,
     ) -> None:
         if not name or not isinstance(name, str):
             raise ValueError("Agent name must be a non-empty string")
@@ -433,6 +434,7 @@ class Agent:
         )
         self.introduction = introduction
         self.metadata: Dict[str, Any] = dict(metadata) if metadata else {}
+        self.stateful = stateful
         self.planner = planner
         self.callbacks: List[Any] = list(callbacks) if callbacks else []
         self.before_agent_callback = before_agent_callback

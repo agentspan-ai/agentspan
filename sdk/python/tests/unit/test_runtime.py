@@ -502,7 +502,7 @@ class TestRuntimeLifecycle:
 
     def test_resume_delegates(self, runtime):
         runtime._workflow_client.resume_workflow = MagicMock()
-        runtime.resume("wf-1")
+        runtime._resume_workflow("wf-1")
         runtime._workflow_client.resume_workflow.assert_called_once_with("wf-1")
 
     def test_cancel_delegates(self, runtime):

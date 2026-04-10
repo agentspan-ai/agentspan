@@ -32,9 +32,13 @@ public class AuthUserSeeder {
     @PostConstruct
     public void seed() {
         for (AuthProperties.UserEntry entry : authProperties.getUsers()) {
-            String name = entry.getName() != null ? entry.getName() : entry.getUsername();
-            userRepository.createIfNotExists(entry.getUsername(), name, entry.getEmail(), entry.getPassword());
-            log.info("Ensured user exists: {}", entry.getUsername());
+            try {
+                String name = entry.getName() != null ? entry.getName() : entry.getUsername();
+                userRepository.createIfNotExists(entry.getUsername(), name, entry.getEmail(), entry.getPassword());
+                log.info("Ensured user exists: {}", entry.getUsername());
+            } catch (Exception e) {
+                log.warn("Failed to seed user '{}' — skipping", entry.getUsername(), e);
+            }
         }
     }
 }

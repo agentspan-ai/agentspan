@@ -7,6 +7,8 @@ package dev.agentspan.runtime.credentials;
 import java.util.List;
 import java.util.function.Function;
 
+import javax.crypto.AEADBadTagException;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -129,7 +131,28 @@ public class CredentialEnvSeeder implements ApplicationRunner {
                 continue;
             }
 
-            String existing = storeProvider.get(ANONYMOUS_USER_ID, name);
+            String existing;
+            try {
+                existing = storeProvider.get(ANONYMOUS_USER_ID, name);
+            } catch (Exception e) {
+                if (!(e.getCause() instanceof AEADBadTagException)) {
+                    throw e; // not a key mismatch — propagate (e.g. DB connection failure)
+                }
+                log.warn(
+                        "Credential '{}' could not be decrypted (master key mismatch?) — "
+                                + "re-seeding from environment variable",
+                        name,
+                        e);
+                try {
+                    storeProvider.delete(ANONYMOUS_USER_ID, name);
+                    storeProvider.set(ANONYMOUS_USER_ID, name, value);
+                    created++;
+                } catch (Exception re) {
+                    log.warn("Credential '{}' could not be re-seeded — skipping", name, re);
+                }
+                continue;
+            }
+
             if (existing != null) {
                 log.warn(
                         "Credential '{}' already exists in store — skipping env import. "
@@ -139,9 +162,13 @@ public class CredentialEnvSeeder implements ApplicationRunner {
                 continue;
             }
 
-            storeProvider.set(ANONYMOUS_USER_ID, name, value);
-            log.info("Credential seeded from environment: {}", name);
-            created++;
+            try {
+                storeProvider.set(ANONYMOUS_USER_ID, name, value);
+                log.info("Credential seeded from environment: {}", name);
+                created++;
+            } catch (Exception e) {
+                log.warn("Credential '{}' could not be seeded — skipping: {}", name, e.getMessage());
+            }
         }
 
         if (created > 0 || skipped > 0) {

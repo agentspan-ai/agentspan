@@ -20,14 +20,14 @@
  *   mcp-testkit --transport http --auth <secret>
  *
  *   # Store credentials via CLI or Agentspan UI:
- *   agentspan credentials set --name HTTP_TEST_API_KEY --value <secret>
+ *   agentspan credentials set HTTP_TEST_API_KEY <secret>
  *
  * Requirements:
  *   - Conductor server with LLM support
  *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  *   - mcp-testkit running on http://localhost:3001 (for examples 1-3, see setup above)
- *   - For GitHub example: agentspan credentials set --name GITHUB_TOKEN --value ghp_xxx
+ *   - For GitHub example: agentspan credentials set GITHUB_TOKEN ghp_xxx
  */
 
 import { Agent, AgentRuntime, apiTool, tool } from '@agentspan-ai/sdk';

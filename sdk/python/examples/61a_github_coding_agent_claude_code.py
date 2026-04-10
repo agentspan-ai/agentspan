@@ -25,7 +25,7 @@ Run:
 
 Requirements:
     - Agentspan server running
-    - GITHUB_TOKEN stored: agentspan credentials set --name GITHUB_TOKEN
+    - GITHUB_TOKEN stored: agentspan credentials set GITHUB_TOKEN <your-github-token>
     - gh CLI installed
     - Claude Code SDK installed (pip install claude-code-sdk)
 """

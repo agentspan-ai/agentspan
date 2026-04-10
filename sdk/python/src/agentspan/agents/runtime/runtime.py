@@ -46,6 +46,11 @@ def _default_task_def(name: str) -> Any:
 
     Timeout is 0 (no timeout) — the agent configuration controls execution
     duration, not the task definition.
+
+    response_timeout_seconds is 120 (2 minutes): if a worker fails to pick
+    up and respond to a task within 2 minutes, Conductor marks it as timed
+    out and retries.  Keeping this short prevents multi-hour CI hangs when
+    worker processes fail to start due to resource pressure.
     """
     from conductor.client.http.models.task_def import TaskDef
 
@@ -54,7 +59,7 @@ def _default_task_def(name: str) -> Any:
     td.retry_logic = "LINEAR_BACKOFF"
     td.retry_delay_seconds = 2
     td.timeout_seconds = 0
-    td.response_timeout_seconds = 3600
+    td.response_timeout_seconds = 120
     td.timeout_policy = "RETRY"
     return td
 
@@ -64,6 +69,9 @@ def _passthrough_task_def(name: str) -> Any:
 
     Timeout is 0 (no timeout) — the agent configuration controls execution
     duration, not the task definition.
+
+    response_timeout_seconds is 120 (2 minutes): same reasoning as
+    _default_task_def.
     """
     from conductor.client.http.models.task_def import TaskDef
 
@@ -72,9 +80,24 @@ def _passthrough_task_def(name: str) -> Any:
     td.retry_logic = "LINEAR_BACKOFF"
     td.retry_delay_seconds = 2
     td.timeout_seconds = 0
-    td.response_timeout_seconds = 3600
+    td.response_timeout_seconds = 120
     td.timeout_policy = "RETRY"
     return td
+
+
+def _has_stateful_tools(agent: Any) -> bool:
+    """Return True if the agent is stateful or any @tool has stateful=True."""
+    from agentspan.agents.tool import get_tool_defs
+
+    if getattr(agent, "stateful", False):
+        return True
+    for td in get_tool_defs(getattr(agent, "tools", [])):
+        if getattr(td, "stateful", False):
+            return True
+    for sub in getattr(agent, "agents", []):
+        if _has_stateful_tools(sub):
+            return True
+    return False
 
 
 # Thread count for system-level async workers (guardrails, handoff checks, etc.).
@@ -399,6 +422,7 @@ class AgentRuntime:
         timeout: Optional[int] = None,
         credentials: Optional[List[str]] = None,
         context: Optional[Dict[str, Any]] = None,
+        run_id: Optional[str] = None,
     ) -> str:
         """Start an agent via the server's /api/agent/start endpoint.
 
@@ -429,6 +453,8 @@ class AgentRuntime:
             payload["timeoutSeconds"] = timeout
         if credentials:
             payload["credentials"] = credentials
+        if run_id:
+            payload["runId"] = run_id
         url = self._agent_api_url("/start")
         resp = req_lib.post(url, json=payload, headers=self._agent_api_headers(), timeout=30)
         try:
@@ -459,6 +485,7 @@ class AgentRuntime:
         timeout: Optional[int] = None,
         credentials: Optional[List[str]] = None,
         context: Optional[Dict[str, Any]] = None,
+        run_id: Optional[str] = None,
     ) -> str:
         """Async version of :meth:`_start_via_server`."""
         from agentspan.agents.config_serializer import AgentConfigSerializer
@@ -480,6 +507,8 @@ class AgentRuntime:
             payload["timeoutSeconds"] = timeout
         if credentials:
             payload["credentials"] = credentials
+        if run_id:
+            payload["runId"] = run_id
         data = await self._http.start_agent(payload)
         execution_id = data.get("executionId", "")
         required_workers: Optional[set] = None
@@ -717,7 +746,7 @@ class AgentRuntime:
             self._registered_tool_names.update(worker_names)
 
     def _prepare_workers(
-        self, agent: Agent, *, required_workers: Optional[set] = None
+        self, agent: Agent, *, required_workers: Optional[set] = None, domain: Optional[str] = None
     ) -> None:
         """Register and start workers without compiling.
 
@@ -741,7 +770,7 @@ class AgentRuntime:
             logger.info("Server expects workers: %s", sorted(required_workers))
 
         # Register worker functions locally
-        self._register_workers(agent, required_workers=required_workers)
+        self._register_workers(agent, required_workers=required_workers, domain=domain)
 
         # Start worker polling if needed
         if self._config.auto_start_workers and self._has_worker_tools(agent):
@@ -886,7 +915,7 @@ class AgentRuntime:
         return names
 
     def _register_workers(
-        self, agent: Agent, *, required_workers: Optional[set] = None
+        self, agent: Agent, *, required_workers: Optional[set] = None, domain: Optional[str] = None
     ) -> None:
         """Register all workers needed for SDK-side execution.
 
@@ -953,7 +982,10 @@ class AgentRuntime:
         # 1. Tools (and tool-level guardrails) — always registered
         if agent.tools:
             tc = ToolRegistry()
-            tc.register_tool_workers(agent.tools, agent.name)
+            tc.register_tool_workers(
+                agent.tools, agent.name, domain=domain,
+                agent_stateful=getattr(agent, "stateful", False),
+            )
             for t in agent.tools:
                 from agentspan.agents.tool import get_tool_def
 
@@ -2326,6 +2358,8 @@ class AgentRuntime:
 
         logger.info("Executing agent '%s'", agent.name)
 
+        run_id = uuid.uuid4().hex if _has_stateful_tools(agent) else None
+
         # Start via server first to get requiredWorkers, then register
         # locally.  Conductor queues tasks so workers can start polling
         # immediately after registration without missing work.
@@ -2338,9 +2372,10 @@ class AgentRuntime:
             timeout=timeout,
             credentials=credentials,
             context=context,
+            run_id=run_id,
         )
 
-        self._prepare_workers(agent, required_workers=required_workers)
+        self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
 
         self._register_workflow_credentials(execution_id, credentials)
 
@@ -3435,6 +3470,8 @@ class AgentRuntime:
 
         correlation_id = str(uuid.uuid4())
 
+        run_id = uuid.uuid4().hex if _has_stateful_tools(agent) else None
+
         # Start via server first to get requiredWorkers, then register locally
         effective_timeout = agent.timeout_seconds if agent.timeout_seconds > 0 else None
         execution_id, required_workers = self._start_via_server(
@@ -3445,11 +3482,14 @@ class AgentRuntime:
             idempotency_key=idempotency_key,
             timeout=effective_timeout,
             context=context,
+            run_id=run_id,
         )
 
-        self._prepare_workers(agent, required_workers=required_workers)
+        self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
 
-        return AgentHandle(execution_id=execution_id, runtime=self, correlation_id=correlation_id)
+        return AgentHandle(
+            execution_id=execution_id, runtime=self, correlation_id=correlation_id, run_id=run_id
+        )
 
     # ── Streaming execution ─────────────────────────────────────────
 
@@ -3824,6 +3864,8 @@ class AgentRuntime:
 
         logger.info("Executing agent '%s' (async)", agent.name)
 
+        run_id = uuid.uuid4().hex if _has_stateful_tools(agent) else None
+
         # Start via server first to get requiredWorkers, then register locally
         execution_id, required_workers = await self._start_via_server_async(
             agent,
@@ -3834,9 +3876,10 @@ class AgentRuntime:
             timeout=timeout,
             credentials=credentials,
             context=context,
+            run_id=run_id,
         )
 
-        self._prepare_workers(agent, required_workers=required_workers)
+        self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
         self._register_workflow_credentials(execution_id, credentials)
 
         effective_timeout = timeout or (
@@ -3956,6 +3999,8 @@ class AgentRuntime:
 
         correlation_id = str(uuid.uuid4())
 
+        run_id = uuid.uuid4().hex if _has_stateful_tools(agent) else None
+
         # Start via server first to get requiredWorkers, then register locally
         effective_timeout = agent.timeout_seconds if agent.timeout_seconds > 0 else None
         execution_id, required_workers = await self._start_via_server_async(
@@ -3966,11 +4011,14 @@ class AgentRuntime:
             idempotency_key=idempotency_key,
             timeout=effective_timeout,
             context=context,
+            run_id=run_id,
         )
 
-        self._prepare_workers(agent, required_workers=required_workers)
+        self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
 
-        return AgentHandle(execution_id=execution_id, runtime=self, correlation_id=correlation_id)
+        return AgentHandle(
+            execution_id=execution_id, runtime=self, correlation_id=correlation_id, run_id=run_id
+        )
 
     async def stream_async(
         self,
@@ -4497,13 +4545,188 @@ class AgentRuntime:
         """Pause an agent execution."""
         self._workflow_client.pause_workflow(execution_id)
 
-    def resume(self, execution_id: str) -> None:
-        """Resume a paused agent execution."""
+    def _resume_workflow(self, execution_id: str) -> None:
+        """Resume a paused Conductor workflow (internal — called by AgentHandle.resume())."""
         self._workflow_client.resume_workflow(execution_id)
 
     def cancel(self, execution_id: str, reason: str = "") -> None:
         """Cancel an agent execution."""
         self._workflow_client.terminate_workflow(workflow_id=execution_id, reason=reason)
+
+    # ── Resume (re-attach to existing execution) ─────────────────────
+
+    def _extract_domain(self, execution_id: str) -> Optional[str]:
+        """Extract the worker domain from a workflow's taskToDomain mapping.
+
+        Returns the domain UUID if the workflow uses domain-based routing
+        (stateful agents), or ``None`` for stateless agents.
+        """
+        try:
+            wf = self._workflow_client.get_workflow(execution_id, include_tasks=False)
+            task_to_domain = getattr(wf, "task_to_domain", None) or {}
+            domains = {v for v in task_to_domain.values() if v}
+            if len(domains) == 1:
+                return domains.pop()
+            if len(domains) > 1:
+                # Multiple distinct domains — pick the most common one
+                from collections import Counter
+                counts = Counter(v for v in task_to_domain.values() if v)
+                return counts.most_common(1)[0][0]
+            return None
+        except Exception as exc:
+            logger.debug("Could not extract domain for %s: %s", execution_id, exc)
+            return None
+
+    def resume(
+        self,
+        execution_id: str,
+        agent: Any,
+        *,
+        timeout: Optional[int] = None,
+    ) -> AgentHandle:
+        """Re-attach to an existing agent execution and re-register workers.
+
+        Fetches the workflow from the server, extracts the worker domain
+        from its ``taskToDomain`` mapping (for stateful agents), and
+        re-registers tool workers under that domain.  Returns an
+        :class:`AgentHandle` for continued interaction.
+
+        This works across process restarts: the workflow is durable on the
+        server, and the domain is derived from the server — no ``run_id``
+        needs to be persisted by the caller.
+
+        Args:
+            execution_id: The Conductor execution ID from a previous
+                :meth:`start` call.
+            agent: The same :class:`Agent` definition that was originally
+                executed.  Its tools are re-registered as workers.
+            timeout: Not used directly — reserved for future use.
+
+        Returns:
+            An :class:`AgentHandle` bound to this runtime with workers
+            polling under the correct domain.
+
+        Example — stateless::
+
+            handle = runtime.start(agent, "Analyze reports")
+            eid = handle.execution_id
+            # ... later, even in a new AgentRuntime ...
+            handle = runtime.resume(eid, agent)
+            result = handle.join(timeout=120)
+
+        Example — stateful (domain extracted automatically)::
+
+            handle = runtime.start(stateful_agent, "Run pipeline")
+            eid = handle.execution_id
+            # ... runtime closed, workers died ...
+            # In a new runtime:
+            handle = runtime.resume(eid, stateful_agent)
+            # Workers re-registered under the original domain
+            runtime.send_message(eid, {"task": "continue"})
+        """
+        domain = self._extract_domain(execution_id)
+
+        self._prepare_workers(agent, domain=domain)
+
+        return AgentHandle(
+            execution_id=execution_id,
+            runtime=self,
+            run_id=domain,
+        )
+
+    def stop(self, execution_id: str) -> None:
+        """Gracefully stop an agent execution.
+
+        Sets the ``_stop_requested`` workflow variable to ``true``.  The
+        agent's DoWhile loop checks this flag on each iteration and exits
+        when it is set.  The execution reaches ``COMPLETED`` status with
+        the last LLM output preserved.
+
+        Also sends a WMQ unblock message for agents waiting on a blocking
+        ``PULL_WORKFLOW_MESSAGES`` task.
+
+        This is deterministic — it does not depend on the LLM following
+        stop instructions in the prompt.
+
+        For immediate termination (``TERMINATED`` status), use
+        :meth:`cancel` instead.
+
+        Args:
+            execution_id: The Conductor execution ID.
+        """
+        import requests as req_lib
+
+        url = self._agent_api_url(f"/{execution_id}/stop")
+        resp = req_lib.post(url, headers=self._agent_api_headers(), timeout=30)
+        try:
+            resp.raise_for_status()
+        except req_lib.exceptions.HTTPError as exc:
+            _raise_api_error(exc, url=url)
+
+        # Also unblock any blocking PULL_WORKFLOW_MESSAGES wait.
+        try:
+            self._workflow_client.send_message(
+                execution_id, {"_signal": "stop"}
+            )
+        except Exception:
+            pass  # best-effort — agent may not have a WMQ tool
+
+    def signal(self, execution_id: str, message: str) -> None:
+        """Inject a persistent signal into a running agent's context.
+
+        Sets the ``_signal_injection`` workflow variable.  The agent's
+        context injection reads this variable on each iteration and
+        prepends it to the LLM's user message as ``[SIGNALS]...[/SIGNALS]``.
+
+        The signal persists until overwritten by another ``signal()`` call.
+        To clear it, call ``signal(execution_id, "")``.
+
+        This works on **all** agents — no ``wait_for_message_tool`` needed.
+        It's a separate channel from WMQ: ``signal()`` writes to a workflow
+        variable, ``send_message()`` writes to the message queue.
+
+        Args:
+            execution_id: The Conductor execution ID.
+            message: The signal text.  Empty string clears the signal.
+        """
+        import requests as req_lib
+
+        url = self._agent_api_url(f"/{execution_id}/signal")
+        resp = req_lib.post(url, json={"message": message}, headers=self._agent_api_headers(), timeout=30)
+        try:
+            resp.raise_for_status()
+        except req_lib.exceptions.HTTPError as exc:
+            _raise_api_error(exc, url=url)
+
+    async def resume_async(
+        self,
+        execution_id: str,
+        agent: Any,
+        *,
+        timeout: Optional[int] = None,
+    ) -> AgentHandle:
+        """Async version of :meth:`resume`.
+
+        Re-attaches to an existing agent execution, extracts the worker
+        domain from the server, and re-registers tool workers.
+
+        Args:
+            execution_id: The Conductor execution ID.
+            agent: The same :class:`Agent` definition originally executed.
+            timeout: Reserved for future use.
+
+        Returns:
+            An :class:`AgentHandle`.
+        """
+        domain = self._extract_domain(execution_id)
+
+        self._prepare_workers(agent, domain=domain)
+
+        return AgentHandle(
+            execution_id=execution_id,
+            runtime=self,
+            run_id=domain,
+        )
 
     # ── Async status / interaction ───────────────────────────────────
 
@@ -4555,8 +4778,8 @@ class AgentRuntime:
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, self._workflow_client.pause_workflow, execution_id)
 
-    async def resume_async(self, execution_id: str) -> None:
-        """Async version of :meth:`resume`."""
+    async def _resume_workflow_async(self, execution_id: str) -> None:
+        """Async version of :meth:`_resume_workflow` (internal — called by AgentHandle.resume_async())."""
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, self._workflow_client.resume_workflow, execution_id)
 
@@ -4570,6 +4793,22 @@ class AgentRuntime:
                 reason=reason,
             ),
         )
+
+    async def stop_async(self, execution_id: str) -> None:
+        """Async version of :meth:`stop`."""
+        await self._http.stop(execution_id)
+        # Also unblock any blocking PULL_WORKFLOW_MESSAGES wait.
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None, self._workflow_client.send_message, execution_id, {"_signal": "stop"}
+            )
+        except Exception:
+            pass
+
+    async def signal_async(self, execution_id: str, message: str) -> None:
+        """Async version of :meth:`signal`."""
+        await self._http.signal(execution_id, message)
 
     # ── Session continuity helpers ────────────────────────────────────
 

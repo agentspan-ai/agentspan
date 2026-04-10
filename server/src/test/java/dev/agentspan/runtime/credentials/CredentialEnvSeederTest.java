@@ -139,6 +139,72 @@ class CredentialEnvSeederTest {
     }
 
     @Test
+    void seeder_reseeds_whenDecryptionFailsDueToKeyMismatch() throws Exception {
+        // Simulate a credential encrypted with an old/rotated master key by writing
+        // garbage bytes directly into the DB — decryption will throw AEADBadTagException.
+        storeProvider.delete(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY");
+        String now = java.time.Instant.now().toString();
+        // 12-byte fake IV + 17 bytes of garbage ciphertext → GCM tag mismatch on decrypt
+        byte[] staleBytes = new byte[29];
+        java.util.Arrays.fill(staleBytes, (byte) 0x42);
+        jdbc.update(
+                "INSERT INTO credentials_store (user_id, name, encrypted_value, created_at, updated_at) "
+                        + "VALUES (:uid, :n, :enc, :now, :now)",
+                Map.of("uid", ANONYMOUS_USER_ID, "n", "ANTHROPIC_API_KEY", "enc", staleBytes, "now", now));
+
+        Function<String, String> envLookup =
+                name -> "ANTHROPIC_API_KEY".equals(name) ? "sk-fresh-after-rotation" : null;
+
+        CredentialEnvSeeder seeder = new CredentialEnvSeeder(storeProvider, envLookup);
+        var field = CredentialEnvSeeder.class.getDeclaredField("credentialsStore");
+        field.setAccessible(true);
+        field.set(seeder, "built-in");
+
+        // Must NOT throw — seeder should self-heal instead of crashing the server
+        assertThatCode(() -> seeder.run(new org.springframework.boot.DefaultApplicationArguments()))
+                .doesNotThrowAnyException();
+
+        // Credential must be re-encrypted with the current key and readable
+        String value = storeProvider.get(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY");
+        assertThat(value).isEqualTo("sk-fresh-after-rotation");
+    }
+
+    @Test
+    void seeder_propagates_nonDecryptionExceptions() throws Exception {
+        // A non-AEADBadTagException from get() must propagate — e.g. a transient DB failure
+        // should NOT silently delete a valid credential.
+        CredentialStoreProvider failingStore = new CredentialStoreProvider() {
+            @Override
+            public String get(String userId, String name) {
+                throw new IllegalStateException("DB connection lost", new RuntimeException("timeout"));
+            }
+
+            @Override
+            public void set(String userId, String name, String value) {}
+
+            @Override
+            public void delete(String userId, String name) {}
+
+            @Override
+            public java.util.List<dev.agentspan.runtime.model.credentials.CredentialMeta> list(String userId) {
+                return java.util.List.of();
+            }
+        };
+
+        Function<String, String> envLookup = name -> "ANTHROPIC_API_KEY".equals(name) ? "sk-value" : null;
+
+        CredentialEnvSeeder seeder = new CredentialEnvSeeder(failingStore, envLookup);
+        var field = CredentialEnvSeeder.class.getDeclaredField("credentialsStore");
+        field.setAccessible(true);
+        field.set(seeder, "built-in");
+
+        // Non-key-mismatch exception must propagate — seeder should NOT swallow it
+        assertThatThrownBy(() -> seeder.run(new org.springframework.boot.DefaultApplicationArguments()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("DB connection lost");
+    }
+
+    @Test
     void seeder_storesGitHubCredentials_inRealDb() throws Exception {
         Function<String, String> envLookup = name -> switch (name) {
             case "GH_TOKEN" -> "ghp-test-gh-token";

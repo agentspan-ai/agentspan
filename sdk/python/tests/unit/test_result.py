@@ -249,7 +249,7 @@ class TestAgentHandleDelegation:
         runtime = MagicMock()
         handle = AgentHandle(execution_id="wf-1", runtime=runtime)
         handle.resume()
-        runtime.resume.assert_called_once_with("wf-1")
+        runtime._resume_workflow.assert_called_once_with("wf-1")
 
     def test_cancel(self):
         runtime = MagicMock()
@@ -353,7 +353,7 @@ class TestFinishReasonEnum:
         assert FinishReason.REJECTED == "rejected"
 
     def test_all_values(self):
-        assert len(FinishReason) == 8
+        assert len(FinishReason) == 9
 
 
 class TestAgentResultProperties:

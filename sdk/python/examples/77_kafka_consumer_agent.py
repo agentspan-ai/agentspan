@@ -50,6 +50,7 @@ agent = Agent(
     model=settings.llm_model,
     tools=[receive_message, echo_message],
     max_turns=100_000,
+    stateful=True,
     instructions=(
         "You are a Kafka consumer agent that runs forever. "
         "Repeat this cycle indefinitely without stopping: "

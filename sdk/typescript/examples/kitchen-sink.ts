@@ -27,8 +27,8 @@
  *   mcp-testkit --transport http --auth <secret>
  *
  *   # Store credentials via CLI or Agentspan UI:
- *   agentspan credentials set --name MCP_AUTH_TOKEN --value <secret>
- *   agentspan credentials set --name SEARCH_API_KEY --value <key>
+ *   agentspan credentials set MCP_AUTH_TOKEN <secret>
+ *   agentspan credentials set SEARCH_API_KEY <key>
  *
  * Requirements:
  *   - Conductor server with LLM support

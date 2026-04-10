@@ -17,12 +17,12 @@ export abstract class CallbackHandler {
  * Mapping from callback method names to their wire format position identifiers.
  */
 export const CALLBACK_POSITIONS: Record<string, string> = {
-  onAgentStart: 'before_agent',
-  onAgentEnd: 'after_agent',
-  onModelStart: 'before_model',
-  onModelEnd: 'after_model',
-  onToolStart: 'before_tool',
-  onToolEnd: 'after_tool',
+  onAgentStart: "before_agent",
+  onAgentEnd: "after_agent",
+  onModelStart: "before_model",
+  onModelEnd: "after_model",
+  onToolStart: "before_tool",
+  onToolEnd: "after_tool",
 };
 
 /**
@@ -36,7 +36,7 @@ export function getCallbackWorkerNames(
   const result: Array<{ position: string; taskName: string }> = [];
 
   for (const [methodName, position] of Object.entries(CALLBACK_POSITIONS)) {
-    if (typeof (handler as Record<string, unknown>)[methodName] === 'function') {
+    if (typeof (handler as Record<string, unknown>)[methodName] === "function") {
       result.push({
         position,
         taskName: `${agentName}_${position}`,

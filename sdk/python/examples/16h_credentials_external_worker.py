@@ -19,8 +19,7 @@ The external worker typically runs in a separate process. Here we
 simulate both in one file for demonstration.
 
 Setup (one-time):
-    agentspan credentials set --name GITHUB_TOKEN
-
+    agentspan credentials set GITHUB_TOKEN <your-github-token>
 Requirements:
     - Agentspan server running at AGENTSPAN_SERVER_URL
     - AGENTSPAN_LLM_MODEL set (or defaults to openai/gpt-5.4)

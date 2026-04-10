@@ -90,7 +90,8 @@ class AgentConfigSerializer:
 
         # Tools
         if agent.tools:
-            config["tools"] = [self._serialize_tool(t) for t in agent.tools]
+            agent_stateful = getattr(agent, "stateful", False)
+            config["tools"] = [self._serialize_tool(t, agent_stateful=agent_stateful) for t in agent.tools]
 
         # Sub-agents (recursive)
         if agent.agents:
@@ -220,7 +221,7 @@ class AgentConfigSerializer:
         # Remove None values for cleaner JSON
         return {k: v for k, v in config.items() if v is not None}
 
-    def _serialize_tool(self, tool_obj: Any) -> dict:
+    def _serialize_tool(self, tool_obj: Any, *, agent_stateful: bool = False) -> dict:
         """Serialize a tool to a ToolConfig dict."""
         from agentspan.agents.tool import get_tool_def
 
@@ -237,6 +238,9 @@ class AgentConfigSerializer:
 
         if td.approval_required:
             result["approvalRequired"] = True
+
+        if agent_stateful or getattr(td, "stateful", False):
+            result["stateful"] = True
 
         if td.timeout_seconds is not None:
             result["timeoutSeconds"] = td.timeout_seconds

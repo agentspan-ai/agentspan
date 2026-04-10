@@ -9,14 +9,16 @@
  * 3. Passthrough — single SIMPLE task runs entire graph
  */
 
-import type { WorkerInfo } from './serializer.js';
+import type { WorkerInfo } from "./serializer.js";
 
-const _DEFAULT_NAME = 'langgraph_agent';
+const _DEFAULT_NAME = "langgraph_agent";
 
 // Debug logging — set via _setDebugLog for testing/diagnostics
 let _debugLog: ((...args: any[]) => void) | null = null;
 /** @internal For debugging only. */
-export function _setDebugLog(fn: ((...args: any[]) => void) | null) { _debugLog = fn; }
+export function _setDebugLog(fn: ((...args: any[]) => void) | null) {
+  _debugLog = fn;
+}
 
 // ── Public API ──────────────────────────────────────────
 
@@ -53,9 +55,12 @@ export function serializeLangGraph(
   // Resolve the LLM object: explicit option > _agentspan.llm metadata
   // This is the actual LLM instance needed for monkey-patching .invoke()
   // in graph-structure prep/finish workers. Model string alone is not enough.
-  const llmObj = (options?.model != null && typeof options.model === 'object') ? options.model
-    : (metadata?.llm != null && typeof metadata.llm === 'object') ? metadata.llm
-    : null;
+  const llmObj =
+    options?.model != null && typeof options.model === "object"
+      ? options.model
+      : metadata?.llm != null && typeof metadata.llm === "object"
+        ? metadata.llm
+        : null;
 
   // Path 2: Graph-structure — custom StateGraph with nodes/edges
   const graphResult = _serializeGraphStructure(name, modelStr, graph, llmObj);
@@ -82,30 +87,37 @@ export function serializeLangGraph(
 
 function _extractGraphName(g: Record<string, unknown>): string {
   // Explicit name property
-  if (typeof g.name === 'string' && g.name) return g.name;
+  if (typeof g.name === "string" && g.name) return g.name;
   // _agentspan metadata name
   const metadata = g._agentspan as Record<string, unknown> | undefined;
-  if (metadata && typeof metadata.name === 'string' && metadata.name) return metadata.name;
+  if (metadata && typeof metadata.name === "string" && metadata.name) return metadata.name;
   // getName() method (LangGraph compiled graphs)
   // Filter out "LangGraph" — it's the generic default from Pregel, not user-defined.
-  if (typeof (g as any).getName === 'function') {
+  if (typeof (g as any).getName === "function") {
     try {
       const n = (g as any).getName();
-      if (typeof n === 'string' && n && n !== 'LangGraph') return n;
-    } catch { /* ignore */ }
+      if (typeof n === "string" && n && n !== "LangGraph") return n;
+    } catch {
+      /* ignore */
+    }
   }
   return _DEFAULT_NAME;
 }
 
 // ── Passthrough ─────────────────────────────────────────
 
-function _serializePassthrough(
-  name: string,
-): [Record<string, unknown>, WorkerInfo[]] {
+function _serializePassthrough(name: string): [Record<string, unknown>, WorkerInfo[]] {
   const workerName = name;
   return [
     { name, _worker_name: workerName },
-    [{ name: workerName, description: `Passthrough worker for ${name}`, inputSchema: {}, func: null }],
+    [
+      {
+        name: workerName,
+        description: `Passthrough worker for ${name}`,
+        inputSchema: {},
+        func: null,
+      },
+    ],
   ];
 }
 
@@ -127,8 +139,8 @@ function _serializeFromMetadata(
 
   for (const toolObj of tools) {
     const t = toolObj as Record<string, unknown>;
-    const toolName = (typeof t.name === 'string' && t.name) || '';
-    const description = (typeof t.description === 'string' && t.description) || '';
+    const toolName = (typeof t.name === "string" && t.name) || "";
+    const description = (typeof t.description === "string" && t.description) || "";
     const schema = _getToolSchema(toolObj);
 
     toolDicts.push({ _worker_ref: toolName, description, parameters: schema });
@@ -137,7 +149,7 @@ function _serializeFromMetadata(
     if (func !== null) {
       workers.push({
         name: toolName,
-        description: description.trim().split('\n')[0],
+        description: description.trim().split("\n")[0],
         inputSchema: schema,
         func,
       });
@@ -164,8 +176,8 @@ function _serializeFullExtraction(
 
   for (const toolObj of toolObjs) {
     const t = toolObj as Record<string, unknown>;
-    const toolName = (typeof t.name === 'string' && t.name) || '';
-    const description = (typeof t.description === 'string' && t.description) || '';
+    const toolName = (typeof t.name === "string" && t.name) || "";
+    const description = (typeof t.description === "string" && t.description) || "";
     const schema = _getToolSchema(toolObj);
 
     toolDicts.push({ _worker_ref: toolName, description, parameters: schema });
@@ -174,7 +186,7 @@ function _serializeFullExtraction(
     if (func !== null) {
       workers.push({
         name: toolName,
-        description: description.trim().split('\n')[0],
+        description: description.trim().split("\n")[0],
         inputSchema: schema,
         func,
       });
@@ -207,7 +219,7 @@ function _serializeGraphStructure(
 
     // Human node: no worker needed, compiled as Conductor HUMAN task
     if (_isHumanNode(func)) {
-      const humanPrompt = (func as any)._agentspan_human_prompt || '';
+      const humanPrompt = (func as any)._agentspan_human_prompt || "";
       graphNodes.push({
         name: nodeName,
         _worker_ref: workerName,
@@ -236,10 +248,10 @@ function _serializeGraphStructure(
       workers.push({
         name: prepName,
         description: `LLM prep for node '${nodeName}'`,
-        inputSchema: { type: 'object', properties: { state: { type: 'object' } } },
+        inputSchema: { type: "object", properties: { state: { type: "object" } } },
         func: makeLLMPrepWorker(func, nodeName, _llmObj),
         _pre_wrapped: true,
-        _extra: { llm_role: 'prep' },
+        _extra: { llm_role: "prep" },
       });
 
       // Finish worker: re-runs node with mock LLM response
@@ -247,12 +259,12 @@ function _serializeGraphStructure(
         name: finishName,
         description: `LLM finish for node '${nodeName}'`,
         inputSchema: {
-          type: 'object',
-          properties: { state: { type: 'object' }, llm_result: { type: 'string' } },
+          type: "object",
+          properties: { state: { type: "object" }, llm_result: { type: "string" } },
         },
         func: makeLLMFinishWorker(func, nodeName, _llmObj),
         _pre_wrapped: true,
-        _extra: { llm_role: 'finish' },
+        _extra: { llm_role: "finish" },
       });
       continue;
     }
@@ -285,22 +297,22 @@ function _serializeGraphStructure(
         workers.push({
           name: prepName,
           description: `Subgraph prep for node '${nodeName}'`,
-          inputSchema: { type: 'object', properties: { state: { type: 'object' } } },
+          inputSchema: { type: "object", properties: { state: { type: "object" } } },
           func: makeSubgraphPrepWorker(func, nodeName, subgraphObj),
           _pre_wrapped: true,
-          _extra: { subgraph_role: 'prep' },
+          _extra: { subgraph_role: "prep" },
         });
 
         workers.push({
           name: finishName,
           description: `Subgraph finish for node '${nodeName}'`,
           inputSchema: {
-            type: 'object',
-            properties: { state: { type: 'object' }, subgraph_result: { type: 'object' } },
+            type: "object",
+            properties: { state: { type: "object" }, subgraph_result: { type: "object" } },
           },
           func: makeSubgraphFinishWorker(func, nodeName, subgraphObj),
           _pre_wrapped: true,
-          _extra: { subgraph_role: 'finish' },
+          _extra: { subgraph_role: "finish" },
         });
 
         workers.push(...subWorkers);
@@ -314,7 +326,7 @@ function _serializeGraphStructure(
     workers.push({
       name: workerName,
       description: `Graph node '${nodeName}'`,
-      inputSchema: { type: 'object', properties: { state: { type: 'object' } } },
+      inputSchema: { type: "object", properties: { state: { type: "object" } } },
       func: makeNodeWorker(func, nodeName),
       _pre_wrapped: true,
     });
@@ -341,7 +353,7 @@ function _serializeGraphStructure(
     if (isDynamic) {
       ceEntry._dynamic_fanout = true;
       for (const targetNode of Object.values(targets)) {
-        if (targetNode !== '__end__') {
+        if (targetNode !== "__end__") {
           dynamicFanoutTargets.add(targetNode);
         }
       }
@@ -350,7 +362,7 @@ function _serializeGraphStructure(
     workers.push({
       name: routerName,
       description: `Router for conditional edge from '${src}'`,
-      inputSchema: { type: 'object', properties: { state: { type: 'object' } } },
+      inputSchema: { type: "object", properties: { state: { type: "object" } } },
       func: makeRouterWorker(routerFunc, routerName, isDynamic),
       _pre_wrapped: true,
       _extra: { is_dynamic_fanout: isDynamic },
@@ -358,7 +370,7 @@ function _serializeGraphStructure(
   }
 
   // Register direct workers for dynamic fanout targets that are LLM nodes
-  const existingNames = new Set(workers.map(w => w.name));
+  const existingNames = new Set(workers.map((w) => w.name));
   for (const targetNode of dynamicFanoutTargets) {
     const func = nodeFuncs[targetNode];
     if (!func) continue;
@@ -367,7 +379,7 @@ function _serializeGraphStructure(
       workers.push({
         name: workerName,
         description: `Direct worker for dynamic fanout node '${targetNode}'`,
-        inputSchema: { type: 'object', properties: { state: { type: 'object' } } },
+        inputSchema: { type: "object", properties: { state: { type: "object" } } },
         func: makeNodeWorker(func, targetNode),
         _pre_wrapped: true,
         _extra: { direct_node_worker: true },
@@ -407,17 +419,16 @@ function _serializeGraphStructure(
 function _extractNodeFunctions(graph: unknown): Record<string, Function> {
   const g = graph as Record<string, unknown>;
   const nodes = g.nodes;
-  if (!nodes || typeof nodes !== 'object') return {};
+  if (!nodes || typeof nodes !== "object") return {};
 
   const result: Record<string, Function> = {};
 
   // Handle both Map and plain object
-  const entries: [string, unknown][] = nodes instanceof Map
-    ? Array.from(nodes.entries())
-    : Object.entries(nodes);
+  const entries: [string, unknown][] =
+    nodes instanceof Map ? Array.from(nodes.entries()) : Object.entries(nodes);
 
   for (const [nodeName, node] of entries) {
-    if (nodeName === '__start__' || nodeName === '__end__') continue;
+    if (nodeName === "__start__" || nodeName === "__end__") continue;
     const func = _getNodeFunction(node);
     if (func !== null) {
       result[nodeName] = func;
@@ -427,14 +438,14 @@ function _extractNodeFunctions(graph: unknown): Record<string, Function> {
 }
 
 function _getNodeFunction(node: unknown): Function | null {
-  if (typeof node !== 'object' || node === null) return null;
+  if (typeof node !== "object" || node === null) return null;
   const n = node as Record<string, unknown>;
 
   // LangGraph PregelNode has .bound.func (or .bound.afunc for async)
   const bound = n.bound as Record<string, unknown> | undefined;
   if (!bound) return null;
   const func = bound.func ?? bound.afunc;
-  if (typeof func !== 'function') return null;
+  if (typeof func !== "function") return null;
 
   return func as Function;
 }
@@ -460,20 +471,25 @@ function _extractEdges(
   // Conditional edges from builder.branches
   const conditional: [string, Function, Record<string, string>, boolean][] = [];
   const branches = builder.branches;
-  if (branches && typeof branches === 'object') {
+  if (branches && typeof branches === "object") {
     for (const [srcNode, branchMap] of Object.entries(branches as Record<string, unknown>)) {
-      if (typeof branchMap !== 'object' || branchMap === null) continue;
+      if (typeof branchMap !== "object" || branchMap === null) continue;
       for (const [, branchSpec] of Object.entries(branchMap as Record<string, unknown>)) {
-        if (typeof branchSpec !== 'object' || branchSpec === null) continue;
+        if (typeof branchSpec !== "object" || branchSpec === null) continue;
         const spec = branchSpec as Record<string, unknown>;
         const path = spec.path as Record<string, unknown> | undefined;
         if (!path) continue;
         const routerFunc = path.func;
-        if (typeof routerFunc !== 'function') continue;
+        if (typeof routerFunc !== "function") continue;
         const targets = spec.ends;
-        if (!targets || typeof targets !== 'object') continue;
+        if (!targets || typeof targets !== "object") continue;
         const isDynamic = _isSendRouter(routerFunc as Function);
-        conditional.push([srcNode, routerFunc as Function, targets as Record<string, string>, isDynamic]);
+        conditional.push([
+          srcNode,
+          routerFunc as Function,
+          targets as Record<string, string>,
+          isDynamic,
+        ]);
       }
     }
   }
@@ -506,18 +522,19 @@ function _findLLMInNode(
 ): { llm: unknown; path: string } | null {
   // Quick check: does the function source reference .invoke()?
   const funcSource = func.toString();
-  const hasInvokeCall = funcSource.includes('.invoke(') || funcSource.includes('.invoke (');
+  const hasInvokeCall = funcSource.includes(".invoke(") || funcSource.includes(".invoke (");
   if (!hasInvokeCall) return null;
 
   const g = graph as Record<string, unknown>;
   const nodes = g.nodes;
-  if (!nodes || typeof nodes !== 'object') return null;
+  if (!nodes || typeof nodes !== "object") return null;
 
   // Search all graph nodes for LLM-like objects
   const seen = new WeakSet<object>();
-  const entries: [string, unknown][] = nodes instanceof Map
-    ? Array.from((nodes as Map<string, unknown>).entries())
-    : Object.entries(nodes);
+  const entries: [string, unknown][] =
+    nodes instanceof Map
+      ? Array.from((nodes as Map<string, unknown>).entries())
+      : Object.entries(nodes);
 
   for (const [, node] of entries) {
     const result = _searchForLLM(node, 6, seen);
@@ -526,9 +543,9 @@ function _findLLMInNode(
 
   // Search graph-level properties
   for (const key of Object.keys(g)) {
-    if (key.startsWith('_') || key === 'nodes' || key === 'builder') continue;
+    if (key.startsWith("_") || key === "nodes" || key === "builder") continue;
     const val = g[key];
-    if (val && typeof val === 'object') {
+    if (val && typeof val === "object") {
       const result = _searchForLLM(val, 4, seen);
       if (result) return result;
     }
@@ -541,7 +558,7 @@ function _findLLMInNode(
     // If the caller provided an LLM object hint (from run()/deploy() options
     // or _agentspan.llm metadata), use it for monkey-patching. Otherwise
     // fall back to null which triggers client-side passthrough.
-    return { llm: llmObjHint ?? null, path: llmObjHint ? '__option__' : '__inferred__' };
+    return { llm: llmObjHint ?? null, path: llmObjHint ? "__option__" : "__inferred__" };
   }
 
   return null;
@@ -554,28 +571,43 @@ function _findLLMInNode(
  */
 function _looksLikeLLMCall(source: string): boolean {
   // LangChain message construction patterns
-  if (source.includes('Message')) {
-    if (source.includes('System') || source.includes('Human') ||
-        source.includes('AI') || source.includes('Chat')) {
+  if (source.includes("Message")) {
+    if (
+      source.includes("System") ||
+      source.includes("Human") ||
+      source.includes("AI") ||
+      source.includes("Chat")
+    ) {
       return true;
     }
   }
   // OpenAI-style dict messages: { role: "system", content: ... }
-  if (source.includes('role') && source.includes('content') && source.includes('system')) {
+  if (source.includes("role") && source.includes("content") && source.includes("system")) {
     return true;
   }
   // Common LLM variable names before .invoke
-  for (const varName of ['llm.invoke', 'model.invoke', 'chat.invoke', 'chatModel.invoke', 'chatLLM.invoke',
-                          'llm.call', 'model.call', 'llm.generate', 'model.generate',
-                          'llm.stream', 'model.stream', 'chat.stream']) {
+  for (const varName of [
+    "llm.invoke",
+    "model.invoke",
+    "chat.invoke",
+    "chatModel.invoke",
+    "chatLLM.invoke",
+    "llm.call",
+    "model.call",
+    "llm.generate",
+    "model.generate",
+    "llm.stream",
+    "model.stream",
+    "chat.stream",
+  ]) {
     if (source.includes(varName)) return true;
   }
   // .invoke() + response.content pattern — strong LLM signal
-  if (source.includes('.invoke(') && source.includes('.content')) {
+  if (source.includes(".invoke(") && source.includes(".content")) {
     return true;
   }
   // Template literal or string concat with prompt-like patterns
-  if (source.includes('.invoke(') && (source.includes('prompt') || source.includes('Prompt'))) {
+  if (source.includes(".invoke(") && (source.includes("prompt") || source.includes("Prompt"))) {
     return true;
   }
   return false;
@@ -590,24 +622,24 @@ function _searchForLLM(
   depth: number,
   seen: WeakSet<object>,
 ): { llm: unknown; path: string } | null {
-  if (depth <= 0 || obj == null || typeof obj !== 'object') return null;
+  if (depth <= 0 || obj == null || typeof obj !== "object") return null;
   if (seen.has(obj as object)) return null;
   seen.add(obj as object);
 
   // Check if this object IS an LLM
   const modelStr = _tryGetModelString(obj);
-  if (modelStr && typeof (obj as any).invoke === 'function') {
+  if (modelStr && typeof (obj as any).invoke === "function") {
     // It has a model string and an invoke method — it's an LLM
-    const clsName = (obj as any).constructor?.name ?? 'llm';
+    const clsName = (obj as any).constructor?.name ?? "llm";
     return { llm: obj, path: clsName };
   }
 
   const asAny = obj as Record<string, unknown>;
 
   // Walk common nested property names
-  for (const attr of ['bound', 'first', 'last', 'runnable', 'func', 'llm', 'model']) {
+  for (const attr of ["bound", "first", "last", "runnable", "func", "llm", "model"]) {
     const child = asAny[attr];
-    if (child != null && child !== obj && typeof child === 'object') {
+    if (child != null && child !== obj && typeof child === "object") {
       const found = _searchForLLM(child, depth - 1, seen);
       if (found) return found;
     }
@@ -627,17 +659,17 @@ function _searchForLLM(
 // ── Subgraph detection ──────────────────────────────────
 
 function _isCompiledGraph(obj: unknown): boolean {
-  if (typeof obj !== 'object' || obj === null) return false;
+  if (typeof obj !== "object" || obj === null) return false;
   // Use LangGraph's own marker property — most reliable check.
   // CompiledStateGraph, CompiledGraph, and Pregel all set lg_is_pregel = true.
   // This avoids false positives from PregelNode (which also contains "Pregel").
   if ((obj as any).lg_is_pregel === true) return true;
   // Fallback: exact class name check (excludes PregelNode, PregelTaskDescription, etc.)
-  const typeName = (obj as any).constructor?.name ?? '';
+  const typeName = (obj as any).constructor?.name ?? "";
   return (
-    typeName.includes('CompiledStateGraph') ||
-    typeName.includes('CompiledGraph') ||
-    typeName === 'Pregel'
+    typeName.includes("CompiledStateGraph") ||
+    typeName.includes("CompiledGraph") ||
+    typeName === "Pregel"
   );
 }
 
@@ -647,10 +679,10 @@ function _isCompiledGraph(obj: unknown): boolean {
  * compiled graphs — patching it intercepts invoke on every instance.
  */
 function _getPregelPrototype(graph: unknown): { proto: any; origInvoke: Function } | null {
-  if (typeof graph !== 'object' || graph === null) return null;
+  if (typeof graph !== "object" || graph === null) return null;
   let proto = Object.getPrototypeOf(graph);
   while (proto != null) {
-    if (proto.hasOwnProperty('invoke') && typeof proto.invoke === 'function') {
+    if (Object.hasOwn(proto, "invoke") && typeof proto.invoke === "function") {
       return { proto, origInvoke: proto.invoke };
     }
     proto = Object.getPrototypeOf(proto);
@@ -680,6 +712,7 @@ function _findSubgraphViaRuntime(
 
   // Temporarily patch the shared Pregel prototype invoke
   pregel.proto.invoke = function (this: unknown, input: unknown) {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias -- intentional: capturing call-site receiver
     captured = this;
     throw new _CapturedSubgraphCall(input);
   };
@@ -688,12 +721,12 @@ function _findSubgraphViaRuntime(
   // so the function doesn't crash before reaching .invoke()
   const proxyState = new Proxy({} as Record<string, unknown>, {
     get(_target, prop) {
-      if (prop === Symbol.toPrimitive) return () => '';
+      if (prop === Symbol.toPrimitive) return () => "";
       if (prop === Symbol.iterator) return undefined;
-      if (typeof prop === 'symbol') return undefined;
+      if (typeof prop === "symbol") return undefined;
       // Return an empty string for common state fields; the function
       // only needs to reach the .invoke() call, not produce valid output.
-      return '';
+      return "";
     },
   });
 
@@ -703,18 +736,18 @@ function _findSubgraphViaRuntime(
     // the throw propagates. The throw becomes a rejected promise which
     // we must suppress to avoid crashing the process.
     const maybePromise = (func as any)(proxyState);
-    if (maybePromise && typeof maybePromise.then === 'function') {
+    if (maybePromise && typeof maybePromise.then === "function") {
       maybePromise.catch(() => {}); // suppress unhandled rejection
     }
-  } catch (e) {
+  } catch {
     // Expected: _CapturedSubgraphCall or state access error (sync path)
   } finally {
     pregel.proto.invoke = pregel.origInvoke;
   }
 
   if (captured != null && captured !== graph && _isCompiledGraph(captured)) {
-    const clsName = (captured as any).constructor?.name ?? 'subgraph';
-    _debugLog?.('_findSubgraphViaRuntime: captured', clsName);
+    const clsName = (captured as any).constructor?.name ?? "subgraph";
+    _debugLog?.("_findSubgraphViaRuntime: captured", clsName);
     return { subgraph: captured, path: clsName };
   }
 
@@ -742,34 +775,37 @@ function _findSubgraphInNode(
 
   // Quick check: does the function source contain .invoke() at all?
   const funcSource = func.toString();
-  const hasInvoke = funcSource.includes('.invoke(') || funcSource.includes('.invoke (');
+  const hasInvoke = funcSource.includes(".invoke(") || funcSource.includes(".invoke (");
   if (!hasInvoke) return null;
 
   // Strategy 1: LangGraph's built-in getSubgraphs() API
   // Works when a compiled graph is passed directly to addNode()
-  if (nodeName && typeof (g as any).getSubgraphs === 'function') {
+  if (nodeName && typeof (g as any).getSubgraphs === "function") {
     try {
       for (const [name, sg] of (g as any).getSubgraphs()) {
         if (name === nodeName && _isCompiledGraph(sg)) {
-          _debugLog?.('_findSubgraphInNode: found via getSubgraphs() for', nodeName);
+          _debugLog?.("_findSubgraphInNode: found via getSubgraphs() for", nodeName);
           return { subgraph: sg, path: name };
         }
       }
-    } catch { /* getSubgraphs() not available or failed */ }
+    } catch {
+      /* getSubgraphs() not available or failed */
+    }
   }
 
   // Strategy 2: Graph-tree search — walk node wrappers for embedded subgraphs
   const nodes = g.nodes;
-  if (nodes && typeof nodes === 'object') {
+  if (nodes && typeof nodes === "object") {
     const seen = new WeakSet<object>();
-    const entries: [string, unknown][] = nodes instanceof Map
-      ? Array.from((nodes as Map<string, unknown>).entries())
-      : Object.entries(nodes);
+    const entries: [string, unknown][] =
+      nodes instanceof Map
+        ? Array.from((nodes as Map<string, unknown>).entries())
+        : Object.entries(nodes);
 
     for (const [, node] of entries) {
       const result = _searchForSubgraph(node, 5, seen, graph);
       if (result) {
-        _debugLog?.('_findSubgraphInNode: found via graph-tree search');
+        _debugLog?.("_findSubgraphInNode: found via graph-tree search");
         return result;
       }
     }
@@ -792,20 +828,20 @@ function _searchForSubgraph(
   seen: WeakSet<object>,
   parentGraph: unknown,
 ): { subgraph: unknown; path: string } | null {
-  if (depth <= 0 || obj == null || typeof obj !== 'object') return null;
+  if (depth <= 0 || obj == null || typeof obj !== "object") return null;
   if (seen.has(obj as object)) return null;
   seen.add(obj as object);
 
   // Check if this is a compiled graph (but NOT the parent graph itself)
   if (obj !== parentGraph && _isCompiledGraph(obj)) {
-    const clsName = (obj as any).constructor?.name ?? 'subgraph';
+    const clsName = (obj as any).constructor?.name ?? "subgraph";
     return { subgraph: obj, path: clsName };
   }
 
   const asAny = obj as Record<string, unknown>;
-  for (const attr of ['bound', 'first', 'last', 'runnable', 'func']) {
+  for (const attr of ["bound", "first", "last", "runnable", "func"]) {
     const child = asAny[attr];
-    if (child != null && child !== obj && typeof child === 'object') {
+    if (child != null && child !== obj && typeof child === "object") {
       const found = _searchForSubgraph(child, depth - 1, seen, parentGraph);
       if (found) return found;
     }
@@ -818,7 +854,7 @@ function _searchForSubgraph(
 
 function _isSendRouter(func: Function): boolean {
   const src = func.toString();
-  return src.includes('Send');
+  return src.includes("Send");
 }
 
 // ── Input key extraction ────────────────────────────────
@@ -828,13 +864,13 @@ function _extractInputKey(graph: unknown): string | null {
     const g = graph as any;
 
     // Method 1: getInputJsonSchema (if available)
-    if (typeof g.getInputJsonSchema === 'function') {
+    if (typeof g.getInputJsonSchema === "function") {
       const schema = g.getInputJsonSchema();
       if (schema?.properties) {
         const required: string[] = schema.required || Object.keys(schema.properties);
         for (const field of required) {
           const prop = schema.properties[field];
-          if (prop?.type === 'string') return field;
+          if (prop?.type === "string") return field;
         }
         const keys = Object.keys(schema.properties);
         if (keys.length > 0) return keys[0];
@@ -843,17 +879,17 @@ function _extractInputKey(graph: unknown): string | null {
 
     // Method 2: Examine channels — find first string-default channel
     const channels = g.channels;
-    if (channels && typeof channels === 'object') {
-      const entries: [string, unknown][] = channels instanceof Map
-        ? Array.from(channels.entries())
-        : Object.entries(channels);
+    if (channels && typeof channels === "object") {
+      const entries: [string, unknown][] =
+        channels instanceof Map ? Array.from(channels.entries()) : Object.entries(channels);
 
       for (const [chName, chObj] of entries) {
-        if (chName.startsWith('__') || chName.startsWith('branch:')) continue;
+        if (chName.startsWith("__") || chName.startsWith("branch:")) continue;
         const ch = chObj as any;
         // BinaryOperatorAggregate has a .value or default() that reveals the type
-        const defaultVal = ch.value ?? (typeof ch.default === 'function' ? ch.default() : ch.default);
-        if (typeof defaultVal === 'string') return chName;
+        const defaultVal =
+          ch.value ?? (typeof ch.default === "function" ? ch.default() : ch.default);
+        if (typeof defaultVal === "string") return chName;
       }
     }
 
@@ -868,17 +904,16 @@ function _extractInputKey(graph: unknown): string | null {
 function _extractReducers(graph: unknown): Record<string, string> | null {
   try {
     const channels = (graph as any).channels;
-    if (!channels || typeof channels !== 'object') return null;
+    if (!channels || typeof channels !== "object") return null;
 
     const reducers: Record<string, string> = {};
-    const entries: [string, unknown][] = channels instanceof Map
-      ? Array.from(channels.entries())
-      : Object.entries(channels);
+    const entries: [string, unknown][] =
+      channels instanceof Map ? Array.from(channels.entries()) : Object.entries(channels);
 
     for (const [chName, chObj] of entries) {
-      if (chName.startsWith('__') || chName.startsWith('branch:')) continue;
-      const typeName = (chObj as any)?.constructor?.name ?? '';
-      if (typeName === 'BinaryOperatorAggregate') {
+      if (chName.startsWith("__") || chName.startsWith("branch:")) continue;
+      const typeName = (chObj as any)?.constructor?.name ?? "";
+      if (typeName === "BinaryOperatorAggregate") {
         const op = (chObj as any).operator;
         if (op != null) {
           reducers[chName] = _inferReducerType(op);
@@ -936,23 +971,24 @@ function _extractRetryPolicies(graph: unknown): Record<string, Record<string, un
 function _inferReducerType(op: Function): string {
   const src = op.toString();
   // Replace patterns: (a, b) => b ?? a, (_, n) => n, (p, n) => n ?? p
-  if (src.includes('??') || /=>\s*\w+\s*$/.test(src.trim())) return 'replace';
+  if (src.includes("??") || /=>\s*\w+\s*$/.test(src.trim())) return "replace";
   // Array spread/concat: [...a, ...b] or a.concat(b)
-  if (src.includes('...') && src.includes('[')) return 'add';
-  if (src.includes('.concat(')) return 'add';
+  if (src.includes("...") && src.includes("[")) return "add";
+  if (src.includes(".concat(")) return "add";
   // Numeric addition: a + b
-  if (/\w\s*\+\s*\w/.test(src) && !src.includes('"') && !src.includes("'") && !src.includes('`')) return 'add';
+  if (/\w\s*\+\s*\w/.test(src) && !src.includes('"') && !src.includes("'") && !src.includes("`"))
+    return "add";
   // Named function (if not the generic "reducer" from Annotation)
   const name = op.name;
-  if (name && name !== 'reducer' && name !== 'anonymous' && name !== '') return name;
-  return 'replace';
+  if (name && name !== "reducer" && name !== "anonymous" && name !== "") return name;
+  return "replace";
 }
 
 // ── LLM interception workers ────────────────────────────
 
 class _CapturedLLMCall extends Error {
   constructor(public messages: unknown[]) {
-    super('LLM call captured');
+    super("LLM call captured");
   }
 }
 
@@ -973,17 +1009,19 @@ async function _getChatModelClasses(): Promise<any[]> {
 
   // Core: BaseChatModel
   try {
-    const mod = await import('@langchain/core/language_models/chat_models');
+    const mod = await import("@langchain/core/language_models/chat_models");
     if (mod.BaseChatModel) classes.push(mod.BaseChatModel);
-  } catch (e) { _debugLog?.('import @langchain/core failed:', e); }
+  } catch (e) {
+    _debugLog?.("import @langchain/core failed:", e);
+  }
 
   // Provider packages — each may add intermediate classes with their own invoke
   const providerImports = [
-    ['@langchain/openai', ['ChatOpenAI', 'BaseChatOpenAI']],
-    ['@langchain/anthropic', ['ChatAnthropic']],
-    ['@langchain/google-genai', ['ChatGoogleGenerativeAI']],
-    ['@langchain/google-vertexai', ['ChatVertexAI']],
-    ['@langchain/community/chat_models/bedrock', ['BedrockChat']],
+    ["@langchain/openai", ["ChatOpenAI", "BaseChatOpenAI"]],
+    ["@langchain/anthropic", ["ChatAnthropic"]],
+    ["@langchain/google-genai", ["ChatGoogleGenerativeAI"]],
+    ["@langchain/google-vertexai", ["ChatVertexAI"]],
+    ["@langchain/community/chat_models/bedrock", ["BedrockChat"]],
   ] as const;
 
   for (const [pkg, classNames] of providerImports) {
@@ -992,10 +1030,12 @@ async function _getChatModelClasses(): Promise<any[]> {
       for (const name of classNames) {
         if (mod[name]) classes.push(mod[name]);
       }
-    } catch (e) { _debugLog?.('import', pkg, 'failed:', e); }
+    } catch (e) {
+      _debugLog?.("import", pkg, "failed:", e);
+    }
   }
 
-  _debugLog?.('_getChatModelClasses found', classes.length, 'classes');
+  _debugLog?.("_getChatModelClasses found", classes.length, "classes");
   _chatModelClasses = classes;
   return classes;
 }
@@ -1016,7 +1056,7 @@ async function _patchAllInvokes(replacement: Function): Promise<(() => void) | n
     let proto = cls.prototype;
     while (proto && !seen.has(proto)) {
       seen.add(proto);
-      if (proto.hasOwnProperty('invoke')) {
+      if (Object.hasOwn(proto, "invoke")) {
         patches.push({ proto, original: proto.invoke });
         proto.invoke = replacement;
       }
@@ -1024,7 +1064,7 @@ async function _patchAllInvokes(replacement: Function): Promise<(() => void) | n
     }
   }
 
-  _debugLog?.('_patchAllInvokes: patched', patches.length, 'prototypes');
+  _debugLog?.("_patchAllInvokes: patched", patches.length, "prototypes");
   if (patches.length === 0) return null;
   return () => {
     for (const { proto, original } of patches) {
@@ -1045,11 +1085,11 @@ const _LLM_ENDPOINT_PATTERNS = [
   /api\.fireworks\.ai/,
   /api\.mistral\.ai/,
   /bedrock-runtime\..+\.amazonaws\.com/,
-  /\/v1\/chat\/completions/,  // Generic OpenAI-compatible endpoints
+  /\/v1\/chat\/completions/, // Generic OpenAI-compatible endpoints
 ];
 
 function _isLLMEndpoint(url: string): boolean {
-  return _LLM_ENDPOINT_PATTERNS.some(p => p.test(url));
+  return _LLM_ENDPOINT_PATTERNS.some((p) => p.test(url));
 }
 
 /**
@@ -1057,18 +1097,20 @@ function _isLLMEndpoint(url: string): boolean {
  */
 function _fakeLLMResponse(content: string): Response {
   const body = JSON.stringify({
-    id: 'agentspan-capture',
-    object: 'chat.completion',
-    choices: [{
-      index: 0,
-      message: { role: 'assistant', content },
-      finish_reason: 'stop',
-    }],
+    id: "agentspan-capture",
+    object: "chat.completion",
+    choices: [
+      {
+        index: 0,
+        message: { role: "assistant", content },
+        finish_reason: "stop",
+      },
+    ],
     usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
   });
   return new Response(body, {
     status: 200,
-    headers: { 'content-type': 'application/json' },
+    headers: { "content-type": "application/json" },
   });
 }
 
@@ -1081,15 +1123,15 @@ function _fakeLLMResponse(content: string): Response {
  * persistent interceptor and control its behavior via this state object.
  */
 interface _FetchInterceptState {
-  mode: 'passthrough' | 'capture' | 'mock';
+  mode: "passthrough" | "capture" | "mock";
   capturedMessages: unknown[] | null;
   mockContent: string;
 }
 
 const _fetchState: _FetchInterceptState = {
-  mode: 'passthrough',
+  mode: "passthrough",
   capturedMessages: null,
-  mockContent: '',
+  mockContent: "",
 };
 
 let _fetchInterceptorInstalled = false;
@@ -1104,26 +1146,31 @@ function _ensureFetchInterceptor(): void {
     input: string | URL | Request,
     init?: RequestInit,
   ): Promise<Response> {
-    if (_fetchState.mode === 'passthrough') {
+    if (_fetchState.mode === "passthrough") {
       return _origFetch!.call(globalThis, input, init);
     }
 
-    const url = typeof input === 'string'
-      ? input
-      : input instanceof URL ? input.href : (input as Request).url;
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.href
+          : (input as Request).url;
 
     if (_isLLMEndpoint(url)) {
-      if (_fetchState.mode === 'capture' && init?.body && !_fetchState.capturedMessages) {
+      if (_fetchState.mode === "capture" && init?.body && !_fetchState.capturedMessages) {
         try {
-          const bodyStr = typeof init.body === 'string' ? init.body : String(init.body);
+          const bodyStr = typeof init.body === "string" ? init.body : String(init.body);
           const body = JSON.parse(bodyStr);
           if (Array.isArray(body.messages)) {
             _fetchState.capturedMessages = body.messages;
-            return _fakeLLMResponse('');
+            return _fakeLLMResponse("");
           }
-        } catch { /* not JSON — pass through */ }
+        } catch {
+          /* not JSON — pass through */
+        }
       }
-      if (_fetchState.mode === 'mock') {
+      if (_fetchState.mode === "mock") {
         return _fakeLLMResponse(_fetchState.mockContent);
       }
     }
@@ -1156,7 +1203,7 @@ async function _withCaptureInvoke(
   if (llmObj) {
     const llm = llmObj as any;
     const origInvoke = llm.invoke;
-    const origCall = typeof llm.__call__ === 'function' ? llm.__call__ : undefined;
+    const origCall = typeof llm.__call__ === "function" ? llm.__call__ : undefined;
     llm.invoke = async (msgs: unknown[]) => {
       throw new _CapturedLLMCall(Array.isArray(msgs) ? msgs : [msgs]);
     };
@@ -1177,7 +1224,7 @@ async function _withCaptureInvoke(
 
   // Strategy 3: persistent fetch interceptor in capture mode
   _ensureFetchInterceptor();
-  _fetchState.mode = 'capture';
+  _fetchState.mode = "capture";
   _fetchState.capturedMessages = null;
 
   // Strategy 2: prototype chain patch (may work if modules are deduplicated)
@@ -1200,7 +1247,7 @@ async function _withCaptureInvoke(
     if (e instanceof _CapturedLLMCall) return { captured: true, messages: e.messages };
     throw e;
   } finally {
-    _fetchState.mode = 'passthrough';
+    _fetchState.mode = "passthrough";
     _fetchState.capturedMessages = null;
     if (restore) restore();
   }
@@ -1215,13 +1262,13 @@ async function _withMockInvoke(
   llmResult: string,
   fn: () => Promise<unknown>,
 ): Promise<unknown> {
-  const mockInvoke = async () => ({ content: llmResult, tool_calls: [], type: 'ai' });
+  const mockInvoke = async () => ({ content: llmResult, tool_calls: [], type: "ai" });
 
   // Strategy 1: direct instance patch
   if (llmObj) {
     const llm = llmObj as any;
     const origInvoke = llm.invoke;
-    const origCall = typeof llm.__call__ === 'function' ? llm.__call__ : undefined;
+    const origCall = typeof llm.__call__ === "function" ? llm.__call__ : undefined;
     llm.invoke = mockInvoke;
     if (origCall !== undefined) llm.__call__ = mockInvoke;
     try {
@@ -1236,7 +1283,7 @@ async function _withMockInvoke(
 
   // Strategy 3: persistent fetch interceptor in mock mode
   _ensureFetchInterceptor();
-  _fetchState.mode = 'mock';
+  _fetchState.mode = "mock";
   _fetchState.mockContent = llmResult;
 
   // Strategy 2: prototype chain patch
@@ -1245,8 +1292,8 @@ async function _withMockInvoke(
   try {
     return await Promise.resolve(fn());
   } finally {
-    _fetchState.mode = 'passthrough';
-    _fetchState.mockContent = '';
+    _fetchState.mode = "passthrough";
+    _fetchState.mockContent = "";
     if (restore) restore();
   }
 }
@@ -1257,11 +1304,7 @@ async function _withMockInvoke(
  * Workers receive raw inputData from the polling loop (not a task wrapper).
  * They return output directly — the worker manager wraps it in status/outputData.
  */
-function makeLLMPrepWorker(
-  nodeFunc: Function,
-  nodeName: string,
-  llmObj: unknown,
-): Function {
+function makeLLMPrepWorker(nodeFunc: Function, nodeName: string, llmObj: unknown): Function {
   return async (inputData: Record<string, unknown>) => {
     const state = (inputData.state as Record<string, unknown>) || {};
 
@@ -1274,7 +1317,7 @@ function makeLLMPrepWorker(
 
     // Function completed without calling llm.invoke() — passthrough
     const update = outcome.result;
-    const merged = { ...state, ...(update && typeof update === 'object' ? update : {}) };
+    const merged = { ...state, ...(update && typeof update === "object" ? update : {}) };
     return { messages: [], state: merged, result: _stateToResult(merged), _skip_llm: true };
   };
 }
@@ -1282,17 +1325,13 @@ function makeLLMPrepWorker(
 /**
  * Build a finish worker that re-runs the node with a mock LLM response.
  */
-function makeLLMFinishWorker(
-  nodeFunc: Function,
-  nodeName: string,
-  llmObj: unknown,
-): Function {
+function makeLLMFinishWorker(nodeFunc: Function, nodeName: string, llmObj: unknown): Function {
   return async (inputData: Record<string, unknown>) => {
     const state = (inputData.state as Record<string, unknown>) || {};
-    const llmResult = inputData.llm_result as string || '';
+    const llmResult = (inputData.llm_result as string) || "";
 
     const update = await _withMockInvoke(llmObj, llmResult, () => (nodeFunc as any)(state));
-    const merged = { ...state, ...(update && typeof update === 'object' ? update : {}) };
+    const merged = { ...state, ...(update && typeof update === "object" ? update : {}) };
     return { state: merged, result: _stateToResult(merged) };
   };
 }
@@ -1301,7 +1340,7 @@ function makeLLMFinishWorker(
 
 class _CapturedSubgraphCall extends Error {
   constructor(public inputData: unknown) {
-    super('Subgraph call captured');
+    super("Subgraph call captured");
   }
 }
 
@@ -1322,8 +1361,13 @@ function makeSubgraphPrepWorker(
 
     try {
       const update = await Promise.resolve((nodeFunc as any)(state));
-      const merged = { ...state, ...(update && typeof update === 'object' ? update : {}) };
-      return { subgraph_input: {}, state: merged, result: _stateToResult(merged), _skip_subgraph: true };
+      const merged = { ...state, ...(update && typeof update === "object" ? update : {}) };
+      return {
+        subgraph_input: {},
+        state: merged,
+        result: _stateToResult(merged),
+        _skip_subgraph: true,
+      };
     } catch (e) {
       if (e instanceof _CapturedSubgraphCall) {
         return { subgraph_input: e.inputData, state };
@@ -1351,7 +1395,7 @@ function makeSubgraphFinishWorker(
 
     try {
       const update = await Promise.resolve((nodeFunc as any)(state));
-      const merged = { ...state, ...(update && typeof update === 'object' ? update : {}) };
+      const merged = { ...state, ...(update && typeof update === "object" ? update : {}) };
       return { state: merged, result: _stateToResult(merged) };
     } finally {
       sg.invoke = originalInvoke;
@@ -1361,14 +1405,11 @@ function makeSubgraphFinishWorker(
 
 // ── Regular node worker ─────────────────────────────────
 
-function makeNodeWorker(
-  nodeFunc: Function,
-  nodeName: string,
-): Function {
+function makeNodeWorker(nodeFunc: Function, _nodeName: string): Function {
   return async (inputData: Record<string, unknown>) => {
     const state = (inputData.state as Record<string, unknown>) || {};
     const update = await Promise.resolve((nodeFunc as any)(state));
-    const merged = { ...state, ...(update && typeof update === 'object' ? update : {}) };
+    const merged = { ...state, ...(update && typeof update === "object" ? update : {}) };
     return { state: merged, result: _stateToResult(merged) };
   };
 }
@@ -1405,7 +1446,7 @@ function _serializeMessages(messages: unknown[]): Array<Record<string, string>> 
   for (const msg of messages) {
     const role = _langchainRole(msg);
     let content: string;
-    if (typeof msg === 'object' && msg !== null) {
+    if (typeof msg === "object" && msg !== null) {
       const m = msg as any;
       content = m.content ?? m.text ?? String(msg);
     } else {
@@ -1417,37 +1458,37 @@ function _serializeMessages(messages: unknown[]): Array<Record<string, string>> 
 }
 
 function _langchainRole(msg: unknown): string {
-  if (typeof msg !== 'object' || msg === null) return 'user';
+  if (typeof msg !== "object" || msg === null) return "user";
   const m = msg as any;
 
   // LangChain message type detection
-  const typeName = m.constructor?.name ?? '';
-  if (typeName.includes('System')) return 'system';
-  if (typeName.includes('Human') || typeName.includes('User')) return 'user';
-  if (typeName.includes('AI') || typeName.includes('Assistant')) return 'assistant';
+  const typeName = m.constructor?.name ?? "";
+  if (typeName.includes("System")) return "system";
+  if (typeName.includes("Human") || typeName.includes("User")) return "user";
+  if (typeName.includes("AI") || typeName.includes("Assistant")) return "assistant";
 
   // _getType method (LangChain JS)
-  if (typeof m._getType === 'function') {
+  if (typeof m._getType === "function") {
     const t = m._getType();
-    if (t === 'system') return 'system';
-    if (t === 'human') return 'user';
-    if (t === 'ai') return 'assistant';
+    if (t === "system") return "system";
+    if (t === "human") return "user";
+    if (t === "ai") return "assistant";
   }
 
   // Dict-style messages
-  if (typeof m.role === 'string') {
-    if (m.role === 'human') return 'user';
-    if (m.role === 'ai') return 'assistant';
+  if (typeof m.role === "string") {
+    if (m.role === "human") return "user";
+    if (m.role === "ai") return "assistant";
     return m.role;
   }
 
-  return 'user';
+  return "user";
 }
 
 // ── State helpers ───────────────────────────────────────
 
 function _stateToResult(state: Record<string, unknown>): string {
-  for (const key of ['result', 'final_email', 'output', 'answer', 'response']) {
+  for (const key of ["result", "final_email", "output", "answer", "response"]) {
     if (state[key]) return String(state[key]);
   }
   try {
@@ -1464,25 +1505,25 @@ function _stateToResult(state: Record<string, unknown>): string {
  * Accepts a string ('openai/gpt-4o-mini') or an LLM object (ChatOpenAI instance).
  */
 function _extractModelFromOption(model: unknown): string | null {
-  if (typeof model === 'string' && model.length > 0) {
-    if (model.includes('/')) return model;
-    const provider = _inferProvider('', model);
+  if (typeof model === "string" && model.length > 0) {
+    if (model.includes("/")) return model;
+    const provider = _inferProvider("", model);
     return provider ? `${provider}/${model}` : model;
   }
-  if (typeof model !== 'object' || model === null) return null;
+  if (typeof model !== "object" || model === null) return null;
 
   const obj = model as Record<string, unknown>;
   const modelName =
-    (typeof obj.model === 'string' && obj.model) ||
-    (typeof obj.modelName === 'string' && obj.modelName) ||
-    (typeof obj.model_name === 'string' && obj.model_name) ||
-    (typeof obj.modelId === 'string' && obj.modelId) ||
+    (typeof obj.model === "string" && obj.model) ||
+    (typeof obj.modelName === "string" && obj.modelName) ||
+    (typeof obj.model_name === "string" && obj.model_name) ||
+    (typeof obj.modelId === "string" && obj.modelId) ||
     null;
 
   if (!modelName || modelName.length > 100) return null;
-  if (modelName.includes('/')) return modelName;
+  if (modelName.includes("/")) return modelName;
 
-  const clsName = model.constructor?.name ?? '';
+  const clsName = model.constructor?.name ?? "";
   const provider = _inferProvider(clsName, modelName);
   return provider ? `${provider}/${modelName}` : modelName;
 }
@@ -1492,11 +1533,12 @@ function _extractModelFromOption(model: unknown): string | null {
 function _findModelInGraph(graph: unknown): string | null {
   const g = graph as Record<string, unknown>;
   const nodes = g.nodes;
-  if (!nodes || typeof nodes !== 'object') return null;
+  if (!nodes || typeof nodes !== "object") return null;
 
-  const values: unknown[] = nodes instanceof Map
-    ? Array.from((nodes as Map<string, unknown>).values())
-    : Object.values(nodes);
+  const values: unknown[] =
+    nodes instanceof Map
+      ? Array.from((nodes as Map<string, unknown>).values())
+      : Object.values(nodes);
 
   for (const node of values) {
     const model = _searchForModel(node, 5);
@@ -1511,10 +1553,10 @@ function _searchForModel(obj: unknown, depth: number): string | null {
   const result = _tryGetModelString(obj);
   if (result) return result;
 
-  if (typeof obj !== 'object' || obj === null) return null;
+  if (typeof obj !== "object" || obj === null) return null;
   const asAny = obj as Record<string, unknown>;
 
-  for (const attr of ['bound', 'first', 'last', 'runnable', 'func']) {
+  for (const attr of ["bound", "first", "last", "runnable", "func"]) {
     const child = asAny[attr];
     if (child != null && child !== obj) {
       const found = _searchForModel(child, depth - 1);
@@ -1531,7 +1573,7 @@ function _searchForModel(obj: unknown, depth: number): string | null {
   }
 
   const steps = asAny.steps;
-  if (steps && typeof steps === 'object' && !Array.isArray(steps)) {
+  if (steps && typeof steps === "object" && !Array.isArray(steps)) {
     for (const child of Object.values(steps as Record<string, unknown>)) {
       const found = _searchForModel(child, depth - 1);
       if (found) return found;
@@ -1542,33 +1584,39 @@ function _searchForModel(obj: unknown, depth: number): string | null {
 }
 
 function _tryGetModelString(obj: unknown): string | null {
-  if (typeof obj !== 'object' || obj === null) return null;
+  if (typeof obj !== "object" || obj === null) return null;
   const asAny = obj as Record<string, unknown>;
-  const clsName = (obj as any).constructor?.name ?? '';
+  const clsName = (obj as any).constructor?.name ?? "";
 
   const modelName =
-    (typeof asAny.model_name === 'string' && asAny.model_name) ||
-    (typeof asAny.modelName === 'string' && asAny.modelName) ||
-    (typeof asAny.model === 'string' && asAny.model) ||
+    (typeof asAny.model_name === "string" && asAny.model_name) ||
+    (typeof asAny.modelName === "string" && asAny.modelName) ||
+    (typeof asAny.model === "string" && asAny.model) ||
     null;
 
   if (!modelName || modelName.length > 100) return null;
-  if (modelName.startsWith('<') || modelName.startsWith('(')) return null;
+  if (modelName.startsWith("<") || modelName.startsWith("(")) return null;
 
-  if (modelName.includes('/')) return modelName;
+  if (modelName.includes("/")) return modelName;
 
   const provider = _inferProvider(clsName, modelName);
   return provider ? `${provider}/${modelName}` : modelName;
 }
 
 function _inferProvider(clsName: string, modelName: string): string | null {
-  if (clsName.includes('OpenAI') || clsName.includes('openai')) return 'openai';
-  if (clsName.includes('Anthropic') || clsName.includes('anthropic')) return 'anthropic';
-  if (clsName.includes('Google') || clsName.includes('google')) return 'google';
-  if (clsName.includes('Bedrock')) return 'bedrock';
-  if (modelName.startsWith('gpt-') || modelName.startsWith('o1') || modelName.startsWith('o3') || modelName.startsWith('o4')) return 'openai';
-  if (modelName.includes('claude')) return 'anthropic';
-  if (modelName.includes('gemini')) return 'google';
+  if (clsName.includes("OpenAI") || clsName.includes("openai")) return "openai";
+  if (clsName.includes("Anthropic") || clsName.includes("anthropic")) return "anthropic";
+  if (clsName.includes("Google") || clsName.includes("google")) return "google";
+  if (clsName.includes("Bedrock")) return "bedrock";
+  if (
+    modelName.startsWith("gpt-") ||
+    modelName.startsWith("o1") ||
+    modelName.startsWith("o3") ||
+    modelName.startsWith("o4")
+  )
+    return "openai";
+  if (modelName.includes("claude")) return "anthropic";
+  if (modelName.includes("gemini")) return "google";
   return null;
 }
 
@@ -1577,11 +1625,12 @@ function _inferProvider(clsName: string, modelName: string): string | null {
 function _findToolsInGraph(graph: unknown): unknown[] {
   const g = graph as Record<string, unknown>;
   const nodes = g.nodes;
-  if (!nodes || typeof nodes !== 'object') return [];
+  if (!nodes || typeof nodes !== "object") return [];
 
-  const values: unknown[] = nodes instanceof Map
-    ? Array.from((nodes as Map<string, unknown>).values())
-    : Object.values(nodes);
+  const values: unknown[] =
+    nodes instanceof Map
+      ? Array.from((nodes as Map<string, unknown>).values())
+      : Object.values(nodes);
 
   for (const node of values) {
     const tools = _searchForTools(node, 3);
@@ -1592,12 +1641,12 @@ function _findToolsInGraph(graph: unknown): unknown[] {
 
 function _searchForTools(obj: unknown, depth: number): unknown[] {
   if (depth <= 0) return [];
-  if (typeof obj !== 'object' || obj === null) return [];
+  if (typeof obj !== "object" || obj === null) return [];
   const asAny = obj as Record<string, unknown>;
 
   // Check tools_by_name dict (Python LangGraph ToolNode pattern)
   const toolsByName = asAny.tools_by_name;
-  if (toolsByName && typeof toolsByName === 'object') {
+  if (toolsByName && typeof toolsByName === "object") {
     if (toolsByName instanceof Map) {
       return Array.from(toolsByName.values());
     }
@@ -1611,12 +1660,12 @@ function _searchForTools(obj: unknown, depth: number): unknown[] {
   if (Array.isArray(toolsArr) && toolsArr.length > 0) {
     // Validate that these look like tool objects (have name + description)
     const first = toolsArr[0] as Record<string, unknown> | null;
-    if (first && typeof first === 'object' && typeof first.name === 'string') {
+    if (first && typeof first === "object" && typeof first.name === "string") {
       return toolsArr;
     }
   }
 
-  for (const attr of ['bound', 'runnable', 'func']) {
+  for (const attr of ["bound", "runnable", "func"]) {
     const child = asAny[attr];
     if (child != null && child !== obj) {
       const result = _searchForTools(child, depth - 1);
@@ -1631,21 +1680,22 @@ function _searchForTools(obj: unknown, depth: number): unknown[] {
 function _extractSystemPrompt(graph: unknown): string | null {
   const g = graph as Record<string, unknown>;
   const nodes = g.nodes;
-  if (!nodes || typeof nodes !== 'object') return null;
+  if (!nodes || typeof nodes !== "object") return null;
 
-  const entries: [string, unknown][] = nodes instanceof Map
-    ? Array.from((nodes as Map<string, unknown>).entries())
-    : Object.entries(nodes);
+  const entries: [string, unknown][] =
+    nodes instanceof Map
+      ? Array.from((nodes as Map<string, unknown>).entries())
+      : Object.entries(nodes);
 
   for (const [nodeName, node] of entries) {
-    if (nodeName === '__start__' || nodeName === '__end__') continue;
-    if (typeof node !== 'object' || node === null) continue;
+    if (nodeName === "__start__" || nodeName === "__end__") continue;
+    if (typeof node !== "object" || node === null) continue;
     const n = node as Record<string, unknown>;
 
     const config = n.config as Record<string, unknown> | undefined;
     if (config) {
       const prompt = config.system_prompt ?? config.system_message ?? config.systemPrompt;
-      if (typeof prompt === 'string') return prompt;
+      if (typeof prompt === "string") return prompt;
     }
   }
 
@@ -1655,14 +1705,14 @@ function _extractSystemPrompt(graph: unknown): string | null {
 // ── Tool schema/callable extraction ─────────────────────
 
 function _getToolSchema(toolObj: unknown): Record<string, unknown> {
-  if (typeof toolObj !== 'object' || toolObj === null) {
-    return { type: 'object', properties: {} };
+  if (typeof toolObj !== "object" || toolObj === null) {
+    return { type: "object", properties: {} };
   }
   const t = toolObj as Record<string, unknown>;
 
-  if (t.args_schema && typeof t.args_schema === 'object') {
+  if (t.args_schema && typeof t.args_schema === "object") {
     const schema = t.args_schema as Record<string, unknown>;
-    if (typeof schema.model_json_schema === 'function') {
+    if (typeof schema.model_json_schema === "function") {
       try {
         return (schema as any).model_json_schema();
       } catch {
@@ -1671,10 +1721,10 @@ function _getToolSchema(toolObj: unknown): Record<string, unknown> {
     }
   }
 
-  if (typeof t.get_input_schema === 'function') {
+  if (typeof t.get_input_schema === "function") {
     try {
       const schema = (t as any).get_input_schema();
-      if (typeof schema?.model_json_schema === 'function') {
+      if (typeof schema?.model_json_schema === "function") {
         return schema.model_json_schema();
       }
     } catch {
@@ -1682,23 +1732,23 @@ function _getToolSchema(toolObj: unknown): Record<string, unknown> {
     }
   }
 
-  for (const key of ['params_json_schema', 'input_schema', 'parameters', 'schema']) {
+  for (const key of ["params_json_schema", "input_schema", "parameters", "schema"]) {
     const val = t[key];
-    if (val && typeof val === 'object' && !Array.isArray(val)) {
+    if (val && typeof val === "object" && !Array.isArray(val)) {
       return val as Record<string, unknown>;
     }
   }
 
-  return { type: 'object', properties: {} };
+  return { type: "object", properties: {} };
 }
 
 function _getToolCallable(toolObj: unknown): Function | null {
-  if (typeof toolObj !== 'object' || toolObj === null) return null;
+  if (typeof toolObj !== "object" || toolObj === null) return null;
   const t = toolObj as Record<string, unknown>;
 
-  if (typeof t.func === 'function') return t.func as Function;
-  if (typeof t._run === 'function') return t._run as Function;
-  if (typeof toolObj === 'function') return toolObj as Function;
+  if (typeof t.func === "function") return t.func as Function;
+  if (typeof t._run === "function") return t._run as Function;
+  if (typeof toolObj === "function") return toolObj as Function;
 
   return null;
 }
