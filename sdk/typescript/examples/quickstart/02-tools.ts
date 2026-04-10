@@ -3,7 +3,7 @@
  */
 
 import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../../src/index.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
 import { llmModel } from '../settings.js';
 
 const getWeather = tool(
@@ -47,6 +47,4 @@ async function main() {
 
 export const prompt = "What's the weather in Tokyo?";
 
-if (process.argv[1]?.includes('02-tools')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

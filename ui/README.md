@@ -1,6 +1,6 @@
-# Conductor UI v2
+# Agentspan UI
 
-The open-source React UI for [Conductor](https://github.com/conductor-oss/conductor). It ships as both a **standalone web application** and an **npm library** that enterprise packages can extend via a plugin system.
+The React UI for [Agentspan](https://github.com/agentspan-ai/agentspan). It ships as both a **standalone web application** (bundled with the server) and an **npm library** (`conductor-ui`) that enterprise packages can extend via a plugin system. The npm package name will change before the first stable release.
 
 ## Running locally
 
@@ -8,7 +8,7 @@ The open-source React UI for [Conductor](https://github.com/conductor-oss/conduc
 
 - Node.js 22+
 - [pnpm](https://pnpm.io/) 10.32.0 (`corepack use pnpm@10.32.0`)
-- A running Conductor server (default: `http://localhost:6767`)
+- A running Agentspan server (default: `http://localhost:6767`)
 
 ### Setup
 
@@ -38,7 +38,7 @@ The app reads runtime config from `public/context.js`, which is loaded at startu
 cp public/context.js.example public/context.js
 ```
 
-This file sets feature flags (`window.conductor`) and auth config (`window.authConfig`) without requiring a rebuild.
+This file sets feature flags (`window.agentspan`) and auth config (`window.authConfig`) without requiring a rebuild.
 
 ## Available scripts
 
@@ -59,11 +59,7 @@ This file sets feature flags (`window.conductor`) and auth config (`window.authC
 
 ## Using as an npm library
 
-Install the package:
-
-```bash
-npm install conductor-ui
-```
+> **Note:** The package (`conductor-ui`) is not yet published to npm. Build the library locally with `pnpm build:lib` and link it, or use it as a workspace dependency.
 
 Import styles in your app entry point:
 

@@ -13,8 +13,8 @@
  *   - conductor-skills installed (https://github.com/conductor-oss/conductor-skills)
  */
 
-import { Agent, AgentRuntime, agentTool, loadSkills, skill } from '../src/index.js';
-import { llmModel, secondaryLlmModel } from './settings.js';
+import { Agent, AgentRuntime, agentTool, loadSkills, skill } from '@agentspan-ai/sdk';
+import { llmModel, secondaryLlmModel } from './settings';
 
 // ── Load conductor skill ───────────────────────────────────────────
 const conductorSkill = skill('~/.claude/skills/conductor', {
@@ -131,9 +131,4 @@ async function main() {
   }
 }
 
-if (
-  process.argv[1]?.endsWith('31-skills-conductor.ts') ||
-  process.argv[1]?.endsWith('31-skills-conductor.js')
-) {
-  main().catch(console.error);
-}
+main().catch(console.error);

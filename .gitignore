@@ -27,3 +27,8 @@ node_modules/
 /ui/dist
 /ui/dist
 /ui/e2e-results
+server/src/main/resources/static/
+# E2E test artifacts installed to repo root during development
+/*.py
+/*.ts
+/tsconfig.json

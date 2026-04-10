@@ -106,6 +106,25 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 Reconnection is supported via `Last-Event-ID` header. Events are buffered in memory (up to 200 per execution).
 
+### API Documentation
+
+A static API docs page is served at `/docs` (built from `docs/` at compile time). The OpenAPI JSON spec is still available at `/api-docs`.
+
+**Regenerating API Docs** (after changing endpoints):
+
+```bash
+# 1. Save the latest spec from a running server
+curl http://localhost:6767/api-docs > ui/api-docs-ui/api-docs.json
+
+# 2. Regenerate the TypeScript data file
+./docs/regenerate.sh
+
+# 3. Commit both files
+git add ui/api-docs-ui/api-docs.json ui/api-docs-ui/src/generated-api-data.ts
+```
+
+The next `./gradlew build` or `bootRun` picks up the changes automatically.
+
 ## Database
 
 ### SQLite (default)

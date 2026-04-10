@@ -16,8 +16,8 @@
 
 import { createServer } from 'http';
 import { execSync } from 'child_process';
-import { Agent, AgentRuntime, ServerlessCodeExecutor } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, ServerlessCodeExecutor } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Tiny mock execution server -----------------------------------------------
 
@@ -82,7 +82,6 @@ export const serverlessCoder = new Agent({
 
 // -- Run ----------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -107,6 +106,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('39c-serverless-code-execution.ts') || process.argv[1]?.endsWith('39c-serverless-code-execution.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

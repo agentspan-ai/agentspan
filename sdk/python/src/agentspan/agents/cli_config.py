@@ -40,11 +40,11 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 
-class TerminalToolError(RuntimeError):
-    """Non-retryable tool failure.
+class TerminalToolError(Exception):
+    """Non-retryable CLI tool failure (e.g. command not found, timeout).
 
-    Causes the Conductor task to be marked FAILED_WITH_TERMINAL_ERROR
-    instead of FAILED (which would trigger retries).
+    When raised, causes the Conductor task to be marked
+    ``FAILED_WITH_TERMINAL_ERROR`` instead of retrying.
     """
 
 
@@ -98,13 +98,11 @@ def _make_cli_tool(
     timeout: int = 30,
     working_dir: Optional[str] = None,
     allow_shell: bool = False,
-    agent_name: str = "",
+    agent_name: Optional[str] = None,
 ) -> Any:
     """Create a ``@tool``-decorated ``run_command`` function.
 
     The returned function can be appended to ``Agent.tools`` directly.
-    The tool name is prefixed with the agent name to avoid collisions
-    when multiple agents define CLI tools with different allowed commands.
     """
     from agentspan.agents.tool import tool
 
@@ -118,10 +116,6 @@ def _make_cli_tool(
         shell: bool = False,
         context_key: str = "",
         context: Any = None,
-        _allowed_commands: list = None,
-        _allow_shell: bool = None,
-        _timeout: int = None,
-        _working_dir: str = None,
     ) -> dict:
         """Run a CLI command."""
         if not command or not isinstance(command, str):
@@ -131,17 +125,11 @@ def _make_cli_tool(
                 "stderr": "No command provided.",
             }
 
-        # Per-task overrides from server take precedence over closure defaults
-        effective_allowed = _allowed_commands if _allowed_commands is not None else allowed_commands
-        effective_allow_shell = _allow_shell if _allow_shell is not None else allow_shell
-        effective_timeout = _timeout if _timeout is not None else timeout
-        effective_working_dir = _working_dir if _working_dir is not None else working_dir
-
         # Validate against whitelist
-        _validate_cli_command(command, effective_allowed)
+        _validate_cli_command(command, allowed_commands)
 
         # Shell gate
-        if shell and not effective_allow_shell:
+        if shell and not allow_shell:
             raise ValueError(
                 "Shell mode is disabled for this agent. "
                 "Do not set shell=True."
@@ -154,7 +142,7 @@ def _make_cli_tool(
             args = [str(args)]
 
         # Resolve working directory
-        effective_cwd = cwd if cwd else effective_working_dir
+        effective_cwd = cwd if cwd else working_dir
 
         try:
             if shell:
@@ -167,7 +155,7 @@ def _make_cli_tool(
                     shell=True,
                     capture_output=True,
                     text=True,
-                    timeout=effective_timeout,
+                    timeout=timeout,
                     cwd=effective_cwd or None,
                 )
             else:
@@ -175,14 +163,14 @@ def _make_cli_tool(
                     [command] + [str(a) for a in args],
                     capture_output=True,
                     text=True,
-                    timeout=effective_timeout,
+                    timeout=timeout,
                     cwd=effective_cwd or None,
                 )
 
             if result.returncode == 0:
-                if context_key and context is not None and hasattr(context, "state"):
-                    # Prefer stdout; fall back to stderr (e.g. git clone outputs to stderr)
-                    value = result.stdout.strip() or result.stderr.strip()
+                # Save stdout to context state if context_key is set
+                if context_key and context is not None:
+                    value = (result.stdout or "").strip() or (result.stderr or "").strip()
                     if value:
                         context.state[context_key] = value
                 return {
@@ -201,10 +189,14 @@ def _make_cli_tool(
 
         except subprocess.TimeoutExpired:
             raise TerminalToolError(
-                f"Command timed out after {effective_timeout}s"
+                f"Command timed out after {timeout}s"
             )
         except FileNotFoundError:
-            raise TerminalToolError(f"Command not found: {command}")
+            raise TerminalToolError(
+                f"Command not found: {command}"
+            )
+        except Exception as e:
+            raise TerminalToolError(str(e))
 
     # Build dynamic description
     desc = (
@@ -216,11 +208,10 @@ def _make_cli_tool(
     if not allow_shell:
         desc += " Shell mode is disabled — do not set shell=True."
     desc += (
-        " If you need to save a command's output for later pipeline steps, set context_key."
-        " Well-known keys: repo, branch, working_dir, issue_number, pr_url, commit_sha."
+        " If you need to save a command's output for later pipeline steps,"
+        " set context_key. Well-known keys: repo, branch, working_dir,"
+        " issue_number, pr_url, commit_sha."
     )
     run_command._tool_def.description = desc
-    run_command._tool_def.tool_type = "cli"
-    run_command._tool_def.config = {"allowedCommands": list(allowed_commands)}
 
     return run_command

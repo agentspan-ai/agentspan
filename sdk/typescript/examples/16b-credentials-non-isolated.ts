@@ -18,7 +18,7 @@
  * Requirements:
  *   - Agentspan server running at AGENTSPAN_SERVER_URL
  *   - AGENTSPAN_LLM_MODEL set (or defaults to openai/gpt-4o-mini)
- *   - STRIPE_SECRET_KEY stored: agentspan credentials set --name STRIPE_SECRET_KEY
+ *   - STRIPE_SECRET_KEY stored: agentspan credentials set STRIPE_SECRET_KEY <your-stripe-secret-key>
  */
 
 import {
@@ -27,8 +27,8 @@ import {
   CredentialNotFoundError,
   getCredential,
   tool,
-} from '../src/index.js';
-import { llmModel } from './settings.js';
+} from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Non-isolated tool: get Stripe customer balance ---------------------------
 
@@ -40,7 +40,7 @@ const getCustomerBalance = tool(
     } catch (err) {
       if (err instanceof CredentialNotFoundError) {
         return {
-          error: 'STRIPE_SECRET_KEY not configured -- run: agentspan credentials set --name STRIPE_SECRET_KEY',
+          error: 'STRIPE_SECRET_KEY not configured -- run: agentspan credentials set STRIPE_SECRET_KEY', <your-stripe-secret-key',>
         };
       }
       throw err;
@@ -154,7 +154,6 @@ export const agent = new Agent({
 
 // -- Run ----------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -174,6 +173,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('16b-credentials-non-isolated.ts') || process.argv[1]?.endsWith('16b-credentials-non-isolated.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

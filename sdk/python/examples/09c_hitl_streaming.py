@@ -4,8 +4,8 @@
 """Human-in-the-Loop with Streaming — Console Interactive.
 
 Streams agent events in real time via SSE.  When the agent pauses for
-human approval, the user is prompted in the console to approve, reject,
-or provide feedback — all through the AgentStream object.
+human approval, the user is prompted in the console with schema-driven
+prompts and responds through the handle.
 
 Use case: an ops agent that can restart services (safe) and delete data
 (dangerous, requires approval).  The operator watches the agent think
@@ -53,66 +53,47 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(agent, "The payments service is down. Check it and restart it.")
-        result.print_result()
+        handle = runtime.start(agent, "The payments service is down. Check it, restart it, and clear its stale cache data.")
+        print(f"Started: {handle.execution_id}\n")
+
+        for event in handle.stream():
+            if event.type == EventType.THINKING:
+                print(f"  [thinking] {event.content}")
+
+            elif event.type == EventType.TOOL_CALL:
+                print(f"  [tool_call] {event.tool_name}({event.args})")
+
+            elif event.type == EventType.TOOL_RESULT:
+                print(f"  [tool_result] {event.tool_name} -> {str(event.result)[:100]}")
+
+            elif event.type == EventType.WAITING:
+                status = handle.get_status()
+                pt = status.pending_tool or {}
+                schema = pt.get("response_schema", {})
+                props = schema.get("properties", {})
+                print("\n--- Human input required ---")
+                response = {}
+                for field, fs in props.items():
+                    desc = fs.get("description") or fs.get("title", field)
+                    if fs.get("type") == "boolean":
+                        val = input(f"  {desc} (y/n): ").strip().lower()
+                        response[field] = val in ("y", "yes")
+                    else:
+                        response[field] = input(f"  {desc}: ").strip()
+                handle.respond(response)
+                print()
+
+            elif event.type == EventType.DONE:
+                print(f"\nDone: {event.output}")
+
+        # Non-interactive alternative (no HITL, will block on human tasks):
+        # result = runtime.run(agent, "The payments service is down. Check it and restart it.")
+        # result.print_result()
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
         # runtime.deploy(agent)
-        # CLI alternative:
-        # agentspan deploy --package examples.09c_hitl_streaming
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
-
-        # Interactive streaming alternative:
-        # # stream() starts the workflow and returns an AgentStream —
-        # # iterable for events, with HITL controls built in.
-        # result = runtime.stream(
-        #     agent,
-        #     "The payments service is down. Check it, restart it, and clear its stale cache data.",
-        # )
-        # print(f"Workflow started: {result.execution_id}\n")
-
-        # for event in result:
-        #     if event.type == EventType.THINKING:
-        #         print(f"  [thinking] {event.content}")
-
-        #     elif event.type == EventType.TOOL_CALL:
-        #         print(f"  [tool_call] {event.tool_name}({event.args})")
-
-        #     elif event.type == EventType.TOOL_RESULT:
-        #         print(f"  [tool_result] {event.tool_name} -> {event.result}")
-
-        #     elif event.type == EventType.WAITING:
-        #         print(f"\n--- Approval required ---")
-        #         choice = input("  Approve? (y/n/message): ").strip().lower()
-        #         if choice == "y":
-        #             result.approve()
-        #             print("  Approved!\n")
-        #         elif choice == "n":
-        #             reason = input("  Rejection reason: ").strip()
-        #             result.reject(reason or "Rejected by operator")
-        #             print("  Rejected.\n")
-        #         else:
-        #             # Anything else is treated as feedback
-        #             result.send(choice)
-        #             print("  Feedback sent.\n")
-
-        #     elif event.type == EventType.GUARDRAIL_PASS:
-        #         print(f"  [guardrail] {event.guardrail_name} passed")
-
-        #     elif event.type == EventType.GUARDRAIL_FAIL:
-        #         print(f"  [guardrail] {event.guardrail_name} FAILED: {event.content}")
-
-        #     elif event.type == EventType.ERROR:
-        #         print(f"  [error] {event.content}")
-
-        #     elif event.type == EventType.DONE:
-        #         print(f"\n  [done] {event.output}")
-
-        # # After iteration, the full result is available
-        # final = result.get_result()
-        # print(f"\nTool calls made: {len(final.tool_calls)}")
-        # print(f"Status: {final.status}")
 

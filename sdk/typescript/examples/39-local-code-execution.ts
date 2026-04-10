@@ -16,8 +16,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, LocalCodeExecutor } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, LocalCodeExecutor } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Example 1: Simple flag --------------------------------------------------
 // Just set codeExecutionConfig with enabled: true
@@ -68,7 +68,6 @@ export const configCoder = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -99,6 +98,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('39-local-code-execution.ts') || process.argv[1]?.endsWith('39-local-code-execution.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

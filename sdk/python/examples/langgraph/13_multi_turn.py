@@ -35,6 +35,8 @@ graph = create_agent(
 )
 
 if __name__ == "__main__":
+    SESSION_A = "alice-session-001"
+    SESSION_B = "bob-session-001"
     with AgentRuntime() as runtime:
         print("=== Alice's session ===")
         r = runtime.run(

@@ -1,15 +1,16 @@
 # AGENTS.md — Guide for AI Agents Working on This Codebase
 
-This file provides context for AI coding agents (Claude Code, Copilot, Cursor, etc.) working on the Conductor Agentic SDK.
+This file provides context for AI coding agents (Claude Code, Copilot, Cursor, etc.) working on the Agentspan SDK.
 
 ## Project Overview
 
-The `conductor-agentic` Python SDK compiles Python `Agent` definitions into durable [Conductor](https://github.com/conductor-oss/conductor) executions. Agents survive process crashes, tools scale as distributed workers, and human-in-the-loop approvals can pause for days.
+The `agentspan` Python SDK compiles Python `Agent` definitions into durable [Conductor](https://github.com/conductor-oss/conductor) executions. Agents survive process crashes, tools scale as distributed workers, and human-in-the-loop approvals can pause for days.
 
-**Package name:** `conductor-agentic`
-**Import path:** `from conductor.agentic import ...`
-**Python:** 3.9+
-**License:** Apache 2.0
+**Package name (PyPI):** `agentspan`
+**npm package:** `@agentspan-ai/agentspan`
+**Import path:** `from agentspan.agents import ...`
+**Python:** 3.10+
+**License:** MIT
 
 ## Architecture
 
@@ -37,28 +38,28 @@ When `run(agent, prompt)` is called:
 
 | File | Purpose |
 |---|---|
-| `src/conductor/agentic/agent.py` | `Agent` class — the single orchestration primitive |
-| `src/conductor/agentic/tool.py` | `@tool` decorator, `ToolDef`, `http_tool()`, `mcp_tool()` |
-| `src/conductor/agentic/run.py` | Top-level `run()`, `start()`, `stream()`, `run_async()`, `plan()` with singleton runtime |
-| `src/conductor/agentic/result.py` | `AgentResult`, `AgentHandle`, `AgentStatus`, `AgentEvent`, `EventType` |
-| `src/conductor/agentic/guardrail.py` | `Guardrail`, `GuardrailResult`, `RegexGuardrail`, `LLMGuardrail` |
-| `src/conductor/agentic/memory.py` | `ConversationMemory` — session message history |
-| `src/conductor/agentic/semantic_memory.py` | `SemanticMemory`, `MemoryStore`, `MemoryEntry` — long-term memory |
-| `src/conductor/agentic/termination.py` | `TerminationCondition` and composable subclasses (`&`, `|` operators) |
-| `src/conductor/agentic/handoff.py` | `HandoffCondition`, `OnToolResult`, `OnTextMention`, `OnCondition` |
-| `src/conductor/agentic/code_executor.py` | `CodeExecutor` — Local, Docker, Jupyter, Serverless |
-| `src/conductor/agentic/ext.py` | `UserProxyAgent`, `GPTAssistantAgent` |
-| `src/conductor/agentic/tracing.py` | Optional OpenTelemetry integration |
-| `src/conductor/agentic/__init__.py` | Public API surface — all exports |
-| `src/conductor/agentic/compiler/agent_compiler.py` | Single agent compilation (DoWhile loops, tool dispatch) |
-| `src/conductor/agentic/compiler/multi_agent_compiler.py` | Multi-agent strategies (handoff, sequential, parallel, router) |
-| `src/conductor/agentic/compiler/tool_compiler.py` | `@tool` → TaskDef + ToolSpec + dispatch registration |
-| `src/conductor/agentic/compiler/_dispatch.py` | Universal dispatch worker (fuzzy parsing, circuit breaker) |
-| `src/conductor/agentic/runtime/runtime.py` | `AgentRuntime` — compile + execute + stream |
-| `src/conductor/agentic/runtime/worker_manager.py` | Auto-register `@tool` as Conductor workers |
-| `src/conductor/agentic/runtime/config.py` | `AgentConfig` — environment variable configuration |
-| `src/conductor/agentic/_internal/model_parser.py` | Parse `"provider/model"` strings |
-| `src/conductor/agentic/_internal/schema_utils.py` | JSON Schema generation from type hints |
+| `src/agentspan/agents/agent.py` | `Agent` class — the single orchestration primitive |
+| `src/agentspan/agents/tool.py` | `@tool` decorator, `ToolDef`, `http_tool()`, `mcp_tool()` |
+| `src/agentspan/agents/run.py` | Top-level `run()`, `start()`, `stream()`, `run_async()`, `plan()` with singleton runtime |
+| `src/agentspan/agents/result.py` | `AgentResult`, `AgentHandle`, `AgentStatus`, `AgentEvent`, `EventType` |
+| `src/agentspan/agents/guardrail.py` | `Guardrail`, `GuardrailResult`, `RegexGuardrail`, `LLMGuardrail` |
+| `src/agentspan/agents/memory.py` | `ConversationMemory` — session message history |
+| `src/agentspan/agents/semantic_memory.py` | `SemanticMemory`, `MemoryStore`, `MemoryEntry` — long-term memory |
+| `src/agentspan/agents/termination.py` | `TerminationCondition` and composable subclasses (`&`, `|` operators) |
+| `src/agentspan/agents/handoff.py` | `HandoffCondition`, `OnToolResult`, `OnTextMention`, `OnCondition` |
+| `src/agentspan/agents/code_executor.py` | `CodeExecutor` — Local, Docker, Jupyter, Serverless |
+| `src/agentspan/agents/ext.py` | `UserProxyAgent`, `GPTAssistantAgent` |
+| `src/agentspan/agents/tracing.py` | Optional OpenTelemetry integration |
+| `src/agentspan/agents/__init__.py` | Public API surface — all exports |
+| `src/agentspan/agents/compiler/agent_compiler.py` | Single agent compilation (DoWhile loops, tool dispatch) |
+| `src/agentspan/agents/compiler/multi_agent_compiler.py` | Multi-agent strategies (handoff, sequential, parallel, router) |
+| `src/agentspan/agents/compiler/tool_compiler.py` | `@tool` → TaskDef + ToolSpec + dispatch registration |
+| `src/agentspan/agents/compiler/_dispatch.py` | Universal dispatch worker (fuzzy parsing, circuit breaker) |
+| `src/agentspan/agents/runtime/runtime.py` | `AgentRuntime` — compile + execute + stream |
+| `src/agentspan/agents/runtime/worker_manager.py` | Auto-register `@tool` as Conductor workers |
+| `src/agentspan/agents/runtime/config.py` | `AgentConfig` — environment variable configuration |
+| `src/agentspan/agents/_internal/model_parser.py` | Parse `"provider/model"` strings |
+| `src/agentspan/agents/_internal/schema_utils.py` | JSON Schema generation from type hints |
 
 ### Conductor Primitive Mapping
 
@@ -80,21 +81,21 @@ When `run(agent, prompt)` is called:
 
 ### Style
 
-- **Linter:** ruff (`target-version = "py39"`, `line-length = 100`)
-- **Type checker:** mypy (`python_version = "3.9"`, `ignore_missing_imports = true`)
+- **Linter:** ruff (`target-version = "py310"`, `line-length = 100`)
+- **Type checker:** mypy (`python_version = "3.10"`, `ignore_missing_imports = true`)
 - **Imports:** isort via ruff (`"I"` rule)
-- **Python target:** 3.9+ (use `from __future__ import annotations` for newer typing syntax)
+- **Python target:** 3.10+ (use `from __future__ import annotations` for newer typing syntax)
 
 ### Module-Level Patterns
 
-- Every module uses `logging.getLogger("conductor.agentic.xxx")` for structured logging
+- Every module uses `logging.getLogger("agentspan.agents.xxx")` for structured logging
 - The dispatch worker (`_dispatch.py`) deliberately does NOT use `from __future__ import annotations` because Conductor's worker framework needs real type objects for parameter resolution
 - The dispatch worker uses `object` type annotations (not `dict`/`list`) to avoid Conductor's `convert_from_dict_or_list()` issues
 - Tool functions, error counts, and approval flags are stored in module-level registries (`_tool_registry`, `_tool_error_counts`, `_tool_approval_flags`)
 
 ### Public API
 
-All public exports are listed in `src/conductor/agentic/__init__.py` and its `__all__` list. When adding a new public class or function, add it to both the imports and `__all__`.
+All public exports are listed in `src/agentspan/agents/__init__.py` and its `__all__` list. When adding a new public class or function, add it to both the imports and `__all__`.
 
 ### Agent Strategies
 
@@ -126,7 +127,7 @@ python3 -m pytest tests/integration/ -v
 ruff check src/
 
 # Type check
-mypy src/conductor/agentic/ --ignore-missing-imports --no-strict-optional
+mypy src/agentspan/agents/ --ignore-missing-imports --no-strict-optional
 ```
 
 ### Test Files
@@ -145,12 +146,12 @@ mypy src/conductor/agentic/ --ignore-missing-imports --no-strict-optional
 
 ### Writing Tests
 
-- Unit tests must run without a Conductor server (mock all external calls)
+- Unit tests must run without an Agentspan server (mock all external calls)
 - Place unit tests in `tests/unit/`, integration tests in `tests/integration/`
 - Follow existing naming: `test_{module}.py`
 - Use `pytest` fixtures and parametrize where appropriate
-- do NOT use mocks.  Mocks considered harmful.  Write tests that uses the actual server
-- SDK e2e tests MUST rely on the server to ensure we are testing the actual communication
+- do NOT use mocks.  Mocks considered harmful.  Write tests that use the actual server
+- SDK e2e tests MUST rely on the Agentspan server to ensure we are testing the actual communication
 
 ### Examples
 - Every feature MUST have an example in all the supported sdks (python/ etc)
@@ -163,9 +164,9 @@ Before merging any change:
 
 1. **Unit tests pass:** `python3 -m pytest tests/unit/ -v`
 2. **Lint clean:** `ruff check src/`
-3. **Type check clean:** `mypy src/conductor/agentic/ --ignore-missing-imports --no-strict-optional`
+3. **Type check clean:** `mypy src/agentspan/agents/ --ignore-missing-imports --no-strict-optional`
 4. **Public API unchanged** (or intentionally extended): check `__init__.py` `__all__`
-5. **Examples still work** for affected features (run against a live Conductor server)
+5. **Examples still work** for affected features (run against a live Agentspan server)
 
 ## Common Patterns
 
@@ -349,7 +350,7 @@ cd python && AGENTSPAN_STREAMING_ENABLED=true python3 -m pytest tests/integratio
 ## CI/CD
 
 GitHub Actions workflow at `.github/workflows/ci.yml`:
-- Unit tests on Python 3.9-3.13
+- Unit tests on Python 3.10-3.13
 - Lint with ruff
 - Type check with mypy
 

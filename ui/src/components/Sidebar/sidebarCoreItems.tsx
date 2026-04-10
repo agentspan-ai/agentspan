@@ -10,14 +10,14 @@
  */
 
 import CodeIcon from "@mui/icons-material/Code";
+import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined";
 import PlayIcon from "@mui/icons-material/PlayArrowOutlined";
 import PlaylistPlayIcon from "@mui/icons-material/PlaylistPlay";
-import SettingsIcon from "@mui/icons-material/Settings";
-import SupportIcon from "@mui/icons-material/Support";
 import WebhookOutlinedIcon from "@mui/icons-material/WebhookOutlined";
 import RunAgentButton from "components/Sidebar/RunAgentButton";
+import DiscordIcon from "components/Sidebar/DiscordIcon";
 import { MenuItemType } from "components/Sidebar/types";
-import { FEATURES, featureFlags } from "utils";
+
 import {
   CREDENTIALS_URL,
   RUN_AGENT_URL,
@@ -25,9 +25,6 @@ import {
   AGENT_DEFINITION_URL,
   AGENT_EXECUTION_URL,
 } from "utils/constants/route";
-
-const isPlayground = featureFlags.isEnabled(FEATURES.PLAYGROUND);
-const hideFeedbackForm = !featureFlags.isEnabled(FEATURES.SHOW_FEEDBACK_FORM);
 
 /**
  * Core sidebar position constants. Root and submenus both use 100, 200, 300, ...
@@ -40,9 +37,9 @@ const CORE_SIDEBAR_POSITIONS = {
     executionsSubMenu: 100,
     runWorkflow: 200,
     definitionsSubMenu: 300,
-    settingsSubMenu: 350,
-    helpMenu: 400,
     swaggerItem: 500,
+    docsItem: 600,
+    discordItem: 700,
   },
   // Executions submenu children
   EXECUTIONS: {
@@ -52,12 +49,7 @@ const CORE_SIDEBAR_POSITIONS = {
   // Definitions submenu children
   DEFINITIONS: {
     workflowDefItem: 100,
-  },
-  // Help submenu children
-  HELP: {
-    docsItem: 100,
-    requestsItem: 200,
-    supportItem: 300,
+    credentialsItem: 200,
   },
 } as const;
 
@@ -70,7 +62,6 @@ export function getCoreSidebarItems(open: boolean): MenuItemType[] {
   const R = CORE_SIDEBAR_POSITIONS.ROOT;
   const E = CORE_SIDEBAR_POSITIONS.EXECUTIONS;
   const D = CORE_SIDEBAR_POSITIONS.DEFINITIONS;
-  const H = CORE_SIDEBAR_POSITIONS.HELP;
 
   return [
     // Executions submenu - core items only
@@ -142,19 +133,6 @@ export function getCoreSidebarItems(open: boolean): MenuItemType[] {
           hidden: false,
           position: D.workflowDefItem,
         },
-      ],
-    },
-    // Settings submenu
-    {
-      id: "settingsSubMenu",
-      title: "Settings",
-      icon: <SettingsIcon />,
-      linkTo: "",
-      shortcuts: [],
-      hotkeys: "",
-      hidden: false,
-      position: R.settingsSubMenu,
-      items: [
         {
           id: "credentialsItem",
           title: "Credentials",
@@ -164,56 +142,7 @@ export function getCoreSidebarItems(open: boolean): MenuItemType[] {
           shortcuts: [],
           hotkeys: "",
           hidden: false,
-          position: 100,
-        },
-      ],
-    },
-    // Help menu
-    {
-      id: "helpMenu",
-      title: "Help",
-      icon: <SupportIcon />,
-      linkTo: "",
-      shortcuts: [],
-      hotkeys: "",
-      hidden: false,
-      position: R.helpMenu,
-      items: [
-        {
-          id: "docsItem",
-          title: "Docs",
-          icon: null,
-          linkTo: "https://orkes.io/content/",
-          shortcuts: [],
-          hotkeys: "",
-          hidden: false,
-          position: H.docsItem,
-          isOpenNewTab: true,
-        },
-        {
-          id: "requestsItem",
-          title: "Requests",
-          icon: null,
-          linkTo:
-            "https://orkes.io/orkes-cloud-free-trial?utm_source=playground",
-          shortcuts: [],
-          hotkeys: "",
-          hidden: hideFeedbackForm,
-          position: H.requestsItem,
-          isOpenNewTab: true,
-        },
-        {
-          id: "supportItem",
-          title: "Support",
-          icon: null,
-          linkTo: isPlayground
-            ? "https://community.orkes.io/ "
-            : "https://orkeshelp.zendesk.com/hc/en-us/requests/new",
-          shortcuts: [],
-          hotkeys: "",
-          hidden: false,
-          position: H.supportItem,
-          isOpenNewTab: true,
+          position: D.credentialsItem,
         },
       ],
     },
@@ -222,11 +151,35 @@ export function getCoreSidebarItems(open: boolean): MenuItemType[] {
       id: "swaggerItem",
       title: "API Docs",
       icon: <WebhookOutlinedIcon />,
-      linkTo: "/api-reference",
+      linkTo: "/docs",
       shortcuts: [],
       hotkeys: "",
       hidden: false,
       position: R.swaggerItem,
+    },
+    // Docs
+    {
+      id: "docsItem",
+      title: "Docs",
+      icon: <MenuBookOutlinedIcon />,
+      linkTo: "https://agentspan.ai/docs",
+      shortcuts: [],
+      hotkeys: "",
+      hidden: false,
+      position: R.docsItem,
+      isOpenNewTab: true,
+    },
+    // Discord
+    {
+      id: "discordItem",
+      title: "Discord",
+      icon: <DiscordIcon />,
+      linkTo: "https://discord.com/invite/ajcA66JcKq",
+      shortcuts: [],
+      hotkeys: "",
+      hidden: false,
+      position: R.discordItem,
+      isOpenNewTab: true,
     },
   ];
 }

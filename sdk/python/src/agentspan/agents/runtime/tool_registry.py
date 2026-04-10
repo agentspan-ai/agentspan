@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, List
+from typing import Any, List, Optional
 
 from agentspan.agents.runtime._dispatch import (
     _mcp_servers,
@@ -28,7 +28,7 @@ class ToolRegistry:
     locally for Conductor task polling.
     """
 
-    def register_tool_workers(self, tools: List[Any], agent_name: str) -> None:
+    def register_tool_workers(self, tools: List[Any], agent_name: str, domain: Optional[str] = None, agent_stateful: bool = False) -> None:
         """Register tool functions as Conductor workers and populate global registries.
 
         Registers each ``@tool`` function as a Conductor worker task so that
@@ -71,6 +71,7 @@ class ToolRegistry:
                     task_def=_default_task_def(td.name),
                     register_task_def=True,
                     overwrite_task_def=True,
+                    domain=domain if (agent_stateful or td.stateful) else None,
                 )(wrapper)
                 _tool_task_names[td.name] = td.name
                 logger.debug("Registered tool worker '%s'", td.name)

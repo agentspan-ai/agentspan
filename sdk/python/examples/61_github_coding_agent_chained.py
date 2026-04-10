@@ -15,7 +15,7 @@ Run:
 
 Requirements:
     - Agentspan server running
-    - GITHUB_TOKEN stored: agentspan credentials set --name GITHUB_TOKEN
+    - GITHUB_TOKEN stored: agentspan credentials set GITHUB_TOKEN <your-github-token>
     - gh CLI installed
 """
 
@@ -27,7 +27,14 @@ from agentspan.agents.handoff import OnTextMention
 REPO = "agentspan-ai/codingexamples"
 MODEL = "anthropic/claude-sonnet-4-6"
 
+
 # ── Stage 1: Fetch issues ─────────────────────────────────────────
+
+def _fetch_done(context: dict, **kwargs) -> bool:
+    """Stop when the agent has produced the structured output with issue details."""
+    result = context.get("result", "")
+    return all(tag in result for tag in ("REPO:", "BRANCH:", "ISSUE:", "AUTHOR:", "DETAILS:"))
+
 
 git_fetch_issues = Agent(
     name="git_fetch_issues",
@@ -36,31 +43,40 @@ git_fetch_issues = Agent(
     instructions=f"""\
 You fetch ONE open issue from {REPO} and push an empty branch.
 
-Step 1 — run this command:
+Step 1 — list open issues:
   gh issue list --repo {REPO} --state open --limit 5
 If no issues, respond: NO_OPEN_ISSUES
 
-Step 2 — pick an issue, then run this ONE compound command (shell=true):
+Step 2 — pick an issue and fetch its FULL details (body, author, labels):
+  gh issue view <N> --repo {REPO} --json number,title,body,author,labels
+
+You MUST run this command — gh issue list only returns titles, not the issue body.
+Read the JSON output carefully and extract the author login and the COMPLETE body text.
+
+Step 3 — create a branch and push it (one compound command, shell=true):
   TMPDIR=$(mktemp -d) && gh repo clone {REPO} "$TMPDIR" && cd "$TMPDIR" && git checkout -b fix/issue-<N> && git push -u origin fix/issue-<N> && echo "DONE"
 
-Step 3 — respond with ONLY these 4 lines (NO tool calls):
+Step 4 — respond with ONLY these lines (NO tool calls):
   REPO: {REPO}
   BRANCH: fix/issue-<N>
   ISSUE: #<N> <title>
+  AUTHOR: <who opened the issue>
+  DETAILS: <full issue body — preserve all requirements, acceptance criteria, and context>
   SUMMARY: <one-sentence description>
 
 RULES:
 - Do NOT create files, commits, or pull requests.
-- After step 2, you MUST stop using tools entirely. Just output text.
-- You have at most 5 turns total.
+- After step 3, you MUST stop using tools entirely. Just output text.
+- Include the COMPLETE issue body in DETAILS — the next stage needs it to implement the fix.
 """,
     cli_config=CliConfig(
-        allowed_commands=["gh", "git", "mktemp"],
+        allowed_commands=["gh", "git", "mktemp", "ls"],
         allow_shell=True,
         timeout=60,
     ),
     credentials=["GITHUB_TOKEN", "GH_TOKEN"],
-    max_turns=8,
+    max_turns=20,
+    stop_when=_fetch_done,
     gate=TextGate("NO_OPEN_ISSUES"),
 )
 
@@ -72,10 +88,21 @@ coder = Agent(
     max_tokens=60000,
     credentials=["GITHUB_TOKEN", "GH_TOKEN"],
     instructions="""\
-You are a senior developer. Clone the repo, check out the branch,
-implement the fix, commit, push. Then say HANDOFF_TO_QA with REPO/BRANCH/CHANGES.
+You are a senior developer. Your input contains issue details from the previous stage
+including REPO, BRANCH, ISSUE, AUTHOR, DETAILS, and SUMMARY.
+
+1. Read the DETAILS field carefully — it contains the full issue body with requirements.
+2. Clone the repo: gh repo clone <REPO> /tmp/work && cd /tmp/work
+3. Check out the branch: git checkout <BRANCH>
+4. Implement the fix according to ALL requirements in DETAILS.
+5. Commit and push your changes.
+6. Say HANDOFF_TO_QA with REPO, BRANCH, and a summary of CHANGES.
 """,
-    local_code_execution=True,
+    cli_config=CliConfig(
+        allowed_commands=["gh", "git", "mktemp", "rm", "ls", "cat", "mkdir", "cp"],
+        allow_shell=True,
+        timeout=120,
+    ),
 )
 
 qa_tester = Agent(
@@ -87,7 +114,11 @@ You are a QA engineer. Clone the repo, review changes, run tests.
 If bugs found: say HANDOFF_TO_CODER with what to fix.
 If good: say QA_APPROVED with REPO/BRANCH/SUMMARY.
 """,
-    local_code_execution=True,
+    cli_config=CliConfig(
+        allowed_commands=["gh", "git", "mktemp", "rm", "ls", "cat"],
+        allow_shell=True,
+        timeout=120,
+    ),
     max_tokens=60000,
     max_turns=15,
 )
@@ -112,6 +143,12 @@ coding_qa = Agent(
 
 # ── Stage 3: Create PR ────────────────────────────────────────────
 
+def _pr_done(context: dict, **kwargs) -> bool:
+    """Stop when the agent has output a PR URL."""
+    result = context.get("result", "")
+    return "github.com" in result and "/pull/" in result
+
+
 git_push_pr = Agent(
     name="git_push_pr",
     model=MODEL,
@@ -119,13 +156,19 @@ git_push_pr = Agent(
     max_turns=15,
     credentials=["GITHUB_TOKEN", "GH_TOKEN"],
     instructions="""\
-Create a pull request. Run this ONE command (extract REPO, BRANCH, ISSUE from context):
+Create a pull request. Extract REPO, BRANCH, and ISSUE from the previous stage output.
+
+Run this command (shell=true so quotes are handled correctly):
   gh pr create --repo <REPO> --base main --head <BRANCH> --title "Fix <ISSUE>" --body "Fixes <ISSUE>"
 
 After the command succeeds, STOP calling tools and respond with ONLY the PR URL.
 """,
-    cli_commands=True,
-    cli_allowed_commands=["gh"],
+    cli_config=CliConfig(
+        allowed_commands=["gh", "git"],
+        allow_shell=True,
+        timeout=60,
+    ),
+    stop_when=_pr_done,
 )
 
 # ── Pipeline ──────────────────────────────────────────────────────

@@ -8,7 +8,7 @@
 
 import { tool as aiTool } from 'ai';
 import { z } from 'zod';
-import { Agent, AgentRuntime } from '../../src/index.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
 
 // ── Specialist tools (Vercel AI SDK format) ──────────────
 
@@ -98,7 +98,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('08-agent-handoff.ts') || process.argv[1]?.endsWith('08-agent-handoff.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

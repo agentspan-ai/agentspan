@@ -103,7 +103,7 @@ def shell(command: str) -> str:
 
 architect = Agent(
     name="architect",
-    model="google/gemini-2.5-pro",
+    model="google_gemini/gemini-2.5-pro",
     instructions="""\
 You are a senior architect and lead engineer. You design minimal, targeted solutions for GitHub issues.
 

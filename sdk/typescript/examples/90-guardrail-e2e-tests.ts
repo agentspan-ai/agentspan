@@ -9,7 +9,6 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
 import {
   Agent,
   AgentRuntime,
@@ -18,9 +17,9 @@ import {
   RegexGuardrail,
   guardrail,
   tool,
-} from '../src/index.js';
-import type { GuardrailResult } from '../src/index.js';
-import { llmModel } from './settings.js';
+} from '@agentspan-ai/sdk';
+import type { GuardrailResult } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Test infrastructure -----------------------------------------------------
 
@@ -280,90 +279,216 @@ const customToutFixGuardrail = guardrail(
 
 const getCcData = tool(
   async (args: { userId: string }) => ({ user: args.userId, card: '4532-0150-1234-5678', name: 'Alice' }),
-  { name: 'get_cc_data', description: 'Look up payment info.', inputSchema: z.object({ userId: z.string() }) },
+  { name: 'get_cc_data', description: 'Look up payment info.', inputSchema: {
+  type: 'object',
+  properties: {
+    userId: { type: 'string' },
+  },
+  required: ['userId'],
+} },
 );
 const getSsnData = tool(
   async (args: { userId: string }) => ({ user: args.userId, ssn: '123-45-6789', name: 'Bob' }),
-  { name: 'get_ssn_data', description: 'Look up identity info.', inputSchema: z.object({ userId: z.string() }) },
+  { name: 'get_ssn_data', description: 'Look up identity info.', inputSchema: {
+  type: 'object',
+  properties: {
+    userId: { type: 'string' },
+  },
+  required: ['userId'],
+} },
 );
 const getSecretData = tool(
   async (args: { query: string }) => ({ result: `The access code is SECRET42, query: ${args.query}` }),
-  { name: 'get_secret_data', description: 'Look up confidential data.', inputSchema: z.object({ query: z.string() }) },
+  { name: 'get_secret_data', description: 'Look up confidential data.', inputSchema: {
+  type: 'object',
+  properties: {
+    query: { type: 'string' },
+  },
+  required: ['query'],
+} },
 );
 
 // Tool INPUT tools
 const tTinRegexRetry = tool(async (args: { query: string }) => `Results: ${args.query} -> [('Alice', 30)]`, {
-  name: 't_tin_regex_retry', description: 'DB query (regex input retry).', inputSchema: z.object({ query: z.string() }),
+  name: 't_tin_regex_retry', description: 'DB query (regex input retry).', inputSchema: {
+  type: 'object',
+  properties: {
+    query: { type: 'string' },
+  },
+  required: ['query'],
+},
   guardrails: [regexTinRetry.toGuardrailDef()],
 });
 const tTinRegexRaise = tool(async (args: { query: string }) => `Results: ${args.query} -> [('Alice', 30)]`, {
-  name: 't_tin_regex_raise', description: 'DB query (regex input raise).', inputSchema: z.object({ query: z.string() }),
+  name: 't_tin_regex_raise', description: 'DB query (regex input raise).', inputSchema: {
+  type: 'object',
+  properties: {
+    query: { type: 'string' },
+  },
+  required: ['query'],
+},
   guardrails: [regexTinRaise.toGuardrailDef()],
 });
 const tTinRegexFix = tool(async (args: { query: string }) => `Results: ${args.query} -> [('Alice', 30)]`, {
-  name: 't_tin_regex_fix', description: 'DB query (regex input fix).', inputSchema: z.object({ query: z.string() }),
+  name: 't_tin_regex_fix', description: 'DB query (regex input fix).', inputSchema: {
+  type: 'object',
+  properties: {
+    query: { type: 'string' },
+  },
+  required: ['query'],
+},
   guardrails: [regexTinFix.toGuardrailDef()],
 });
 const tTinLlmRetry = tool(async (args: { identifier: string }) => `User: ${args.identifier} -> Alice Johnson`, {
-  name: 't_tin_llm_retry', description: 'Look up user (LLM input retry).', inputSchema: z.object({ identifier: z.string() }),
+  name: 't_tin_llm_retry', description: 'Look up user (LLM input retry).', inputSchema: {
+  type: 'object',
+  properties: {
+    identifier: { type: 'string' },
+  },
+  required: ['identifier'],
+},
   guardrails: [llmTinRetry.toGuardrailDef()],
 });
 const tTinLlmRaise = tool(async (args: { identifier: string }) => `User: ${args.identifier} -> Alice Johnson`, {
-  name: 't_tin_llm_raise', description: 'Look up user (LLM input raise).', inputSchema: z.object({ identifier: z.string() }),
+  name: 't_tin_llm_raise', description: 'Look up user (LLM input raise).', inputSchema: {
+  type: 'object',
+  properties: {
+    identifier: { type: 'string' },
+  },
+  required: ['identifier'],
+},
   guardrails: [llmTinRaise.toGuardrailDef()],
 });
 const tTinLlmFix = tool(async (args: { identifier: string }) => `User: ${args.identifier} -> Alice Johnson`, {
-  name: 't_tin_llm_fix', description: 'Look up user (LLM input fix).', inputSchema: z.object({ identifier: z.string() }),
+  name: 't_tin_llm_fix', description: 'Look up user (LLM input fix).', inputSchema: {
+  type: 'object',
+  properties: {
+    identifier: { type: 'string' },
+  },
+  required: ['identifier'],
+},
   guardrails: [llmTinFix.toGuardrailDef()],
 });
 const tTinCustomRetry = tool(async (args: { data: string }) => `Processed: ${args.data}`, {
-  name: 't_tin_custom_retry', description: 'Process data (custom input retry).', inputSchema: z.object({ data: z.string() }),
+  name: 't_tin_custom_retry', description: 'Process data (custom input retry).', inputSchema: {
+  type: 'object',
+  properties: {
+    data: { type: 'string' },
+  },
+  required: ['data'],
+},
   guardrails: [customTinBlock],
 });
 const tTinCustomRaise = tool(async (args: { data: string }) => `Processed: ${args.data}`, {
-  name: 't_tin_custom_raise', description: 'Process data (custom input raise).', inputSchema: z.object({ data: z.string() }),
+  name: 't_tin_custom_raise', description: 'Process data (custom input raise).', inputSchema: {
+  type: 'object',
+  properties: {
+    data: { type: 'string' },
+  },
+  required: ['data'],
+},
   guardrails: [customTinBlockRaise],
 });
 const tTinCustomFix = tool(async (args: { data: string }) => `Processed: ${args.data}`, {
-  name: 't_tin_custom_fix', description: 'Process data (custom input fix).', inputSchema: z.object({ data: z.string() }),
+  name: 't_tin_custom_fix', description: 'Process data (custom input fix).', inputSchema: {
+  type: 'object',
+  properties: {
+    data: { type: 'string' },
+  },
+  required: ['data'],
+},
   guardrails: [customTinBlockFix],
 });
 
 // Tool OUTPUT tools
 const tToutRegexRetry = tool(async (args: { query: string }) => args.query.toLowerCase().includes('secret') ? `INTERNAL_SECRET: classified for ${args.query}` : `Public data: ${args.query}`, {
-  name: 't_tout_regex_retry', description: 'Fetch data (regex output retry).', inputSchema: z.object({ query: z.string() }),
+  name: 't_tout_regex_retry', description: 'Fetch data (regex output retry).', inputSchema: {
+  type: 'object',
+  properties: {
+    query: { type: 'string' },
+  },
+  required: ['query'],
+},
   guardrails: [regexToutRetry.toGuardrailDef()],
 });
 const tToutRegexRaise = tool(async (args: { query: string }) => args.query.toLowerCase().includes('secret') ? `INTERNAL_SECRET: classified for ${args.query}` : `Public data: ${args.query}`, {
-  name: 't_tout_regex_raise', description: 'Fetch data (regex output raise).', inputSchema: z.object({ query: z.string() }),
+  name: 't_tout_regex_raise', description: 'Fetch data (regex output raise).', inputSchema: {
+  type: 'object',
+  properties: {
+    query: { type: 'string' },
+  },
+  required: ['query'],
+},
   guardrails: [regexToutRaise.toGuardrailDef()],
 });
 const tToutRegexFix = tool(async (args: { query: string }) => args.query.toLowerCase().includes('secret') ? `INTERNAL_SECRET: classified for ${args.query}` : `Public data: ${args.query}`, {
-  name: 't_tout_regex_fix', description: 'Fetch data (regex output fix).', inputSchema: z.object({ query: z.string() }),
+  name: 't_tout_regex_fix', description: 'Fetch data (regex output fix).', inputSchema: {
+  type: 'object',
+  properties: {
+    query: { type: 'string' },
+  },
+  required: ['query'],
+},
   guardrails: [regexToutFix.toGuardrailDef()],
 });
 const tToutLlmRetry = tool(async (args: { userId: string }) => `User ${args.userId}: Alice, alice@example.com, SSN 123-45-6789`, {
-  name: 't_tout_llm_retry', description: 'Fetch user data (LLM output retry).', inputSchema: z.object({ userId: z.string() }),
+  name: 't_tout_llm_retry', description: 'Fetch user data (LLM output retry).', inputSchema: {
+  type: 'object',
+  properties: {
+    userId: { type: 'string' },
+  },
+  required: ['userId'],
+},
   guardrails: [llmToutRetry.toGuardrailDef()],
 });
 const tToutLlmRaise = tool(async (args: { userId: string }) => `User ${args.userId}: Alice, alice@example.com, SSN 123-45-6789`, {
-  name: 't_tout_llm_raise', description: 'Fetch user data (LLM output raise).', inputSchema: z.object({ userId: z.string() }),
+  name: 't_tout_llm_raise', description: 'Fetch user data (LLM output raise).', inputSchema: {
+  type: 'object',
+  properties: {
+    userId: { type: 'string' },
+  },
+  required: ['userId'],
+},
   guardrails: [llmToutRaise.toGuardrailDef()],
 });
 const tToutLlmFix = tool(async (args: { userId: string }) => `User ${args.userId}: Alice, alice@example.com, SSN 123-45-6789`, {
-  name: 't_tout_llm_fix', description: 'Fetch user data (LLM output fix).', inputSchema: z.object({ userId: z.string() }),
+  name: 't_tout_llm_fix', description: 'Fetch user data (LLM output fix).', inputSchema: {
+  type: 'object',
+  properties: {
+    userId: { type: 'string' },
+  },
+  required: ['userId'],
+},
   guardrails: [llmToutFix.toGuardrailDef()],
 });
 const tToutCustomRetry = tool(async (args: { query: string }) => `SENSITIVE data for: ${args.query}`, {
-  name: 't_tout_custom_retry', description: 'Fetch data (custom output retry).', inputSchema: z.object({ query: z.string() }),
+  name: 't_tout_custom_retry', description: 'Fetch data (custom output retry).', inputSchema: {
+  type: 'object',
+  properties: {
+    query: { type: 'string' },
+  },
+  required: ['query'],
+},
   guardrails: [customToutRetry],
 });
 const tToutCustomRaise = tool(async (args: { query: string }) => `SENSITIVE data for: ${args.query}`, {
-  name: 't_tout_custom_raise', description: 'Fetch data (custom output raise).', inputSchema: z.object({ query: z.string() }),
+  name: 't_tout_custom_raise', description: 'Fetch data (custom output raise).', inputSchema: {
+  type: 'object',
+  properties: {
+    query: { type: 'string' },
+  },
+  required: ['query'],
+},
   guardrails: [customToutRaise],
 });
 const tToutCustomFixTool = tool(async (args: { query: string }) => `SENSITIVE data for: ${args.query}`, {
-  name: 't_tout_custom_fix', description: 'Fetch data (custom output fix).', inputSchema: z.object({ query: z.string() }),
+  name: 't_tout_custom_fix', description: 'Fetch data (custom output fix).', inputSchema: {
+  type: 'object',
+  properties: {
+    query: { type: 'string' },
+  },
+  required: ['query'],
+},
   guardrails: [customToutFixGuardrail],
 });
 
@@ -479,8 +604,7 @@ async function runTests(runtime: AgentRuntime, runner: TestRunner) {
 
 // -- Main --------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('90-guardrail-e2e-tests.ts') || process.argv[1]?.endsWith('90-guardrail-e2e-tests.js')) {
+async function main() {
   console.log('='.repeat(90));
   console.log('  Guardrail E2E Test Suite -- 27-cell matrix');
   console.log('  Position (3) x Type (3) x OnFail (3)');
@@ -498,3 +622,5 @@ if (process.argv[1]?.endsWith('90-guardrail-e2e-tests.ts') || process.argv[1]?.e
   const failed = runner.printSummary();
   process.exit(failed > 0 ? 1 : 0);
 }
+
+main().catch(console.error);

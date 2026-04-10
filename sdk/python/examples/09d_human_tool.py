@@ -10,7 +10,8 @@ is returned as the tool output.
 
 The tool is entirely server-side (Conductor HUMAN task) — no worker process
 needed.  The server generates the response form and validation pipeline
-automatically, so this works with any SDK language.
+automatically, so this works with any SDK language.  Uses interactive
+streaming with schema-driven console prompts.
 
 Demonstrates:
     - ``human_tool()`` for LLM-initiated human interaction
@@ -66,41 +67,47 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(agent, "Look up Alice and summarize what details are still needed before filing a laptop support ticket.")
-        result.print_result()
+        handle = runtime.start(agent, "I need to file a ticket for Alice about a laptop issue")
+        print(f"Started: {handle.execution_id}\n")
+
+        for event in handle.stream():
+            if event.type == EventType.THINKING:
+                print(f"  [thinking] {event.content}")
+
+            elif event.type == EventType.TOOL_CALL:
+                print(f"  [tool_call] {event.tool_name}({event.args})")
+
+            elif event.type == EventType.TOOL_RESULT:
+                print(f"  [tool_result] {event.tool_name} -> {str(event.result)[:100]}")
+
+            elif event.type == EventType.WAITING:
+                status = handle.get_status()
+                pt = status.pending_tool or {}
+                schema = pt.get("response_schema", {})
+                props = schema.get("properties", {})
+                print("\n--- Human input required ---")
+                response = {}
+                for field, fs in props.items():
+                    desc = fs.get("description") or fs.get("title", field)
+                    if fs.get("type") == "boolean":
+                        val = input(f"  {desc} (y/n): ").strip().lower()
+                        response[field] = val in ("y", "yes")
+                    else:
+                        response[field] = input(f"  {desc}: ").strip()
+                handle.respond(response)
+                print()
+
+            elif event.type == EventType.DONE:
+                print(f"\nDone: {event.output}")
+
+        # Non-interactive alternative (no HITL, will block on human tasks):
+        # result = runtime.run(agent, "Look up Alice and summarize what details are still needed before filing a laptop support ticket.")
+        # result.print_result()
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
         # runtime.deploy(agent)
-        # CLI alternative:
-        # agentspan deploy --package examples.09d_human_tool
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
-
-        # Interactive human-tool alternative:
-        # handle = runtime.start(agent, "I need to file a ticket for Alice about a laptop issue")
-        # print(f"Workflow started: {handle.execution_id}\n")
-
-        # for event in handle.stream():
-        #     if event.type == EventType.THINKING:
-        #         print(f"  [thinking] {event.content}")
-
-        #     elif event.type == EventType.TOOL_CALL:
-        #         print(f"  [tool_call] {event.tool_name}({event.args})")
-
-        #     elif event.type == EventType.TOOL_RESULT:
-        #         print(f"  [tool_result] {event.tool_name} -> {event.result}")
-
-        #     elif event.type == EventType.WAITING:
-        #         print("\n--- Human input required ---")
-        #         response = input("  Your response: ").strip()
-        #         handle.respond({"response": response})
-        #         print()
-
-        #     elif event.type == EventType.ERROR:
-        #         print(f"  [error] {event.content}")
-
-        #     elif event.type == EventType.DONE:
-        #         print(f"\nResult: {event.output}")
 

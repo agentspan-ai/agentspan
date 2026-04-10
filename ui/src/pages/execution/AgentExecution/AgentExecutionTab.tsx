@@ -1,15 +1,11 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { useSearchParams } from "react-router";
+import { useState, useMemo, useCallback } from "react";
 import { usePushHistory } from "utils/hooks/usePushHistory";
 import {
   Box,
-  Breadcrumbs,
-  Link,
   MenuItem,
   Select,
   SelectChangeEvent,
   Typography,
-  CircularProgress,
   Alert,
 } from "@mui/material";
 import { AgentExecutionHeader } from "./AgentExecutionHeader";
@@ -17,24 +13,17 @@ import { AgentRunView } from "./AgentRunView";
 import {
   computeMetrics,
   transformWorkflowExecutionToAgentRun,
-  transformSubWorkflowToAgentRun,
 } from "./agentExecutionUtils";
 import {
   DEFAULT_MOCK_SCENARIO,
   MOCK_SCENARIOS,
   MockScenarioKey,
 } from "./mockData";
-import { AgentRunData, AgentStatus, NavigationEntry } from "./types";
+import { AgentRunData, AgentStatus } from "./types";
 import { WorkflowExecution } from "types/Execution";
 
 interface AgentExecutionTabProps {
   execution?: WorkflowExecution;
-}
-
-async function fetchSubWorkflow(subWorkflowId: string): Promise<WorkflowExecution> {
-  const res = await fetch(`/api/agent/executions/${subWorkflowId}/full`);
-  if (!res.ok) throw new Error(`Failed to fetch sub-workflow ${subWorkflowId}`);
-  return res.json();
 }
 
 /**
@@ -80,110 +69,39 @@ export function AgentExecutionTab({ execution }: AgentExecutionTabProps) {
     return { rootRun: MOCK_SCENARIOS[scenario], transformError: null };
   }, [execution?.workflowId, execution?.tasks, scenario]);
 
-  const [searchParams, setSearchParams] = useSearchParams();
-
-  const [navStack, setNavStack] = useState<NavigationEntry[]>(() => [
-    { agentRun: rootRun, selectedTurn: rootRun.turns[0]?.turnNumber ?? 1, label: rootRun.agentName },
-  ]);
-
-  // Reset nav stack when root run changes; restore from URL agentPath if present
-  useEffect(() => {
-    const root: NavigationEntry = { agentRun: rootRun, selectedTurn: rootRun.turns[0]?.turnNumber ?? 1, label: rootRun.agentName };
-    setNavStack([root]);
-
-    const pathStr = execution?.workflowId ? searchParams.get("agentPath") : null;
-    if (!pathStr) return;
-    const ids = pathStr.split(",").filter(Boolean);
-    if (ids.length === 0) return;
-
-    let cancelled = false;
-    setDrillLoading(true);
-    (async () => {
-      try {
-        const stack: NavigationEntry[] = [root];
-        for (const id of ids) {
-          let subExecution = await fetchSubWorkflow(id);
-          const innerId = findInnerSubWorkflowId(subExecution);
-          if (innerId) subExecution = await fetchSubWorkflow(innerId);
-          const detailed = transformSubWorkflowToAgentRun(subExecution, subExecution.workflowType ?? id);
-          stack.push({ agentRun: detailed, selectedTurn: detailed.turns[0]?.turnNumber ?? 1, label: detailed.agentName });
-        }
-        if (!cancelled) setNavStack(stack);
-      } catch {
-        // Stay at root if restoration fails; clear stale URL param
-        if (!cancelled) setSearchParams(p => { p.delete("agentPath"); return p; }, { replace: true });
-      } finally {
-        if (!cancelled) setDrillLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [rootRun]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const [drillLoading, setDrillLoading] = useState(false);
-
-  // Helper: recompute agentPath from a nav stack (positions 1+ have workflow IDs)
-  const stackToPath = (stack: NavigationEntry[]) =>
-    stack.slice(1).map(e => e.agentRun.id).filter(Boolean).join(",");
-
-  const onDrillIn = useCallback(async (sub: AgentRunData) => {
-    if (sub.subWorkflowId && !sub.model) {
-      setDrillLoading(true);
-      try {
-        let subExecution = await fetchSubWorkflow(sub.subWorkflowId);
-        const innerId = findInnerSubWorkflowId(subExecution);
-        if (innerId) subExecution = await fetchSubWorkflow(innerId);
-        const detailed = transformSubWorkflowToAgentRun(subExecution, sub.agentName);
-        setNavStack(prev => {
-          const next = [...prev, { agentRun: detailed, selectedTurn: detailed.turns[0]?.turnNumber ?? 1, label: detailed.agentName }];
-          setSearchParams(p => { p.set("agentPath", stackToPath(next)); return p; }, { replace: false });
-          return next;
-        });
-      } catch {
-        setNavStack(prev => {
-          const next = [...prev, { agentRun: sub, selectedTurn: sub.turns[0]?.turnNumber ?? 1, label: sub.agentName }];
-          setSearchParams(p => { p.set("agentPath", stackToPath(next)); return p; }, { replace: false });
-          return next;
-        });
-      } finally {
-        setDrillLoading(false);
-      }
-    } else {
-      setNavStack(prev => {
-        const next = [...prev, { agentRun: sub, selectedTurn: sub.turns[0]?.turnNumber ?? 1, label: sub.agentName }];
-        setSearchParams(p => { p.set("agentPath", stackToPath(next)); return p; }, { replace: false });
-        return next;
-      });
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const onBreadcrumbClick = useCallback((index: number) => {
-    setNavStack(prev => {
-      const next = prev.slice(0, index + 1);
-      const path = stackToPath(next);
-      if (path) {
-        setSearchParams(p => { p.set("agentPath", path); return p; }, { replace: false });
-      } else {
-        setSearchParams(p => { p.delete("agentPath"); return p; }, { replace: false });
-      }
-      return next;
-    });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
   const navigate = usePushHistory();
 
-  const currentEntry = navStack[navStack.length - 1];
+  // Drill into a sub-agent by navigating to its execution URL.
+  // For wrapper workflows, resolve the inner sub-workflow ID first.
+  const onDrillIn = useCallback(async (sub: AgentRunData) => {
+    const targetId = sub.subWorkflowId ?? sub.id;
+    if (!targetId) return;
+
+    // Check if this is a wrapper workflow and resolve inner ID
+    try {
+      const res = await fetch(`/api/agent/executions/${targetId}/full`);
+      if (res.ok) {
+        const subExecution: WorkflowExecution = await res.json();
+        const innerId = findInnerSubWorkflowId(subExecution);
+        if (innerId) {
+          navigate(`/execution/${innerId}`);
+          return;
+        }
+      }
+    } catch {
+      // Fall through to direct navigation
+    }
+
+    navigate(`/execution/${targetId}`);
+  }, [navigate]);
+
+  // Back navigates to the parent workflow
+  const onBack = execution?.parentWorkflowId
+    ? () => navigate(`/execution/${execution.parentWorkflowId}`)
+    : undefined;
+
   const metrics = computeMetrics(rootRun);
   const isUsingMockData = !execution?.workflowId;
-
-  // When drilling in-page, the back button pops the stack.
-  // When at root and the execution has a parent workflow (direct URL open of a sub-workflow),
-  // the back button navigates to the parent execution page.
-  const onBack =
-    navStack.length > 1
-      ? () => onBreadcrumbClick(navStack.length - 2)
-      : execution?.parentWorkflowId
-        ? () => navigate(`/execution/${execution.parentWorkflowId}`)
-        : undefined;
 
   const handleScenarioChange = (event: SelectChangeEvent<MockScenarioKey>) => {
     setScenario(event.target.value as MockScenarioKey);
@@ -223,61 +141,15 @@ export function AgentExecutionTab({ execution }: AgentExecutionTabProps) {
         )}
       </Box>
 
-      {/* Breadcrumb — only visible when drilling in */}
-      {navStack.length > 1 && (
-        <Box
-          sx={{
-            px: 2,
-            py: 0.75,
-            borderBottom: "1px solid",
-            borderColor: "divider",
-            flexShrink: 0,
-            backgroundColor: "grey.50",
-          }}
-        >
-          <Breadcrumbs separator=">" aria-label="agent navigation breadcrumb">
-            {navStack.map((entry, index) => {
-              const isLast = index === navStack.length - 1;
-              return isLast ? (
-                <Typography
-                  key={entry.agentRun.id}
-                  variant="caption"
-                  fontWeight={600}
-                  sx={{ fontFamily: "monospace" }}
-                >
-                  {entry.label}
-                </Typography>
-              ) : (
-                <Link
-                  key={entry.agentRun.id}
-                  component="button"
-                  variant="caption"
-                  underline="hover"
-                  onClick={() => onBreadcrumbClick(index)}
-                  sx={{ fontFamily: "monospace", cursor: "pointer", color: "primary.main" }}
-                >
-                  {entry.label}
-                </Link>
-              );
-            })}
-          </Breadcrumbs>
-        </Box>
-      )}
-
       {/* Main content */}
       <Box sx={{
         flex: 1, overflow: "hidden", minHeight: 0, position: "relative",
       }}>
-        {drillLoading && (
-          <Box sx={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10, backgroundColor: "rgba(255,255,255,0.7)" }}>
-            <CircularProgress size={32} />
-          </Box>
-        )}
         <AgentRunView
-          agentRun={currentEntry.agentRun}
+          agentRun={rootRun}
           onDrillIn={onDrillIn}
           onBack={onBack}
-          isRoot={navStack.length === 1}
+          isRoot
         />
       </Box>
     </Box>

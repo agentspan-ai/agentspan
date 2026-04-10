@@ -11,7 +11,7 @@
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
 
@@ -100,7 +100,7 @@ builder.addEdge('pros_node', 'merge');
 builder.addEdge('cons_node', 'merge');
 builder.addEdge('merge', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "parallel_analysis" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
@@ -134,7 +134,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('16-parallel-branches.ts') || process.argv[1]?.endsWith('16-parallel-branches.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

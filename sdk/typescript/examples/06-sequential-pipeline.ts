@@ -12,8 +12,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime } from '../src';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Pipeline agents ---------------------------------------------------------
 
@@ -45,7 +45,6 @@ export const editor = new Agent({
 
 const pipeline = researcher.pipe(writer).pipe(editor);
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -79,6 +78,4 @@ async function main() {
     // // const result = await runtime.run(pipeline, 'The impact of AI agents on software development in 2025');
 }
 
-if (process.argv[1]?.endsWith('06-sequential-pipeline.ts') || process.argv[1]?.endsWith('06-sequential-pipeline.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

@@ -11,7 +11,7 @@
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
 
@@ -168,7 +168,7 @@ builder.addEdge('ship', 'deliver');
 builder.addEdge('deliver', 'summarize');
 builder.addEdge('summarize', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "order_state_machine" });
 
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',
@@ -211,7 +211,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('38-state-machine.ts') || process.argv[1]?.endsWith('38-state-machine.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

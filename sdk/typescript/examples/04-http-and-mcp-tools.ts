@@ -8,112 +8,102 @@
  *
  * These tools execute entirely server-side — no TypeScript worker process needed.
  *
- * MCP Weather Server Setup:
- *   # Install and start the weather MCP server (runs on port 3001):
- *   npx -y @philschmid/weather-mcp
+ * MCP Test Server Setup (mcp-testkit):
+ *   pip install mcp-testkit
  *
- *   # Verify it's running:
- *   curl http://localhost:3001/mcp
+ *   # Start without auth:
+ *   mcp-testkit --transport http
+ *
+ *   # Or start with auth (requires storing the secret as a credential):
+ *   mcp-testkit --transport http --auth <secret>
+ *
+ *   # Store credentials via CLI or Agentspan UI:
+ *   agentspan credentials set HTTP_TEST_API_KEY <secret>
+ *   agentspan credentials set MCP_TEST_API_KEY <secret>
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - MCP weather server running on http://localhost:3001/mcp (see setup above)
+ *   - mcp-testkit running on http://localhost:3001 (see setup above)
  *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool, httpTool, mcpTool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool, httpTool, mcpTool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // TypeScript tool (needs a worker)
 const formatReport = tool(
-  async (args: { data: Record<string, unknown> }) => {
-    return `Report: ${JSON.stringify(args.data)}`;
+  async (args: { title: string; body: string }) => {
+    return {
+      report: `=== ${args.title} ===\n${args.body}\n${'='.repeat(args.title.length + 8)}`,
+    };
   },
   {
     name: 'format_report',
-    description: 'Format raw data into a readable report.',
-    inputSchema: z.object({
-      data: z.record(z.unknown()).describe('The data to format into a report'),
-    }),
+    description: 'Format a title and body into a structured report.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Report title' },
+        body: { type: 'string', description: 'Report body content' },
+      },
+      required: ['title', 'body'],
+    },
   },
 );
 
 // HTTP tool (pure server-side, no worker needed)
-const weatherApi = httpTool({
-  name: 'get_current_weather',
-  description: 'Get current weather for a city from the weather API',
-  url: 'http://localhost:3001/mcp',
+// ${HTTP_TEST_API_KEY} is resolved server-side from the credential store.
+const reverseApi = httpTool({
+  name: 'reverse_string',
+  description: 'Reverse a string using the HTTP API',
+  url: 'http://localhost:3001/api/string/reverse',
   method: 'POST',
-  accept: ['text/event-stream', 'application/json'],
+  headers: { Authorization: 'Bearer ${HTTP_TEST_API_KEY}' },
+  credentials: ['HTTP_TEST_API_KEY'],
   inputSchema: {
     type: 'object',
     properties: {
-      jsonrpc: {
-        type: 'string',
-        const: '2.0',
-      },
-      id: {
-        const: 1,
-      },
-      method: {
-        type: 'string',
-        const: 'tools/call',
-      },
-      params: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          name: {
-            type: 'string',
-            const: 'get_current_weather',
-          },
-          arguments: {
-            type: 'object',
-            additionalProperties: false,
-            properties: {
-              city: {
-                type: 'string',
-              },
-            },
-            required: ['city'],
-          },
-        },
-        required: ['name', 'arguments'],
-      },
+      text: { type: 'string', description: 'Text to reverse' },
     },
-    required: ['jsonrpc', 'id', 'method', 'params'],
+    required: ['text'],
   },
 });
 
 // MCP tools (discovered from MCP server at runtime)
-const githubTools = mcpTool({
+// ${MCP_TEST_API_KEY} is resolved server-side from the credential store.
+const mcpTestTools = mcpTool({
   serverUrl: 'http://localhost:3001/mcp',
-  name: 'github',
-  description: 'GitHub operations via MCP',
+  name: 'mcp_test_tools',
+  description:
+    'Deterministic test tools via MCP — math, string, collection, encoding, hash, datetime, validation, and conversion operations.',
+  headers: { Authorization: 'Bearer ${MCP_TEST_API_KEY}' },
+  credentials: ['MCP_TEST_API_KEY'],
 });
 
 export const agent = new Agent({
-  name: 'api_assistant',
+  name: 'http_tools_demo',
   model: llmModel,
-  tools: [formatReport, weatherApi],
-  maxTokens: 102040,
-  instructions: 'You have access to weather data, GitHub, and report formatting.',
+  tools: [formatReport, reverseApi, mcpTestTools],
+  instructions:
+    'You can reverse strings and format reports. ' +
+    'When asked to reverse a string, use reverse_string first, then format_report with the result.',
 });
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(agent, 'Get the weather in London and format it as a report.');
+    const result = await runtime.run(
+      agent,
+      "Reverse the string 'hello world' and add 33 and 21 append the result to that string, then write a report with the result.",
+    );
     result.printResult();
 
     // Production pattern:
     // 1. Deploy once during CI/CD:
     // await runtime.deploy(agent);
     // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples --agents api_assistant
+    // agentspan deploy --package sdk/typescript/examples --agents http_tools_demo
     //
     // 2. In a separate long-lived worker process:
     // await runtime.serve(agent);
@@ -122,6 +112,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('04-http-and-mcp-tools.ts') || process.argv[1]?.endsWith('04-http-and-mcp-tools.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

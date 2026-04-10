@@ -13,9 +13,8 @@
  *   - GH_TOKEN in environment (optional, for GitHub MCP)
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, agentTool, tool, mcpTool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, agentTool, tool, mcpTool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- In-memory ticket store --------------------------------------------------
 
@@ -66,7 +65,11 @@ const getCurrentDate = tool(
   {
     name: 'get_current_date',
     description: "Get today's date.",
-    inputSchema: z.object({}),
+    inputSchema: {
+      type: 'object',
+      properties: {
+      },
+    },
   },
 );
 
@@ -83,9 +86,13 @@ const searchTickets = tool(
   {
     name: 'search_tickets',
     description: 'Search the internal bug ticket database for Conductor issues.',
-    inputSchema: z.object({
-      query: z.string().describe('Search term to match against ticket titles and descriptions'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search term to match against ticket titles and descriptions' },
+      },
+      required: ['query'],
+    },
   },
 );
 
@@ -107,11 +114,15 @@ const createTicket = tool(
   {
     name: 'create_ticket',
     description: 'Create a new bug ticket in the internal tracker.',
-    inputSchema: z.object({
-      title: z.string().describe('Short title for the bug'),
-      description: z.string().describe('Detailed description of the issue'),
-      priority: z.string().optional().describe('Priority level (low, medium, high, critical)'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Short title for the bug' },
+        description: { type: 'string', description: 'Detailed description of the issue' },
+        priority: { type: 'string', description: 'Priority level (low, medium, high, critical)' },
+      },
+      required: ['title', 'description'],
+    },
   },
 );
 
@@ -128,11 +139,15 @@ const updateTicket = tool(
   {
     name: 'update_ticket',
     description: "Update an existing bug ticket's status or priority.",
-    inputSchema: z.object({
-      ticketId: z.string().describe('The ticket ID (e.g. COND-001)'),
-      status: z.string().optional().describe('New status (open, in_progress, resolved, closed)'),
-      priority: z.string().optional().describe('New priority (low, medium, high, critical)'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticketId: { type: 'string', description: 'The ticket ID (e.g. COND-001)' },
+        status: { type: 'string', description: 'New status (open, in_progress, resolved, closed)' },
+        priority: { type: 'string', description: 'New priority (low, medium, high, critical)' },
+      },
+      required: ['ticketId'],
+    },
   },
 );
 
@@ -176,9 +191,13 @@ const searchWebTool = tool(
   {
     name: 'search_web',
     description: 'Search the web for information about a Conductor bug or workflow issue.',
-    inputSchema: z.object({
-      query: z.string().describe('The search query'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'The search query' },
+      },
+      required: ['query'],
+    },
   },
 );
 
@@ -246,7 +265,6 @@ export const softwareAssistant = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -272,6 +290,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('54-software-bug-assistant.ts') || process.argv[1]?.endsWith('54-software-bug-assistant.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

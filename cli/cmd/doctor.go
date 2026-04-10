@@ -289,12 +289,23 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 			dim.Printf("  - %s", p.name)
 			dim.Printf("  (%s)\n", strings.Join(p.envVars, ", "))
 
-			// Still show warnings for partially configured providers
-			for _, w := range p.warns {
-				if w.condition() {
-					yellow.Printf("    ⚠ %s\n", w.message)
-					fmt.Printf("      %s\n", w.fix)
-					issues++
+			// Only show warnings for partially configured providers — i.e. at least
+			// one required env var is set, meaning the user is trying to use this
+			// provider. Skip entirely if no vars are set (provider not opted in).
+			partiallyConfigured := false
+			for _, env := range p.envVars {
+				if os.Getenv(env) != "" {
+					partiallyConfigured = true
+					break
+				}
+			}
+			if partiallyConfigured {
+				for _, w := range p.warns {
+					if w.condition() {
+						yellow.Printf("    ⚠ %s\n", w.message)
+						fmt.Printf("      %s\n", w.fix)
+						issues++
+					}
 				}
 			}
 		}
@@ -481,4 +492,3 @@ func checkServer(baseURL string) bool {
 	resp.Body.Close()
 	return resp.StatusCode == http.StatusOK
 }
-

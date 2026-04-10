@@ -9,8 +9,7 @@ Demonstrates:
       and injected into os.environ before agent execution
 
 Setup (one-time):
-    agentspan credentials set --name GITHUB_TOKEN
-
+    agentspan credentials set GITHUB_TOKEN <your-github-token>
 Requirements:
     - Agentspan server running at AGENTSPAN_SERVER_URL
     - AGENTSPAN_LLM_MODEL set (or defaults to openai/gpt-5.4)
@@ -37,7 +36,7 @@ def create_adk_agent():
 
     agent = Agent(
         name="github_checker",
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         instruction="You check GitHub authentication status.",
         tools=[FunctionTool(check_github_auth)],
     )

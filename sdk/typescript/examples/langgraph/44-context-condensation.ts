@@ -24,7 +24,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // Domain data -- structured facts for each technology domain
@@ -320,7 +320,7 @@ const subAgentBuilder = new StateGraph(MessagesAnnotation)
   .addConditionalEdges('agent', toolsCondition)
   .addEdge('tools', 'agent');
 
-const subAgentGraph = subAgentBuilder.compile();
+const subAgentGraph = subAgentBuilder.compile({ name: "research_sub_agent" });
 
 // ---------------------------------------------------------------------------
 // Wrap sub-agent as a tool for the orchestrator
@@ -374,7 +374,7 @@ const orchBuilder = new StateGraph(MessagesAnnotation)
   .addConditionalEdges('orchestrator', toolsCondition)
   .addEdge('tools', 'orchestrator');
 
-const graph = orchBuilder.compile();
+const graph = orchBuilder.compile({ name: "research_orchestrator" });
 
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',
@@ -417,7 +417,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('44-context-condensation.ts') || process.argv[1]?.endsWith('44-context-condensation.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

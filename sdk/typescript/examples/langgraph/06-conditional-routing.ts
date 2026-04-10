@@ -8,7 +8,7 @@
  */
 
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // State schema
@@ -93,7 +93,7 @@ builder.addEdge('positive', END);
 builder.addEdge('negative', END);
 builder.addEdge('neutral', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "sentiment_router" });
 
 // Add agentspan metadata for extraction (no LLM in this pipeline example)
 (graph as any)._agentspan = {
@@ -128,7 +128,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('06-conditional-routing.ts') || process.argv[1]?.endsWith('06-conditional-routing.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

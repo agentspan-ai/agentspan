@@ -111,6 +111,11 @@ builder.add_edge("general", END)
 graph = builder.compile(name="agent_handoff")
 
 if __name__ == "__main__":
+    queries = [
+        "I was charged twice for my subscription last month.",
+        "My app keeps crashing after the latest update.",
+        "What are your business hours?",
+    ]
     with AgentRuntime() as runtime:
         for query in queries:
             print(f"\nQuery: {query}")

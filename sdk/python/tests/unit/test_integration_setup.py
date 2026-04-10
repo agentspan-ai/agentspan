@@ -79,7 +79,7 @@ class TestEnsureModel:
             from agentspan.agents.runtime.runtime import AgentRuntime
 
             config = AgentConfig(
-                server_url="http://localhost:8080/api",
+                server_url="http://localhost:6767/api",
                 auto_register_integrations=auto_register,
             )
             runtime = AgentRuntime(config=config)
@@ -247,7 +247,7 @@ class TestEnsureModelsForAgent:
             from agentspan.agents.runtime.runtime import AgentRuntime
 
             config = AgentConfig(
-                server_url="http://localhost:8080/api",
+                server_url="http://localhost:6767/api",
                 auto_register_integrations=True,
             )
             runtime = AgentRuntime(config=config)
@@ -329,7 +329,7 @@ class TestAutoRegisterInPrepare:
             from agentspan.agents.runtime.runtime import AgentRuntime
 
             config = AgentConfig(
-                server_url="http://localhost:8080/api",
+                server_url="http://localhost:6767/api",
                 auto_register_integrations=True,
             )
             runtime = AgentRuntime(config=config)
@@ -354,7 +354,7 @@ class TestAutoRegisterInPrepare:
             from agentspan.agents.runtime.runtime import AgentRuntime
 
             config = AgentConfig(
-                server_url="http://localhost:8080/api",
+                server_url="http://localhost:6767/api",
                 auto_register_integrations=False,
             )
             runtime = AgentRuntime(config=config)

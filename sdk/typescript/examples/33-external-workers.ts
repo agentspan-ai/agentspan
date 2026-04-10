@@ -19,9 +19,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Example 1: Basic external worker reference ------------------------------
 // The function stub defines the schema; no implementation needed.
@@ -35,10 +34,14 @@ const processOrder = tool(
   {
     name: 'process_order',
     description: 'Process a customer order. Actions: refund, cancel, update.',
-    inputSchema: z.object({
-      orderId: z.string().describe('The order ID'),
-      action: z.string().describe('Action to take: refund, cancel, or update'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        orderId: { type: 'string', description: 'The order ID' },
+        action: { type: 'string', description: 'Action to take: refund, cancel, or update' },
+      },
+      required: ['orderId', 'action'],
+    },
     external: true,
   },
 );
@@ -53,10 +56,14 @@ const deleteAccount = tool(
   {
     name: 'delete_account',
     description: 'Permanently delete a user account. Requires manager approval.',
-    inputSchema: z.object({
-      userId: z.string().describe('The user ID to delete'),
-      reason: z.string().describe('Reason for deletion'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        userId: { type: 'string', description: 'The user ID to delete' },
+        reason: { type: 'string', description: 'Reason for deletion' },
+      },
+      required: ['userId', 'reason'],
+    },
     external: true,
     approvalRequired: true,
   },
@@ -73,9 +80,13 @@ const formatResponse = tool(
   {
     name: 'format_response',
     description: 'Format a data dictionary into a human-readable string.',
-    inputSchema: z.object({
-      data: z.record(z.unknown()).describe('Data to format'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        data: { type: 'object', additionalProperties: true, description: 'Data to format' },
+      },
+      required: ['data'],
+    },
   },
 );
 
@@ -86,9 +97,13 @@ const getCustomer = tool(
   {
     name: 'get_customer',
     description: 'Look up customer details from the CRM system.',
-    inputSchema: z.object({
-      customerId: z.string().describe('The customer ID'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        customerId: { type: 'string', description: 'The customer ID' },
+      },
+      required: ['customerId'],
+    },
     external: true,
   },
 );
@@ -100,10 +115,14 @@ const checkInventory = tool(
   {
     name: 'check_inventory',
     description: 'Check product availability in a warehouse.',
-    inputSchema: z.object({
-      productId: z.string().describe('The product ID'),
-      warehouse: z.string().optional().default('default').describe('Warehouse name'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        productId: { type: 'string', description: 'The product ID' },
+        warehouse: { type: 'string', description: 'Warehouse name' },
+      },
+      required: ['productId'],
+    },
     external: true,
   },
 );
@@ -127,7 +146,6 @@ export const supportAgent = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -155,6 +173,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('33-external-workers.ts') || process.argv[1]?.endsWith('33-external-workers.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

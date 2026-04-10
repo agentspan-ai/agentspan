@@ -13,8 +13,8 @@ class TestBuildResolvedEnv:
         assert env["AGENTSPAN_LLM_MODEL"] == "openai/gpt-4o"
 
     def test_server_url_set_when_provided(self):
-        env = build_resolved_env("openai/gpt-4o", "http://localhost:8080/api")
-        assert env["AGENTSPAN_SERVER_URL"] == "http://localhost:8080/api"
+        env = build_resolved_env("openai/gpt-4o", "http://localhost:6767/api")
+        assert env["AGENTSPAN_SERVER_URL"] == "http://localhost:6767/api"
 
     def test_server_url_absent_when_none(self):
         env = build_resolved_env("openai/gpt-4o", None)
@@ -50,7 +50,7 @@ class TestBuildResolvedEnv:
 
     def test_os_environ_not_mutated(self):
         before = dict(os.environ)
-        build_resolved_env("openai/gpt-4o", "http://localhost:8080/api", secondary_model="m2")
+        build_resolved_env("openai/gpt-4o", "http://localhost:6767/api", secondary_model="m2")
         assert dict(os.environ) == before
         assert "AGENTSPAN_LLM_MODEL" not in os.environ or os.environ.get(
             "AGENTSPAN_LLM_MODEL"

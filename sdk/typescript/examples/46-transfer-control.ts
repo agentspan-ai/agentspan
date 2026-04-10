@@ -11,9 +11,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Tools -------------------------------------------------------------------
 
@@ -24,9 +23,13 @@ const collectData = tool(
   {
     name: 'collect_data',
     description: 'Collect data from a source.',
-    inputSchema: z.object({
-      source: z.string().describe('The data source name'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        source: { type: 'string', description: 'The data source name' },
+      },
+      required: ['source'],
+    },
   },
 );
 
@@ -37,9 +40,13 @@ const analyzeData = tool(
   {
     name: 'analyze_data',
     description: 'Analyze collected data.',
-    inputSchema: z.object({
-      dataSummary: z.string().describe('Summary of data to analyze'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dataSummary: { type: 'string', description: 'Summary of data to analyze' },
+      },
+      required: ['dataSummary'],
+    },
   },
 );
 
@@ -50,9 +57,13 @@ const writeSummary = tool(
   {
     name: 'write_summary',
     description: 'Write a summary report.',
-    inputSchema: z.object({
-      findings: z.string().describe('The findings to summarize'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        findings: { type: 'string', description: 'The findings to summarize' },
+      },
+      required: ['findings'],
+    },
   },
 );
 
@@ -100,7 +111,6 @@ export const coordinator = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -123,6 +133,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('46-transfer-control.ts') || process.argv[1]?.endsWith('46-transfer-control.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

@@ -19,10 +19,24 @@ Demonstrates:
     - Extended thinking, planner mode, required_tools, include_contents
     - GPTAssistantAgent, agent_tool(), scatter_gather()
 
+MCP Test Server Setup (mcp-testkit):
+    pip install mcp-testkit
+
+    # Start without auth:
+    mcp-testkit --transport http
+
+    # Or start with auth (requires storing the secret as a credential):
+    mcp-testkit --transport http --auth <secret>
+
+    # Store credentials via CLI or Agentspan UI:
+    agentspan credentials set MCP_AUTH_TOKEN <secret>
+    agentspan credentials set SEARCH_API_KEY <key>
+
 Requirements:
     - Conductor server with LLM support
     - AGENTSPAN_SERVER_URL, AGENTSPAN_LLM_MODEL env vars
-    - For full execution: Docker, MCP server, credential store configured
+    - mcp-testkit running on http://localhost:3001 (for MCP/HTTP tools)
+    - For full execution: Docker, credential store configured
 """
 
 import asyncio
@@ -192,7 +206,7 @@ intake_router = Agent(
 
 
 # -- Native tool with ToolContext injection + file-based credentials --
-@tool(credentials=[CredentialFile(env_var="RESEARCH_API_KEY")])
+@tool(credentials=[CredentialFile(env_var="RESEARCH_API_KEY", relative_path=".research/api_key")])
 def research_database(query: str, ctx: ToolContext = None) -> dict:
     """Search internal research database."""
     session = ctx.session_id if ctx else "unknown"
@@ -234,6 +248,7 @@ mcp_fact_checker = mcp_tool(
     name="fact_checker",
     description="Verify factual claims using knowledge base.",
     tool_names=["verify_claim", "check_source"],
+    headers={"Authorization": "Bearer ${MCP_AUTH_TOKEN}"},
     credentials=["MCP_AUTH_TOKEN"],
 )
 
@@ -406,7 +421,6 @@ def fact_validator(content: str) -> GuardrailResult:
 # -- External guardrail (remote worker, on_fail=RAISE) --
 compliance_guardrail = Guardrail(
     name="compliance_check",
-    external=True,
     position=Position.OUTPUT,
     on_fail=OnFail.RAISE,
 )
@@ -584,7 +598,6 @@ formatter = Agent(
 # External agent — runs as remote SUB_WORKFLOW (#88)
 external_publisher = Agent(
     name="external_publisher",
-    external=True,
     instructions="Publish to the CMS platform.",
 )
 
@@ -715,7 +728,7 @@ analytics_agent = Agent(
     include_contents="default",  # #68
     output_type=ArticleReport,  # #30
     required_tools=["index_article"],  # #70
-    code_execution_config=CodeExecutionConfig(  # #58
+    code_execution=CodeExecutionConfig(  # #58
         enabled=True,
         allowed_languages=["python", "shell"],
         allowed_commands=["python3", "pip"],
@@ -726,6 +739,7 @@ analytics_agent = Agent(
         allowed_commands=["git", "gh"],
         timeout=30,
     ),
+    credentials=["GITHUB_TOKEN", "GH_TOKEN"],
     metadata={"stage": "analytics", "version": "1.0"},
     planner=True,  # #69
 )

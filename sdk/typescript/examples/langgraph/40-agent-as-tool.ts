@@ -14,7 +14,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // Specialist agents (as plain compiled graphs)
@@ -119,7 +119,7 @@ const orchBuilder = new StateGraph(MessagesAnnotation)
   .addConditionalEdges('orchestrator', toolsCondition)
   .addEdge('tools', 'orchestrator');
 
-const graph = orchBuilder.compile();
+const graph = orchBuilder.compile({ name: "orchestrator_with_subagents" });
 
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',
@@ -159,7 +159,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('40-agent-as-tool.ts') || process.argv[1]?.endsWith('40-agent-as-tool.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

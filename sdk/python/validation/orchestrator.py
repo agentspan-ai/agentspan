@@ -310,7 +310,7 @@ def _run_single(
 
 
 def _parse_port(server_url: str) -> int:
-    """Extract port from URL like http://localhost:8080/api. Defaults to 8080."""
+    """Extract port from URL like http://localhost:6767/api. Defaults to 8080."""
     try:
         from urllib.parse import urlparse
 

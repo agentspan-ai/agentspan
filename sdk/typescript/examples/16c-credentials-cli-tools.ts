@@ -1,29 +1,17 @@
 /**
- * Credentials -- CLI tools with automatic credential mapping.
+ * Credentials -- CLI tools with explicit credential declarations.
  *
  * Demonstrates:
- *   - cliConfig.allowedCommands auto-maps to credentials (gh -> GITHUB_TOKEN, aws -> AWS_*)
- *   - No need to declare credentials manually when using CLI tools
+ *   - Explicit credentials on agents and tools
+ *   - cliConfig.allowedCommands defines which CLI tools the agent can use
+ *   - credentials: [...] declares which secrets the server must inject
  *   - Multi-credential tools (aws needs multiple env vars)
- *
- * CLI credential auto-mapping (built-in):
- *   gh          -> GITHUB_TOKEN
- *   aws         -> AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN
- *   gcloud      -> GOOGLE_APPLICATION_CREDENTIALS (CredentialFile)
- *   docker      -> DOCKER_USERNAME, DOCKER_PASSWORD
- *   kubectl     -> KUBECONFIG (CredentialFile)
- *   az          -> AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID
- *   npm         -> NPM_TOKEN
- *   pip         -> PIP_INDEX_URL
- *   databricks  -> DATABRICKS_TOKEN, DATABRICKS_HOST
- *   snowflake   -> SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_PASSWORD
- *   terraform   -> ConfigurationError (use tool() with explicit credentials)
  *
  * Setup (one-time, via CLI):
  *   agentspan login
- *   agentspan credentials set --name GITHUB_TOKEN
- *   agentspan credentials set --name AWS_ACCESS_KEY_ID
- *   agentspan credentials set --name AWS_SECRET_ACCESS_KEY
+ *   agentspan credentials set GITHUB_TOKEN <your-github-token>
+ *   agentspan credentials set AWS_ACCESS_KEY_ID <your-aws-access-key-id>
+ *   agentspan credentials set AWS_SECRET_ACCESS_KEY <your-aws-secret-access-key>
  *
  * Requirements:
  *   - Agentspan server running at AGENTSPAN_SERVER_URL
@@ -32,8 +20,8 @@
  */
 
 import { execSync } from 'node:child_process';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- gh tool: list pull requests ----------------------------------------------
 
@@ -137,7 +125,7 @@ const awsListS3Buckets = tool(
     name: 'aws_list_s3_buckets',
     description: "List S3 buckets accessible with the user's AWS credentials.",
     inputSchema: { type: 'object', properties: {} },
-    credentials: ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'],
+    credentials: ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN'],
   },
 );
 
@@ -159,7 +147,7 @@ const awsGetCallerIdentity = tool(
     name: 'aws_get_caller_identity',
     description: 'Return the AWS identity (account, ARN) for the current credentials.',
     inputSchema: { type: 'object', properties: {} },
-    credentials: ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'],
+    credentials: ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN'],
   },
 );
 
@@ -170,6 +158,7 @@ export const githubAwsAgent = new Agent({
   model: llmModel,
   tools: [ghListPrs, ghCreatePr, awsListS3Buckets, awsGetCallerIdentity],
   cliConfig: { enabled: true, allowedCommands: ['gh', 'aws'] },
+  credentials: ['GITHUB_TOKEN', 'GH_TOKEN', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN'],
   instructions:
     'You are a DevOps assistant. You can manage GitHub pull requests and ' +
     'inspect AWS resources. Always confirm destructive actions before proceeding.',
@@ -179,7 +168,6 @@ export const githubAwsAgent = new Agent({
 
 const task = process.argv.slice(2).join(' ') || 'Who am I in AWS, and list my S3 buckets?';
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -199,6 +187,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('16c-credentials-cli-tools.ts') || process.argv[1]?.endsWith('16c-credentials-cli-tools.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

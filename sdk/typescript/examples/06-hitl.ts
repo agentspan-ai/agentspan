@@ -2,15 +2,16 @@
  * 06 - Human-in-the-Loop (HITL)
  *
  * Demonstrates a tool with approvalRequired: true.
- * Uses stream.approve(), stream.reject(), and stream.send().
+ * Uses interactive streaming with schema-driven console prompts.
  */
 
+import * as readline from 'node:readline/promises';
+import { stdin, stdout } from 'node:process';
 import {
   Agent,
   AgentRuntime,
-  EventTypes,
   tool,
-} from '../src/index.js';
+} from '@agentspan-ai/sdk';
 
 const MODEL = process.env.AGENTSPAN_LLM_MODEL ?? 'openai/gpt-4o';
 
@@ -41,63 +42,64 @@ export const publishingAgent = new Agent({
   tools: [publishArticle],
 });
 
-async function main() {
-  const runtime = new AgentRuntime();
-  try {
-    const result = await runtime.run(publishingAgent, 'Write a short article outline about TypeScript, but do not publish it.');
-    result.printResult();
-
-    // Production pattern:
-    // 1. Deploy once during CI/CD:
-    // await runtime.deploy(publishingAgent);
-    // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples --agents publisher
-    //
-    // 2. In a separate long-lived worker process:
-    // await runtime.serve(publishingAgent);
-
-    // Interactive HITL alternative:
-    // const agentStream = await runtime.stream(
-    // publishingAgent,
-    // 'Write a short article about TypeScript and publish it.',
-    // );
-
-    // let attempt = 0;
-
-    // for await (const event of agentStream) {
-    // if (event.type === EventTypes.WAITING) {
-    // attempt++;
-    // console.log(`\n--- HITL: Approval required (attempt ${attempt}) ---`);
-
-    // if (attempt === 1) {
-          // First: send feedback
-    // console.log('Sending feedback...');
-    // await agentStream.send('Please make the title more descriptive.');
-    // } else if (attempt === 2) {
-          // Second: reject
-    // console.log('Rejecting...');
-    // await agentStream.reject('Title still needs improvement.');
-    // } else {
-          // Third: approve
-    // console.log('Approving!');
-    // await agentStream.approve();
-    // }
-    // } else if (event.type === EventTypes.DONE) {
-    // console.log('\nDone!');
-    // } else if (event.type === EventTypes.MESSAGE) {
-    // console.log(`[message] ${(event.content ?? '').slice(0, 100)}`);
-    // }
-    // }
-
-    // const result = await agentStream.getResult();
-    // result.printResult();
-  } finally {
-    await runtime.shutdown();
+async function promptHuman(
+  rl: readline.Interface,
+  pendingTool: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const schema = (pendingTool.response_schema ?? {}) as Record<string, unknown>;
+  const props = (schema.properties ?? {}) as Record<string, Record<string, unknown>>;
+  const response: Record<string, unknown> = {};
+  for (const [field, fs] of Object.entries(props)) {
+    const desc = (fs.description || fs.title || field) as string;
+    if (fs.type === 'boolean') {
+      const val = await rl.question(`  ${desc} (y/n): `);
+      response[field] = ['y', 'yes'].includes(val.trim().toLowerCase());
+    } else {
+      response[field] = await rl.question(`  ${desc}: `);
+    }
   }
+  return response;
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('06-hitl.ts') || process.argv[1]?.endsWith('06-hitl.js')) {
+const rl = readline.createInterface({ input: stdin, output: stdout });
+const runtime = new AgentRuntime();
+try {
+  const handle = await runtime.start(
+    publishingAgent,
+    'Write a short article about TypeScript and publish it.',
+  );
+  console.log(`Started: ${handle.executionId}\n`);
 
-  main().catch(console.error);
+  for await (const event of handle.stream()) {
+    if (event.type === 'thinking') {
+      console.log(`  [thinking] ${event.content}`);
+    } else if (event.type === 'tool_call') {
+      console.log(`  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`);
+    } else if (event.type === 'tool_result') {
+      console.log(`  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result).slice(0, 100)}`);
+    } else if (event.type === 'waiting') {
+      const status = await handle.getStatus();
+      const pt = (status.pendingTool ?? {}) as Record<string, unknown>;
+      console.log('\n--- Human input required ---');
+      const response = await promptHuman(rl, pt);
+      await handle.respond(response);
+      console.log();
+    } else if (event.type === 'done') {
+      console.log(`\nDone: ${JSON.stringify(event.output)}`);
+    }
+  }
+
+  // Non-interactive alternative (no HITL, will block on human tasks):
+  // const result = await runtime.run(publishingAgent, 'Write a short article outline about TypeScript, but do not publish it.');
+  // result.printResult();
+
+  // Production pattern:
+  // 1. Deploy once during CI/CD:
+  // await runtime.deploy(publishingAgent);
+  //
+  // 2. In a separate long-lived worker process:
+  // await runtime.serve(publishingAgent);
+} finally {
+  rl.close();
+  await runtime.shutdown();
 }

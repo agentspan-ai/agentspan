@@ -1,6 +1,6 @@
-import { readdirSync } from 'fs';
-import { join, extname } from 'path';
-import { Agent } from './agent.js';
+import { readdirSync } from "fs";
+import { join, extname } from "path";
+import { Agent } from "./agent.js";
 
 /**
  * Scan a directory for .ts/.js files, dynamically import them,
@@ -13,7 +13,7 @@ export async function discoverAgents(path: string): Promise<Agent[]> {
   for (const entry of entries) {
     if (!entry.isFile()) continue;
     const ext = extname(entry.name);
-    if (ext !== '.ts' && ext !== '.js') continue;
+    if (ext !== ".ts" && ext !== ".js") continue;
 
     const fullPath = join(path, entry.name);
     try {

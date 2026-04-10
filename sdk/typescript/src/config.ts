@@ -1,9 +1,9 @@
-import { config as dotenvConfig } from 'dotenv';
+import { config as dotenvConfig } from "dotenv";
 
 // Load .env file on import (no-op if file doesn't exist)
 dotenvConfig();
 
-export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
+export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
 
 /**
  * Normalize server URL: ensures it ends with `/api`.
@@ -12,11 +12,11 @@ export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
  */
 export function normalizeServerUrl(url: string): string {
   // Strip trailing slashes
-  let normalized = url.replace(/\/+$/, '');
+  let normalized = url.replace(/\/+$/, "");
 
   // Append /api if not already present
-  if (!normalized.endsWith('/api')) {
-    normalized += '/api';
+  if (!normalized.endsWith("/api")) {
+    normalized += "/api";
   }
 
   return normalized;
@@ -27,15 +27,15 @@ export function normalizeServerUrl(url: string): string {
  * Recognizes 'true', '1', 'yes' as true; everything else as false.
  */
 function parseBoolEnv(value: string | undefined, defaultValue: boolean): boolean {
-  if (value === undefined || value === '') return defaultValue;
-  return ['true', '1', 'yes'].includes(value.toLowerCase());
+  if (value === undefined || value === "") return defaultValue;
+  return ["true", "1", "yes"].includes(value.toLowerCase());
 }
 
 /**
  * Parse an integer from an environment variable string.
  */
 function parseIntEnv(value: string | undefined, defaultValue: number): number {
-  if (value === undefined || value === '') return defaultValue;
+  if (value === undefined || value === "") return defaultValue;
   const parsed = parseInt(value, 10);
   return Number.isNaN(parsed) ? defaultValue : parsed;
 }
@@ -77,52 +77,36 @@ export class AgentConfig {
   constructor(options?: AgentConfigOptions) {
     const env = process.env;
 
-    const rawUrl =
-      options?.serverUrl ??
-      env.AGENTSPAN_SERVER_URL ??
-      'http://localhost:6767/api';
+    const rawUrl = options?.serverUrl ?? env.AGENTSPAN_SERVER_URL ?? "http://localhost:6767/api";
 
     this.serverUrl = normalizeServerUrl(rawUrl);
 
-    this.apiKey = options?.apiKey ?? env.AGENTSPAN_API_KEY ?? '';
-    this.authKey = options?.authKey ?? env.AGENTSPAN_AUTH_KEY ?? '';
-    this.authSecret = options?.authSecret ?? env.AGENTSPAN_AUTH_SECRET ?? '';
+    this.apiKey = options?.apiKey ?? env.AGENTSPAN_API_KEY ?? "";
+    this.authKey = options?.authKey ?? env.AGENTSPAN_AUTH_KEY ?? "";
+    this.authSecret = options?.authSecret ?? env.AGENTSPAN_AUTH_SECRET ?? "";
 
     this.workerPollIntervalMs =
-      options?.workerPollIntervalMs ??
-      parseIntEnv(env.AGENTSPAN_WORKER_POLL_INTERVAL, 100);
+      options?.workerPollIntervalMs ?? parseIntEnv(env.AGENTSPAN_WORKER_POLL_INTERVAL, 100);
 
-    this.workerThreads =
-      options?.workerThreads ??
-      parseIntEnv(env.AGENTSPAN_WORKER_THREADS, 1);
+    this.workerThreads = options?.workerThreads ?? parseIntEnv(env.AGENTSPAN_WORKER_THREADS, 1);
 
     this.autoStartWorkers =
-      options?.autoStartWorkers ??
-      parseBoolEnv(env.AGENTSPAN_AUTO_START_WORKERS, true);
+      options?.autoStartWorkers ?? parseBoolEnv(env.AGENTSPAN_AUTO_START_WORKERS, true);
 
     this.autoStartServer =
-      options?.autoStartServer ??
-      parseBoolEnv(env.AGENTSPAN_AUTO_START_SERVER, true);
+      options?.autoStartServer ?? parseBoolEnv(env.AGENTSPAN_AUTO_START_SERVER, true);
 
-    this.daemonWorkers =
-      options?.daemonWorkers ??
-      parseBoolEnv(env.AGENTSPAN_DAEMON_WORKERS, true);
+    this.daemonWorkers = options?.daemonWorkers ?? parseBoolEnv(env.AGENTSPAN_DAEMON_WORKERS, true);
 
     this.streamingEnabled =
-      options?.streamingEnabled ??
-      parseBoolEnv(env.AGENTSPAN_STREAMING_ENABLED, true);
+      options?.streamingEnabled ?? parseBoolEnv(env.AGENTSPAN_STREAMING_ENABLED, true);
 
     this.credentialStrictMode =
-      options?.credentialStrictMode ??
-      parseBoolEnv(env.AGENTSPAN_CREDENTIAL_STRICT_MODE, false);
+      options?.credentialStrictMode ?? parseBoolEnv(env.AGENTSPAN_CREDENTIAL_STRICT_MODE, false);
 
-    this.logLevel =
-      options?.logLevel ??
-      ((env.AGENTSPAN_LOG_LEVEL as LogLevel) || 'INFO');
+    this.logLevel = options?.logLevel ?? ((env.AGENTSPAN_LOG_LEVEL as LogLevel) || "INFO");
 
-    this.llmRetryCount =
-      options?.llmRetryCount ??
-      parseIntEnv(env.AGENTSPAN_LLM_RETRY_COUNT, 3);
+    this.llmRetryCount = options?.llmRetryCount ?? parseIntEnv(env.AGENTSPAN_LLM_RETRY_COUNT, 3);
   }
 
   /**

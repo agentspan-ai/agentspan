@@ -23,8 +23,8 @@ import {
   StopMessage,
   MaxMessage,
   TokenUsageCondition,
-} from '../src/index.js';
-import { llmModel } from './settings.js';
+} from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Example 1: Simple text mention ----------------------------------------
 
@@ -93,7 +93,6 @@ export const agent4 = new Agent({
 
 // -- Run -------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -114,6 +113,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('19-composable-termination.ts') || process.argv[1]?.endsWith('19-composable-termination.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

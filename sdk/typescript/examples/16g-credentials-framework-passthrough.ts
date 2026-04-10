@@ -16,7 +16,7 @@
  * credentials are resolved and injected before tool execution.
  *
  * Setup (one-time):
- *   agentspan credentials set --name GITHUB_TOKEN
+ *   agentspan credentials set GITHUB_TOKEN <your-github-token>
  *
  * Requirements:
  *   - Agentspan server running at AGENTSPAN_SERVER_URL
@@ -24,8 +24,8 @@
  *   - GITHUB_TOKEN stored via `agentspan credentials set`
  */
 
-import { Agent, AgentRuntime, tool, getCredential } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool, getCredential } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // A tool that reads GITHUB_TOKEN from the credential store (in-process mode).
 // In a framework passthrough scenario, this credential would be injected into
@@ -64,7 +64,6 @@ export const agent = new Agent({
 
 // -- Run ----------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -87,6 +86,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('16g-credentials-framework-passthrough.ts') || process.argv[1]?.endsWith('16g-credentials-framework-passthrough.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

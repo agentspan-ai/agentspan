@@ -17,9 +17,11 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime } from '../src';
-import type { AgentHandle } from '../src/index.js';
-import { llmModel } from './settings.js';
+import * as readline from 'node:readline/promises';
+import { stdin, stdout } from 'node:process';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import type { AgentHandle } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 export const writer = new Agent({
   name: 'writer',
@@ -48,34 +50,68 @@ export const team = new Agent({
   maxTurns: 3,
 });
 
+// -- Helpers ------------------------------------------------------------------
+
+async function promptHuman(
+  rl: readline.Interface,
+  pendingTool: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const schema = (pendingTool.response_schema ?? {}) as Record<string, unknown>;
+  const props = (schema.properties ?? {}) as Record<string, Record<string, unknown>>;
+  const response: Record<string, unknown> = {};
+  for (const [field, fs] of Object.entries(props)) {
+    const desc = (fs.description || fs.title || field) as string;
+    if (fs.type === 'boolean') {
+      const val = await rl.question(`  ${desc} (y/n): `);
+      response[field] = ['y', 'yes'].includes(val.trim().toLowerCase());
+    } else {
+      response[field] = await rl.question(`  ${desc}: `);
+    }
+  }
+  return response;
+}
+
 // -- Run ----------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('18-manual-selection.ts') || process.argv[1]?.endsWith('18-manual-selection.js')) {
-  const runtime = new AgentRuntime();
-  try {
-    const result = await runtime.run(
-      writer,
-      'Write a short paragraph about the history of artificial intelligence.',
-    );
-    result.printResult();
+const rl = readline.createInterface({ input: stdin, output: stdout });
+const runtime = new AgentRuntime();
+try {
+  const handle = await runtime.start(
+    team,
+    'Write a short paragraph about the history of artificial intelligence.',
+  );
+  console.log(`Started: ${handle.executionId}\n`);
 
-    // Production pattern:
-    // 1. Deploy once during CI/CD:
-    // await runtime.deploy(team);
-    // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples
-    //
-    // 2. In a separate long-lived worker process:
-    // await runtime.serve(team);
-    //
-    // Interactive manual-selection alternative:
-    // const handle: AgentHandle = await runtime.start(
-    //   team,
-    //   'Write a short paragraph about the history of artificial intelligence.',
-    // );
-    // await handle.respond({ selected: 'writer' });
-  } finally {
-    await runtime.shutdown();
+  for await (const event of handle.stream()) {
+    if (event.type === 'thinking') {
+      console.log(`  [thinking] ${event.content}`);
+    } else if (event.type === 'tool_call') {
+      console.log(`  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`);
+    } else if (event.type === 'tool_result') {
+      console.log(`  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result).slice(0, 100)}`);
+    } else if (event.type === 'waiting') {
+      const status = await handle.getStatus();
+      const pt = (status.pendingTool ?? {}) as Record<string, unknown>;
+      console.log('\n--- Human input required ---');
+      const response = await promptHuman(rl, pt);
+      await handle.respond(response);
+      console.log();
+    } else if (event.type === 'done') {
+      console.log(`\nDone: ${JSON.stringify(event.output)}`);
+    }
   }
+
+  // Non-interactive alternative (no HITL, will block on human tasks):
+  // const result = await runtime.run(writer, 'Write a short paragraph about the history of artificial intelligence.');
+  // result.printResult();
+
+  // Production pattern:
+  // 1. Deploy once during CI/CD:
+  // await runtime.deploy(team);
+  //
+  // 2. In a separate long-lived worker process:
+  // await runtime.serve(team);
+} finally {
+  rl.close();
+  await runtime.shutdown();
 }

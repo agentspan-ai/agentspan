@@ -62,7 +62,9 @@ export const RunWorkFlowForm = ({
 
     try {
       // Build the StartRequest payload (matches server's StartRequest.java)
-      const agentConfig = { ...currentWf };
+      const agentConfig: Partial<typeof currentWf> & { model?: string } = {
+        ...currentWf,
+      };
 
       // Override model if user specified one
       if (model && model.trim()) {

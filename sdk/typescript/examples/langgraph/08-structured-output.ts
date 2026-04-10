@@ -10,7 +10,7 @@
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // Structured output schema
@@ -32,6 +32,7 @@ const graph = createReactAgent({
   llm,
   tools: [],
   responseFormat: MovieReviewSchema,
+  name: "movie_review_agent",
 });
 
 // Add agentspan metadata for extraction
@@ -66,7 +67,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('08-structured-output.ts') || process.argv[1]?.endsWith('08-structured-output.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

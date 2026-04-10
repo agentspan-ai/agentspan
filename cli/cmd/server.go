@@ -33,8 +33,8 @@ var (
 	serverVersion string
 	serverJar     string
 	serverLocal   bool
-	followLogs   bool
-	tailLines    int
+	followLogs    bool
+	tailLines     int
 )
 
 var serverCmd = &cobra.Command{
@@ -157,8 +157,8 @@ func runServerStart(cmd *cobra.Command, args []string) error {
 					"  Run 'agentspan doctor' for full diagnostics.", javaVersion)
 		}
 		return fmt.Errorf(
-			"Java is not installed. The Agentspan server requires Java 21+.\n"+
-				"  Install: https://adoptium.net/\n"+
+			"Java is not installed. The Agentspan server requires Java 21+.\n" +
+				"  Install: https://adoptium.net/\n" +
 				"  Run 'agentspan doctor' for full diagnostics.")
 	}
 
@@ -510,8 +510,13 @@ func checkAIProviderKeys() {
 		}
 	}
 
-	// Check provider-specific warnings
+	// Check provider-specific warnings — only for providers that are actually
+	// configured (all required env vars set). Warnings for unconfigured providers
+	// are noise; the user hasn't opted in to that provider at all.
 	for _, p := range aiProviders {
+		if !isProviderConfigured(p) {
+			continue
+		}
 		for _, w := range p.warns {
 			if w.condition() {
 				warn := color.New(color.FgYellow, color.Bold)
@@ -559,4 +564,3 @@ func readPID() (int, error) {
 	}
 	return strconv.Atoi(strings.TrimSpace(string(data)))
 }
-

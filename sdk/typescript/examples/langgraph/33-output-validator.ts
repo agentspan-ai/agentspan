@@ -11,7 +11,7 @@
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // LLM
@@ -141,7 +141,7 @@ builder.addConditionalEdges('validate', shouldRetry, {
 });
 builder.addEdge('finalize', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "output_validator_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
@@ -175,7 +175,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('33-output-validator.ts') || process.argv[1]?.endsWith('33-output-validator.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

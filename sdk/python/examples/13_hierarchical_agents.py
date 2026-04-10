@@ -111,7 +111,7 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         print("--- Technical question (CEO -> Engineering -> Backend) ---")
         result = runtime.run(ceo, "Design a REST API for a user management system with authentication "
-                                  "and then come up with a marketing campaign for the system")
+                                  "and then ask marketing team to come up with a marketing campaign for the system with details on how to run these campaign")
         result.print_result()
 
         # Production pattern:

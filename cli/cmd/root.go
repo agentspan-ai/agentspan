@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/agentspan-ai/agentspan/cli/tui"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 var (
@@ -21,6 +23,13 @@ var rootCmd = &cobra.Command{
 	Use:   "agentspan",
 	Short: "CLI for the AgentSpan runtime",
 	Long:  "Create, run, and manage AI agents powered by the AgentSpan runtime.",
+	// When invoked with no subcommand and stdout is a TTY, launch the TUI.
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if isTTY() {
+			return tui.Start(Version)
+		}
+		return cmd.Help()
+	},
 }
 
 var versionCmd = &cobra.Command{
@@ -29,6 +38,11 @@ var versionCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Printf("agentspan %s (commit: %s, built: %s)\n", Version, Commit, Date)
 	},
+}
+
+// isTTY returns true if stdout is connected to a terminal.
+func isTTY() bool {
+	return term.IsTerminal(int(os.Stdout.Fd()))
 }
 
 func Execute() {

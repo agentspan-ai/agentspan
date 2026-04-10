@@ -10,14 +10,14 @@
 import { MemorySaver } from '@langchain/langgraph';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // Build the graph with checkpointer
 // ---------------------------------------------------------------------------
 const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
 const checkpointer = new MemorySaver();
-const graph = createReactAgent({ llm, tools: [], checkpointer });
+const graph = createReactAgent({ llm, tools: [], checkpointer, name: "memory_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
@@ -53,7 +53,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('03-memory.ts') || process.argv[1]?.endsWith('03-memory.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

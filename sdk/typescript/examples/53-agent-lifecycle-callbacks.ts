@@ -11,9 +11,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, CallbackHandler, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, CallbackHandler, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Handler 1: Timing -------------------------------------------------------
 
@@ -61,9 +60,13 @@ const lookupWeather = tool(
   {
     name: 'lookup_weather',
     description: 'Get the current weather for a city.',
-    inputSchema: z.object({
-      city: z.string().describe('Name of the city'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        city: { type: 'string', description: 'Name of the city' },
+      },
+      required: ['city'],
+    },
   },
 );
 
@@ -79,7 +82,6 @@ export const agent = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -99,6 +101,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('53-agent-lifecycle-callbacks.ts') || process.argv[1]?.endsWith('53-agent-lifecycle-callbacks.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

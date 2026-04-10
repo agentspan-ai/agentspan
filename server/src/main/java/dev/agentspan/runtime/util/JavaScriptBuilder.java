@@ -226,14 +226,16 @@ public class JavaScriptBuilder {
             String agentToolConfigJson,
             String ragConfigJson,
             String cliConfigJson,
-            String humanConfigJson) {
+            String humanConfigJson,
+            String wmqConfigJson) {
         return iife("  var httpCfg = " + httpConfigJson + ";" + "  var mcpCfg = "
                 + mcpConfigJson + ";" + "  var mediaCfg = "
                 + mediaConfigJson + ";" + "  var agentToolCfg = "
                 + agentToolConfigJson + ";" + "  var ragCfg = "
                 + ragConfigJson + ";" + "  var cliCfg = "
                 + cliConfigJson + ";" + "  var humanCfg = "
-                + humanConfigJson + ";" + "  var agentState = $.agentState || {};"
+                + humanConfigJson + ";" + "  var wmqCfg = "
+                + wmqConfigJson + ";" + "  var agentState = $.agentState || {};"
                 + "  var tcs = $.toolCalls || [];"
                 + "  var result = [];"
                 + "  for (var i = 0; i < tcs.length; i++) {"
@@ -320,6 +322,12 @@ public class JavaScriptBuilder {
                 + "      for (var k in inp) { hInputs[k] = inp[k]; }"
                 + "      if (humanCfg[n].description) hInputs._description = humanCfg[n].description;"
                 + "      t.inputParameters = hInputs;"
+                + "      t.optional = false;"
+                + "    } else if (wmqCfg[n]) {"
+                + "      t.type = 'PULL_WORKFLOW_MESSAGES';"
+                + "      t.name = n;"
+                + "      t.inputParameters = {batchSize: wmqCfg[n].batchSize || 1};"
+                + "      t.retryCount = 0;"
                 + "      t.optional = false;"
                 + "    }"
                 + "    if (t.type === 'SIMPLE') {"
@@ -610,13 +618,19 @@ public class JavaScriptBuilder {
             if (oa && ('' + oa).indexOf('3.') === 0) {
                 format = 'openapi3';
                 var servers = get(spec, 'servers');
-                var specBase = '' + get(servers && servers[0] ? servers[0] : {}, 'url');
+                var rawBase = (servers && servers[0]) ? get(servers[0], 'url') : null;
+                var specBase = rawBase ? '' + rawBase : '';
                 // If baseUrl is relative (starts with /), prepend the spec URL's origin
                 if (specBase && specBase.indexOf('/') === 0) {
                     var m = specUrl.match(/^(https?:\\/\\/[^\\/]+)/);
                     specBase = (m ? m[1] : '') + specBase;
                 }
-                baseUrl = specBase || specUrl.replace(/\\/[^\\/]*\\.(json|yaml).*$/, '');
+                // Fallback: derive origin from the spec URL
+                if (!specBase) {
+                    var m2 = specUrl.match(/^(https?:\\/\\/[^\\/]+)/);
+                    specBase = m2 ? m2[1] : specUrl.replace(/\\/[^\\/]*\\.(json|yaml).*$/, '');
+                }
+                baseUrl = specBase;
                 var paths = get(spec, 'paths');
                 if (paths) {
                     for (var path in paths) {
@@ -774,14 +788,16 @@ public class JavaScriptBuilder {
             String mediaConfigJson,
             String agentToolConfigJson,
             String ragConfigJson,
-            String humanConfigJson) {
+            String humanConfigJson,
+            String wmqConfigJson) {
         return iife("  var httpCfg = " + httpConfigJson + ";" + "  var mcpCfg = $.mcpConfig || {};"
                 + "  var apiCfg = $.apiConfig || {};"
                 + "  var mediaCfg = "
                 + mediaConfigJson + ";" + "  var agentToolCfg = "
                 + agentToolConfigJson + ";" + "  var ragCfg = "
                 + ragConfigJson + ";" + "  var humanCfg = "
-                + humanConfigJson + ";" + "  var agentState = $.agentState || {};"
+                + humanConfigJson + ";" + "  var wmqCfg = "
+                + wmqConfigJson + ";" + "  var agentState = $.agentState || {};"
                 + "  var tcs = $.toolCalls || [];"
                 + "  var result = [];"
                 + "  for (var i = 0; i < tcs.length; i++) {"
@@ -901,6 +917,12 @@ public class JavaScriptBuilder {
                 + "      for (var k in inp) { hInputs[k] = inp[k]; }"
                 + "      if (humanCfg[n].description) hInputs._description = humanCfg[n].description;"
                 + "      t.inputParameters = hInputs;"
+                + "      t.optional = false;"
+                + "    } else if (wmqCfg[n]) {"
+                + "      t.type = 'PULL_WORKFLOW_MESSAGES';"
+                + "      t.name = n;"
+                + "      t.inputParameters = {batchSize: wmqCfg[n].batchSize || 1};"
+                + "      t.retryCount = 0;"
                 + "      t.optional = false;"
                 + "    }"
                 + "    if (t.type === 'SIMPLE') {"
@@ -1150,17 +1172,19 @@ public class JavaScriptBuilder {
                 // since bracket notation may not work for Java Maps.
                 "var rawState = $.state;"
                         + "var prompt = $.prompt || '';"
-                        + "if (!rawState) return prompt;"
+                        + "var signals = $.signals || '';"
+                        + "if (!rawState && !signals) return prompt;"
                         + "var maxSize = $.maxSize || 32768;"
                         + "var maxValueSize = $.maxValueSize || 4096;"
                         // Collect map entries via for-in (works on Java Maps in GraalJS)
                         + "var state = {};"
-                        + "for (var k in rawState) {"
-                        + "  var v = rawState.get(k);"
-                        + "  if (v != null) state[k] = '' + v;"
+                        + "if (rawState) {"
+                        + "  for (var k in rawState) {"
+                        + "    var v = rawState.get(k);"
+                        + "    if (v != null) state[k] = '' + v;"
+                        + "  }"
                         + "}"
                         + "var keys = Object.keys(state);"
-                        + "if (keys.length === 0) return prompt;"
                         // Per-value truncation
                         + "var truncated = {};"
                         + "for (var i = 0; i < keys.length; i++) {"
@@ -1176,8 +1200,14 @@ public class JavaScriptBuilder {
                         + "  delete truncated[tKeys.shift()];"
                         + "  json = JSON.stringify(truncated);"
                         + "}"
-                        + "if (Object.keys(truncated).length === 0) return prompt;"
-                        + "return 'Context:\\n```json\\n' + JSON.stringify(truncated, null, 2) + '\\n```\\n\\n' + prompt;");
+                        // Build result: signals (if any) + context (if any) + prompt
+                        + "var parts = [];"
+                        + "if (signals) { parts.push('[SIGNALS]\\n' + signals + '\\n[/SIGNALS]'); }"
+                        + "if (Object.keys(truncated).length > 0) {"
+                        + "  parts.push('Context:\\n```json\\n' + JSON.stringify(truncated, null, 2) + '\\n```');"
+                        + "}"
+                        + "parts.push(prompt);"
+                        + "return parts.join('\\n\\n');");
     }
 
     /**

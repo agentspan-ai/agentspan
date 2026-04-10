@@ -5,7 +5,8 @@
 
 Demonstrates the general-purpose `respond()` API.  Instead of a binary
 approve/reject, the human can send arbitrary feedback that the LLM
-processes on its next iteration.
+processes on its next iteration.  Uses interactive streaming with
+schema-driven console prompts.
 
 Use case: a content-publishing agent writes a blog post, and a human
 editor can approve, reject, or provide revision notes.  The agent
@@ -41,83 +42,47 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(agent, "Write a short blog post outline about the benefits of code review. Do not publish it.")
-        result.print_result()
+        handle = runtime.start(agent, "Write a short blog post about the benefits of code review")
+        print(f"Started: {handle.execution_id}\n")
+
+        for event in handle.stream():
+            if event.type == EventType.THINKING:
+                print(f"  [thinking] {event.content}")
+
+            elif event.type == EventType.TOOL_CALL:
+                print(f"  [tool_call] {event.tool_name}({event.args})")
+
+            elif event.type == EventType.TOOL_RESULT:
+                print(f"  [tool_result] {event.tool_name} -> {str(event.result)[:100]}")
+
+            elif event.type == EventType.WAITING:
+                status = handle.get_status()
+                pt = status.pending_tool or {}
+                schema = pt.get("response_schema", {})
+                props = schema.get("properties", {})
+                print("\n--- Human input required ---")
+                response = {}
+                for field, fs in props.items():
+                    desc = fs.get("description") or fs.get("title", field)
+                    if fs.get("type") == "boolean":
+                        val = input(f"  {desc} (y/n): ").strip().lower()
+                        response[field] = val in ("y", "yes")
+                    else:
+                        response[field] = input(f"  {desc}: ").strip()
+                handle.respond(response)
+                print()
+
+            elif event.type == EventType.DONE:
+                print(f"\nDone: {event.output}")
+
+        # Non-interactive alternative (no HITL, will block on human tasks):
+        # result = runtime.run(agent, "Write a short blog post outline about the benefits of code review. Do not publish it.")
+        # result.print_result()
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
         # runtime.deploy(agent)
-        # CLI alternative:
-        # agentspan deploy --package examples.09b_hitl_with_feedback
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
-
-        # Interactive HITL alternative:
-        # result = runtime.stream(
-        #     agent, "Write a short blog post about the benefits of code review"
-        # )
-        # print(f"Workflow started: {result.execution_id}\n")
-
-        # for event in result:
-        #     print(f'event type: {event.type} --> {event.content}')
-        #     if event.type == EventType.THINKING:
-        #         print(f"  [thinking] {event.content}")
-
-        #     elif event.type == EventType.TOOL_CALL:
-        #         print(f"  [tool_call] {event.tool_name}")
-        #         if event.args:
-        #             title = event.args.get("title", "")
-        #             body = event.args.get("body", "")
-        #             if title:
-        #                 print(f"    Title: {title}")
-        #             if body:
-        #                 preview = body[:200] + "..." if len(body) > 200 else body
-        #                 print(f"    Body:  {preview}")
-
-        #     elif event.type == EventType.GUARDRAIL_FAIL:
-        #         print(f"  [guardrail failed] {event.guardrail_name}")
-        #         if event.args:
-        #             title = event.args.get("title", "")
-        #             body = event.args.get("body", "")
-        #             if title:
-        #                 print(f"    Title: {title}")
-        #             if body:
-        #                 preview = body[:200] + "..." if len(body) > 200 else body
-        #                 print(f"    Body:  {preview}")
-
-        #     elif event.type == EventType.TOOL_RESULT:
-        #         print(f"  [tool_result] {event.tool_name} -> {event.result}")
-
-        #     elif event.type == EventType.WAITING:
-        #         print(f"\n--- Editorial Review Required ---")
-        #         print("  [a] Approve and publish")
-        #         print("  [r] Reject entirely")
-        #         print("  [f] Provide feedback for revision")
-        #         print()
-
-        #         choice = input("  Choice (a/r/f): ").strip().lower()
-
-        #         if choice == "a":
-        #             result.approve()
-        #             print("  Approved for publication!\n")
-        #         elif choice == "r":
-        #             reason = input("  Rejection reason: ").strip()
-        #             result.reject(reason or "Does not meet editorial standards")
-        #             print("  Rejected.\n")
-        #         else:
-        #             feedback = input("  Feedback: ").strip()
-        #             result.respond({"feedback": feedback})
-        #             print("  Feedback sent, agent will revise...\n")
-
-        #     elif event.type == EventType.ERROR:
-        #         print(f"  [error] {event.content}")
-
-        #     elif event.type == EventType.DONE:
-        #         print(f"\n  [done] {event.output}")
-
-        # # Access the structured result after streaming
-        # final = result.get_result()
-        # print(f"\nTool calls made: {len(final.tool_calls)}")
-        # print(f"Status: {final.status}")
 

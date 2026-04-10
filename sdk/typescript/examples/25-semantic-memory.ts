@@ -19,8 +19,8 @@ import {
   tool,
   SemanticMemory,
   InMemoryStore,
-} from '../src/index.js';
-import { llmModel } from './settings.js';
+} from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Build up a knowledge base ---------------------------------------------
 
@@ -68,7 +68,6 @@ export const agent = new Agent({
 
 // -- Run -------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -111,6 +110,4 @@ async function main() {
     // }
 }
 
-if (process.argv[1]?.endsWith('25-semantic-memory.ts') || process.argv[1]?.endsWith('25-semantic-memory.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

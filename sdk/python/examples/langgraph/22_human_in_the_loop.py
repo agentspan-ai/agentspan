@@ -9,7 +9,7 @@ Demonstrates:
     - The human provides a verdict (APPROVE/REVISE) and feedback
     - Conditional routing based on human verdict
     - LLM nodes compiled as server-side LLM_CHAT_COMPLETE tasks
-    - Running the full workflow through Agentspan via runtime.run()
+    - Interactive streaming with schema-driven console prompts
 
 The workflow pauses at the review step and waits for a human to approve or
 reject the draft via the AgentSpan UI or API. This is true human-in-the-loop,
@@ -26,7 +26,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 
-from agentspan.agents import AgentRuntime
+from agentspan.agents import AgentRuntime, EventType
 from agentspan.agents.frameworks.langgraph import human_task
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
@@ -109,17 +109,48 @@ graph = builder.compile(name="email_hitl_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-        graph, "Schedule a team meeting for next Monday at 10am to discuss Q3 plans."
+        handle = runtime.start(
+            graph, "Schedule a team meeting for next Monday at 10am to discuss Q3 plans."
         )
-        print(f"Status: {result.status}")
-        result.print_result()
+        print(f"Started: {handle.execution_id}\n")
+
+        for event in handle.stream():
+            if event.type == EventType.THINKING:
+                print(f"  [thinking] {event.content}")
+
+            elif event.type == EventType.TOOL_CALL:
+                print(f"  [tool_call] {event.tool_name}({event.args})")
+
+            elif event.type == EventType.TOOL_RESULT:
+                print(f"  [tool_result] {event.tool_name} -> {str(event.result)[:100]}")
+
+            elif event.type == EventType.WAITING:
+                status = handle.get_status()
+                pt = status.pending_tool or {}
+                schema = pt.get("response_schema", {})
+                props = schema.get("properties", {})
+                print("\n--- Human input required ---")
+                response = {}
+                for field, fs in props.items():
+                    desc = fs.get("description") or fs.get("title", field)
+                    if fs.get("type") == "boolean":
+                        val = input(f"  {desc} (y/n): ").strip().lower()
+                        response[field] = val in ("y", "yes")
+                    else:
+                        response[field] = input(f"  {desc}: ").strip()
+                handle.respond(response)
+                print()
+
+            elif event.type == EventType.DONE:
+                print(f"\nDone: {event.output}")
+
+        # Non-interactive alternative (no HITL, will block on human tasks):
+        # result = runtime.run(graph, "Schedule a team meeting for next Monday at 10am to discuss Q3 plans.")
+        # result.print_result()
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
         # runtime.deploy(graph)
-        # CLI alternative:
-        # agentspan deploy --package examples.langgraph.22_human_in_the_loop
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(graph)

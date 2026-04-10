@@ -123,7 +123,7 @@ vi.mock("utils", async (importOriginal) => {
 
 // Mock route constants (must include all used by conductor-ui routes.tsx)
 vi.mock("utils/constants/route", () => ({
-  API_REFERENCE_URL: { BASE: "/api-reference" },
+  API_REFERENCE_URL: { BASE: "/docs" },
   AI_PROMPTS_MANAGEMENT_URL: { BASE: "/ai_prompts" },
   APPLICATION_MANAGEMENT_URL: { BASE: "/applications" },
   AUTHENTICATION_URL: "/authentication",

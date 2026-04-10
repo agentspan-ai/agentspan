@@ -10,7 +10,7 @@
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
 import { SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // System prompt (Socratic tutor persona)
@@ -36,6 +36,7 @@ const graph = createReactAgent({
   llm,
   tools: [],
   prompt: new SystemMessage(TUTOR_SYSTEM_PROMPT),
+  name: "socratic_tutor",
 });
 
 // Add agentspan metadata for extraction
@@ -71,7 +72,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('07-system-prompt.ts') || process.argv[1]?.endsWith('07-system-prompt.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

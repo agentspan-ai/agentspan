@@ -127,6 +127,11 @@ class AgentConfig:
         from conductor.client.configuration.configuration import Configuration
 
         config = Configuration(server_api_url=self.server_url)
+        # Propagate our log level to the Conductor logger process.
+        # Configuration.log_level has no public setter (only debug=True/False),
+        # so we write the private attribute directly.
+        import logging as _logging
+        config._Configuration__log_level = getattr(_logging, self.log_level.upper(), _logging.INFO)
         # Prefer api_key; fall back to auth_key for backward compat
         effective_key = self.api_key or self.auth_key
         if effective_key:

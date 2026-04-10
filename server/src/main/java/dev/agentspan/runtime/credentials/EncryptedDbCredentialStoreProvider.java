@@ -96,9 +96,10 @@ public class EncryptedDbCredentialStoreProvider implements CredentialStoreProvid
 
     @Override
     public List<CredentialMeta> list(String userId) {
-        // Include encrypted_value in the SELECT so we can decrypt it inline without
-        // opening a second JDBC connection (SQLite pool has maximumPoolSize=1;
-        // calling get() from inside a RowMapper would exhaust the pool).
+        // Include encrypted_value in the SELECT so we can decrypt inline — avoids
+        // an N+1 query pattern. On SQLite the pool is capped at 1 connection so a
+        // nested get() call inside a RowMapper would deadlock; on PostgreSQL the
+        // single-query approach remains more efficient regardless.
         return jdbc.query(
                 "SELECT name, encrypted_value, created_at, updated_at "
                         + "FROM credentials_store WHERE user_id = :uid ORDER BY name",

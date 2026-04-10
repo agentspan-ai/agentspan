@@ -10,9 +10,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, OnTextMention, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, OnTextMention, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Domain tools ------------------------------------------------------------
 
@@ -23,9 +22,13 @@ const checkBalance = tool(
   {
     name: 'check_balance',
     description: 'Check the balance of a bank account.',
-    inputSchema: z.object({
-      accountId: z.string().describe('The bank account ID'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        accountId: { type: 'string', description: 'The bank account ID' },
+      },
+      required: ['accountId'],
+    },
   },
 );
 
@@ -36,9 +39,13 @@ const lookupOrder = tool(
   {
     name: 'lookup_order',
     description: 'Look up the status of an order.',
-    inputSchema: z.object({
-      orderId: z.string().describe('The order ID'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        orderId: { type: 'string', description: 'The order ID' },
+      },
+      required: ['orderId'],
+    },
   },
 );
 
@@ -82,7 +89,6 @@ export const support = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -127,6 +133,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('64-swarm-with-tools.ts') || process.argv[1]?.endsWith('64-swarm-with-tools.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

@@ -1,8 +1,0 @@
-<svg width="400" height="80" viewBox="0 0 400 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Icon: 3 staggered bars -->
-  <rect x="10" y="12" width="40" height="10" rx="5" fill="#4F46E5"/>
-  <rect x="22" y="35" width="56" height="10" rx="5" fill="#4F46E5" opacity="0.65"/>
-  <rect x="14" y="58" width="32" height="10" rx="5" fill="#4F46E5" opacity="0.38"/>
-  <!-- Text -->
-  <text x="82" y="54" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="42" font-weight="700" fill="#1E1B4B" letter-spacing="-1">agentspan</text>
-</svg>

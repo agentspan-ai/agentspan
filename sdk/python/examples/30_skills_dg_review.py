@@ -54,7 +54,7 @@ def run_standalone():
             "    return result.fetchone()\n"
             "```")
 
-        print(f"Execution ID: {stream.workflow_id}\n")
+        print(f"Execution ID: {stream.execution_id}\n")
 
         for event in stream:
             if event.type == EventType.TOOL_CALL:
@@ -69,7 +69,7 @@ def run_standalone():
                 print(str(out)[:500])
 
         result = stream.get_result()
-        print(f"\nExecution ID: {result.workflow_id}")
+        print(f"\nExecution ID: {result.execution_id}")
         print(f"Status: {result.status}")
         print(f"Tokens: {result.token_usage}")
 
@@ -109,7 +109,7 @@ def run_pipeline():
             "```",
         )
 
-        print(f"Execution ID: {result.workflow_id}")
+        print(f"Execution ID: {result.execution_id}")
         print(f"Status: {result.status}")
         result.print_result()
 
@@ -138,7 +138,7 @@ def run_as_tool():
             "The code adds JWT token validation."
         )
 
-        print(f"Execution ID: {result.workflow_id}")
+        print(f"Execution ID: {result.execution_id}")
         print(f"Status: {result.status}")
         result.print_result()
 

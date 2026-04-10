@@ -11,9 +11,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Tools -------------------------------------------------------------------
 
@@ -39,9 +38,13 @@ const searchWeb = tool(
   {
     name: 'search_web',
     description: 'Search the web for information.',
-    inputSchema: z.object({
-      query: z.string().describe('Search query string'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search query string' },
+      },
+      required: ['query'],
+    },
   },
 );
 
@@ -52,10 +55,14 @@ const writeSection = tool(
   {
     name: 'write_section',
     description: 'Write a section of a report.',
-    inputSchema: z.object({
-      title: z.string().describe('Section title'),
-      content: z.string().describe('Section body text'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Section title' },
+        content: { type: 'string', description: 'Section body text' },
+      },
+      required: ['title', 'content'],
+    },
   },
 );
 
@@ -73,7 +80,6 @@ export const agent = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -96,6 +102,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('48-planner.ts') || process.argv[1]?.endsWith('48-planner.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

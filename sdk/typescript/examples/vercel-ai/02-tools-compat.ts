@@ -13,7 +13,7 @@ import {
   AgentRuntime,
   tool as agentspanTool,
   getToolDef,
-} from '../../src/index.js';
+} from '@agentspan-ai/sdk';
 
 // ── Agentspan native tool ────────────────────────────────
 export const nativeSearchTool = agentspanTool(
@@ -76,11 +76,8 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('02-tools-compat.ts') || process.argv[1]?.endsWith('02-tools-compat.js')) {
-  // Show normalized tool definitions
-  console.log('Native tool def:', getToolDef(nativeSearchTool).name);
-  console.log('Vercel tool def:', getToolDef(calculatorTool).name);
+// Show normalized tool definitions
+console.log('Native tool def:', getToolDef(nativeSearchTool).name);
+console.log('Vercel tool def:', getToolDef(calculatorTool).name);
 
-  main().catch(console.error);
-}
+main().catch(console.error);

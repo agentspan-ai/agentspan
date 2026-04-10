@@ -11,7 +11,7 @@ import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // Tool definitions
@@ -67,7 +67,7 @@ const reverseStringTool = new DynamicStructuredTool({
 // ---------------------------------------------------------------------------
 const tools = [calculateTool, countWordsTool, reverseStringTool];
 const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
-const graph = createReactAgent({ llm, tools });
+const graph = createReactAgent({ llm, tools, name: "math_and_text_agent" });
 
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',
@@ -103,7 +103,4 @@ async function main() {
   }
 }
 
-// Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('41-react-agent-basic.ts') || process.argv[1]?.endsWith('41-react-agent-basic.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

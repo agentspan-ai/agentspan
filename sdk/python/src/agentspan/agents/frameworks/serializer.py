@@ -191,6 +191,17 @@ def serialize_agent(agent_obj: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
 
             # Pydantic v2 (instance, not class)
             if hasattr(obj, "model_dump") and not isinstance(obj, type):
+                model_fields = getattr(type(obj), "model_fields", None)
+                if model_fields is not None:
+                    # Serialize field-by-field so our `seen` set handles circular
+                    # references (e.g. ADK parent_agent back-reference) instead of
+                    # letting Pydantic truncate nested models mid-serialization.
+                    # Include _type so server-side normalizers can identify the class.
+                    d: Dict[str, Any] = {"_type": type(obj).__name__}
+                    for field_name in model_fields:
+                        val = getattr(obj, field_name, None)
+                        d[field_name] = _serialize(val)
+                    return d
                 try:
                     return _serialize(obj.model_dump())
                 except (ValueError, RecursionError):

@@ -31,6 +31,7 @@ graph = create_agent(
 )
 
 if __name__ == "__main__":
+    SESSION_ID = "demo-session-001"
     with AgentRuntime() as runtime:
         print("=== Turn 1: Introduce a name ===")
         result1 = runtime.run(

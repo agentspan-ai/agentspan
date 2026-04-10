@@ -79,6 +79,7 @@ class ToolDef:
     guardrails: List[Any] = field(default_factory=list)
     isolated: bool = True
     credentials: List[Any] = field(default_factory=list)
+    stateful: bool = False
 
 
 # ── @tool decorator ─────────────────────────────────────────────────────
@@ -98,6 +99,7 @@ def tool(
     guardrails: Optional[List[Any]] = None,
     isolated: bool = True,
     credentials: Optional[List[Any]] = None,
+    stateful: bool = False,
 ) -> Callable[[F], F]: ...
 
 
@@ -111,6 +113,7 @@ def tool(
     guardrails: Optional[List[Any]] = None,
     isolated: bool = True,
     credentials: Optional[List[Any]] = None,
+    stateful: bool = False,
 ) -> Any:
     """Register a Python function as a Conductor agent tool.
 
@@ -156,6 +159,7 @@ def tool(
             guardrails=list(guardrails) if guardrails else [],
             isolated=isolated,
             credentials=list(credentials) if credentials else [],
+            stateful=stateful,
         )
 
         @functools.wraps(fn)
@@ -926,7 +930,72 @@ def search_tool(
     )
 
 
+
 # ── Human interaction tool ──────────────────────────────────────────────
+
+
+def wait_for_message_tool(
+    name: str,
+    description: str,
+    batch_size: int = 1,
+    blocking: bool = True,
+) -> ToolDef:
+    """Create a tool that dequeues messages from the Workflow Message Queue
+    (Conductor ``PULL_WORKFLOW_MESSAGES`` task).
+
+    When the LLM calls this tool, the workflow dequeues up to *batch_size*
+    messages from its WMQ.
+
+    In **blocking** mode (default), the task stays ``IN_PROGRESS`` while the
+    queue is empty and completes once messages arrive.
+
+    In **non-blocking** mode, the task completes immediately — returning
+    whatever messages are in the queue (or an empty result if none).  This
+    is useful for polling patterns where the agent should not stall waiting
+    for messages.  Non-blocking agents are also more responsive to
+    :meth:`~AgentHandle.stop` signals since the loop condition is checked
+    after each iteration.
+
+    No worker process is needed — the Conductor server handles the
+    ``PULL_WORKFLOW_MESSAGES`` task directly.  Use
+    :meth:`~agentspan.AgentRuntime.send_message` from outside the workflow to
+    push a message into the queue.
+
+    Args:
+        name: Tool name (shown to the LLM).
+        description: Human-readable description for the LLM.
+        batch_size: Maximum number of messages to dequeue per invocation
+            (server cap is 100, default 1).
+        blocking: If ``True`` (default), the task blocks until at least one
+            message is available.  If ``False``, the task returns immediately.
+
+    Example::
+
+        listen = wait_for_message_tool(
+            name="wait_for_message",
+            description="Wait until a message is sent to this agent.",
+        )
+
+        agent = Agent(
+            name="listener",
+            model="openai/gpt-4o",
+            tools=[listen],
+            instructions="Call wait_for_message when you need to wait for input.",
+        )
+
+        # From the caller side:
+        runtime.send_message(workflow_id, {"text": "hello"})
+    """
+    config = {"batchSize": batch_size}
+    if not blocking:
+        config["blocking"] = False
+    return ToolDef(
+        name=name,
+        description=description,
+        input_schema={"type": "object", "properties": {}},
+        tool_type="pull_workflow_messages",
+        config=config,
+    )
 
 
 def human_tool(

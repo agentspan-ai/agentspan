@@ -1,6 +1,12 @@
-import type { ToolContext } from './types.js';
-import { AgentAPIError, TerminalToolError } from './errors.js';
-import { extractExecutionToken, setCredentialContext, clearCredentialContext, resolveCredentials, injectCredentials } from './credentials.js';
+import type { ToolContext } from "./types.js";
+import { AgentAPIError, TerminalToolError } from "./errors.js";
+import {
+  extractExecutionToken,
+  setCredentialContext,
+  clearCredentialContext,
+  resolveCredentials,
+  injectCredentials,
+} from "./credentials.js";
 
 // ── Type coercion (base spec §14.1) ─────────────────────
 
@@ -10,20 +16,20 @@ import { extractExecutionToken, setCredentialContext, clearCredentialContext, re
  */
 export function coerceValue(value: unknown, targetType?: string): unknown {
   // Rule 1: null/empty or unknown target → return unchanged
-  if (value == null || targetType == null || targetType === '') {
+  if (value == null || targetType == null || targetType === "") {
     return value;
   }
 
   const t = targetType.toLowerCase();
 
   // Rule 3: type match short-circuit
-  if (t === 'string' && typeof value === 'string') return value;
-  if (t === 'number' && typeof value === 'number') return value;
-  if (t === 'boolean' && typeof value === 'boolean') return value;
-  if ((t === 'object' || t === 'array') && typeof value === 'object') return value;
+  if (t === "string" && typeof value === "string") return value;
+  if (t === "number" && typeof value === "number") return value;
+  if (t === "boolean" && typeof value === "boolean") return value;
+  if ((t === "object" || t === "array") && typeof value === "object") return value;
 
   // Rule 4: String → object/array via JSON.parse
-  if (typeof value === 'string' && (t === 'object' || t === 'array')) {
+  if (typeof value === "string" && (t === "object" || t === "array")) {
     try {
       return JSON.parse(value);
     } catch {
@@ -32,7 +38,7 @@ export function coerceValue(value: unknown, targetType?: string): unknown {
   }
 
   // Rule 5: object/array → string via JSON.stringify
-  if (typeof value === 'object' && t === 'string') {
+  if (typeof value === "object" && t === "string") {
     try {
       return JSON.stringify(value);
     } catch {
@@ -41,17 +47,17 @@ export function coerceValue(value: unknown, targetType?: string): unknown {
   }
 
   // Rule 6: String → number
-  if (typeof value === 'string' && t === 'number') {
+  if (typeof value === "string" && t === "number") {
     const n = Number(value);
     if (Number.isNaN(n)) return value;
     return n;
   }
 
   // Rule 6: String → boolean
-  if (typeof value === 'string' && t === 'boolean') {
+  if (typeof value === "string" && t === "boolean") {
     const lower = value.toLowerCase();
-    if (lower === 'true' || lower === '1' || lower === 'yes') return true;
-    if (lower === 'false' || lower === '0' || lower === 'no') return false;
+    if (lower === "true" || lower === "1" || lower === "yes") return true;
+    if (lower === "false" || lower === "0" || lower === "no") return false;
     return value;
   }
 
@@ -118,14 +124,14 @@ export function resetAllCircuitBreakers(): void {
  * Reads `__agentspan_ctx__` from inputData and builds a ToolContext.
  */
 export function extractToolContext(inputData: Record<string, unknown>): ToolContext | null {
-  const ctx = inputData['__agentspan_ctx__'];
-  if (ctx == null || typeof ctx !== 'object') return null;
+  const ctx = inputData["__agentspan_ctx__"];
+  if (ctx == null || typeof ctx !== "object") return null;
 
   const raw = ctx as Record<string, unknown>;
   return {
-    sessionId: (raw.sessionId as string) ?? '',
-    executionId: (raw.executionId as string) ?? '',
-    agentName: (raw.agentName as string) ?? '',
+    sessionId: (raw.sessionId as string) ?? "",
+    executionId: (raw.executionId as string) ?? "",
+    agentName: (raw.agentName as string) ?? "",
     metadata: (raw.metadata as Record<string, unknown>) ?? {},
     dependencies: (raw.dependencies as Record<string, unknown>) ?? {},
     // Mutable copy of state
@@ -165,7 +171,7 @@ export function appendStateUpdates(
   result: unknown,
   stateUpdates: Record<string, unknown>,
 ): unknown {
-  if (result != null && typeof result === 'object' && !Array.isArray(result)) {
+  if (result != null && typeof result === "object" && !Array.isArray(result)) {
     return { ...(result as Record<string, unknown>), _state_updates: stateUpdates };
   }
   return { result, _state_updates: stateUpdates };
@@ -176,7 +182,7 @@ function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (a == null || b == null) return false;
   if (typeof a !== typeof b) return false;
-  if (typeof a !== 'object') return false;
+  if (typeof a !== "object") return false;
 
   const aObj = a as Record<string, unknown>;
   const bObj = b as Record<string, unknown>;
@@ -198,9 +204,9 @@ function deepEqual(a: unknown, b: unknown): boolean {
  */
 export function stripInternalKeys(inputData: Record<string, unknown>): Record<string, unknown> {
   const cleaned = { ...inputData };
-  delete cleaned['_agent_state'];
-  delete cleaned['method'];
-  delete cleaned['__agentspan_ctx__'];
+  delete cleaned["_agent_state"];
+  delete cleaned["method"];
+  delete cleaned["__agentspan_ctx__"];
   return cleaned;
 }
 
@@ -234,11 +240,7 @@ export class WorkerManager {
   private pollers: ReturnType<typeof setInterval>[] = [];
   private workerId: string;
 
-  constructor(
-    serverUrl: string,
-    headers: Record<string, string>,
-    pollIntervalMs: number = 100,
-  ) {
+  constructor(serverUrl: string, headers: Record<string, string>, pollIntervalMs: number = 100) {
     this.serverUrl = serverUrl;
     this.headers = headers;
     this.pollIntervalMs = pollIntervalMs;
@@ -263,10 +265,7 @@ export class WorkerManager {
    * No-op: task definitions are now registered by the server during
    * agent compilation. SDKs only poll for tasks.
    */
-  async registerTaskDef(
-    taskName: string,
-    config?: { timeoutSeconds?: number },
-  ): Promise<void> {
+  async registerTaskDef(_taskName: string, _config?: { timeoutSeconds?: number }): Promise<void> {
     // No-op: task definitions are now registered by the server during
     // agent compilation. SDKs only poll for tasks.
     return;
@@ -302,7 +301,7 @@ export class WorkerManager {
   async pollTask(taskType: string): Promise<TaskData | null> {
     const url = `${this.serverUrl}/tasks/poll/${taskType}?workerid=${encodeURIComponent(this.workerId)}`;
     const response = await fetch(url, {
-      method: 'GET',
+      method: "GET",
       headers: this.headers,
     });
 
@@ -320,7 +319,7 @@ export class WorkerManager {
     }
 
     const text = await response.text();
-    if (!text || text.trim() === '') return null;
+    if (!text || text.trim() === "") return null;
 
     try {
       return JSON.parse(text) as TaskData;
@@ -339,15 +338,15 @@ export class WorkerManager {
   ): Promise<void> {
     const url = `${this.serverUrl}/tasks`;
     const response = await fetch(url, {
-      method: 'POST',
+      method: "POST",
       headers: {
         ...this.headers,
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         taskId,
         workflowInstanceId,
-        status: 'COMPLETED',
+        status: "COMPLETED",
         outputData,
       }),
     });
@@ -371,18 +370,18 @@ export class WorkerManager {
     error: Error | string,
     terminal: boolean = false,
   ): Promise<void> {
-    const message = typeof error === 'string' ? error : error.message;
+    const message = typeof error === "string" ? error : error.message;
     const url = `${this.serverUrl}/tasks`;
     const response = await fetch(url, {
-      method: 'POST',
+      method: "POST",
       headers: {
         ...this.headers,
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         taskId,
         workflowInstanceId,
-        status: terminal ? 'FAILED_WITH_TERMINAL_ERROR' : 'FAILED',
+        status: terminal ? "FAILED_WITH_TERMINAL_ERROR" : "FAILED",
         reasonForIncompletion: message,
       }),
     });
@@ -416,19 +415,17 @@ export class WorkerManager {
       const toolContext = extractToolContext(inputData);
 
       // Snapshot state for mutation capture
-      const stateSnapshot = toolContext
-        ? { ...toolContext.state }
-        : {};
+      const stateSnapshot = toolContext ? { ...toolContext.state } : {};
 
       // Strip internal keys
       const cleanedInput = stripInternalKeys(inputData);
 
       // Inject workflowInstanceId so framework passthrough workers can push events
-      cleanedInput['__workflowInstanceId__'] = task.workflowInstanceId;
+      cleanedInput["__workflowInstanceId__"] = task.workflowInstanceId;
 
       // If ToolContext has state, inject it into the handler context
       if (toolContext) {
-        cleanedInput['__toolContext__'] = toolContext;
+        cleanedInput["__toolContext__"] = toolContext;
       }
 
       // Set up credential context so getCredential() works inside handlers
@@ -445,18 +442,24 @@ export class WorkerManager {
           await this.reportFailure(
             task.taskId,
             task.workflowInstanceId,
-            `Required credentials not found: ${worker.credentials.join(', ')}. ` +
-            `No execution token available. Store credentials on the server with: agentspan credentials set --name <NAME>`,
+            `Required credentials not found: ${worker.credentials.join(", ")}. ` +
+              `No execution token available. Store credentials on the server with: agentspan credentials set --name <NAME>`,
             true, // terminal error — non-retryable
           );
           return;
         }
         try {
           const resolved = await resolveCredentials(
-            this.serverUrl, this.headers, executionToken, worker.credentials,
+            this.serverUrl,
+            this.headers,
+            executionToken,
+            worker.credentials,
           );
           cleanupCredentials = injectCredentials(
-            this.serverUrl, this.headers, executionToken, resolved,
+            this.serverUrl,
+            this.headers,
+            executionToken,
+            resolved,
           );
         } catch (err) {
           // Credential errors are non-retryable config issues
@@ -481,8 +484,15 @@ export class WorkerManager {
           }
         }
 
+        // Conductor expects outputData to be an object; wrap primitives
+        // (mirrors Python SDK: if isinstance(result, dict) → use as-is, else → {result: ...})
+        const outputData =
+          result != null && typeof result === "object" && !Array.isArray(result)
+            ? result
+            : { result };
+
         recordSuccess(worker.taskName);
-        await this.reportSuccess(task.taskId, task.workflowInstanceId, result);
+        await this.reportSuccess(task.taskId, task.workflowInstanceId, outputData);
       } catch (error) {
         recordFailure(worker.taskName);
         const isTerminal = error instanceof TerminalToolError;

@@ -20,7 +20,7 @@ When to use isolated=False vs isolated=True (default):
 Requirements:
     - Agentspan server running at AGENTSPAN_SERVER_URL
     - AGENTSPAN_LLM_MODEL set (or defaults to openai/gpt-5.4)
-    - STRIPE_SECRET_KEY stored: agentspan credentials set --name STRIPE_SECRET_KEY
+    - STRIPE_SECRET_KEY stored: agentspan credentials set STRIPE_SECRET_KEY <your-stripe-secret-key>
 """
 
 from agentspan.agents import (
@@ -43,8 +43,7 @@ def get_customer_balance(customer_id: str) -> dict:
     try:
         api_key = get_credential("STRIPE_SECRET_KEY")
     except CredentialNotFoundError:
-        return {"error": "STRIPE_SECRET_KEY not configured — run: agentspan credentials set --name STRIPE_SECRET_KEY"}
-
+        return {"error": "STRIPE_SECRET_KEY not configured — run: agentspan credentials set STRIPE_SECRET_KEY <your-value>"}
     import urllib.request
     import json
     import base64

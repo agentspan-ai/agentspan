@@ -12,7 +12,7 @@
  *   npx tsx quickstart/run-all.ts
  */
 
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 import { agent as basicAgent, prompt as basicPrompt } from './01-basic-agent.js';
 import { agent as toolsAgent, prompt as toolsPrompt } from './02-tools.js';

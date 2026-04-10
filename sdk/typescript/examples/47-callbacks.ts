@@ -10,9 +10,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Callback functions ------------------------------------------------------
 
@@ -46,9 +45,13 @@ const getFacts = tool(
   {
     name: 'get_facts',
     description: 'Get interesting facts about a topic.',
-    inputSchema: z.object({
-      topic: z.string().describe('The topic to get facts about'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        topic: { type: 'string', description: 'The topic to get facts about' },
+      },
+      required: ['topic'],
+    },
   },
 );
 
@@ -65,7 +68,6 @@ export const agent = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-// Only run when executed directly (not when imported for discovery)
 async function main() {
   const runtime = new AgentRuntime();
   try {
@@ -85,6 +87,4 @@ async function main() {
   }
 }
 
-if (process.argv[1]?.endsWith('47-callbacks.ts') || process.argv[1]?.endsWith('47-callbacks.js')) {
-  main().catch(console.error);
-}
+main().catch(console.error);
