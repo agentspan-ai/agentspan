@@ -592,6 +592,76 @@ class TestHasWorkerTools:
         assert runtime._has_worker_tools(parent) is True
 
 
+# ── _has_stateful_tools ─────────────────────────────────────────────────
+
+
+class TestHasStatefulTools:
+    """Test _has_stateful_tools() helper.
+
+    Regression: agents with string tool names (e.g. claude-code built-ins like
+    "Read", "Glob") must not crash with TypeError — strings are never stateful.
+    """
+
+    def test_string_tools_do_not_raise(self):
+        """Agents with string tool lists must not raise TypeError."""
+        from agentspan.agents.runtime.runtime import _has_stateful_tools
+
+        agent = Agent(name="cc", model="claude-code/sonnet", tools=["Read", "Glob", "Grep"])
+        # Must not raise, must return False (strings are never stateful)
+        assert _has_stateful_tools(agent) is False
+
+    def test_no_tools_returns_false(self):
+        from agentspan.agents.runtime.runtime import _has_stateful_tools
+
+        agent = Agent(name="plain", model="openai/gpt-4o")
+        assert _has_stateful_tools(agent) is False
+
+    def test_tool_def_stateful_true_returns_true(self):
+        from agentspan.agents.runtime.runtime import _has_stateful_tools
+        from agentspan.agents.tool import tool
+
+        @tool(stateful=True)
+        def stateful_tool(x: str) -> str:
+            """Stateful."""
+            return x
+
+        agent = Agent(name="stateful", model="openai/gpt-4o", tools=[stateful_tool])
+        assert _has_stateful_tools(agent) is True
+
+    def test_tool_def_stateful_false_returns_false(self):
+        from agentspan.agents.runtime.runtime import _has_stateful_tools
+        from agentspan.agents.tool import tool
+
+        @tool
+        def plain_tool(x: str) -> str:
+            """Plain."""
+            return x
+
+        agent = Agent(name="plain_tool", model="openai/gpt-4o", tools=[plain_tool])
+        assert _has_stateful_tools(agent) is False
+
+    def test_mixed_strings_and_tool_defs_not_stateful(self):
+        """A mix of strings and non-stateful @tool functions returns False."""
+        from agentspan.agents.runtime.runtime import _has_stateful_tools
+        from agentspan.agents.tool import tool
+
+        @tool
+        def helper(x: str) -> str:
+            """Helper."""
+            return x
+
+        agent = Agent(name="mixed", model="openai/gpt-4o", tools=[helper])
+        assert _has_stateful_tools(agent) is False
+
+    def test_sub_agent_with_string_tools_does_not_raise(self):
+        """String tools in sub-agents must also not raise."""
+        from agentspan.agents.runtime.runtime import _has_stateful_tools
+
+        sub = Agent(name="sub_cc", model="claude-code/sonnet", tools=["Bash", "Write"])
+        parent = Agent(name="parent", model="openai/gpt-4o", agents=[sub])
+        assert _has_stateful_tools(parent) is False
+
+
 # ── _extract_token_usage ────────────────────────────────────────────────
 
 
