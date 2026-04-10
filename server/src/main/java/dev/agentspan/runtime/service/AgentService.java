@@ -1104,7 +1104,9 @@ public class AgentService {
     private void collectDynamicTransferNames(AgentConfig config, Set<String> names) {
         if (config == null) return;
         // Swarm: {source}_transfer_to_{peer} for each pair
-        if ("swarm".equals(config.getStrategy()) && config.getAgents() != null && !config.getAgents().isEmpty()) {
+        if ("swarm".equals(config.getStrategy())
+                && config.getAgents() != null
+                && !config.getAgents().isEmpty()) {
             List<String> allNames = new ArrayList<>();
             allNames.add(config.getName());
             for (AgentConfig sub : config.getAgents()) {
@@ -1119,8 +1121,10 @@ public class AgentService {
             }
         }
         // Hybrid: {parent}_transfer_to_{sub} for agents with both tools and sub-agents
-        if (config.getAgents() != null && !config.getAgents().isEmpty()
-                && config.getTools() != null && !config.getTools().isEmpty()) {
+        if (config.getAgents() != null
+                && !config.getAgents().isEmpty()
+                && config.getTools() != null
+                && !config.getTools().isEmpty()) {
             for (AgentConfig sub : config.getAgents()) {
                 names.add(config.getName() + "_transfer_to_" + sub.getName());
             }
