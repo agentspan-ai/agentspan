@@ -12,4 +12,3 @@ target/
 .factorypath
 *.log
 .DS_Store
-PARITY_REPORT.md
