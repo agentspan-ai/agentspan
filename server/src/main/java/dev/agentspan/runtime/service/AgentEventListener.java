@@ -75,6 +75,8 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
 
         if ("LLM_CHAT_COMPLETE".equals(taskType)) {
             emit(wfId, AgentSSEEvent.thinking(wfId, taskRef));
+        } else if ("PULL_WORKFLOW_MESSAGES".equals(taskType)) {
+            emit(wfId, AgentSSEEvent.waiting(wfId, Map.of("taskRefName", taskRef)));
         } else if ("SUB_WORKFLOW".equals(taskType)) {
             // Register child workflow alias for event forwarding
             String childWfId = task.getSubWorkflowId();
