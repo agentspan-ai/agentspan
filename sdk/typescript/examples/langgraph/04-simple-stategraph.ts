@@ -1,15 +1,24 @@
 /**
- * Simple StateGraph -- custom query -> process -> generate pipeline.
+ * Simple StateGraph -- custom query → refine → answer pipeline.
  *
  * Demonstrates:
  *   - Defining a typed state schema with Annotation
  *   - Building a StateGraph with multiple sequential nodes
+ *   - LLM calls inside node functions (detected by Agentspan for interception)
  *   - Connecting nodes with addEdge
- *   - Compiling the graph
+ *   - Compiling and running via AgentRuntime
+ *
+ * Requirements:
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api
+ *   - OPENAI_API_KEY for ChatOpenAI
  */
 
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
+import { ChatOpenAI } from '@langchain/openai';
+import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { AgentRuntime } from '@agentspan-ai/sdk';
+
+const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
 
 // ---------------------------------------------------------------------------
 // State schema
@@ -23,7 +32,7 @@ const QueryState = Annotation.Root({
     reducer: (_prev: string, next: string) => next ?? _prev,
     default: () => '',
   }),
-  output: Annotation<string>({
+  answer: Annotation<string>({
     reducer: (_prev: string, next: string) => next ?? _prev,
     default: () => '',
   }),
@@ -39,23 +48,23 @@ function validate(state: State): Partial<State> {
   if (query === '') {
     query = 'What can you help me with?';
   }
-  return { query };
+  return { query, refined_query: '', answer: '' };
 }
 
-function refine(state: State): Partial<State> {
-  const refined = `Please provide a detailed and comprehensive explanation of: ${state.query}`;
-  return { refined_query: refined };
+async function refine(state: State): Promise<Partial<State>> {
+  const response = await llm.invoke([
+    new SystemMessage('Rewrite the user query to be more specific and clear. Return only the rewritten query.'),
+    new HumanMessage(state.query),
+  ]);
+  return { refined_query: (response.content as string).trim() };
 }
 
-function generate(state: State): Partial<State> {
-  const q = state.refined_query || state.query;
-  // In production this would call an LLM
-  const answer =
-    `Based on the query "${q.slice(0, 60)}...", Python is a versatile, ` +
-    'high-level programming language created by Guido van Rossum in 1991. ' +
-    'It emphasizes readability and supports multiple paradigms including ' +
-    'procedural, object-oriented, and functional programming.';
-  return { output: answer };
+async function answer(state: State): Promise<Partial<State>> {
+  const response = await llm.invoke([
+    new SystemMessage('You are a knowledgeable assistant. Answer the question clearly and concisely.'),
+    new HumanMessage(state.refined_query || state.query),
+  ]);
+  return { answer: (response.content as string).trim() };
 }
 
 // ---------------------------------------------------------------------------
@@ -64,18 +73,16 @@ function generate(state: State): Partial<State> {
 const builder = new StateGraph(QueryState);
 builder.addNode('validate', validate);
 builder.addNode('refine', refine);
-builder.addNode('generate', generate);
+builder.addNode('generate_answer', answer);
 builder.addEdge(START, 'validate');
 builder.addEdge('validate', 'refine');
-builder.addEdge('refine', 'generate');
-builder.addEdge('generate', END);
+builder.addEdge('refine', 'generate_answer');
+builder.addEdge('generate_answer', END);
 
 const graph = builder.compile({ name: "query_pipeline" });
 
-// Add agentspan metadata for extraction.
-// NOTE: Do NOT set tools=[] on StateGraphs — that signals "react agent with no tools"
-// and forces full extraction (ignoring the graph structure).
-// For StateGraphs, only set model and framework.
+// Add agentspan metadata for graph-structure extraction.
+// NOTE: Do NOT set tools on StateGraphs — only model + framework.
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',
   framework: 'langgraph',
