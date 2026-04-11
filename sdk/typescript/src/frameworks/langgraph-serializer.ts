@@ -1758,31 +1758,65 @@ function _getToolSchema(toolObj: unknown): Record<string, unknown> {
  * Tries zodToJsonSchema (zod-to-json-schema package), then Zod v4 built-in.
  * Returns null if conversion fails.
  */
-function _zodToJsonSchema(zodSchema: Record<string, unknown>): Record<string, unknown> | null {
-  // Try zod-to-json-schema package (works with Zod v3)
+/**
+ * Convert a Zod schema to JSON Schema.
+ *
+ * Built-in converter that walks Zod's internal `_def` structure.
+ * No external dependencies — works in CJS, ESM, vitest, tsx, and bundled dist.
+ */
+function _zodToJsonSchema(zodObj: Record<string, unknown>): Record<string, unknown> | null {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { zodToJsonSchema } = require("zod-to-json-schema");
-    const result = zodToJsonSchema(zodSchema);
-    if (result && typeof result === "object" && (result as any).type) {
-      const { $schema, ...rest } = result as Record<string, unknown>;
-      return rest;
-    }
+    const result = _convertZodDef(zodObj);
+    return result?.type ? result : null;
   } catch {
-    // Package not installed — try alternatives
+    return null;
   }
+}
 
-  // Try Zod v4 built-in toJSONSchema
-  try {
-    const z = require("zod");
-    if (typeof z.toJSONSchema === "function") {
-      return z.toJSONSchema(zodSchema);
+function _convertZodDef(zodObj: any): Record<string, unknown> {
+  const def = zodObj?._def;
+  if (!def?.typeName) return {};
+
+  switch (def.typeName) {
+    case "ZodObject": {
+      const props: Record<string, unknown> = {};
+      const required: string[] = [];
+      const shape = typeof def.shape === "function" ? def.shape() : def.shape;
+      for (const [key, val] of Object.entries(shape || {})) {
+        const converted = _convertZodDef(val);
+        props[key] = converted;
+        if ((val as any)?._def?.typeName !== "ZodOptional") required.push(key);
+        // Preserve description if set via .describe()
+        const desc = (val as any)?._def?.description ?? (val as any)?.description;
+        if (desc && typeof converted === "object") {
+          (converted as Record<string, unknown>).description = desc;
+        }
+      }
+      return { type: "object", properties: props, required, additionalProperties: false };
     }
-  } catch {
-    // Not available
+    case "ZodString":
+      return { type: "string" };
+    case "ZodNumber":
+      return { type: "number" };
+    case "ZodBoolean":
+      return { type: "boolean" };
+    case "ZodArray":
+      return { type: "array", items: _convertZodDef(def.type) };
+    case "ZodOptional":
+      return _convertZodDef(def.innerType);
+    case "ZodNullable": {
+      const inner = _convertZodDef(def.innerType);
+      return { ...inner, nullable: true };
+    }
+    case "ZodEnum":
+      return { type: "string", enum: def.values };
+    case "ZodLiteral":
+      return { const: def.value };
+    case "ZodDefault":
+      return { ..._convertZodDef(def.innerType), default: def.defaultValue() };
+    default:
+      return {};
   }
-
-  return null;
 }
 
 function _getToolCallable(toolObj: unknown): Function | null {
