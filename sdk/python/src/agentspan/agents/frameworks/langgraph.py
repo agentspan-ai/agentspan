@@ -418,6 +418,36 @@ def _serialize_graph_structure(
     except Exception:
         pass
 
+    # Fallback: if input_key not found (e.g. StateGraph(dict) with no typed schema),
+    # scan the first node's function source for state access patterns like
+    # state.get("key") or state["key"]. Use the first key found.
+    if "input_key" not in raw_config.get("_graph", {}):
+        _detect_input_key_from_nodes(raw_config, node_funcs)
+
+    # If the graph state has a "messages" field (typed or detected), the server
+    # can't construct LangChain HumanMessage objects for prompt injection.
+    # Fall back to passthrough where the SDK worker handles this via _build_input().
+    # Also fall back when input_key can't be detected at all.
+    detected_key = raw_config.get("_graph", {}).get("input_key")
+    has_messages_field = False
+    try:
+        schema = graph.get_input_jsonschema()
+        has_messages_field = "messages" in schema.get("properties", {})
+    except Exception:
+        pass
+    if not has_messages_field and detected_key == "messages":
+        has_messages_field = True
+
+    if detected_key is None or has_messages_field:
+        logger.info(
+            "LangGraph '%s': input_key=%r, messages_field=%s — falling back "
+            "to passthrough for correct prompt injection",
+            name,
+            detected_key,
+            has_messages_field,
+        )
+        return None
+
     # Extract state reducer annotations from graph channels
     # (e.g. Annotated[list, operator.add] → {"field": "add"})
     try:
@@ -1494,6 +1524,50 @@ def make_langgraph_worker(
                 _os.environ.pop(k, None)
 
     return tool_worker
+
+
+def _detect_input_key_from_nodes(
+    raw_config: Dict[str, Any], node_funcs: Dict[str, Any]
+) -> None:
+    """Detect input_key by scanning node function source for state access patterns.
+
+    Fallback for StateGraph(dict) where get_input_jsonschema() returns no
+    typed properties. Scans the first node's source for patterns like:
+      state.get("key", ...)
+      state["key"]
+    Sets raw_config["_graph"]["input_key"] if a key is found.
+    """
+    import ast
+    import inspect
+    import textwrap
+
+    for func in node_funcs.values():
+        try:
+            src = textwrap.dedent(inspect.getsource(func))
+            tree = ast.parse(src)
+        except Exception:
+            continue
+
+        for node in ast.walk(tree):
+            # state.get("key", ...)
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "get"
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+            ):
+                raw_config.setdefault("_graph", {})["input_key"] = node.args[0].value
+                return
+            # state["key"]
+            if (
+                isinstance(node, ast.Subscript)
+                and isinstance(node.slice, ast.Constant)
+                and isinstance(node.slice.value, str)
+            ):
+                raw_config.setdefault("_graph", {})["input_key"] = node.slice.value
+                return
 
 
 def _build_input(graph: Any, prompt: str) -> Dict[str, Any]:
