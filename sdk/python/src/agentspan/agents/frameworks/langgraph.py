@@ -1596,13 +1596,19 @@ def _build_input(graph: Any, prompt: str) -> Dict[str, Any]:
         schema = graph.get_input_jsonschema()
         props = schema.get("properties", {})
         if "messages" in props:
-            # Detect if the messages field expects dicts or LangChain message objects
+            # Detect if the messages field expects plain dicts or LangChain messages.
+            # Plain dict: items.type == "object" with no $ref or anyOf
+            # LangChain: items has anyOf/allOf/$ref pointing to message classes
             msg_schema = props.get("messages", {})
             items = msg_schema.get("items", {})
-            if items.get("type") == "object" or msg_schema.get("type") == "array":
-                # Plain dict messages (e.g. List[dict])
+            is_plain_dict = (
+                items.get("type") == "object"
+                and "anyOf" not in items
+                and "allOf" not in items
+                and "$ref" not in items
+            )
+            if is_plain_dict:
                 return {"messages": [{"role": "user", "content": prompt}]}
-            # LangChain message objects (default for create_agent / messages state)
             from langchain_core.messages import HumanMessage
 
             return {"messages": [HumanMessage(content=prompt)]}
