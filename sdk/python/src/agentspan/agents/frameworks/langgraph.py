@@ -424,29 +424,25 @@ def _serialize_graph_structure(
     if "input_key" not in raw_config.get("_graph", {}):
         _detect_input_key_from_nodes(raw_config, node_funcs)
 
-    # If the graph state has a "messages" field (typed or detected), the server
-    # can't construct LangChain HumanMessage objects for prompt injection.
-    # Fall back to passthrough where the SDK worker handles this via _build_input().
-    # Also fall back when input_key can't be detected at all.
+    # TODO(server): Messages-based graph states (input_key="messages" or
+    # state schema has a "messages" field) need the server to inject the user
+    # prompt as [{"role": "user", "content": prompt}] — not as a plain string.
+    # Until the server supports _input_is_messages, these graphs will fail
+    # with "No non-empty user prompt" because the LLM prep task receives
+    # empty messages. See examples 27 (persistent_memory) and 28 (streaming_tokens).
+    #
+    # Signal to the server that the input field is a messages list:
     detected_key = raw_config.get("_graph", {}).get("input_key")
-    has_messages_field = False
+    has_messages = False
     try:
         schema = graph.get_input_jsonschema()
-        has_messages_field = "messages" in schema.get("properties", {})
+        has_messages = "messages" in schema.get("properties", {})
     except Exception:
         pass
-    if not has_messages_field and detected_key == "messages":
-        has_messages_field = True
-
-    if detected_key is None or has_messages_field:
-        logger.info(
-            "LangGraph '%s': input_key=%r, messages_field=%s — falling back "
-            "to passthrough for correct prompt injection",
-            name,
-            detected_key,
-            has_messages_field,
-        )
-        return None
+    if detected_key == "messages":
+        has_messages = True
+    if has_messages:
+        raw_config["_graph"]["_input_is_messages"] = True
 
     # Extract state reducer annotations from graph channels
     # (e.g. Annotated[list, operator.add] → {"field": "add"})
