@@ -140,10 +140,10 @@ Full credential pipeline: missing → env vars ignored → add via CLI → updat
 CLI command execution with credential isolation and command whitelisting. Validates `ls`/`mktemp` succeed without credentials, `gh` fails without server credential, succeeds after adding. Command whitelist validated via plan compilation + direct `_validate_cli_command()` call.
 
 ### Suite 4: MCP Tools
-MCP tool discovery (65 tools via MCP protocol), execution (3 deterministic tools), and authenticated access. Manages its own mcp-testkit instance on port 3002.
+MCP tool discovery (65 tools via MCP protocol), execution (3 deterministic tools), and authenticated access. Manages its own mcp-testkit instance (Python: port 3002, TypeScript: port 3004).
 
 ### Suite 5: HTTP Tools / External OpenAPI
-HTTP tool execution via `http_tool()`, OpenAPI spec discovery (65 operations), authenticated access. External OpenAPI test validates `startWorkflow` operation at Orkes Cloud API. Manages its own mcp-testkit instance on port 3003.
+HTTP tool execution via `http_tool()`, OpenAPI spec discovery (65 operations), authenticated access. External OpenAPI test validates `startWorkflow` operation at Orkes Cloud API. Manages its own mcp-testkit instance (Python: port 3003, TypeScript: port 3005).
 
 ### Suite 6: PDF Tools
 Markdown → PDF generation via `pdf_tool()`. Validates GENERATE_PDF task completes. Round-trip validation with markitdown (extracts text from PDF, checks key phrases survived).
