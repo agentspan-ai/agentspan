@@ -98,7 +98,7 @@ if $DO_BUILD; then
     echo "TypeScript SDK installed."
 
     echo "=== Installing mcp-testkit ==="
-    pip install mcp-testkit -q 2>/dev/null || uv pip install mcp-testkit -q 2>/dev/null || true
+    uv pip install mcp-testkit -q 2>/dev/null || pip install mcp-testkit -q
     echo "mcp-testkit installed."
   fi
 fi
@@ -173,7 +173,7 @@ if [[ "$SDK" == "python" || "$SDK" == "both" ]]; then
   fi
 
   cd "$REPO_ROOT/sdk/python"
-  uv run pytest "${PYTEST_ARGS[@]}" || TEST_EXIT=$?
+  uv run pytest "${PYTEST_ARGS[@]}" || { rc=$?; TEST_EXIT=$((TEST_EXIT > rc ? TEST_EXIT : rc)); }
 
   echo "=== Generating Python HTML report ==="
   uv run python "$REPO_ROOT/sdk/python/e2e/report_generator.py" \
@@ -196,10 +196,10 @@ if [[ "$SDK" == "typescript" || "$SDK" == "both" ]]; then
   )
 
   if [[ -n "$SUITE_FILTER" ]]; then
-    VITEST_ARGS+=("--testNamePattern" "$SUITE_FILTER")
+    VITEST_ARGS+=("--testPathPattern" "$SUITE_FILTER")
   fi
 
-  npx vitest "${VITEST_ARGS[@]}" || TEST_EXIT=$?
+  npx vitest "${VITEST_ARGS[@]}" || { rc=$?; TEST_EXIT=$((TEST_EXIT > rc ? TEST_EXIT : rc)); }
 
   echo "=== Generating TypeScript HTML report ==="
   npx tsx tests/e2e/generate-report.ts \

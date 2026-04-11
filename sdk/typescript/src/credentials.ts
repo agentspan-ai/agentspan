@@ -149,7 +149,7 @@ export async function resolveCredentials(
   const data = (await response.json()) as Record<string, string>;
 
   // Check that all requested credentials were resolved
-  const missing = names.filter((n) => data[n] === undefined);
+  const missing = names.filter((n) => data[n] == null);
   if (missing.length > 0) {
     throw new CredentialNotFoundError(missing.join(", "));
   }
