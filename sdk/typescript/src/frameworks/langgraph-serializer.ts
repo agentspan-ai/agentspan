@@ -42,12 +42,12 @@ export function serializeLangGraph(
   // Find model: explicit option > graph introspection > _agentspan metadata
   const modelStr = optionModel ?? _findModelInGraph(graph) ?? metadataModel ?? null;
 
-  // Path 1: Full extraction — react agents with model + ToolNode (matching Python)
-  // Requires BOTH model and tools. Python uses __closure__ to always find the model;
-  // in JS, closures are sealed, so users must provide it via _agentspan metadata,
-  // the wrapper import, or the model option in run()/deploy().
+  // Path 1: Full extraction — react agents with model + tools (matching Python)
+  // Python takes this path when model is found (even with empty tools).
+  // In JS, closures are sealed, so users must provide the model via _agentspan
+  // metadata, the wrapper import, or the model option in run()/deploy().
   const toolObjs = _findToolsInGraph(graph);
-  if (modelStr && toolObjs.length > 0) {
+  if (modelStr && (toolObjs.length > 0 || metadata?.tools !== undefined)) {
     const instructions = metadata?.instructions as string | undefined;
     return _serializeFullExtraction(name, modelStr, toolObjs, instructions);
   }
