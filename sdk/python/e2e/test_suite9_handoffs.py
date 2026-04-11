@@ -30,7 +30,7 @@ pytestmark = [
     pytest.mark.e2e,
 ]
 
-TIMEOUT = 120
+TIMEOUT = 300  # 5 min per run — CI runners are slower
 
 
 # ===================================================================

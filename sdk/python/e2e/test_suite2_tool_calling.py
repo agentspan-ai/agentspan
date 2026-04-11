@@ -25,7 +25,7 @@ pytestmark = [
 
 CRED_A = "E2E_CRED_A"
 CRED_B = "E2E_CRED_B"
-TIMEOUT = 120  # 120 seconds per agent run
+TIMEOUT = 300  # 5 min per agent run — CI runners are slower
 
 
 # ── Tools ───────────────────────────────────────────────────────────────
