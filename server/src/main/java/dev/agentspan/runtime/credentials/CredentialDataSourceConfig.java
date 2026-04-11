@@ -85,6 +85,12 @@ public class CredentialDataSourceConfig {
             config.setMaximumPoolSize(1);
             config.setMinimumIdle(1);
             config.setConnectionTestQuery("SELECT 1");
+            // busy_timeout: wait up to 15s when another connection holds a write lock.
+            // The production URL sets this via ?busy_timeout=15000, but the test URL uses
+            // SQLite's file: URI syntax (?mode=memory&cache=shared) where JDBC-level
+            // parameters are not parsed, so the PRAGMA never gets applied from the URL.
+            // connectionInitSql ensures it is set uniformly in all environments.
+            config.setConnectionInitSql("PRAGMA busy_timeout = 15000");
         }
 
         log.info(
