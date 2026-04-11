@@ -403,6 +403,14 @@ function _serializeGraphStructure(
   const inputKey = _extractInputKey(graph);
   if (inputKey) graphConfig.input_key = inputKey;
 
+  // Detect messages-based state: signal to server to wrap prompt as
+  // [{"role": "user", "content": prompt}] instead of plain string.
+  const hasMessagesField =
+    inputKey === "messages" || _hasMessagesInSchema(graph);
+  if (hasMessagesField) {
+    graphConfig._input_is_messages = true;
+  }
+
   // Extract state reducers
   const reducers = _extractReducers(graph);
   if (reducers) graphConfig._reducers = reducers;
@@ -903,6 +911,27 @@ function _extractInputKey(graph: unknown): string | null {
   } catch {
     return null;
   }
+}
+
+/** Check if the graph state has a "messages" field (typed or channel-based). */
+function _hasMessagesInSchema(graph: unknown): boolean {
+  try {
+    const g = graph as any;
+    // Check JSON schema
+    if (typeof g.getInputJsonSchema === "function") {
+      const schema = g.getInputJsonSchema();
+      if (schema?.properties && "messages" in schema.properties) return true;
+    }
+    // Check channels
+    const channels = g.channels;
+    if (channels) {
+      const keys = channels instanceof Map
+        ? Array.from(channels.keys())
+        : Object.keys(channels);
+      if (keys.includes("messages")) return true;
+    }
+  } catch { /* ignore */ }
+  return false;
 }
 
 // ── Reducer extraction ──────────────────────────────────

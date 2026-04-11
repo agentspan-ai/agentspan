@@ -119,7 +119,6 @@ const graph = builder.compile({ name: "conversation_manager" });
 
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',
-  tools: [],
   framework: 'langgraph',
 };
 

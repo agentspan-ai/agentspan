@@ -116,7 +116,6 @@ const graph = builder.compile({ name: "agent_handoff" });
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',
-  tools: [],
   framework: 'langgraph',
 };
 

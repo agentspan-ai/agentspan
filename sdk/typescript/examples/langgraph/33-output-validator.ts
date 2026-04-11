@@ -146,7 +146,6 @@ const graph = builder.compile({ name: "output_validator_agent" });
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',
-  tools: [],
   framework: 'langgraph',
 };
 
