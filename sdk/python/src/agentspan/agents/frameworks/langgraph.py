@@ -75,6 +75,30 @@ def serialize_langgraph(graph: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
     """
     name = getattr(graph, "name", None) or _DEFAULT_NAME
 
+    # Graphs with checkpointers (MemorySaver, etc.) require the full LangGraph
+    # runtime for session state persistence across turns. Extracting the graph
+    # structure strips the checkpointer, breaking memory. Force passthrough.
+    if getattr(graph, "checkpointer", None) is not None:
+        logger.info(
+            "LangGraph '%s': has checkpointer — using passthrough to "
+            "preserve session state management",
+            name,
+        )
+        raw_config: Dict[str, Any] = {"name": name, "_worker_name": name}
+        worker = WorkerInfo(
+            name=name,
+            description=f"LangGraph passthrough worker for {name}",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "prompt": {"type": "string"},
+                    "session_id": {"type": "string"},
+                },
+            },
+            func=None,
+        )
+        return raw_config, [worker]
+
     # Try full extraction: find model and tools in the compiled graph
     model_str = _find_model_in_graph(graph)
     tool_objs = _find_tools_in_graph(graph)
@@ -1572,6 +1596,13 @@ def _build_input(graph: Any, prompt: str) -> Dict[str, Any]:
         schema = graph.get_input_jsonschema()
         props = schema.get("properties", {})
         if "messages" in props:
+            # Detect if the messages field expects dicts or LangChain message objects
+            msg_schema = props.get("messages", {})
+            items = msg_schema.get("items", {})
+            if items.get("type") == "object" or msg_schema.get("type") == "array":
+                # Plain dict messages (e.g. List[dict])
+                return {"messages": [{"role": "user", "content": prompt}]}
+            # LangChain message objects (default for create_agent / messages state)
             from langchain_core.messages import HumanMessage
 
             return {"messages": [HumanMessage(content=prompt)]}
