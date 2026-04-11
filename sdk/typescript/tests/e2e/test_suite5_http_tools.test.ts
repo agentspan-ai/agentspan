@@ -18,7 +18,7 @@ import {
   runDiagnostic,
 } from './helpers';
 
-const HTTP_PORT = 3003;
+const HTTP_PORT = 3005; // Dedicated port — avoids conflict with Python Suite 5 (3003) in parallel CI
 const HTTP_BASE_URL = `http://localhost:${HTTP_PORT}`;
 const HTTP_SPEC_URL = `${HTTP_BASE_URL}/api-docs`;
 const HTTP_AUTH_KEY = 'e2e-ts-http-secret';

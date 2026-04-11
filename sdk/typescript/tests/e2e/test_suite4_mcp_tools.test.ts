@@ -18,7 +18,7 @@ import {
   runDiagnostic,
 } from './helpers';
 
-const MCP_PORT = 3002;
+const MCP_PORT = 3004; // Dedicated port — avoids conflict with Python Suite 4 (3002) in parallel CI
 const MCP_BASE_URL = `http://localhost:${MCP_PORT}`;
 const MCP_SERVER_URL = `${MCP_BASE_URL}/mcp`;
 const MCP_AUTH_KEY = 'e2e-ts-mcp-test-secret';
