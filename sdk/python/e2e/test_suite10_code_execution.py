@@ -370,7 +370,7 @@ class TestSuite10CodeExecution:
         agent = _agent_local_code(model)
         result = ce_runtime.run(
             agent,
-            "Run Python code that computes and prints 42 * 73",
+            "Run this exact Python code using execute_code: print(42 * 73)",
             timeout=TIMEOUT,
         )
         diag = _run_diagnostic(result)
@@ -504,7 +504,7 @@ class TestSuite10CodeExecution:
         agent = _agent_docker_python(model)
         result = ce_runtime.run(
             agent,
-            "Run Python code that computes and prints 42 * 73",
+            "Run this exact Python code using execute_code: print(42 * 73)",
             timeout=300,  # Docker needs extra time for image pull + container start
         )
         diag = _run_diagnostic(result)

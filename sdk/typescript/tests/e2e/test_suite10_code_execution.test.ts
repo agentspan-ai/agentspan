@@ -191,9 +191,8 @@ describe('Suite 10: Code Execution', { timeout: 1_800_000 }, () => {
       name: 'e2e_ts_local_python',
       model: MODEL,
       instructions:
-        'You are a Python code executor. When asked to compute something, ' +
-        'write Python code that prints the result and execute it using the execute_code tool. ' +
-        'Always specify language="python".',
+        'You are a Python code executor. When asked to run code, execute it exactly as given ' +
+        'using the execute_code tool with language="python". Do not modify the code.',
       tools: [executor.asTool('execute_code', 'e2e_ts_local_python')],
       codeExecutionConfig: {
         enabled: true,
@@ -204,7 +203,7 @@ describe('Suite 10: Code Execution', { timeout: 1_800_000 }, () => {
 
     const result = await runtime.run(
       agent,
-      'Run Python code that computes and prints 42 * 73',
+      'Run this exact Python code using execute_code: print(42 * 73)',
       { timeout: TIMEOUT },
     );
 
@@ -381,9 +380,8 @@ describe('Suite 10: Code Execution', { timeout: 1_800_000 }, () => {
       name: 'e2e_ts_docker_python',
       model: MODEL,
       instructions:
-        'You are a Python code executor. When asked to compute something, ' +
-        'write Python code that prints the result and execute it using the execute_code tool. ' +
-        'Always specify language="python".',
+        'You are a Python code executor. When asked to run code, execute it exactly as given ' +
+        'using the execute_code tool with language="python". Do not modify the code.',
       tools: [executor.asTool('execute_code', 'e2e_ts_docker_python')],
       codeExecutionConfig: {
         enabled: true,
@@ -394,7 +392,7 @@ describe('Suite 10: Code Execution', { timeout: 1_800_000 }, () => {
 
     const result = await runtime.run(
       agent,
-      'Run Python code that computes and prints 42 * 73',
+      'Run this exact Python code using execute_code: print(42 * 73)',
       { timeout: TIMEOUT },
     );
 
