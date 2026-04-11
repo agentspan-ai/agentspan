@@ -43,13 +43,19 @@ export function serializeLangGraph(
   const modelStr = optionModel ?? _findModelInGraph(graph) ?? metadataModel ?? null;
 
   // Path 1: Full extraction — react agents with model + tools (matching Python)
-  // Python takes this path when model is found (even with empty tools).
-  // In JS, closures are sealed, so users must provide the model via _agentspan
-  // metadata, the wrapper import, or the model option in run()/deploy().
+  // Takes this path when model found + tools in graph (react agent with ToolNode).
   const toolObjs = _findToolsInGraph(graph);
-  if (modelStr && (toolObjs.length > 0 || metadata?.tools !== undefined)) {
+  if (modelStr && toolObjs.length > 0) {
     const instructions = metadata?.instructions as string | undefined;
     return _serializeFullExtraction(name, modelStr, toolObjs, instructions);
+  }
+
+  // React agent with no tools: metadata explicitly declares tools=[] to signal
+  // "this is a react agent, use full extraction as pure LLM call".
+  // Custom StateGraphs should NOT set metadata.tools.
+  if (modelStr && metadata && Array.isArray(metadata.tools) && toolObjs.length === 0) {
+    const instructions = metadata?.instructions as string | undefined;
+    return _serializeFullExtraction(name, modelStr, [], instructions);
   }
 
   // Resolve the LLM object: explicit option > _agentspan.llm metadata

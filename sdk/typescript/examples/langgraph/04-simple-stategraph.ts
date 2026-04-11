@@ -72,10 +72,12 @@ builder.addEdge('generate', END);
 
 const graph = builder.compile({ name: "query_pipeline" });
 
-// Add agentspan metadata for extraction (no LLM in this pipeline example)
+// Add agentspan metadata for extraction.
+// NOTE: Do NOT set tools=[] on StateGraphs — that signals "react agent with no tools"
+// and forces full extraction (ignoring the graph structure).
+// For StateGraphs, only set model and framework.
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',
-  tools: [],
   framework: 'langgraph',
 };
 
