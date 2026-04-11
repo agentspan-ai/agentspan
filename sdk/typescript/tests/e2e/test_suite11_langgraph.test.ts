@@ -1,11 +1,14 @@
 /**
- * Suite 11: LangGraph Integration — serialization and compilation.
+ * Suite 11: LangGraph Cross-SDK Parity Tests — serialization and compilation.
  *
  * Tests that LangGraph graphs serialize correctly into Agentspan workflows:
  *   - Full extraction: createReactAgent → model + tools in rawConfig
  *   - Graph-structure: StateGraph → nodes + edges in rawConfig._graph
  *   - Tool extraction: tools have correct names, descriptions, schemas
+ *   - Conditional routing: conditional_edges in rawConfig._graph
+ *   - Messages state: _input_is_messages flag detection
  *   - Passthrough fallback: plain graph → single worker
+ *   - Compile via server: /agent/compile returns 200
  *   - Runtime execution: agent with tool produces correct output
  *
  * Uses serializeLangGraph() directly for compilation tests (no server needed).
@@ -30,9 +33,13 @@ let StateGraph: any;
 let START: any;
 let END: any;
 let Annotation: any;
+let MessagesAnnotation: any;
 let z: any;
 let serializeLangGraph: any;
 let detectFramework: any;
+
+const SERVER_URL = process.env.AGENTSPAN_SERVER_URL ?? 'http://localhost:6767/api';
+const BASE_URL = SERVER_URL.replace(/\/api$/, '');
 
 try {
   const lgPrebuilt = await import('@langchain/langgraph/prebuilt');
@@ -42,6 +49,7 @@ try {
   START = lgCore.START;
   END = lgCore.END;
   Annotation = lgCore.Annotation;
+  MessagesAnnotation = lgCore.MessagesAnnotation;
   const openai = await import('@langchain/openai');
   ChatOpenAI = openai.ChatOpenAI;
   const tools = await import('@langchain/core/tools');
@@ -300,7 +308,268 @@ describe('Suite 11: LangGraph Integration', { timeout: 300_000 }, () => {
     expect(workers.length, '[Passthrough] expected 1 passthrough worker').toBe(1);
   });
 
-  // ── 6. Runtime execution: tool produces deterministic output ────────
+  // ── 6. Conditional routing — conditional_edges in rawConfig ──────────
+
+  it.skipIf(!langGraphAvailable)('conditional routing — conditional_edges extracted', () => {
+    const RouteState = Annotation.Root({
+      query: Annotation<string>({
+        reducer: (_prev: string, next: string) => next ?? _prev,
+        default: () => '',
+      }),
+      category: Annotation<string>({
+        reducer: (_prev: string, next: string) => next ?? _prev,
+        default: () => '',
+      }),
+      answer: Annotation<string>({
+        reducer: (_prev: string, next: string) => next ?? _prev,
+        default: () => '',
+      }),
+    });
+
+    function classify(state: any) {
+      const q = (state.query || '').toLowerCase();
+      return { category: q.includes('math') ? 'math' : 'general' };
+    }
+
+    function routeQuery(state: any): string {
+      return state.category || 'general';
+    }
+
+    function handleMath(state: any) {
+      return { answer: 'math_answer' };
+    }
+
+    function handleGeneral(state: any) {
+      return { answer: 'general_answer' };
+    }
+
+    const builder = new StateGraph(RouteState);
+    builder.addNode('classify', classify);
+    builder.addNode('handle_math', handleMath);
+    builder.addNode('handle_general', handleGeneral);
+
+    builder.addEdge(START, 'classify');
+    builder.addConditionalEdges(
+      'classify',
+      routeQuery,
+      { math: 'handle_math', general: 'handle_general' },
+    );
+    builder.addEdge('handle_math', END);
+    builder.addEdge('handle_general', END);
+
+    const graph = builder.compile({ name: 'e2e_lg_conditional' });
+
+    const [rawConfig] = serializeLangGraph(graph);
+
+    // Must be graph-structure path
+    expect(
+      rawConfig._graph,
+      '[Conditional] _graph missing from rawConfig',
+    ).toBeDefined();
+
+    const graphData = rawConfig._graph as Record<string, unknown>;
+
+    // conditional_edges must be non-empty
+    const condEdges = graphData.conditional_edges as Record<string, unknown>[];
+    expect(condEdges, '[Conditional] conditional_edges missing').toBeDefined();
+    expect(
+      condEdges.length,
+      '[Conditional] conditional_edges should be non-empty',
+    ).toBeGreaterThan(0);
+
+    // First conditional edge must have _router_ref
+    const ce = condEdges[0];
+    expect(
+      ce._router_ref,
+      `[Conditional] conditional_edges[0] missing _router_ref. Keys: ${Object.keys(ce)}`,
+    ).toBeDefined();
+
+    // Source should be "classify"
+    expect(
+      ce.source,
+      `[Conditional] Expected source='classify', got '${ce.source}'`,
+    ).toBe('classify');
+
+    // Targets should map to handle_math and handle_general
+    const targets = ce.targets as Record<string, string>;
+    expect(targets, '[Conditional] targets missing').toBeDefined();
+    expect(targets.math, '[Conditional] math target missing').toBeDefined();
+    expect(targets.general, '[Conditional] general target missing').toBeDefined();
+  });
+
+  // ── 7. Messages state detection — _input_is_messages flag ──────────
+
+  it.skipIf(!langGraphAvailable)('messages state detected — _input_is_messages flag', () => {
+    // Use MessagesAnnotation which defines a "messages" field with an add reducer.
+    // This is the standard LangGraph pattern for chat-based agents.
+    const MessagesState = Annotation.Root({
+      messages: Annotation<Record<string, unknown>[]>({
+        reducer: (prev: Record<string, unknown>[], next: Record<string, unknown>[]) => [...prev, ...next],
+        default: () => [],
+      }),
+      output: Annotation<string>({
+        reducer: (_prev: string, next: string) => next ?? _prev,
+        default: () => '',
+      }),
+    });
+
+    function processMessages(state: any) {
+      return { output: 'processed' };
+    }
+
+    const builder = new StateGraph(MessagesState);
+    builder.addNode('process', processMessages);
+    builder.addEdge(START, 'process');
+    builder.addEdge('process', END);
+
+    const graph = builder.compile({ name: 'e2e_lg_messages' });
+
+    const [rawConfig] = serializeLangGraph(graph);
+
+    // Must be graph-structure path
+    expect(rawConfig._graph, '[Messages] _graph missing').toBeDefined();
+
+    const graphData = rawConfig._graph as Record<string, unknown>;
+
+    // _input_is_messages must be true
+    expect(
+      graphData._input_is_messages,
+      `[Messages] _input_is_messages should be true. ` +
+      `Graph keys: ${Object.keys(graphData)}. ` +
+      `Got: ${graphData._input_is_messages}`,
+    ).toBe(true);
+  });
+
+  // ── 8. Compile via server — /agent/compile returns 200 ─────────────
+
+  it.skipIf(!langGraphAvailable)('compile hello_world via server', async () => {
+    if (!serverAvailable) {
+      console.log('Server not available — skipping compile test');
+      return;
+    }
+
+    const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
+    const graph = createReactAgent({ llm, tools: [], name: 'compile_hello_world' });
+
+    (graph as any)._agentspan = {
+      model: 'openai/gpt-4o-mini',
+      tools: [],
+      framework: 'langgraph',
+    };
+
+    const [rawConfig] = serializeLangGraph(graph);
+
+    const resp = await fetch(`${BASE_URL}/api/agent/compile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ framework: 'langgraph', rawConfig }),
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    const body = await resp.text();
+    expect(
+      resp.status,
+      `[Compile hello_world] Expected 200, got ${resp.status}. Body: ${body.slice(0, 500)}`,
+    ).toBe(200);
+  });
+
+  it.skipIf(!langGraphAvailable)('compile react_with_tools via server', async () => {
+    if (!serverAvailable) {
+      console.log('Server not available — skipping compile test');
+      return;
+    }
+
+    const calculateTool = new DynamicStructuredTool({
+      name: 'calculate',
+      description: 'Evaluate a mathematical expression.',
+      schema: z.object({ expression: z.string() }),
+      func: async ({ expression }: { expression: string }) => String(eval(expression)),
+    });
+
+    const countWordsTool = new DynamicStructuredTool({
+      name: 'count_words',
+      description: 'Count words in text.',
+      schema: z.object({ text: z.string() }),
+      func: async ({ text }: { text: string }) => `${text.split(/\s+/).length} words`,
+    });
+
+    const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
+    const graph = createReactAgent({
+      llm,
+      tools: [calculateTool, countWordsTool],
+      name: 'compile_react_tools',
+    });
+
+    (graph as any)._agentspan = {
+      model: 'openai/gpt-4o-mini',
+      tools: [calculateTool, countWordsTool],
+      framework: 'langgraph',
+    };
+
+    const [rawConfig] = serializeLangGraph(graph);
+
+    const resp = await fetch(`${BASE_URL}/api/agent/compile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ framework: 'langgraph', rawConfig }),
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    const body = await resp.text();
+    expect(
+      resp.status,
+      `[Compile react_tools] Expected 200, got ${resp.status}. Body: ${body.slice(0, 500)}`,
+    ).toBe(200);
+  });
+
+  it.skipIf(!langGraphAvailable)('compile stategraph via server', async () => {
+    if (!serverAvailable) {
+      console.log('Server not available — skipping compile test');
+      return;
+    }
+
+    // Note: TS LangGraph forbids node names matching state field names.
+    // Use 'result' for state field so node can be 'answer'.
+    const QueryState = Annotation.Root({
+      query: Annotation<string>({
+        reducer: (_prev: string, next: string) => next ?? _prev,
+        default: () => '',
+      }),
+      result: Annotation<string>({
+        reducer: (_prev: string, next: string) => next ?? _prev,
+        default: () => '',
+      }),
+    });
+
+    function validateQ(state: any) { return { query: (state.query || '').trim() || 'default' }; }
+    function answerQ(state: any) { return { result: `answer_for:${state.query}` }; }
+
+    const builder = new StateGraph(QueryState);
+    builder.addNode('validate', validateQ);
+    builder.addNode('answer', answerQ);
+    builder.addEdge(START, 'validate');
+    builder.addEdge('validate', 'answer');
+    builder.addEdge('answer', END);
+
+    const graph = builder.compile({ name: 'compile_stategraph' });
+
+    const [rawConfig] = serializeLangGraph(graph);
+
+    const resp = await fetch(`${BASE_URL}/api/agent/compile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ framework: 'langgraph', rawConfig }),
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    const body = await resp.text();
+    expect(
+      resp.status,
+      `[Compile stategraph] Expected 200, got ${resp.status}. Body: ${body.slice(0, 500)}`,
+    ).toBe(200);
+  });
+
+  // ── 9. Runtime execution: tool produces deterministic output ────────
 
   it.skipIf(!langGraphAvailable || !process.env.OPENAI_API_KEY)('runtime execution — multiply tool returns 56', async () => {
     if (!serverAvailable) {
