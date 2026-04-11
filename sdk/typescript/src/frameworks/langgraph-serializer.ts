@@ -42,18 +42,17 @@ export function serializeLangGraph(
   // Find model: explicit option > graph introspection > _agentspan metadata
   const modelStr = optionModel ?? _findModelInGraph(graph) ?? metadataModel ?? null;
 
-  // Path 1: Full extraction — react agents with model + tools (matching Python)
-  // Takes this path when model found + tools in graph (react agent with ToolNode).
+  // Path 1: Full extraction — react agents with model + tools in graph.
   const toolObjs = _findToolsInGraph(graph);
   if (modelStr && toolObjs.length > 0) {
     const instructions = metadata?.instructions as string | undefined;
     return _serializeFullExtraction(name, modelStr, toolObjs, instructions);
   }
 
-  // React agent with no tools: metadata explicitly declares tools=[] to signal
-  // "this is a react agent, use full extraction as pure LLM call".
-  // Custom StateGraphs should NOT set metadata.tools.
-  if (modelStr && metadata && Array.isArray(metadata.tools) && toolObjs.length === 0) {
+  // React agent with no tools: detected by having "agent" + "tools" nodes
+  // (createReactAgent pattern) but no extractable tool objects.
+  // These can't use graph-structure (internal nodes aren't plain functions).
+  if (modelStr && toolObjs.length === 0 && _isReactAgentGraph(graph)) {
     const instructions = metadata?.instructions as string | undefined;
     return _serializeFullExtraction(name, modelStr, [], instructions);
   }
@@ -910,6 +909,25 @@ function _extractInputKey(graph: unknown): string | null {
     return null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Check if the graph is a createReactAgent graph (has "agent" + "tools" nodes).
+ * These graphs can't use graph-structure extraction because their internal
+ * nodes aren't plain functions — they need full extraction.
+ */
+function _isReactAgentGraph(graph: unknown): boolean {
+  try {
+    const g = graph as Record<string, unknown>;
+    const nodes = g.nodes;
+    if (!nodes || typeof nodes !== "object") return false;
+    const keys: string[] = nodes instanceof Map
+      ? Array.from(nodes.keys())
+      : Object.keys(nodes);
+    return keys.includes("agent") && keys.includes("tools");
+  } catch {
+    return false;
   }
 }
 
