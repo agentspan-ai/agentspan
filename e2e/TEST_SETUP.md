@@ -17,16 +17,6 @@ Both SDKs have 1:1 matching test suites with identical file naming, test coverag
   - `GOOGLE_AI_API_KEY` — optional, for Gemini image test in Suite 7
 - `gh` CLI installed (only needed for Suite 3)
 
-### Server master key
-
-The server encrypts credentials with AES-256-GCM using a master key. Set `AGENTSPAN_MASTER_KEY` before starting the server so the key survives restarts. Without it, the server auto-generates a key that is lost on restart — causing HTTP 500 when decrypting credentials from a prior session.
-
-```bash
-# The orchestrator sets this automatically. For manual runs:
-export AGENTSPAN_MASTER_KEY="MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA="
-java -jar server/build/libs/agentspan-runtime.jar --server.port=6767
-```
-
 **Troubleshooting:** If you get `AEADBadTagException` on startup, the DB was encrypted with a different key. Delete the stale DB and restart:
 ```bash
 rm -f agent-runtime.db* ~/.agentspan/master.key
@@ -109,7 +99,6 @@ npx vitest run tests/e2e/test_suite10_code_execution.test.ts       # suite 10 on
 |----------|---------|---------|
 | `AGENTSPAN_SERVER_URL` | `http://localhost:6767/api` | Server API URL |
 | `AGENTSPAN_CLI_PATH` | `agentspan` | Path to CLI binary |
-| `AGENTSPAN_MASTER_KEY` | (auto-generated) | Master key for credential encryption. Set before starting the server. |
 | `MCP_TESTKIT_URL` | `http://localhost:3001` | mcp-testkit URL for HTTP/MCP tool tests |
 | `AGENTSPAN_LLM_MODEL` | `openai/gpt-4o-mini` | Model for agent execution |
 | `AGENTSPAN_JUDGE_MODEL` | `claude-sonnet-4-20250514` | Model for LLM-as-judge (Suite 1) |

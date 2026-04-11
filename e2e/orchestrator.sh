@@ -89,10 +89,6 @@ if $DO_START; then
   echo "mcp-testkit started (PID $MCP_PID)"
 
   echo "=== Starting agentspan server on port $SERVER_PORT ==="
-  # Master key for credential encryption — stable across restarts within a run.
-  # Without this, the server auto-generates a key that is lost on restart,
-  # causing 500 errors when decrypting credentials from a previous run.
-  export AGENTSPAN_MASTER_KEY="${AGENTSPAN_MASTER_KEY:-MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=}"
   java -jar "$REPO_ROOT/server/build/libs/agentspan-runtime.jar" \
     --server.port="$SERVER_PORT" &
   SERVER_PID=$!
