@@ -215,6 +215,7 @@ def _agent_with_email_tool(model):
     return Agent(
         name="e2e_gr_email",
         model=model,
+        max_turns=3,
         instructions=(
             "You have redact_tool. Call it with the text provided. "
             "Report the result."

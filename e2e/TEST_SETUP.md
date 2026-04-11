@@ -11,7 +11,7 @@ Both SDKs have 1:1 matching test suites with identical file naming, test coverag
 - `mcp-testkit` running (default: `http://localhost:3001`, needed for Suites 1, 4, 5)
 - Docker running (needed for Suite 10 Docker tests, skips if unavailable)
 - LLM API keys:
-  - `OPENAI_API_KEY` — required for agent execution (Suites 2–10)
+  - `OPENAI_API_KEY` — required for agent execution (Suites 2–11)
   - `ANTHROPIC_API_KEY` — required for LLM-as-judge (Suite 1, default judge model is Claude Sonnet)
   - `GITHUB_TOKEN` — required for Suite 3 CLI tools test (gh CLI authentication)
   - `GOOGLE_AI_API_KEY` — optional, for Gemini image test in Suite 7
@@ -41,20 +41,40 @@ Both SDKs implement identical test suites:
 | 4 — MCP Tools | `test_suite4_mcp_tools.py` | `test_suite4_mcp_tools.test.ts` | 1 | ~30s |
 | 5 — HTTP Tools | `test_suite5_http_tools.py` | `test_suite5_http_tools.test.ts` | 2 | ~20s |
 | 6 — PDF Tools | `test_suite6_pdf_tools.py` | `test_suite6_pdf_tools.test.ts` | 1 | ~10s |
-| 7 — Media Tools | `test_suite7_media_tools.py` | `test_suite7_media_tools.test.ts` | 4 | ~2 min |
+| 7 — Media Tools | `test_suite7_media_tools.py` | `test_suite7_media_tools.test.ts` | 3 | ~1 min |
 | 8 — Guardrails | `test_suite8_guardrails.py` | `test_suite8_guardrails.test.ts` | 7-8 | ~30s |
 | 9 — Handoffs | `test_suite9_handoffs.py` | `test_suite9_handoffs.test.ts` | 8 | ~2 min |
 | 10 — Code Execution | `test_suite10_code_execution.py` | `test_suite10_code_execution.test.ts` | 9 | ~40s |
+| 11 — LangGraph | `test_suite11_langgraph.py` | `test_suite11_langgraph.test.ts` | 11-12 | ~3 min |
 
 ## Running
 
-### Python
+### Orchestrator (recommended)
 
 ```bash
-# Full automated run (build + start services + test + report)
+# Python tests (default)
 ./e2e/orchestrator.sh
 
-# Manual run (services already running)
+# TypeScript tests
+./e2e/orchestrator.sh --sdk typescript
+
+# Both SDKs
+./e2e/orchestrator.sh --sdk both
+
+# Single suite
+./e2e/orchestrator.sh --sdk python --suite suite1
+./e2e/orchestrator.sh --sdk typescript --suite suite1
+
+# Skip build/start (services already running)
+./e2e/orchestrator.sh --sdk typescript --no-build --no-start
+
+# Parallel workers (Python only)
+./e2e/orchestrator.sh -j 4
+```
+
+### Python (manual)
+
+```bash
 cd sdk/python
 export AGENTSPAN_SERVER_URL=http://localhost:6767/api
 export AGENTSPAN_CLI_PATH=../../cli/agentspan
@@ -70,12 +90,12 @@ uv run pytest e2e/test_suite7_media_tools.py -v           # suite 7 only
 uv run pytest e2e/test_suite8_guardrails.py -v            # suite 8 only
 uv run pytest e2e/test_suite9_handoffs.py -v              # suite 9 only
 uv run pytest e2e/test_suite10_code_execution.py -v       # suite 10 only
+uv run pytest e2e/test_suite11_langgraph.py -v            # suite 11 only
 ```
 
-### TypeScript
+### TypeScript (manual)
 
 ```bash
-# Manual run (server already running)
 cd sdk/typescript
 export AGENTSPAN_SERVER_URL=http://localhost:6767/api
 export AGENTSPAN_CLI_PATH=../../cli/agentspan
@@ -91,6 +111,7 @@ npx vitest run tests/e2e/test_suite7_media_tools.test.ts           # suite 7 onl
 npx vitest run tests/e2e/test_suite8_guardrails.test.ts            # suite 8 only
 npx vitest run tests/e2e/test_suite9_handoffs.test.ts              # suite 9 only
 npx vitest run tests/e2e/test_suite10_code_execution.test.ts       # suite 10 only
+npx vitest run tests/e2e/test_suite11_langgraph.test.ts            # suite 11 only
 ```
 
 ## Environment Variables
@@ -128,7 +149,7 @@ HTTP tool execution via `http_tool()`, OpenAPI spec discovery (65 operations), a
 Markdown → PDF generation via `pdf_tool()`. Validates GENERATE_PDF task completes. Round-trip validation with markitdown (extracts text from PDF, checks key phrases survived).
 
 ### Suite 7: Media Tools
-Image (OpenAI DALL-E 3 + Gemini Imagen 3), audio (OpenAI TTS-1), and video (OpenAI Sora-2) generation. Plan compilation validates correct model in tool config. Runtime validates GENERATE_* task completes. Video failures skip (Sora is unreliable).
+Image (OpenAI DALL-E 3 + Gemini Imagen 3) and audio (OpenAI TTS-1) generation. Plan compilation validates correct model in tool config. Runtime validates GENERATE_* task completes.
 
 ### Suite 8: Guardrails
 Compilation: all guardrail types (regex block/allow, custom function, LLM) with correct properties. Runtime: tool input raise (SQL injection), tool output regex retry (email blocked), agent output secrets blocked, max_retries escalation (always-fail → FAILED).
@@ -138,6 +159,9 @@ All 8 multi-agent strategies compile correctly. Runtime: sequential (both sub-wo
 
 ### Suite 10: Code Execution
 Compilation: `codeExecution` config in plan, tool naming avoids collisions. Runtime: local Python (42*73=3066), local Bash (17+29=46), language restriction (plan-only — bash not in allowedLanguages), timeout (maxTurns=2, 3s executor timeout), Docker Python (container execution), Docker network disabled (connection error). Jupyter stateful (variable persists across calls, skips if not installed).
+
+### Suite 11: LangGraph
+Framework detection, serialization paths (full extraction, graph-structure, passthrough), conditional routing, messages-based state detection, checkpointer passthrough, tool schema validation, server compilation, and runtime execution. Validates all three LangGraph serializer paths produce correct Conductor workflows.
 
 ## Reports
 
@@ -151,6 +175,6 @@ Both use the same dark-themed format with collapsible suites, error summaries, f
 
 Both e2e jobs in `.github/workflows/ci.yml`:
 - Build CLI + install mcp-testkit + start services
-- Run existing e2e tests, then new suites 1-10
+- Run existing e2e tests, then new suites 1-11
 - Generate HTML reports (uploaded as artifacts, 14-day retention)
 - 45-minute timeout per job

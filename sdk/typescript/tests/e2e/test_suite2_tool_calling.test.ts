@@ -19,6 +19,7 @@ import {
   credentialDelete,
   getOutputText,
   runDiagnostic,
+  findToolTasks,
 } from './helpers';
 
 const CRED_A = 'E2E_TS_CRED_A';
@@ -52,7 +53,7 @@ const freeTool = tool(
 const paidToolA = tool(
   async () => {
     let cred: string | undefined;
-    try { cred = getCredential(CRED_A); } catch { /* credential not found */ }
+    try { cred = await getCredential(CRED_A); } catch { /* credential not found */ }
     if (!cred) throw new Error(`Credential '${CRED_A}' not found in environment.`);
     return `paid_a:${cred.slice(0, 3)}`;
   },
@@ -67,7 +68,7 @@ const paidToolA = tool(
 const paidToolB = tool(
   async () => {
     let cred: string | undefined;
-    try { cred = getCredential(CRED_B); } catch { /* credential not found */ }
+    try { cred = await getCredential(CRED_B); } catch { /* credential not found */ }
     if (!cred) throw new Error(`Credential '${CRED_B}' not found in environment.`);
     return `paid_b:${cred.slice(0, 3)}`;
   },
@@ -83,6 +84,7 @@ function makeAgent() {
   return new Agent({
     name: 'e2e_ts_cred_lifecycle',
     model: MODEL,
+    maxTurns: 3,
     instructions:
       'You have three tools: free_tool, paid_tool_a, and paid_tool_b. ' +
       'Call all three exactly once with argument x="test". Report each result.',
@@ -106,6 +108,26 @@ describe('Suite 2: Tool Calling / Credential Lifecycle', { timeout: 300_000 }, (
     });
     expect(result1.executionId).toBeTruthy();
     expect(['COMPLETED', 'FAILED', 'TERMINATED']).toContain(result1.status);
+
+    // Verify via workflow tasks: paid tools must be FAILED_WITH_TERMINAL_ERROR
+    // (not plain FAILED, which triggers retries — pointless since credentials
+    // won't appear on retry)
+    const { results: tasks1 } = await findToolTasks(result1.executionId!, [
+      'paid_tool_a',
+      'paid_tool_b',
+    ]);
+    for (const paid of ['paid_tool_a', 'paid_tool_b'] as const) {
+      if (tasks1[paid]) {
+        const t = tasks1[paid];
+        // Conductor maps TaskResult.FAILED_WITH_TERMINAL_ERROR → Task.COMPLETED_WITH_ERRORS
+        const terminalStatuses = ['FAILED_WITH_TERMINAL_ERROR', 'COMPLETED_WITH_ERRORS'];
+        expect(
+          terminalStatuses,
+          `[Step 2] ${paid} should be terminal (not retryable), ` +
+            `got '${t.status}'. Missing credentials are a config issue.`,
+        ).toContain(t.status);
+      }
+    }
 
     // ── Step 3: Env-var security — values in env must NOT leak ──
     try {

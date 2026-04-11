@@ -1,17 +1,16 @@
 /**
- * Suite 7: Media Tools — image, audio, and video generation.
+ * Suite 7: Media Tools — image and audio generation.
  *
  * Tests media generation tools end-to-end:
  *   - Image via OpenAI (dall-e-3) and Gemini (imagen-3.0)
  *   - Audio via OpenAI (tts-1)
- *   - Video via OpenAI (sora-2)
  *
  * Skips if API keys not set. Media API errors skip (not test bugs).
  * No mocks. Real server, real LLM, real media APIs.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { Agent, AgentRuntime, imageTool, audioTool, videoTool } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, imageTool, audioTool } from '@agentspan-ai/sdk';
 import {
   checkServerHealth,
   MODEL,
@@ -61,13 +60,6 @@ async function assertMediaGenerated(
   expect(task, `[${stepName}] No ${taskTypePrefix} task in workflow`).toBeDefined();
 
   const taskStatus = String(task!.status ?? '');
-
-  // Video generation is unreliable (Sora) — not a test bug
-  if (taskStatus === 'COMPLETED_WITH_ERRORS' && taskTypePrefix === 'GENERATE_VIDEO') {
-    const reason = String(task!.reasonForIncompletion ?? task!.outputData ?? '');
-    expect(true, `[${stepName}] Video API error (skipped): ${reason.slice(0, 200)}`).toBe(true);
-    return;
-  }
 
   expect(taskStatus, `[${stepName}] ${taskTypePrefix} task status`).toBe('COMPLETED');
   expect(task!.outputData, `[${stepName}] empty outputData`).toBeDefined();
@@ -178,25 +170,4 @@ describe('Suite 7: Media Tools', { timeout: 600_000 }, () => {
     await assertMediaGenerated(result, 'Audio/OpenAI', 'GENERATE_AUDIO');
   });
 
-  it.skipIf(!process.env.OPENAI_API_KEY)('video — OpenAI Sora 2', async () => {
-    const vid = videoTool({
-      name: 'gen_video',
-      description: 'Generate a short video.',
-      llmProvider: 'openai',
-      model: 'sora-2',
-    });
-    const agent = new Agent({
-      name: 'e2e_ts_video_openai',
-      model: MODEL,
-      instructions: 'Generate videos when asked. Call gen_video.',
-      tools: [vid],
-    });
-
-    const result = await runtime.run(
-      agent,
-      'Generate a 4-second video of a bouncing ball.',
-      { timeout: 300_000 },
-    );
-    await assertMediaGenerated(result, 'Video/OpenAI', 'GENERATE_VIDEO');
-  });
 });

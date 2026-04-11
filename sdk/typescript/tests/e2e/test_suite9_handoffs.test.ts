@@ -88,9 +88,12 @@ function makeMathAgent() {
   return new Agent({
     name: 'math_agent',
     model: MODEL,
+    maxTurns: 3,
     instructions:
       'You are a math agent. When asked to compute something, call do_math with the expression. ' +
-      'For example, for "3+4" call do_math with expr="3+4".',
+      'For example, for "3+4" call do_math with expr="3+4". ' +
+      'Only handle math operations — ignore non-math requests. ' +
+      'If there is nothing to compute, just respond with a summary.',
     tools: [doMath],
   });
 }
@@ -99,9 +102,11 @@ function makeTextAgent() {
   return new Agent({
     name: 'text_agent',
     model: MODEL,
+    maxTurns: 3,
     instructions:
       'You are a text agent. When asked to reverse text, call do_text with the text. ' +
-      'For example, for "hello" call do_text with text="hello".',
+      'For example, for "hello" call do_text with text="hello". ' +
+      'If there is nothing to reverse, just respond with a summary of what you received.',
     tools: [doText],
   });
 }
@@ -110,8 +115,10 @@ function makeDataAgent() {
   return new Agent({
     name: 'data_agent',
     model: MODEL,
+    maxTurns: 3,
     instructions:
-      'You are a data agent. When asked to query data, call do_data with the query.',
+      'You are a data agent. When asked to query data, call do_data with the query. ' +
+      'If there is nothing to query, just respond with a summary.',
     tools: [doData],
   });
 }
@@ -219,6 +226,10 @@ describe('Suite 9: Agent Handoffs', { timeout: 1_800_000 }, () => { // 30 min fo
   // ── Runtime tests ─────────────────────────────────────────────────────
 
   it('sequential execution produces SUB_WORKFLOW tasks', async () => {
+    // Use a prompt with unique markers so we can verify each
+    // sub-agent received the original instructions
+    const originalPrompt = 'First compute 3+4, then reverse hello';
+
     const parent = new Agent({
       name: 'e2e_ts_sequential_run',
       model: MODEL,
@@ -229,11 +240,7 @@ describe('Suite 9: Agent Handoffs', { timeout: 1_800_000 }, () => { // 30 min fo
       strategy: 'sequential',
     });
 
-    const result = await runtime.run(
-      parent,
-      'First compute 3+4, then reverse hello',
-      { timeout: TIMEOUT },
-    );
+    const result = await runtime.run(parent, originalPrompt, { timeout: TIMEOUT });
 
     const diag = runDiagnostic(result as unknown as Record<string, unknown>);
     expect(result.executionId).toBeTruthy();
@@ -259,6 +266,28 @@ describe('Suite 9: Agent Handoffs', { timeout: 1_800_000 }, () => { // 30 min fo
       completedRefs.some((r) => r.toLowerCase().includes('text')),
       `[Sequential] text_agent sub-workflow not COMPLETED. Refs: ${completedRefs}`,
     ).toBe(true);
+
+    // ── Context propagation: each sub-agent must receive the original prompt ──
+    // The second agent should see both the original user request AND
+    // the previous agent's output — not just the previous output alone.
+    for (const subWf of subWorkflows) {
+      const subWfId = subWf.outputData?.subWorkflowId ?? (subWf as Record<string, unknown>).subWorkflowId;
+      if (!subWfId) continue;
+      const childWf = await getWorkflow(subWfId as string);
+      const childPrompt = ((childWf.input as Record<string, unknown>)?.prompt ?? '') as string;
+      const refName = subWf.referenceTaskName;
+
+      // Every sub-agent in the sequence must have the original prompt
+      // in its input so it knows the full user request
+      expect(
+        childPrompt.toLowerCase().includes('reverse') || childPrompt.includes('3+4'),
+        `[Sequential] Sub-agent '${refName}' lost the original prompt. ` +
+          `Each agent in a sequential pipeline must receive the original ` +
+          `user instructions, not just the previous agent's output.\n` +
+          `  child_prompt=${childPrompt.slice(0, 300)}\n` +
+          `  expected to contain 'reverse' or '3+4' from original: '${originalPrompt}'`,
+      ).toBe(true);
+    }
   });
 
   it('parallel execution produces FORK task', async () => {

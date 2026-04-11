@@ -65,9 +65,12 @@ def _math_agent(model):
     return Agent(
         name="math_agent",
         model=model,
+        max_turns=3,
         instructions=(
             "You are a math agent. When asked to compute something, call do_math "
-            'with the expression. For example, for "3+4" call do_math with expr="3+4".'
+            'with the expression. For example, for "3+4" call do_math with expr="3+4". '
+            "Only handle math operations — ignore non-math requests. "
+            "If there is nothing to compute, just respond with a summary."
         ),
         tools=[do_math],
     )
@@ -77,9 +80,11 @@ def _text_agent(model):
     return Agent(
         name="text_agent",
         model=model,
+        max_turns=3,
         instructions=(
             "You are a text agent. When asked to reverse text, call do_text "
-            'with the text. For example, for "hello" call do_text with text="hello".'
+            'with the text. For example, for "hello" call do_text with text="hello". '
+            "If there is nothing to reverse, just respond with a summary of what you received."
         ),
         tools=[do_text],
     )
@@ -89,9 +94,10 @@ def _data_agent(model):
     return Agent(
         name="data_agent",
         model=model,
+        max_turns=3,
         instructions=(
             "You are a data agent. When asked to query data, call do_data "
-            "with the query."
+            "with the query. If there is nothing to query, just respond with a summary."
         ),
         tools=[do_data],
     )
@@ -333,8 +339,13 @@ class TestSuite9Handoffs:
         Parent agent with math_agent >> text_agent (sequential).
         Prompt asks to compute 3+4 then reverse hello.
         Validates: status COMPLETED, SUB_WORKFLOW tasks present,
-        output contains both deterministic markers.
+        and each sub-agent receives the original prompt (not just
+        the previous agent's output).
         """
+        # Use a prompt with unique markers so we can verify each
+        # sub-agent received the original instructions
+        original_prompt = "First compute 3+4, then reverse the word hello"
+
         parent = Agent(
             name="e2e_s9_seq_run",
             model=model,
@@ -347,7 +358,7 @@ class TestSuite9Handoffs:
         )
         result = runtime.run(
             parent,
-            "First compute 3+4, then reverse the word hello",
+            original_prompt,
             timeout=TIMEOUT,
         )
         diag = _run_diagnostic(result)
@@ -380,6 +391,28 @@ class TestSuite9Handoffs:
             f"[Sequential] text_agent sub-workflow not COMPLETED. "
             f"Sub-workflow refs: {sub_refs}"
         )
+
+        # ── Context propagation: each sub-agent must receive the original prompt ──
+        # The second agent should see both the original user request AND
+        # the previous agent's output — not just the previous output alone.
+        for sub_wf in sub_wfs:
+            sub_wf_id = sub_wf.get("subWorkflowId")
+            if not sub_wf_id:
+                continue
+            child_wf = _get_workflow(sub_wf_id)
+            child_prompt = child_wf.get("input", {}).get("prompt", "")
+            ref_name = sub_wf.get("referenceTaskName", "")
+
+            # Every sub-agent in the sequence must have the original prompt
+            # in its input so it knows the full user request
+            assert "reverse" in child_prompt.lower() or "3+4" in child_prompt, (
+                f"[Sequential] Sub-agent '{ref_name}' lost the original prompt. "
+                f"Each agent in a sequential pipeline must receive the original "
+                f"user instructions, not just the previous agent's output.\n"
+                f"  child_prompt={child_prompt[:300]}\n"
+                f"  expected to contain 'reverse' or '3+4' from original: "
+                f"'{original_prompt}'"
+            )
 
     # ── Parallel execution ────────────────────────────────────────────
 

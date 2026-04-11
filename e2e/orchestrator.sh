@@ -5,15 +5,18 @@ set -euo pipefail
 # Builds all components, starts services, runs e2e tests, generates report.
 #
 # Usage:
-#   ./e2e/orchestrator.sh              # defaults: -j 1
-#   ./e2e/orchestrator.sh -j 4        # 4 parallel workers
-#   ./e2e/orchestrator.sh --suite suite1
+#   ./e2e/orchestrator.sh                          # Python tests (default)
+#   ./e2e/orchestrator.sh --sdk typescript         # TypeScript tests
+#   ./e2e/orchestrator.sh --sdk both               # Both SDKs
+#   ./e2e/orchestrator.sh --sdk typescript --suite suite1
+#   ./e2e/orchestrator.sh -j 4                     # 4 parallel workers (Python)
 #   ./e2e/orchestrator.sh --no-build --no-start
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RESULTS_DIR="$REPO_ROOT/e2e-results"
 PARALLELISM=1
 SUITE_FILTER=""
+SDK="python"
 DO_BUILD=true
 DO_START=true
 SERVER_PORT=6767
@@ -27,6 +30,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -j|--parallelism) PARALLELISM="$2"; shift 2 ;;
     --suite)          SUITE_FILTER="$2"; shift 2 ;;
+    --sdk)            SDK="$2"; shift 2 ;;
     --no-build)       DO_BUILD=false; shift ;;
     --no-start)       DO_START=false; shift ;;
     --port)           SERVER_PORT="$2"; shift 2 ;;
@@ -34,6 +38,11 @@ while [[ $# -gt 0 ]]; do
     *)                echo "Unknown arg: $1"; exit 1 ;;
   esac
 done
+
+if [[ "$SDK" != "python" && "$SDK" != "typescript" && "$SDK" != "both" ]]; then
+  echo "ERROR: --sdk must be python, typescript, or both (got: $SDK)"
+  exit 1
+fi
 
 # ── Cleanup trap ────────────────────────────────────────────────────────
 
@@ -70,14 +79,28 @@ if $DO_BUILD; then
   go build -o agentspan .
   echo "CLI built at cli/agentspan"
 
-  echo "=== Installing Python SDK ==="
-  cd "$REPO_ROOT/sdk/python"
-  uv sync --extra dev --extra testing -q
-  echo "Python SDK installed."
+  if [[ "$SDK" == "python" || "$SDK" == "both" ]]; then
+    echo "=== Installing Python SDK ==="
+    cd "$REPO_ROOT/sdk/python"
+    uv sync --extra dev --extra testing -q
+    echo "Python SDK installed."
 
-  echo "=== Installing mcp-testkit ==="
-  uv pip install mcp-testkit -q 2>/dev/null || pip install mcp-testkit -q
-  echo "mcp-testkit installed."
+    echo "=== Installing mcp-testkit ==="
+    uv pip install mcp-testkit -q 2>/dev/null || pip install mcp-testkit -q
+    echo "mcp-testkit installed."
+  fi
+
+  if [[ "$SDK" == "typescript" || "$SDK" == "both" ]]; then
+    echo "=== Installing TypeScript SDK ==="
+    cd "$REPO_ROOT/sdk/typescript"
+    npm ci --silent
+    npm run build
+    echo "TypeScript SDK installed."
+
+    echo "=== Installing mcp-testkit ==="
+    pip install mcp-testkit -q 2>/dev/null || uv pip install mcp-testkit -q 2>/dev/null || true
+    echo "mcp-testkit installed."
+  fi
 fi
 
 # ── Start services ──────────────────────────────────────────────────────
@@ -123,7 +146,6 @@ fi
 
 # ── Run tests ───────────────────────────────────────────────────────────
 
-echo "=== Running E2E tests (parallelism=$PARALLELISM) ==="
 mkdir -p "$RESULTS_DIR"
 
 export AGENTSPAN_SERVER_URL="http://localhost:$SERVER_PORT/api"
@@ -131,33 +153,69 @@ export AGENTSPAN_CLI_PATH="$REPO_ROOT/cli/agentspan"
 export MCP_TESTKIT_URL="http://localhost:$MCP_PORT"
 export AGENTSPAN_AUTO_START_SERVER=false
 
-# Build pytest args
-PYTEST_ARGS=(
-  "$REPO_ROOT/sdk/python/e2e/"
-  "-v"
-  "--tb=short"
-  "--junitxml=$RESULTS_DIR/junit.xml"
-  "-n" "$PARALLELISM"
-)
+TEST_EXIT=0
 
-if [[ -n "$SUITE_FILTER" ]]; then
-  PYTEST_ARGS+=("-k" "$SUITE_FILTER")
+# ── Python tests ─────────────────────────────────────────────────────────
+
+if [[ "$SDK" == "python" || "$SDK" == "both" ]]; then
+  echo "=== Running Python E2E tests (parallelism=$PARALLELISM) ==="
+
+  PYTEST_ARGS=(
+    "$REPO_ROOT/sdk/python/e2e/"
+    "-v"
+    "--tb=short"
+    "--junitxml=$RESULTS_DIR/junit.xml"
+    "-n" "$PARALLELISM"
+  )
+
+  if [[ -n "$SUITE_FILTER" ]]; then
+    PYTEST_ARGS+=("-k" "$SUITE_FILTER")
+  fi
+
+  cd "$REPO_ROOT/sdk/python"
+  uv run pytest "${PYTEST_ARGS[@]}" || TEST_EXIT=$?
+
+  echo "=== Generating Python HTML report ==="
+  uv run python "$REPO_ROOT/sdk/python/e2e/report_generator.py" \
+    "$RESULTS_DIR/junit.xml" "$RESULTS_DIR/report.html"
 fi
 
-cd "$REPO_ROOT/sdk/python"
-TEST_EXIT=0
-uv run pytest "${PYTEST_ARGS[@]}" || TEST_EXIT=$?
+# ── TypeScript tests ─────────────────────────────────────────────────────
 
-# ── Generate HTML report ────────────────────────────────────────────────
+if [[ "$SDK" == "typescript" || "$SDK" == "both" ]]; then
+  echo "=== Running TypeScript E2E tests ==="
 
-echo "=== Generating HTML report ==="
-uv run python "$REPO_ROOT/sdk/python/e2e/report_generator.py" \
-  "$RESULTS_DIR/junit.xml" "$RESULTS_DIR/report.html"
+  cd "$REPO_ROOT/sdk/typescript"
+
+  VITEST_ARGS=(
+    "run"
+    "tests/e2e/"
+    "--reporter=verbose"
+    "--reporter=junit"
+    "--outputFile.junit=$RESULTS_DIR/junit-ts.xml"
+  )
+
+  if [[ -n "$SUITE_FILTER" ]]; then
+    VITEST_ARGS+=("--testNamePattern" "$SUITE_FILTER")
+  fi
+
+  npx vitest "${VITEST_ARGS[@]}" || TEST_EXIT=$?
+
+  echo "=== Generating TypeScript HTML report ==="
+  npx tsx tests/e2e/generate-report.ts \
+    "$RESULTS_DIR/junit-ts.xml" "$RESULTS_DIR/report-ts.html"
+fi
+
+# ── Summary ──────────────────────────────────────────────────────────────
 
 echo ""
 echo "=============================="
-echo "  Results: $RESULTS_DIR/report.html"
-echo "  XML:     $RESULTS_DIR/junit.xml"
+if [[ "$SDK" == "python" || "$SDK" == "both" ]]; then
+  echo "  Python:  $RESULTS_DIR/report.html"
+fi
+if [[ "$SDK" == "typescript" || "$SDK" == "both" ]]; then
+  echo "  TypeScript: $RESULTS_DIR/report-ts.html"
+fi
 echo "=============================="
 
 exit $TEST_EXIT

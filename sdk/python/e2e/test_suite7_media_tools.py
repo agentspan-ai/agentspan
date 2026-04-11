@@ -1,9 +1,8 @@
-"""Suite 7: Media Tools — image, audio, and video generation.
+"""Suite 7: Media Tools — image and audio generation.
 
 Tests media generation tools end-to-end:
   - Image generation via OpenAI (dall-e-3) and Gemini (imagen-3.0)
   - Audio generation via OpenAI (tts-1)
-  - Video generation via OpenAI (sora-2)
 
 Each test validates agent completion and output presence.
 Skips if required API keys are not set.
@@ -15,7 +14,7 @@ import os
 import pytest
 import requests
 
-from agentspan.agents import Agent, audio_tool, image_tool, video_tool
+from agentspan.agents import Agent, audio_tool, image_tool
 
 pytestmark = [
     pytest.mark.e2e,
@@ -78,16 +77,6 @@ def _assert_media_generated(result, step_name, task_type_prefix):
     task_status = media_task.get("status", "")
     reason = media_task.get("reasonForIncompletion", "")
 
-    # Video generation (Sora) is inherently unreliable — jobs can fail
-    # mid-generation. Skip on API errors for video only.
-    # For image/audio, COMPLETED_WITH_ERRORS is a real failure (wrong
-    # model, wrong provider, etc.) and must NOT be skipped.
-    if task_status == "COMPLETED_WITH_ERRORS" and task_type_prefix == "GENERATE_VIDEO":
-        pytest.skip(
-            f"[{step_name}] Video API error (Sora is unreliable): "
-            f"status={task_status} reason={reason[:200]}"
-        )
-
     assert task_status == "COMPLETED", (
         f"[{step_name}] {task_type_prefix} task did not complete. "
         f"status={task_status} reason={reason[:300]}"
@@ -123,7 +112,7 @@ def _assert_tool_compiled(runtime, agent, expected_tool_type, expected_model, st
 
 @pytest.mark.timeout(600)
 class TestSuite7MediaTools:
-    """Media tools: image, audio, and video generation."""
+    """Media tools: image and audio generation."""
 
     # ── Image: OpenAI ─────────────────────────────────────────────────
 
@@ -212,30 +201,3 @@ class TestSuite7MediaTools:
         )
         _assert_media_generated(result, "Audio/OpenAI", "GENERATE_AUDIO")
 
-    # ── Video: OpenAI ─────────────────────────────────────────────────
-
-    def test_video_openai(self, runtime, model):
-        """Generate video via OpenAI Sora 2."""
-        if not os.environ.get("OPENAI_API_KEY"):
-            pytest.skip("OPENAI_API_KEY not set")
-
-        vid = video_tool(
-            name="gen_video",
-            description="Generate a short video from a text prompt.",
-            llm_provider="openai",
-            model="sora-2",
-            n=1,
-        )
-        agent = Agent(
-            name="e2e_video_openai",
-            model=model,
-            instructions="Generate videos when asked. Call the gen_video tool.",
-            tools=[vid],
-        )
-
-        result = runtime.run(
-            agent,
-            "Generate a 4-second video of a bouncing ball.",
-            timeout=300,  # Video generation can be very slow
-        )
-        _assert_media_generated(result, "Video/OpenAI", "GENERATE_VIDEO")

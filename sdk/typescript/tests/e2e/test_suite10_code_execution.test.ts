@@ -341,7 +341,7 @@ describe('Suite 10: Code Execution', { timeout: 1_800_000 }, () => {
     const result = await runtime.run(
       agent,
       'Run this Python code exactly: import time; time.sleep(30); print("done")',
-      { timeout: 30_000 }, // Short timeout — we expect failure, not completion
+      { timeout: 60_000 }, // Generous — we expect the 3s executor timeout to kill it
     );
 
     const diag = runDiagnostic(result as unknown as Record<string, unknown>);

@@ -253,7 +253,6 @@ def _agent_jupyter(model):
 # ===================================================================
 
 
-@pytest.mark.timeout(1800)
 @pytest.fixture(scope="class")
 def ce_runtime():
     """Fresh runtime for code execution tests — avoids stale workers from other suites."""
@@ -263,6 +262,7 @@ def ce_runtime():
         yield rt
 
 
+@pytest.mark.timeout(1800)
 class TestSuite10CodeExecution:
     """Code execution: compilation, local/docker/jupyter execution, restrictions."""
 
@@ -456,9 +456,9 @@ class TestSuite10CodeExecution:
             agent,
             (
                 "Run this exact Python code using execute_code: "
-                "import time; time.sleep(30); print('done')"
+                'import time; time.sleep(30); print("done")'
             ),
-            timeout=30,  # Short — we expect failure, not completion
+            timeout=60,  # Generous — we expect the 3s executor timeout to kill it
         )
         diag = _run_diagnostic(result)
 

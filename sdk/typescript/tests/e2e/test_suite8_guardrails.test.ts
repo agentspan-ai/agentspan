@@ -297,6 +297,7 @@ describe('Suite 8: Guardrails', { timeout: 600_000 }, () => {
     const agent = new Agent({
       name: 'e2e_ts_gr_email',
       model: MODEL,
+      maxTurns: 3,
       instructions: 'Call redact_tool with the text provided.',
       tools: [redactTool],
     });

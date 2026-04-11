@@ -79,6 +79,7 @@ def _make_agent(model: str) -> Agent:
     return Agent(
         name="e2e_cred_lifecycle",
         model=model,
+        max_turns=3,
         instructions=AGENT_INSTRUCTIONS,
         tools=[free_tool, paid_tool_a, paid_tool_b],
     )
@@ -326,14 +327,17 @@ class TestSuite2ToolCalling:
             f"  {_tool_diagnostics(result.execution_id)}"
         )
 
-        # Verify via workflow tasks: paid tools should NOT have succeeded
+        # Verify via workflow tasks: paid tools must be terminal (not retryable).
+        # Conductor maps TaskResult.FAILED_WITH_TERMINAL_ERROR → Task.COMPLETED_WITH_ERRORS
         tool_tasks_s2 = _find_tool_tasks_for(result.execution_id)
+        terminal_statuses = {"FAILED_WITH_TERMINAL_ERROR", "COMPLETED_WITH_ERRORS"}
         for paid in ("paid_tool_a", "paid_tool_b"):
             if paid in tool_tasks_s2:
                 task_info = tool_tasks_s2[paid]
-                assert task_info["status"] != "COMPLETED", (
-                    f"[Step 2: No credentials] {paid} has status COMPLETED "
-                    f"but credentials were not set — it should have failed.\n"
+                assert task_info["status"] in terminal_statuses, (
+                    f"[Step 2: No credentials] {paid} should be terminal "
+                    f"(not retryable), got '{task_info['status']}'. Missing "
+                    f"credentials are a config issue — retries are pointless.\n"
                     f"  task={task_info}"
                 )
 
