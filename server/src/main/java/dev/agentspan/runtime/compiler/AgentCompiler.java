@@ -2136,8 +2136,7 @@ public class AgentCompiler {
         List<Map<String, Object>> conditionalEdges =
                 (List<Map<String, Object>>) graph.getOrDefault("conditional_edges", List.of());
         boolean inputIsMessages = Boolean.TRUE.equals(graph.get("_input_is_messages"));
-        String inputKey = (String) graph.getOrDefault("input_key",
-                inputIsMessages ? "messages" : "request");
+        String inputKey = (String) graph.getOrDefault("input_key", inputIsMessages ? "messages" : "request");
 
         // Extract reducer metadata: field_name -> reducer_type ("add", "extend", etc.)
         // Used in FORK_JOIN merge to correctly combine parallel branch state
