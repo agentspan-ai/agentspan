@@ -1690,12 +1690,13 @@ def _extract_output(final_state: Optional[Dict[str, Any]]) -> str:
     if final_state is None:
         return ""
     messages = final_state.get("messages", [])
-    # Walk in reverse to find the last AIMessage with content and no tool calls
+    # Walk in reverse to find the last AI/assistant message with content
     for msg in reversed(messages):
         msg_type = getattr(msg, "type", None) or (
             msg.get("type") if isinstance(msg, dict) else None
         )
-        if msg_type == "ai":
+        msg_role = msg.get("role") if isinstance(msg, dict) else None
+        if msg_type == "ai" or msg_role == "assistant":
             content = getattr(msg, "content", "") or (
                 msg.get("content", "") if isinstance(msg, dict) else ""
             )
