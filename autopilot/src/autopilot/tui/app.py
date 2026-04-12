@@ -30,17 +30,22 @@ from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout import HSplit, Layout, Window
 from prompt_toolkit.widgets import TextArea
 
+import yaml
+
 from agentspan.agents import Agent, AgentRuntime, EventType, tool, wait_for_message_tool
 
+from autopilot.config import AutopilotConfig
 from autopilot.tui.commands import CommandResult, HELP_TEXT, parse_command
+from autopilot.tui.dashboard import render_dashboard
 from autopilot.tui.events import format_event
+from autopilot.tui.notifications import Notification, NotificationManager
 
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-SESSION_FILE = Path("/tmp/agentspan_claw.session")
+SESSION_FILE = Path.home() / ".agentspan" / "autopilot" / "session"
 _SEPARATOR = "\u2500" * 62
 _THIN_SEP = "\u2504" * 62
 
@@ -52,11 +57,48 @@ class AgentState(enum.Enum):
 
 
 # ---------------------------------------------------------------------------
+# Agent discovery from local filesystem
+# ---------------------------------------------------------------------------
+
+def _discover_agents(config: AutopilotConfig) -> list[dict]:
+    """Read agent directories from disk and return agent info dicts."""
+    agents_dir = config.agents_dir
+    if not agents_dir.exists():
+        return []
+
+    agents = []
+    for d in sorted(agents_dir.iterdir()):
+        if not d.is_dir():
+            continue
+        yaml_path = d / "agent.yaml"
+        if not yaml_path.exists():
+            continue
+
+        info: dict = {"name": d.name, "status": "active", "last_run": "", "trigger": ""}
+        try:
+            raw = yaml.safe_load(yaml_path.read_text()) or {}
+            trigger_cfg = raw.get("trigger", {})
+            if isinstance(trigger_cfg, dict):
+                info["trigger"] = trigger_cfg.get("type", "")
+            elif isinstance(trigger_cfg, str):
+                info["trigger"] = trigger_cfg
+            metadata = raw.get("metadata", {})
+            if isinstance(metadata, dict):
+                info["last_run"] = metadata.get("last_deployed", "")
+        except Exception:
+            info["status"] = "error"
+
+        agents.append(info)
+
+    return agents
+
+
+# ---------------------------------------------------------------------------
 # Orchestrator agent builder
 # ---------------------------------------------------------------------------
 
 def build_orchestrator():
-    """Build the Claw orchestrator agent."""
+    """Build the Claw orchestrator agent with full orchestrator toolset."""
 
     model = os.environ.get("AGENTSPAN_LLM_MODEL", "openai/gpt-4o")
 
@@ -69,17 +111,6 @@ def build_orchestrator():
     def reply_to_user(message: str) -> str:
         """Send your response to the user. Call this when done with the current request."""
         return "ok"
-
-    @tool
-    def list_available_agents() -> str:
-        """List all agent directories under ~/.agentspan/autopilot/agents/."""
-        agents_dir = Path.home() / ".agentspan" / "autopilot" / "agents"
-        if not agents_dir.exists():
-            return "No agents directory found. No agents created yet."
-        dirs = [d.name for d in agents_dir.iterdir() if d.is_dir() and (d / "agent.yaml").exists()]
-        if not dirs:
-            return "No agents found."
-        return "Available agents:\n" + "\n".join(f"  - {d}" for d in sorted(dirs))
 
     @tool
     def read_agent_config(agent_name: str) -> str:
@@ -96,41 +127,68 @@ def build_orchestrator():
             result.append(f"=== expanded_prompt.md ===\n{prompt_path.read_text()}")
         return "\n\n".join(result) if result else f"Agent '{agent_name}' has no config files."
 
+    # Core TUI tools + all orchestrator creation/management/credential tools
+    all_tools = [
+        receive_message,
+        reply_to_user,
+        read_agent_config,
+    ] + get_orchestrator_tools()
+
     agent = Agent(
         name="claw_orchestrator",
         model=model,
-        tools=[
-            receive_message,
-            reply_to_user,
-            list_available_agents,
-            read_agent_config,
-        ],
+        tools=all_tools,
         max_turns=100_000,
         stateful=True,
-        instructions=f"""You are the Agentspan Claw orchestrator — an AI assistant that helps users create and manage autonomous agents.
+        instructions="""\
+You are the Agentspan Claw orchestrator — an AI assistant that autonomously
+creates, deploys, and manages agents on behalf of the user.
 
-You can help users:
-- Understand what agents are available
-- Create new agents by expanding their requirements into full specifications
-- Monitor and manage running agents
-- Answer questions about agent capabilities
+Your job is to turn lazy, minimal user prompts into fully functional agents.
 
-Available tools:
-- reply_to_user(message): Send your response to the user
-- list_available_agents(): List all configured agents
-- read_agent_config(agent_name): Read an agent's configuration
+## Workflow
 
-When the user asks to create an agent, help them think through:
-1. What the agent should do (the task)
-2. What integrations it needs (email, web search, etc.)
-3. How often it should run (schedule, event-driven, always-on)
-4. What credentials it needs
+When a user asks you to create an agent:
 
-Keep responses concise and actionable.
+1. Ask 1-2 critical clarifying questions (only when there is no reasonable default).
+2. Call expand_prompt() with the user's request and any clarifications.
+3. Use the returned template to generate a complete YAML agent specification.
+4. Call generate_agent() with the YAML spec to create the agent files.
+5. Call resolve_integrations() to check what's available and what's missing.
+6. Call check_credentials() to verify credential requirements.
+7. If everything is ready, call deploy_agent() to start the agent.
+8. Report back to the user with what was created and deployed.
+
+## Agent Management
+
+When a user asks to manage existing agents:
+
+- Use list_agents() to show all agents and their status.
+- Use get_agent_status() for detailed info on a specific agent.
+- Use signal_agent() for transient, one-time instructions to a running agent.
+- Use update_agent() for permanent changes to an agent's behavior.
+- Use pause_agent() and resume_agent() to control execution.
+- Use archive_agent() to deactivate an agent while keeping its files.
+- Use get_notifications() to check for recent agent outputs and alerts.
+- Use read_agent_config() to read raw config files for a specific agent.
+
+## Credentials
+
+- Use check_credentials() to see what credentials an agent needs.
+- Use prompt_credentials() to guide the user through setting up a credential.
+
+## Principles
+
+- Be proactive: smart-default everything you can.
+- Be concise: don't over-explain unless asked.
+- Be honest: if something fails, say what went wrong and suggest a fix.
+- Never invent credentials — check what's needed and guide the user to set them up.
+
+## Interaction Loop
 
 Repeat indefinitely:
 1. Call wait_for_message to receive the next user message.
-2. Process the request.
+2. Process the request using available tools.
 3. Call reply_to_user with your response.
 4. Return to step 1.
 """,
@@ -172,6 +230,9 @@ def _run_tui_repl(
     execution_id: str,
 ) -> None:
     """Full-screen TUI: scrollable output on top, persistent input on bottom."""
+
+    config = AutopilotConfig.from_env()
+    notif_manager = NotificationManager(config)
 
     agent_state = [AgentState.BUSY]
     _event_queue: queue.Queue = queue.Queue()
@@ -237,7 +298,9 @@ def _run_tui_repl(
 
         # Handle action commands that need server interaction
         if cmd.action == "signal" and cmd.agent_name and cmd.message:
-            # TODO: resolve agent_name to execution_id, then signal
+            # Signal the orchestrator's execution — the agent_name is passed
+            # as context so the orchestrator can route it to the right agent.
+            runtime.signal(execution_id, f"[signal:{cmd.agent_name}] {cmd.message}")
             _append(f"  Signal sent to {cmd.agent_name}: {cmd.message}\n")
             return
 
@@ -248,23 +311,78 @@ def _run_tui_repl(
             return
 
         if cmd.action == "list_agents":
-            _append(f"\n{_THIN_SEP}\nYou: list agents\n{_THIN_SEP}\n")
-            runtime.send_message(execution_id, {"text": "List all available agents and their status."})
+            agents = _discover_agents(config)
+            if not agents:
+                _append("\n  No agents found.\n")
+            else:
+                _append(f"\n  {'Name':<24} {'Status':<10} {'Trigger'}\n")
+                _append(f"  {'----':<24} {'------':<10} {'-------'}\n")
+                for a in agents:
+                    _append(f"  {a['name']:<24} {a['status']:<10} {a['trigger']}\n")
+                _append("")
             return
 
         if cmd.action == "status":
-            msg = f"Show status of agent '{cmd.agent_name}'" if cmd.agent_name else "Show overall status"
-            _append(f"\n{_THIN_SEP}\nYou: {msg}\n{_THIN_SEP}\n")
-            runtime.send_message(execution_id, {"text": msg})
+            if cmd.agent_name:
+                # Show status for a specific agent
+                agents = _discover_agents(config)
+                found = [a for a in agents if a["name"] == cmd.agent_name]
+                if found:
+                    a = found[0]
+                    _append(
+                        f"\n  Agent: {a['name']}\n"
+                        f"  Status: {a['status']}\n"
+                        f"  Trigger: {a['trigger']}\n"
+                        f"  Last run: {a['last_run'] or 'never'}\n"
+                    )
+                else:
+                    _append(f"\n  Agent '{cmd.agent_name}' not found.\n")
+            else:
+                # Overall status
+                agents = _discover_agents(config)
+                state_label = agent_state[0].value
+                _append(
+                    f"\n  Session: {execution_id}\n"
+                    f"  Orchestrator: {state_label}\n"
+                    f"  Agents: {len(agents)} configured\n"
+                    f"  Notifications: {notif_manager.unread_count()} unread\n"
+                )
             return
 
-        if cmd.action in ("dashboard", "notifications"):
-            _append(f"  [{cmd.action}] Coming soon.\n")
+        if cmd.action == "dashboard":
+            agents = _discover_agents(config)
+            notifs = [
+                {
+                    "agent_name": n.agent_name,
+                    "timestamp": n.timestamp,
+                    "summary": n.summary,
+                    "priority": n.priority,
+                    "read": n.read,
+                }
+                for n in notif_manager.get_all(limit=10)
+            ]
+            _append(render_dashboard(agents, notifs))
+            return
+
+        if cmd.action == "notifications":
+            unread = notif_manager.get_unread()
+            if not unread:
+                _append("\n  No unread notifications.\n")
+            else:
+                _append(f"\n  Unread notifications ({len(unread)}):\n")
+                for n in unread:
+                    icon = {"urgent": "(!)", "normal": "( )", "info": "(i)"}.get(n.priority, "( )")
+                    _append(f"  {icon} {n.timestamp[:16]}  {n.agent_name}: {n.summary}\n")
+                _append("")
             return
 
         if cmd.action in ("pause", "resume") and cmd.agent_name:
-            _append(f"\n{_THIN_SEP}\nYou: {cmd.action} {cmd.agent_name}\n{_THIN_SEP}\n")
-            runtime.send_message(execution_id, {"text": f"{cmd.action.title()} agent '{cmd.agent_name}'."})
+            # Signal the orchestrator to pause/resume the agent
+            runtime.signal(
+                execution_id,
+                f"[{cmd.action}:{cmd.agent_name}]",
+            )
+            _append(f"  {cmd.action.title()} signal sent for {cmd.agent_name}.\n")
             return
 
         # Normal chat message
@@ -405,6 +523,9 @@ def main() -> None:
             raise SystemExit(1)
     else:
         agent = build_orchestrator()
+
+    # Ensure session file directory exists
+    args.session_file.parent.mkdir(parents=True, exist_ok=True)
 
     with AgentRuntime() as runtime:
         if args.resume:

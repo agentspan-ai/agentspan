@@ -14,6 +14,16 @@ def format_event(event) -> str:
     etype = event.type
     args = event.args or {}
 
+    if etype == EventType.THINKING:
+        content = getattr(event, "content", None) or ""
+        if content:
+            # Show a truncated preview of thinking content
+            preview = content[:80].replace("\n", " ")
+            if len(content) > 80:
+                preview += "..."
+            return f"  [thinking] {preview}\n"
+        return "  [thinking] ...\n"
+
     if etype == EventType.TOOL_CALL:
         tool_name = event.tool_name or ""
 
@@ -45,8 +55,18 @@ def format_event(event) -> str:
         return ""
 
     if etype == EventType.HANDOFF:
-        target = getattr(event, "content", "") or ""
+        target = getattr(event, "target", None) or getattr(event, "content", "") or ""
         return f"  [handoff -> {target}]\n"
+
+    if etype == EventType.GUARDRAIL_PASS:
+        name = getattr(event, "guardrail_name", None) or "guardrail"
+        return f"  [guardrail PASS] {name}\n"
+
+    if etype == EventType.GUARDRAIL_FAIL:
+        name = getattr(event, "guardrail_name", None) or "guardrail"
+        content = getattr(event, "content", "") or ""
+        msg = f": {content}" if content else ""
+        return f"  [guardrail FAIL] {name}{msg}\n"
 
     if etype == EventType.ERROR:
         return f"\n[ERROR] {event.content}\n"
