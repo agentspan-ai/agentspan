@@ -796,6 +796,15 @@ def _parse_args() -> argparse.Namespace:
 def main() -> None:
     args = _parse_args()
 
+    # Check if we're running in an interactive terminal
+    if not sys.stdin.isatty():
+        print("Error: Agentspan Claw TUI requires an interactive terminal.")
+        print("Run this command directly in your terminal, not from a script or pipe.")
+        print()
+        print("  uv run python -m autopilot")
+        print()
+        raise SystemExit(1)
+
     # Build the agent
     if args.agent:
         # Check for run_interactive.py script first
@@ -811,8 +820,6 @@ def main() -> None:
             raise SystemExit(1)
     else:
         # Build with TUI-safe credential handling
-        # We pass None here and rebuild after app setup, but since the agent
-        # is built before the app, we use a deferred append function
         _deferred_output: list[str] = []
 
         def _deferred_append(text: str) -> None:
@@ -823,25 +830,34 @@ def main() -> None:
     # Ensure session file directory exists
     args.session_file.parent.mkdir(parents=True, exist_ok=True)
 
-    with AgentRuntime() as runtime:
-        if args.resume:
-            if not args.session_file.exists():
-                print(f"No session file found at {args.session_file}.")
-                print("Start a new session first (without --resume).")
-                raise SystemExit(1)
-            saved_eid = args.session_file.read_text().strip()
-            print(f"Resuming session: {saved_eid}")
-            handle = runtime.resume(saved_eid, agent)
-            execution_id = handle.execution_id
-        else:
-            handle = runtime.start(
-                agent,
-                "Begin. You are the Agentspan Claw orchestrator. Wait for the user's first message.",
-            )
-            execution_id = handle.execution_id
-            args.session_file.write_text(execution_id)
+    print("Starting Agentspan Claw...")
 
-        _run_tui_repl(runtime, handle, execution_id)
+    try:
+        with AgentRuntime() as runtime:
+            if args.resume:
+                if not args.session_file.exists():
+                    print(f"No session file found at {args.session_file}.")
+                    print("Start a new session first (without --resume).")
+                    raise SystemExit(1)
+                saved_eid = args.session_file.read_text().strip()
+                print(f"Resuming session: {saved_eid}")
+                handle = runtime.resume(saved_eid, agent)
+                execution_id = handle.execution_id
+            else:
+                handle = runtime.start(
+                    agent,
+                    "Begin. You are the Agentspan Claw orchestrator. Wait for the user's first message.",
+                )
+                execution_id = handle.execution_id
+                args.session_file.write_text(execution_id)
+
+            print(f"Session: {execution_id[:16]}...")
+            _run_tui_repl(runtime, handle, execution_id)
+    except KeyboardInterrupt:
+        print("\nShutting down...")
+    except Exception as exc:
+        print(f"\nError: {exc}")
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
