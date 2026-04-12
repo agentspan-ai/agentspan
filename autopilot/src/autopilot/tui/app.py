@@ -40,6 +40,7 @@ from autopilot.tui.commands import CommandResult, HELP_TEXT, parse_command
 from autopilot.tui.dashboard import render_dashboard
 from autopilot.tui.events import format_event
 from autopilot.tui.notifications import Notification, NotificationManager
+from autopilot.tui.poller import DashboardPoller
 
 
 # ---------------------------------------------------------------------------
@@ -155,10 +156,14 @@ When a user asks you to create an agent:
 2. Call expand_prompt() with the user's request and any clarifications.
 3. Use the returned template to generate a complete YAML agent specification.
 4. Call generate_agent() with the YAML spec to create the agent files.
-5. Call resolve_integrations() to check what's available and what's missing.
-6. Call check_credentials() to verify credential requirements.
-7. If everything is ready, call deploy_agent() to start the agent.
-8. Report back to the user with what was created and deployed.
+5. **Validation gates** — run each gate in order, fix issues before proceeding:
+   a. Call validate_spec() — if FAIL, fix the spec and retry (up to 3 times).
+   b. Call validate_code() — if FAIL, regenerate or fix worker code and retry (up to 3 times).
+   c. Call validate_integrations() — if FAIL, resolve missing integrations/credentials and retry (up to 3 times).
+   d. Call validate_deployment() — if FAIL, fix the issue and retry (up to 3 times).
+   If a gate still fails after 3 retries, report the errors to the user and stop.
+6. If all gates pass, call deploy_agent() to start the agent.
+7. Report back to the user with what was created and deployed.
 
 ## Agent Management
 
