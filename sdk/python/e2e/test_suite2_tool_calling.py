@@ -353,9 +353,10 @@ class TestSuite2ToolCalling:
             # The SDK resolves credentials from the server, not env.
             output_env = _get_output_text(result_env)
 
-            # If the tool returned "fro" (first 3 chars of "from-env-..."),
-            # that means env vars leaked — FAIL the test.
-            assert "fro" not in output_env, (
+            # Check for "from-env" (unique prefix of our test env values).
+            # Using "fro" caused false positives when LLM prose contained
+            # "from" in normal words.
+            assert "from-env" not in output_env, (
                 "SECURITY VIOLATION: env vars were read for credential "
                 "resolution! The SDK MUST NOT resolve credentials from "
                 "environment variables — only from the server.\n"

@@ -141,13 +141,13 @@ describe('Suite 2: Tool Calling / Credential Lifecycle', { timeout: 300_000 }, (
       expect(['COMPLETED', 'FAILED', 'TERMINATED']).toContain(resultEnv.status);
 
       const outputEnv = getOutputText(resultEnv as unknown as { output: unknown });
-      // "fro" = first 3 chars of "from-env-aaa" / "from-env-bbb"
-      // These env values must NOT appear in output — credentials come from
-      // the credential store, not the process environment.
+      // Check for "from-env" (the unique prefix of our test env values
+      // "from-env-aaa" / "from-env-bbb"). Using "fro" caused false positives
+      // when LLM prose contained "from" in normal words.
       expect(
         outputEnv,
         `[Env security] env-var values leaked into output: ${outputEnv.slice(0, 300)}`,
-      ).not.toContain('fro');
+      ).not.toContain('from-env');
     } finally {
       delete process.env.E2E_TS_CRED_A;
       delete process.env.E2E_TS_CRED_B;
