@@ -102,24 +102,37 @@ async function discoverMcpTools(serverUrl: string, authKey?: string): Promise<st
   return result.tools.map((t: { name: string }) => t.name).sort();
 }
 
-// Fallback: fetch OpenAPI spec from REST API
+// Fallback: fetch OpenAPI spec from REST API (with retry for server readiness)
 async function discoverToolsViaOpenApi(baseUrl: string, authKey?: string): Promise<string[]> {
   const headers: Record<string, string> = {};
   if (authKey) headers.Authorization = `Bearer ${authKey}`;
 
-  const resp = await fetch(`${baseUrl}/api-docs`, { headers, signal: AbortSignal.timeout(10_000) });
-  if (!resp.ok) throw new Error(`OpenAPI fetch failed: ${resp.status}`);
-  const spec = (await resp.json()) as Record<string, unknown>;
-  const paths = (spec.paths ?? {}) as Record<string, Record<string, Record<string, unknown>>>;
-  const operations: string[] = [];
-  for (const methods of Object.values(paths)) {
-    for (const op of Object.values(methods)) {
-      if (typeof op === 'object' && op && 'operationId' in op) {
-        operations.push(op.operationId as string);
+  // Retry up to 3 times with 2s backoff — mcp-testkit may not be fully ready
+  // after restart (especially in CI where processes start slower)
+  let lastError: Error | undefined;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const resp = await fetch(`${baseUrl}/api-docs`, { headers, signal: AbortSignal.timeout(10_000) });
+      if (!resp.ok) throw new Error(`OpenAPI fetch failed: ${resp.status}`);
+      const spec = (await resp.json()) as Record<string, unknown>;
+      const paths = (spec.paths ?? {}) as Record<string, Record<string, Record<string, unknown>>>;
+      const operations: string[] = [];
+      for (const methods of Object.values(paths)) {
+        for (const op of Object.values(methods)) {
+          if (typeof op === 'object' && op && 'operationId' in op) {
+            operations.push(op.operationId as string);
+          }
+        }
+      }
+      return operations.sort();
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt < 2) {
+        await new Promise((r) => setTimeout(r, 2000));
       }
     }
   }
-  return operations.sort();
+  throw lastError!;
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────
