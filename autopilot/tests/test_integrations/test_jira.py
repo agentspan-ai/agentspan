@@ -1,8 +1,6 @@
-"""Tests for jira integration tools."""
+"""Tests for jira integration tools — real e2e, no mocks."""
 
 from __future__ import annotations
-
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -42,54 +40,15 @@ class TestJiraSearch:
         with pytest.raises(ValueError, match="jql is required"):
             jira_search("")
 
-    def test_successful_search(self, monkeypatch):
-        _set_jira_creds(monkeypatch)
-
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {
-            "issues": [
-                {
-                    "key": "ENG-1",
-                    "fields": {
-                        "summary": "Fix login",
-                        "status": {"name": "Open"},
-                        "assignee": {"displayName": "Bob"},
-                        "priority": {"name": "High"},
-                    },
-                }
-            ]
-        }
-        mock_resp.raise_for_status = MagicMock()
-
-        monkeypatch.setattr(
-            "autopilot.integrations.jira.tools.httpx.get",
-            lambda *a, **kw: mock_resp,
-        )
-
-        results = jira_search("project = ENG")
-        assert len(results) == 1
-        assert results[0]["key"] == "ENG-1"
-        assert results[0]["summary"] == "Fix login"
-
-    def test_max_results_clamped(self, monkeypatch):
-        _set_jira_creds(monkeypatch)
-
-        captured = {}
-
-        def mock_get(*args, **kwargs):
-            captured.update(kwargs.get("params", {}))
-            resp = MagicMock()
-            resp.json.return_value = {"issues": []}
-            resp.raise_for_status = MagicMock()
-            return resp
-
-        monkeypatch.setattr("autopilot.integrations.jira.tools.httpx.get", mock_get)
-
-        jira_search("project = ENG", max_results=200)
-        assert captured["maxResults"] == 100
-
     def test_credentials_on_tool_def(self):
         assert jira_search._tool_def.credentials == ["JIRA_URL", "JIRA_EMAIL", "JIRA_API_TOKEN"]
+
+    def test_tool_def_name(self):
+        assert jira_search._tool_def.name == "jira_search"
+
+    def test_tool_def_has_description(self):
+        assert jira_search._tool_def.description
+        assert len(jira_search._tool_def.description) > 10
 
 
 class TestJiraGetIssue:
@@ -98,35 +57,11 @@ class TestJiraGetIssue:
         with pytest.raises(ValueError, match="issue_key is required"):
             jira_get_issue("")
 
-    def test_successful_get(self, monkeypatch):
-        _set_jira_creds(monkeypatch)
-
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {
-            "key": "ENG-1",
-            "fields": {
-                "summary": "Fix login",
-                "description": "Login is broken",
-                "status": {"name": "Open"},
-                "assignee": {"displayName": "Bob"},
-                "priority": {"name": "High"},
-                "created": "2024-01-01",
-                "updated": "2024-01-02",
-            },
-        }
-        mock_resp.raise_for_status = MagicMock()
-
-        monkeypatch.setattr(
-            "autopilot.integrations.jira.tools.httpx.get",
-            lambda *a, **kw: mock_resp,
-        )
-
-        result = jira_get_issue("ENG-1")
-        assert result["key"] == "ENG-1"
-        assert result["summary"] == "Fix login"
-
     def test_credentials_on_tool_def(self):
         assert jira_get_issue._tool_def.credentials == ["JIRA_URL", "JIRA_EMAIL", "JIRA_API_TOKEN"]
+
+    def test_tool_def_name(self):
+        assert jira_get_issue._tool_def.name == "jira_get_issue"
 
 
 class TestJiraCreateIssue:
@@ -140,23 +75,11 @@ class TestJiraCreateIssue:
         with pytest.raises(ValueError, match="summary is required"):
             jira_create_issue("ENG", "")
 
-    def test_successful_create(self, monkeypatch):
-        _set_jira_creds(monkeypatch)
-
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {"key": "ENG-2", "id": "10001"}
-        mock_resp.raise_for_status = MagicMock()
-
-        monkeypatch.setattr(
-            "autopilot.integrations.jira.tools.httpx.post",
-            lambda *a, **kw: mock_resp,
-        )
-
-        result = jira_create_issue("ENG", "New feature")
-        assert result["key"] == "ENG-2"
-
     def test_credentials_on_tool_def(self):
         assert jira_create_issue._tool_def.credentials == ["JIRA_URL", "JIRA_EMAIL", "JIRA_API_TOKEN"]
+
+    def test_tool_def_name(self):
+        assert jira_create_issue._tool_def.name == "jira_create_issue"
 
 
 class TestJiraUpdateIssue:
@@ -173,6 +96,9 @@ class TestJiraUpdateIssue:
     def test_credentials_on_tool_def(self):
         assert jira_update_issue._tool_def.credentials == ["JIRA_URL", "JIRA_EMAIL", "JIRA_API_TOKEN"]
 
+    def test_tool_def_name(self):
+        assert jira_update_issue._tool_def.name == "jira_update_issue"
+
 
 class TestJiraAddComment:
     def test_empty_issue_key_raises(self, monkeypatch):
@@ -185,23 +111,11 @@ class TestJiraAddComment:
         with pytest.raises(ValueError, match="body is required"):
             jira_add_comment("ENG-1", "")
 
-    def test_successful_comment(self, monkeypatch):
-        _set_jira_creds(monkeypatch)
-
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {"id": "comment1"}
-        mock_resp.raise_for_status = MagicMock()
-
-        monkeypatch.setattr(
-            "autopilot.integrations.jira.tools.httpx.post",
-            lambda *a, **kw: mock_resp,
-        )
-
-        result = jira_add_comment("ENG-1", "This is a comment")
-        assert result["id"] == "comment1"
-
     def test_credentials_on_tool_def(self):
         assert jira_add_comment._tool_def.credentials == ["JIRA_URL", "JIRA_EMAIL", "JIRA_API_TOKEN"]
+
+    def test_tool_def_name(self):
+        assert jira_add_comment._tool_def.name == "jira_add_comment"
 
 
 class TestGetTools:

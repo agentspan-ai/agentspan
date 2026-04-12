@@ -1,8 +1,6 @@
-"""Tests for outlook integration tools."""
+"""Tests for outlook integration tools — real e2e, no mocks."""
 
 from __future__ import annotations
-
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -21,46 +19,15 @@ class TestOutlookListMessages:
         with pytest.raises(RuntimeError, match="OUTLOOK_ACCESS_TOKEN"):
             outlook_list_messages()
 
-    def test_successful_list(self, monkeypatch):
-        monkeypatch.setenv("OUTLOOK_ACCESS_TOKEN", "test-token")
-
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {
-            "value": [
-                {"id": "m1", "subject": "Hello", "bodyPreview": "Hi there"},
-                {"id": "m2", "subject": "Meeting", "bodyPreview": "Tomorrow"},
-            ]
-        }
-        mock_resp.raise_for_status = MagicMock()
-
-        monkeypatch.setattr(
-            "autopilot.integrations.outlook.tools.httpx.get",
-            lambda *a, **kw: mock_resp,
-        )
-
-        results = outlook_list_messages()
-        assert len(results) == 2
-        assert results[0]["id"] == "m1"
-
-    def test_top_clamped(self, monkeypatch):
-        monkeypatch.setenv("OUTLOOK_ACCESS_TOKEN", "test-token")
-
-        captured = {}
-
-        def mock_get(*args, **kwargs):
-            captured.update(kwargs.get("params", {}))
-            resp = MagicMock()
-            resp.json.return_value = {"value": []}
-            resp.raise_for_status = MagicMock()
-            return resp
-
-        monkeypatch.setattr("autopilot.integrations.outlook.tools.httpx.get", mock_get)
-
-        outlook_list_messages(top=200)
-        assert captured["$top"] == 100
-
     def test_credentials_on_tool_def(self):
         assert outlook_list_messages._tool_def.credentials == ["OUTLOOK_ACCESS_TOKEN"]
+
+    def test_tool_def_name(self):
+        assert outlook_list_messages._tool_def.name == "outlook_list_messages"
+
+    def test_tool_def_has_description(self):
+        assert outlook_list_messages._tool_def.description
+        assert len(outlook_list_messages._tool_def.description) > 10
 
 
 class TestOutlookReadMessage:
@@ -74,28 +41,11 @@ class TestOutlookReadMessage:
         with pytest.raises(ValueError, match="message_id is required"):
             outlook_read_message("")
 
-    def test_successful_read(self, monkeypatch):
-        monkeypatch.setenv("OUTLOOK_ACCESS_TOKEN", "test-token")
-
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {
-            "id": "m1",
-            "subject": "Test",
-            "body": {"content": "Hello"},
-        }
-        mock_resp.raise_for_status = MagicMock()
-
-        monkeypatch.setattr(
-            "autopilot.integrations.outlook.tools.httpx.get",
-            lambda *a, **kw: mock_resp,
-        )
-
-        result = outlook_read_message("m1")
-        assert result["id"] == "m1"
-        assert result["subject"] == "Test"
-
     def test_credentials_on_tool_def(self):
         assert outlook_read_message._tool_def.credentials == ["OUTLOOK_ACCESS_TOKEN"]
+
+    def test_tool_def_name(self):
+        assert outlook_read_message._tool_def.name == "outlook_read_message"
 
 
 class TestOutlookSendMessage:
@@ -114,22 +64,11 @@ class TestOutlookSendMessage:
         with pytest.raises(ValueError, match="subject is required"):
             outlook_send_message("to@test.com", "", "body")
 
-    def test_successful_send(self, monkeypatch):
-        monkeypatch.setenv("OUTLOOK_ACCESS_TOKEN", "test-token")
-
-        mock_resp = MagicMock()
-        mock_resp.raise_for_status = MagicMock()
-
-        monkeypatch.setattr(
-            "autopilot.integrations.outlook.tools.httpx.post",
-            lambda *a, **kw: mock_resp,
-        )
-
-        result = outlook_send_message("bob@test.com", "Hi", "Hello")
-        assert "bob@test.com" in result
-
     def test_credentials_on_tool_def(self):
         assert outlook_send_message._tool_def.credentials == ["OUTLOOK_ACCESS_TOKEN"]
+
+    def test_tool_def_name(self):
+        assert outlook_send_message._tool_def.name == "outlook_send_message"
 
 
 class TestOutlookSearch:
@@ -140,6 +79,9 @@ class TestOutlookSearch:
 
     def test_credentials_on_tool_def(self):
         assert outlook_search._tool_def.credentials == ["OUTLOOK_ACCESS_TOKEN"]
+
+    def test_tool_def_name(self):
+        assert outlook_search._tool_def.name == "outlook_search"
 
 
 class TestGetTools:

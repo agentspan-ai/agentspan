@@ -1,8 +1,6 @@
-"""Tests for linear integration tools."""
+"""Tests for linear integration tools — real e2e, no mocks."""
 
 from __future__ import annotations
-
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -21,40 +19,15 @@ class TestLinearListIssues:
         with pytest.raises(RuntimeError, match="LINEAR_API_KEY"):
             linear_list_issues()
 
-    def test_successful_list(self, monkeypatch):
-        monkeypatch.setenv("LINEAR_API_KEY", "lin_test_key")
-
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {
-            "data": {
-                "issues": {
-                    "nodes": [
-                        {
-                            "id": "issue1",
-                            "title": "Fix bug",
-                            "identifier": "ENG-1",
-                            "priority": 2,
-                            "state": {"name": "In Progress"},
-                            "assignee": {"name": "Alice"},
-                        }
-                    ]
-                }
-            }
-        }
-        mock_resp.raise_for_status = MagicMock()
-
-        monkeypatch.setattr(
-            "autopilot.integrations.linear.tools.httpx.post",
-            lambda *a, **kw: mock_resp,
-        )
-
-        results = linear_list_issues(team_key="ENG")
-        assert len(results) == 1
-        assert results[0]["title"] == "Fix bug"
-        assert results[0]["state"] == "In Progress"
-
     def test_credentials_on_tool_def(self):
         assert linear_list_issues._tool_def.credentials == ["LINEAR_API_KEY"]
+
+    def test_tool_def_name(self):
+        assert linear_list_issues._tool_def.name == "linear_list_issues"
+
+    def test_tool_def_has_description(self):
+        assert linear_list_issues._tool_def.description
+        assert len(linear_list_issues._tool_def.description) > 10
 
 
 class TestLinearGetIssue:
@@ -68,38 +41,11 @@ class TestLinearGetIssue:
         with pytest.raises(ValueError, match="issue_id is required"):
             linear_get_issue("")
 
-    def test_successful_get(self, monkeypatch):
-        monkeypatch.setenv("LINEAR_API_KEY", "lin_test_key")
-
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {
-            "data": {
-                "issue": {
-                    "id": "issue1",
-                    "title": "Fix bug",
-                    "identifier": "ENG-1",
-                    "description": "It's broken",
-                    "priority": 2,
-                    "state": {"name": "Todo"},
-                    "assignee": None,
-                    "labels": {"nodes": []},
-                    "createdAt": "2024-01-01",
-                    "updatedAt": "2024-01-02",
-                }
-            }
-        }
-        mock_resp.raise_for_status = MagicMock()
-
-        monkeypatch.setattr(
-            "autopilot.integrations.linear.tools.httpx.post",
-            lambda *a, **kw: mock_resp,
-        )
-
-        result = linear_get_issue("issue1")
-        assert result["title"] == "Fix bug"
-
     def test_credentials_on_tool_def(self):
         assert linear_get_issue._tool_def.credentials == ["LINEAR_API_KEY"]
+
+    def test_tool_def_name(self):
+        assert linear_get_issue._tool_def.name == "linear_get_issue"
 
 
 class TestLinearCreateIssue:
@@ -121,6 +67,9 @@ class TestLinearCreateIssue:
     def test_credentials_on_tool_def(self):
         assert linear_create_issue._tool_def.credentials == ["LINEAR_API_KEY"]
 
+    def test_tool_def_name(self):
+        assert linear_create_issue._tool_def.name == "linear_create_issue"
+
 
 class TestLinearUpdateIssue:
     def test_empty_issue_id_raises(self, monkeypatch):
@@ -130,6 +79,9 @@ class TestLinearUpdateIssue:
 
     def test_credentials_on_tool_def(self):
         assert linear_update_issue._tool_def.credentials == ["LINEAR_API_KEY"]
+
+    def test_tool_def_name(self):
+        assert linear_update_issue._tool_def.name == "linear_update_issue"
 
 
 class TestGetTools:

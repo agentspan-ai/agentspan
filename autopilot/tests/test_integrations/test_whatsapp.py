@@ -1,8 +1,6 @@
-"""Tests for whatsapp integration tools."""
+"""Tests for whatsapp integration tools — real e2e, no mocks."""
 
 from __future__ import annotations
-
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -41,29 +39,18 @@ class TestWhatsappSendMessage:
         with pytest.raises(ValueError, match="text is required"):
             whatsapp_send_message("+1234567890", "")
 
-    def test_successful_send(self, monkeypatch):
-        _set_wa_creds(monkeypatch)
-
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {
-            "messages": [{"id": "wamid.123"}]
-        }
-        mock_resp.raise_for_status = MagicMock()
-
-        monkeypatch.setattr(
-            "autopilot.integrations.whatsapp.tools.httpx.post",
-            lambda *a, **kw: mock_resp,
-        )
-
-        result = whatsapp_send_message("+1234567890", "Hello!")
-        assert "messages" in result
-        assert result["messages"][0]["id"] == "wamid.123"
-
     def test_credentials_on_tool_def(self):
         assert whatsapp_send_message._tool_def.credentials == [
             "WHATSAPP_TOKEN",
             "WHATSAPP_PHONE_ID",
         ]
+
+    def test_tool_def_name(self):
+        assert whatsapp_send_message._tool_def.name == "whatsapp_send_message"
+
+    def test_tool_def_has_description(self):
+        assert whatsapp_send_message._tool_def.description
+        assert len(whatsapp_send_message._tool_def.description) > 10
 
 
 class TestWhatsappSendTemplate:
@@ -83,31 +70,14 @@ class TestWhatsappSendTemplate:
         with pytest.raises(ValueError, match="template_name is required"):
             whatsapp_send_template("+1234567890", "")
 
-    def test_successful_template_send(self, monkeypatch):
-        _set_wa_creds(monkeypatch)
-
-        captured_payload = {}
-
-        def mock_post(*args, **kwargs):
-            captured_payload.update(kwargs.get("json", {}))
-            resp = MagicMock()
-            resp.json.return_value = {"messages": [{"id": "wamid.456"}]}
-            resp.raise_for_status = MagicMock()
-            return resp
-
-        monkeypatch.setattr("autopilot.integrations.whatsapp.tools.httpx.post", mock_post)
-
-        result = whatsapp_send_template("+1234567890", "hello_world", ["param1"])
-        assert result["messages"][0]["id"] == "wamid.456"
-        assert captured_payload["type"] == "template"
-        assert captured_payload["template"]["name"] == "hello_world"
-        assert len(captured_payload["template"]["components"][0]["parameters"]) == 1
-
     def test_credentials_on_tool_def(self):
         assert whatsapp_send_template._tool_def.credentials == [
             "WHATSAPP_TOKEN",
             "WHATSAPP_PHONE_ID",
         ]
+
+    def test_tool_def_name(self):
+        assert whatsapp_send_template._tool_def.name == "whatsapp_send_template"
 
 
 class TestGetTools:

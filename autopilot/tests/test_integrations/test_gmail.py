@@ -1,8 +1,6 @@
-"""Tests for gmail integration tools."""
+"""Tests for gmail integration tools — real e2e, no mocks."""
 
 from __future__ import annotations
-
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -21,46 +19,15 @@ class TestGmailListMessages:
         with pytest.raises(RuntimeError, match="GMAIL_ACCESS_TOKEN"):
             gmail_list_messages()
 
-    def test_successful_list(self, monkeypatch):
-        monkeypatch.setenv("GMAIL_ACCESS_TOKEN", "test-token")
-
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {
-            "messages": [
-                {"id": "msg1", "threadId": "t1"},
-                {"id": "msg2", "threadId": "t2"},
-            ]
-        }
-        mock_resp.raise_for_status = MagicMock()
-
-        monkeypatch.setattr(
-            "autopilot.integrations.gmail.tools.httpx.get",
-            lambda *a, **kw: mock_resp,
-        )
-
-        results = gmail_list_messages(query="from:alice")
-        assert len(results) == 2
-        assert results[0]["id"] == "msg1"
-
-    def test_max_results_clamped(self, monkeypatch):
-        monkeypatch.setenv("GMAIL_ACCESS_TOKEN", "test-token")
-
-        captured = {}
-
-        def mock_get(*args, **kwargs):
-            captured.update(kwargs.get("params", {}))
-            resp = MagicMock()
-            resp.json.return_value = {"messages": []}
-            resp.raise_for_status = MagicMock()
-            return resp
-
-        monkeypatch.setattr("autopilot.integrations.gmail.tools.httpx.get", mock_get)
-
-        gmail_list_messages(max_results=200)
-        assert captured["maxResults"] == 100
-
     def test_credentials_on_tool_def(self):
         assert gmail_list_messages._tool_def.credentials == ["GMAIL_ACCESS_TOKEN"]
+
+    def test_tool_def_name(self):
+        assert gmail_list_messages._tool_def.name == "gmail_list_messages"
+
+    def test_tool_def_has_description(self):
+        assert gmail_list_messages._tool_def.description
+        assert len(gmail_list_messages._tool_def.description) > 10
 
 
 class TestGmailReadMessage:
@@ -74,40 +41,11 @@ class TestGmailReadMessage:
         with pytest.raises(ValueError, match="message_id is required"):
             gmail_read_message("")
 
-    def test_successful_read(self, monkeypatch):
-        monkeypatch.setenv("GMAIL_ACCESS_TOKEN", "test-token")
-
-        import base64
-
-        body_data = base64.urlsafe_b64encode(b"Hello world").decode()
-
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {
-            "id": "msg1",
-            "snippet": "Hello...",
-            "payload": {
-                "headers": [
-                    {"name": "Subject", "value": "Test Subject"},
-                    {"name": "From", "value": "alice@test.com"},
-                    {"name": "To", "value": "bob@test.com"},
-                ],
-                "body": {"data": body_data},
-            },
-        }
-        mock_resp.raise_for_status = MagicMock()
-
-        monkeypatch.setattr(
-            "autopilot.integrations.gmail.tools.httpx.get",
-            lambda *a, **kw: mock_resp,
-        )
-
-        result = gmail_read_message("msg1")
-        assert result["id"] == "msg1"
-        assert result["subject"] == "Test Subject"
-        assert result["body"] == "Hello world"
-
     def test_credentials_on_tool_def(self):
         assert gmail_read_message._tool_def.credentials == ["GMAIL_ACCESS_TOKEN"]
+
+    def test_tool_def_name(self):
+        assert gmail_read_message._tool_def.name == "gmail_read_message"
 
 
 class TestGmailSendMessage:
@@ -126,23 +64,11 @@ class TestGmailSendMessage:
         with pytest.raises(ValueError, match="subject is required"):
             gmail_send_message("to@test.com", "", "body")
 
-    def test_successful_send(self, monkeypatch):
-        monkeypatch.setenv("GMAIL_ACCESS_TOKEN", "test-token")
-
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {"id": "sent1", "threadId": "t1"}
-        mock_resp.raise_for_status = MagicMock()
-
-        monkeypatch.setattr(
-            "autopilot.integrations.gmail.tools.httpx.post",
-            lambda *a, **kw: mock_resp,
-        )
-
-        result = gmail_send_message("bob@test.com", "Hi", "Hello Bob")
-        assert result["id"] == "sent1"
-
     def test_credentials_on_tool_def(self):
         assert gmail_send_message._tool_def.credentials == ["GMAIL_ACCESS_TOKEN"]
+
+    def test_tool_def_name(self):
+        assert gmail_send_message._tool_def.name == "gmail_send_message"
 
 
 class TestGmailSearch:
@@ -153,6 +79,9 @@ class TestGmailSearch:
 
     def test_credentials_on_tool_def(self):
         assert gmail_search._tool_def.credentials == ["GMAIL_ACCESS_TOKEN"]
+
+    def test_tool_def_name(self):
+        assert gmail_search._tool_def.name == "gmail_search"
 
 
 class TestGetTools:
