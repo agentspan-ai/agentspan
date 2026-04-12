@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -99,4 +100,87 @@ func TestServerPSRemovesStalePIDFile(t *testing.T) {
 	if _, err := os.Stat(pidFile()); !os.IsNotExist(err) {
 		t.Fatalf("expected stale pid file to be removed, stat err=%v", err)
 	}
+}
+
+func TestServerStartUsesRequestedVersion(t *testing.T) {
+	newTempHome(t)
+
+	prevEnsureLatest := serverEnsureLatestJAR
+	prevEnsureVersioned := serverEnsureVersionedJAR
+	prevFindLocal := serverFindLocalJAR
+	prevCheckJava := serverCheckJava
+	prevCheckAI := serverCheckAIProviderKeys
+	prevProcessRunning := serverProcessRunning
+	prevServerJar := serverJar
+	prevServerLocal := serverLocal
+	prevServerVersion := serverVersion
+	prevServerPort := serverPort
+	prevServerModel := serverModel
+	t.Cleanup(func() {
+		serverEnsureLatestJAR = prevEnsureLatest
+		serverEnsureVersionedJAR = prevEnsureVersioned
+		serverFindLocalJAR = prevFindLocal
+		serverCheckJava = prevCheckJava
+		serverCheckAIProviderKeys = prevCheckAI
+		serverProcessRunning = prevProcessRunning
+		serverJar = prevServerJar
+		serverLocal = prevServerLocal
+		serverVersion = prevServerVersion
+		serverPort = prevServerPort
+		serverModel = prevServerModel
+	})
+
+	serverJar = ""
+	serverLocal = false
+	serverVersion = "1.2.3"
+	serverPort = freeTCPPort(t)
+	serverModel = ""
+	serverProcessRunning = func(int) bool { return false }
+
+	versionedCalled := false
+	var gotJarPath, gotVersion string
+	serverEnsureVersionedJAR = func(jarPath, version string) error {
+		versionedCalled = true
+		gotJarPath = jarPath
+		gotVersion = version
+		return nil
+	}
+	serverEnsureLatestJAR = func(string) error {
+		t.Fatal("ensureLatestJAR should not be called when --version is set")
+		return nil
+	}
+	serverFindLocalJAR = func() (string, error) {
+		t.Fatal("findLocalJAR should not be called when --version is set")
+		return "", nil
+	}
+	serverCheckAIProviderKeys = func() {}
+	serverCheckJava = func() (bool, string) { return false, "" }
+
+	err := runServerStart(serverStartCmd, nil)
+	if err == nil {
+		t.Fatal("expected runServerStart to stop at Java validation in test")
+	}
+	if !strings.Contains(err.Error(), "Java is not installed") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !versionedCalled {
+		t.Fatal("expected versioned JAR downloader to be called")
+	}
+	wantJarPath := filepath.Join(serverDir(), "agentspan-runtime-1.2.3.jar")
+	if gotJarPath != wantJarPath {
+		t.Fatalf("jar path = %q, want %q", gotJarPath, wantJarPath)
+	}
+	if gotVersion != "1.2.3" {
+		t.Fatalf("version = %q, want %q", gotVersion, "1.2.3")
+	}
+}
+
+func freeTCPPort(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("allocate free port: %v", err)
+	}
+	defer ln.Close()
+	return strings.TrimPrefix(ln.Addr().String(), "127.0.0.1:")
 }

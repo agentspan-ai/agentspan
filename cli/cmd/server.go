@@ -36,7 +36,12 @@ var (
 	followLogs    bool
 	tailLines     int
 
-	serverProcessRunning = processRunning
+	serverProcessRunning      = processRunning
+	serverEnsureLatestJAR     = ensureLatestJAR
+	serverEnsureVersionedJAR  = ensureVersionedJAR
+	serverFindLocalJAR        = findLocalJAR
+	serverCheckJava           = checkJava
+	serverCheckAIProviderKeys = checkAIProviderKeys
 )
 
 var serverCmd = &cobra.Command{
@@ -117,7 +122,7 @@ func runServerStart(cmd *cobra.Command, args []string) error {
 
 	case serverLocal:
 		// Find locally built JAR by walking up from executable or CWD
-		localJar, err := findLocalJAR()
+		localJar, err := serverFindLocalJAR()
 		if err != nil {
 			return err
 		}
@@ -126,13 +131,13 @@ func runServerStart(cmd *cobra.Command, args []string) error {
 
 	case serverVersion != "":
 		jarPath = filepath.Join(dir, fmt.Sprintf("agentspan-runtime-%s.jar", serverVersion))
-		if err := ensureVersionedJAR(jarPath, serverVersion); err != nil {
+		if err := serverEnsureVersionedJAR(jarPath, serverVersion); err != nil {
 			return err
 		}
 
 	default:
 		jarPath = filepath.Join(dir, jarName)
-		if err := ensureLatestJAR(jarPath); err != nil {
+		if err := serverEnsureLatestJAR(jarPath); err != nil {
 			return err
 		}
 	}
@@ -153,10 +158,10 @@ func runServerStart(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("port %s is already in use. Stop the other process or use --port to choose a different port.", serverPort)
 	}
 
-	checkAIProviderKeys()
+	serverCheckAIProviderKeys()
 
 	// Validate JDK before launching java
-	javaOk, javaVersion := checkJava()
+	javaOk, javaVersion := serverCheckJava()
 	if !javaOk {
 		if javaVersion != "" {
 			return fmt.Errorf(
