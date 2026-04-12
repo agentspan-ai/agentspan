@@ -98,7 +98,6 @@ const graph = builder.compile({ name: "sentiment_router" });
 // Add agentspan metadata for extraction (no LLM in this pipeline example)
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',
-  tools: [],
   framework: 'langgraph',
 };
 

@@ -42,14 +42,19 @@ export function serializeLangGraph(
   // Find model: explicit option > graph introspection > _agentspan metadata
   const modelStr = optionModel ?? _findModelInGraph(graph) ?? metadataModel ?? null;
 
-  // Path 1: Full extraction — react agents with model + ToolNode (matching Python)
-  // Requires BOTH model and tools. Python uses __closure__ to always find the model;
-  // in JS, closures are sealed, so users must provide it via _agentspan metadata,
-  // the wrapper import, or the model option in run()/deploy().
+  // Path 1: Full extraction — react agents with model + tools in graph.
   const toolObjs = _findToolsInGraph(graph);
   if (modelStr && toolObjs.length > 0) {
     const instructions = metadata?.instructions as string | undefined;
     return _serializeFullExtraction(name, modelStr, toolObjs, instructions);
+  }
+
+  // React agent with no tools: detected by having "agent" + "tools" nodes
+  // (createReactAgent pattern) but no extractable tool objects.
+  // These can't use graph-structure (internal nodes aren't plain functions).
+  if (modelStr && toolObjs.length === 0 && _isReactAgentGraph(graph)) {
+    const instructions = metadata?.instructions as string | undefined;
+    return _serializeFullExtraction(name, modelStr, [], instructions);
   }
 
   // Resolve the LLM object: explicit option > _agentspan.llm metadata
@@ -396,6 +401,14 @@ function _serializeGraphStructure(
   // Extract input_key from input schema
   const inputKey = _extractInputKey(graph);
   if (inputKey) graphConfig.input_key = inputKey;
+
+  // Detect messages-based state: signal to server to wrap prompt as
+  // [{"role": "user", "content": prompt}] instead of plain string.
+  const hasMessagesField =
+    inputKey === "messages" || _hasMessagesInSchema(graph);
+  if (hasMessagesField) {
+    graphConfig._input_is_messages = true;
+  }
 
   // Extract state reducers
   const reducers = _extractReducers(graph);
@@ -897,6 +910,46 @@ function _extractInputKey(graph: unknown): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Check if the graph is a createReactAgent graph (has "agent" + "tools" nodes).
+ * These graphs can't use graph-structure extraction because their internal
+ * nodes aren't plain functions — they need full extraction.
+ */
+function _isReactAgentGraph(graph: unknown): boolean {
+  try {
+    const g = graph as Record<string, unknown>;
+    const nodes = g.nodes;
+    if (!nodes || typeof nodes !== "object") return false;
+    const keys: string[] = nodes instanceof Map
+      ? Array.from(nodes.keys())
+      : Object.keys(nodes);
+    return keys.includes("agent") && keys.includes("tools");
+  } catch {
+    return false;
+  }
+}
+
+/** Check if the graph state has a "messages" field (typed or channel-based). */
+function _hasMessagesInSchema(graph: unknown): boolean {
+  try {
+    const g = graph as any;
+    // Check JSON schema
+    if (typeof g.getInputJsonSchema === "function") {
+      const schema = g.getInputJsonSchema();
+      if (schema?.properties && "messages" in schema.properties) return true;
+    }
+    // Check channels
+    const channels = g.channels;
+    if (channels) {
+      const keys = channels instanceof Map
+        ? Array.from(channels.keys())
+        : Object.keys(channels);
+      if (keys.includes("messages")) return true;
+    }
+  } catch { /* ignore */ }
+  return false;
 }
 
 // ── Reducer extraction ──────────────────────────────────
@@ -1735,11 +1788,88 @@ function _getToolSchema(toolObj: unknown): Record<string, unknown> {
   for (const key of ["params_json_schema", "input_schema", "parameters", "schema"]) {
     const val = t[key];
     if (val && typeof val === "object" && !Array.isArray(val)) {
-      return val as Record<string, unknown>;
+      const obj = val as Record<string, unknown>;
+      // Already a JSON Schema — return as-is
+      if (obj.type === "object" && obj.properties) {
+        return obj;
+      }
+      // Zod schema detected (has _def + parse) — convert to JSON Schema
+      if (obj._def && typeof obj.parse === "function") {
+        const converted = _zodToJsonSchema(obj);
+        if (converted) return converted;
+      }
+      // Unknown object — return as-is (may be a valid schema in another format)
+      return obj;
     }
   }
 
   return { type: "object", properties: {} };
+}
+
+/**
+ * Convert a Zod schema to JSON Schema.
+ * Tries zodToJsonSchema (zod-to-json-schema package), then Zod v4 built-in.
+ * Returns null if conversion fails.
+ */
+/**
+ * Convert a Zod schema to JSON Schema.
+ *
+ * Built-in converter that walks Zod's internal `_def` structure.
+ * No external dependencies — works in CJS, ESM, vitest, tsx, and bundled dist.
+ */
+function _zodToJsonSchema(zodObj: Record<string, unknown>): Record<string, unknown> | null {
+  try {
+    const result = _convertZodDef(zodObj);
+    return result?.type ? result : null;
+  } catch {
+    return null;
+  }
+}
+
+function _convertZodDef(zodObj: any): Record<string, unknown> {
+  const def = zodObj?._def;
+  if (!def?.typeName) return {};
+
+  switch (def.typeName) {
+    case "ZodObject": {
+      const props: Record<string, unknown> = {};
+      const required: string[] = [];
+      const shape = typeof def.shape === "function" ? def.shape() : def.shape;
+      for (const [key, val] of Object.entries(shape || {})) {
+        const converted = _convertZodDef(val);
+        props[key] = converted;
+        if ((val as any)?._def?.typeName !== "ZodOptional") required.push(key);
+        // Preserve description if set via .describe()
+        const desc = (val as any)?._def?.description ?? (val as any)?.description;
+        if (desc && typeof converted === "object") {
+          (converted as Record<string, unknown>).description = desc;
+        }
+      }
+      return { type: "object", properties: props, required, additionalProperties: false };
+    }
+    case "ZodString":
+      return { type: "string" };
+    case "ZodNumber":
+      return { type: "number" };
+    case "ZodBoolean":
+      return { type: "boolean" };
+    case "ZodArray":
+      return { type: "array", items: _convertZodDef(def.type) };
+    case "ZodOptional":
+      return _convertZodDef(def.innerType);
+    case "ZodNullable": {
+      const inner = _convertZodDef(def.innerType);
+      return { ...inner, nullable: true };
+    }
+    case "ZodEnum":
+      return { type: "string", enum: def.values };
+    case "ZodLiteral":
+      return { const: def.value };
+    case "ZodDefault":
+      return { ..._convertZodDef(def.innerType), default: def.defaultValue() };
+    default:
+      return {};
+  }
 }
 
 function _getToolCallable(toolObj: unknown): Function | null {

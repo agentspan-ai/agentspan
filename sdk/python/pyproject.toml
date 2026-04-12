@@ -41,7 +41,8 @@ dev = [
     "mypy>=1.10",
 ]
 testing = [
-    "litellm>=1.0",
+    "anthropic>=0.30",
+    "openai>=1.0",
 ]
 validation = [
     "openai-agents>=0.1",

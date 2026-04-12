@@ -2135,7 +2135,8 @@ public class AgentCompiler {
         List<Map<String, Object>> edges = (List<Map<String, Object>>) graph.get("edges");
         List<Map<String, Object>> conditionalEdges =
                 (List<Map<String, Object>>) graph.getOrDefault("conditional_edges", List.of());
-        String inputKey = (String) graph.getOrDefault("input_key", "request");
+        boolean inputIsMessages = Boolean.TRUE.equals(graph.get("_input_is_messages"));
+        String inputKey = (String) graph.getOrDefault("input_key", inputIsMessages ? "messages" : "request");
 
         // Extract reducer metadata: field_name -> reducer_type ("add", "extend", etc.)
         // Used in FORK_JOIN merge to correctly combine parallel branch state
@@ -2243,9 +2244,18 @@ public class AgentCompiler {
         // Build initial state map
         // For subgraph workflows, the state is passed directly via workflow.input.state
         // For regular workflows, the state starts as {inputKey: prompt}
+        // For messages-based graphs, wrap the prompt as a message object list
         Object initialState;
         if (isSubgraphWorkflow) {
             initialState = "${workflow.input.state}";
+        } else if (inputIsMessages) {
+            // Messages-based state: wrap prompt as [{"role": "user", "content": prompt}]
+            Map<String, Object> stateMap = new LinkedHashMap<>();
+            Map<String, Object> userMessage = new LinkedHashMap<>();
+            userMessage.put("role", "user");
+            userMessage.put("content", "${workflow.input.prompt}");
+            stateMap.put(inputKey, List.of(userMessage));
+            initialState = stateMap;
         } else {
             Map<String, Object> stateMap = new LinkedHashMap<>();
             stateMap.put(inputKey, "${workflow.input.prompt}");

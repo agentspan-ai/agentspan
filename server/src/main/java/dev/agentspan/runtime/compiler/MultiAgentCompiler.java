@@ -274,10 +274,18 @@ public class MultiAgentCompiler {
         for (int i = 0; i < config.getAgents().size(); i++) {
             AgentConfig sub = config.getAgents().get(i);
             String taskRef = config.getName() + "_step_" + i + "_" + sub.getName();
-            String mediaRef = i == 0 ? "${workflow.input.media}" : "${workflow.input.media}";
+            String mediaRef = "${workflow.input.media}";
 
-            WorkflowTask task = agentCompiler.compileSubAgent(
-                    sub, taskRef, prevOutputRef, mediaRef, "${workflow.variables.context}");
+            // For non-first agents, combine the original user prompt with the
+            // previous agent's output via Conductor string interpolation.
+            // This ensures each agent in the sequence knows the full context.
+            String promptRef = prevOutputRef;
+            if (i > 0) {
+                promptRef = "${workflow.input.prompt}\n\nPrevious agent output:\n" + prevOutputRef;
+            }
+
+            WorkflowTask task =
+                    agentCompiler.compileSubAgent(sub, taskRef, promptRef, mediaRef, "${workflow.variables.context}");
             tasks.add(task);
 
             // Merge child context back into pipeline context
@@ -376,8 +384,11 @@ public class MultiAgentCompiler {
             String taskRef = config.getName() + "_step_" + i + "_" + sub.getName();
             String mediaRef = "${workflow.input.media}";
 
-            WorkflowTask task = agentCompiler.compileSubAgent(
-                    sub, taskRef, prevOutputRef, mediaRef, "${workflow.variables.context}");
+            // Combine original prompt with previous output via string interpolation
+            String promptRef = "${workflow.input.prompt}\n\nPrevious agent output:\n" + prevOutputRef;
+
+            WorkflowTask task =
+                    agentCompiler.compileSubAgent(sub, taskRef, promptRef, mediaRef, "${workflow.variables.context}");
             tasks.add(task);
 
             String rawRef = AgentCompiler.subAgentResultRef(sub, taskRef);

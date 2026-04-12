@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="8" fill="#4969e4"/>
+  <!-- two dots + arc, white on blue -->
+  <circle cx="7" cy="16" r="3.5" fill="white"/>
+  <path d="M10.5 16 Q16 10 21.5 16" stroke="white" stroke-width="1.5" stroke-opacity="0.6" fill="none" stroke-linecap="round"/>
+  <path d="M10.5 16 Q16 22 21.5 16" stroke="white" stroke-width="1.5" stroke-opacity="0.6" fill="none" stroke-linecap="round"/>
+  <circle cx="25" cy="16" r="3.5" fill="white" opacity="0.8"/>
+</svg>
