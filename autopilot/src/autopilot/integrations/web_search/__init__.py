@@ -1,4 +1,4 @@
-"""Web search integration — Brave Search API."""
+"""Web search integration — DDG + Brave + page fetch + content extraction."""
 
 from autopilot.integrations.web_search.tools import get_tools
 
