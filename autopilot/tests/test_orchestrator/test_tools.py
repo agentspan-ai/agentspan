@@ -136,7 +136,8 @@ class TestGenerateAgent:
 
         written = yaml.safe_load((agents_dir / "yaml_check" / "agent.yaml").read_text())
         assert written["name"] == "yaml_check"
-        assert written["model"] == "anthropic/claude-sonnet-4-20250514"
+        # Model is forced to the configured default (prevents LLM from picking cheap models)
+        assert written["model"] is not None
         assert written["credentials"] == ["API_KEY"]
         assert written["trigger"]["type"] == "cron"
 
