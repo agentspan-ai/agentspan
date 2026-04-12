@@ -194,9 +194,10 @@ def resolve_integrations(agent_name: str) -> str:
 
     report_lines = [f"Integration check for agent '{agent_name}':", ""]
 
-    # Check tools
+    # Check tools — Tier 1 (builtin), then Tier 2 (MCP) fallback
     available = []
     missing = []
+    mcp_available = []
     for ref in tool_refs:
         if isinstance(ref, str) and ref.startswith("builtin:"):
             integration_name = ref[len("builtin:"):]
@@ -204,7 +205,21 @@ def resolve_integrations(agent_name: str) -> str:
             if tools:
                 available.append(integration_name)
             else:
-                missing.append(integration_name)
+                # Tier 2 fallback: check configured MCP servers
+                from autopilot.integrations.mcp.tools import get_configured_servers
+
+                mcp_servers = get_configured_servers()
+                found_via_mcp = False
+                for server_name in mcp_servers:
+                    mcp_available.append(f"{integration_name} (via MCP: {server_name})")
+                    found_via_mcp = True
+                    break
+                if not found_via_mcp:
+                    missing.append(integration_name)
+        elif isinstance(ref, str) and ref.startswith("mcp:"):
+            # Explicit MCP reference — e.g. "mcp:http://localhost:3001/mcp"
+            server_url = ref[len("mcp:"):]
+            mcp_available.append(f"mcp ({server_url})")
         elif isinstance(ref, str):
             # Worker-based tool — check if file exists
             worker_file = agent_dir / "workers" / f"{ref}.py"
@@ -217,6 +232,11 @@ def resolve_integrations(agent_name: str) -> str:
         report_lines.append("Available integrations:")
         for name in available:
             report_lines.append(f"  [OK] {name}")
+
+    if mcp_available:
+        report_lines.append("Available via MCP (Tier 2):")
+        for name in mcp_available:
+            report_lines.append(f"  [MCP] {name}")
 
     if missing:
         report_lines.append("Missing integrations:")
@@ -268,16 +288,28 @@ def deploy_agent(agent_name: str) -> str:
         created_at=created_at,
     ))
 
-    # Load and start the agent
+    # Load the agent config for retry policy
+    with open(agent_dir / "agent.yaml") as f:
+        agent_yaml = yaml.safe_load(f) or {}
+    error_handling = agent_yaml.get("error_handling", {})
+
+    from autopilot.orchestrator.retry import RetryPolicy, retry_with_policy
+
+    policy = RetryPolicy.from_agent_config(error_handling)
+
+    # Load and start the agent, wrapping deployment in retry policy
     try:
         from autopilot.loader import load_agent
         from agentspan.agents import AgentRuntime
 
         agent = load_agent(agent_dir)
 
-        with AgentRuntime() as runtime:
-            handle = runtime.start(agent, "Begin agent execution.")
-            execution_id = handle.execution_id
+        def _do_deploy():
+            with AgentRuntime() as runtime:
+                handle = runtime.start(agent, "Begin agent execution.")
+                return handle.execution_id
+
+        execution_id = retry_with_policy(_do_deploy, policy)
 
         sm.set(agent_name, AgentState(
             name=agent_name,
@@ -816,6 +848,7 @@ def commit_agent_change(agent_name: str, message: str, config: Optional[Autopilo
 
 def get_orchestrator_tools() -> list:
     """Return all orchestrator tools as a list for agent construction."""
+    from autopilot.integrations.mcp.tools import add_mcp_integration
     from autopilot.orchestrator.gates import (
         validate_code,
         validate_deployment,
@@ -839,6 +872,8 @@ def get_orchestrator_tools() -> list:
         get_notifications,
         check_credentials,
         prompt_credentials,
+        # MCP integration
+        add_mcp_integration,
         # Validation gates
         validate_spec,
         validate_code,
