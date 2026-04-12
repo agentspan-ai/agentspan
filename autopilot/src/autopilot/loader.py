@@ -99,6 +99,10 @@ def load_agent(agent_dir: Path) -> Agent:
         raise LoaderError(f"agent.yaml in {agent_dir} is missing required 'name' field")
 
     model = raw.get("model", "")
+    if not model or model.startswith("${"):
+        # Default to configured model when empty or a shell variable placeholder
+        from autopilot.config import AutopilotConfig
+        model = AutopilotConfig.from_env().llm_model
     instructions = raw.get("instructions", "")
 
     # -- Collect worker tools --------------------------------------------------

@@ -70,8 +70,12 @@ class AutopilotConfig:
         if not path.exists():
             return cls()
 
-        with open(path) as f:
-            raw: Dict[str, Any] = yaml.safe_load(f) or {}
+        try:
+            with open(path) as f:
+                raw: Dict[str, Any] = yaml.safe_load(f) or {}
+        except (yaml.YAMLError, OSError):
+            # Corrupted or unreadable config — use defaults
+            return cls()
 
         base_dir = Path(raw["base_dir"]) if "base_dir" in raw else _default_base_dir()
         last_seen = raw.get("last_seen", {})
