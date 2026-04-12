@@ -1,0 +1,15 @@
+agentspan
+pyyaml>=6.0
+httpx>=0.24
+trafilatura>=1.6
+prompt_toolkit>=3.0
+
+[dev]
+pytest>=7.0
+ruff>=0.4
+
+[langextract]
+langextract>=0.1
+
+[markitdown]
+markitdown>=0.1
