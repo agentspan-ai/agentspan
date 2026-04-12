@@ -11,7 +11,7 @@ Both SDKs have 1:1 matching test suites with identical file naming, test coverag
 - `mcp-testkit` running (default: `http://localhost:3001`, needed for Suites 1, 4, 5)
 - Docker running (needed for Suite 10 Docker tests, skips if unavailable)
 - LLM API keys:
-  - `OPENAI_API_KEY` — required for agent execution (Suites 2–11)
+  - `OPENAI_API_KEY` — required for agent execution (Suites 2–12)
   - `ANTHROPIC_API_KEY` — required for LLM-as-judge (Suite 1, default judge model is Claude Sonnet)
   - `GITHUB_TOKEN` — required for Suite 3 CLI tools test (gh CLI authentication)
   - `GOOGLE_AI_API_KEY` — optional, for Gemini image test in Suite 7
@@ -36,7 +36,7 @@ Both SDKs implement identical test suites:
 | Suite | File (Python) | File (TypeScript) | Tests | Duration |
 |-------|--------------|-------------------|-------|----------|
 | 1 — Basic Validation | `test_suite1_basic_validation.py` | `test_suite1_basic_validation.test.ts` | 8 | ~1s |
-| 2 — Tool Calling | `test_suite2_tool_calling.py` | `test_suite2_tool_calling.test.ts` | 1 | ~3 min |
+| 2 — Tool Calling | `test_suite2_tool_calling.py` | `test_suite2_tool_calling.test.ts` | 1 | ~30s |
 | 3 — CLI Tools | `test_suite3_cli_tools.py` | `test_suite3_cli_tools.test.ts` | 1 | skips w/o GITHUB_TOKEN |
 | 4 — MCP Tools | `test_suite4_mcp_tools.py` | `test_suite4_mcp_tools.test.ts` | 1 | ~30s |
 | 5 — HTTP Tools | `test_suite5_http_tools.py` | `test_suite5_http_tools.test.ts` | 2 | ~20s |
@@ -47,6 +47,18 @@ Both SDKs implement identical test suites:
 | 10 — Code Execution | `test_suite10_code_execution.py` | `test_suite10_code_execution.test.ts` | 9 | ~40s |
 | 11 — LangGraph | `test_suite11_langgraph.py` | `test_suite11_langgraph.test.ts` | 11-12 | ~3 min |
 | 12 — Termination & Gates | `test_suite12_termination_gates.py` | `test_suite12_termination_gates.test.ts` | 5 | ~2 min |
+
+## Port Assignments
+
+Each SDK uses dedicated ports for managed test services to avoid conflicts in parallel CI:
+
+| Port | Used By |
+|------|---------|
+| 3001 | Shared mcp-testkit (orchestrator/CI startup) |
+| 3002 | Python Suite 4 (MCP tools) |
+| 3003 | Python Suite 5 (HTTP tools) |
+| 3004 | TypeScript Suite 4 (MCP tools) |
+| 3005 | TypeScript Suite 5 (HTTP tools) |
 
 ## Running
 
@@ -73,6 +85,21 @@ Both SDKs implement identical test suites:
 ./e2e/orchestrator.sh -j 4
 ```
 
+### Mutation Testing
+
+Proves tests catch bugs via counterfactual mutations:
+
+```bash
+# All mutations (Suites 4-7)
+./e2e/mutation_test.sh
+
+# Specific suite only
+./e2e/mutation_test.sh --suite suite4
+
+# TypeScript mutations
+./e2e/mutation_test.sh --sdk typescript
+```
+
 ### Python (manual)
 
 ```bash
@@ -92,7 +119,7 @@ uv run pytest e2e/test_suite8_guardrails.py -v            # suite 8 only
 uv run pytest e2e/test_suite9_handoffs.py -v              # suite 9 only
 uv run pytest e2e/test_suite10_code_execution.py -v       # suite 10 only
 uv run pytest e2e/test_suite11_langgraph.py -v            # suite 11 only
-uv run pytest e2e/test_suite12_termination_gates.py -v   # suite 12 only
+uv run pytest e2e/test_suite12_termination_gates.py -v    # suite 12 only
 ```
 
 ### TypeScript (manual)
@@ -114,7 +141,7 @@ npx vitest run tests/e2e/test_suite8_guardrails.test.ts            # suite 8 onl
 npx vitest run tests/e2e/test_suite9_handoffs.test.ts              # suite 9 only
 npx vitest run tests/e2e/test_suite10_code_execution.test.ts       # suite 10 only
 npx vitest run tests/e2e/test_suite11_langgraph.test.ts            # suite 11 only
-npx vitest run tests/e2e/test_suite12_termination_gates.test.ts   # suite 12 only
+npx vitest run tests/e2e/test_suite12_termination_gates.test.ts    # suite 12 only
 ```
 
 ## Environment Variables
@@ -137,7 +164,7 @@ npx vitest run tests/e2e/test_suite12_termination_gates.test.ts   # suite 12 onl
 Compiles agents via `plan()` and asserts on Conductor workflow JSON. No agent execution except the LLM judge test. Validates tools, guardrails, credentials, sub-agents, and all 8 strategy types compile correctly.
 
 ### Suite 2: Tool Calling / Credential Lifecycle
-Full credential pipeline: missing → env vars ignored → add via CLI → update via CLI. Validates via workflow task data (tool task status + output), not LLM prose.
+Full credential pipeline: missing → env vars ignored → add via CLI → update via CLI. Validates via workflow task data (tool task status + output), not LLM prose. Missing credentials must produce terminal errors (FAILED_WITH_TERMINAL_ERROR / COMPLETED_WITH_ERRORS), not retryable FAILED. Agents use `max_turns=3` to prevent excessive loops.
 
 ### Suite 3: CLI Tools / Credential Isolation
 CLI command execution with credential isolation and command whitelisting. Validates `ls`/`mktemp` succeed without credentials, `gh` fails without server credential, succeeds after adding. Command whitelist validated via plan compilation + direct `_validate_cli_command()` call.
@@ -155,19 +182,56 @@ Markdown → PDF generation via `pdf_tool()`. Validates GENERATE_PDF task comple
 Image (OpenAI DALL-E 3 + Gemini Imagen 3) and audio (OpenAI TTS-1) generation. Plan compilation validates correct model in tool config. Runtime validates GENERATE_* task completes.
 
 ### Suite 8: Guardrails
-Compilation: all guardrail types (regex block/allow, custom function, LLM) with correct properties. Runtime: tool input raise (SQL injection), tool output regex retry (email blocked), agent output secrets blocked, max_retries escalation (always-fail → FAILED).
+Compilation: all guardrail types (regex block/allow, custom function, LLM) with correct properties. Runtime: tool input raise (SQL injection), tool output regex retry (email blocked, `max_turns=3`), agent output secrets blocked, max_retries escalation (always-fail → FAILED).
 
 ### Suite 9: Agent Handoffs
-All 8 multi-agent strategies compile correctly. Runtime: sequential (both sub-workflows complete in order), parallel (FORK task + both complete), handoff (LLM delegates), router (correct agent selected), swarm (OnTextMention triggers handoff), pipe operator (>> / .pipe()). All validated via SUB_WORKFLOW task status in workflow data.
+All 8 multi-agent strategies compile correctly. Runtime: sequential (both sub-workflows complete in order + context propagation — each sub-agent receives original prompt + previous output), parallel (FORK task + both complete), handoff (LLM delegates), router (correct agent selected), swarm (OnTextMention triggers handoff), pipe operator (>> / .pipe()). All validated via SUB_WORKFLOW task status in workflow data. Sub-agents use `max_turns=3` with fallback instructions to prevent infinite loops.
 
 ### Suite 10: Code Execution
-Compilation: `codeExecution` config in plan, tool naming avoids collisions. Runtime: local Python (42*73=3066), local Bash (17+29=46), language restriction (plan-only — bash not in allowedLanguages), timeout (maxTurns=2, 3s executor timeout), Docker Python (container execution), Docker network disabled (connection error). Jupyter stateful (variable persists across calls, skips if not installed).
+Compilation: `codeExecution` config in plan, tool naming avoids collisions. Runtime: local Python (`print(42 * 73)` = 3066, exact code in prompt), local Bash (17+29=46), language restriction (plan-only — bash not in allowedLanguages), timeout (maxTurns=2, 3s executor timeout, sleep(30) killed), Docker Python (container execution), Docker network disabled (connection error). Jupyter stateful (variable persists across calls, skips if not installed).
 
 ### Suite 11: LangGraph
 Framework detection, serialization paths (full extraction, graph-structure, passthrough), conditional routing, messages-based state detection, checkpointer passthrough, tool schema validation, server compilation, and runtime execution. Validates all three LangGraph serializer paths produce correct Conductor workflows.
 
 ### Suite 12: Termination & Gates
-TextMentionTermination (loop stops early when sentinel detected, validated via DO_WHILE iteration count), MaxMessageTermination (loop stops at exactly N messages), TextGate stops pipeline (fixer SUB_WORKFLOW absent when checker outputs sentinel), TextGate allows continuation (both SUB_WORKFLOW tasks COMPLETED), invalid model (server rejects nonexistent model). All validation is algorithmic — no LLM output parsing.
+Migrated from legacy `tests/e2e/test_python_e2e.py` with counterfactually-valid assertions (no LLM output parsing):
+- TextMentionTermination: loop stops early when sentinel detected, validated via DO_WHILE iteration count (≤ max_turns)
+- MaxMessageTermination: loop stops at exactly N messages, validated via DO_WHILE iteration count (2-4 for N=3)
+- TextGate stops pipeline: fixer SUB_WORKFLOW absent/not COMPLETED when checker outputs sentinel
+- TextGate allows continuation: both SUB_WORKFLOW tasks COMPLETED when checker doesn't output sentinel
+- Invalid model: server rejects nonexistent model (status FAILED/TERMINATED)
+
+## Coverage Not Yet Tested
+
+The following features are not yet covered by e2e suites:
+- **Callbacks** (before/after tool execution hooks) — legacy tests only verified status=COMPLETED, which passes whether callbacks execute or not. Proper validation requires proving callback side-effects occurred.
+- **Skills** (`skill()` API, `load_skills()`, skill pipelines) — requires skill fixture files
+- **Streaming** (`rt.stream()`) — token-by-token output validation
+
+## Legacy Test Migration
+
+Legacy tests from `tests/e2e/test_python_e2e.py` (30 tests) and `typescript_e2e.test.ts` (29 tests) were analyzed and migrated:
+
+| Category | Count | Disposition |
+|----------|-------|-------------|
+| Redundant (covered by Suites 1-11) | 22 | Removed — stronger assertions exist in new suites |
+| Migrated to Suite 12 | 5 | Termination, gates, invalid model — with fixed assertions |
+| Moved to unit tests | 12 | Compile-time validations (no server needed) |
+| Dropped (useless) | 3 | Callback tests (proved nothing), tool exception (accepted all outcomes) |
+
+Additional legacy files removed from `sdk/python/tests/e2e/`:
+- `test_credential_e2e.py` — internal API tests (SubprocessIsolator, token extraction), covered by Suite 2
+- `test_framework_credentials.py` — internal API tests (workflow credentials registry)
+- `test_http_tool_credentials.py` — placeholder validation, covered by Suite 5
+- `test_skill_e2e.py` — requires skill fixtures, separate feature area
+
+## Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `e2e/orchestrator.sh` | Build + start + run tests (`--sdk python\|typescript\|both`) |
+| `e2e/mutation_test.sh` | Counterfactual validation for Suites 4-7 (`--suite`, `--sdk`) |
+| `e2e/run_all_examples.sh` | Run all SDK examples, compare Python vs TS output |
 
 ## Reports
 
@@ -181,6 +245,6 @@ Both use the same dark-themed format with collapsible suites, error summaries, f
 
 Both e2e jobs in `.github/workflows/ci.yml`:
 - Build CLI + install mcp-testkit + start services
-- Run suites 1-12
+- Run suites 1-12 (Python and TypeScript in parallel jobs)
 - Generate HTML reports (uploaded as artifacts, 14-day retention)
 - 45-minute timeout per job
