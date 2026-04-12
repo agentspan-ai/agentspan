@@ -2,10 +2,16 @@ package tui
 
 import (
 	"fmt"
+	"image/color"
+	"math"
 	"os"
+	"os/exec"
+	"runtime"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/agentspan-ai/agentspan/cli/client"
 	"github.com/agentspan-ai/agentspan/cli/config"
 	"github.com/agentspan-ai/agentspan/cli/tui/components"
@@ -18,6 +24,7 @@ type NavigateMsg struct {
 	View        ViewID
 	ExecutionID string
 	AgentName   string
+	OpenRun     bool
 }
 
 // AppModel is the root BubbleTea model.
@@ -28,6 +35,7 @@ type AppModel struct {
 	showHelp       bool
 	version        string
 	contentFocused bool // true = content panel has focus, false = sidebar
+	themeLocked    bool // true when theme was set explicitly by env or ctrl+t
 
 	// Views (run+deploy merged into agents)
 	dashboard   views.DashboardModel
@@ -46,6 +54,24 @@ type AppModel struct {
 	serverHealthy  bool
 	serverChecking bool
 }
+
+type themeSelection struct {
+	isDark bool
+	locked bool
+}
+
+var (
+	queryBackgroundColor = func() (color.Color, error) {
+		return lipgloss.BackgroundColor(os.Stdin, os.Stdout)
+	}
+	readAppleTerminalProfile = func(key string) (string, error) {
+		out, err := exec.Command("defaults", "read", "com.apple.Terminal", key).Output()
+		if err != nil {
+			return "", err
+		}
+		return strings.TrimSpace(string(out)), nil
+	}
+)
 
 // New creates the root App model.
 func New(version string) *AppModel {
@@ -84,6 +110,13 @@ func (m *AppModel) Init() tea.Cmd {
 
 func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+
+	// ── Terminal background detection ─────────────────────────────────────
+	case tea.BackgroundColorMsg:
+		if !m.themeLocked {
+			ui.SetTheme(msg.IsDark())
+		}
+		return m, nil
 
 	// ── Window resize ──────────────────────────────────────────────────────
 	case tea.WindowSizeMsg:
@@ -174,6 +207,10 @@ func (m *AppModel) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch key {
 	case "ctrl+c":
 		return m, tea.Quit
+	case "ctrl+t":
+		m.themeLocked = true
+		ui.SetTheme(!ui.IsDarkBackground)
+		return m, nil
 	case "?":
 		m.showHelp = !m.showHelp
 		return m, nil
@@ -276,7 +313,7 @@ func (m *AppModel) checkViewNav(key string) *NavigateMsg {
 	case ViewDashboard:
 		switch key {
 		case "r":
-			return &NavigateMsg{View: ViewAgents}
+			return &NavigateMsg{View: ViewAgents, OpenRun: true}
 		case "enter":
 			if id := m.dashboard.SelectedExecutionID(); id != "" {
 				return &NavigateMsg{View: ViewExecutions, ExecutionID: id}
@@ -286,12 +323,6 @@ func (m *AppModel) checkViewNav(key string) *NavigateMsg {
 				if id := m.dashboard.SelectedExecutionID(); id != "" {
 					return &NavigateMsg{View: ViewAgents, ExecutionID: id}
 				}
-			}
-		}
-	case ViewAgents:
-		if key == "r" {
-			if a := m.agents.SelectedAgent(); a != nil {
-				return &NavigateMsg{View: ViewAgents, AgentName: a.Name}
 			}
 		}
 	case ViewExecutions:
@@ -338,7 +369,7 @@ func (m *AppModel) handleNavigation(nav NavigateMsg) (tea.Model, tea.Cmd) {
 			// Reconnect to an existing running execution's SSE stream
 			serverURL := strings.TrimPrefix(nav.AgentName, "stream:")
 			m.agents = views.NewAgentsStream(m.client, nav.ExecutionID, "", serverURL)
-		} else if nav.AgentName != "" {
+		} else if nav.OpenRun {
 			m.agents = views.NewAgentsRunWithConfig(m.client, nav.AgentName, m.cfg.ServerURL)
 		} else {
 			m.agents = views.NewAgentsWithConfig(m.client, m.cfg.ServerURL)
@@ -461,7 +492,8 @@ func (m *AppModel) View() tea.View {
 	// Help overlay
 	if m.showHelp {
 		helpContent := components.HelpOverlay(m.width-4, m.height-4)
-		v := tea.NewView(header + "\n" + helpContent + "\n" + footer)
+		screen := ui.WrapScreen(header+"\n"+helpContent+"\n"+footer, m.width, m.height)
+		v := tea.NewView(screen)
 		v.AltScreen = true
 		return v
 	}
@@ -474,7 +506,8 @@ func (m *AppModel) View() tea.View {
 
 	// header + body + footer: each lipgloss render ends without \n,
 	// so we add exactly one \n between each to stack them as rows.
-	v := tea.NewView(header + "\n" + body + "\n" + footer)
+	screen := ui.WrapScreen(header+"\n"+body+"\n"+footer, m.width, m.height)
+	v := tea.NewView(screen)
 	v.AltScreen = true
 	return v
 }
@@ -508,9 +541,14 @@ func (m *AppModel) renderActiveView() string {
 func (m *AppModel) footerHints() string {
 	if !m.contentFocused {
 		// Sidebar mode — arrow keys move cursor, enter opens view
+		theme := "dark"
+		if ui.IsDarkBackground {
+			theme = "light"
+		}
 		return ui.KeyHint("↑↓", "navigate") + "  " +
 			ui.KeyHint("enter", "open view") + "  " +
 			ui.KeyHint("1-0", "jump") + "  " +
+			ui.KeyHint("ctrl+t", theme) + "  " +
 			ui.KeyHint("?", "help") + "  " +
 			ui.KeyHint("q", "quit")
 	}
@@ -544,9 +582,119 @@ func (m *AppModel) footerHints() string {
 	return viewHints + "  " + ui.KeyHint("esc", "sidebar") + "  " + ui.KeyHint("?", "help")
 }
 
+// detectInitialTheme returns the initial theme selection for the app.
+// AGENTSPAN_THEME=light|dark pins the palette until the user changes it.
+// Otherwise we auto-detect from terminal metadata.
+func detectInitialTheme() themeSelection {
+	if t := strings.TrimSpace(os.Getenv("AGENTSPAN_THEME")); t != "" {
+		switch strings.ToLower(t) {
+		case "light":
+			return themeSelection{isDark: false, locked: true}
+		case "dark":
+			return themeSelection{isDark: true, locked: true}
+		case "auto":
+			return themeSelection{isDark: detectDarkBackground()}
+		}
+	}
+	return themeSelection{isDark: detectDarkBackground()}
+}
+
+// detectDarkBackground checks whether the terminal has a dark background.
+// It tries the COLORFGBG convention first and then falls back to the OSC 11
+// terminal query via lipgloss. Defaults to true (dark) if nothing works.
+func detectDarkBackground() bool {
+	// 1. COLORFGBG env var (set by Terminal.app, iTerm2, xterm, etc.)
+	//    Format: "foreground;background" where background >= 8 is typically light.
+	if colorfgbg := os.Getenv("COLORFGBG"); colorfgbg != "" {
+		parts := strings.Split(colorfgbg, ";")
+		if len(parts) >= 2 {
+			if bg, err := strconv.Atoi(parts[len(parts)-1]); err == nil {
+				// ANSI colors 0-6 are dark, 7+ are light (white/bright)
+				return bg < 7
+			}
+		}
+	}
+
+	// 2. Synchronous OSC 11 query (must run before BubbleTea takes the terminal)
+	if bg, err := queryBackgroundColor(); err == nil && bg != nil {
+		return isDarkColor(bg)
+	}
+
+	// 3. Best-effort macOS Terminal fallback. Terminal.app often runs without
+	// COLORFGBG, and on some setups the OSC 11 query is unavailable, which
+	// would otherwise force the dark default even for the stock light profile.
+	if isDark, ok := detectAppleTerminalTheme(); ok {
+		return isDark
+	}
+
+	// 4. Safe fallback when nothing else is available.
+	return true
+}
+
+func isDarkColor(c color.Color) bool {
+	r, g, b, _ := c.RGBA()
+	rr := float64(r) / 65535.0
+	gg := float64(g) / 65535.0
+	bb := float64(b) / 65535.0
+
+	luminance := 0.2126*srgbToLinear(rr) + 0.7152*srgbToLinear(gg) + 0.0722*srgbToLinear(bb)
+	return luminance < 0.5
+}
+
+func srgbToLinear(v float64) float64 {
+	if v <= 0.04045 {
+		return v / 12.92
+	}
+	return math.Pow((v+0.055)/1.055, 2.4)
+}
+
+func detectAppleTerminalTheme() (bool, bool) {
+	if runtime.GOOS != "darwin" || os.Getenv("TERM_PROGRAM") != "Apple_Terminal" {
+		return false, false
+	}
+
+	for _, key := range []string{"Default Window Settings", "Startup Window Settings"} {
+		profile, err := readAppleTerminalProfile(key)
+		if err != nil || profile == "" {
+			continue
+		}
+		if isDark, ok := classifyAppleTerminalProfile(profile); ok {
+			return isDark, true
+		}
+	}
+
+	return false, false
+}
+
+func classifyAppleTerminalProfile(profile string) (bool, bool) {
+	p := strings.TrimSpace(strings.ToLower(profile))
+	switch {
+	case p == "":
+		return false, false
+	case strings.Contains(p, "dark"):
+		return true, true
+	case strings.Contains(p, "light"):
+		return false, true
+	}
+
+	switch p {
+	case "basic", "novel", "man page", "silver aerogel":
+		return false, true
+	case "clear dark", "grass", "homebrew", "ocean", "pro", "red sands":
+		return true, true
+	default:
+		return false, false
+	}
+}
+
 // Start launches the full-screen TUI.
 func Start(version string) error {
+	// Detect terminal background BEFORE BubbleTea takes over stdin/stdout.
+	theme := detectInitialTheme()
+	ui.SetTheme(theme.isDark)
+
 	m := New(version)
+	m.themeLocked = theme.locked
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)

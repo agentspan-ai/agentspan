@@ -60,11 +60,11 @@ func (m ConfigureModel) Update(msg tea.Msg) (ConfigureModel, tea.Cmd) {
 		}
 
 	case tea.KeyPressMsg:
-		switch msg.String() {
-		case "esc":
-			if m.form != nil && m.form.State != huh.StateCompleted {
-				return m, nil
-			}
+		// huh does not bind esc to abort by default — intercept it here
+		// to cancel the form and return to the content panel.
+		if msg.String() == "esc" && m.form != nil && m.form.State == huh.StateNormal {
+			m.form = m.buildForm()
+			return m, m.form.Init()
 		}
 	}
 
@@ -73,6 +73,9 @@ func (m ConfigureModel) Update(msg tea.Msg) (ConfigureModel, tea.Cmd) {
 		if f, ok := form.(*huh.Form); ok {
 			m.form = f
 			if m.form.State == huh.StateCompleted {
+				m.serverURL = m.form.GetString("server_url")
+				m.authKey = m.form.GetString("auth_key")
+				m.authSecret = m.form.GetString("auth_secret")
 				return m, m.saveConfig()
 			}
 		}
@@ -121,17 +124,20 @@ func (m *ConfigureModel) buildForm() *huh.Form {
 	return huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().
+				Key("server_url").
 				Title("Server URL").
 				Description("AgentSpan runtime server URL").
 				Placeholder("http://localhost:6767").
 				Value(&m.serverURL),
 
 			huh.NewInput().
+				Key("auth_key").
 				Title("Auth Key").
 				Description("Optional: for Orkes Cloud auth").
 				Value(&m.authKey),
 
 			huh.NewInput().
+				Key("auth_secret").
 				Title("Auth Secret").
 				Description("Optional: for Orkes Cloud auth").
 				EchoMode(huh.EchoModePassword).
@@ -144,6 +150,11 @@ func (m ConfigureModel) saveConfig() tea.Cmd {
 	serverURL := m.serverURL
 	authKey := m.authKey
 	authSecret := m.authSecret
+	if m.form != nil {
+		serverURL = m.form.GetString("server_url")
+		authKey = m.form.GetString("auth_key")
+		authSecret = m.form.GetString("auth_secret")
+	}
 	return func() tea.Msg {
 		cfg := config.Load()
 		cfg.ServerURL = serverURL

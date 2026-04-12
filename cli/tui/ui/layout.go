@@ -86,6 +86,7 @@ func ContentPanel(width, height int, title, body string) string {
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(ColorDarkGreen).
+		Background(ColorBg).
 		Padding(0, 1).
 		Width(width).
 		Height(height).
@@ -101,12 +102,14 @@ func SplitHorizontal(totalWidth int, leftContent, rightContent string) string {
 	left := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(ColorDarkGreen).
+		Background(ColorBg).
 		Padding(0, 1).
 		Width(half).
 		Render(leftContent)
 	right := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(ColorDarkGreen).
+		Background(ColorBg).
 		Padding(0, 1).
 		Width(half).
 		Render(rightContent)
@@ -130,6 +133,7 @@ func Card(width int, title string, rows ...string) string {
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(ColorDarkGreen).
+		Background(ColorBg).
 		Padding(0, 1).
 		Width(width).
 		Render(body)
@@ -199,4 +203,17 @@ func ProgressBar(width int, percent float64, desc string) string {
 
 	pct := lipgloss.NewStyle().Foreground(ColorWhite).Render(fmt.Sprintf(" %3.0f%%", percent))
 	return desc + " [" + bar + "]" + pct
+}
+
+// WrapScreen applies the full-screen background color so the selected palette
+// renders consistently even when the terminal's native background differs.
+func WrapScreen(content string, width, height int) string {
+	if !hasBg {
+		return content
+	}
+	return lipgloss.NewStyle().
+		Background(ColorBg).
+		Width(width).
+		Height(height).
+		Render(content)
 }

@@ -1,9 +1,12 @@
 package tui
 
 import (
+	"errors"
+	"image/color"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/agentspan-ai/agentspan/cli/tui/ui"
 )
 
 // newTestApp creates an AppModel wired to nothing (no real client).
@@ -289,6 +292,120 @@ func TestCtrlCAlwaysQuits(t *testing.T) {
 		msg := cmd()
 		if _, ok := msg.(tea.QuitMsg); !ok {
 			t.Errorf("contentFocused=%v: expected QuitMsg, got %T", focused, msg)
+		}
+	}
+}
+
+func TestDetectInitialThemeRespectsEnvOverride(t *testing.T) {
+	t.Setenv("AGENTSPAN_THEME", "light")
+
+	theme := detectInitialTheme()
+	if theme.isDark {
+		t.Error("AGENTSPAN_THEME=light should force the light theme")
+	}
+	if !theme.locked {
+		t.Error("AGENTSPAN_THEME should lock the theme against auto-detection updates")
+	}
+}
+
+func TestBackgroundColorIgnoredWhenThemeLocked(t *testing.T) {
+	prev := ui.IsDarkBackground
+	t.Cleanup(func() { ui.SetTheme(prev) })
+
+	ui.SetTheme(false)
+	m := newTestApp()
+	m.themeLocked = true
+
+	result, _ := m.Update(tea.BackgroundColorMsg{color.Black})
+	m2 := result.(*AppModel)
+
+	if !m2.themeLocked {
+		t.Error("theme lock should persist after a background-color message")
+	}
+	if ui.IsDarkBackground {
+		t.Error("locked theme should ignore terminal background updates")
+	}
+}
+
+func TestBackgroundColorUpdatesWhenThemeUnlocked(t *testing.T) {
+	prev := ui.IsDarkBackground
+	t.Cleanup(func() { ui.SetTheme(prev) })
+
+	ui.SetTheme(false)
+	m := newTestApp()
+	m.themeLocked = false
+
+	_, _ = m.Update(tea.BackgroundColorMsg{color.Black})
+	if !ui.IsDarkBackground {
+		t.Error("auto theme should track terminal background updates")
+	}
+}
+
+func TestCtrlTTogglesThemeAndLocksIt(t *testing.T) {
+	prev := ui.IsDarkBackground
+	t.Cleanup(func() { ui.SetTheme(prev) })
+
+	ui.SetTheme(true)
+	m := newTestApp()
+	m.themeLocked = false
+
+	result, _ := m.Update(pressKey("ctrl+t"))
+	m2 := result.(*AppModel)
+
+	if !m2.themeLocked {
+		t.Error("ctrl+t should lock the theme in the user-selected mode")
+	}
+	if ui.IsDarkBackground {
+		t.Error("ctrl+t should toggle the theme")
+	}
+
+	_, _ = m2.Update(tea.BackgroundColorMsg{color.Black})
+	if ui.IsDarkBackground {
+		t.Error("terminal background updates should not override a manual theme toggle")
+	}
+}
+
+func TestDetectDarkBackgroundFallsBackToAppleTerminalProfile(t *testing.T) {
+	prevQuery := queryBackgroundColor
+	prevReadProfile := readAppleTerminalProfile
+	t.Cleanup(func() {
+		queryBackgroundColor = prevQuery
+		readAppleTerminalProfile = prevReadProfile
+	})
+
+	t.Setenv("TERM_PROGRAM", "Apple_Terminal")
+	queryBackgroundColor = func() (color.Color, error) {
+		return nil, errors.New("osc query failed")
+	}
+	readAppleTerminalProfile = func(key string) (string, error) {
+		if key == "Default Window Settings" {
+			return "Basic", nil
+		}
+		return "", errors.New("unexpected key")
+	}
+
+	if detectDarkBackground() {
+		t.Error("Apple Terminal Basic profile should fall back to light theme")
+	}
+}
+
+func TestClassifyAppleTerminalProfile(t *testing.T) {
+	cases := []struct {
+		profile string
+		want    bool
+		ok      bool
+	}{
+		{profile: "Basic", want: false, ok: true},
+		{profile: "Clear Light", want: false, ok: true},
+		{profile: "Clear Dark", want: true, ok: true},
+		{profile: "Pro", want: true, ok: true},
+		{profile: "Unknown Custom", want: false, ok: false},
+	}
+
+	for _, tc := range cases {
+		got, ok := classifyAppleTerminalProfile(tc.profile)
+		if got != tc.want || ok != tc.ok {
+			t.Errorf("profile %q: got (%v, %v), want (%v, %v)", tc.profile, got, ok, tc.want, tc.ok)
 		}
 	}
 }
