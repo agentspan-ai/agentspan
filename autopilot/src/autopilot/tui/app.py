@@ -35,6 +35,7 @@ import yaml
 from agentspan.agents import Agent, AgentRuntime, EventType, tool, wait_for_message_tool
 
 from autopilot.config import AutopilotConfig
+from autopilot.orchestrator.tools import get_orchestrator_tools
 from autopilot.tui.commands import CommandResult, HELP_TEXT, parse_command
 from autopilot.tui.dashboard import render_dashboard
 from autopilot.tui.events import format_event

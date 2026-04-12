@@ -15,8 +15,12 @@ from autopilot.integrations.github.tools import (
 )
 
 
+@pytest.mark.network
 class TestGithubSearchRepos:
-    """github_search_repos uses the public search API (no auth required)."""
+    """github_search_repos uses the public search API (no auth required).
+
+    Marked as network — GitHub rate-limits unauthenticated requests.
+    """
 
     def test_search_returns_results(self):
         results = github_search_repos("python")
