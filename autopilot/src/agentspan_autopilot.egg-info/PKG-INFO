@@ -20,6 +20,7 @@ Requires-Dist: pyyaml>=6.0
 Requires-Dist: httpx>=0.24
 Requires-Dist: trafilatura>=1.6
 Requires-Dist: prompt_toolkit>=3.0
+Requires-Dist: ddgs>=9.0
 Provides-Extra: markitdown
 Requires-Dist: markitdown>=0.1; extra == "markitdown"
 Provides-Extra: langextract

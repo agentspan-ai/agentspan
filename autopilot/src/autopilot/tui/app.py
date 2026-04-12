@@ -484,8 +484,18 @@ def _run_tui_repl(
 
     threading.Thread(target=_consume_events, daemon=True).start()
 
+    # ── Background poller for dashboard/notification refreshes ─────
+    poller = DashboardPoller(
+        interval_seconds=30,
+        on_update=lambda: app.invalidate() if app.is_running else None,
+    )
+    poller.start()
+
     # ── Run the TUI ────────────────────────────────────────────────
-    app.run()
+    try:
+        app.run()
+    finally:
+        poller.stop()
 
 
 # ---------------------------------------------------------------------------
