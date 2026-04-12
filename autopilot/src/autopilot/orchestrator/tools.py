@@ -68,27 +68,65 @@ def expand_prompt(seed_prompt: str, clarifications: str = "") -> str:
 
     Returns the expansion template as a string for the LLM to fill in.
     """
+    config = _get_config()
     registry = get_default_registry()
-    available_integrations = ", ".join(registry.list_integrations())
+
+    # Build integration catalog with credential info
+    integration_lines = []
+    for name in registry.list_integrations():
+        tools = registry.get_tools(name)
+        creds = []
+        for t in tools:
+            if hasattr(t, "_tool_def") and t._tool_def.credentials:
+                creds = list(t._tool_def.credentials)
+                break
+        tool_names = [t._tool_def.name for t in tools if hasattr(t, "_tool_def")]
+        cred_str = f" (credentials: {', '.join(creds)})" if creds else " (no credentials needed)"
+        integration_lines.append(f"  - builtin:{name}{cred_str} — tools: {', '.join(tool_names)}")
+
+    integrations_catalog = "\n".join(integration_lines)
 
     template = f"""Based on the user's request and clarifications, create a complete agent specification.
 
 User request: {seed_prompt}
 Clarifications: {clarifications or "None provided"}
 
-Generate a YAML agent specification with these fields:
-- name: (snake_case, descriptive)
-- version: 1
-- model: (default to the current model)
-- instructions: (detailed instructions for the agent)
-- trigger: (type: cron/daemon, schedule if cron)
-- tools: (list of builtin: integrations or custom tool names needed)
-- credentials: (list of credential names needed)
-- error_handling: (max_retries: 3, backoff: exponential, on_failure: pause_and_notify)
+Generate a YAML agent specification with EXACTLY these fields:
 
-Available builtin integrations: {available_integrations}
+```yaml
+name: <snake_case_descriptive_name>
+version: 1
+model: {config.llm_model}
+instructions: |
+  <Detailed multi-paragraph instructions for the agent. Be specific about:
+  - What data to fetch and from where
+  - How to process/analyze the data
+  - What output to produce and in what format
+  - How to handle edge cases (no data, errors, etc.)
+  - Any categorization or prioritization logic>
+trigger:
+  type: <cron or daemon>
+  schedule: "<cron expression>"  # only for type: cron
+tools:
+  - builtin:<integration_name>  # NO SPACE after colon
+credentials:
+  - <EXACT_CREDENTIAL_NAME>  # must match the integration's credential names below
+error_handling:
+  max_retries: 3
+  backoff: exponential
+  on_failure: pause_and_notify
+```
 
-Return ONLY the YAML specification, no explanation."""
+CRITICAL RULES:
+1. model MUST be "{config.llm_model}" — do not change it
+2. tools entries MUST use format "builtin:name" with NO SPACE after the colon
+3. credentials MUST use the EXACT names listed below for each integration
+4. instructions MUST be detailed (at least 10 lines) — not a one-liner
+
+Available integrations:
+{integrations_catalog}
+
+Return ONLY the YAML specification wrapped in ```yaml ... ``` — no other text."""
     return template
 
 
@@ -104,9 +142,17 @@ def generate_agent(spec_yaml: str, agent_name: str) -> str:
     config = _get_config()
     agents_base = config.agents_dir
 
+    # Strip markdown code fences if the LLM wrapped the YAML
+    cleaned = spec_yaml.strip()
+    if cleaned.startswith("```"):
+        lines = cleaned.split("\n")
+        # Remove first line (```yaml) and last line (```)
+        lines = [l for l in lines if not l.strip().startswith("```")]
+        cleaned = "\n".join(lines)
+
     # Parse spec
     try:
-        spec = yaml.safe_load(spec_yaml)
+        spec = yaml.safe_load(cleaned)
     except yaml.YAMLError as exc:
         return f"Error: Invalid YAML spec — {exc}"
 
@@ -123,22 +169,83 @@ def generate_agent(spec_yaml: str, agent_name: str) -> str:
     workers_dir = agent_dir / "workers"
     workers_dir.mkdir(exist_ok=True)
 
-    # Write agent.yaml
+    # --- Normalize common LLM mistakes ---
+
+    # Force model to configured value if LLM picked something else
+    spec["model"] = config.llm_model
+
+    # Fix tools: normalize "builtin: gmail" -> "builtin:gmail" (remove space)
+    if "tools" in spec and isinstance(spec["tools"], list):
+        normalized_tools = []
+        for t in spec["tools"]:
+            if isinstance(t, str):
+                normalized_tools.append(t.replace("builtin: ", "builtin:"))
+            elif isinstance(t, dict) and "builtin" in t:
+                # Handle YAML parsing {"builtin": "gmail"} -> "builtin:gmail"
+                normalized_tools.append(f"builtin:{t['builtin']}")
+            else:
+                normalized_tools.append(str(t))
+        spec["tools"] = normalized_tools
+
+    # Normalize credential names — map common mistakes to actual names
+    _CREDENTIAL_ALIASES = {
+        "gmail_api": "GMAIL_ACCESS_TOKEN",
+        "gmail_token": "GMAIL_ACCESS_TOKEN",
+        "gmail_access_token": "GMAIL_ACCESS_TOKEN",
+        "github_api": "GITHUB_TOKEN",
+        "slack_token": "SLACK_BOT_TOKEN",
+        "outlook_token": "OUTLOOK_ACCESS_TOKEN",
+        "google_calendar_token": "GOOGLE_CALENDAR_TOKEN",
+        "google_drive_token": "GOOGLE_DRIVE_TOKEN",
+        "linear_key": "LINEAR_API_KEY",
+        "notion_key": "NOTION_API_KEY",
+        "hubspot_token": "HUBSPOT_ACCESS_TOKEN",
+    }
+    if "credentials" in spec and isinstance(spec["credentials"], list):
+        spec["credentials"] = [
+            _CREDENTIAL_ALIASES.get(c.lower().strip(), c) for c in spec["credentials"]
+        ]
+
+    # Ensure defaults
     spec.setdefault("name", name)
     spec.setdefault("version", 1)
-    spec.setdefault("model", config.llm_model)
     if "metadata" not in spec:
         spec["metadata"] = {}
     spec["metadata"]["created_at"] = _now_iso()
     spec["metadata"]["created_by"] = "orchestrator"
 
+    # Ensure error_handling exists
+    spec.setdefault("error_handling", {
+        "max_retries": 3,
+        "backoff": "exponential",
+        "on_failure": "pause_and_notify",
+    })
+
     yaml_path = agent_dir / "agent.yaml"
     yaml_path.write_text(yaml.dump(spec, default_flow_style=False, sort_keys=False))
 
-    # Write expanded_prompt.md
+    # Write expanded_prompt.md with more detail
     instructions = spec.get("instructions", "")
+    trigger = spec.get("trigger", {})
+    tools = spec.get("tools", [])
+    creds = spec.get("credentials", [])
+
+    prompt_content = f"""# {name}
+
+## Instructions
+
+{instructions}
+
+## Configuration
+
+- **Model:** {spec.get('model', 'default')}
+- **Trigger:** {trigger.get('type', 'daemon')}{' — schedule: ' + trigger.get('schedule', '') if trigger.get('schedule') else ''}
+- **Tools:** {', '.join(str(t) for t in tools)}
+- **Credentials:** {', '.join(str(c) for c in creds)}
+- **Error handling:** {spec.get('error_handling', {}).get('max_retries', 3)} retries, {spec.get('error_handling', {}).get('backoff', 'exponential')} backoff
+"""
     prompt_path = agent_dir / "expanded_prompt.md"
-    prompt_path.write_text(f"# {name}\n\n{instructions}\n")
+    prompt_path.write_text(prompt_content)
 
     # Register in state as DRAFT
     sm = _get_state_manager(config)
