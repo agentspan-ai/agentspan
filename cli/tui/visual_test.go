@@ -410,8 +410,8 @@ func TestConfigureViewForm(t *testing.T) {
 	if !strings.Contains(plain, "Server URL") {
 		t.Error("configure view missing 'Server URL' field")
 	}
-	if !strings.Contains(plain, "Auth") {
-		t.Error("configure view missing 'Auth' field")
+	if !strings.Contains(plain, "Config file") {
+		t.Error("configure view missing config file summary")
 	}
 }
 

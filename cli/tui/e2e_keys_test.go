@@ -781,7 +781,7 @@ func TestE2EConfigureRendered(t *testing.T) {
 	out := eout(m)
 	ehas(t, "configure", out, "Configure")
 	ehas(t, "configure url", out, "Server URL")
-	ehas(t, "configure auth", out, "Auth")
+	ehas(t, "configure file", out, "Config file")
 }
 
 func TestE2EConfigureFormActive(t *testing.T) {

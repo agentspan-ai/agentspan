@@ -323,9 +323,11 @@ func TestStream_PathEscapesExecutionID(t *testing.T) {
 // ─── Auth Headers ────────────────────────────────────────────────────────────
 
 func TestDoRequest_SendsBearerToken(t *testing.T) {
-	var gotAuth string
+	var gotAuth, gotKey, gotSecret string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
+		gotKey = r.Header.Get("X-Auth-Key")
+		gotSecret = r.Header.Get("X-Auth-Secret")
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(srv.Close)
@@ -340,50 +342,36 @@ func TestDoRequest_SendsBearerToken(t *testing.T) {
 	if gotAuth != "Bearer my-jwt" {
 		t.Errorf("Authorization = %q, want \"Bearer my-jwt\"", gotAuth)
 	}
-}
-
-func TestDoRequest_SendsAuthKeyAndSecret(t *testing.T) {
-	var gotKey, gotSecret string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotKey = r.Header.Get("X-Auth-Key")
-		gotSecret = r.Header.Get("X-Auth-Secret")
-		w.WriteHeader(http.StatusOK)
-	}))
-	t.Cleanup(srv.Close)
-
-	c := New(&config.Config{ServerURL: srv.URL, AuthKey: "k", AuthSecret: "s"})
-	resp, err := c.doRequest("GET", "/health", nil)
-	if err != nil {
-		t.Fatalf("doRequest: %v", err)
-	}
-	resp.Body.Close()
-
-	if gotKey != "k" || gotSecret != "s" {
-		t.Errorf("auth headers = (%q, %q), want (k, s)", gotKey, gotSecret)
-	}
-}
-
-func TestDoRequest_BearerTakesPrecedence(t *testing.T) {
-	var gotAuth, gotKey string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAuth = r.Header.Get("Authorization")
-		gotKey = r.Header.Get("X-Auth-Key")
-		w.WriteHeader(http.StatusOK)
-	}))
-	t.Cleanup(srv.Close)
-
-	c := New(&config.Config{ServerURL: srv.URL, APIKey: "jwt", AuthKey: "k"})
-	resp, err := c.doRequest("GET", "/health", nil)
-	if err != nil {
-		t.Fatalf("doRequest: %v", err)
-	}
-	resp.Body.Close()
-
-	if gotAuth != "Bearer jwt" {
-		t.Errorf("Authorization = %q, want Bearer jwt", gotAuth)
-	}
 	if gotKey != "" {
-		t.Errorf("X-Auth-Key = %q, want empty (Bearer takes precedence)", gotKey)
+		t.Errorf("X-Auth-Key = %q, want empty", gotKey)
+	}
+	if gotSecret != "" {
+		t.Errorf("X-Auth-Secret = %q, want empty", gotSecret)
+	}
+}
+
+func TestStream_SendsBearerToken(t *testing.T) {
+	var gotAuth string
+	_, c := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = fmt.Fprint(w, "event: done\ndata: {}\n\n")
+	}))
+
+	c.apiKey = "stream-token"
+	events := make(chan SSEEvent, 10)
+	done := make(chan error, 1)
+	c.Stream("test-id", "", events, done)
+
+	for range events {
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("stream error: %v", err)
+	}
+
+	if gotAuth != "Bearer stream-token" {
+		t.Errorf("Authorization = %q, want %q", gotAuth, "Bearer stream-token")
 	}
 }
 
