@@ -46,6 +46,7 @@ Both SDKs implement identical test suites:
 | 9 — Handoffs | `test_suite9_handoffs.py` | `test_suite9_handoffs.test.ts` | 8 | ~2 min |
 | 10 — Code Execution | `test_suite10_code_execution.py` | `test_suite10_code_execution.test.ts` | 9 | ~40s |
 | 11 — LangGraph | `test_suite11_langgraph.py` | `test_suite11_langgraph.test.ts` | 11-12 | ~3 min |
+| 12 — Termination & Gates | `test_suite12_termination_gates.py` | `test_suite12_termination_gates.test.ts` | 5 | ~2 min |
 
 ## Running
 
@@ -91,6 +92,7 @@ uv run pytest e2e/test_suite8_guardrails.py -v            # suite 8 only
 uv run pytest e2e/test_suite9_handoffs.py -v              # suite 9 only
 uv run pytest e2e/test_suite10_code_execution.py -v       # suite 10 only
 uv run pytest e2e/test_suite11_langgraph.py -v            # suite 11 only
+uv run pytest e2e/test_suite12_termination_gates.py -v   # suite 12 only
 ```
 
 ### TypeScript (manual)
@@ -112,6 +114,7 @@ npx vitest run tests/e2e/test_suite8_guardrails.test.ts            # suite 8 onl
 npx vitest run tests/e2e/test_suite9_handoffs.test.ts              # suite 9 only
 npx vitest run tests/e2e/test_suite10_code_execution.test.ts       # suite 10 only
 npx vitest run tests/e2e/test_suite11_langgraph.test.ts            # suite 11 only
+npx vitest run tests/e2e/test_suite12_termination_gates.test.ts   # suite 12 only
 ```
 
 ## Environment Variables
@@ -163,6 +166,9 @@ Compilation: `codeExecution` config in plan, tool naming avoids collisions. Runt
 ### Suite 11: LangGraph
 Framework detection, serialization paths (full extraction, graph-structure, passthrough), conditional routing, messages-based state detection, checkpointer passthrough, tool schema validation, server compilation, and runtime execution. Validates all three LangGraph serializer paths produce correct Conductor workflows.
 
+### Suite 12: Termination & Gates
+TextMentionTermination (loop stops early when sentinel detected, validated via DO_WHILE iteration count), MaxMessageTermination (loop stops at exactly N messages), TextGate stops pipeline (fixer SUB_WORKFLOW absent when checker outputs sentinel), TextGate allows continuation (both SUB_WORKFLOW tasks COMPLETED), invalid model (server rejects nonexistent model). All validation is algorithmic — no LLM output parsing.
+
 ## Reports
 
 After running:
@@ -175,6 +181,6 @@ Both use the same dark-themed format with collapsible suites, error summaries, f
 
 Both e2e jobs in `.github/workflows/ci.yml`:
 - Build CLI + install mcp-testkit + start services
-- Run existing e2e tests, then new suites 1-11
+- Run suites 1-12
 - Generate HTML reports (uploaded as artifacts, 14-day retention)
 - 45-minute timeout per job
