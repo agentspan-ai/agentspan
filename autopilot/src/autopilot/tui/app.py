@@ -16,10 +16,12 @@ from __future__ import annotations
 
 import argparse
 import enum
+import logging
 import os
 import queue
 import sys
 import threading
+import traceback
 from pathlib import Path
 
 os.environ.setdefault("AGENTSPAN_LOG_LEVEL", "WARNING")
@@ -38,9 +40,11 @@ from autopilot.config import AutopilotConfig
 from autopilot.orchestrator.tools import get_orchestrator_tools
 from autopilot.tui.commands import CommandResult, HELP_TEXT, parse_command
 from autopilot.tui.dashboard import render_dashboard
-from autopilot.tui.events import format_event
+from autopilot.tui.events import format_event, render_welcome
 from autopilot.tui.notifications import Notification, NotificationManager
 from autopilot.tui.poller import DashboardPoller
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -96,11 +100,229 @@ def _discover_agents(config: AutopilotConfig) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# TUI-safe credential acquisition
+# ---------------------------------------------------------------------------
+
+def _make_tui_safe_acquire_credentials(append_fn):
+    """Create a TUI-safe version of acquire_credentials.
+
+    Instead of calling input() (which crashes prompt_toolkit), this version:
+    - For OAuth flows: opens the browser and shows instructions in the output area.
+      The local callback server captures the token without terminal input.
+    - For API keys: shows the URL and instructions. Returns a message telling
+      the orchestrator to ask the user to paste the key via chat.
+    - For AWS: reads from ~/.aws/credentials. Falls back to instructions.
+    - For manual: returns instructions for the user to provide via chat.
+
+    Args:
+        append_fn: Function to append text to the TUI output area.
+
+    Returns:
+        A @tool-decorated function safe for use inside prompt_toolkit.
+    """
+    @tool
+    def acquire_credentials(credential_name: str) -> str:
+        """Acquire a missing credential — TUI-safe (no stdin input).
+
+        For OAuth: opens browser, captures token via local callback server.
+        For API keys: shows URL, asks user to paste via chat.
+        For AWS: reads from ~/.aws/credentials.
+        """
+        from autopilot.credentials.acquisition import (
+            CREDENTIAL_REGISTRY,
+            _store_credential,
+            _find_free_port,
+            _run_oauth_callback_server,
+            read_aws_credentials_file,
+        )
+        import urllib.parse
+        import webbrowser
+
+        info = CREDENTIAL_REGISTRY.get(credential_name)
+
+        if info is None:
+            append_fn(
+                f"\n  Unknown credential: {credential_name}\n"
+                f"  Please provide the value in your next message.\n"
+            )
+            return (
+                f"Unknown credential '{credential_name}'. "
+                f"Ask the user to provide the value in their next chat message, "
+                f"then store it with the agentspan CLI."
+            )
+
+        acq_type = info.acquisition_type
+        service = info.service
+
+        # -- OAuth (Google / Microsoft) --
+        if acq_type in ("oauth_google", "oauth_microsoft"):
+            client_id_env = (
+                "GOOGLE_CLIENT_ID" if acq_type == "oauth_google" else "MICROSOFT_CLIENT_ID"
+            )
+            client_secret_env = (
+                "GOOGLE_CLIENT_SECRET" if acq_type == "oauth_google" else "MICROSOFT_CLIENT_SECRET"
+            )
+            client_id = os.environ.get(client_id_env, "")
+            client_secret = os.environ.get(client_secret_env, "")
+
+            if not client_id or not client_secret:
+                provider = "Google" if acq_type == "oauth_google" else "Microsoft"
+                append_fn(
+                    f"\n  {service} requires OAuth authorization.\n"
+                    f"  Set {client_id_env} and {client_secret_env} environment variables,\n"
+                    f"  then retry.\n"
+                )
+                return (
+                    f"OAuth credentials for {service} require {client_id_env} and "
+                    f"{client_secret_env} environment variables to be set. "
+                    f"Tell the user to set these env vars and try again."
+                )
+
+            # Build OAuth URL and open browser
+            port = _find_free_port()
+            redirect_uri = f"http://localhost:{port}/callback"
+
+            if acq_type == "oauth_google":
+                auth_url_base = "https://accounts.google.com/o/oauth2/v2/auth"
+                token_url = "https://oauth2.googleapis.com/token"
+                params = {
+                    "client_id": client_id,
+                    "redirect_uri": redirect_uri,
+                    "response_type": "code",
+                    "scope": " ".join(info.scopes),
+                    "access_type": "offline",
+                    "prompt": "consent",
+                }
+            else:
+                auth_url_base = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+                token_url = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+                params = {
+                    "client_id": client_id,
+                    "redirect_uri": redirect_uri,
+                    "response_type": "code",
+                    "scope": " ".join(info.scopes),
+                    "response_mode": "query",
+                }
+
+            auth_url = f"{auth_url_base}?{urllib.parse.urlencode(params)}"
+
+            append_fn(
+                f"\n  Opening browser for {service} authorization...\n"
+                f"  (Complete the sign-in in your browser)\n"
+            )
+
+            try:
+                webbrowser.open(auth_url)
+            except Exception:
+                append_fn(f"  Could not open browser. Visit:\n  {auth_url}\n")
+
+            # Wait for callback in a background thread to avoid blocking
+            auth_code = _run_oauth_callback_server(port, timeout=120.0)
+            if not auth_code:
+                append_fn(f"  Authorization timed out or was cancelled.\n")
+                return f"Error: OAuth authorization failed or timed out for {credential_name}."
+
+            # Exchange code for token
+            try:
+                import httpx
+                token_data = {
+                    "code": auth_code,
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "redirect_uri": redirect_uri,
+                    "grant_type": "authorization_code",
+                }
+                resp = httpx.post(token_url, data=token_data, timeout=15.0)
+                if resp.status_code != 200:
+                    return f"Error: Token exchange failed ({resp.status_code}): {resp.text}"
+                tokens = resp.json()
+                access_token = tokens.get("access_token", "")
+                if not access_token:
+                    return f"Error: No access token in response."
+                stored = _store_credential(credential_name, access_token)
+                if stored:
+                    append_fn(f"  \u2713 {service} credential acquired and stored.\n")
+                    return f"{credential_name} acquired and stored successfully."
+                else:
+                    os.environ[credential_name] = access_token
+                    append_fn(f"  \u2713 {service} credential acquired (session only).\n")
+                    return f"{credential_name} acquired. Set for current session."
+            except Exception as exc:
+                return f"Error exchanging token: {exc}"
+
+        # -- API key --
+        if acq_type == "api_key":
+            from autopilot.credentials.acquisition import _API_KEY_URLS
+            url = _API_KEY_URLS.get(credential_name, "")
+            if url:
+                append_fn(
+                    f"\n  Opening browser for {service} API key...\n"
+                    f"  {url}\n"
+                    f"  Paste your API key in the chat below.\n"
+                )
+                try:
+                    webbrowser.open(url)
+                except Exception:
+                    pass
+            else:
+                append_fn(
+                    f"\n  {info.instructions}\n"
+                    f"  Paste your {credential_name} in the chat below.\n"
+                )
+            return (
+                f"Browser opened for {service} API key setup. "
+                f"The user should paste the API key in the chat. "
+                f"When they do, store it with: agentspan credentials set {credential_name} <value>"
+            )
+
+        # -- AWS --
+        if acq_type == "aws":
+            creds = read_aws_credentials_file()
+            if creds:
+                access_key = creds.get("aws_access_key_id", "")
+                secret_key = creds.get("aws_secret_access_key", "")
+                _store_credential("AWS_ACCESS_KEY_ID", access_key)
+                _store_credential("AWS_SECRET_ACCESS_KEY", secret_key)
+                append_fn(f"  \u2713 AWS credentials read from ~/.aws/credentials\n")
+                return (
+                    "AWS credentials read from ~/.aws/credentials and stored. "
+                    "Both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are now available."
+                )
+            append_fn(
+                f"\n  No ~/.aws/credentials file found.\n"
+                f"  Create AWS access keys in the IAM console and paste them in the chat.\n"
+            )
+            return (
+                "No ~/.aws/credentials file found. "
+                "Ask the user to provide AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY via chat."
+            )
+
+        # -- Manual --
+        append_fn(
+            f"\n  {info.instructions}\n"
+            f"  Please provide the value for {credential_name} in the chat below.\n"
+        )
+        return (
+            f"Credential '{credential_name}' requires manual input. "
+            f"The user should type the value in the chat. "
+            f"When they do, store it with: agentspan credentials set {credential_name} <value>"
+        )
+
+    return acquire_credentials
+
+
+# ---------------------------------------------------------------------------
 # Orchestrator agent builder
 # ---------------------------------------------------------------------------
 
-def build_orchestrator():
-    """Build the Claw orchestrator agent with full orchestrator toolset."""
+def build_orchestrator(tui_append_fn=None):
+    """Build the Claw orchestrator agent with full orchestrator toolset.
+
+    Args:
+        tui_append_fn: Optional callback to append text to TUI output.
+            When provided, credential tools use TUI-safe versions that
+            don't call input().
+    """
 
     model = os.environ.get("AGENTSPAN_LLM_MODEL", "openai/gpt-4o")
 
@@ -129,12 +351,24 @@ def build_orchestrator():
             result.append(f"=== expanded_prompt.md ===\n{prompt_path.read_text()}")
         return "\n\n".join(result) if result else f"Agent '{agent_name}' has no config files."
 
+    # Get orchestrator tools and replace acquire_credentials with TUI-safe version
+    orch_tools = get_orchestrator_tools()
+
+    if tui_append_fn is not None:
+        tui_safe_acquire = _make_tui_safe_acquire_credentials(tui_append_fn)
+        # Replace the original acquire_credentials with the TUI-safe one
+        orch_tools = [
+            tui_safe_acquire if (hasattr(t, "_tool_def") and t._tool_def.name == "acquire_credentials")
+            else t
+            for t in orch_tools
+        ]
+
     # Core TUI tools + all orchestrator creation/management/credential tools
     all_tools = [
         receive_message,
         reply_to_user,
         read_agent_config,
-    ] + get_orchestrator_tools()
+    ] + orch_tools
 
     agent = Agent(
         name="claw_orchestrator",
@@ -143,7 +377,7 @@ def build_orchestrator():
         max_turns=100_000,
         stateful=True,
         instructions="""\
-You are the Agentspan Claw orchestrator — an AI assistant that autonomously
+You are the Agentspan Claw orchestrator -- an AI assistant that autonomously
 creates, deploys, and manages agents on behalf of the user.
 
 Your job is to turn lazy, minimal user prompts into fully functional agents.
@@ -156,11 +390,11 @@ When a user asks you to create an agent:
 2. Call expand_prompt() with the user's request and any clarifications.
 3. Use the returned template to generate a complete YAML agent specification.
 4. Call generate_agent() with the YAML spec to create the agent files.
-5. **Validation gates** — run each gate in order, fix issues before proceeding:
-   a. Call validate_spec() — if FAIL, fix the spec and retry (up to 3 times).
-   b. Call validate_code() — if FAIL, regenerate or fix worker code and retry (up to 3 times).
-   c. Call validate_integrations() — if FAIL, resolve missing integrations/credentials and retry (up to 3 times).
-   d. Call validate_deployment() — if FAIL, fix the issue and retry (up to 3 times).
+5. **Validation gates** -- run each gate in order, fix issues before proceeding:
+   a. Call validate_spec() -- if FAIL, fix the spec and retry (up to 3 times).
+   b. Call validate_code() -- if FAIL, regenerate or fix worker code and retry (up to 3 times).
+   c. Call validate_integrations() -- if FAIL, resolve missing integrations/credentials and retry (up to 3 times).
+   d. Call validate_deployment() -- if FAIL, fix the issue and retry (up to 3 times).
    If a gate still fails after 3 retries, report the errors to the user and stop.
 6. If all gates pass, call deploy_agent() to start the agent.
 7. Report back to the user with what was created and deployed.
@@ -181,14 +415,14 @@ When a user asks to manage existing agents:
 ## Credentials
 
 - Use check_credentials() to see what credentials an agent needs.
-- Use prompt_credentials() to guide the user through setting up a credential.
+- Use acquire_credentials() to set up a missing credential.
 
 ## Principles
 
 - Be proactive: smart-default everything you can.
 - Be concise: don't over-explain unless asked.
 - Be honest: if something fails, say what went wrong and suggest a fix.
-- Never invent credentials — check what's needed and guide the user to set them up.
+- Never invent credentials -- check what's needed and guide the user to set them up.
 
 ## Interaction Loop
 
@@ -243,16 +477,11 @@ def _run_tui_repl(
     agent_state = [AgentState.BUSY]
     _event_queue: queue.Queue = queue.Queue()
     _stop_requested = [False]
+    _app_exited = threading.Event()
 
-    # ── Output area (read-only, scrollable) ────────────────────────
+    # ---- Output area (read-only, scrollable) ----
     output_area = TextArea(
-        text=(
-            f"{'=' * 62}\n"
-            f"  Agentspan Claw\n"
-            f"  Session: {execution_id[:16]}...\n"
-            f"  Type /help for commands, quit to exit\n"
-            f"{'=' * 62}\n\n"
-        ),
+        text=render_welcome(execution_id),
         read_only=True,
         scrollbar=True,
         wrap_lines=True,
@@ -260,14 +489,20 @@ def _run_tui_repl(
     )
 
     def _append(text: str) -> None:
+        """Append text to the output area — thread-safe."""
         if not text:
             return
-        output_area.text += text
-        output_area.buffer.cursor_position = len(output_area.text)
-        if app.is_running:
-            app.invalidate()
+        if _app_exited.is_set():
+            return
+        try:
+            output_area.text += text
+            output_area.buffer.cursor_position = len(output_area.text)
+            if app.is_running:
+                app.invalidate()
+        except Exception:
+            pass  # Safely ignore if app is shutting down
 
-    # ── Input handler ──────────────────────────────────────────────
+    # ---- Input handler ----
 
     def _on_input(buff: Buffer) -> None:
         raw = buff.text.strip()
@@ -280,7 +515,10 @@ def _run_tui_repl(
         if cmd.action in ("quit", "stop"):
             _append("Stopping...\n")
             _stop_requested[0] = True
-            handle.stop()
+            try:
+                handle.stop()
+            except Exception:
+                pass
             threading.Timer(1.0, lambda: app.exit() if app.is_running else None).start()
             return
 
@@ -293,7 +531,10 @@ def _run_tui_repl(
         if cmd.action == "cancel":
             _append("Cancelling...\n")
             _stop_requested[0] = True
-            handle.cancel()
+            try:
+                handle.cancel()
+            except Exception:
+                pass
             threading.Timer(0.5, lambda: app.exit() if app.is_running else None).start()
             return
 
@@ -304,14 +545,11 @@ def _run_tui_repl(
 
         # Handle action commands that need server interaction
         if cmd.action == "signal" and cmd.agent_name and cmd.message:
-            # Signal the orchestrator's execution — the agent_name is passed
-            # as context so the orchestrator can route it to the right agent.
             runtime.signal(execution_id, f"[signal:{cmd.agent_name}] {cmd.message}")
-            _append(f"  Signal sent to {cmd.agent_name}: {cmd.message}\n")
+            _append(f"  \u2713 Signal sent to {cmd.agent_name}: {cmd.message}\n")
             return
 
         if cmd.action == "change" and cmd.agent_name and cmd.message:
-            # Send as chat message — orchestrator will handle the change
             _append(f"\n{_THIN_SEP}\nYou: change {cmd.agent_name}: {cmd.message}\n{_THIN_SEP}\n")
             runtime.send_message(execution_id, {"text": f"Change agent '{cmd.agent_name}': {cmd.message}"})
             return
@@ -330,7 +568,6 @@ def _run_tui_repl(
 
         if cmd.action == "status":
             if cmd.agent_name:
-                # Show status for a specific agent
                 agents = _discover_agents(config)
                 found = [a for a in agents if a["name"] == cmd.agent_name]
                 if found:
@@ -344,7 +581,6 @@ def _run_tui_repl(
                 else:
                     _append(f"\n  Agent '{cmd.agent_name}' not found.\n")
             else:
-                # Overall status
                 agents = _discover_agents(config)
                 state_label = agent_state[0].value
                 _append(
@@ -383,7 +619,6 @@ def _run_tui_repl(
             return
 
         if cmd.action in ("pause", "resume") and cmd.agent_name:
-            # Signal the orchestrator to pause/resume the agent
             runtime.signal(
                 execution_id,
                 f"[{cmd.action}:{cmd.agent_name}]",
@@ -406,7 +641,7 @@ def _run_tui_repl(
         focusable=True,
     )
 
-    # ── Key bindings ───────────────────────────────────────────────
+    # ---- Key bindings ----
     kb = KeyBindings()
 
     @kb.add("c-c")
@@ -416,7 +651,10 @@ def _run_tui_repl(
             return
         _stop_requested[0] = True
         _append("\n\nCtrl+C \u2014 stopping (Ctrl+C again to force exit)...\n")
-        handle.stop()
+        try:
+            handle.stop()
+        except Exception:
+            pass
 
     @kb.add("pageup")
     def _page_up(event):
@@ -428,7 +666,7 @@ def _run_tui_repl(
         output_area.buffer.cursor_position = len(output_area.text)
         app.invalidate()
 
-    # ── Layout ─────────────────────────────────────────────────────
+    # ---- Layout ----
     layout = Layout(
         HSplit([
             output_area,
@@ -444,57 +682,91 @@ def _run_tui_repl(
         full_screen=True,
     )
 
-    # ── Stream thread ──────────────────────────────────────────────
+    # ---- Stream thread (with exception handling) ----
     def _stream_events():
-        for event in handle.stream():
-            _event_queue.put(event)
-
-    threading.Thread(target=_stream_events, daemon=True).start()
-
-    # ── Event consumer thread ──────────────────────────────────────
-    def _consume_events():
-        while True:
-            try:
-                event = _event_queue.get(timeout=1.0)
-            except queue.Empty:
+        try:
+            for event in handle.stream():
                 if _stop_requested[0]:
-                    if app.is_running:
-                        app.exit()
                     return
-                continue
+                _event_queue.put(event)
+        except Exception as exc:
+            logger.debug("Stream thread error: %s", exc)
+            if not _stop_requested[0]:
+                _event_queue.put(("__error__", str(exc)))
 
-            if event.type == EventType.WAITING:
-                agent_state[0] = AgentState.WAITING
-                _append(f"{_SEPARATOR}\n")
-            elif event.type in (EventType.TOOL_CALL, EventType.THINKING):
-                agent_state[0] = AgentState.BUSY
-            elif event.type in (EventType.DONE, EventType.ERROR):
-                agent_state[0] = AgentState.DONE
+    threading.Thread(target=_stream_events, daemon=True, name="claw-stream").start()
+
+    # ---- Event consumer thread (with exception handling) ----
+    def _consume_events():
+        try:
+            while True:
+                try:
+                    event = _event_queue.get(timeout=1.0)
+                except queue.Empty:
+                    if _stop_requested[0]:
+                        if app.is_running:
+                            try:
+                                app.exit()
+                            except Exception:
+                                pass
+                        return
+                    continue
+
+                # Handle internal error sentinel
+                if isinstance(event, tuple) and len(event) == 2 and event[0] == "__error__":
+                    _append(f"\n  Connection error: {event[1]}\n")
+                    continue
+
+                # Process event type
+                if event.type == EventType.WAITING:
+                    agent_state[0] = AgentState.WAITING
+                    _append(f"{_SEPARATOR}\n")
+                elif event.type in (EventType.TOOL_CALL, EventType.THINKING):
+                    agent_state[0] = AgentState.BUSY
+                elif event.type in (EventType.DONE, EventType.ERROR):
+                    agent_state[0] = AgentState.DONE
+                    text = format_event(event)
+                    _append(text)
+                    if event.type == EventType.DONE and event.output:
+                        _append(f"\n{'--- Claw ' + '-' * 53}\n{event.output}\n")
+                    _append("\nSession ended.\n")
+                    if app.is_running:
+                        try:
+                            app.exit()
+                        except Exception:
+                            pass
+                    return
+
+                # Format and display the event
                 text = format_event(event)
                 _append(text)
-                if event.type == EventType.DONE and event.output:
-                    _append(f"\n{'--- Claw ' + '-' * 53}\n{event.output}\n")
-                _append("\nSession ended.\n")
-                if app.is_running:
-                    app.exit()
-                return
 
-            text = format_event(event)
-            _append(text)
+        except Exception as exc:
+            logger.debug("Consumer thread error: %s\n%s", exc, traceback.format_exc())
+            _append(f"\n  Internal error in event consumer: {exc}\n")
 
-    threading.Thread(target=_consume_events, daemon=True).start()
+    threading.Thread(target=_consume_events, daemon=True, name="claw-consumer").start()
 
-    # ── Background poller for dashboard/notification refreshes ─────
+    # ---- Background poller (with safe invalidate) ----
+    def _safe_invalidate():
+        """Only invalidate if the app is still running."""
+        if not _app_exited.is_set() and app.is_running:
+            try:
+                app.invalidate()
+            except Exception:
+                pass
+
     poller = DashboardPoller(
         interval_seconds=30,
-        on_update=lambda: app.invalidate() if app.is_running else None,
+        on_update=_safe_invalidate,
     )
     poller.start()
 
-    # ── Run the TUI ────────────────────────────────────────────────
+    # ---- Run the TUI ----
     try:
         app.run()
     finally:
+        _app_exited.set()
         poller.stop()
 
 
@@ -538,7 +810,15 @@ def main() -> None:
             print(f"Could not load agent '{args.agent}'.")
             raise SystemExit(1)
     else:
-        agent = build_orchestrator()
+        # Build with TUI-safe credential handling
+        # We pass None here and rebuild after app setup, but since the agent
+        # is built before the app, we use a deferred append function
+        _deferred_output: list[str] = []
+
+        def _deferred_append(text: str) -> None:
+            _deferred_output.append(text)
+
+        agent = build_orchestrator(tui_append_fn=_deferred_append)
 
     # Ensure session file directory exists
     args.session_file.parent.mkdir(parents=True, exist_ok=True)

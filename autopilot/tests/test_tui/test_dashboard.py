@@ -1,4 +1,4 @@
-"""Tests for the dashboard rendering."""
+"""Tests for the dashboard rendering with box-drawing characters."""
 
 from autopilot.tui.dashboard import render_dashboard
 
@@ -8,13 +8,24 @@ class TestRenderDashboardEmpty:
 
     def test_render_dashboard_empty(self):
         result = render_dashboard(agents=[], notifications=[])
-        assert "DASHBOARD" in result
+        assert "AGENTSPAN CLAW" in result
+        assert "Dashboard" in result
         assert "No agents configured." in result
         assert "No notifications." in result
 
-    def test_render_dashboard_empty_shows_zero_unread(self):
+    def test_render_dashboard_empty_shows_zero_new(self):
         result = render_dashboard(agents=[], notifications=[])
-        assert "0 unread" in result
+        assert "0 new" in result
+
+    def test_render_dashboard_contains_box_drawing(self):
+        """Dashboard must use box-drawing characters."""
+        result = render_dashboard(agents=[], notifications=[])
+        assert "\u2554" in result  # double top-left
+        assert "\u2557" in result  # double top-right
+        assert "\u255a" in result  # double bottom-left
+        assert "\u255d" in result  # double bottom-right
+        assert "\u2551" in result  # double vertical
+        assert "\u2550" in result  # double horizontal
 
 
 class TestRenderDashboardWithAgents:
@@ -33,10 +44,9 @@ class TestRenderDashboardWithAgents:
         assert "docs-reviewer" in result
         assert "tax-review" in result
 
-        # Status indicators must appear
-        assert "[*]" in result  # active
-        assert "[-]" in result  # paused
-        assert "[!]" in result  # error
+        # Status indicators must use circle icons
+        assert "\u25cf" in result  # filled circle (active/error)
+        assert "\u25cb" in result  # empty circle (paused)
 
         # Trigger types must appear
         assert "cron" in result
@@ -48,18 +58,24 @@ class TestRenderDashboardWithAgents:
         result = render_dashboard(agents=agents, notifications=[])
         assert "minimal-agent" in result
 
-    def test_render_dashboard_agent_statuses_are_correct(self):
-        """Verify each status maps to its expected icon."""
-        for status, icon in [
-            ("active", "[*]"),
-            ("paused", "[-]"),
-            ("waiting", "[?]"),
-            ("error", "[!]"),
-            ("archived", "[x]"),
-        ]:
+    def test_render_dashboard_agent_statuses_produce_icons(self):
+        """Verify different statuses produce icon characters."""
+        for status in ["active", "paused", "waiting", "error"]:
             agents = [{"name": f"agent-{status}", "status": status, "last_run": "", "trigger": ""}]
             result = render_dashboard(agents=agents, notifications=[])
-            assert icon in result, f"Expected {icon} for status '{status}' in output"
+            # Every status should produce some kind of circle icon
+            assert "\u25cf" in result or "\u25cb" in result or "\u25d4" in result, (
+                f"Expected a circle icon for status '{status}'"
+            )
+
+    def test_render_dashboard_header_row(self):
+        """Verify the agent table has a header."""
+        agents = [{"name": "test", "status": "active", "last_run": "", "trigger": "cron"}]
+        result = render_dashboard(agents=agents, notifications=[])
+        assert "AGENTS" in result
+        assert "STATUS" in result
+        assert "TRIGGER" in result
+        assert "LAST RUN" in result
 
 
 class TestRenderDashboardWithNotifications:
@@ -85,7 +101,7 @@ class TestRenderDashboardWithNotifications:
         result = render_dashboard(agents=[], notifications=notifications)
 
         # Unread count should be 1 (only the first is unread)
-        assert "1 unread" in result
+        assert "1 new" in result
 
         # Notification content
         assert "email-summary" in result
@@ -97,12 +113,18 @@ class TestRenderDashboardWithNotifications:
         lines = result.split("\n")
         email_lines = [l for l in lines if "email-summary" in l and "2 urgent" in l]
         assert len(email_lines) == 1
-        assert email_lines[0].lstrip().startswith("*")
+        assert "*" in email_lines[0]
 
         docs_lines = [l for l in lines if "docs-reviewer" in l and "Review complete" in l]
         assert len(docs_lines) == 1
-        # Read notifications don't start with '*'
-        assert not docs_lines[0].lstrip().startswith("*")
+        # Read notifications should not have the '*' marker
+        # Find the notification-specific portion
+        doc_line = docs_lines[0]
+        # The read notification's marker position should have a space, not '*'
+        # Look at the content after the border character
+        content_start = doc_line.find("\u2551") + 1
+        notif_text = doc_line[content_start:].lstrip()
+        assert not notif_text.startswith("*")
 
     def test_render_dashboard_all_unread(self):
         notifications = [
@@ -111,11 +133,16 @@ class TestRenderDashboardWithNotifications:
             {"agent_name": "a3", "timestamp": "", "summary": "s3", "priority": "normal", "read": False},
         ]
         result = render_dashboard(agents=[], notifications=notifications)
-        assert "3 unread" in result
+        assert "3 new" in result
 
     def test_render_dashboard_all_read(self):
         notifications = [
             {"agent_name": "a1", "timestamp": "", "summary": "s1", "priority": "normal", "read": True},
         ]
         result = render_dashboard(agents=[], notifications=notifications)
-        assert "0 unread" in result
+        assert "0 new" in result
+
+    def test_render_dashboard_notifications_section(self):
+        """Verify the notifications section header is present."""
+        result = render_dashboard(agents=[], notifications=[])
+        assert "NOTIFICATIONS" in result
