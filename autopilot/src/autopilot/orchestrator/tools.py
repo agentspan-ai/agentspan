@@ -766,8 +766,8 @@ def check_credentials(agent_name: str) -> str:
 
     lines.append("")
     lines.append(
-        "Use prompt_credentials('<credential_name>') to set up missing credentials, "
-        "or run: agentspan credentials set <name> <value>"
+        "Use acquire_credentials('<credential_name>') to seamlessly set up missing "
+        "credentials (opens browser for OAuth/API key flows)."
     )
 
     return "\n".join(lines)
@@ -779,6 +779,9 @@ def prompt_credentials(credential_name: str) -> str:
 
     Returns instructions for the user to configure the named credential
     via the Agentspan CLI.
+
+    .. deprecated:: Use :func:`acquire_credentials` instead for seamless
+       browser-based acquisition.
     """
     return (
         f"To set up the '{credential_name}' credential:\n\n"
@@ -787,6 +790,32 @@ def prompt_credentials(credential_name: str) -> str:
         f"The credential will be securely stored on the Agentspan server and "
         f"injected into agent executions automatically."
     )
+
+
+@tool
+def acquire_credentials(credential_name: str) -> str:
+    """Acquire a missing credential by guiding the user through the setup process.
+
+    For OAuth services (Gmail, Google Calendar, etc.): opens browser for OAuth flow.
+    For API key services (GitHub, Linear, etc.): opens browser to API key page and prompts for the key.
+    For AWS: reads from ~/.aws/credentials or guides through IAM console.
+
+    Returns the result of the acquisition attempt.
+    """
+    from autopilot.credentials.acquisition import (
+        CREDENTIAL_REGISTRY,
+        acquire_credential,
+    )
+
+    info = CREDENTIAL_REGISTRY.get(credential_name)
+    if info:
+        method = info.acquisition_type.replace("_", " ").title()
+        service = info.service
+    else:
+        method = "Manual"
+        service = credential_name
+
+    return acquire_credential(credential_name)
 
 
 # ---------------------------------------------------------------------------
@@ -979,6 +1008,7 @@ def get_orchestrator_tools() -> list:
         get_notifications,
         check_credentials,
         prompt_credentials,
+        acquire_credentials,
         # MCP integration
         add_mcp_integration,
         # Validation gates
