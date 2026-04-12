@@ -146,7 +146,7 @@ jobs:
           java -jar server/build/libs/agentspan-runtime.jar --server.port=6767 &
           for i in $(seq 1 30); do curl -sf http://localhost:6767/health && break; sleep 2; done
 
-      - name: Run Python e2e suites 1-12
+      - name: Run Python e2e suites 1-13
         working-directory: sdk/python
         run: |
           uv run pytest e2e/ -v --tb=short \
@@ -217,7 +217,7 @@ jobs:
         working-directory: sdk/typescript
         run: npm ci && npm run build
 
-      - name: Run TypeScript e2e suites 1-12
+      - name: Run TypeScript e2e suites 1-13
         working-directory: sdk/typescript
         run: npx vitest run tests/e2e/ --reporter=verbose --reporter=junit --outputFile.junit=../../e2e-results/junit-ts.xml
 

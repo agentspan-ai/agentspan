@@ -47,6 +47,7 @@ Both SDKs implement identical test suites:
 | 10 — Code Execution | `test_suite10_code_execution.py` | `test_suite10_code_execution.test.ts` | 9 | ~40s |
 | 11 — LangGraph | `test_suite11_langgraph.py` | `test_suite11_langgraph.test.ts` | 11-12 | ~3 min |
 | 12 — Termination & Gates | `test_suite12_termination_gates.py` | `test_suite12_termination_gates.test.ts` | 5 | ~2 min |
+| 13 — Callbacks | `test_suite13_callbacks.py` | `test_suite13_callbacks.test.ts` | 5 | ~1 min |
 
 ## Port Assignments
 
@@ -120,6 +121,7 @@ uv run pytest e2e/test_suite9_handoffs.py -v              # suite 9 only
 uv run pytest e2e/test_suite10_code_execution.py -v       # suite 10 only
 uv run pytest e2e/test_suite11_langgraph.py -v            # suite 11 only
 uv run pytest e2e/test_suite12_termination_gates.py -v    # suite 12 only
+uv run pytest e2e/test_suite13_callbacks.py -v            # suite 13 only
 ```
 
 ### TypeScript (manual)
@@ -142,6 +144,7 @@ npx vitest run tests/e2e/test_suite9_handoffs.test.ts              # suite 9 onl
 npx vitest run tests/e2e/test_suite10_code_execution.test.ts       # suite 10 only
 npx vitest run tests/e2e/test_suite11_langgraph.test.ts            # suite 11 only
 npx vitest run tests/e2e/test_suite12_termination_gates.test.ts    # suite 12 only
+npx vitest run tests/e2e/test_suite13_callbacks.test.ts            # suite 13 only
 ```
 
 ## Environment Variables
@@ -201,10 +204,12 @@ Migrated from legacy `tests/e2e/test_python_e2e.py` with counterfactually-valid 
 - TextGate allows continuation: both SUB_WORKFLOW tasks COMPLETED when checker doesn't output sentinel
 - Invalid model: server rejects nonexistent model (status FAILED/TERMINATED)
 
+### Suite 13: Callbacks
+Compilation: tool callbacks (on_tool_start/on_tool_end) produce `before_tool`/`after_tool` entries in plan with correct taskName format. Model callbacks (on_model_start/on_model_end) produce `before_model`/`after_model` entries. Runtime: before_tool callback worker task exists and COMPLETED in workflow. after_tool callback worker task exists and COMPLETED. All 6 callback hooks attached simultaneously don't block tool execution. All validation via plan JSON inspection and workflow task status — no LLM output parsing.
+
 ## Coverage Not Yet Tested
 
 The following features are not yet covered by e2e suites:
-- **Callbacks** (before/after tool execution hooks) — legacy tests only verified status=COMPLETED, which passes whether callbacks execute or not. Proper validation requires proving callback side-effects occurred.
 - **Skills** (`skill()` API, `load_skills()`, skill pipelines) — requires skill fixture files
 - **Streaming** (`rt.stream()`) — token-by-token output validation
 
@@ -245,6 +250,6 @@ Both use the same dark-themed format with collapsible suites, error summaries, f
 
 Both e2e jobs in `.github/workflows/ci.yml`:
 - Build CLI + install mcp-testkit + start services
-- Run suites 1-12 (Python and TypeScript in parallel jobs)
+- Run suites 1-13 (Python and TypeScript in parallel jobs)
 - Generate HTML reports (uploaded as artifacts, 14-day retention)
 - 45-minute timeout per job
