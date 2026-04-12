@@ -72,7 +72,17 @@ def _register_builtins(registry: IntegrationRegistry) -> None:
     from autopilot.integrations.local_fs.tools import get_tools as local_fs_tools
     from autopilot.integrations.web_search.tools import get_tools as web_search_tools
     from autopilot.integrations.doc_reader.tools import get_tools as doc_reader_tools
+    from autopilot.integrations.github.tools import get_tools as github_tools
+    from autopilot.integrations.slack.tools import get_tools as slack_tools
+    from autopilot.integrations.google_calendar.tools import get_tools as gcal_tools
+    from autopilot.integrations.google_drive.tools import get_tools as gdrive_tools
+    from autopilot.integrations.s3.tools import get_tools as s3_tools
 
     registry.register("local_fs", local_fs_tools)
     registry.register("web_search", web_search_tools)
     registry.register("doc_reader", doc_reader_tools)
+    registry.register("github", github_tools)
+    registry.register("slack", slack_tools)
+    registry.register("google_calendar", gcal_tools)
+    registry.register("google_drive", gdrive_tools)
+    registry.register("s3", s3_tools)
