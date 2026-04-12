@@ -106,3 +106,7 @@ def _register_builtins(registry: IntegrationRegistry) -> None:
     registry.register("google_analytics", ga_tools)
     registry.register("whatsapp", whatsapp_tools)
     registry.register("imessage", imessage_tools)
+
+    # MCP is registered as a dynamic integration — it creates tools on demand
+    # from configured MCP servers, not from a static tool set.
+    registry.register("mcp", lambda: [])  # placeholder; actual tools are per-server
