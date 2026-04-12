@@ -12,10 +12,13 @@ from autopilot.orchestrator.state import AgentState, StateManager
 from autopilot.orchestrator.tools import (
     OrchestratorError,
     check_credentials,
+    commit_agent_change,
     expand_prompt,
     generate_agent,
+    generate_worker,
     get_agent_status,
     get_notifications,
+    init_autopilot_repo,
     list_agents,
     resolve_integrations,
     signal_agent,
@@ -476,3 +479,122 @@ class TestGetNotifications:
         assert "2 active" in result
         assert "1 waiting" in result
         assert "1 errors" in result
+
+
+# ---------------------------------------------------------------------------
+# generate_worker
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateWorker:
+    def test_creates_worker_file(self, monkeypatch, tmp_path: Path):
+        agents_dir = _make_config_env(monkeypatch, tmp_path)
+        _write_agent_yaml(agents_dir, "my_agent", {
+            "name": "my_agent",
+            "model": "openai/gpt-4o",
+            "tools": [],
+        })
+
+        result = generate_worker(
+            agent_name="my_agent",
+            tool_name="fetch_data",
+            description="Fetch data from an API",
+            parameters="url: str, limit: int = 10",
+        )
+
+        worker_path = agents_dir / "my_agent" / "workers" / "fetch_data.py"
+        assert worker_path.exists()
+        content = worker_path.read_text()
+        assert "@tool" in content
+        assert "def fetch_data" in content
+        assert "url: str" in content
+        assert "limit: int = 10" in content
+
+    def test_updates_agent_yaml_tools(self, monkeypatch, tmp_path: Path):
+        agents_dir = _make_config_env(monkeypatch, tmp_path)
+        _write_agent_yaml(agents_dir, "my_agent", {
+            "name": "my_agent",
+            "model": "openai/gpt-4o",
+            "tools": ["existing_tool"],
+        })
+
+        generate_worker(
+            agent_name="my_agent",
+            tool_name="new_tool",
+            description="A new tool",
+        )
+
+        updated_yaml = yaml.safe_load((agents_dir / "my_agent" / "agent.yaml").read_text())
+        assert "new_tool" in updated_yaml["tools"]
+        assert "existing_tool" in updated_yaml["tools"]
+
+    def test_raises_for_nonexistent_agent(self, monkeypatch, tmp_path: Path):
+        _make_config_env(monkeypatch, tmp_path)
+
+        with pytest.raises(RuntimeError, match="not found"):
+            generate_worker(
+                agent_name="ghost",
+                tool_name="something",
+                description="whatever",
+            )
+
+    def test_includes_api_docs_in_comment(self, monkeypatch, tmp_path: Path):
+        agents_dir = _make_config_env(monkeypatch, tmp_path)
+        _write_agent_yaml(agents_dir, "doc_agent", {
+            "name": "doc_agent",
+            "model": "openai/gpt-4o",
+            "tools": [],
+        })
+
+        generate_worker(
+            agent_name="doc_agent",
+            tool_name="call_api",
+            description="Call the Foo API",
+            api_docs="https://docs.foo.com/v1/endpoints",
+        )
+
+        content = (agents_dir / "doc_agent" / "workers" / "call_api.py").read_text()
+        assert "docs.foo.com" in content
+
+
+# ---------------------------------------------------------------------------
+# Git versioning
+# ---------------------------------------------------------------------------
+
+
+class TestGitVersioning:
+    def test_init_autopilot_repo_creates_git(self, tmp_path: Path):
+        from autopilot.config import AutopilotConfig
+        config = AutopilotConfig(base_dir=tmp_path)
+        init_autopilot_repo(config)
+        assert (tmp_path / ".git").exists()
+        assert (tmp_path / ".gitignore").exists()
+
+    def test_init_is_idempotent(self, tmp_path: Path):
+        from autopilot.config import AutopilotConfig
+        config = AutopilotConfig(base_dir=tmp_path)
+        init_autopilot_repo(config)
+        init_autopilot_repo(config)  # Should not fail
+        assert (tmp_path / ".git").exists()
+
+    def test_commit_agent_change(self, tmp_path: Path):
+        import subprocess
+        from autopilot.config import AutopilotConfig
+        config = AutopilotConfig(base_dir=tmp_path)
+        init_autopilot_repo(config)
+
+        # Create an agent dir
+        agent_dir = tmp_path / "agents" / "test_agent"
+        agent_dir.mkdir(parents=True)
+        (agent_dir / "agent.yaml").write_text("name: test_agent\n")
+
+        commit_agent_change("test_agent", "created agent", config)
+
+        # Verify the commit exists
+        result = subprocess.run(
+            ["git", "log", "--oneline", "-1"],
+            cwd=str(tmp_path),
+            capture_output=True,
+            text=True,
+        )
+        assert "[test_agent] created agent" in result.stdout
