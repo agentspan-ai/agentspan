@@ -472,7 +472,20 @@ The Claw orchestrator is an Agentspan agent with two categories of tools.
 | Tool | Description |
 |------|-------------|
 | `check_credentials(agent_name)` | Verify all required credentials exist on server |
-| `prompt_credentials(missing_list)` | Guide user through `agentspan credentials set` |
+| `acquire_credentials(credential_name)` | Automatically acquire a missing credential — opens browser for OAuth flows (Google, Microsoft), navigates to API key pages (GitHub, Linear, Slack), reads AWS credentials from `~/.aws/credentials`. The system does the work, not the user. |
+
+#### Credential Acquisition Strategy
+
+The system must be fully autopilot — when credentials are missing, it doesn't just print instructions. It **does the work**:
+
+| Credential Type | Acquisition Method |
+|----------------|-------------------|
+| Google OAuth (Gmail, Calendar, Drive, Analytics) | Opens browser to Google OAuth consent screen, runs local HTTP callback server, exchanges auth code for token, stores automatically |
+| Microsoft OAuth (Outlook) | Opens browser to Microsoft identity login, same local callback flow |
+| API Keys (GitHub, Linear, Notion, Slack, Jira, HubSpot, Brave) | Opens browser directly to the service's token/API key creation page, prompts user to paste the key |
+| AWS (S3) | Reads from `~/.aws/credentials` if available, otherwise guides through IAM console |
+| WhatsApp | Opens Meta Business settings page for token setup |
+| iMessage | No credentials needed (local macOS only) |
 
 ---
 
