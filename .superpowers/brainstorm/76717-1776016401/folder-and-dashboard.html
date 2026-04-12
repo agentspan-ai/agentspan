@@ -1,0 +1,136 @@
+<h2>Section 3: Local Folder Structure & Dashboard UX</h2>
+<p class="subtitle">Thin local storage + notifications panel + polling architecture</p>
+
+<div class="section">
+  <h3>Local Folder Structure</h3>
+  <div class="mockup">
+    <div class="mockup-header">~/.autopilot/</div>
+    <div class="mockup-body" style="font-family: monospace; font-size: 13px; line-height: 1.8; color: #e2e8f0;">
+      <span style="color: #a78bfa;">~/.autopilot/</span><br>
+      ├── <span style="color: #64748b;">config.yaml</span> <span style="color: #475569;"># server URL, default model, polling interval</span><br>
+      ├── <span style="color: #a78bfa;">agents/</span><br>
+      │   ├── <span style="color: #a78bfa;">email-morning-summary/</span><br>
+      │   │   ├── <span style="color: #22c55e;">agent.yaml</span> <span style="color: #475569;"># agent definition (name, model, instructions, schedule)</span><br>
+      │   │   ├── <span style="color: #22c55e;">expanded_prompt.md</span> <span style="color: #475569;"># the full expanded prompt (human-readable)</span><br>
+      │   │   └── <span style="color: #a78bfa;">workers/</span><br>
+      │   │       ├── <span style="color: #f59e0b;">gmail_reader.py</span> <span style="color: #475569;"># custom tool: fetch + categorize emails</span><br>
+      │   │       └── <span style="color: #f59e0b;">whatsapp_sender.py</span> <span style="color: #475569;"># custom tool: format + send summary</span><br>
+      │   ├── <span style="color: #a78bfa;">tax-review/</span><br>
+      │   │   ├── <span style="color: #22c55e;">agent.yaml</span><br>
+      │   │   ├── <span style="color: #22c55e;">expanded_prompt.md</span><br>
+      │   │   └── <span style="color: #a78bfa;">workers/</span><br>
+      │   │       └── <span style="color: #f59e0b;">pdf_analyzer.py</span><br>
+      │   └── <span style="color: #a78bfa;">docs-reviewer/</span><br>
+      │       ├── <span style="color: #22c55e;">agent.yaml</span><br>
+      │       ├── <span style="color: #22c55e;">expanded_prompt.md</span><br>
+      │       └── <span style="color: #a78bfa;">workers/</span><br>
+      │           └── <span style="color: #f59e0b;">folder_scanner.py</span><br>
+      └── <span style="color: #a78bfa;">orchestrator/</span><br>
+      &nbsp;   ├── <span style="color: #22c55e;">agent.yaml</span> <span style="color: #475569;"># the Claw orchestrator agent itself</span><br>
+      &nbsp;   └── <span style="color: #a78bfa;">workers/</span><br>
+      &nbsp;       ├── <span style="color: #f59e0b;">prompt_expander.py</span> <span style="color: #475569;"># expand lazy prompt → full spec</span><br>
+      &nbsp;       ├── <span style="color: #f59e0b;">agent_builder.py</span> <span style="color: #475569;"># generate agent.yaml + worker code</span><br>
+      &nbsp;       ├── <span style="color: #f59e0b;">agent_deployer.py</span> <span style="color: #475569;"># compile + register + schedule on server</span><br>
+      &nbsp;       └── <span style="color: #f59e0b;">agent_manager.py</span> <span style="color: #475569;"># list, stop, signal, reschedule (deterministic)</span>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Dashboard — Agent List + Notifications</h3>
+  <p class="subtitle">Both TUI and browser show the same data, pulled from server via polling</p>
+
+  <div class="split">
+    <div class="mockup" style="flex: 1;">
+      <div class="mockup-header">TUI Dashboard (prompt_toolkit)</div>
+      <div class="mockup-body" style="font-family: monospace; font-size: 12px; line-height: 1.6; color: #e2e8f0;">
+        <div style="color: #a78bfa; border-bottom: 1px solid #334155; padding-bottom: 4px; margin-bottom: 8px;">AGENTS&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;STATUS&nbsp;&nbsp;&nbsp;LAST RUN</div>
+        <div><span style="color: #22c55e;">●</span> email-morning-summary&nbsp;&nbsp;&nbsp;<span style="color: #22c55e;">active</span>&nbsp;&nbsp;&nbsp;today 7:58am</div>
+        <div><span style="color: #eab308;">●</span> tax-review&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #eab308;">paused</span>&nbsp;&nbsp;&nbsp;Apr 10</div>
+        <div><span style="color: #22c55e;">●</span> docs-reviewer&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #22c55e;">active</span>&nbsp;&nbsp;&nbsp;today 2:30pm</div>
+        <div style="color: #475569; margin-top: 16px; border-bottom: 1px solid #334155; padding-bottom: 4px;">NOTIFICATIONS (3 new)</div>
+        <div style="margin-top: 8px;">
+          <span style="color: #ef4444;">!</span> <span style="color: #64748b;">7:58am</span> email-summary: <span style="color: #ef4444;">2 urgent emails</span> flagged<br>
+          &nbsp; → "Board meeting moved to 2pm" / "Client invoice overdue"<br>
+          &nbsp; <span style="color: #a78bfa;">[open] [mark read] [signal agent]</span>
+        </div>
+        <div style="margin-top: 8px;">
+          <span style="color: #22c55e;">✓</span> <span style="color: #64748b;">2:30pm</span> docs-reviewer: Scanned 23 files in /projects/q2<br>
+          &nbsp; → Summary ready. 3 docs need updates.<br>
+          &nbsp; <span style="color: #a78bfa;">[open] [mark read]</span>
+        </div>
+        <div style="margin-top: 8px;">
+          <span style="color: #eab308;">⚠</span> <span style="color: #64748b;">Apr 10</span> tax-review: Missing W-2 from employer #2<br>
+          &nbsp; → Agent paused, waiting for input.<br>
+          &nbsp; <span style="color: #a78bfa;">[open] [respond] [mark read]</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="mockup" style="flex: 1;">
+      <div class="mockup-header">Browser Dashboard</div>
+      <div class="mockup-body" style="font-size: 13px; line-height: 1.6; color: #e2e8f0;">
+        <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+          <div style="flex:1; padding: 12px; border-radius: 8px; background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); text-align:center;">
+            <div style="font-size: 24px; font-weight: bold; color: #22c55e;">2</div>
+            <div style="color: #64748b; font-size: 11px;">Active</div>
+          </div>
+          <div style="flex:1; padding: 12px; border-radius: 8px; background: rgba(234,179,8,0.1); border: 1px solid rgba(234,179,8,0.3); text-align:center;">
+            <div style="font-size: 24px; font-weight: bold; color: #eab308;">1</div>
+            <div style="color: #64748b; font-size: 11px;">Waiting</div>
+          </div>
+          <div style="flex:1; padding: 12px; border-radius: 8px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); text-align:center;">
+            <div style="font-size: 24px; font-weight: bold; color: #ef4444;">3</div>
+            <div style="color: #64748b; font-size: 11px;">Unread</div>
+          </div>
+        </div>
+        <div style="border: 1px solid #334155; border-radius: 8px; overflow:hidden;">
+          <div style="padding: 10px 12px; border-bottom: 1px solid #334155; display:flex; justify-content:space-between;">
+            <div><span style="color: #ef4444; font-weight:bold;">!</span> email-morning-summary</div>
+            <div style="color: #64748b; font-size: 12px;">7:58am</div>
+          </div>
+          <div style="padding: 10px 12px; border-bottom: 1px solid #334155; display:flex; justify-content:space-between;">
+            <div><span style="color: #22c55e;">✓</span> docs-reviewer</div>
+            <div style="color: #64748b; font-size: 12px;">2:30pm</div>
+          </div>
+          <div style="padding: 10px 12px; display:flex; justify-content:space-between;">
+            <div><span style="color: #eab308;">⚠</span> tax-review — <span style="color: #eab308;">waiting for input</span></div>
+            <div style="color: #64748b; font-size: 12px;">Apr 10</div>
+          </div>
+        </div>
+        <div style="margin-top: 12px; color: #64748b; font-size: 11px; text-align:center;">
+          Click any agent to open chat thread • Polling every 30s
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Polling Architecture</h3>
+  <div class="mockup">
+    <div class="mockup-header">Local UI → Remote Server (no server push)</div>
+    <div class="mockup-body" style="font-family: monospace; font-size: 12px; line-height: 2; color: #e2e8f0;">
+      <span style="color: #a78bfa;">Dashboard poll</span> (every 30s):<br>
+      &nbsp; GET /api/agent/executions?status=RUNNING,PAUSED,COMPLETED&amp;since={lastPoll}<br>
+      &nbsp; → Returns list of agent statuses + latest outputs<br><br>
+
+      <span style="color: #a78bfa;">Active chat stream</span> (while chat thread is open):<br>
+      &nbsp; GET /api/agent/stream/{executionId} (SSE — client-initiated, long-lived)<br>
+      &nbsp; → Real-time events while user is watching<br><br>
+
+      <span style="color: #a78bfa;">Notification fetch</span> (on dashboard load + poll):<br>
+      &nbsp; GET /api/agent/executions?hasOutput=true&amp;since={lastSeen}<br>
+      &nbsp; → Agent outputs the user hasn't seen yet<br><br>
+
+      <span style="color: #a78bfa;">Actions</span> (user-initiated):<br>
+      &nbsp; POST /api/agent/{executionId}/signal — send signal to running agent<br>
+      &nbsp; POST /api/agent/{executionId}/approve — respond to HITL pause<br>
+      &nbsp; POST /api/agent/{executionId}/cancel — stop agent<br>
+    </div>
+  </div>
+
+  <div style="margin-top: 1rem; padding: 1rem; border-radius: 8px; background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.2);">
+    <p style="margin: 0; color: #eab308; font-size: 13px;"><strong>Key constraint:</strong> All data flows from UI → server. The server never pushes to the UI. SSE is client-initiated (browser/TUI opens the connection). Dashboard uses periodic polling for status updates. Notification "unread" state is tracked locally in <code>~/.autopilot/config.yaml</code> (last-seen timestamps per agent).</p>
+  </div>
+</div>
