@@ -1,0 +1,29 @@
+Metadata-Version: 2.4
+Name: agentspan-autopilot
+Version: 0.1.0
+Summary: Agentspan Autopilot — autonomous agent orchestration from YAML configs
+License: MIT License
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: agentspan
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: httpx>=0.24
+Requires-Dist: trafilatura>=1.6
+Requires-Dist: prompt_toolkit>=3.0
+Provides-Extra: markitdown
+Requires-Dist: markitdown>=0.1; extra == "markitdown"
+Provides-Extra: langextract
+Requires-Dist: langextract>=0.1; extra == "langextract"
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: ruff>=0.4; extra == "dev"
