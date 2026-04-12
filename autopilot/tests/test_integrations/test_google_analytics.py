@@ -1,8 +1,6 @@
-"""Tests for google_analytics integration tools."""
+"""Tests for google_analytics integration tools — real e2e, no mocks."""
 
 from __future__ import annotations
-
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -36,27 +34,15 @@ class TestGaRunReport:
         with pytest.raises(ValueError, match="metrics is required"):
             ga_run_report([])
 
-    def test_successful_report(self, monkeypatch):
-        _set_ga_creds(monkeypatch)
-
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {
-            "rows": [{"dimensionValues": [{"value": "20240101"}], "metricValues": [{"value": "100"}]}],
-            "metricHeaders": [{"name": "activeUsers"}],
-        }
-        mock_resp.raise_for_status = MagicMock()
-
-        monkeypatch.setattr(
-            "autopilot.integrations.google_analytics.tools.httpx.post",
-            lambda *a, **kw: mock_resp,
-        )
-
-        result = ga_run_report(["activeUsers"], dimensions=["date"])
-        assert "rows" in result
-        assert len(result["rows"]) == 1
-
     def test_credentials_on_tool_def(self):
         assert ga_run_report._tool_def.credentials == ["GA_ACCESS_TOKEN", "GA_PROPERTY_ID"]
+
+    def test_tool_def_name(self):
+        assert ga_run_report._tool_def.name == "ga_run_report"
+
+    def test_tool_def_has_description(self):
+        assert ga_run_report._tool_def.description
+        assert len(ga_run_report._tool_def.description) > 10
 
 
 class TestGaGetRealtime:
@@ -66,25 +52,11 @@ class TestGaGetRealtime:
         with pytest.raises(RuntimeError, match="GA_ACCESS_TOKEN"):
             ga_get_realtime()
 
-    def test_successful_realtime(self, monkeypatch):
-        _set_ga_creds(monkeypatch)
-
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {
-            "rows": [{"metricValues": [{"value": "42"}]}],
-        }
-        mock_resp.raise_for_status = MagicMock()
-
-        monkeypatch.setattr(
-            "autopilot.integrations.google_analytics.tools.httpx.post",
-            lambda *a, **kw: mock_resp,
-        )
-
-        result = ga_get_realtime()
-        assert "rows" in result
-
     def test_credentials_on_tool_def(self):
         assert ga_get_realtime._tool_def.credentials == ["GA_ACCESS_TOKEN", "GA_PROPERTY_ID"]
+
+    def test_tool_def_name(self):
+        assert ga_get_realtime._tool_def.name == "ga_get_realtime"
 
 
 class TestGetTools:

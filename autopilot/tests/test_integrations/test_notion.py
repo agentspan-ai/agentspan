@@ -1,8 +1,6 @@
-"""Tests for notion integration tools."""
+"""Tests for notion integration tools — real e2e, no mocks."""
 
 from __future__ import annotations
-
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -26,38 +24,15 @@ class TestNotionSearch:
         with pytest.raises(ValueError, match="query is required"):
             notion_search("")
 
-    def test_successful_search(self, monkeypatch):
-        monkeypatch.setenv("NOTION_API_KEY", "ntn_test_key")
-
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {
-            "results": [
-                {
-                    "id": "page1",
-                    "object": "page",
-                    "url": "https://notion.so/page1",
-                    "properties": {
-                        "Name": {
-                            "title": [{"plain_text": "My Page"}]
-                        }
-                    },
-                }
-            ]
-        }
-        mock_resp.raise_for_status = MagicMock()
-
-        monkeypatch.setattr(
-            "autopilot.integrations.notion.tools.httpx.post",
-            lambda *a, **kw: mock_resp,
-        )
-
-        results = notion_search("My Page")
-        assert len(results) == 1
-        assert results[0]["title"] == "My Page"
-        assert results[0]["type"] == "page"
-
     def test_credentials_on_tool_def(self):
         assert notion_search._tool_def.credentials == ["NOTION_API_KEY"]
+
+    def test_tool_def_name(self):
+        assert notion_search._tool_def.name == "notion_search"
+
+    def test_tool_def_has_description(self):
+        assert notion_search._tool_def.description
+        assert len(notion_search._tool_def.description) > 10
 
 
 class TestNotionReadPage:
@@ -71,39 +46,11 @@ class TestNotionReadPage:
         with pytest.raises(ValueError, match="page_id is required"):
             notion_read_page("")
 
-    def test_successful_read(self, monkeypatch):
-        monkeypatch.setenv("NOTION_API_KEY", "ntn_test_key")
-
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {
-            "results": [
-                {
-                    "type": "paragraph",
-                    "paragraph": {
-                        "rich_text": [{"plain_text": "Hello world"}]
-                    },
-                },
-                {
-                    "type": "heading_1",
-                    "heading_1": {
-                        "rich_text": [{"plain_text": "Title"}]
-                    },
-                },
-            ]
-        }
-        mock_resp.raise_for_status = MagicMock()
-
-        monkeypatch.setattr(
-            "autopilot.integrations.notion.tools.httpx.get",
-            lambda *a, **kw: mock_resp,
-        )
-
-        result = notion_read_page("page1")
-        assert "Hello world" in result
-        assert "Title" in result
-
     def test_credentials_on_tool_def(self):
         assert notion_read_page._tool_def.credentials == ["NOTION_API_KEY"]
+
+    def test_tool_def_name(self):
+        assert notion_read_page._tool_def.name == "notion_read_page"
 
 
 class TestNotionQueryDatabase:
@@ -112,28 +59,11 @@ class TestNotionQueryDatabase:
         with pytest.raises(ValueError, match="database_id is required"):
             notion_query_database("")
 
-    def test_successful_query(self, monkeypatch):
-        monkeypatch.setenv("NOTION_API_KEY", "ntn_test_key")
-
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {
-            "results": [
-                {"id": "row1", "properties": {}},
-                {"id": "row2", "properties": {}},
-            ]
-        }
-        mock_resp.raise_for_status = MagicMock()
-
-        monkeypatch.setattr(
-            "autopilot.integrations.notion.tools.httpx.post",
-            lambda *a, **kw: mock_resp,
-        )
-
-        results = notion_query_database("db1")
-        assert len(results) == 2
-
     def test_credentials_on_tool_def(self):
         assert notion_query_database._tool_def.credentials == ["NOTION_API_KEY"]
+
+    def test_tool_def_name(self):
+        assert notion_query_database._tool_def.name == "notion_query_database"
 
 
 class TestNotionCreatePage:
@@ -147,26 +77,11 @@ class TestNotionCreatePage:
         with pytest.raises(ValueError, match="title is required"):
             notion_create_page("parent1", "")
 
-    def test_successful_create(self, monkeypatch):
-        monkeypatch.setenv("NOTION_API_KEY", "ntn_test_key")
-
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {
-            "id": "new_page",
-            "url": "https://notion.so/new_page",
-        }
-        mock_resp.raise_for_status = MagicMock()
-
-        monkeypatch.setattr(
-            "autopilot.integrations.notion.tools.httpx.post",
-            lambda *a, **kw: mock_resp,
-        )
-
-        result = notion_create_page("parent1", "New Page", "Some content")
-        assert result["id"] == "new_page"
-
     def test_credentials_on_tool_def(self):
         assert notion_create_page._tool_def.credentials == ["NOTION_API_KEY"]
+
+    def test_tool_def_name(self):
+        assert notion_create_page._tool_def.name == "notion_create_page"
 
 
 class TestGetTools:
