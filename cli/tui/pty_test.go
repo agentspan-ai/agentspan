@@ -137,8 +137,8 @@ func TestPTYThemeOverrideAndToggle(t *testing.T) {
 }
 
 func TestPTYAppleTerminalBasicProfileStartsLight(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("PTY harness is only supported on Unix-like platforms")
+	if runtime.GOOS != "darwin" {
+		t.Skip("Apple Terminal fallback only applies on macOS")
 	}
 
 	bin := buildCLIBinary(t)
@@ -157,8 +157,9 @@ func TestPTYAppleTerminalBasicProfileStartsLight(t *testing.T) {
 	}
 
 	env := map[string]string{
-		"TERM_PROGRAM": "Apple_Terminal",
-		"PATH":         fakeBinDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+		"TERM_PROGRAM":                     "Apple_Terminal",
+		"PATH":                             fakeBinDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+		"AGENTSPAN_TEST_DISABLE_OSC_QUERY": "1",
 	}
 	s := startPTYSession(t, bin, tuiRuntimeEnv(t, env))
 	defer s.close()
@@ -413,13 +414,14 @@ func ptyCommandArgs(bin string) []string {
 func tuiRuntimeEnv(t *testing.T, overrides map[string]string) []string {
 	t.Helper()
 	remove := map[string]bool{
-		"NO_COLOR":        true,
-		"AGENTSPAN_THEME": true,
-		"COLORFGBG":       true,
-		"TERM":            true,
-		"COLORTERM":       true,
-		"CI":              true,
-		"CODEX_CI":        true,
+		"NO_COLOR":                         true,
+		"AGENTSPAN_THEME":                  true,
+		"AGENTSPAN_TEST_DISABLE_OSC_QUERY": true,
+		"COLORFGBG":                        true,
+		"TERM":                             true,
+		"COLORTERM":                        true,
+		"CI":                               true,
+		"CODEX_CI":                         true,
 	}
 	for key := range overrides {
 		remove[key] = true

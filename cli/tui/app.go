@@ -61,6 +61,7 @@ type themeSelection struct {
 }
 
 var (
+	runtimeGOOS          = runtime.GOOS
 	queryBackgroundColor = func() (color.Color, error) {
 		return lipgloss.BackgroundColor(os.Stdin, os.Stdout)
 	}
@@ -615,9 +616,13 @@ func detectDarkBackground() bool {
 		}
 	}
 
-	// 2. Synchronous OSC 11 query (must run before BubbleTea takes the terminal)
-	if bg, err := queryBackgroundColor(); err == nil && bg != nil {
-		return isDarkColor(bg)
+	// 2. Synchronous OSC 11 query (must run before BubbleTea takes the terminal).
+	// AGENTSPAN_TEST_DISABLE_OSC_QUERY is an internal test seam so PTY tests can
+	// deterministically exercise fallback detection inside a spawned binary.
+	if os.Getenv("AGENTSPAN_TEST_DISABLE_OSC_QUERY") != "1" {
+		if bg, err := queryBackgroundColor(); err == nil && bg != nil {
+			return isDarkColor(bg)
+		}
 	}
 
 	// 3. Best-effort macOS Terminal fallback. Terminal.app often runs without
@@ -649,7 +654,7 @@ func srgbToLinear(v float64) float64 {
 }
 
 func detectAppleTerminalTheme() (bool, bool) {
-	if runtime.GOOS != "darwin" || os.Getenv("TERM_PROGRAM") != "Apple_Terminal" {
+	if runtimeGOOS != "darwin" || os.Getenv("TERM_PROGRAM") != "Apple_Terminal" {
 		return false, false
 	}
 

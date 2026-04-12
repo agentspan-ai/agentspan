@@ -366,13 +366,17 @@ func TestCtrlTTogglesThemeAndLocksIt(t *testing.T) {
 }
 
 func TestDetectDarkBackgroundFallsBackToAppleTerminalProfile(t *testing.T) {
+	prevGOOS := runtimeGOOS
 	prevQuery := queryBackgroundColor
 	prevReadProfile := readAppleTerminalProfile
 	t.Cleanup(func() {
+		runtimeGOOS = prevGOOS
 		queryBackgroundColor = prevQuery
 		readAppleTerminalProfile = prevReadProfile
 	})
 
+	runtimeGOOS = "darwin"
+	t.Setenv("COLORFGBG", "")
 	t.Setenv("TERM_PROGRAM", "Apple_Terminal")
 	queryBackgroundColor = func() (color.Color, error) {
 		return nil, errors.New("osc query failed")
