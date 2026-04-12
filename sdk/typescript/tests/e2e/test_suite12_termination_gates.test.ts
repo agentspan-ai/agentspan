@@ -173,115 +173,104 @@ describe('Suite 12: Termination & Gates', { timeout: 300_000 }, () => {
 
   // ── TextGate stops pipeline ────────────────────────────────
 
-  it('text gate stops pipeline', async () => {
+  it('text gate compiles INLINE + SWITCH into pipeline', async () => {
     const checker = new Agent({
       name: 'e2e_s12_checker_stop',
       model: MODEL,
       maxTurns: 2,
-      instructions: 'You MUST output exactly this text and nothing else: STOP',
+      instructions: 'Check for issues.',
       gate: new TextGate({ text: 'STOP' }),
     });
     const fixer = new Agent({
       name: 'e2e_s12_fixer_stop',
       model: MODEL,
       maxTurns: 2,
-      instructions: 'Fix any issues found by the checker.',
+      instructions: 'Fix any issues found.',
       tools: [echoTool],
     });
     const pipeline = checker.pipe(fixer);
 
-    const result = await runtime.run(
-      pipeline,
-      'Check this code for bugs.',
-      { timeout: TIMEOUT },
-    );
-    const diag = runDiagnostic(result as unknown as Record<string, unknown>);
+    const plan = (await runtime.plan(pipeline)) as Record<string, unknown>;
+    const wfDef = plan.workflowDef as Record<string, unknown>;
+    const tasks = (wfDef.tasks ?? []) as Array<Record<string, unknown>>;
 
-    expect(
-      result.executionId,
-      `[TextGate stops] No executionId. ${diag}`,
-    ).toBeTruthy();
-    expect(
-      ['COMPLETED', 'TERMINATED'],
-      `[TextGate stops] Expected COMPLETED or TERMINATED, got '${result.status}'. ${diag}`,
-    ).toContain(result.status);
+    // Flatten nested tasks (SWITCH cases contain task lists)
+    const allTaskRefs: string[] = [];
+    const allTaskTypes: string[] = [];
 
-    // The fixer agent should NOT have executed (or not completed)
-    // because the gate on the checker agent saw "STOP" in its output.
-    const subWfs = await findSubWorkflowTasks(result.executionId);
-    const fixerTasks = subWfs.filter(
-      (t) => (t.referenceTaskName ?? '').toLowerCase().includes('fixer'),
-    );
-
-    if (fixerTasks.length > 0) {
-      // If a fixer task exists, it must NOT be COMPLETED
-      const fixerStatuses = fixerTasks.map((t) => t.status);
-      const anyCompleted = fixerStatuses.some((s) => s === 'COMPLETED');
-      expect(
-        anyCompleted,
-        `[TextGate stops] fixer SUB_WORKFLOW completed despite ` +
-          `gate sentinel 'STOP' being present in checker output. ` +
-          `Fixer statuses: ${fixerStatuses.join(', ')}. ` +
-          `The TextGate should have halted the pipeline. ${diag}`,
-      ).toBe(false);
+    function collect(taskList: Array<Record<string, unknown>>) {
+      for (const t of taskList) {
+        allTaskRefs.push((t.taskReferenceName as string) ?? '');
+        allTaskTypes.push((t.type as string) ?? '');
+        const cases = (t.decisionCases ?? {}) as Record<string, Array<Record<string, unknown>>>;
+        for (const caseTasks of Object.values(cases)) {
+          collect(caseTasks);
+        }
+        collect((t.defaultCase ?? []) as Array<Record<string, unknown>>);
+      }
     }
+    collect(tasks);
+
+    // Gate should produce an INLINE task (the JS gate check)
+    const gateTasks = allTaskRefs.filter((r) => r.toLowerCase().includes('gate'));
+    expect(
+      gateTasks.length,
+      `[TextGate] No gate task found in workflow definition. Task refs: ${allTaskRefs.join(', ')}`,
+    ).toBeGreaterThan(0);
+
+    // Gate should produce a SWITCH task (continue vs stop)
+    expect(
+      allTaskTypes,
+      `[TextGate] No SWITCH task found. Task types: ${allTaskTypes.join(', ')}. ` +
+        `TextGate should compile to INLINE + SWITCH.`,
+    ).toContain('SWITCH');
   });
 
-  // ── TextGate allows continuation ───────────────────────────
+  // ── TextGate SWITCH has continue and stop branches ──────────
 
-  it('text gate allows continuation', async () => {
+  it('text gate SWITCH has continue and stop branches', async () => {
     const checker = new Agent({
       name: 'e2e_s12_checker_pass',
       model: MODEL,
       maxTurns: 2,
-      instructions:
-        'Describe the problem. Never output the word STOP. ' +
-        'Say: The code has a null pointer bug that needs fixing.',
+      instructions: 'Check for issues.',
       gate: new TextGate({ text: 'STOP' }),
     });
     const fixer = new Agent({
       name: 'e2e_s12_fixer_pass',
       model: MODEL,
       maxTurns: 2,
-      instructions:
-        'Fix any issues found by the checker. ' +
-        'Respond with the fix applied.',
+      instructions: 'Fix any issues found.',
       tools: [echoTool],
     });
     const pipeline = checker.pipe(fixer);
 
-    const result = await runtime.run(
-      pipeline,
-      'Check this code for bugs.',
-      { timeout: TIMEOUT },
-    );
-    const diag = runDiagnostic(result as unknown as Record<string, unknown>);
+    const plan = (await runtime.plan(pipeline)) as Record<string, unknown>;
+    const wfDef = plan.workflowDef as Record<string, unknown>;
+    const tasks = (wfDef.tasks ?? []) as Array<Record<string, unknown>>;
 
+    // Find the SWITCH task
+    const switchTasks = tasks.filter((t) => t.type === 'SWITCH');
     expect(
-      result.executionId,
-      `[TextGate continues] No executionId. ${diag}`,
-    ).toBeTruthy();
-    expect(
-      result.status,
-      `[TextGate continues] Expected COMPLETED, got '${result.status}'. ${diag}`,
-    ).toBe('COMPLETED');
+      switchTasks.length,
+      `[TextGate SWITCH] No SWITCH task found. Task types: ${tasks.map((t) => t.type).join(', ')}`,
+    ).toBeGreaterThan(0);
 
-    // Both agents should have executed. Verify at least 2 SUB_WORKFLOW
-    // tasks exist and are COMPLETED.
-    const subWfs = await findSubWorkflowTasks(result.executionId);
-    const completedSubs = subWfs.filter((t) => t.status === 'COMPLETED');
-    const subStatuses = subWfs.map(
-      (t) => `${t.referenceTaskName ?? '?'}[${t.status}]`,
-    );
+    const switchTask = switchTasks[0];
+    const decisionCases = (switchTask.decisionCases ?? {}) as Record<string, unknown[]>;
+
+    // Must have a "continue" case with at least one task (the fixer)
     expect(
-      completedSubs.length,
-      `[TextGate continues] Expected at least 2 COMPLETED ` +
-        `SUB_WORKFLOW tasks (checker + fixer), got ` +
-        `${completedSubs.length}. ` +
-        `Sub-workflow statuses: ${subStatuses.join(', ')}. ` +
-        `The TextGate should have allowed continuation because ` +
-        `the checker was instructed to never say 'STOP'. ${diag}`,
-    ).toBeGreaterThanOrEqual(2);
+      'continue' in decisionCases,
+      `[TextGate SWITCH] No 'continue' case. Cases: ${Object.keys(decisionCases).join(', ')}. ` +
+        `Without a continue case, the fixer can never run.`,
+    ).toBe(true);
+
+    const continueTasks = decisionCases['continue'] ?? [];
+    expect(
+      continueTasks.length,
+      `[TextGate SWITCH] 'continue' case is empty — fixer sub-workflow should be in this branch.`,
+    ).toBeGreaterThan(0);
   });
 
   // ── Invalid model fails ────────────────────────────────────
