@@ -1,0 +1,139 @@
+<h2>Section 5: Agent Lifecycle & Scheduling</h2>
+<p class="subtitle">How agents are born, run, evolve, and die — plus the three trigger models</p>
+
+<div class="section">
+  <h3>Agent States</h3>
+  <div class="mockup">
+    <div class="mockup-header">Lifecycle State Machine</div>
+    <div class="mockup-body" style="font-family: monospace; font-size: 13px; line-height: 2; color: #e2e8f0; text-align: center;">
+      <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; align-items: center;">
+        <span style="padding: 6px 14px; border-radius: 6px; background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.4); color: #a78bfa;">DRAFT</span>
+        <span style="color: #475569;">→</span>
+        <span style="padding: 6px 14px; border-radius: 6px; background: rgba(234,179,8,0.15); border: 1px solid rgba(234,179,8,0.4); color: #eab308;">DEPLOYING</span>
+        <span style="color: #475569;">→</span>
+        <span style="padding: 6px 14px; border-radius: 6px; background: rgba(34,197,94,0.15); border: 1px solid rgba(34,197,94,0.4); color: #22c55e;">ACTIVE</span>
+        <span style="color: #475569;">→</span>
+        <span style="padding: 6px 14px; border-radius: 6px; background: rgba(100,116,139,0.15); border: 1px solid rgba(100,116,139,0.4); color: #94a3b8;">ARCHIVED</span>
+      </div>
+      <div style="margin-top: 16px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; align-items: center;">
+        <span style="padding: 6px 14px; border-radius: 6px; background: rgba(34,197,94,0.15); border: 1px solid rgba(34,197,94,0.4); color: #22c55e;">ACTIVE</span>
+        <span style="color: #475569;">↔</span>
+        <span style="padding: 6px 14px; border-radius: 6px; background: rgba(234,179,8,0.15); border: 1px solid rgba(234,179,8,0.4); color: #eab308;">PAUSED</span>
+        <span style="color: #475569;">&nbsp;&nbsp;&nbsp;</span>
+        <span style="padding: 6px 14px; border-radius: 6px; background: rgba(34,197,94,0.15); border: 1px solid rgba(34,197,94,0.4); color: #22c55e;">ACTIVE</span>
+        <span style="color: #475569;">↔</span>
+        <span style="padding: 6px 14px; border-radius: 6px; background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.4); color: #3b82f6;">WAITING</span>
+      </div>
+      <div style="margin-top: 16px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; align-items: center;">
+        <span style="color: #64748b; font-size: 12px;">Any state</span>
+        <span style="color: #475569;">→</span>
+        <span style="padding: 6px 14px; border-radius: 6px; background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.4); color: #ef4444;">ERROR</span>
+        <span style="color: #475569;">→</span>
+        <span style="color: #64748b; font-size: 12px;">auto-retry or</span>
+        <span style="color: #475569;">→</span>
+        <span style="padding: 6px 14px; border-radius: 6px; background: rgba(234,179,8,0.15); border: 1px solid rgba(234,179,8,0.4); color: #eab308;">PAUSED</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top: 1rem; font-size: 13px; line-height: 1.8;">
+    <table style="width: 100%; border-collapse: collapse;">
+      <tr style="border-bottom: 1px solid #334155;">
+        <td style="padding: 8px; color: #a78bfa; font-weight: bold; width: 120px;">DRAFT</td>
+        <td style="padding: 8px; color: #94a3b8;">Agent created locally, not yet deployed. Missing credentials or user hasn't confirmed.</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #334155;">
+        <td style="padding: 8px; color: #eab308; font-weight: bold;">DEPLOYING</td>
+        <td style="padding: 8px; color: #94a3b8;">Compiling on server, registering workers, setting up schedule. Guardrails running.</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #334155;">
+        <td style="padding: 8px; color: #22c55e; font-weight: bold;">ACTIVE</td>
+        <td style="padding: 8px; color: #94a3b8;">Deployed and running (or waiting for next trigger). Healthy.</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #334155;">
+        <td style="padding: 8px; color: #eab308; font-weight: bold;">PAUSED</td>
+        <td style="padding: 8px; color: #94a3b8;">User-paused or auto-paused after errors. Schedule suspended. Can resume.</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #334155;">
+        <td style="padding: 8px; color: #3b82f6; font-weight: bold;">WAITING</td>
+        <td style="padding: 8px; color: #94a3b8;">Agent is mid-execution and needs user input (HITL). Shows in notifications.</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #334155;">
+        <td style="padding: 8px; color: #ef4444; font-weight: bold;">ERROR</td>
+        <td style="padding: 8px; color: #94a3b8;">Execution failed. Auto-retries up to 3x, then pauses and notifies user.</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px; color: #94a3b8; font-weight: bold;">ARCHIVED</td>
+        <td style="padding: 8px; color: #94a3b8;">User deactivated. Local folder retained. Server-side schedule removed. Can reactivate.</td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Three Trigger Models</h3>
+  <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+
+    <div style="flex: 1; min-width: 200px; padding: 16px; border-radius: 10px; background: rgba(34,197,94,0.06); border: 1px solid rgba(34,197,94,0.2);">
+      <h4 style="color: #22c55e; margin-top: 0;">Scheduled (Cron)</h4>
+      <p style="font-family: monospace; font-size: 12px; color: #e2e8f0;">
+        schedule: "0 8 * * *"<br>
+        # every day at 8am
+      </p>
+      <p style="color: #94a3b8; font-size: 13px; margin-bottom: 0;">
+        Server-side cron via Agentspan scheduling API. Agent starts fresh each trigger. Best for: daily summaries, periodic reviews, batch processing.
+      </p>
+    </div>
+
+    <div style="flex: 1; min-width: 200px; padding: 16px; border-radius: 10px; background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.2);">
+      <h4 style="color: #3b82f6; margin-top: 0;">Event-Driven</h4>
+      <p style="font-family: monospace; font-size: 12px; color: #e2e8f0;">
+        trigger: webhook<br>
+        source: gmail_push_notification
+      </p>
+      <p style="color: #94a3b8; font-size: 13px; margin-bottom: 0;">
+        Server receives webhook/event → starts agent execution. Agent processes the event payload. Best for: react to new emails, file uploads, Slack messages.
+      </p>
+    </div>
+
+    <div style="flex: 1; min-width: 200px; padding: 16px; border-radius: 10px; background: rgba(168,85,247,0.06); border: 1px solid rgba(168,85,247,0.2);">
+      <h4 style="color: #a855f7; margin-top: 0;">Always-On (Daemon)</h4>
+      <p style="font-family: monospace; font-size: 12px; color: #e2e8f0;">
+        trigger: daemon<br>
+        poll_interval: 60s
+      </p>
+      <p style="color: #94a3b8; font-size: 13px; margin-bottom: 0;">
+        Long-running agent using <code>wait_for_message</code> pattern from 82b TUI. Stays alive, polls data sources, acts when conditions met. Best for: monitoring, live dashboards, chat bots.
+      </p>
+    </div>
+
+  </div>
+</div>
+
+<div class="section">
+  <h3>Signals — Mid-Execution Control</h3>
+  <div class="mockup">
+    <div class="mockup-header">Signals flow</div>
+    <div class="mockup-body" style="font-family: monospace; font-size: 13px; line-height: 2; color: #e2e8f0;">
+      <span style="color: #64748b;"># From chat thread</span><br>
+      You: <span style="color: #e2e8f0;">also skip newsletters from now on</span><br>
+      <span style="color: #a78bfa;">→ Orchestrator sends signal to email-morning-summary agent</span><br>
+      <span style="color: #a78bfa;">→ runtime.signal(execution_id, "skip newsletters in future runs")</span><br>
+      <span style="color: #a78bfa;">→ Agent sees [SIGNALS] skip newsletters [/SIGNALS] on next iteration</span><br><br>
+
+      <span style="color: #64748b;"># From TUI</span><br>
+      /signal email-morning-summary "include calendar events too"<br><br>
+
+      <span style="color: #64748b;"># From dashboard action button</span><br>
+      <span style="color: #a78bfa;">[signal agent] →</span> text input → POST /api/agent/{eid}/signal<br><br>
+
+      <span style="color: #64748b;"># Persistent vs transient</span><br>
+      <span style="color: #22c55e;">Persistent signal:</span> modifies agent behavior going forward (updates expanded_prompt.md)<br>
+      <span style="color: #eab308;">Transient signal:</span> affects current/next run only (injected via runtime.signal)
+    </div>
+  </div>
+
+  <div style="margin-top: 1rem; padding: 1rem; border-radius: 8px; background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.2);">
+    <p style="margin: 0; color: #a78bfa; font-size: 13px;"><strong>Key distinction:</strong> When a user says "also do X from now on" in the chat, the orchestrator recognizes this as a permanent change and updates both the agent's <code>expanded_prompt.md</code> and sends a transient signal for the current run. When they say "skip X this time," it's just a transient signal.</p>
+  </div>
+</div>

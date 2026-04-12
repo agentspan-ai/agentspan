@@ -1,0 +1,106 @@
+<h2>Section 2: Agent Creation Flow</h2>
+<p class="subtitle">How a lazy prompt becomes a running agent — the progressive expansion pipeline</p>
+
+<div class="section">
+  <h3>The User Journey</h3>
+  <div class="mockup">
+    <div class="mockup-header">Step 1 — User drops a lazy prompt</div>
+    <div class="mockup-body" style="font-family: monospace; font-size: 13px; line-height: 1.6;">
+      <div style="color: #888; margin-bottom: 8px;">You: <span style="color: #e2e8f0;">scan my emails every morning and send me a summary on whatsapp</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="mockup">
+    <div class="mockup-header">Step 2 — Orchestrator asks 1-2 critical questions</div>
+    <div class="mockup-body" style="font-family: monospace; font-size: 13px; line-height: 1.6;">
+      <div style="color: #8b5cf6; margin-bottom: 12px;">
+        Claw: I'll set this up for you. Quick questions:<br><br>
+        <span style="color: #a78bfa;">1.</span> Which email? (Gmail, Outlook, or other?)<br>
+        <span style="color: #a78bfa;">2.</span> What time should the summary arrive?
+      </div>
+      <div style="color: #888; margin-bottom: 8px;">You: <span style="color: #e2e8f0;">gmail, 8am</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="mockup">
+    <div class="mockup-header">Step 3 — Orchestrator generates expanded spec with smart defaults</div>
+    <div class="mockup-body" style="font-family: monospace; font-size: 13px; line-height: 1.6;">
+      <div style="color: #8b5cf6; margin-bottom: 8px;">
+        Claw: Here's what I'll build:<br><br>
+        <span style="color: #64748b;">Agent:</span> <span style="color: #e2e8f0;">email-morning-summary</span><br>
+        <span style="color: #64748b;">Schedule:</span> <span style="color: #e2e8f0;">Daily at 7:45 AM (15min buffer for processing)</span><br>
+        <span style="color: #64748b;">Integrations:</span> <span style="color: #e2e8f0;">Gmail API (read), WhatsApp Business API (send)</span><br>
+        <span style="color: #64748b;">Behavior:</span><br>
+        <span style="color: #e2e8f0;">&nbsp; - Fetch unread emails from last 24h</span><br>
+        <span style="color: #e2e8f0;">&nbsp; - Categorize: urgent, actionable, FYI, newsletters</span><br>
+        <span style="color: #e2e8f0;">&nbsp; - Summarize each category (max 2-3 lines per email)</span><br>
+        <span style="color: #e2e8f0;">&nbsp; - Send via WhatsApp as a formatted message</span><br>
+        <span style="color: #e2e8f0;">&nbsp; - Mark urgent items with priority flag</span><br>
+        <span style="color: #64748b;">Error handling:</span> <span style="color: #e2e8f0;">Retry 3x, then notify via WhatsApp</span><br>
+        <span style="color: #64748b;">Credentials needed:</span> <span style="color: #e2e8f0;">GMAIL_OAUTH, WHATSAPP_API_KEY</span><br><br>
+        <span style="color: #a78bfa;">Want to tweak anything, or should I build it?</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="mockup">
+    <div class="mockup-header">Step 4 — Build, validate, deploy</div>
+    <div class="mockup-body" style="font-family: monospace; font-size: 13px; line-height: 1.6;">
+      <div style="color: #888; margin-bottom: 8px;">You: <span style="color: #e2e8f0;">build it</span></div>
+      <div style="color: #8b5cf6; margin-bottom: 4px;">
+        <span style="color: #22c55e;">&#10003;</span> Generated agent definition<br>
+        <span style="color: #22c55e;">&#10003;</span> Created Gmail integration worker<br>
+        <span style="color: #22c55e;">&#10003;</span> Created WhatsApp sender worker<br>
+        <span style="color: #22c55e;">&#10003;</span> Spec validation passed<br>
+        <span style="color: #22c55e;">&#10003;</span> Code validation passed<br>
+        <span style="color: #eab308;">&#9888;</span> Missing credential: GMAIL_OAUTH<br>
+        <span style="color: #eab308;">&#9888;</span> Missing credential: WHATSAPP_API_KEY<br><br>
+        <span style="color: #a78bfa;">Agent created at ~/.autopilot/agents/email-morning-summary/</span><br>
+        <span style="color: #a78bfa;">Set up credentials to activate:</span><br>
+        <span style="color: #e2e8f0;">&nbsp; agentspan credentials set GMAIL_OAUTH</span><br>
+        <span style="color: #e2e8f0;">&nbsp; agentspan credentials set WHATSAPP_API_KEY</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="mockup">
+    <div class="mockup-header">Step 5 — Agent runs, chat thread becomes control plane</div>
+    <div class="mockup-body" style="font-family: monospace; font-size: 13px; line-height: 1.6;">
+      <div style="color: #64748b; margin-bottom: 8px; font-size: 11px;">[ Next morning, 7:45 AM — agent fires ]</div>
+      <div style="color: #8b5cf6; margin-bottom: 12px;">
+        Claw: Your email summary ran successfully. Sent to WhatsApp at 7:58 AM.<br>
+        <span style="color: #64748b;">Processed:</span> <span style="color: #e2e8f0;">47 emails</span><br>
+        <span style="color: #64748b;">Urgent:</span> <span style="color: #ef4444;">2 items flagged</span>
+      </div>
+      <div style="color: #888; margin-bottom: 8px;">You: <span style="color: #e2e8f0;">also include my calendar for the day</span></div>
+      <div style="color: #8b5cf6;">
+        Claw: Got it. I'll add Google Calendar integration.<br>
+        <span style="color: #eab308;">&#9888;</span> Need GOOGLE_CALENDAR_OAUTH credential.<br>
+        Updated agent — next run will include today's schedule.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 2rem; padding: 1.5rem; border-radius: 12px; background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.2);">
+  <h3 style="margin-top:0;">Pipeline Under the Hood</h3>
+  <p style="font-family: monospace; font-size: 13px; line-height: 2;">
+    <span style="color: #a78bfa;">User prompt</span>
+    → <span style="color: #8b5cf6;">Orchestrator expands</span>
+    → <span style="color: #f59e0b;">Spec guardrail validates</span>
+    → <span style="color: #8b5cf6;">Orchestrator generates code</span>
+    → <span style="color: #f59e0b;">Code guardrail validates</span>
+    → <span style="color: #8b5cf6;">Integration check</span>
+    → <span style="color: #f59e0b;">Deploy guardrail (dry-run compile)</span>
+    → <span style="color: #22c55e;">Deploy &amp; schedule</span>
+  </p>
+  <p style="margin-bottom:0; color: #94a3b8;">Each guardrail uses Agentspan's native guardrail system. On failure, the orchestrator gets the error and self-corrects (up to 3 retries) before surfacing to the user.</p>
+</div>
