@@ -349,19 +349,22 @@ describe('Suite 13: Callbacks', { timeout: 300_000 }, () => {
         `${diag}`,
     ).toBe('COMPLETED');
 
-    // Verify the echo_tool actually ran by finding its task
+    // Verify the echo_tool actually ran by finding its task.
+    // Tool tasks use the LLM's call ID as referenceTaskName (e.g., call_XYZ),
+    // but taskType or taskDefName contains the tool name.
     const wf = await getWorkflow(result.executionId);
     const allTasks = (wf.tasks ?? []) as Array<Record<string, unknown>>;
     const toolTasks = allTasks.filter(
-      (t) => ((t.referenceTaskName as string) ?? '').includes('echo_tool'),
+      (t) =>
+        ((t.taskType as string) ?? '').includes('echo_tool') ||
+        ((t.taskDefName as string) ?? '').includes('echo_tool'),
     );
 
     expect(
       toolTasks.length,
-      `[all_callbacks] No task with 'echo_tool' in ` +
-        `referenceTaskName found. Callbacks may have blocked tool ` +
-        `execution. All task refs: ` +
-        `${allTasks.map((t) => t.referenceTaskName ?? '?').join(', ')}. ${diag}`,
+      `[all_callbacks] No echo_tool task found. Callbacks may have ` +
+        `blocked tool execution. All tasks: ` +
+        `${allTasks.map((t) => `${t.referenceTaskName ?? '?'}[${t.taskType ?? '?'}]`).join(', ')}. ${diag}`,
     ).toBeGreaterThan(0);
 
     const completedTools = toolTasks.filter((t) => t.status === 'COMPLETED');

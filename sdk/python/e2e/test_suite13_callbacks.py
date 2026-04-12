@@ -390,19 +390,21 @@ class TestSuite13Callbacks:
             f"{diag}"
         )
 
-        # Verify the echo_tool actually ran by finding its task
+        # Verify the echo_tool actually ran by finding its task.
+        # Tool tasks use the LLM's call ID as referenceTaskName (e.g., call_XYZ),
+        # but taskType or taskDefName contains the tool name.
         wf = _get_workflow(result.execution_id)
         all_tasks = wf.get("tasks", [])
         tool_tasks = [
             t for t in all_tasks
-            if "echo_tool" in t.get("referenceTaskName", "")
+            if "echo_tool" in t.get("taskType", "")
+            or "echo_tool" in t.get("taskDefName", "")
         ]
 
         assert len(tool_tasks) > 0, (
-            f"[all_callbacks] No task with 'echo_tool' in "
-            f"referenceTaskName found. Callbacks may have blocked tool "
-            f"execution. All task refs: "
-            f"{[t.get('referenceTaskName', '?') for t in all_tasks]}. {diag}"
+            f"[all_callbacks] No echo_tool task found. Callbacks may have "
+            f"blocked tool execution. All tasks: "
+            f"{[(t.get('referenceTaskName', '?'), t.get('taskType', '?')) for t in all_tasks]}. {diag}"
         )
 
         completed_tools = [
