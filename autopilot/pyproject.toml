@@ -15,6 +15,7 @@ dependencies = [
     "httpx>=0.24",
     "trafilatura>=1.6",
     "prompt_toolkit>=3.0",
+    "ddgs>=9.0",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -46,6 +47,9 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 timeout = 30
+markers = [
+    "network: marks tests that require network access (deselect with '-m \"not network\"')",
+]
 
 [tool.ruff]
 target-version = "py310"
