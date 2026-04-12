@@ -155,9 +155,11 @@ This is the core of the interactive pattern. When you call:
 runtime.send_message(execution_id, {"text": "implement a login function"})
 ```
 
-The SDK makes an HTTP POST to the server. The message goes into a **[Workflow Message Queue](https://github.com/conductor-oss/conductor/pull/982)**—a durable, per-workflow queue stored in the Conductor database.
+The SDK makes an HTTP POST to the server. The message goes into a **[Workflow Message Queue](https://github.com/conductor-oss/conductor/pull/982)**\*—a durable, per-workflow queue stored in the Conductor database.
 
 On the agent side, the `PULL_WORKFLOW_MESSAGES` task is blocking on the server. When a message arrives, the task completes, the LLM receives the message in its context, and the loop continues.
+
+> *\*WMQ is currently in beta. The default storage is in-memory. We're adding a SQLite-backed option for local dev environments soon; production deployments should use Redis.*
 
 ---
 

@@ -114,7 +114,7 @@ On the client side:
 runtime.send_message(execution_id, {"text": user_input})
 ```
 
-This does an HTTP POST to the server. The message lands in a **[Workflow Message Queue (WMQ)](https://github.com/conductor-oss/conductor/pull/982)**—a durable, per-workflow queue stored in the database. The `PULL_WORKFLOW_MESSAGES` task dequeues it, the LLM sees it, and the loop continues.
+This does an HTTP POST to the server. The message lands in a **[Workflow Message Queue (WMQ)](https://github.com/conductor-oss/conductor/pull/982)**\*—a durable, per-workflow queue stored in the database. The `PULL_WORKFLOW_MESSAGES` task dequeues it, the LLM sees it, and the loop continues.
 
 #### Signals
 
@@ -136,6 +136,8 @@ The difference:
 | **When seen** | Next `wait_for_message` call | Next LLM turn |
 | **Use case** | User input, new tasks | Course correction, runtime hints |
 | **Persistence** | Durable queue | Last-write-wins variable |
+
+> *\*WMQ is currently in beta. The default storage is in-memory. We're adding a SQLite-backed option for local dev environments soon; production deployments should use Redis.*
 
 ---
 

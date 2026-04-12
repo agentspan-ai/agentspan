@@ -84,11 +84,13 @@ This might be a bit more tricky than you'd imagine.
 
 You need a way for the agent to *wait* for user input without consuming resources. You need messages to survive network interruptions—if the user sends something and the connection blips, that message can't be lost. You need the ability to send messages while the agent is busy, with those messages queuing up for later. And you need a way to redirect the agent mid-task without interrupting what it's currently doing.
 
-The solution was building a [Workflow Message Queue (WMQ)](https://github.com/conductor-oss/conductor/pull/982) into Conductor: a server-side durable queue, one per workflow execution, stored in the database. When the user sends a message, it lands in this queue. The agent checks it and blocks until something arrives. If the client crashes after sending, the message is safe. If the agent is busy, messages queue up. If the server restarts, the queue persists.
+The solution was building a [Workflow Message Queue (WMQ)](https://github.com/conductor-oss/conductor/pull/982)* into Conductor: a server-side durable queue, one per workflow execution, stored in the database. When the user sends a message, it lands in this queue. The agent checks it and blocks until something arrives. If the client crashes after sending, the message is safe. If the agent is busy, messages queue up. If the server restarts, the queue persists.
 
 We also added "signals"—a mechanism to inject context into a running agent asynchronously. A signal doesn't go through the queue. It updates a workflow variable that the agent sees on its very next decision step. This is how you tell an agent "focus only on the auth module" while it's in the middle of scanning a codebase—without interrupting the current operation, without losing state.
 
 This is distributed systems engineering, not AI work.
+
+> *\*WMQ is currently in beta. The default storage is in-memory. We're adding a SQLite-backed option for local dev environments soon; production deployments should use Redis.*
 
 ---
 
