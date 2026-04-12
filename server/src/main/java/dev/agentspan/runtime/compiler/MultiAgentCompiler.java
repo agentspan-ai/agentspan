@@ -274,7 +274,7 @@ public class MultiAgentCompiler {
         for (int i = 0; i < config.getAgents().size(); i++) {
             AgentConfig sub = config.getAgents().get(i);
             String taskRef = config.getName() + "_step_" + i + "_" + sub.getName();
-            String mediaRef = i == 0 ? "${workflow.input.media}" : "${workflow.input.media}";
+            String mediaRef = "${workflow.input.media}";
 
             // For non-first agents, combine the original user prompt with the
             // previous agent's output via Conductor string interpolation.
