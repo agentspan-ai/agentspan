@@ -492,8 +492,12 @@ def deploy_agent(agent_name: str) -> str:
         }
 
         # Call the server's /agent/start endpoint directly
+        # server_url may or may not include /api — normalize
+        api_url = server_url.rstrip("/")
+        if not api_url.endswith("/api"):
+            api_url += "/api"
         resp = httpx.post(
-            f"{server_url}/agent/start",
+            f"{api_url}/agent/start",
             json=payload,
             timeout=30.0,
         )
