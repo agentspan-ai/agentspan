@@ -393,16 +393,14 @@ def build_orchestrator(tui_append_fn=None):
             for t in orch_tools
         ]
 
-    # Add web search tools so the orchestrator can answer direct questions
-    from autopilot.integrations.web_search.tools import get_tools as get_web_search_tools
-    web_tools = get_web_search_tools()
-
-    # Core TUI tools + web search + all orchestrator creation/management/credential tools
+    # Orchestrator has ONLY agent management tools — no web_search, no local_fs.
+    # If the user wants to search, the orchestrator creates a search agent.
+    # This forces agent creation for EVERY request.
     all_tools = [
         receive_message,
         reply_to_user,
         read_agent_config,
-    ] + web_tools + orch_tools
+    ] + orch_tools
 
     agent = Agent(
         name="claw_orchestrator",
