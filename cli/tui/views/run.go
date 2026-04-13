@@ -178,6 +178,14 @@ func (m RunModel) Update(msg tea.Msg) (RunModel, tea.Cmd) {
 			form, cmd := m.form.Update(msg)
 			if f, ok := form.(*huh.Form); ok {
 				m.form = f
+				if m.form.State == huh.StateCompleted {
+					if v := m.form.GetString("agent"); v != "" || m.agentName == "" {
+						m.agentName = v
+					}
+					m.prompt = m.form.GetString("prompt")
+					m.sessionID = m.form.GetString("session_id")
+					return m, m.startAgent()
+				}
 			}
 			return m, cmd
 		}
@@ -204,6 +212,11 @@ func (m RunModel) updateForm(msg tea.KeyPressMsg) (RunModel, tea.Cmd) {
 	if f, ok := form.(*huh.Form); ok {
 		m.form = f
 		if m.form.State == huh.StateCompleted {
+			if v := m.form.GetString("agent"); v != "" || m.agentName == "" {
+				m.agentName = v
+			}
+			m.prompt = m.form.GetString("prompt")
+			m.sessionID = m.form.GetString("session_id")
 			return m, m.startAgent()
 		}
 		if m.form.State == huh.StateAborted {
@@ -268,7 +281,16 @@ func (m RunModel) renderForm(width int) string {
 
 	if len(m.agentNames) == 0 {
 		content.WriteString(ui.DimStyle.Render("  Loading agents..."))
-	} else if m.form != nil {
+	} else {
+		if m.agentName != "" {
+			content.WriteString(ui.CardRow("Agent:", lipgloss.NewStyle().
+				Bold(true).
+				Foreground(ui.ColorLimeGreen).
+				Render(m.agentName)))
+			content.WriteString("\n\n")
+		}
+	}
+	if len(m.agentNames) > 0 && m.form != nil {
 		content.WriteString(m.form.View())
 	}
 
@@ -276,7 +298,13 @@ func (m RunModel) renderForm(width int) string {
 		content.WriteString("\n\n" + ui.ErrorBanner(width-4, m.formErr))
 	}
 
-	return ui.ContentPanel(width, ui.ContentHeight(m.height), "Run Agent", content.String())
+	title := "Run Agent"
+	if m.agentName != "" {
+		title = "Run Agent: " + lipgloss.NewStyle().
+			Foreground(ui.ColorLimeGreen).
+			Render(m.agentName)
+	}
+	return ui.ContentPanel(width, ui.ContentHeight(m.height), title, content.String())
 }
 
 func (m RunModel) renderStream(width int) string {
@@ -344,35 +372,44 @@ func (m *RunModel) buildForm() *huh.Form {
 		opts = append(opts, huh.NewOption("(no agents registered)", ""))
 	}
 
-	agentSel := huh.NewSelect[string]().
-		Title("Agent").
-		Description("Select a registered agent to run").
-		Options(opts...).
-		Value(&m.agentName)
-	if m.preselected != "" {
-		agentSel = agentSel.Value(&m.agentName)
-	}
-
-	promptField := huh.NewText().
+	promptField := huh.NewInput().
+		Key("prompt").
 		Title("Prompt").
 		Description("What should the agent do?").
 		CharLimit(4000).
 		Value(&m.prompt)
 
 	sessionField := huh.NewInput().
+		Key("session_id").
 		Title("Session ID").
 		Description("Optional: for conversation continuity").
 		Placeholder("leave blank for new session").
 		Value(&m.sessionID)
 
-	return huh.NewForm(
-		huh.NewGroup(agentSel, promptField, sessionField),
+	fields := []huh.Field{promptField, sessionField}
+	if m.preselected == "" {
+		fields = append([]huh.Field{
+			huh.NewSelect[string]().
+				Key("agent").
+				Title("Agent").
+				Description("Select a registered agent to run").
+				Options(opts...).
+				Value(&m.agentName),
+		}, fields...)
+	}
+
+	form := huh.NewForm(
+		huh.NewGroup(fields...),
 	).WithTheme(huh.ThemeFunc(agentspanHuhTheme))
+	primeFormFocus(form)
+	return form
 }
 
 // agentspanHuhTheme applies our color palette to huh forms.
-func agentspanHuhTheme(isDark bool) *huh.Styles {
-	s := huh.ThemeCharm(isDark)
+// It keys off the app's current theme so ctrl+t and env overrides affect the
+// forms as well as the surrounding chrome.
+func agentspanHuhTheme(_ bool) *huh.Styles {
+	s := huh.ThemeCharm(ui.IsDarkBackground)
 	// Override key colors with our palette
 	s.Focused.Base = s.Focused.Base.BorderForeground(ui.ColorDarkGreen)
 	s.Focused.Title = s.Focused.Title.Foreground(ui.ColorLimeGreen)
@@ -401,6 +438,13 @@ func (m RunModel) startAgent() tea.Cmd {
 	name := m.agentName
 	prompt := m.prompt
 	sessionID := m.sessionID
+	if m.form != nil {
+		if v := m.form.GetString("agent"); v != "" || name == "" {
+			name = v
+		}
+		prompt = m.form.GetString("prompt")
+		sessionID = m.form.GetString("session_id")
+	}
 	return func() tea.Msg {
 		// Fetch agent definition by name, then start with full config
 		agentDef, err := m.client.GetAgent(name, nil)

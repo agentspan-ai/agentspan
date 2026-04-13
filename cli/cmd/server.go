@@ -35,6 +35,13 @@ var (
 	serverLocal   bool
 	followLogs    bool
 	tailLines     int
+
+	serverProcessRunning      = processRunning
+	serverEnsureLatestJAR     = ensureLatestJAR
+	serverEnsureVersionedJAR  = ensureVersionedJAR
+	serverFindLocalJAR        = findLocalJAR
+	serverCheckJava           = checkJava
+	serverCheckAIProviderKeys = checkAIProviderKeys
 )
 
 var serverCmd = &cobra.Command{
@@ -60,6 +67,12 @@ var serverLogsCmd = &cobra.Command{
 	RunE:  runServerLogs,
 }
 
+var serverPsCmd = &cobra.Command{
+	Use:   "ps",
+	Short: "Show the running agent runtime server PID",
+	RunE:  runServerPS,
+}
+
 func init() {
 	serverStartCmd.Flags().StringVarP(&serverPort, "port", "p", "6767", "Server port")
 	serverStartCmd.Flags().StringVarP(&serverModel, "model", "m", "", "Default LLM model (e.g. openai/gpt-4o)")
@@ -70,7 +83,7 @@ func init() {
 	serverLogsCmd.Flags().BoolVarP(&followLogs, "follow", "f", false, "Follow log output")
 	serverLogsCmd.Flags().IntVarP(&tailLines, "lines", "n", 20, "Number of lines to show before following (with -f)")
 
-	serverCmd.AddCommand(serverStartCmd, serverStopCmd, serverLogsCmd)
+	serverCmd.AddCommand(serverStartCmd, serverStopCmd, serverLogsCmd, serverPsCmd)
 	rootCmd.AddCommand(serverCmd)
 }
 
@@ -109,7 +122,7 @@ func runServerStart(cmd *cobra.Command, args []string) error {
 
 	case serverLocal:
 		// Find locally built JAR by walking up from executable or CWD
-		localJar, err := findLocalJAR()
+		localJar, err := serverFindLocalJAR()
 		if err != nil {
 			return err
 		}
@@ -118,20 +131,20 @@ func runServerStart(cmd *cobra.Command, args []string) error {
 
 	case serverVersion != "":
 		jarPath = filepath.Join(dir, fmt.Sprintf("agentspan-runtime-%s.jar", serverVersion))
-		if err := ensureVersionedJAR(jarPath, serverVersion); err != nil {
+		if err := serverEnsureVersionedJAR(jarPath, serverVersion); err != nil {
 			return err
 		}
 
 	default:
 		jarPath = filepath.Join(dir, jarName)
-		if err := ensureLatestJAR(jarPath); err != nil {
+		if err := serverEnsureLatestJAR(jarPath); err != nil {
 			return err
 		}
 	}
 
 	// Check if already running
 	if pid, err := readPID(); err == nil {
-		if processRunning(pid) {
+		if serverProcessRunning(pid) {
 			color.Yellow("Server already running (PID %d). Stop it first with: agentspan server stop", pid)
 			return nil
 		}
@@ -145,10 +158,10 @@ func runServerStart(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("port %s is already in use. Stop the other process or use --port to choose a different port.", serverPort)
 	}
 
-	checkAIProviderKeys()
+	serverCheckAIProviderKeys()
 
 	// Validate JDK before launching java
-	javaOk, javaVersion := checkJava()
+	javaOk, javaVersion := serverCheckJava()
 	if !javaOk {
 		if javaVersion != "" {
 			return fmt.Errorf(
@@ -235,7 +248,7 @@ func waitForHealthy(pid int, port string) error {
 
 	for time.Now().Before(deadline) {
 		// Fail fast if the process has died
-		if !processRunning(pid) {
+		if !serverProcessRunning(pid) {
 			return fmt.Errorf("server process exited unexpectedly — check logs: %s", logFile())
 		}
 
@@ -264,7 +277,7 @@ func runServerStop(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	if !processRunning(pid) {
+	if !serverProcessRunning(pid) {
 		os.Remove(pidFile())
 		color.Yellow("Server process (PID %d) is not running. Cleaned up stale PID file.", pid)
 		return nil
@@ -281,6 +294,26 @@ func runServerStop(cmd *cobra.Command, args []string) error {
 
 	os.Remove(pidFile())
 	color.Green("Server stopped (PID %d)", pid)
+	return nil
+}
+
+func runServerPS(cmd *cobra.Command, args []string) error {
+	out := cmd.OutOrStdout()
+
+	pid, err := readPID()
+	if err != nil {
+		fmt.Fprintln(out, "No server is running.")
+		return nil
+	}
+
+	if !serverProcessRunning(pid) {
+		_ = os.Remove(pidFile())
+		fmt.Fprintf(out, "No server is running. Removed stale PID file for PID %d.\n", pid)
+		return nil
+	}
+
+	fmt.Fprintln(out, "PID\tSTATUS")
+	fmt.Fprintf(out, "%d\trunning\n", pid)
 	return nil
 }
 

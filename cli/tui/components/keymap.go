@@ -36,6 +36,7 @@ func HelpOverlay(width, height int) string {
 				{"enter", "select view"},
 				{"tab", "focus content panel"},
 				{"1-0", "jump to view directly"},
+				{"ctrl+t", "toggle light/dark theme"},
 				{"q", "quit"},
 			},
 		},

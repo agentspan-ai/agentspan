@@ -20,8 +20,6 @@ import (
 type Client struct {
 	baseURL    string
 	httpClient *http.Client
-	authKey    string
-	authSecret string
 	apiKey     string
 }
 
@@ -29,8 +27,6 @@ func New(cfg *config.Config) *Client {
 	return &Client{
 		baseURL:    strings.TrimRight(cfg.ServerURL, "/"),
 		httpClient: &http.Client{Timeout: 30 * time.Second},
-		authKey:    cfg.AuthKey,
-		authSecret: cfg.AuthSecret,
 		apiKey:     cfg.APIKey,
 	}
 }
@@ -54,13 +50,6 @@ func (c *Client) doRequest(method, path string, body interface{}) (*http.Respons
 	}
 	if c.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	} else {
-		if c.authKey != "" {
-			req.Header.Set("X-Auth-Key", c.authKey)
-		}
-		if c.authSecret != "" {
-			req.Header.Set("X-Auth-Secret", c.authSecret)
-		}
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -361,8 +350,8 @@ func (c *Client) Stream(executionID string, lastEventID string, events chan<- SS
 		if lastEventID != "" {
 			req.Header.Set("Last-Event-ID", lastEventID)
 		}
-		if c.authKey != "" {
-			req.Header.Set("X-Auth-Key", c.authKey)
+		if c.apiKey != "" {
+			req.Header.Set("Authorization", "Bearer "+c.apiKey)
 		}
 
 		resp, err := streamClient.Do(req)

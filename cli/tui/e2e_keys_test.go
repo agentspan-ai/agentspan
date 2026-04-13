@@ -209,10 +209,13 @@ func TestE2EDashboardRendered(t *testing.T) {
 	ehas(t, "dashboard", out, "Executions")
 }
 
-func TestE2EDashboardRNavigatesToAgents(t *testing.T) {
+func TestE2EDashboardROpensRunPane(t *testing.T) {
 	m := enavTo(t, ebaseApp(t), ViewDashboard)
 	m = esend(m, "r")
 	eview(t, "dashboard r→agents", m, ViewAgents)
+	if m.agents.Pane() != views.PaneRun {
+		t.Errorf("dashboard r: pane=%d, want PaneRun", m.agents.Pane())
+	}
 }
 
 func TestE2EDashboardRRefresh(t *testing.T) {
@@ -778,7 +781,7 @@ func TestE2EConfigureRendered(t *testing.T) {
 	out := eout(m)
 	ehas(t, "configure", out, "Configure")
 	ehas(t, "configure url", out, "Server URL")
-	ehas(t, "configure auth", out, "Auth")
+	ehas(t, "configure file", out, "Config file")
 }
 
 func TestE2EConfigureFormActive(t *testing.T) {

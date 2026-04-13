@@ -112,10 +112,18 @@ func (m CredentialsModel) Update(msg tea.Msg) (CredentialsModel, tea.Cmd) {
 	case tea.KeyPressMsg:
 		// When add form is active, send ALL keys to the form
 		if m.addMode && m.addForm != nil && m.addForm.State == huh.StateNormal {
+			// huh does not bind esc to abort by default — intercept it here.
+			if msg.String() == "esc" {
+				m.addMode = false
+				m.addForm = nil
+				return m, nil
+			}
 			form, cmd := m.addForm.Update(msg)
 			if f, ok := form.(*huh.Form); ok {
 				m.addForm = f
 				if m.addForm.State == huh.StateCompleted {
+					m.addName = m.addForm.GetString("name")
+					m.addValue = m.addForm.GetString("value")
 					return m, m.saveCredential()
 				}
 				if m.addForm.State == huh.StateAborted {
@@ -144,6 +152,16 @@ func (m CredentialsModel) Update(msg tea.Msg) (CredentialsModel, tea.Cmd) {
 		form, cmd := m.addForm.Update(msg)
 		if f, ok := form.(*huh.Form); ok {
 			m.addForm = f
+			if m.addForm.State == huh.StateCompleted {
+				m.addName = m.addForm.GetString("name")
+				m.addValue = m.addForm.GetString("value")
+				return m, m.saveCredential()
+			}
+			if m.addForm.State == huh.StateAborted {
+				m.addMode = false
+				m.addForm = nil
+				return m, nil
+			}
 		}
 		return m, cmd
 	}
@@ -371,20 +389,20 @@ func (m CredentialsModel) buildAddForm() *huh.Form {
 
 	if m.tab == CredTabCreds {
 		return huh.NewForm(huh.NewGroup(
-			huh.NewInput().Title(nameLabel).
+			huh.NewInput().Key("name").Title(nameLabel).
 				Description("e.g. OPENAI_API_KEY").
 				Value(&m.addName),
-			huh.NewInput().Title(valueLabel).
+			huh.NewInput().Key("value").Title(valueLabel).
 				Description("Stored encrypted on the server").
 				EchoMode(huh.EchoModePassword).
 				Value(&m.addValue),
 		)).WithTheme(huh.ThemeFunc(agentspanHuhTheme))
 	}
 	return huh.NewForm(huh.NewGroup(
-		huh.NewInput().Title(nameLabel).
+		huh.NewInput().Key("name").Title(nameLabel).
 			Description("e.g. OPENAI_API_KEY").
 			Value(&m.addName),
-		huh.NewInput().Title(valueLabel).
+		huh.NewInput().Key("value").Title(valueLabel).
 			Description("The storage key name").
 			Value(&m.addValue),
 	)).WithTheme(huh.ThemeFunc(agentspanHuhTheme))
@@ -410,6 +428,10 @@ func (m CredentialsModel) saveCredential() tea.Cmd {
 	name := m.addName
 	value := m.addValue
 	tab := m.tab
+	if m.addForm != nil {
+		name = m.addForm.GetString("name")
+		value = m.addForm.GetString("value")
+	}
 	return func() tea.Msg {
 		if tab == CredTabCreds {
 			err := m.client.SetCredential(name, value)
@@ -477,12 +499,12 @@ func (m CredentialsModel) FooterHints() string {
 
 // ─── Test accessors ───────────────────────────────────────────────────────────
 
-func (m CredentialsModel) Tab() CredTab       { return m.tab }
-func (m CredentialsModel) BtnCursor() int     { return m.btnCursor }
-func (m CredentialsModel) AddMode() bool      { return m.addMode }
-func (m CredentialsModel) DelConfirm() bool   { return m.delConfirm }
-func (m CredentialsModel) Loading() bool      { return m.loading }
-func (m CredentialsModel) Success() string    { return m.success }
+func (m CredentialsModel) Tab() CredTab         { return m.tab }
+func (m CredentialsModel) BtnCursor() int       { return m.btnCursor }
+func (m CredentialsModel) AddMode() bool        { return m.addMode }
+func (m CredentialsModel) DelConfirm() bool     { return m.delConfirm }
+func (m CredentialsModel) Loading() bool        { return m.loading }
+func (m CredentialsModel) Success() string      { return m.success }
 func (m *CredentialsModel) SetSuccess(s string) { m.success = s }
 
 func (m *CredentialsModel) InjectCred(name string) {
