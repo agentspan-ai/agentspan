@@ -143,7 +143,7 @@ class TestMarkCompleted:
 
 
 class TestGetMostRecent:
-    """get_most_recent returns the last session added."""
+    """get_most_recent returns the session with the newest last_active."""
 
     def test_returns_none_when_empty(self, sm: SessionManager) -> None:
         assert sm.get_most_recent() is None
@@ -155,6 +155,19 @@ class TestGetMostRecent:
         recent = sm.get_most_recent()
         assert recent is not None
         assert recent.execution_id == "exec-003"
+
+    def test_returns_most_recently_active(self, sm: SessionManager) -> None:
+        """get_most_recent should return the session with the latest last_active,
+        not just the last appended session."""
+        sm.create("exec-001")
+        sm.create("exec-002")
+        sm.create("exec-003")
+        # Touch exec-001 so it becomes the most recently active
+        time.sleep(0.01)
+        sm.update_last_active("exec-001")
+        recent = sm.get_most_recent()
+        assert recent is not None
+        assert recent.execution_id == "exec-001"
 
 
 class TestFindById:
@@ -175,6 +188,58 @@ class TestFindById:
     def test_returns_none_for_no_match(self, sm: SessionManager) -> None:
         sm.create("exec-001")
         assert sm.find_by_id("nonexistent") is None
+
+    def test_ambiguous_prefix_raises(self, sm: SessionManager) -> None:
+        """Ambiguous prefix matching raises ValueError."""
+        sm.create("e6c2d0cf-aaaa")
+        sm.create("e6c2d0cf-bbbb")
+        with pytest.raises(ValueError, match="Ambiguous session ID"):
+            sm.find_by_id("e6c2d0cf")
+
+    def test_exact_match_wins_over_ambiguous_prefix(self, sm: SessionManager) -> None:
+        """An exact match should return immediately, even if other sessions share the prefix."""
+        sm.create("e6c2d0cf")
+        sm.create("e6c2d0cf-aaaa")
+        sm.create("e6c2d0cf-bbbb")
+        found = sm.find_by_id("e6c2d0cf")
+        assert found is not None
+        assert found.execution_id == "e6c2d0cf"
+
+
+class TestCleanup:
+    """cleanup removes oldest COMPLETED sessions beyond the limit."""
+
+    def test_cleanup_removes_oldest_completed(self, sm: SessionManager) -> None:
+        for i in range(5):
+            sm.create(f"exec-{i:03d}")
+            sm.mark_completed(f"exec-{i:03d}")
+        sm.cleanup(max_sessions=3)
+        sessions = sm.list_sessions()
+        completed_ids = [s.execution_id for s in sessions if s.status == "COMPLETED"]
+        assert len(completed_ids) == 3
+        # Oldest two (exec-000, exec-001) should have been removed
+        assert "exec-000" not in completed_ids
+        assert "exec-001" not in completed_ids
+
+    def test_cleanup_preserves_active_sessions(self, sm: SessionManager) -> None:
+        for i in range(5):
+            sm.create(f"exec-{i:03d}")
+        # Complete only some
+        sm.mark_completed("exec-000")
+        sm.mark_completed("exec-001")
+        sm.mark_completed("exec-002")
+        sm.cleanup(max_sessions=1)
+        sessions = sm.list_sessions()
+        # 2 active (RUNNING) + 1 completed (most recent) = 3
+        assert len(sessions) == 3
+        active = [s for s in sessions if s.status == "RUNNING"]
+        assert len(active) == 2
+
+    def test_cleanup_noop_under_limit(self, sm: SessionManager) -> None:
+        sm.create("exec-001")
+        sm.mark_completed("exec-001")
+        sm.cleanup(max_sessions=50)
+        assert len(sm.list_sessions()) == 1
 
 
 class TestPersistenceRoundtrip:
