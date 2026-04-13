@@ -30,6 +30,7 @@ class AutopilotConfig:
 
     server_url: str = "http://localhost:6767"
     llm_model: str = "openai/gpt-4o-mini"
+    poll_interval_seconds: int = 30
     base_dir: Path = field(default_factory=_default_base_dir)
     last_seen: Dict[str, str] = field(default_factory=dict)
 
@@ -85,6 +86,7 @@ class AutopilotConfig:
         return cls(
             server_url=raw.get("server_url", cls.server_url),
             llm_model=raw.get("llm_model", cls.llm_model),
+            poll_interval_seconds=raw.get("poll_interval_seconds", cls.poll_interval_seconds),
             base_dir=base_dir,
             last_seen=last_seen,
         )
