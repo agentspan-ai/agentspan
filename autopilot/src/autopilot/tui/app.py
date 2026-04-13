@@ -763,10 +763,15 @@ def _run_tui_repl(
     poller.start()
 
     # ---- Run the TUI ----
+    print("About to call app.run()...", file=sys.stderr, flush=True)
     try:
         app.run()
+        print("app.run() returned normally.", file=sys.stderr, flush=True)
+    except Exception as exc:
+        print(f"app.run() raised: {exc}", file=sys.stderr, flush=True)
     finally:
         _app_exited.set()
+        print("TUI cleanup complete.", file=sys.stderr, flush=True)
         poller.stop()
 
 
@@ -852,7 +857,9 @@ def main() -> None:
                 args.session_file.write_text(execution_id)
 
             print(f"Session: {execution_id[:16]}...")
+            print("Launching TUI...", file=sys.stderr, flush=True)
             _run_tui_repl(runtime, handle, execution_id)
+            print("TUI exited.", file=sys.stderr, flush=True)
     except KeyboardInterrupt:
         print("\nShutting down...")
     except Exception as exc:
