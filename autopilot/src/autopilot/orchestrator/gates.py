@@ -118,6 +118,20 @@ def validate_spec(agent_name: str) -> str:
         errors.append("trigger section is missing or not a mapping")
     else:
         ttype = trigger.get("type")
+        # Normalize common aliases the LLM uses
+        _TRIGGER_ALIASES = {
+            "scheduled": "cron",
+            "schedule": "cron",
+            "interval": "cron",
+            "periodic": "cron",
+            "always_on": "daemon",
+            "continuous": "daemon",
+            "event": "webhook",
+            "file_watch": "daemon",
+            "polling": "daemon",
+        }
+        if ttype in _TRIGGER_ALIASES:
+            ttype = _TRIGGER_ALIASES[ttype]
         if ttype not in _VALID_TRIGGER_TYPES:
             errors.append(
                 f"trigger type '{ttype}' is invalid — must be one of: "
@@ -138,9 +152,24 @@ def validate_spec(agent_name: str) -> str:
                 if int_name not in known_integrations:
                     errors.append(f"tool '{ref}' references unknown integration '{int_name}'")
             elif isinstance(ref, str):
-                worker_file = agent_workers_dir / f"{ref}.py"
-                if not worker_file.exists():
-                    errors.append(f"tool '{ref}' references a worker file that does not exist")
+                # Check if it's a known builtin integration (LLM often omits "builtin:" prefix)
+                if ref in known_integrations:
+                    pass  # It's a known integration, just missing the prefix — OK
+                else:
+                    # Check for individual tool names that belong to builtin integrations
+                    is_known_tool = False
+                    for int_name in known_integrations:
+                        int_tools = registry.get_tools(int_name)
+                        for t in int_tools:
+                            if hasattr(t, "_tool_def") and t._tool_def.name == ref:
+                                is_known_tool = True
+                                break
+                        if is_known_tool:
+                            break
+                    if not is_known_tool:
+                        worker_file = agent_workers_dir / f"{ref}.py"
+                        if not worker_file.exists():
+                            errors.append(f"tool '{ref}' is not a known integration and no worker file exists")
 
     # -- credentials --
     # We only check that if tools need credentials, the credentials section
