@@ -1125,28 +1125,13 @@ def main() -> None:
                 sm.update_last_active(execution_id)
 
             else:
-                # Smart default: resume if a current running session exists
-                current_eid = sm.get_current()
-                if current_eid:
-                    current_session = sm.find_by_id(current_eid)
-                    if current_session and current_session.status in ("RUNNING", "DISCONNECTED"):
-                        try:
-                            print(f"Resuming session: {current_eid[:16]}...")
-                            handle = runtime.resume(current_eid, agent)
-                            execution_id = handle.execution_id
-                            sm.update_last_active(execution_id)
-                        except Exception:
-                            # F7: Show message on silent resume failure
-                            print("Previous session ended. Starting fresh.")
-                            handle = None
-
-                if handle is None:
-                    handle = runtime.start(agent, _start_prompt)
-                    execution_id = handle.execution_id
-                    sm.create(execution_id)
-                    # Also write legacy session file
-                    args.session_file.parent.mkdir(parents=True, exist_ok=True)
-                    args.session_file.write_text(execution_id)
+                # Always start a new session. User can switch to existing
+                # sessions with /switch or /sessions if needed.
+                handle = runtime.start(agent, _start_prompt)
+                execution_id = handle.execution_id
+                sm.create(execution_id)
+                args.session_file.parent.mkdir(parents=True, exist_ok=True)
+                args.session_file.write_text(execution_id)
 
             # Loop: run the TUI; if user types /new, start a fresh session
             while True:
