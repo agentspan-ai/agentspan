@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 import yaml
 
-from autopilot.config import AutopilotConfig
 from autopilot.orchestrator.gates import (
     run_all_gates,
     validate_code,
@@ -21,25 +20,9 @@ from autopilot.orchestrator.gates import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _config_for_tmp(tmp_path: Path) -> AutopilotConfig:
-    return AutopilotConfig(base_dir=tmp_path)
-
-
 def _make_config_env(monkeypatch, tmp_path: Path) -> Path:
     """Point the gates module at tmp_path. Returns the agents dir."""
-    monkeypatch.setattr(
-        "autopilot.config._default_base_dir",
-        lambda: tmp_path,
-    )
-    monkeypatch.setattr(
-        "autopilot.orchestrator.gates._get_config",
-        lambda: _config_for_tmp(tmp_path),
-    )
-    # Also patch tools._get_config for deploy gate which uses the loader
-    monkeypatch.setattr(
-        "autopilot.orchestrator.tools._get_config",
-        lambda: _config_for_tmp(tmp_path),
-    )
+    monkeypatch.setenv("AUTOPILOT_BASE_DIR", str(tmp_path))
     agents_dir = tmp_path / "agents"
     agents_dir.mkdir(parents=True, exist_ok=True)
     return agents_dir

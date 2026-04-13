@@ -19,7 +19,6 @@ import pytest
 import yaml
 
 from agentspan.agents import Agent, AgentRuntime, EventType, tool, wait_for_message_tool
-from autopilot.config import AutopilotConfig
 from autopilot.orchestrator.tools import build_integration_catalog, get_orchestrator_tools
 
 
@@ -31,24 +30,13 @@ from autopilot.orchestrator.tools import build_integration_catalog, get_orchestr
 def temp_autopilot_dir(tmp_path, monkeypatch):
     """Create a temporary autopilot directory and redirect config to it.
 
-    Patches both ``autopilot.config._default_base_dir`` and the per-module
-    ``_get_config`` helpers so that all tool calls write to the temp dir
-    instead of ``~/.agentspan/autopilot/``.
+    Sets AUTOPILOT_BASE_DIR so that ``_default_base_dir()`` and all
+    ``_get_config()`` helpers resolve to tmp_path automatically.
     """
     agents_dir = tmp_path / "agents"
-    agents_dir.mkdir()
+    agents_dir.mkdir(parents=True, exist_ok=True)
 
-    _cfg = AutopilotConfig(base_dir=tmp_path)
-
-    monkeypatch.setattr("autopilot.config._default_base_dir", lambda: tmp_path)
-    monkeypatch.setattr(
-        "autopilot.orchestrator.tools._get_config",
-        lambda: _cfg,
-    )
-    monkeypatch.setattr(
-        "autopilot.orchestrator.gates._get_config",
-        lambda: _cfg,
-    )
+    monkeypatch.setenv("AUTOPILOT_BASE_DIR", str(tmp_path))
 
     return tmp_path
 
