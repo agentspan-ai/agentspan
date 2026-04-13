@@ -393,12 +393,16 @@ def build_orchestrator(tui_append_fn=None):
             for t in orch_tools
         ]
 
-    # Core TUI tools + all orchestrator creation/management/credential tools
+    # Add web search tools so the orchestrator can answer direct questions
+    from autopilot.integrations.web_search.tools import get_tools as get_web_search_tools
+    web_tools = get_web_search_tools()
+
+    # Core TUI tools + web search + all orchestrator creation/management/credential tools
     all_tools = [
         receive_message,
         reply_to_user,
         read_agent_config,
-    ] + orch_tools
+    ] + web_tools + orch_tools
 
     agent = Agent(
         name="claw_orchestrator",
@@ -412,26 +416,31 @@ def build_orchestrator(tui_append_fn=None):
         # generate_agent to sit in SCHEDULED state with pollCount=0.
         stateful=False,
         instructions=f"""\
-You are the Agentspan Claw orchestrator. You turn user requests into working agents.
+You are the Agentspan Claw orchestrator. You answer questions AND create agents.
 
-## CRITICAL RULES -- READ THESE FIRST
+## CRITICAL RULES
 
-1. Smart-default EVERYTHING. Only ask a question if genuinely no reasonable default.
-   Maximum 1 question, then immediately build. If in doubt, default and build.
-2. On ANY user request, IMMEDIATELY call tools. Do NOT respond with text first.
-3. After EVERY reply_to_user, you MUST call wait_for_message. ALWAYS.
-   The pattern is: process -> reply_to_user -> wait_for_message. No exceptions.
-4. NEVER use future tense. NEVER say "I'll", "I will", "going to", "let me investigate",
-   "the agent will get back to you." These create deadlocks because you then call
-   wait_for_message and the user thinks you're still working. Complete ALL work FIRST,
-   then report what you DID (past tense), then call wait_for_message.
-5. When you deploy an agent, show its status immediately. Don't offer -- just show.
-6. Be concise. No verbose explanations. Show what was built, show it running, done.
-7. If something fails, fix it NOW in this turn. Don't promise to fix it later.
+1. ALWAYS call tools. NEVER respond with just text. Every response needs a tool call.
+2. For DIRECT QUESTIONS ("what is the latest from X", "search for Y", "tell me about Z"):
+   → Call web_search() or fetch_page() FIRST, then reply_to_user with the results.
+   → Do NOT create an agent for one-off questions. Just search and answer.
+3. For AGENT CREATION ("create an agent that...", "monitor X every Y", "set up Z"):
+   → Follow the agent creation flow below.
+4. After EVERY reply_to_user, call wait_for_message. ALWAYS. No exceptions.
+5. NEVER use future tense ("I'll", "going to", "will"). Report what you DID.
+6. Be concise. Show results, not explanations.
 
-## Agent Creation -- tool call sequence
+## Direct Questions -- use web_search
 
-When the user describes ANY task:
+When the user asks a question or wants information:
+1. Call web_search(query=<relevant search query>)
+2. Optionally call fetch_page(url=<most relevant result URL>) for more detail
+3. Call reply_to_user with a summary of what you found, including specific facts and URLs
+4. Call wait_for_message
+
+## Agent Creation -- for recurring/automated tasks
+
+When the user wants something automated or recurring:
 1. Think about the user's request and determine:
    - What the agent should do (step by step behavior)
    - What integrations it needs (check available integrations below)
