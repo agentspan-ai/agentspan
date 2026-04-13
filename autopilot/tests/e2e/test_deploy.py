@@ -90,10 +90,7 @@ class TestDeployAgent:
         _make_agent_on_disk(tmp_path, agent_name)
         config = _make_config(tmp_path)
 
-        monkeypatch.setattr(
-            "autopilot.orchestrator.tools._get_config",
-            lambda: config,
-        )
+        monkeypatch.setenv("AUTOPILOT_BASE_DIR", str(tmp_path))
 
         # -- Act: call deploy_agent directly (the @tool function) --
         result = deploy_agent(agent_name)
@@ -149,10 +146,7 @@ class TestDeployAgent:
         agent_dir = _make_agent_on_disk(tmp_path, agent_name)
         config = _make_config(tmp_path)
 
-        monkeypatch.setattr(
-            "autopilot.orchestrator.tools._get_config",
-            lambda: config,
-        )
+        monkeypatch.setenv("AUTOPILOT_BASE_DIR", str(tmp_path))
 
         # Load agent so we can register its tool workers
         agent = load_agent(agent_dir)
@@ -231,12 +225,8 @@ class TestDeployAgent:
         _make_agent_on_disk(tmp_path, agent_name)
 
         # Use a URL that will definitely fail (wrong port)
-        bad_config = _make_config(tmp_path, server_url="http://localhost:19999")
-
-        monkeypatch.setattr(
-            "autopilot.orchestrator.tools._get_config",
-            lambda: bad_config,
-        )
+        monkeypatch.setenv("AUTOPILOT_BASE_DIR", str(tmp_path))
+        monkeypatch.setenv("AGENTSPAN_SERVER_URL", "http://localhost:19999")
 
         # -- Act --
         result = deploy_agent(agent_name)
