@@ -489,6 +489,58 @@ The system must be fully autopilot — when credentials are missing, it doesn't 
 
 ---
 
+## Session Management
+
+Each Claw interaction is a **session** — a persistent orchestrator workflow execution on the Agentspan server. Sessions maintain full conversation history, agent creation context, and state.
+
+### Session Lifecycle
+
+- **A session is a single orchestrator workflow execution.** It stays RUNNING as long as the user is interacting with it.
+- **The workflow must NOT complete between turns.** The orchestrator must always call `wait_for_message` after `reply_to_user` to keep the DoWhile loop alive. If the LLM fails to call `wait_for_message` (producing a text response instead), the TUI must detect this and **send the response back as a message** to keep the loop alive, rather than letting the workflow complete.
+- **Sessions are resumable.** A user can disconnect (`/disconnect`) and resume later (`--resume`). The workflow stays alive on the server during disconnection.
+- **Multiple sessions can exist.** Each session has a unique execution ID. The user can list sessions and switch between them.
+
+### Session Commands
+
+| Command | Description |
+|---------|-------------|
+| `--resume` | Resume the most recent session |
+| `--resume <session-id>` | Resume a specific session |
+| `--new` | Force start a new session (don't resume existing) |
+| `/sessions` | List all active sessions with creation time and last activity |
+| `/switch <session-id>` | Switch to a different active session |
+
+### Session Storage
+
+Sessions are tracked in `~/.agentspan/autopilot/sessions.json`:
+
+```json
+{
+  "current": "e6c2d0cf-11af-455b-8443-7e3f5ea193a8",
+  "sessions": [
+    {
+      "execution_id": "e6c2d0cf-11af-455b-8443-7e3f5ea193a8",
+      "created_at": "2026-04-12T18:27:18Z",
+      "last_active": "2026-04-12T18:28:47Z",
+      "status": "RUNNING"
+    }
+  ]
+}
+```
+
+### Handling LLM Workflow Completion
+
+When the orchestrator LLM produces a text response without calling `wait_for_message`, the workflow's DoWhile loop terminates (the server emits DONE). The TUI handles this by:
+
+1. Detecting the DONE event
+2. **Using `runtime.resume()` to re-attach to the execution** if it's still resumable
+3. If the execution truly ended, starting a **new execution in the same session context** — passing the conversation summary as the initial prompt so the LLM has continuity
+4. The user never sees "Resuming session..." — it's transparent
+
+This ensures the session never dies from the user's perspective, even when the LLM misbehaves.
+
+---
+
 ## UI Surfaces
 
 ### TUI (Terminal)
@@ -499,7 +551,7 @@ Built on `prompt_toolkit`, extending the pattern from `examples/82b_coding_agent
 - Chat with the orchestrator (create agents, ask questions, modify agents)
 - Dashboard view: agent list + notifications (toggle with `/dashboard`)
 - Signal commands: `/signal <agent-name> <message>` (transient), `/change <agent-name> <instruction>` (persistent)
-- Session resume: `--resume` flag
+- Session management: `--resume`, `--new`, `/sessions`, `/switch`
 - Connects to orchestrator via `wait_for_message` + SSE streaming
 
 ### Browser
