@@ -10,6 +10,8 @@ src/autopilot/__main__.py
 src/autopilot/config.py
 src/autopilot/loader.py
 src/autopilot/registry.py
+src/autopilot/credentials/__init__.py
+src/autopilot/credentials/acquisition.py
 src/autopilot/integrations/__init__.py
 src/autopilot/integrations/doc_reader/__init__.py
 src/autopilot/integrations/doc_reader/tools.py
@@ -33,6 +35,8 @@ src/autopilot/integrations/linear/__init__.py
 src/autopilot/integrations/linear/tools.py
 src/autopilot/integrations/local_fs/__init__.py
 src/autopilot/integrations/local_fs/tools.py
+src/autopilot/integrations/mcp/__init__.py
+src/autopilot/integrations/mcp/tools.py
 src/autopilot/integrations/notion/__init__.py
 src/autopilot/integrations/notion/tools.py
 src/autopilot/integrations/outlook/__init__.py
@@ -48,6 +52,9 @@ src/autopilot/integrations/web_search/tools.py
 src/autopilot/integrations/whatsapp/__init__.py
 src/autopilot/integrations/whatsapp/tools.py
 src/autopilot/orchestrator/__init__.py
+src/autopilot/orchestrator/gates.py
+src/autopilot/orchestrator/retry.py
+src/autopilot/orchestrator/server.py
 src/autopilot/orchestrator/state.py
 src/autopilot/orchestrator/tools.py
 src/autopilot/templates/__init__.py
@@ -59,6 +66,8 @@ src/autopilot/tui/commands.py
 src/autopilot/tui/dashboard.py
 src/autopilot/tui/events.py
 src/autopilot/tui/notifications.py
+src/autopilot/tui/poller.py
+src/autopilot/tui/sessions.py
 tests/test_commands.py
 tests/test_config.py
 tests/test_loader.py
