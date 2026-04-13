@@ -83,6 +83,7 @@ Available integrations:
     def start(self):
         self.runtime = AgentRuntime()
         self.runtime.__enter__()
+        self._started = False  # Defer first execution to first send()
         print(f"\n  Runtime started")
 
     def send(self, message: str, timeout: float = 120) -> dict:
@@ -173,11 +174,10 @@ Available integrations:
 
 @pytest.fixture
 def runner(tmp_path, monkeypatch):
+    config = AutopilotConfig(base_dir=tmp_path)
     monkeypatch.setattr("autopilot.config._default_base_dir", lambda: tmp_path)
-    monkeypatch.setattr(
-        "autopilot.orchestrator.tools._get_config",
-        lambda: AutopilotConfig(base_dir=tmp_path),
-    )
+    monkeypatch.setattr("autopilot.orchestrator.tools._get_config", lambda: config)
+    monkeypatch.setattr("autopilot.orchestrator.gates._get_config", lambda: config)
     r = ConversationRunner(tmp_path)
     yield r
     r.stop()
