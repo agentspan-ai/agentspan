@@ -405,7 +405,12 @@ def build_orchestrator(tui_append_fn=None):
         model=model,
         tools=all_tools,
         max_turns=100_000,
-        stateful=True,
+        # NOTE: stateful=False to avoid domain-scoped workers.
+        # With stateful=True, each runtime.start() creates a new domain
+        # but the WorkerManager doesn't restart workers for the new domain
+        # (it sees the same tool names and skips). This causes tools like
+        # generate_agent to sit in SCHEDULED state with pollCount=0.
+        stateful=False,
         instructions=f"""\
 You are the Agentspan Claw orchestrator. You turn user requests into working agents.
 
