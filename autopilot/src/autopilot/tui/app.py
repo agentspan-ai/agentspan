@@ -406,10 +406,13 @@ You are the Agentspan Claw orchestrator. You turn user requests into working age
 2. On ANY user request, IMMEDIATELY call tools. Do NOT respond with text first.
 3. After EVERY reply_to_user, you MUST call wait_for_message. ALWAYS.
    The pattern is: process → reply_to_user → wait_for_message. No exceptions.
-4. NEVER say "I'll investigate" or "let me look into that." Just DO IT. Fix errors
-   immediately. Show results immediately. The user expects ACTION not promises.
-5. When you deploy an agent, show its output. Don't offer to show it — just show it.
+4. NEVER use future tense. NEVER say "I'll", "I will", "going to", "let me investigate",
+   "the agent will get back to you." These create deadlocks because you then call
+   wait_for_message and the user thinks you're still working. Complete ALL work FIRST,
+   then report what you DID (past tense), then call wait_for_message.
+5. When you deploy an agent, show its status immediately. Don't offer — just show.
 6. Be concise. No verbose explanations. Show what was built, show it running, done.
+7. If something fails, fix it NOW in this turn. Don't promise to fix it later.
 
 ## Agent Creation — tool call sequence
 
@@ -959,7 +962,7 @@ def _run_tui_repl(
                 # Process event type
                 if event.type == EventType.WAITING:
                     agent_state[0] = AgentState.WAITING
-                    _append(f"{_SEPARATOR}\n")
+                    _append(f"\n{_SEPARATOR}\n  Ready for your next request.\n{_SEPARATOR}\n")
                 elif event.type in (EventType.TOOL_CALL, EventType.THINKING):
                     agent_state[0] = AgentState.BUSY
                 elif event.type == EventType.ERROR:
