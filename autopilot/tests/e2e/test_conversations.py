@@ -45,12 +45,6 @@ def temp_autopilot_dir(tmp_path, monkeypatch):
 # Agent builder
 # ---------------------------------------------------------------------------
 
-_STDIN_TOOLS = frozenset({
-    "acquire_credentials",
-    "prompt_credentials",
-})
-"""Tools that call ``input()`` and would block in a headless test runner."""
-
 
 def build_test_orchestrator():
     """Build the orchestrator agent (same as TUI but without wait_for_message).
@@ -58,9 +52,9 @@ def build_test_orchestrator():
     The test sends the prompt directly via ``runtime.start()``, so
     ``wait_for_message`` is not needed for single-turn tests.
 
-    Tools that call ``input()`` (acquire_credentials, prompt_credentials)
-    are replaced with safe stubs that return an informational string instead
-    of blocking on stdin.
+    Uses the REAL orchestrator tools — no stubs.  If a tool calls input()
+    in a headless runner, that is a real bug to surface, not something to
+    paper over with fakes.
     """
     model = os.environ.get("AGENTSPAN_LLM_MODEL", "openai/gpt-4o")
 
@@ -69,27 +63,13 @@ def build_test_orchestrator():
         """Send response to user."""
         return "ok"
 
-    @tool
-    def acquire_credentials(credential_name: str) -> str:
-        """Stub: credential acquisition is not available in e2e tests."""
-        return f"Credential '{credential_name}' not available in test environment."
-
-    @tool
-    def prompt_credentials(credential_name: str) -> str:
-        """Stub: credential prompting is not available in e2e tests."""
-        return f"Credential '{credential_name}' not available in test environment."
-
-    # Filter out stdin-blocking tools and replace with safe stubs
-    orch_tools = [
-        t for t in get_orchestrator_tools()
-        if not (hasattr(t, "_tool_def") and t._tool_def.name in _STDIN_TOOLS)
-    ]
+    orch_tools = get_orchestrator_tools()
     catalog = build_integration_catalog()
 
     return Agent(
         name="claw_e2e_test",
         model=model,
-        tools=[reply_to_user, acquire_credentials, prompt_credentials] + orch_tools,
+        tools=[reply_to_user] + orch_tools,
         max_turns=25,
         instructions=f"""You are the Agentspan Claw orchestrator. Turn user requests into agents.
 
@@ -98,7 +78,6 @@ RULES:
 2. IMMEDIATELY generate a YAML spec and call generate_agent.
 3. Run validation gates: validate_spec, validate_integrations, validate_deployment.
 4. Call reply_to_user with what you built.
-5. Do NOT call acquire_credentials or prompt_credentials — credentials are not available in this environment.
 
 Available integrations:
 {catalog}
@@ -204,7 +183,7 @@ class TestCreateAgentConversation:
             f"Expected agent directory created, found: {list(agents_dir.iterdir())}"
         )
 
-        # Verify agent.yaml is valid YAML with required fields
+        # Verify agent.yaml is valid YAML with required fields and meaningful content
         agent_dir = agent_dirs[0]
         yaml_path = agent_dir / "agent.yaml"
         assert yaml_path.exists(), f"Expected agent.yaml in {agent_dir}"
@@ -212,6 +191,19 @@ class TestCreateAgentConversation:
         assert "name" in config
         assert "model" in config
         assert "instructions" in config
+
+        # Quality checks: instructions must be meaningful, not empty stubs
+        instructions = config.get("instructions", "")
+        assert len(instructions) > 50, (
+            f"Instructions too short ({len(instructions)} chars) — agent spec is hollow: "
+            f"{instructions!r}"
+        )
+        # Must reference at least one tool
+        tools = config.get("tools", [])
+        assert len(tools) >= 1, f"Expected at least one tool reference, got: {tools}"
+        # Must have a valid trigger type
+        trigger = config.get("trigger", {})
+        assert trigger.get("type"), f"Expected a trigger type, got: {trigger}"
 
     def test_create_agent_with_cron(self, temp_autopilot_dir):
         """Verify cron schedule is correctly set when user specifies a time interval."""

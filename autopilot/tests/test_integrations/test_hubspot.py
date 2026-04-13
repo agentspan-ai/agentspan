@@ -1,4 +1,9 @@
-"""Tests for hubspot integration tools — real e2e, no mocks."""
+"""Tests for hubspot integration tools — credential validation and tool metadata.
+
+# NOTE: These tests verify credential validation and tool metadata.
+# Full API integration tests require real credentials and are run
+# via the e2e test suite with deployed agents.
+"""
 
 from __future__ import annotations
 

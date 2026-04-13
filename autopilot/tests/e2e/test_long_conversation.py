@@ -213,6 +213,16 @@ class TestLongConversation:
         assert c1.get("name")
         assert c1.get("instructions")
 
+        # Verify agent.yaml has meaningful instructions (not empty or trivially short)
+        instructions = c1.get("instructions", "")
+        assert len(instructions) > 50, (
+            f"Instructions too short ({len(instructions)} chars) — agent spec is hollow: "
+            f"{instructions!r}"
+        )
+        # Must reference at least one tool
+        a1_tools = c1.get("tools", [])
+        assert len(a1_tools) >= 1, f"Expected at least one tool reference, got: {a1_tools}"
+
         has_validation = any("validate" in n for n in r1["tool_names"])
         assert has_validation, f"Expected validation in {r1['tool_names']}"
 

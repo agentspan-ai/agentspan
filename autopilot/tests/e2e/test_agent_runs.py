@@ -119,7 +119,8 @@ class TestLoadAndRunAgent:
 
         assert "web_search" in run_tool_calls or "search_and_read" in run_tool_calls, \
             f"Agent didn't search the web. Calls: {run_tool_calls}"
-        assert output, "Agent produced no output"
-        assert len(output) > 30, f"Output too short: {output}"
+
+        from tests.e2e.conftest import assert_output_quality
+        assert_output_quality(output, min_length=100)
 
         print(f"\n  SUCCESS: Agent loaded from disk, ran on server, searched web, produced output.")

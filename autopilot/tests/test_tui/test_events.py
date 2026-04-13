@@ -24,10 +24,6 @@ from autopilot.tui.events import (
 
 from agentspan.agents import AgentEvent, EventType
 
-# Use the real SDK event and enum — no fakes
-_FakeEvent = AgentEvent
-_ET = EventType
-
 
 # ---------------------------------------------------------------------------
 # Test: expand_prompt events
@@ -38,7 +34,7 @@ class TestExpandPromptFormatting:
     """Verify expand_prompt tool call/result produce user-friendly messages."""
 
     def test_expand_prompt_call_shows_expanding_message(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_CALL,
             tool_name="expand_prompt",
             args={"seed_prompt": "scan my emails"},
@@ -47,7 +43,7 @@ class TestExpandPromptFormatting:
         assert "Expanding your request" in result
 
     def test_expand_prompt_result_shows_checkmark(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_RESULT,
             tool_name="expand_prompt",
             result="template text here",
@@ -66,7 +62,7 @@ class TestValidationFormatting:
     """Verify validation gates produce checkmark on PASS, warning on FAIL."""
 
     def test_validate_spec_pass(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_RESULT,
             tool_name="validate_spec",
             result="PASS",
@@ -76,7 +72,7 @@ class TestValidationFormatting:
         assert "Specification valid" in result
 
     def test_validate_spec_fail(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_RESULT,
             tool_name="validate_spec",
             result="FAIL: name is missing; instructions are empty",
@@ -87,7 +83,7 @@ class TestValidationFormatting:
         assert "name is missing" in result
 
     def test_validate_code_pass(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_RESULT,
             tool_name="validate_code",
             result="PASS",
@@ -97,7 +93,7 @@ class TestValidationFormatting:
         assert "Code validated" in result
 
     def test_validate_code_fail(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_RESULT,
             tool_name="validate_code",
             result="FAIL: syntax error in worker.py",
@@ -107,7 +103,7 @@ class TestValidationFormatting:
         assert "Code issue" in result
 
     def test_validate_integrations_pass(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_RESULT,
             tool_name="validate_integrations",
             result="PASS",
@@ -117,7 +113,7 @@ class TestValidationFormatting:
         assert "Integrations available" in result
 
     def test_validate_integrations_fail_missing_credential(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_RESULT,
             tool_name="validate_integrations",
             result="FAIL: missing credentials: GMAIL_ACCESS_TOKEN",
@@ -127,7 +123,7 @@ class TestValidationFormatting:
         assert "GMAIL_ACCESS_TOKEN" in result
 
     def test_validate_deployment_pass(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_RESULT,
             tool_name="validate_deployment",
             result="PASS",
@@ -137,7 +133,7 @@ class TestValidationFormatting:
         assert "Deployment check passed" in result
 
     def test_validate_deployment_fail(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_RESULT,
             tool_name="validate_deployment",
             result="FAIL: LoaderError -- missing workers/",
@@ -180,7 +176,7 @@ class TestDeployAgentFormatting:
     """Verify deploy_agent events produce proper progress messages."""
 
     def test_deploy_call_shows_deploying(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_CALL,
             tool_name="deploy_agent",
             args={"agent_name": "email_monitor"},
@@ -190,7 +186,7 @@ class TestDeployAgentFormatting:
         assert "email_monitor" in result
 
     def test_deploy_result_success_shows_execution_id(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_RESULT,
             tool_name="deploy_agent",
             result="Agent 'email_monitor' deployed successfully.\nExecution ID: abc123\nStatus: ACTIVE",
@@ -201,7 +197,7 @@ class TestDeployAgentFormatting:
         assert "abc123" in result
 
     def test_deploy_result_failure(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_RESULT,
             tool_name="deploy_agent",
             result="Error deploying agent 'email_monitor': connection refused",
@@ -220,7 +216,7 @@ class TestAcquireCredentialsFormatting:
     """Verify credential events produce proper messages."""
 
     def test_acquire_call_shows_setting_up(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_CALL,
             tool_name="acquire_credentials",
             args={"credential_name": "GMAIL_ACCESS_TOKEN"},
@@ -230,7 +226,7 @@ class TestAcquireCredentialsFormatting:
         assert "GMAIL_ACCESS_TOKEN" in result
 
     def test_acquire_result_success(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_RESULT,
             tool_name="acquire_credentials",
             result="GMAIL_ACCESS_TOKEN acquired and stored successfully.",
@@ -249,7 +245,7 @@ class TestReplyToUserFormatting:
     """Verify reply_to_user shows the message cleanly."""
 
     def test_reply_call_shows_message(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_CALL,
             tool_name="reply_to_user",
             args={"message": "I'll set this up for you."},
@@ -259,7 +255,7 @@ class TestReplyToUserFormatting:
         assert "I'll set this up for you." in result
 
     def test_reply_result_suppressed(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_RESULT,
             tool_name="reply_to_user",
             result="ok",
@@ -277,7 +273,7 @@ class TestWebSearchFormatting:
     """Verify web_search events show the query."""
 
     def test_web_search_call_shows_query(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_CALL,
             tool_name="web_search",
             args={"query": "best email APIs"},
@@ -296,7 +292,7 @@ class TestWaitForMessageSuppressed:
     """wait_for_message should produce no output."""
 
     def test_wait_call_suppressed(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_CALL,
             tool_name="wait_for_message",
             args={},
@@ -305,7 +301,7 @@ class TestWaitForMessageSuppressed:
         assert result == ""
 
     def test_wait_result_suppressed(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_RESULT,
             tool_name="wait_for_message",
             result={"text": "hello"},
@@ -323,7 +319,7 @@ class TestUnknownToolFormatting:
     """Unknown tools should show 'Working...' instead of raw tool names."""
 
     def test_unknown_tool_shows_working(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_CALL,
             tool_name="some_internal_tool",
             args={"foo": "bar"},
@@ -343,7 +339,7 @@ class TestThinkingSuppressed:
     """THINKING events should be suppressed from user view."""
 
     def test_thinking_suppressed(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.THINKING,
             content="Let me think about this...",
         )
@@ -360,7 +356,7 @@ class TestErrorFormatting:
     """ERROR events should show the error content clearly."""
 
     def test_error_shows_content(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.ERROR,
             content="Connection refused to server",
         )
@@ -493,7 +489,7 @@ class TestSignalAgentFormatting:
     """Verify signal_agent events produce proper messages."""
 
     def test_signal_call(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_CALL,
             tool_name="signal_agent",
             args={"agent_name": "email_monitor", "message": "skip newsletters"},
@@ -503,7 +499,7 @@ class TestSignalAgentFormatting:
         assert "email_monitor" in result
 
     def test_signal_result_success(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_RESULT,
             tool_name="signal_agent",
             result="Signal sent to 'email_monitor': skip newsletters",
@@ -522,7 +518,7 @@ class TestGenerateAgentFormatting:
     """Verify generate_agent events produce proper messages."""
 
     def test_generate_call_shows_building(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_CALL,
             tool_name="generate_agent",
             args={"agent_name": "email_monitor", "spec_yaml": "..."},
@@ -531,7 +527,7 @@ class TestGenerateAgentFormatting:
         assert "Building agent" in result
 
     def test_generate_result_success(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_RESULT,
             tool_name="generate_agent",
             result="Agent 'email_monitor' created successfully.\nDirectory: /tmp/...",
@@ -550,7 +546,7 @@ class TestListAgentsFormatting:
     """Verify list_agents events render as tables."""
 
     def test_list_agents_call_suppressed(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_CALL,
             tool_name="list_agents",
             args={},
@@ -559,7 +555,7 @@ class TestListAgentsFormatting:
         assert result == ""
 
     def test_list_agents_no_agents(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.TOOL_RESULT,
             tool_name="list_agents",
             result="No agents found.",
@@ -577,7 +573,7 @@ class TestGuardrailFormatting:
     """Verify guardrail events produce proper messages."""
 
     def test_guardrail_pass(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.GUARDRAIL_PASS,
             guardrail_name="output_safety",
         )
@@ -586,7 +582,7 @@ class TestGuardrailFormatting:
         assert "output_safety" in result
 
     def test_guardrail_fail(self):
-        event = _FakeEvent(
+        event = AgentEvent(
             type=EventType.GUARDRAIL_FAIL,
             guardrail_name="output_safety",
             content="contains PII",
