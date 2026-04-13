@@ -67,10 +67,21 @@ class AgentState(enum.Enum):
 # ---------------------------------------------------------------------------
 
 def _discover_agents(config: AutopilotConfig) -> list[dict]:
-    """Read agent directories from disk and return agent info dicts."""
+    """Read agent directories from disk and enrich with live server status."""
     agents_dir = config.agents_dir
     if not agents_dir.exists():
         return []
+
+    # Fetch live server status for enrichment
+    server_running: dict[str, dict] = {}
+    try:
+        from autopilot.orchestrator.server import get_running_agents
+        for ex in get_running_agents(config=config):
+            aname = ex.get("agentName", "")
+            if aname:
+                server_running[aname] = ex
+    except Exception:
+        pass  # Server unreachable — use local data only
 
     agents = []
     for d in sorted(agents_dir.iterdir()):
@@ -93,6 +104,13 @@ def _discover_agents(config: AutopilotConfig) -> list[dict]:
                 info["last_run"] = metadata.get("last_deployed", "")
         except Exception:
             info["status"] = "error"
+
+        # Enrich with live server status
+        if d.name in server_running:
+            info["status"] = "running"
+            ex = server_running[d.name]
+            if ex.get("startTime"):
+                info["last_run"] = ex["startTime"]
 
         agents.append(info)
 
