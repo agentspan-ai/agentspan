@@ -16,7 +16,7 @@ You need to:
 
 That's where SDKs, frameworks, and agent runtimes can help — and there are quite a few out there. I'm part of the team building Agentspan, and through both developing it and using it, I've learned a lot. This post walks through an example I found particularly interesting—one that brings together several of the things I've been working on.
 
-In this post, I'll walk through one of my contributions: a coding agent with a terminal UI (inspired by tools like Claude Code), built with Agentspan (powered by [Conductor OSS](https://github.com/conductor-oss/conductor)).
+In this post, I'll walk through one of my contributions: [a durable coding assistant REPL](https://github.com/agentspan-ai/agentspan/pull/117) (inspired by tools like Claude Code), built with Agentspan (powered by [Conductor OSS](https://github.com/conductor-oss/conductor)).
 
 > **Note:** This isn't meant to be a production-ready coding agent. But it *is* a concrete, working example that shows what's going on under the hood—and how you can build something similar yourself.
 
@@ -93,7 +93,7 @@ Let's unpack what each piece does.
 
 **`wait_for_message_tool()`.** It creates a `PULL_WORKFLOW_MESSAGES` task—a server-side task that blocks until a message arrives in the workflow's message queue. Unlike regular tools, this one doesn't need a worker. The server handles it.
 
-**`stateful=True`.** The SDK generates a unique UUID `run_id` for this execution. Workers register under `domain=run_id`. The server routes all tasks for this execution to the correct worker pool. Multiple concurrent sessions are fully isolated.
+**`stateful=True`.** The SDK generates a unique UUID `run_id` for this execution. Workers register under `domain=run_id`. The server uses [task-to-domain mapping](https://orkes.io/content/developer-guides/task-to-domain) to route all tasks for this execution to the correct worker pool. Multiple concurrent sessions are fully isolated.
 
 **`max_turns=100_000`.** Each LLM decision → tool call → result counts as one turn. Setting this high means the agent loops effectively forever—which is what you want for a REPL.
 
@@ -112,7 +112,7 @@ execution_id = handle.execution_id
 
 `runtime.start()` compiles the agent to a Conductor workflow, registers it on the server, and kicks off execution. The returned `handle` gives you the execution ID and an event stream.
 
-Here's the simplest way to consume events:
+Here's how you would consume events:
 
 ```python
 for event in handle.stream():
@@ -159,7 +159,7 @@ The SDK makes an HTTP POST to the server. The message goes into a **[Workflow Me
 
 On the agent side, the `PULL_WORKFLOW_MESSAGES` task is blocking on the server. When a message arrives, the task completes, the LLM receives the message in its context, and the loop continues.
 
-> *\*WMQ is currently in beta. The default storage is in-memory. We're adding a SQLite-backed option for local dev environments soon; production deployments should use Redis.*
+> *\*WMQ is still a work in progress. The default storage is in-memory. We're adding a SQLite-backed option for local dev environments soon; production deployments should use Redis.*
 
 ---
 
@@ -310,17 +310,15 @@ The LLM uses these naturally: "start the dev server in the background, then run 
 
 ## Resuming an Agent
 
-The execution ID is saved to a session file so the client can reconnect to an existing agent via `runtime.resume(execution_id, agent)`.
+The execution ID is saved to a session file so the client can reconnect to an existing agent via `runtime.resume(execution_id, agent)`. This re-registers the tool workers under the same domain and returns a new `AgentHandle` with a fresh event stream — the agent picks up exactly where it left off, with full conversation history and state intact.
 
 ---
 
-## Conclusion
+## The Bottom Line
 
 Agentspan handles durability, session isolation, message queuing, event streaming, and resume so you can focus on the agent logic: what tools to give it, what instructions to write, what signals to send.
 
-The coding agent example is about 500 lines of Python. The framework handles the rest.
+The simple REPL version is about 540 lines of Python; the TUI version is around 780. The framework handles the rest. Check out [the PR](https://github.com/agentspan-ai/agentspan/pull/117). Honestly, it was fun to build. I hope you find it useful.
 
-If you want to build something similar, check out [this PR](https://github.com/agentspan-ai/agentspan/pull/117). There are two examples: a simple one with plain `input()` and another with a simple TUI. They run against a live Conductor server. Fork, extend, iterate.
-
-And honestly, building it was fun.
+Cheers!
 

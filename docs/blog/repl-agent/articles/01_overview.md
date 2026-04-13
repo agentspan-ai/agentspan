@@ -16,7 +16,7 @@ You need to:
 
 That's where frameworks can help — and there are quite a few out there. I'm part of the team building Agentspan, and through both developing it and using it, I've learned a lot. This post walks through an example I found particularly interesting—one that brings together several of the things I've been working on.
 
-In this post, I'll walk through one of my contributions: a coding agent with a terminal UI (inspired by tools like Claude Code), built with Agentspan and powered by Conductor OSS.
+In this post, I'll walk through one of my contributions: [a durable coding assistant REPL](https://github.com/agentspan-ai/agentspan/pull/117) (inspired by tools like Claude Code), built with Agentspan and powered by Conductor OSS.
 
 > **Note:** This isn't meant to be a production-ready coding agent. But it *is* a concrete, working example that shows what's really going on under the hood—and how you can build something similar yourself.
 
@@ -90,7 +90,7 @@ We also added "signals"—a mechanism to inject context into a running agent asy
 
 This is distributed systems engineering, not AI work.
 
-> *\*WMQ is currently in beta. The default storage is in-memory. We're adding a SQLite-backed option for local dev environments soon; production deployments should use Redis.*
+> *\*WMQ is still a work in progress. The default storage is in-memory. We're adding a SQLite-backed option for local dev environments soon; production deployments should use Redis.*
 
 ---
 
@@ -100,19 +100,17 @@ To put this to the test, we built a proof-of-concept: a terminal-based coding as
 
 The agent has access to file system tools (read, write, search), shell execution, and background process management. The UI has one pane showing the conversation and another where you can type while the agent is working. If your connection drops, you can reconnect to the same session and resume where you left off.
 
-The agent code is about 500 lines of Python. The framework handles durability, task routing, event streaming, and state synchronization.
-
-If you want to take a look at the implementation, check out [this PR](https://github.com/agentspan-ai/agentspan/pull/117). There are two examples: a simple one with plain `input()` and another with a simple TUI.
+The simple REPL version is about 540 lines of Python; the TUI version is around 780. The framework handles durability, task routing, event streaming, and state synchronization.
 
 ---
 
-## Conclusion
+## The Bottom Line
 
 Agent development isn't "just prompting." It's the intersection of AI, distributed systems, and developer experience.
 
 Frameworks like Agentspan exist to handle the infrastructure — durability, message queuing, session isolation, event streaming — so teams can focus on what their agents actually do.
 
-The coding agent example isn't meant to replace Claude Code. It's meant to show that with the right infrastructure, building an interactive, durable, observable agent is a few hundred lines of Python — not a heroic engineering effort.
+The simple REPL version is about 540 lines of Python; the TUI version is around 780. The framework handles the rest. Check out [the PR](https://github.com/agentspan-ai/agentspan/pull/117). Honestly, it was fun to build. I hope you find it useful.
 
-And honestly, building it was fun.
+Cheers!
 
