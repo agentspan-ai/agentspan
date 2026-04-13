@@ -5,6 +5,7 @@ State file lives at ``~/.agentspan/autopilot/state.json`` by default.
 
 from __future__ import annotations
 
+import fcntl
 import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -105,18 +106,26 @@ class StateManager:
     # -- Persistence -----------------------------------------------------------
 
     def save(self) -> None:
-        """Write current state to disk as JSON."""
+        """Write current state to disk as JSON (with exclusive file lock)."""
         self._state_file.parent.mkdir(parents=True, exist_ok=True)
         data = {name: asdict(state) for name, state in self._agents.items()}
-        self._state_file.write_text(json.dumps(data, indent=2) + "\n")
+        with open(self._state_file, "w") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            json.dump(data, f, indent=2)
+            f.write("\n")
+            fcntl.flock(f, fcntl.LOCK_UN)
 
     def load(self) -> None:
-        """Load state from disk.  If the file does not exist, start empty."""
+        """Load state from disk (with shared file lock).  If the file does not exist, start empty."""
         if not self._state_file.exists():
             self._agents = {}
             return
 
-        raw_text = self._state_file.read_text().strip()
+        with open(self._state_file, "r") as f:
+            fcntl.flock(f, fcntl.LOCK_SH)
+            raw_text = f.read().strip()
+            fcntl.flock(f, fcntl.LOCK_UN)
+
         if not raw_text:
             self._agents = {}
             return
