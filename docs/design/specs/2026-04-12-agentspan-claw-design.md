@@ -114,15 +114,24 @@ Credentials needed: GMAIL_OAUTH, WHATSAPP_API_KEY
 Want to tweak anything, or should I build it?
 ```
 
-### Step 4: Build, validate, deploy
+### Step 4: Build, validate, deploy, show
 
-User confirms. Orchestrator runs through the guardrailed pipeline. Flags missing credentials with setup instructions.
+The orchestrator runs through the guardrailed pipeline automatically:
+1. Generates agent definition + worker code
+2. Runs all validation gates (spec, code, integrations, deployment)
+3. If credentials are available, **deploys immediately** and shows the execution status
+4. If credentials are missing, acquires them (OAuth browser flow / API key page) then deploys
+5. Shows the user exactly what was built: name, schedule, integrations, credentials, execution ID
+6. Offers to show the agent's output: *"The agent is running. Say 'show output' to see what it produces."*
+
+The user never has to ask "did it work?" — the system shows them.
 
 ### Step 5: Chat becomes the control plane
 
 The chat thread persists as the agent's interaction channel. The user can:
 
-- Monitor outputs ("how did this morning's summary go?")
+- View output ("show output", "what did it produce?")
+- Monitor status ("how did this morning's summary go?")
 - Modify behavior ("also include my calendar from now on")
 - Pause/resume ("pause this until next week")
 - Signal running agents ("skip newsletters this time")
