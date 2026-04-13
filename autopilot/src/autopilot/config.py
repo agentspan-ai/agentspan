@@ -11,6 +11,10 @@ import yaml
 
 
 def _default_base_dir() -> Path:
+    """Default autopilot base directory. Override with AUTOPILOT_BASE_DIR env var."""
+    env_dir = os.environ.get("AUTOPILOT_BASE_DIR")
+    if env_dir:
+        return Path(env_dir)
     return Path.home() / ".agentspan" / "autopilot"
 
 
