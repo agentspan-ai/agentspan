@@ -466,50 +466,70 @@ def deploy_agent(agent_name: str) -> str:
 
     policy = RetryPolicy.from_agent_config(error_handling)
 
-    # Deploy via the server's HTTP API directly.
-    # We cannot use AgentRuntime() here because this tool runs inside a
-    # Conductor daemon worker process, and daemon processes cannot spawn
-    # child processes (which AgentRuntime needs for tool workers).
+    import os
+    import subprocess
+    import sys
+
+    # Deploy by running the agent in a subprocess.
+    # We cannot use AgentRuntime() directly here because this tool runs
+    # inside a Conductor daemon worker process, and daemon processes cannot
+    # spawn child processes.
     #
-    # Instead, we use the compile + start REST endpoints and register
-    # the agent for execution. Workers for builtin tools are already
-    # running as part of the orchestrator's runtime.
+    # Solution: run the agent in a SUBPROCESS. This creates a completely
+    # independent process with its own AgentRuntime that properly starts
+    # workers for tool execution (web_search, fetch_page, etc.).
     try:
-        from autopilot.loader import load_agent
-        from agentspan.agents.config_serializer import AgentConfigSerializer
-        import httpx
+        import json as _json
 
-        agent = load_agent(agent_dir)
-        serializer = AgentConfigSerializer()
-        config_json = serializer.serialize(agent)
+        # Run agent via subprocess — starts AgentRuntime with proper workers
+        script = f"""
+import os, sys, json
+os.environ.setdefault('AGENTSPAN_LOG_LEVEL', 'WARNING')
+sys.path.insert(0, '{str(Path(__file__).parent.parent)}')
+from agentspan.agents import AgentRuntime
+from autopilot.loader import load_agent
+from pathlib import Path
 
-        server_url = config.server_url.rstrip("/")
-        payload = {
-            "agentConfig": config_json,
-            "prompt": "Begin agent execution.",
-            "sessionId": "",
-            "media": [],
-        }
-
-        # Call the server's /agent/start endpoint directly
-        # server_url may or may not include /api — normalize
-        api_url = server_url.rstrip("/")
-        if not api_url.endswith("/api"):
-            api_url += "/api"
-        resp = httpx.post(
-            f"{api_url}/agent/start",
-            json=payload,
-            timeout=30.0,
+agent = load_agent(Path('{str(agent_dir)}'))
+with AgentRuntime() as runtime:
+    handle = runtime.start(agent, 'Execute the agent task now. Produce output immediately.')
+    result = handle.join(timeout=120)
+    output = {{
+        'execution_id': handle.execution_id,
+        'status': result.status if result else 'UNKNOWN',
+        'output': str(result.output)[:2000] if result and result.output else '',
+    }}
+    print('AGENT_RESULT:' + json.dumps(output))
+"""
+        proc = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            timeout=150,
+            env={**os.environ, "AUTOPILOT_BASE_DIR": str(config.autopilot_dir)},
         )
-        resp.raise_for_status()
-        data = resp.json()
-        execution_id = data.get("executionId", "")
+
+        # Parse the result from subprocess stdout
+        execution_id = ""
+        agent_output = ""
+        server_status = "ACTIVE"
+
+        for line in proc.stdout.splitlines():
+            if line.startswith("AGENT_RESULT:"):
+                result_data = _json.loads(line[len("AGENT_RESULT:"):])
+                execution_id = result_data.get("execution_id", "")
+                agent_output = result_data.get("output", "")
+                status = result_data.get("status", "")
+                if status in ("COMPLETED", "FinishReason.STOP"):
+                    server_status = "ACTIVE"
+                break
 
         if not execution_id:
-            raise RuntimeError("Server returned no execution ID")
+            # Check stderr for errors
+            err = proc.stderr.strip()[:500] if proc.stderr else "Unknown error"
+            raise RuntimeError(f"Agent subprocess failed: {err}")
 
-        # Verify the execution is running
-        server_status = "ACTIVE"
+        # Verify on server
         try:
             from autopilot.orchestrator.server import get_execution
             details = get_execution(execution_id, config=config)
@@ -534,12 +554,14 @@ def deploy_agent(agent_name: str) -> str:
         except Exception:
             pass
 
-        return (
-            f"Agent '{agent_name}' deployed successfully.\n"
+        result_msg = (
+            f"Agent '{agent_name}' deployed and executed successfully.\n"
             f"Execution ID: {execution_id}\n"
             f"Status: {server_status}\n"
-            f"The agent is now running on the server."
         )
+        if agent_output:
+            result_msg += f"\nAgent output:\n{agent_output}"
+        return result_msg
     except Exception as exc:
         sm.set(agent_name, AgentState(
             name=agent_name,
