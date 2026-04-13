@@ -14,7 +14,7 @@ You need to:
 * manage context — the right information, at the right time, across interactions  
 * and orchestrate all of this in a reliable way
 
-That's where SDKs, frameworks, and agent runtimes can help — and there are quite a few out there. I'm part of the team building Agentspan, and through both developing it and using it, I've learned a lot. This post walks through an example I found particularly interesting—one that brings together several of the things I've been working on.
+That's where SDKs, frameworks, and agent runtimes can help. I'm part of the team building Agentspan, and through both developing it and using it, I've learned a lot. This post walks through an example I found particularly interesting—one that brings together several of the things I've been working on.
 
 In this post, I'll walk through one of my contributions: [a durable coding assistant REPL](https://github.com/agentspan-ai/agentspan/pull/117) (inspired by tools like Claude Code), built with Agentspan (powered by [Conductor OSS](https://github.com/conductor-oss/conductor)).
 
