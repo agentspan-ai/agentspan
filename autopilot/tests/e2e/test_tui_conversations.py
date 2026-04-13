@@ -140,6 +140,14 @@ class TUIConversationSimulator:
         orch_tools = get_orchestrator_tools()
         web_tools = get_web_search_tools()
 
+        # Filter out tools that call input() -- they block forever in headless tests.
+        # These are: acquire_credentials (stdin-based), prompt_credentials (deprecated).
+        _STDIN_TOOLS = {"acquire_credentials", "prompt_credentials"}
+        orch_tools = [
+            t for t in orch_tools
+            if not (hasattr(t, "_tool_def") and t._tool_def.name in _STDIN_TOOLS)
+        ]
+
         @tool
         def reply_to_user(message: str) -> str:
             """Send your response to the user. Call this ONLY when ALL work is complete."""
