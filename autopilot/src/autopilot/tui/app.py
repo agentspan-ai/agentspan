@@ -43,6 +43,7 @@ from autopilot.tui.dashboard import render_dashboard
 from autopilot.tui.events import format_event, render_welcome
 from autopilot.tui.notifications import Notification, NotificationManager
 from autopilot.tui.poller import DashboardPoller
+from autopilot.tui.sessions import SessionManager
 
 logger = logging.getLogger(__name__)
 
@@ -484,6 +485,7 @@ def _run_tui_repl(
     handle,
     execution_id: str,
     agent=None,
+    session_manager: SessionManager | None = None,
 ) -> None:
     """Full-screen TUI: scrollable output on top, persistent input on bottom."""
 
@@ -544,6 +546,8 @@ def _run_tui_repl(
             return
 
         if cmd.action == "disconnect":
+            if session_manager:
+                session_manager.mark_disconnected(_current_execution_id[0])
             _append(f"Disconnected. Resume with: python -m autopilot.tui.app --resume\n")
             _stop_requested[0] = True
             threading.Timer(0.5, lambda: app.exit() if app.is_running else None).start()
@@ -647,11 +651,137 @@ def _run_tui_repl(
             _append(f"  {cmd.action.title()} signal sent for {cmd.agent_name}.\n")
             return
 
+        if cmd.action == "list_sessions":
+            if session_manager:
+                sessions = session_manager.list_sessions()
+                if not sessions:
+                    _append("\n  No sessions.\n")
+                else:
+                    current = session_manager.get_current()
+                    _append(f"\n  {'ID':<40} {'Status':<14} {'Last Active'}\n")
+                    _append(f"  {'----':<40} {'------':<14} {'-----------'}\n")
+                    for s in sessions:
+                        marker = " *" if s.execution_id == current else ""
+                        short_id = s.execution_id[:36]
+                        last = s.last_active[:19] if s.last_active else ""
+                        _append(
+                            f"  {short_id:<40} {s.status:<14} {last}{marker}\n"
+                        )
+                    _append("")
+            else:
+                _append("\n  Session manager not available.\n")
+            return
+
+        if cmd.action == "switch_session":
+            if session_manager and cmd.message:
+                target = session_manager.find_by_id(cmd.message)
+                if not target:
+                    _append(f"\n  Session '{cmd.message}' not found.\n")
+                    return
+                try:
+                    # Signal old stream to stop
+                    _stop_old_stream[0] = True
+                    for t in _active_threads:
+                        if t.is_alive():
+                            t.join(timeout=1.0)
+                    _active_threads.clear()
+                    _stop_old_stream[0] = False
+
+                    new_handle = runtime.resume(target.execution_id, agent)
+                    _current_handle[0] = new_handle
+                    _current_execution_id[0] = target.execution_id
+                    session_manager.set_current(target.execution_id)
+                    session_manager.update_last_active(target.execution_id)
+                    agent_state[0] = AgentState.BUSY
+
+                    # Remove from done list if it was there
+                    if target.execution_id in _done_execution_ids:
+                        _done_execution_ids.remove(target.execution_id)
+
+                    def _stream_switched():
+                        try:
+                            for ev in new_handle.stream():
+                                if _stop_requested[0] or _stop_old_stream[0]:
+                                    return
+                                _event_queue.put(ev)
+                        except Exception as exc:
+                            if not _stop_requested[0]:
+                                _event_queue.put(("__error__", str(exc)))
+
+                    t_stream = threading.Thread(
+                        target=_stream_switched, daemon=True, name="claw-stream",
+                    )
+                    t_consumer = threading.Thread(
+                        target=_consume_events, daemon=True, name="claw-consumer",
+                    )
+                    _active_threads.extend([t_stream, t_consumer])
+                    t_stream.start()
+                    t_consumer.start()
+                    short = target.execution_id[:16]
+                    _append(f"\n  Switched to session {short}...\n{_SEPARATOR}\n")
+                except Exception as exc:
+                    _append(f"\n  Could not switch: {exc}\n")
+            else:
+                _append("\n  Session manager not available.\n")
+            return
+
+        if cmd.action == "new_session":
+            try:
+                _stop_old_stream[0] = True
+                for t in _active_threads:
+                    if t.is_alive():
+                        t.join(timeout=1.0)
+                _active_threads.clear()
+                _stop_old_stream[0] = False
+
+                if session_manager:
+                    session_manager.mark_disconnected(_current_execution_id[0])
+
+                new_handle = runtime.start(
+                    agent,
+                    "Begin. You are the Agentspan Claw orchestrator. Wait for the user's first message.",
+                )
+                _current_handle[0] = new_handle
+                _current_execution_id[0] = new_handle.execution_id
+                agent_state[0] = AgentState.BUSY
+
+                if session_manager:
+                    session_manager.create(new_handle.execution_id)
+
+                # Remove any stale done state
+                _done_execution_ids.clear()
+
+                def _stream_new_session():
+                    try:
+                        for ev in new_handle.stream():
+                            if _stop_requested[0] or _stop_old_stream[0]:
+                                return
+                            _event_queue.put(ev)
+                    except Exception as exc:
+                        if not _stop_requested[0]:
+                            _event_queue.put(("__error__", str(exc)))
+
+                t_stream = threading.Thread(
+                    target=_stream_new_session, daemon=True, name="claw-stream",
+                )
+                t_consumer = threading.Thread(
+                    target=_consume_events, daemon=True, name="claw-consumer",
+                )
+                _active_threads.extend([t_stream, t_consumer])
+                t_stream.start()
+                t_consumer.start()
+                short = new_handle.execution_id[:16]
+                _append(f"\n  New session started: {short}...\n{_SEPARATOR}\n")
+            except Exception as exc:
+                _append(f"\n  Error starting new session: {exc}\n")
+            return
+
         # Normal chat message
         if cmd.message:
             _append(f"\n{_THIN_SEP}\nYou: {cmd.message}\n{_THIN_SEP}\n")
 
-            # If the previous execution ended (DONE), start a new one transparently
+            # If the previous execution ended (DONE) and resume didn't work,
+            # start a new execution with conversation context
             if _done_execution_ids and _current_execution_id[0] in _done_execution_ids:
                 try:
                     # Signal old stream thread to stop and wait briefly
@@ -662,10 +792,19 @@ def _run_tui_repl(
                     _active_threads.clear()
                     _stop_old_stream[0] = False
 
-                    new_handle = runtime.start(agent, cmd.message)
+                    # Pass message with context so the LLM has continuity
+                    context_prompt = (
+                        "Continue the Claw session. The previous workflow ended. "
+                        "The user's new message follows.\n\n"
+                        f"User: {cmd.message}"
+                    )
+                    new_handle = runtime.start(agent, context_prompt)
                     _current_handle[0] = new_handle
                     _current_execution_id[0] = new_handle.execution_id
                     agent_state[0] = AgentState.BUSY
+
+                    if session_manager:
+                        session_manager.create(new_handle.execution_id)
 
                     # Start new stream + consumer threads for the new execution
                     def _stream_new():
@@ -793,10 +932,9 @@ def _run_tui_repl(
                     return
 
                 elif event.type == EventType.DONE:
-                    # For stateful orchestrator agents, DONE means the workflow
-                    # completed — likely because the LLM didn't loop back to
-                    # wait_for_message. Don't exit the TUI. Show the output
-                    # and keep the UI alive for the user to send more messages.
+                    # The workflow completed — the LLM didn't call
+                    # wait_for_message. Try to resume the same execution
+                    # transparently so the session stays alive.
                     text = format_event(event)
                     _append(text)
                     if event.output:
@@ -809,11 +947,44 @@ def _run_tui_repl(
                     agent_state[0] = AgentState.WAITING
                     _append(f"\n{_SEPARATOR}\n")
 
-                    # The stream has ended. We can't receive more events from
-                    # this execution. But we keep the TUI alive — when the user
-                    # sends the next message, _on_input will start a new execution.
-                    _done_execution_ids.append(_current_execution_id[0])
-                    return  # Exit consumer — TUI stays alive
+                    # Try to resume the same execution
+                    resumed = False
+                    try:
+                        new_handle = runtime.resume(_current_execution_id[0], agent)
+                        _current_handle[0] = new_handle
+                        if session_manager:
+                            session_manager.update_last_active(_current_execution_id[0])
+
+                        # Restart stream for the resumed execution
+                        def _stream_resumed():
+                            try:
+                                for ev in new_handle.stream():
+                                    if _stop_requested[0] or _stop_old_stream[0]:
+                                        return
+                                    _event_queue.put(ev)
+                            except Exception as exc:
+                                if not _stop_requested[0]:
+                                    _event_queue.put(("__error__", str(exc)))
+
+                        t_stream = threading.Thread(
+                            target=_stream_resumed, daemon=True, name="claw-stream",
+                        )
+                        _active_threads.append(t_stream)
+                        t_stream.start()
+                        resumed = True
+                    except Exception:
+                        pass
+
+                    if not resumed:
+                        # Execution truly ended — mark done so next message
+                        # starts a new execution with context
+                        _done_execution_ids.append(_current_execution_id[0])
+                        if session_manager:
+                            session_manager.mark_completed(_current_execution_id[0])
+                        return  # Exit consumer — TUI stays alive
+
+                    # If resumed, keep consuming events from the new stream
+                    continue
 
                 # Format and display the event
                 text = format_event(event)
@@ -857,8 +1028,12 @@ def _parse_args() -> argparse.Namespace:
         description="Agentspan Claw TUI \u2014 manage autonomous agents.",
     )
     parser.add_argument(
-        "--resume", action="store_true",
-        help="Resume the last session.",
+        "--resume", nargs="?", const=True, default=None,
+        help="Resume the most recent session, or a specific session by ID.",
+    )
+    parser.add_argument(
+        "--new", action="store_true",
+        help="Force start a new session (don't resume existing).",
     )
     parser.add_argument(
         "--session-file", type=Path, default=SESSION_FILE,
@@ -905,32 +1080,87 @@ def main() -> None:
 
         agent = build_orchestrator(tui_append_fn=_deferred_append)
 
-    # Ensure session file directory exists
-    args.session_file.parent.mkdir(parents=True, exist_ok=True)
+    config = AutopilotConfig.from_env()
+    sm = SessionManager(config.autopilot_dir / "sessions.json")
 
     print("Starting Agentspan Claw...")
 
     try:
         with AgentRuntime() as runtime:
-            if args.resume:
-                if not args.session_file.exists():
-                    print(f"No session file found at {args.session_file}.")
-                    print("Start a new session first (without --resume).")
-                    raise SystemExit(1)
-                saved_eid = args.session_file.read_text().strip()
-                print(f"Resuming session: {saved_eid}")
-                handle = runtime.resume(saved_eid, agent)
-                execution_id = handle.execution_id
-            else:
+            handle = None
+            execution_id = None
+
+            if args.new:
+                # Force new session
                 handle = runtime.start(
                     agent,
                     "Begin. You are the Agentspan Claw orchestrator. Wait for the user's first message.",
                 )
                 execution_id = handle.execution_id
+                sm.create(execution_id)
+                # Also write legacy session file for backward compat
+                args.session_file.parent.mkdir(parents=True, exist_ok=True)
                 args.session_file.write_text(execution_id)
 
+            elif args.resume is not None:
+                # --resume (no value) or --resume <id>
+                if args.resume is True:
+                    # Resume most recent session
+                    session = sm.get_most_recent()
+                    if session is None:
+                        # Fall back to legacy session file
+                        if args.session_file.exists():
+                            saved_eid = args.session_file.read_text().strip()
+                            session_eid = saved_eid
+                        else:
+                            print("No sessions found. Start a new session (without --resume).")
+                            raise SystemExit(1)
+                    else:
+                        session_eid = session.execution_id
+                else:
+                    # --resume <specific-id>
+                    found = sm.find_by_id(args.resume)
+                    if found:
+                        session_eid = found.execution_id
+                    else:
+                        # Try as a raw execution ID
+                        session_eid = args.resume
+
+                print(f"Resuming session: {session_eid}")
+                handle = runtime.resume(session_eid, agent)
+                execution_id = handle.execution_id
+                sm.update_last_active(execution_id)
+
+            else:
+                # Smart default: resume if a current running session exists
+                current_eid = sm.get_current()
+                if current_eid:
+                    current_session = sm.find_by_id(current_eid)
+                    if current_session and current_session.status in ("RUNNING", "DISCONNECTED"):
+                        try:
+                            print(f"Resuming session: {current_eid[:16]}...")
+                            handle = runtime.resume(current_eid, agent)
+                            execution_id = handle.execution_id
+                            sm.update_last_active(execution_id)
+                        except Exception:
+                            # Resume failed — start fresh
+                            handle = None
+
+                if handle is None:
+                    handle = runtime.start(
+                        agent,
+                        "Begin. You are the Agentspan Claw orchestrator. Wait for the user's first message.",
+                    )
+                    execution_id = handle.execution_id
+                    sm.create(execution_id)
+                    # Also write legacy session file
+                    args.session_file.parent.mkdir(parents=True, exist_ok=True)
+                    args.session_file.write_text(execution_id)
+
             print(f"Session: {execution_id[:16]}...")
-            _run_tui_repl(runtime, handle, execution_id, agent=agent)
+            _run_tui_repl(
+                runtime, handle, execution_id, agent=agent, session_manager=sm,
+            )
     except KeyboardInterrupt:
         print("\nShutting down...")
     except Exception as exc:

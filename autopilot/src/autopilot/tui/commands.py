@@ -28,6 +28,9 @@ Commands:
   /resume <agent>                  Resume a paused agent
   /status [agent]                  Show status of an agent or the orchestrator
   /notifications                   Show unread notifications
+  /sessions                        List all sessions
+  /switch <session-id>             Switch to a different active session
+  /new                             Start a new session
   /stop                            Gracefully stop the orchestrator
   /cancel                          Immediately terminate
   /disconnect                      Exit without stopping — resume later with --resume
@@ -75,6 +78,19 @@ def parse_command(raw: str) -> CommandResult:
 
     if lower == "/notifications":
         return CommandResult(handled=True, action="notifications")
+
+    if lower == "/sessions":
+        return CommandResult(handled=True, action="list_sessions")
+
+    if lower == "/new":
+        return CommandResult(handled=True, action="new_session")
+
+    # /switch <session-id>
+    if lower == "/switch" or lower.startswith("/switch "):
+        session_id = text[7:].strip() if len(text) > 7 else ""
+        if not session_id:
+            return CommandResult(handled=True, output="Usage: /switch <session-id>\n")
+        return CommandResult(handled=True, action="switch_session", message=session_id)
 
     # /signal <agent> <message>
     if lower.startswith("/signal "):
