@@ -214,8 +214,8 @@ class TestDeployAgent:
             tc in ("web_search", "search_and_read") for tc in tool_calls
         ), f"Agent never called web_search or search_and_read. Calls: {tool_calls}"
 
-        assert output, "Agent produced no output"
-        assert len(output) > 30, f"Output too short ({len(output)} chars): {output}"
+        from tests.e2e.conftest import assert_output_quality
+        assert_output_quality(output, min_length=100)
 
     def test_deploy_agent_with_wrong_url_fails_clearly(self, tmp_path, monkeypatch):
         """Bad server URL -> deploy_agent returns 'Error deploying' -> state is ERROR."""
