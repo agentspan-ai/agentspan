@@ -500,7 +500,9 @@ def _run_tui_repl(
     _current_handle = [handle]  # mutable ref so we can restart
     _current_execution_id = [execution_id]
     _active_threads: list[threading.Thread] = []  # track spawned threads
-    _stop_old_stream = [False]  # flag to stop old stream thread on restart
+    # F4: Use threading.Event per stream lifecycle instead of a boolean flag
+    _current_stop_event = threading.Event()
+    _current_stop_event_ref = [_current_stop_event]  # mutable ref for swapping
 
     # ---- Output area (read-only, scrollable) ----
     output_area = TextArea(
@@ -674,18 +676,21 @@ def _run_tui_repl(
 
         if cmd.action == "switch_session":
             if session_manager and cmd.message:
-                target = session_manager.find_by_id(cmd.message)
+                try:
+                    target = session_manager.find_by_id(cmd.message)
+                except ValueError as ve:
+                    _append(f"\n  {ve}\n")
+                    return
                 if not target:
                     _append(f"\n  Session '{cmd.message}' not found.\n")
                     return
                 try:
                     # Signal old stream to stop
-                    _stop_old_stream[0] = True
+                    _current_stop_event.set()
                     for t in _active_threads:
                         if t.is_alive():
                             t.join(timeout=1.0)
                     _active_threads.clear()
-                    _stop_old_stream[0] = False
 
                     new_handle = runtime.resume(target.execution_id, agent)
                     _current_handle[0] = new_handle
@@ -698,10 +703,14 @@ def _run_tui_repl(
                     if target.execution_id in _done_execution_ids:
                         _done_execution_ids.remove(target.execution_id)
 
+                    # F4: New stop event for this stream lifecycle
+                    stop_ev = threading.Event()
+                    _current_stop_event_ref[0] = stop_ev
+
                     def _stream_switched():
                         try:
                             for ev in new_handle.stream():
-                                if _stop_requested[0] or _stop_old_stream[0]:
+                                if _stop_requested[0] or stop_ev.is_set():
                                     return
                                 _event_queue.put(ev)
                         except Exception as exc:
@@ -717,8 +726,13 @@ def _run_tui_repl(
                     _active_threads.extend([t_stream, t_consumer])
                     t_stream.start()
                     t_consumer.start()
-                    short = target.execution_id[:16]
-                    _append(f"\n  Switched to session {short}...\n{_SEPARATOR}\n")
+                    # F10: Visual separator on /switch
+                    new_eid = target.execution_id
+                    _append(
+                        f"\n{'=' * 62}\n"
+                        f"  Switched to session {new_eid[:16]}...\n"
+                        f"{'=' * 62}\n\n"
+                    )
                 except Exception as exc:
                     _append(f"\n  Could not switch: {exc}\n")
             else:
@@ -727,12 +741,11 @@ def _run_tui_repl(
 
         if cmd.action == "new_session":
             try:
-                _stop_old_stream[0] = True
+                _current_stop_event.set()
                 for t in _active_threads:
                     if t.is_alive():
                         t.join(timeout=1.0)
                 _active_threads.clear()
-                _stop_old_stream[0] = False
 
                 if session_manager:
                     session_manager.mark_disconnected(_current_execution_id[0])
@@ -751,10 +764,14 @@ def _run_tui_repl(
                 # Remove any stale done state
                 _done_execution_ids.clear()
 
+                # F4: New stop event for this stream lifecycle
+                stop_ev = threading.Event()
+                _current_stop_event_ref[0] = stop_ev
+
                 def _stream_new_session():
                     try:
                         for ev in new_handle.stream():
-                            if _stop_requested[0] or _stop_old_stream[0]:
+                            if _stop_requested[0] or stop_ev.is_set():
                                 return
                             _event_queue.put(ev)
                     except Exception as exc:
@@ -785,19 +802,27 @@ def _run_tui_repl(
             if _done_execution_ids and _current_execution_id[0] in _done_execution_ids:
                 try:
                     # Signal old stream thread to stop and wait briefly
-                    _stop_old_stream[0] = True
+                    _current_stop_event.set()
                     for t in _active_threads:
                         if t.is_alive():
                             t.join(timeout=1.0)
                     _active_threads.clear()
-                    _stop_old_stream[0] = False
 
-                    # Pass message with context so the LLM has continuity
-                    context_prompt = (
-                        "Continue the Claw session. The previous workflow ended. "
-                        "The user's new message follows.\n\n"
-                        f"User: {cmd.message}"
+                    # F2: Carry conversation history into the new execution
+                    output_text = output_area.text
+                    recent_context = (
+                        output_text[-2000:]
+                        if len(output_text) > 2000
+                        else output_text
                     )
+                    context_prompt = (
+                        "You are continuing an existing Claw session. Here is the recent conversation "
+                        "for context (do NOT repeat this to the user):\n\n"
+                        f"---\n{recent_context}\n---\n\n"
+                        f"The user's new message: {cmd.message}\n\n"
+                        "Process this request. Do NOT reference the context above in your reply."
+                    )
+
                     new_handle = runtime.start(agent, context_prompt)
                     _current_handle[0] = new_handle
                     _current_execution_id[0] = new_handle.execution_id
@@ -806,11 +831,15 @@ def _run_tui_repl(
                     if session_manager:
                         session_manager.create(new_handle.execution_id)
 
+                    # F4: New stop event per stream lifecycle
+                    stop_ev = threading.Event()
+                    _current_stop_event_ref[0] = stop_ev
+
                     # Start new stream + consumer threads for the new execution
                     def _stream_new():
                         try:
                             for ev in new_handle.stream():
-                                if _stop_requested[0] or _stop_old_stream[0]:
+                                if _stop_requested[0] or stop_ev.is_set():
                                     return
                                 _event_queue.put(ev)
                         except Exception as exc:
@@ -879,10 +908,12 @@ def _run_tui_repl(
     )
 
     # ---- Stream thread (with exception handling) ----
+    _initial_stop_ev = _current_stop_event_ref[0]
+
     def _stream_events():
         try:
             for event in handle.stream():
-                if _stop_requested[0]:
+                if _stop_requested[0] or _initial_stop_ev.is_set():
                     return
                 _event_queue.put(event)
         except Exception as exc:
@@ -890,7 +921,9 @@ def _run_tui_repl(
             if not _stop_requested[0]:
                 _event_queue.put(("__error__", str(exc)))
 
-    threading.Thread(target=_stream_events, daemon=True, name="claw-stream").start()
+    _t_initial_stream = threading.Thread(target=_stream_events, daemon=True, name="claw-stream")
+    _active_threads.append(_t_initial_stream)
+    _t_initial_stream.start()
 
     # ---- Event consumer thread (with exception handling) ----
     def _consume_events():
@@ -947,33 +980,52 @@ def _run_tui_repl(
                     agent_state[0] = AgentState.WAITING
                     _append(f"\n{_SEPARATOR}\n")
 
-                    # Try to resume the same execution
-                    resumed = False
+                    # F1: Check server status before attempting resume
+                    server_status = "COMPLETED"
                     try:
-                        new_handle = runtime.resume(_current_execution_id[0], agent)
-                        _current_handle[0] = new_handle
-                        if session_manager:
-                            session_manager.update_last_active(_current_execution_id[0])
-
-                        # Restart stream for the resumed execution
-                        def _stream_resumed():
-                            try:
-                                for ev in new_handle.stream():
-                                    if _stop_requested[0] or _stop_old_stream[0]:
-                                        return
-                                    _event_queue.put(ev)
-                            except Exception as exc:
-                                if not _stop_requested[0]:
-                                    _event_queue.put(("__error__", str(exc)))
-
-                        t_stream = threading.Thread(
-                            target=_stream_resumed, daemon=True, name="claw-stream",
+                        from autopilot.orchestrator.server import get_execution
+                        details = get_execution(
+                            _current_execution_id[0], config=config
                         )
-                        _active_threads.append(t_stream)
-                        t_stream.start()
-                        resumed = True
+                        server_status = details.get("status", "COMPLETED")
                     except Exception:
-                        pass
+                        server_status = "COMPLETED"
+
+                    # Try to resume only if the server still considers it running
+                    resumed = False
+                    if server_status == "RUNNING":
+                        try:
+                            stop_ev = threading.Event()
+                            new_handle = runtime.resume(
+                                _current_execution_id[0], agent
+                            )
+                            _current_handle[0] = new_handle
+                            if session_manager:
+                                session_manager.update_last_active(
+                                    _current_execution_id[0]
+                                )
+
+                            # Restart stream for the resumed execution
+                            def _stream_resumed():
+                                try:
+                                    for ev in new_handle.stream():
+                                        if _stop_requested[0] or stop_ev.is_set():
+                                            return
+                                        _event_queue.put(ev)
+                                except Exception as exc:
+                                    if not _stop_requested[0]:
+                                        _event_queue.put(("__error__", str(exc)))
+
+                            t_stream = threading.Thread(
+                                target=_stream_resumed,
+                                daemon=True,
+                                name="claw-stream",
+                            )
+                            _active_threads.append(t_stream)
+                            t_stream.start()
+                            resumed = True
+                        except Exception:
+                            pass
 
                     if not resumed:
                         # Execution truly ended — mark done so next message
@@ -1082,6 +1134,8 @@ def main() -> None:
 
     config = AutopilotConfig.from_env()
     sm = SessionManager(config.autopilot_dir / "sessions.json")
+    # F8: Clean up old completed sessions on startup
+    sm.cleanup()
 
     print("Starting Agentspan Claw...")
 
@@ -1143,7 +1197,8 @@ def main() -> None:
                             execution_id = handle.execution_id
                             sm.update_last_active(execution_id)
                         except Exception:
-                            # Resume failed — start fresh
+                            # F7: Show message on silent resume failure
+                            print("Previous session ended. Starting fresh.")
                             handle = None
 
                 if handle is None:
