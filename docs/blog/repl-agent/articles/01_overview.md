@@ -36,7 +36,7 @@ These aren't problems that stronger models solve. They're engineering problems.
 
 ## Why Does This Need a Framework?
 
-If you're building a demo, you can write an agent as a while-loop in Python. Call the LLM, parse the response, execute a tool, loop. It works wonderfully until you try to run it in production.
+If you're building a simple agent, you can write it as a while-loop in Python. Call the LLM, parse the response, execute a tool, loop. It works wonderfully — until you need it to be more robust.
 
 In production, your agent process will crash. A bug, an OOM error, a network hiccup—and everything in memory is gone. Conversation history, intermediate results, partial progress. The user sees a hung connection and a lost session. You lose visibility into what happened before the crash.
 
