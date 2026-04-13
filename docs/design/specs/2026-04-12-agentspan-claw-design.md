@@ -748,6 +748,28 @@ Local folder retains previous versions via git (the `~/.agentspan/autopilot/` di
 
 ---
 
+## Testing Philosophy
+
+### Workflow completion is NOT success
+
+A test that verifies "the workflow completed" or "the tool was called" is **not sufficient**. The agent must accomplish the goal it was given and produce correct, useful output. If the agent says "I was unable to find information" or produces generic filler instead of actual results — that is a **failure**, even if every tool call succeeded and the workflow status is COMPLETED.
+
+### What "passing" means for agent tests
+
+1. **The agent must accomplish the stated goal.** "Search for X" means the output must contain information about X from the search results, not generic LLM knowledge.
+2. **The output must be grounded in tool results.** If the agent called `web_search` and got results, the output must reference those results — not hallucinate from training data.
+3. **Tool calls are necessary but not sufficient.** Calling `web_search` is step 1. Producing a useful summary from the results is the actual success criterion.
+4. **"Unable to find" is a failure.** If the search returned results but the agent claims it couldn't find anything, the agent failed. The test should catch this.
+
+### Test assertions
+
+- Assert on **output quality**, not just output existence
+- Assert that output **contains specific information** from the tool results
+- Assert that the agent **did not fall back to generic responses** when real data was available
+- Mark tests as failed if the agent produces "I was unable to find" / "no information available" when the tools returned data
+
+---
+
 ## What Agentspan Already Provides (Not Reinvented)
 
 | Capability | Agentspan Feature |
