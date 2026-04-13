@@ -281,12 +281,23 @@ class TestCreateAgentConversation:
     def test_validation_gates_run(self, temp_autopilot_dir):
         """Verify at least one validation gate is called during agent creation."""
         result = run_conversation(
-            "send me a daily weather summary at 7am"
+            "create an agent that reads local files in /tmp and summarizes them every day"
         )
 
         tool_names = [name for name, _ in result["tool_calls"]]
-        assert "validate_spec" in tool_names or "validate_deployment" in tool_names, (
-            f"Expected validation gates in: {tool_names}"
+
+        # First, the agent must have created something
+        assert "generate_agent" in tool_names, (
+            f"Expected generate_agent in {tool_names}"
+        )
+
+        # Then at least one validation gate should have run
+        validation_tools = [
+            n for n in tool_names
+            if n.startswith("validate_")
+        ]
+        assert len(validation_tools) >= 1, (
+            f"Expected at least one validate_* gate in: {tool_names}"
         )
 
 
