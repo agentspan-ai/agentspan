@@ -25,16 +25,44 @@ _MAX_PAGE_CHARS = 10_000
 
 
 def _search_ddg(query: str, count: int) -> List[Dict[str, str]]:
-    """Search DuckDuckGo using the ddgs library (no API key required)."""
-    raw = list(DDGS().text(query, max_results=count))
-    results: List[Dict[str, str]] = []
-    for item in raw:
-        results.append({
-            "title": item.get("title", ""),
-            "url": item.get("href", ""),
-            "snippet": item.get("body", ""),
-        })
-    return results
+    """Search DuckDuckGo using the ddgs library (no API key required).
+
+    Runs in a subprocess to avoid fork() crashes with ddgs/primp's Rust bindings
+    when called from Conductor worker processes (which are forked).
+    """
+    import json
+    import subprocess
+    import sys
+
+    # Run DDG search in a clean subprocess to avoid fork+Rust crash
+    script = f"""
+import json
+from ddgs import DDGS
+results = list(DDGS().text({query!r}, max_results={count}))
+out = [{{"title": r.get("title",""), "url": r.get("href",""), "snippet": r.get("body","")}} for r in results]
+print(json.dumps(out))
+"""
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            return json.loads(proc.stdout.strip())
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, Exception):
+        pass
+
+    # Fallback: try direct call (works in main process, may crash in forked workers)
+    try:
+        raw = list(DDGS().text(query, max_results=count))
+        return [
+            {"title": item.get("title", ""), "url": item.get("href", ""), "snippet": item.get("body", "")}
+            for item in raw
+        ]
+    except Exception:
+        return []
 
 
 def _search_brave(query: str, count: int) -> List[Dict[str, str]]:
