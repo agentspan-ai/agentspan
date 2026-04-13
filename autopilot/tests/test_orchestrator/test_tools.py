@@ -43,25 +43,10 @@ def _make_config_env(monkeypatch, tmp_path: Path) -> Path:
 
     Returns the agents directory path.
     """
-    # Override _default_base_dir so AutopilotConfig.from_env() uses tmp_path
-    monkeypatch.setattr(
-        "autopilot.config._default_base_dir",
-        lambda: tmp_path,
-    )
-    # Also override the tools module's config helper to use tmp_path
-    monkeypatch.setattr(
-        "autopilot.orchestrator.tools._get_config",
-        lambda: _config_for_tmp(tmp_path),
-    )
+    monkeypatch.setenv("AUTOPILOT_BASE_DIR", str(tmp_path))
     agents_dir = tmp_path / "agents"
     agents_dir.mkdir(parents=True, exist_ok=True)
     return agents_dir
-
-
-def _config_for_tmp(tmp_path: Path):
-    """Create an AutopilotConfig pointing at tmp_path."""
-    from autopilot.config import AutopilotConfig
-    return AutopilotConfig(base_dir=tmp_path)
 
 
 # ---------------------------------------------------------------------------
@@ -186,10 +171,7 @@ class TestGenerateAgent:
 class TestListAgents:
     def test_no_agents_dir(self, monkeypatch, tmp_path: Path):
         # Point to a dir that doesn't have agents/ subdir
-        monkeypatch.setattr(
-            "autopilot.orchestrator.tools._get_config",
-            lambda: _config_for_tmp(tmp_path / "empty"),
-        )
+        monkeypatch.setenv("AUTOPILOT_BASE_DIR", str(tmp_path / "empty"))
         result = list_agents()
         assert "No agents" in result
 

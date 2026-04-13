@@ -20,7 +20,6 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from agentspan.agents import Agent, AgentRuntime, EventType, tool
-from autopilot.config import AutopilotConfig
 from autopilot.orchestrator.tools import get_orchestrator_tools, build_integration_catalog
 
 
@@ -174,10 +173,8 @@ Available integrations:
 
 @pytest.fixture
 def runner(tmp_path, monkeypatch):
-    config = AutopilotConfig(base_dir=tmp_path)
-    monkeypatch.setattr("autopilot.config._default_base_dir", lambda: tmp_path)
-    monkeypatch.setattr("autopilot.orchestrator.tools._get_config", lambda: config)
-    monkeypatch.setattr("autopilot.orchestrator.gates._get_config", lambda: config)
+    monkeypatch.setenv("AUTOPILOT_BASE_DIR", str(tmp_path))
+    (tmp_path / "agents").mkdir(parents=True, exist_ok=True)
     r = ConversationRunner(tmp_path)
     yield r
     r.stop()

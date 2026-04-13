@@ -93,30 +93,21 @@ class TestSaveAndReload:
 class TestEnvOverride:
     def test_env_overrides_server_url(self, monkeypatch, tmp_path: Path):
         # Prevent reading real filesystem config
-        monkeypatch.setattr(
-            "autopilot.config._default_base_dir",
-            lambda: tmp_path,
-        )
+        monkeypatch.setenv("AUTOPILOT_BASE_DIR", str(tmp_path))
         monkeypatch.setenv("AGENTSPAN_SERVER_URL", "http://env:8888")
 
         cfg = AutopilotConfig.from_env()
         assert cfg.server_url == "http://env:8888"
 
     def test_env_overrides_llm_model(self, monkeypatch, tmp_path: Path):
-        monkeypatch.setattr(
-            "autopilot.config._default_base_dir",
-            lambda: tmp_path,
-        )
+        monkeypatch.setenv("AUTOPILOT_BASE_DIR", str(tmp_path))
         monkeypatch.setenv("AGENTSPAN_LLM_MODEL", "anthropic/claude-opus-4-20250514")
 
         cfg = AutopilotConfig.from_env()
         assert cfg.llm_model == "anthropic/claude-opus-4-20250514"
 
     def test_env_without_vars_uses_file_defaults(self, monkeypatch, tmp_path: Path):
-        monkeypatch.setattr(
-            "autopilot.config._default_base_dir",
-            lambda: tmp_path,
-        )
+        monkeypatch.setenv("AUTOPILOT_BASE_DIR", str(tmp_path))
         monkeypatch.delenv("AGENTSPAN_SERVER_URL", raising=False)
         monkeypatch.delenv("AGENTSPAN_LLM_MODEL", raising=False)
 
