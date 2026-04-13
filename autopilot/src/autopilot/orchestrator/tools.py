@@ -53,6 +53,28 @@ class OrchestratorError(Exception):
     """Raised for orchestrator-level errors (missing agents, bad state, etc.)."""
 
 
+def build_integration_catalog() -> str:
+    """Build a human-readable integration catalog with credential info.
+
+    Returns a formatted string listing all available integrations, their tools,
+    and required credentials.  Used by the orchestrator instructions so the LLM
+    can generate agent specs without calling expand_prompt.
+    """
+    registry = get_default_registry()
+    lines: list[str] = []
+    for name in registry.list_integrations():
+        tools = registry.get_tools(name)
+        creds: list[str] = []
+        for t in tools:
+            if hasattr(t, "_tool_def") and t._tool_def.credentials:
+                creds = list(t._tool_def.credentials)
+                break
+        tool_names = [t._tool_def.name for t in tools if hasattr(t, "_tool_def")]
+        cred_str = f" (credentials: {', '.join(creds)})" if creds else " (no credentials needed)"
+        lines.append(f"  - builtin:{name}{cred_str} -- tools: {', '.join(tool_names)}")
+    return "\n".join(lines)
+
+
 def _get_credential_aliases() -> dict:
     """Build credential alias map from the credential registry."""
     from autopilot.credentials.acquisition import CREDENTIAL_REGISTRY
@@ -78,6 +100,13 @@ def _get_credential_aliases() -> dict:
 @tool
 def expand_prompt(seed_prompt: str, clarifications: str = "") -> str:
     """Expand a user's lazy prompt into a full agent specification.
+
+    .. deprecated::
+        The orchestrator now inlines the integration catalog into its
+        instructions and generates YAML specs directly, removing the need
+        for a separate ``expand_prompt`` tool call.  This function is kept
+        for backward compatibility with existing tests but is no longer
+        registered in ``get_orchestrator_tools()``.
 
     Takes the user's seed prompt and any clarification answers, and produces
     a structured prompt that the orchestrator LLM will use to generate a
@@ -1122,7 +1151,6 @@ def get_orchestrator_tools() -> list:
     )
 
     return [
-        expand_prompt,
         generate_agent,
         generate_worker,
         resolve_integrations,

@@ -37,7 +37,7 @@ import yaml
 from agentspan.agents import Agent, AgentRuntime, EventType, tool, wait_for_message_tool
 
 from autopilot.config import AutopilotConfig
-from autopilot.orchestrator.tools import get_orchestrator_tools
+from autopilot.orchestrator.tools import build_integration_catalog, get_orchestrator_tools
 from autopilot.tui.commands import CommandResult, HELP_TEXT, parse_command
 from autopilot.tui.dashboard import render_dashboard
 from autopilot.tui.events import format_event, render_welcome
@@ -344,6 +344,7 @@ def build_orchestrator(tui_append_fn=None):
     """
 
     model = os.environ.get("AGENTSPAN_LLM_MODEL", "openai/gpt-4o")
+    integration_catalog = build_integration_catalog()
 
     receive_message = wait_for_message_tool(
         name="wait_for_message",
@@ -396,29 +397,51 @@ def build_orchestrator(tui_append_fn=None):
         tools=all_tools,
         max_turns=100_000,
         stateful=True,
-        instructions="""\
+        instructions=f"""\
 You are the Agentspan Claw orchestrator. You turn user requests into working agents.
 
-## CRITICAL RULES — READ THESE FIRST
+## CRITICAL RULES -- READ THESE FIRST
 
 1. Smart-default EVERYTHING. Only ask a question if genuinely no reasonable default.
    Maximum 1 question, then immediately build. If in doubt, default and build.
 2. On ANY user request, IMMEDIATELY call tools. Do NOT respond with text first.
 3. After EVERY reply_to_user, you MUST call wait_for_message. ALWAYS.
-   The pattern is: process → reply_to_user → wait_for_message. No exceptions.
+   The pattern is: process -> reply_to_user -> wait_for_message. No exceptions.
 4. NEVER use future tense. NEVER say "I'll", "I will", "going to", "let me investigate",
    "the agent will get back to you." These create deadlocks because you then call
    wait_for_message and the user thinks you're still working. Complete ALL work FIRST,
    then report what you DID (past tense), then call wait_for_message.
-5. When you deploy an agent, show its status immediately. Don't offer — just show.
+5. When you deploy an agent, show its status immediately. Don't offer -- just show.
 6. Be concise. No verbose explanations. Show what was built, show it running, done.
 7. If something fails, fix it NOW in this turn. Don't promise to fix it later.
 
-## Agent Creation — tool call sequence
+## Agent Creation -- tool call sequence
 
 When the user describes ANY task:
-1. Call expand_prompt(seed_prompt=<user's request>)
-2. Write a full YAML spec using the template (smart-default everything)
+1. Think about the user's request and determine:
+   - What the agent should do (step by step behavior)
+   - What integrations it needs (check available integrations below)
+   - What schedule makes sense (cron expression or daemon)
+   - What credentials are required (exact names from integration list)
+2. Write a complete YAML spec directly with these fields:
+   name: <snake_case_descriptive_name>
+   version: 1
+   model: {model}
+   instructions: |
+     <Detailed multi-paragraph instructions. Be specific about:
+     what data to fetch, how to process it, what output to produce,
+     how to handle edge cases. At least 10 lines.>
+   trigger:
+     type: <cron or daemon>
+     schedule: "<cron expression>"  # only for type: cron
+   tools:
+     - builtin:<integration_name>  # NO SPACE after colon
+   credentials:
+     - <EXACT_CREDENTIAL_NAME>  # must match names from integration list below
+   error_handling:
+     max_retries: 3
+     backoff: exponential
+     on_failure: pause_and_notify
 3. Call generate_agent(spec_yaml=<YAML>, agent_name=<name>)
 4. Call validate_spec(agent_name=<name>)
 5. If the agent has custom workers (not just builtin: tools), call validate_code(agent_name=<name>)
@@ -429,16 +452,26 @@ When the user describes ANY task:
 10. Call reply_to_user with a CONCISE summary:
    - Agent name, schedule, status, execution ID
    - If errors: what went wrong and what you did to fix it
-   - DO NOT offer to show output — just show it if available
+   - DO NOT offer to show output -- just show it if available
 11. Call wait_for_message to get the next request
+
+## Available integrations
+
+{integration_catalog}
+
+CRITICAL RULES for specs:
+1. model MUST be "{model}" -- do not change it
+2. tools entries MUST use format "builtin:name" with NO SPACE after the colon
+3. credentials MUST use the EXACT names listed above for each integration
+4. instructions MUST be detailed (at least 10 lines) -- not a one-liner
 
 ## When the user asks about output or status
 Call get_agent_status(agent_name) and show the result. No preamble.
 
-## Smart defaults — use these, don't ask
+## Smart defaults -- use these, don't ask
 
-- Model: use the configured model
-- Schedule: if user says "every 15 mins" → cron "*/15 * * * *". If unclear → daemon
+- Model: use the configured model ({model})
+- Schedule: if user says "every 15 mins" -> cron "*/15 * * * *". If unclear -> daemon
 - Integrations: pick the most obvious ones from the request
 - Notifications: default to replying in chat
 - Error handling: 3 retries, exponential backoff, pause on failure
@@ -446,20 +479,20 @@ Call get_agent_status(agent_name) and show the result. No preamble.
 
 ## Agent Management
 
-- list_agents() — show all agents
-- get_agent_status(name) — detailed status
-- signal_agent(name, message) — one-time instruction
-- update_agent(name, changes) — permanent modification
-- pause_agent/resume_agent — control execution
-- archive_agent — deactivate
-- check_credentials/acquire_credentials — handle auth
+- list_agents() -- show all agents
+- get_agent_status(name) -- detailed status
+- signal_agent(name, message) -- one-time instruction
+- update_agent(name, changes) -- permanent modification
+- pause_agent/resume_agent -- control execution
+- archive_agent -- deactivate
+- check_credentials/acquire_credentials -- handle auth
 
-## Interaction Loop — MANDATORY
+## Interaction Loop -- MANDATORY
 
 1. Call wait_for_message
 2. Process the request (call tools as needed)
 3. Call reply_to_user with the result
-4. GOTO 1 — you MUST call wait_for_message again. Do NOT stop.
+4. GOTO 1 -- you MUST call wait_for_message again. Do NOT stop.
 """,
     )
 
@@ -499,8 +532,13 @@ def _run_tui_repl(
     execution_id: str,
     agent=None,
     session_manager: SessionManager | None = None,
-) -> None:
-    """Full-screen TUI: scrollable output on top, persistent input on bottom."""
+) -> str:
+    """Full-screen TUI: scrollable output on top, persistent input on bottom.
+
+    Returns:
+        ``"new_session"`` if the user typed ``/new`` (caller should restart
+        with a fresh ``runtime.start``), or ``""`` for any other exit.
+    """
 
     config = AutopilotConfig.from_env()
     notif_manager = NotificationManager(config)
@@ -509,7 +547,8 @@ def _run_tui_repl(
     _event_queue: queue.Queue = queue.Queue()
     _stop_requested = [False]
     _app_exited = threading.Event()
-    _done_execution_ids: list[str] = []  # tracks completed executions
+    _session_ended = [False]  # True when the workflow completes (DONE)
+    _new_session_requested = [False]  # True when user types /new
     _current_handle = [handle]  # mutable ref so we can restart
     _current_execution_id = [execution_id]
     _active_threads: list[threading.Thread] = []  # track spawned threads
@@ -753,123 +792,32 @@ def _run_tui_repl(
             return
 
         if cmd.action == "new_session":
+            _new_session_requested[0] = True
+            if session_manager:
+                session_manager.mark_disconnected(_current_execution_id[0])
+            _stop_requested[0] = True
             try:
-                _current_stop_event.set()
-                for t in _active_threads:
-                    if t.is_alive():
-                        t.join(timeout=1.0)
-                _active_threads.clear()
-
-                if session_manager:
-                    session_manager.mark_disconnected(_current_execution_id[0])
-
-                new_handle = runtime.start(
-                    agent,
-                    "Begin. You are the Agentspan Claw orchestrator. Wait for the user's first message.",
-                )
-                _current_handle[0] = new_handle
-                _current_execution_id[0] = new_handle.execution_id
-                agent_state[0] = AgentState.BUSY
-
-                if session_manager:
-                    session_manager.create(new_handle.execution_id)
-
-                # Remove any stale done state
-                _done_execution_ids.clear()
-
-                # F4: New stop event for this stream lifecycle
-                stop_ev = threading.Event()
-                _current_stop_event_ref[0] = stop_ev
-
-                def _stream_new_session():
-                    try:
-                        for ev in new_handle.stream():
-                            if _stop_requested[0] or stop_ev.is_set():
-                                return
-                            _event_queue.put(ev)
-                    except Exception as exc:
-                        if not _stop_requested[0]:
-                            _event_queue.put(("__error__", str(exc)))
-
-                t_stream = threading.Thread(
-                    target=_stream_new_session, daemon=True, name="claw-stream",
-                )
-                t_consumer = threading.Thread(
-                    target=_consume_events, daemon=True, name="claw-consumer",
-                )
-                _active_threads.extend([t_stream, t_consumer])
-                t_stream.start()
-                t_consumer.start()
-                short = new_handle.execution_id[:16]
-                _append(f"\n  New session started: {short}...\n{_SEPARATOR}\n")
-            except Exception as exc:
-                _append(f"\n  Error starting new session: {exc}\n")
+                _current_handle[0].stop()
+            except Exception:
+                pass
+            threading.Timer(0.3, lambda: app.exit() if app.is_running else None).start()
             return
 
         # Normal chat message
         if cmd.message:
+            # If the session has ended, don't try to auto-restart.
+            # The user must type /new to start a fresh session.
+            if _session_ended[0]:
+                _append(
+                    f"\n  Session ended. Type /new to start a new session.\n"
+                )
+                return
+
             _append(f"\n{_THIN_SEP}\nYou: {cmd.message}\n{_THIN_SEP}\n")
 
-            # If the previous execution ended (DONE) and resume didn't work,
-            # start a new execution with conversation context
-            if _done_execution_ids and _current_execution_id[0] in _done_execution_ids:
-                try:
-                    # Signal old stream thread to stop and wait briefly
-                    _current_stop_event.set()
-                    for t in _active_threads:
-                        if t.is_alive():
-                            t.join(timeout=1.0)
-                    _active_threads.clear()
-
-                    # F2: Carry conversation history into the new execution
-                    output_text = output_area.text
-                    recent_context = (
-                        output_text[-2000:]
-                        if len(output_text) > 2000
-                        else output_text
-                    )
-                    context_prompt = (
-                        "You are continuing an existing Claw session. Here is the recent conversation "
-                        "for context (do NOT repeat this to the user):\n\n"
-                        f"---\n{recent_context}\n---\n\n"
-                        f"The user's new message: {cmd.message}\n\n"
-                        "Process this request. Do NOT reference the context above in your reply."
-                    )
-
-                    new_handle = runtime.start(agent, context_prompt)
-                    _current_handle[0] = new_handle
-                    _current_execution_id[0] = new_handle.execution_id
-                    agent_state[0] = AgentState.BUSY
-
-                    if session_manager:
-                        session_manager.create(new_handle.execution_id)
-
-                    # F4: New stop event per stream lifecycle
-                    stop_ev = threading.Event()
-                    _current_stop_event_ref[0] = stop_ev
-
-                    # Start new stream + consumer threads for the new execution
-                    def _stream_new():
-                        try:
-                            for ev in new_handle.stream():
-                                if _stop_requested[0] or stop_ev.is_set():
-                                    return
-                                _event_queue.put(ev)
-                        except Exception as exc:
-                            if not _stop_requested[0]:
-                                _event_queue.put(("__error__", str(exc)))
-
-                    t_stream = threading.Thread(target=_stream_new, daemon=True, name="claw-stream")
-                    t_consumer = threading.Thread(target=_consume_events, daemon=True, name="claw-consumer")
-                    _active_threads.extend([t_stream, t_consumer])
-                    t_stream.start()
-                    t_consumer.start()
-                except Exception as exc:
-                    _append(f"  Error: {exc}\n")
-            else:
-                if agent_state[0] == AgentState.BUSY:
-                    _append("  (queued \u2014 agent is busy)\n")
-                runtime.send_message(_current_execution_id[0], {"text": cmd.message})
+            if agent_state[0] == AgentState.BUSY:
+                _append("  (queued \u2014 agent is busy)\n")
+            runtime.send_message(_current_execution_id[0], {"text": cmd.message})
 
     input_area = TextArea(
         height=1,
@@ -982,8 +930,9 @@ def _run_tui_repl(
 
                 elif event.type == EventType.DONE:
                     # The workflow completed — the LLM didn't call
-                    # wait_for_message. Try to resume the same execution
-                    # transparently so the session stays alive.
+                    # wait_for_message.  Instead of auto-restarting (which
+                    # leaks workers), mark the session as ended and let the
+                    # user decide to type /new.
                     text = format_event(event)
                     _append(text)
                     if event.output:
@@ -993,66 +942,16 @@ def _run_tui_repl(
                         if out and str(out).strip():
                             _append(f"\n{str(out).strip()}\n")
 
-                    agent_state[0] = AgentState.WAITING
-                    _append(f"\n{_SEPARATOR}\n")
-
-                    # F1: Check server status before attempting resume
-                    server_status = "COMPLETED"
-                    try:
-                        from autopilot.orchestrator.server import get_execution
-                        details = get_execution(
-                            _current_execution_id[0], config=config
-                        )
-                        server_status = details.get("status", "COMPLETED")
-                    except Exception:
-                        server_status = "COMPLETED"
-
-                    # Try to resume only if the server still considers it running
-                    resumed = False
-                    if server_status == "RUNNING":
-                        try:
-                            stop_ev = threading.Event()
-                            new_handle = runtime.resume(
-                                _current_execution_id[0], agent
-                            )
-                            _current_handle[0] = new_handle
-                            if session_manager:
-                                session_manager.update_last_active(
-                                    _current_execution_id[0]
-                                )
-
-                            # Restart stream for the resumed execution
-                            def _stream_resumed():
-                                try:
-                                    for ev in new_handle.stream():
-                                        if _stop_requested[0] or stop_ev.is_set():
-                                            return
-                                        _event_queue.put(ev)
-                                except Exception as exc:
-                                    if not _stop_requested[0]:
-                                        _event_queue.put(("__error__", str(exc)))
-
-                            t_stream = threading.Thread(
-                                target=_stream_resumed,
-                                daemon=True,
-                                name="claw-stream",
-                            )
-                            _active_threads.append(t_stream)
-                            t_stream.start()
-                            resumed = True
-                        except Exception:
-                            pass
-
-                    if not resumed:
-                        # Execution truly ended — mark done so next message
-                        # starts a new execution with context
-                        _done_execution_ids.append(_current_execution_id[0])
-                        if session_manager:
-                            session_manager.mark_completed(_current_execution_id[0])
-                        return  # Exit consumer — TUI stays alive
-
-                    # If resumed, keep consuming events from the new stream
-                    continue
+                    agent_state[0] = AgentState.DONE
+                    _session_ended[0] = True
+                    _append(
+                        f"\n{_SEPARATOR}\n"
+                        f"  Session ended. Type /new to start a new session.\n"
+                        f"{_SEPARATOR}\n"
+                    )
+                    if session_manager:
+                        session_manager.mark_completed(_current_execution_id[0])
+                    return  # Exit consumer — TUI stays alive for /new
 
                 # Format and display the event
                 text = format_event(event)
@@ -1085,6 +984,8 @@ def _run_tui_repl(
     finally:
         _app_exited.set()
         poller.stop()
+
+    return "new_session" if _new_session_requested[0] else ""
 
 
 # ---------------------------------------------------------------------------
@@ -1155,6 +1056,8 @@ def main() -> None:
 
     print("Starting Agentspan Claw...")
 
+    _start_prompt = "Begin. You are the Agentspan Claw orchestrator. Wait for the user's first message."
+
     try:
         with AgentRuntime() as runtime:
             handle = None
@@ -1162,10 +1065,7 @@ def main() -> None:
 
             if args.new:
                 # Force new session
-                handle = runtime.start(
-                    agent,
-                    "Begin. You are the Agentspan Claw orchestrator. Wait for the user's first message.",
-                )
+                handle = runtime.start(agent, _start_prompt)
                 execution_id = handle.execution_id
                 sm.create(execution_id)
                 # Also write legacy session file for backward compat
@@ -1218,20 +1118,30 @@ def main() -> None:
                             handle = None
 
                 if handle is None:
-                    handle = runtime.start(
-                        agent,
-                        "Begin. You are the Agentspan Claw orchestrator. Wait for the user's first message.",
-                    )
+                    handle = runtime.start(agent, _start_prompt)
                     execution_id = handle.execution_id
                     sm.create(execution_id)
                     # Also write legacy session file
                     args.session_file.parent.mkdir(parents=True, exist_ok=True)
                     args.session_file.write_text(execution_id)
 
-            print(f"Session: {execution_id[:16]}...")
-            _run_tui_repl(
-                runtime, handle, execution_id, agent=agent, session_manager=sm,
-            )
+            # Loop: run the TUI; if user types /new, start a fresh session
+            while True:
+                print(f"Session: {execution_id[:16]}...")
+                result = _run_tui_repl(
+                    runtime, handle, execution_id, agent=agent, session_manager=sm,
+                )
+                if result != "new_session":
+                    break
+                # /new requested — start a fresh execution at the top level
+                # where AgentRuntime has full control over worker registration
+                print("Starting new session...")
+                handle = runtime.start(agent, _start_prompt)
+                execution_id = handle.execution_id
+                sm.create(execution_id)
+                args.session_file.parent.mkdir(parents=True, exist_ok=True)
+                args.session_file.write_text(execution_id)
+
     except KeyboardInterrupt:
         print("\nShutting down...")
     except Exception as exc:
