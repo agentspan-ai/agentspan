@@ -4,7 +4,7 @@ I've heard people say that agents like Claude Code or Codex are "just wrappers a
 
 If you oversimplify things… yeah, that's not entirely wrong, kind of like saying software development is just input → processing → output, IYKWIM.
 
-<!-- TODO: use an agent loop image -->
+![agent_loop.png](agent_loop.png)
 
 In practice, there's a lot more engineering behind it.
 
@@ -14,11 +14,11 @@ You need to:
 * manage context — the right information, at the right time, across interactions  
 * and orchestrate all of this in a reliable way
 
-That's where frameworks can help — and there are quite a few out there. I'm part of the team building Agentspan, and through both developing it and using it, I've learned a lot. This post walks through an example I found particularly interesting—one that brings together several of the things I've been working on.
+That's where SDKs, frameworks, and agent runtimes can help — and there are quite a few out there. I'm part of the team building Agentspan, and through both developing it and using it, I've learned a lot. This post walks through an example I found particularly interesting—one that brings together several of the things I've been working on.
 
-In this post, I'll walk through one of my contributions: a coding agent with a terminal UI (inspired by tools like Claude Code), built with Agentspan and powered by Conductor OSS.
+In this post, I'll walk through one of my contributions: a coding agent with a terminal UI (inspired by tools like Claude Code), built with Agentspan (powered by [Conductor OSS](https://github.com/conductor-oss/conductor)).
 
-> **Note:** This isn't meant to be a production-ready replacement for those tools. But it *is* a concrete, working example that shows what's really going on under the hood—and how you can build something similar yourself.
+> **Note:** This isn't meant to be a production-ready coding agent. But it *is* a concrete, working example that shows what's going on under the hood—and how you can build something similar yourself.
 
 ---
 
@@ -91,7 +91,7 @@ Let's unpack what each piece does.
 
 **`@tool` decorator.** The SDK inspects the function's signature, docstring, and type hints, then registers it with Conductor as a task definition. At runtime, a worker thread polls the server, picks up the task, and executes the function. From the LLM's perspective, it's just a callable tool with a name and parameters.
 
-**`wait_for_message_tool()`.** This is special. It creates a `PULL_WORKFLOW_MESSAGES` task—a server-side task that blocks until a message arrives in the workflow's message queue. Unlike regular tools, this one doesn't need a worker. The server handles it.
+**`wait_for_message_tool()`.** It creates a `PULL_WORKFLOW_MESSAGES` task—a server-side task that blocks until a message arrives in the workflow's message queue. Unlike regular tools, this one doesn't need a worker. The server handles it.
 
 **`stateful=True`.** The SDK generates a unique UUID `run_id` for this execution. Workers register under `domain=run_id`. The server routes all tasks for this execution to the correct worker pool. Multiple concurrent sessions are fully isolated.
 

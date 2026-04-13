@@ -4,7 +4,7 @@ I've heard people say that agents like Claude Code or Codex are "just wrappers a
 
 If you oversimplify things… yeah, that's not entirely wrong, kind of like saying software development is just input → processing → output, IYKWIM.
 
-<!-- TODO: use an agent loop image -->
+![agent_loop.png](agent_loop.png)
 
 In practice, there's a lot more engineering behind it.
 
@@ -18,7 +18,7 @@ That's where frameworks can help — and there are quite a few out there. I'm pa
 
 In this post, I'll walk through one of my contributions: a coding agent with a terminal UI (inspired by tools like Claude Code), built with Agentspan and powered by Conductor OSS.
 
-> **Note:** This isn't meant to be a production-ready replacement for those tools. But it *is* a concrete, working example that shows what's really going on under the hood—and how you can build something similar yourself.
+> **Note:** This isn't meant to be a production-ready coding agent. But it *is* a concrete, working example that shows what's really going on under the hood—and how you can build something similar yourself.
 
 ---
 
