@@ -49,6 +49,7 @@ testpaths = ["tests"]
 timeout = 30
 markers = [
     "network: marks tests that require network access (deselect with '-m \"not network\"')",
+    "e2e: marks end-to-end tests requiring server and LLM API (deselect with '-m \"not e2e\"')",
 ]
 
 [tool.ruff]
