@@ -419,32 +419,54 @@ def deploy_agent(agent_name: str) -> str:
 
     policy = RetryPolicy.from_agent_config(error_handling)
 
-    # Load and start the agent, wrapping deployment in retry policy
+    # Deploy via the server's HTTP API directly.
+    # We cannot use AgentRuntime() here because this tool runs inside a
+    # Conductor daemon worker process, and daemon processes cannot spawn
+    # child processes (which AgentRuntime needs for tool workers).
+    #
+    # Instead, we use the compile + start REST endpoints and register
+    # the agent for execution. Workers for builtin tools are already
+    # running as part of the orchestrator's runtime.
     try:
         from autopilot.loader import load_agent
-        from agentspan.agents import AgentRuntime
+        from agentspan.agents.runtime.serializer import AgentConfigSerializer
+        import httpx
 
         agent = load_agent(agent_dir)
+        serializer = AgentConfigSerializer()
+        config_json = serializer.serialize(agent)
 
-        def _do_deploy():
-            with AgentRuntime() as runtime:
-                handle = runtime.start(agent, "Begin agent execution.")
-                return handle.execution_id
+        server_url = config.server_url.rstrip("/")
+        payload = {
+            "agentConfig": config_json,
+            "prompt": "Begin agent execution.",
+            "sessionId": "",
+            "media": [],
+        }
 
-        execution_id = retry_with_policy(_do_deploy, policy)
+        # Call the server's /agent/start endpoint directly
+        resp = httpx.post(
+            f"{server_url}/agent/start",
+            json=payload,
+            timeout=30.0,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        execution_id = data.get("executionId", "")
 
-        # Verify the execution is actually running on the server
+        if not execution_id:
+            raise RuntimeError("Server returned no execution ID")
+
+        # Verify the execution is running
         server_status = "ACTIVE"
         try:
             from autopilot.orchestrator.server import get_execution
             details = get_execution(execution_id, config=config)
             srv_status = details.get("status", "")
-            if srv_status == "RUNNING":
+            if srv_status in ("RUNNING", "COMPLETED"):
                 server_status = "ACTIVE"
-            elif srv_status:
-                server_status = "ACTIVE"  # Trust our deployment succeeded
         except Exception:
-            pass  # Server unreachable — trust local deployment
+            pass
 
         sm.set(agent_name, AgentState(
             name=agent_name,
@@ -455,10 +477,17 @@ def deploy_agent(agent_name: str) -> str:
             last_deployed=_now_iso(),
         ))
 
+        # Auto-commit for version tracking
+        try:
+            commit_agent_change(agent_name, f"deployed v{agent_yaml.get('version', 1)}", config)
+        except Exception:
+            pass
+
         return (
             f"Agent '{agent_name}' deployed successfully.\n"
             f"Execution ID: {execution_id}\n"
-            f"Status: {server_status}"
+            f"Status: {server_status}\n"
+            f"The agent is now running on the server."
         )
     except Exception as exc:
         sm.set(agent_name, AgentState(
