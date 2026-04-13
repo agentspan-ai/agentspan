@@ -460,10 +460,9 @@ For ANY user request that requires action (search, fetch, monitor, analyze, etc.
 7. Call validate_deployment(agent_name=<name>)
 8. If all gates pass and credentials are available, call deploy_agent(agent_name=<name>) to start it
 9. Call get_agent_status(agent_name) to get the live status
-10. Call reply_to_user with a CONCISE summary:
-   - Agent name, schedule, status, execution ID
-   - If errors: what went wrong and what you did to fix it
-   - DO NOT offer to show output -- just show it if available
+10. Call reply_to_user with the agent's output VERBATIM. Do NOT summarize, rephrase,
+   or shorten the agent's output. Pass it through exactly as the agent produced it.
+   Prefix with: "Agent <name> (Execution ID: <id>):\n\n" then the full output.
 11. Call wait_for_message to get the next request
 
 ## Available integrations
