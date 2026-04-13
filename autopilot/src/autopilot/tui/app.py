@@ -357,7 +357,8 @@ def build_orchestrator(tui_append_fn=None):
     @tool
     def read_agent_config(agent_name: str) -> str:
         """Read an agent's configuration (agent.yaml and expanded_prompt.md)."""
-        agent_dir = Path.home() / ".agentspan" / "autopilot" / "agents" / agent_name
+        config = AutopilotConfig.from_env()
+        agent_dir = config.agents_dir / agent_name
         if not agent_dir.exists():
             return f"Error: agent '{agent_name}' not found."
         result = []
@@ -399,8 +400,9 @@ You are the Agentspan Claw orchestrator. You turn user requests into working age
 
 ## CRITICAL RULES — READ THESE FIRST
 
-1. NEVER ask clarifying questions. NEVER. The user is lazy — that's the whole point.
-   "scrap cnn every 15 mins" is a complete request. Smart-default EVERYTHING.
+1. Smart-default EVERYTHING you can. Only ask a question if there is genuinely
+   no reasonable default (e.g., which specific email account, which Slack channel).
+   Maximum 1-2 questions, then immediately build. If in doubt, default and build.
 2. On ANY user request, IMMEDIATELY call expand_prompt() then generate_agent().
    Do NOT respond with text first. Call tools first.
 3. After EVERY reply_to_user, you MUST call wait_for_message. ALWAYS.
@@ -413,10 +415,11 @@ When the user describes ANY task:
 2. Write a full YAML spec using the template (smart-default everything)
 3. Call generate_agent(spec_yaml=<YAML>, agent_name=<name>)
 4. Call validate_spec(agent_name=<name>)
-5. Call validate_integrations(agent_name=<name>)
-6. Call validate_deployment(agent_name=<name>)
-7. Call reply_to_user with what was created and any next steps
-8. Call wait_for_message to get the next request
+5. If the agent has custom workers (not just builtin: tools), call validate_code(agent_name=<name>)
+6. Call validate_integrations(agent_name=<name>)
+7. Call validate_deployment(agent_name=<name>)
+8. Call reply_to_user with what was created and any next steps
+9. Call wait_for_message to get the next request
 
 ## Smart defaults — use these, don't ask
 
@@ -494,6 +497,8 @@ def _run_tui_repl(
     _done_execution_ids: list[str] = []  # tracks completed executions
     _current_handle = [handle]  # mutable ref so we can restart
     _current_execution_id = [execution_id]
+    _active_threads: list[threading.Thread] = []  # track spawned threads
+    _stop_old_stream = [False]  # flag to stop old stream thread on restart
 
     # ---- Output area (read-only, scrollable) ----
     output_area = TextArea(
@@ -649,6 +654,14 @@ def _run_tui_repl(
             # If the previous execution ended (DONE), start a new one transparently
             if _done_execution_ids and _current_execution_id[0] in _done_execution_ids:
                 try:
+                    # Signal old stream thread to stop and wait briefly
+                    _stop_old_stream[0] = True
+                    for t in _active_threads:
+                        if t.is_alive():
+                            t.join(timeout=1.0)
+                    _active_threads.clear()
+                    _stop_old_stream[0] = False
+
                     new_handle = runtime.start(agent, cmd.message)
                     _current_handle[0] = new_handle
                     _current_execution_id[0] = new_handle.execution_id
@@ -658,15 +671,18 @@ def _run_tui_repl(
                     def _stream_new():
                         try:
                             for ev in new_handle.stream():
-                                if _stop_requested[0]:
+                                if _stop_requested[0] or _stop_old_stream[0]:
                                     return
                                 _event_queue.put(ev)
                         except Exception as exc:
                             if not _stop_requested[0]:
                                 _event_queue.put(("__error__", str(exc)))
 
-                    threading.Thread(target=_stream_new, daemon=True, name="claw-stream").start()
-                    threading.Thread(target=_consume_events, daemon=True, name="claw-consumer").start()
+                    t_stream = threading.Thread(target=_stream_new, daemon=True, name="claw-stream")
+                    t_consumer = threading.Thread(target=_consume_events, daemon=True, name="claw-consumer")
+                    _active_threads.extend([t_stream, t_consumer])
+                    t_stream.start()
+                    t_consumer.start()
                 except Exception as exc:
                     _append(f"  Error: {exc}\n")
             else:

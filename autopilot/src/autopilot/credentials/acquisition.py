@@ -24,6 +24,7 @@ from __future__ import annotations
 import configparser
 import http.server
 import os
+import secrets
 import subprocess
 import sys
 import threading
@@ -259,9 +260,10 @@ def _store_credential(name: str, value: str) -> bool:
 # ---------------------------------------------------------------------------
 
 class _OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
-    """Tiny HTTP handler that captures the OAuth redirect's ``code`` parameter."""
+    """Tiny HTTP handler that captures the OAuth redirect's ``code`` and ``state`` parameters."""
 
     auth_code: Optional[str] = None
+    returned_state: Optional[str] = None
     error: Optional[str] = None
 
     def do_GET(self) -> None:  # noqa: N802
@@ -270,6 +272,7 @@ class _OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
 
         if "code" in params:
             _OAuthCallbackHandler.auth_code = params["code"][0]
+            _OAuthCallbackHandler.returned_state = params.get("state", [None])[0]
             self.send_response(200)
             self.send_header("Content-Type", "text/html")
             self.end_headers()
@@ -296,9 +299,16 @@ class _OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
         pass
 
 
-def _run_oauth_callback_server(port: int, timeout: float = 120.0) -> Optional[str]:
-    """Start a one-shot HTTP server on *port*, wait for the callback, return the auth code."""
+def _run_oauth_callback_server(
+    port: int, timeout: float = 120.0, expected_state: Optional[str] = None
+) -> Optional[str]:
+    """Start a one-shot HTTP server on *port*, wait for the callback, return the auth code.
+
+    If *expected_state* is provided, the returned ``state`` parameter must match;
+    otherwise the auth code is rejected (returns ``None``).
+    """
     _OAuthCallbackHandler.auth_code = None
+    _OAuthCallbackHandler.returned_state = None
     _OAuthCallbackHandler.error = None
 
     server = http.server.HTTPServer(("127.0.0.1", port), _OAuthCallbackHandler)
@@ -310,6 +320,12 @@ def _run_oauth_callback_server(port: int, timeout: float = 120.0) -> Optional[st
 
     if _OAuthCallbackHandler.error:
         return None
+
+    # Verify state parameter when provided (CSRF protection)
+    if expected_state is not None:
+        if _OAuthCallbackHandler.returned_state != expected_state:
+            return None
+
     return _OAuthCallbackHandler.auth_code
 
 
@@ -366,6 +382,7 @@ def acquire_google_oauth(
 
     port = _find_free_port()
     redirect_uri = f"http://localhost:{port}/callback"
+    state = secrets.token_urlsafe(32)
 
     params = {
         "client_id": client_id,
@@ -374,6 +391,7 @@ def acquire_google_oauth(
         "scope": " ".join(scopes),
         "access_type": "offline",
         "prompt": "consent",
+        "state": state,
     }
     auth_url = f"{_GOOGLE_AUTH_URL}?{urllib.parse.urlencode(params)}"
 
@@ -381,8 +399,8 @@ def acquire_google_oauth(
     print(f"If the browser doesn't open, visit:\n  {auth_url}\n")
     webbrowser.open(auth_url)
 
-    # Wait for the callback
-    auth_code = _run_oauth_callback_server(port)
+    # Wait for the callback (verify state for CSRF protection)
+    auth_code = _run_oauth_callback_server(port, expected_state=state)
     if not auth_code:
         return f"Error: OAuth authorization failed or timed out for {credential_name}."
 
@@ -405,6 +423,12 @@ def acquire_google_oauth(
         return "Error: No access token in response from Google."
 
     stored = _store_credential(credential_name, access_token)
+
+    # Store refresh token if provided
+    refresh_token = tokens.get("refresh_token")
+    if refresh_token:
+        _store_credential(f"{credential_name}_REFRESH", refresh_token)
+
     if stored:
         return f"{credential_name} acquired and stored successfully."
     else:
@@ -460,6 +484,7 @@ def acquire_microsoft_oauth(
 
     port = _find_free_port()
     redirect_uri = f"http://localhost:{port}/callback"
+    state = secrets.token_urlsafe(32)
 
     params = {
         "client_id": client_id,
@@ -467,6 +492,7 @@ def acquire_microsoft_oauth(
         "response_type": "code",
         "scope": " ".join(scopes),
         "response_mode": "query",
+        "state": state,
     }
     auth_url = f"{_MS_AUTH_URL}?{urllib.parse.urlencode(params)}"
 
@@ -474,7 +500,7 @@ def acquire_microsoft_oauth(
     print(f"If the browser doesn't open, visit:\n  {auth_url}\n")
     webbrowser.open(auth_url)
 
-    auth_code = _run_oauth_callback_server(port)
+    auth_code = _run_oauth_callback_server(port, expected_state=state)
     if not auth_code:
         return f"Error: OAuth authorization failed or timed out for {credential_name}."
 
@@ -496,6 +522,12 @@ def acquire_microsoft_oauth(
         return "Error: No access token in response from Microsoft."
 
     stored = _store_credential(credential_name, access_token)
+
+    # Store refresh token if provided
+    refresh_token = tokens.get("refresh_token")
+    if refresh_token:
+        _store_credential(f"{credential_name}_REFRESH", refresh_token)
+
     if stored:
         return f"{credential_name} acquired and stored successfully."
     else:

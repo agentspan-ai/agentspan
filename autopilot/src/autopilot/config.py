@@ -121,6 +121,7 @@ class AutopilotConfig:
         data: Dict[str, Any] = {
             "server_url": self.server_url,
             "llm_model": self.llm_model,
+            "poll_interval_seconds": self.poll_interval_seconds,
             "base_dir": str(self.base_dir),
         }
         if self.last_seen:

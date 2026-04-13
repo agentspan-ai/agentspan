@@ -53,6 +53,24 @@ class OrchestratorError(Exception):
     """Raised for orchestrator-level errors (missing agents, bad state, etc.)."""
 
 
+def _get_credential_aliases() -> dict:
+    """Build credential alias map from the credential registry."""
+    from autopilot.credentials.acquisition import CREDENTIAL_REGISTRY
+    aliases: dict[str, str] = {}
+    for cred_name, info in CREDENTIAL_REGISTRY.items():
+        # Create common aliases: lowercase, without _TOKEN/_KEY suffix, etc.
+        lower = cred_name.lower()
+        aliases[lower] = cred_name
+        # Strip common suffixes for additional aliases
+        for suffix in ("_token", "_access_token", "_api_key", "_api_token", "_key"):
+            if lower.endswith(suffix):
+                aliases[lower[: -len(suffix)]] = cred_name
+        # Service name alias
+        if info.service:
+            aliases[info.service.lower().replace(" ", "_")] = cred_name
+    return aliases
+
+
 # ---------------------------------------------------------------------------
 # Creation Tools (LLM-driven, guardrailed)
 # ---------------------------------------------------------------------------
@@ -188,19 +206,7 @@ def generate_agent(spec_yaml: str, agent_name: str) -> str:
         spec["tools"] = normalized_tools
 
     # Normalize credential names — map common mistakes to actual names
-    _CREDENTIAL_ALIASES = {
-        "gmail_api": "GMAIL_ACCESS_TOKEN",
-        "gmail_token": "GMAIL_ACCESS_TOKEN",
-        "gmail_access_token": "GMAIL_ACCESS_TOKEN",
-        "github_api": "GITHUB_TOKEN",
-        "slack_token": "SLACK_BOT_TOKEN",
-        "outlook_token": "OUTLOOK_ACCESS_TOKEN",
-        "google_calendar_token": "GOOGLE_CALENDAR_TOKEN",
-        "google_drive_token": "GOOGLE_DRIVE_TOKEN",
-        "linear_key": "LINEAR_API_KEY",
-        "notion_key": "NOTION_API_KEY",
-        "hubspot_token": "HUBSPOT_ACCESS_TOKEN",
-    }
+    _CREDENTIAL_ALIASES = _get_credential_aliases()
     if "credentials" in spec and isinstance(spec["credentials"], list):
         spec["credentials"] = [
             _CREDENTIAL_ALIASES.get(c.lower().strip(), c) for c in spec["credentials"]
@@ -323,10 +329,13 @@ def resolve_integrations(agent_name: str) -> str:
 
                 mcp_servers = get_configured_servers()
                 found_via_mcp = False
-                for server_name in mcp_servers:
-                    mcp_available.append(f"{integration_name} (via MCP: {server_name})")
-                    found_via_mcp = True
-                    break
+                for server_name, server_info in mcp_servers.items():
+                    # Check if server's tools overlap with what we need
+                    server_tools = server_info.get("tools", [])
+                    if not server_tools or integration_name in server_tools:
+                        mcp_available.append(f"{integration_name} (via MCP: {server_name})")
+                        found_via_mcp = True
+                        break
                 if not found_via_mcp:
                     missing.append(integration_name)
         elif isinstance(ref, str) and ref.startswith("mcp:"):
@@ -932,6 +941,9 @@ def generate_worker(agent_name: str, tool_name: str, description: str, parameter
     agent_dir = config.agents_dir / agent_name
     if not agent_dir.exists():
         raise RuntimeError(f"Agent '{agent_name}' not found at {agent_dir}")
+
+    if not tool_name.isidentifier():
+        raise RuntimeError(f"Invalid tool name '{tool_name}' — must be a valid Python identifier")
 
     workers_dir = agent_dir / "workers"
     workers_dir.mkdir(parents=True, exist_ok=True)
