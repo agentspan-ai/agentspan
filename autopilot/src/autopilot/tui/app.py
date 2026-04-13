@@ -964,6 +964,9 @@ def _run_tui_repl(
                     agent_state[0] = AgentState.WAITING
                     _append(f"\n{_SEPARATOR}\n  Ready for your next request.\n{_SEPARATOR}\n")
                 elif event.type in (EventType.TOOL_CALL, EventType.THINKING):
+                    if agent_state[0] == AgentState.WAITING:
+                        # Transition from waiting → busy: show activity indicator
+                        _append("  Working...\n")
                     agent_state[0] = AgentState.BUSY
                 elif event.type == EventType.ERROR:
                     agent_state[0] = AgentState.DONE
