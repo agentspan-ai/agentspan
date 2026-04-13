@@ -120,8 +120,32 @@ def load_agent(agent_dir: Path) -> Agent:
         if builtin_refs:
             tools.extend(_resolve_builtin_tools(builtin_refs))
 
-        # Load file-based workers
+        # Load file-based workers (or resolve as builtin if the name matches)
+        registry = get_default_registry()
+        known_integrations = set(registry.list_integrations())
+
         for ref in file_refs:
+            # Check if the ref matches a known integration (LLM often omits "builtin:" prefix)
+            if ref in known_integrations:
+                tools.extend(registry.get_tools(ref))
+                continue
+
+            # Check if ref matches an individual tool name from a builtin integration
+            resolved_as_tool = False
+            for int_name in known_integrations:
+                int_tools = registry.get_tools(int_name)
+                for t in int_tools:
+                    if hasattr(t, "_tool_def") and t._tool_def.name == ref:
+                        tools.append(t)
+                        resolved_as_tool = True
+                        break
+                if resolved_as_tool:
+                    break
+
+            if resolved_as_tool:
+                continue
+
+            # Fall back to loading from workers/ directory
             worker_file = workers_dir / f"{ref}.py"
             if not worker_file.exists():
                 raise LoaderError(
