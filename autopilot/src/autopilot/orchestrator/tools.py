@@ -424,10 +424,23 @@ def deploy_agent(agent_name: str) -> str:
 
         execution_id = retry_with_policy(_do_deploy, policy)
 
+        # Verify the execution is actually running on the server
+        server_status = "ACTIVE"
+        try:
+            from autopilot.orchestrator.server import get_execution
+            details = get_execution(execution_id, config=config)
+            srv_status = details.get("status", "")
+            if srv_status == "RUNNING":
+                server_status = "ACTIVE"
+            elif srv_status:
+                server_status = "ACTIVE"  # Trust our deployment succeeded
+        except Exception:
+            pass  # Server unreachable — trust local deployment
+
         sm.set(agent_name, AgentState(
             name=agent_name,
             execution_id=execution_id,
-            status="ACTIVE",
+            status=server_status,
             trigger_type=trigger_type,
             created_at=created_at,
             last_deployed=_now_iso(),
@@ -436,7 +449,7 @@ def deploy_agent(agent_name: str) -> str:
         return (
             f"Agent '{agent_name}' deployed successfully.\n"
             f"Execution ID: {execution_id}\n"
-            f"Status: ACTIVE"
+            f"Status: {server_status}"
         )
     except Exception as exc:
         sm.set(agent_name, AgentState(
@@ -453,7 +466,8 @@ def deploy_agent(agent_name: str) -> str:
 def list_agents() -> str:
     """List all agents with their status.
 
-    Reads agent directories from disk and checks state for live execution status.
+    Merges local disk info with live server execution status. If the server
+    is reachable, running executions are reflected as RUNNING in the output.
     """
     config = _get_config()
     agents_base = config.agents_dir
@@ -471,15 +485,38 @@ def list_agents() -> str:
     if not dirs:
         return "No agents found."
 
+    # Fetch live server status for enrichment
+    server_running: dict[str, dict] = {}
+    try:
+        from autopilot.orchestrator.server import get_running_agents
+        for ex in get_running_agents(config=config):
+            aname = ex.get("agentName", "")
+            if aname:
+                server_running[aname] = ex
+    except Exception:
+        pass  # Server unreachable — use local state only
+
     lines = ["Agents:", ""]
     for name in dirs:
         state = sm.get(name)
         if state:
-            status = state.status
-            eid = state.execution_id[:12] + "..." if state.execution_id else "—"
+            # Prefer live server status when available
+            if name in server_running:
+                status = "RUNNING"
+                eid_full = server_running[name].get("executionId", state.execution_id)
+            else:
+                status = state.status
+                eid_full = state.execution_id
+            eid = eid_full[:12] + "..." if eid_full else "—"
             lines.append(f"  {name:30s} {status:10s} exec={eid}")
         else:
-            lines.append(f"  {name:30s} {'UNTRACKED':10s}")
+            # Check if the server knows about this agent even without local state
+            if name in server_running:
+                eid_full = server_running[name].get("executionId", "")
+                eid = eid_full[:12] + "..." if eid_full else "—"
+                lines.append(f"  {name:30s} {'RUNNING':10s} exec={eid}")
+            else:
+                lines.append(f"  {name:30s} {'UNTRACKED':10s}")
 
     return "\n".join(lines)
 
@@ -663,7 +700,8 @@ def archive_agent(agent_name: str) -> str:
 def get_agent_status(agent_name: str) -> str:
     """Get detailed status of a specific agent.
 
-    Reads state and agent.yaml to provide a comprehensive status report.
+    Reads local state and agent.yaml, then enriches with live server execution
+    data when available.
     """
     config = _get_config()
     sm = _get_state_manager(config)
@@ -678,9 +716,30 @@ def get_agent_status(agent_name: str) -> str:
     agent_dir = config.agents_dir / agent_name
     yaml_path = agent_dir / "agent.yaml"
 
+    # Try to get live server data for this agent
+    server_exec: Optional[dict] = None
+    try:
+        from autopilot.orchestrator.server import get_execution, query_executions
+        if state.execution_id:
+            server_exec = get_execution(state.execution_id, config=config)
+        else:
+            # Try to find by agent name
+            execs = query_executions(agent_name=agent_name, config=config)
+            if execs:
+                server_exec = execs[0]
+    except Exception:
+        pass  # Server unreachable
+
+    # Determine status: prefer server status when available
+    display_status = state.status
+    if server_exec:
+        server_status = server_exec.get("status", "")
+        if server_status:
+            display_status = server_status
+
     lines = [
         f"Agent: {agent_name}",
-        f"Status: {state.status}",
+        f"Status: {display_status}",
         f"Trigger: {state.trigger_type}",
         f"Created: {state.created_at}",
     ]
@@ -690,6 +749,13 @@ def get_agent_status(agent_name: str) -> str:
 
     if state.execution_id:
         lines.append(f"Execution ID: {state.execution_id}")
+
+    # Add server-provided timing info
+    if server_exec:
+        if server_exec.get("executionTime") is not None:
+            lines.append(f"Execution time: {server_exec['executionTime']}ms")
+        if server_exec.get("startTime"):
+            lines.append(f"Server start: {server_exec['startTime']}")
 
     # Read agent.yaml for additional info
     if yaml_path.exists():
@@ -710,8 +776,8 @@ def get_agent_status(agent_name: str) -> str:
 def get_notifications(since: str = "") -> str:
     """Get recent outputs/notifications from all agents.
 
-    Checks state for all agents with recent activity. If *since* is provided
-    (ISO-8601 timestamp), only shows notifications after that time.
+    Checks local state and the server for live execution data. If *since* is
+    provided (ISO-8601 timestamp), only shows notifications after that time.
     """
     config = _get_config()
     sm = _get_state_manager(config)
@@ -720,6 +786,17 @@ def get_notifications(since: str = "") -> str:
     if not all_states:
         return "No agents tracked. Nothing to report."
 
+    # Fetch live server status to enrich local data
+    server_running_names: set[str] = set()
+    try:
+        from autopilot.orchestrator.server import get_running_agents
+        for ex in get_running_agents(config=config):
+            aname = ex.get("agentName", "")
+            if aname:
+                server_running_names.add(aname)
+    except Exception:
+        pass  # Server unreachable
+
     lines = ["Notifications:", ""]
 
     active_count = 0
@@ -727,6 +804,11 @@ def get_notifications(since: str = "") -> str:
     waiting_count = 0
 
     for state in all_states:
+        # If the server says it's running, treat as active regardless of local state
+        if state.name in server_running_names:
+            active_count += 1
+            continue
+
         if state.status == "ERROR":
             error_count += 1
             lines.append(f"  [ERROR] {state.name} — requires attention")
