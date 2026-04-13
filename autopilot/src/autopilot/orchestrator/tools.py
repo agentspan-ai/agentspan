@@ -221,15 +221,33 @@ def generate_agent(spec_yaml: str, agent_name: str) -> str:
     # Force model to configured value if LLM picked something else
     spec["model"] = config.llm_model
 
-    # Fix tools: normalize "builtin: gmail" -> "builtin:gmail" (remove space)
+    # Fix tools: normalize various LLM tool reference formats
     if "tools" in spec and isinstance(spec["tools"], list):
         normalized_tools = []
         for t in spec["tools"]:
             if isinstance(t, str):
-                normalized_tools.append(t.replace("builtin: ", "builtin:"))
-            elif isinstance(t, dict) and "builtin" in t:
-                # Handle YAML parsing {"builtin": "gmail"} -> "builtin:gmail"
-                normalized_tools.append(f"builtin:{t['builtin']}")
+                # "builtin: gmail" -> "builtin:gmail"
+                t = t.replace("builtin: ", "builtin:")
+                # "{'name': 'web_search'}" -> "web_search" (LLM writes Python dict as string)
+                if t.startswith("{") and "name" in t:
+                    import re
+                    m = re.search(r"['\"]name['\"]\s*:\s*['\"]([^'\"]+)['\"]", t)
+                    if m:
+                        t = m.group(1)
+                normalized_tools.append(t)
+            elif isinstance(t, dict):
+                # {"builtin": "gmail"} -> "builtin:gmail"
+                if "builtin" in t:
+                    normalized_tools.append(f"builtin:{t['builtin']}")
+                # {"name": "web_search"} -> "web_search"
+                elif "name" in t:
+                    normalized_tools.append(str(t["name"]))
+                # {"id": "doc_reader.read_document"} -> "doc_reader"
+                elif "id" in t:
+                    tool_id = str(t["id"])
+                    normalized_tools.append(tool_id.split(".")[0] if "." in tool_id else tool_id)
+                else:
+                    normalized_tools.append(str(t))
             else:
                 normalized_tools.append(str(t))
         spec["tools"] = normalized_tools
