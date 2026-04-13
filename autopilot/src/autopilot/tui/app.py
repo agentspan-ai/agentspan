@@ -478,6 +478,9 @@ def _run_tui_repl(
     _event_queue: queue.Queue = queue.Queue()
     _stop_requested = [False]
     _app_exited = threading.Event()
+    _done_execution_ids: list[str] = []  # tracks completed executions
+    _current_handle = [handle]  # mutable ref so we can restart
+    _current_execution_id = [execution_id]
 
     # ---- Output area (read-only, scrollable) ----
     output_area = TextArea(
@@ -516,7 +519,7 @@ def _run_tui_repl(
             _append("Stopping...\n")
             _stop_requested[0] = True
             try:
-                handle.stop()
+                _current_handle[0].stop()
             except Exception:
                 pass
             threading.Timer(1.0, lambda: app.exit() if app.is_running else None).start()
@@ -532,7 +535,7 @@ def _run_tui_repl(
             _append("Cancelling...\n")
             _stop_requested[0] = True
             try:
-                handle.cancel()
+                _current_handle[0].cancel()
             except Exception:
                 pass
             threading.Timer(0.5, lambda: app.exit() if app.is_running else None).start()
@@ -545,13 +548,13 @@ def _run_tui_repl(
 
         # Handle action commands that need server interaction
         if cmd.action == "signal" and cmd.agent_name and cmd.message:
-            runtime.signal(execution_id, f"[signal:{cmd.agent_name}] {cmd.message}")
+            runtime.signal(_current_execution_id[0], f"[signal:{cmd.agent_name}] {cmd.message}")
             _append(f"  \u2713 Signal sent to {cmd.agent_name}: {cmd.message}\n")
             return
 
         if cmd.action == "change" and cmd.agent_name and cmd.message:
             _append(f"\n{_THIN_SEP}\nYou: change {cmd.agent_name}: {cmd.message}\n{_THIN_SEP}\n")
-            runtime.send_message(execution_id, {"text": f"Change agent '{cmd.agent_name}': {cmd.message}"})
+            runtime.send_message(_current_execution_id[0], {"text": f"Change agent '{cmd.agent_name}': {cmd.message}"})
             return
 
         if cmd.action == "list_agents":
@@ -584,7 +587,7 @@ def _run_tui_repl(
                 agents = _discover_agents(config)
                 state_label = agent_state[0].value
                 _append(
-                    f"\n  Session: {execution_id}\n"
+                    f"\n  Session: {_current_execution_id[0]}\n"
                     f"  Orchestrator: {state_label}\n"
                     f"  Agents: {len(agents)} configured\n"
                     f"  Notifications: {notif_manager.unread_count()} unread\n"
@@ -620,7 +623,7 @@ def _run_tui_repl(
 
         if cmd.action in ("pause", "resume") and cmd.agent_name:
             runtime.signal(
-                execution_id,
+                _current_execution_id[0],
                 f"[{cmd.action}:{cmd.agent_name}]",
             )
             _append(f"  {cmd.action.title()} signal sent for {cmd.agent_name}.\n")
@@ -629,9 +632,39 @@ def _run_tui_repl(
         # Normal chat message
         if cmd.message:
             _append(f"\n{_THIN_SEP}\nYou: {cmd.message}\n{_THIN_SEP}\n")
-            if agent_state[0] == AgentState.BUSY:
-                _append("  (queued \u2014 agent is busy)\n")
-            runtime.send_message(execution_id, {"text": cmd.message})
+
+            # If the previous execution ended (DONE), start a new one
+            if _done_execution_ids and _current_execution_id[0] in _done_execution_ids:
+                _append("  Resuming session...\n")
+                try:
+                    from autopilot.tui.app import build_orchestrator
+                    agent = build_orchestrator()
+                    new_handle = runtime.start(agent, cmd.message)
+                    _current_handle[0] = new_handle
+                    _current_execution_id[0] = new_handle.execution_id
+                    agent_state[0] = AgentState.BUSY
+
+                    # Start a new stream thread for the new execution
+                    def _stream_new():
+                        try:
+                            for ev in new_handle.stream():
+                                if _stop_requested[0]:
+                                    return
+                                _event_queue.put(ev)
+                        except Exception as exc:
+                            if not _stop_requested[0]:
+                                _event_queue.put(("__error__", str(exc)))
+
+                    threading.Thread(target=_stream_new, daemon=True, name="claw-stream").start()
+
+                    # Restart the consumer if it exited
+                    threading.Thread(target=_consume_events, daemon=True, name="claw-consumer").start()
+                except Exception as exc:
+                    _append(f"  Error restarting session: {exc}\n")
+            else:
+                if agent_state[0] == AgentState.BUSY:
+                    _append("  (queued \u2014 agent is busy)\n")
+                runtime.send_message(_current_execution_id[0], {"text": cmd.message})
 
     input_area = TextArea(
         height=1,
@@ -652,7 +685,7 @@ def _run_tui_repl(
         _stop_requested[0] = True
         _append("\n\nCtrl+C \u2014 stopping (Ctrl+C again to force exit)...\n")
         try:
-            handle.stop()
+            _current_handle[0].stop()
         except Exception:
             pass
 
@@ -723,19 +756,40 @@ def _run_tui_repl(
                     _append(f"{_SEPARATOR}\n")
                 elif event.type in (EventType.TOOL_CALL, EventType.THINKING):
                     agent_state[0] = AgentState.BUSY
-                elif event.type in (EventType.DONE, EventType.ERROR):
+                elif event.type == EventType.ERROR:
                     agent_state[0] = AgentState.DONE
                     text = format_event(event)
                     _append(text)
-                    if event.type == EventType.DONE and event.output:
-                        _append(f"\n{'--- Claw ' + '-' * 53}\n{event.output}\n")
-                    _append("\nSession ended.\n")
+                    _append("\nSession ended due to error.\n")
                     if app.is_running:
                         try:
                             app.exit()
                         except Exception:
                             pass
                     return
+
+                elif event.type == EventType.DONE:
+                    # For stateful orchestrator agents, DONE means the workflow
+                    # completed — likely because the LLM didn't loop back to
+                    # wait_for_message. Don't exit the TUI. Show the output
+                    # and keep the UI alive for the user to send more messages.
+                    text = format_event(event)
+                    _append(text)
+                    if event.output:
+                        out = event.output
+                        if isinstance(out, dict):
+                            out = out.get("result", str(out))
+                        if out and str(out).strip():
+                            _append(f"\n{str(out).strip()}\n")
+
+                    agent_state[0] = AgentState.WAITING
+                    _append(f"\n{_SEPARATOR}\n")
+
+                    # The stream has ended. We can't receive more events from
+                    # this execution. But we keep the TUI alive — when the user
+                    # sends the next message, _on_input will start a new execution.
+                    _done_execution_ids.append(_current_execution_id[0])
+                    return  # Exit consumer — TUI stays alive
 
                 # Format and display the event
                 text = format_event(event)
