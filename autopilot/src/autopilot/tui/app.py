@@ -377,60 +377,54 @@ def build_orchestrator(tui_append_fn=None):
         max_turns=100_000,
         stateful=True,
         instructions="""\
-You are the Agentspan Claw orchestrator -- an AI assistant that autonomously
-creates, deploys, and manages agents on behalf of the user.
+You are the Agentspan Claw orchestrator. You turn user requests into working agents.
 
-Your job is to turn lazy, minimal user prompts into fully functional agents.
+## CRITICAL RULES — READ THESE FIRST
 
-## Workflow
+1. NEVER ask clarifying questions. NEVER. The user is lazy — that's the whole point.
+   "scrap cnn every 15 mins" is a complete request. Smart-default EVERYTHING.
+2. On ANY user request, IMMEDIATELY call expand_prompt() then generate_agent().
+   Do NOT respond with text first. Call tools first.
+3. After EVERY reply_to_user, you MUST call wait_for_message. ALWAYS.
+   The pattern is: process → reply_to_user → wait_for_message. No exceptions.
 
-When a user asks you to create an agent:
+## Agent Creation — tool call sequence
 
-1. Ask 1-2 critical clarifying questions (only when there is no reasonable default).
-2. Call expand_prompt() with the user's request and any clarifications.
-3. Use the returned template to generate a complete YAML agent specification.
-4. Call generate_agent() with the YAML spec to create the agent files.
-5. **Validation gates** -- run each gate in order, fix issues before proceeding:
-   a. Call validate_spec() -- if FAIL, fix the spec and retry (up to 3 times).
-   b. Call validate_code() -- if FAIL, regenerate or fix worker code and retry (up to 3 times).
-   c. Call validate_integrations() -- if FAIL, resolve missing integrations/credentials and retry (up to 3 times).
-   d. Call validate_deployment() -- if FAIL, fix the issue and retry (up to 3 times).
-   If a gate still fails after 3 retries, report the errors to the user and stop.
-6. If all gates pass, call deploy_agent() to start the agent.
-7. Report back to the user with what was created and deployed.
+When the user describes ANY task:
+1. Call expand_prompt(seed_prompt=<user's request>)
+2. Write a full YAML spec using the template (smart-default everything)
+3. Call generate_agent(spec_yaml=<YAML>, agent_name=<name>)
+4. Call validate_spec(agent_name=<name>)
+5. Call validate_integrations(agent_name=<name>)
+6. Call validate_deployment(agent_name=<name>)
+7. Call reply_to_user with what was created and any next steps
+8. Call wait_for_message to get the next request
+
+## Smart defaults — use these, don't ask
+
+- Model: use the configured model
+- Schedule: if user says "every 15 mins" → cron "*/15 * * * *". If unclear → daemon
+- Integrations: pick the most obvious ones from the request
+- Notifications: default to replying in chat
+- Error handling: 3 retries, exponential backoff, pause on failure
+- Names: generate a clear snake_case name from the request
 
 ## Agent Management
 
-When a user asks to manage existing agents:
+- list_agents() — show all agents
+- get_agent_status(name) — detailed status
+- signal_agent(name, message) — one-time instruction
+- update_agent(name, changes) — permanent modification
+- pause_agent/resume_agent — control execution
+- archive_agent — deactivate
+- check_credentials/acquire_credentials — handle auth
 
-- Use list_agents() to show all agents and their status.
-- Use get_agent_status() for detailed info on a specific agent.
-- Use signal_agent() for transient, one-time instructions to a running agent.
-- Use update_agent() for permanent changes to an agent's behavior.
-- Use pause_agent() and resume_agent() to control execution.
-- Use archive_agent() to deactivate an agent while keeping its files.
-- Use get_notifications() to check for recent agent outputs and alerts.
-- Use read_agent_config() to read raw config files for a specific agent.
+## Interaction Loop — MANDATORY
 
-## Credentials
-
-- Use check_credentials() to see what credentials an agent needs.
-- Use acquire_credentials() to set up a missing credential.
-
-## Principles
-
-- Be proactive: smart-default everything you can.
-- Be concise: don't over-explain unless asked.
-- Be honest: if something fails, say what went wrong and suggest a fix.
-- Never invent credentials -- check what's needed and guide the user to set them up.
-
-## Interaction Loop
-
-Repeat indefinitely:
-1. Call wait_for_message to receive the next user message.
-2. Process the request using available tools.
-3. Call reply_to_user with your response.
-4. Return to step 1.
+1. Call wait_for_message
+2. Process the request (call tools as needed)
+3. Call reply_to_user with the result
+4. GOTO 1 — you MUST call wait_for_message again. Do NOT stop.
 """,
     )
 
@@ -468,6 +462,7 @@ def _run_tui_repl(
     runtime: AgentRuntime,
     handle,
     execution_id: str,
+    agent=None,
 ) -> None:
     """Full-screen TUI: scrollable output on top, persistent input on bottom."""
 
@@ -633,18 +628,15 @@ def _run_tui_repl(
         if cmd.message:
             _append(f"\n{_THIN_SEP}\nYou: {cmd.message}\n{_THIN_SEP}\n")
 
-            # If the previous execution ended (DONE), start a new one
+            # If the previous execution ended (DONE), start a new one transparently
             if _done_execution_ids and _current_execution_id[0] in _done_execution_ids:
-                _append("  Resuming session...\n")
                 try:
-                    from autopilot.tui.app import build_orchestrator
-                    agent = build_orchestrator()
                     new_handle = runtime.start(agent, cmd.message)
                     _current_handle[0] = new_handle
                     _current_execution_id[0] = new_handle.execution_id
                     agent_state[0] = AgentState.BUSY
 
-                    # Start a new stream thread for the new execution
+                    # Start new stream + consumer threads for the new execution
                     def _stream_new():
                         try:
                             for ev in new_handle.stream():
@@ -656,11 +648,9 @@ def _run_tui_repl(
                                 _event_queue.put(("__error__", str(exc)))
 
                     threading.Thread(target=_stream_new, daemon=True, name="claw-stream").start()
-
-                    # Restart the consumer if it exited
                     threading.Thread(target=_consume_events, daemon=True, name="claw-consumer").start()
                 except Exception as exc:
-                    _append(f"  Error restarting session: {exc}\n")
+                    _append(f"  Error: {exc}\n")
             else:
                 if agent_state[0] == AgentState.BUSY:
                     _append("  (queued \u2014 agent is busy)\n")
@@ -817,15 +807,10 @@ def _run_tui_repl(
     poller.start()
 
     # ---- Run the TUI ----
-    print("About to call app.run()...", file=sys.stderr, flush=True)
     try:
         app.run()
-        print("app.run() returned normally.", file=sys.stderr, flush=True)
-    except Exception as exc:
-        print(f"app.run() raised: {exc}", file=sys.stderr, flush=True)
     finally:
         _app_exited.set()
-        print("TUI cleanup complete.", file=sys.stderr, flush=True)
         poller.stop()
 
 
@@ -911,9 +896,7 @@ def main() -> None:
                 args.session_file.write_text(execution_id)
 
             print(f"Session: {execution_id[:16]}...")
-            print("Launching TUI...", file=sys.stderr, flush=True)
-            _run_tui_repl(runtime, handle, execution_id)
-            print("TUI exited.", file=sys.stderr, flush=True)
+            _run_tui_repl(runtime, handle, execution_id, agent=agent)
     except KeyboardInterrupt:
         print("\nShutting down...")
     except Exception as exc:
