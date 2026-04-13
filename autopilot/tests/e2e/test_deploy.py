@@ -90,7 +90,10 @@ class TestDeployAgent:
         _make_agent_on_disk(tmp_path, agent_name)
         config = _make_config(tmp_path)
 
-        monkeypatch.setenv("AUTOPILOT_BASE_DIR", str(tmp_path))
+        monkeypatch.setattr(
+            "autopilot.orchestrator.tools._get_config",
+            lambda: config,
+        )
 
         # -- Act: call deploy_agent directly (the @tool function) --
         result = deploy_agent(agent_name)
@@ -133,11 +136,12 @@ class TestDeployAgent:
             pass
 
     def test_deploy_and_run_produces_output(self, tmp_path, monkeypatch):
-        """deploy_agent -> workers pick up tasks -> agent searches web -> real output.
+        """deploy_agent -> start workers -> agent searches web -> real output.
 
-        This test starts tool workers FIRST, then deploys via deploy_agent.
-        In production, the orchestrator daemon runs workers continuously;
-        deploy_agent just starts a new workflow that uses them.
+        deploy_agent starts the workflow on the server via HTTP POST.
+        Tool workers must run locally to handle tool calls (web_search etc.).
+        In production, the orchestrator daemon runs workers continuously.
+        Here we start them explicitly via _prepare_workers.
         """
 
         # -- Arrange --
@@ -145,15 +149,15 @@ class TestDeployAgent:
         agent_dir = _make_agent_on_disk(tmp_path, agent_name)
         config = _make_config(tmp_path)
 
-        monkeypatch.setenv("AUTOPILOT_BASE_DIR", str(tmp_path))
+        monkeypatch.setattr(
+            "autopilot.orchestrator.tools._get_config",
+            lambda: config,
+        )
 
-        # Load agent to register its tool workers
+        # Load agent so we can register its tool workers
         agent = load_agent(agent_dir)
 
         with AgentRuntime() as runtime:
-            # Pre-register workers so the server can dispatch tool tasks to us
-            runtime.prepare(agent)
-
             # -- Act: deploy via deploy_agent (starts workflow on server) --
             result = deploy_agent(agent_name)
             print(f"\ndeploy_agent result:\n{result}")
@@ -164,6 +168,10 @@ class TestDeployAgent:
             assert match, f"No execution ID in result:\n{result}"
             execution_id = match.group(1)
             print(f"  Execution ID: {execution_id}")
+
+            # Start tool workers so the server can dispatch tool tasks to us.
+            # _prepare_workers registers AND starts worker polling threads.
+            runtime._prepare_workers(agent)
 
             # -- Stream events from the deployed execution --
             handle = AgentHandle(execution_id, runtime)
@@ -223,8 +231,12 @@ class TestDeployAgent:
         _make_agent_on_disk(tmp_path, agent_name)
 
         # Use a URL that will definitely fail (wrong port)
-        monkeypatch.setenv("AUTOPILOT_BASE_DIR", str(tmp_path))
-        monkeypatch.setenv("AGENTSPAN_SERVER_URL", "http://localhost:19999")
+        bad_config = _make_config(tmp_path, server_url="http://localhost:19999")
+
+        monkeypatch.setattr(
+            "autopilot.orchestrator.tools._get_config",
+            lambda: bad_config,
+        )
 
         # -- Act --
         result = deploy_agent(agent_name)
