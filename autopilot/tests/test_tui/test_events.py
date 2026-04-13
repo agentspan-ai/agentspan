@@ -6,7 +6,6 @@ objects.  No mocks, no LLM calls — all assertions are deterministic string che
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from autopilot.tui.events import (
@@ -23,36 +22,11 @@ from autopilot.tui.events import (
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class _FakeEvent:
-    """Minimal event object matching the SDK's SSE event structure."""
+from agentspan.agents import AgentEvent, EventType
 
-    type: str
-    tool_name: Optional[str] = None
-    args: Optional[dict] = field(default_factory=dict)
-    result: Any = None
-    content: Optional[str] = None
-    output: Optional[str] = None
-    guardrail_name: Optional[str] = None
-    target: Optional[str] = None
-
-
-class _ET:
-    """Fake EventType enum matching agentspan.agents.EventType values."""
-
-    TOOL_CALL = "TOOL_CALL"
-    TOOL_RESULT = "TOOL_RESULT"
-    THINKING = "THINKING"
-    WAITING = "WAITING"
-    DONE = "DONE"
-    ERROR = "ERROR"
-    GUARDRAIL_PASS = "GUARDRAIL_PASS"
-    GUARDRAIL_FAIL = "GUARDRAIL_FAIL"
-    HANDOFF = "HANDOFF"
-
-
-# Patch the real EventType values onto our stubs so format_event comparisons work
-from agentspan.agents import EventType  # noqa: E402
+# Use the real SDK event and enum — no fakes
+_FakeEvent = AgentEvent
+_ET = EventType
 
 
 # ---------------------------------------------------------------------------

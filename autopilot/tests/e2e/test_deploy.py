@@ -44,7 +44,7 @@ def _make_agent_on_disk(
     default_instructions = (
         "You are a web search agent. As soon as you start, immediately call "
         "web_search with the query 'Agentspan AI' and return a concise summary "
-        "of the top results. Do NOT ask the user for a query — just search "
+        "of the top results. Do NOT ask the user for a query -- just search "
         "immediately. Include specific facts and URLs from the search results."
     )
 
@@ -85,7 +85,7 @@ class TestDeployAgent:
     def test_deploy_agent_creates_running_execution(self, tmp_path, monkeypatch):
         """deploy_agent -> server returns execution ID -> execution is RUNNING or COMPLETED."""
 
-        # -- Arrange: create agent on disk, set env to use tmp_path --
+        # -- Arrange: create agent on disk, patch config to use tmp_path --
         agent_name = "e2e_deploy_run"
         _make_agent_on_disk(tmp_path, agent_name)
         config = _make_config(tmp_path)
@@ -151,7 +151,7 @@ class TestDeployAgent:
         agent = load_agent(agent_dir)
 
         with AgentRuntime() as runtime:
-            # Pre-register workers so the server can dispatch tool tasks
+            # Pre-register workers so the server can dispatch tool tasks to us
             runtime.prepare(agent)
 
             # -- Act: deploy via deploy_agent (starts workflow on server) --
@@ -222,7 +222,7 @@ class TestDeployAgent:
         agent_name = "e2e_deploy_bad_url"
         _make_agent_on_disk(tmp_path, agent_name)
 
-        # Use env vars that will definitely fail (wrong port)
+        # Use a URL that will definitely fail (wrong port)
         monkeypatch.setenv("AUTOPILOT_BASE_DIR", str(tmp_path))
         monkeypatch.setenv("AGENTSPAN_SERVER_URL", "http://localhost:19999")
 
