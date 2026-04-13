@@ -476,7 +476,7 @@ def deploy_agent(agent_name: str) -> str:
     # running as part of the orchestrator's runtime.
     try:
         from autopilot.loader import load_agent
-        from agentspan.agents.runtime.serializer import AgentConfigSerializer
+        from agentspan.agents.config_serializer import AgentConfigSerializer
         import httpx
 
         agent = load_agent(agent_dir)
