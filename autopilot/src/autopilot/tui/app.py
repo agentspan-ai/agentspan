@@ -801,7 +801,7 @@ def _run_tui_repl(
                 pass
 
     poller = DashboardPoller(
-        interval_seconds=30,
+        interval_seconds=config.poll_interval_seconds,
         on_update=_safe_invalidate,
     )
     poller.start()

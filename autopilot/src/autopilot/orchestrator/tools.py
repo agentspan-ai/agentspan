@@ -265,6 +265,12 @@ def generate_agent(spec_yaml: str, agent_name: str) -> str:
         created_at=_now_iso(),
     ))
 
+    # Auto-commit for version tracking
+    try:
+        commit_agent_change(name, f"created agent v{spec.get('version', 1)}", config)
+    except Exception:
+        pass  # Git commit is best-effort
+
     created_files = [
         str(yaml_path),
         str(prompt_path),

@@ -75,11 +75,24 @@ class DashboardPoller:
     def _do_poll(self) -> None:
         """Execute one poll cycle.
 
-        Checks for agent execution status updates and new outputs/notifications.
-        When the execution query API is available, this will call:
+        Refreshes local agent state and triggers the on_update callback.
+        When the server-side execution query API is available, this will also call:
             GET /api/agent/executions?status=RUNNING,PAUSED,COMPLETED&since={last_poll}
-
-        For now, it triggers the on_update callback to refresh the local state.
         """
+        # Refresh local state (agent directories + state.json)
+        try:
+            from autopilot.config import AutopilotConfig
+            from autopilot.orchestrator.state import StateManager
+
+            config = AutopilotConfig.from_env()
+            state_file = config.autopilot_dir / "state.json"
+            if state_file.exists():
+                sm = StateManager(state_file)
+                # Touch the state to keep it loaded — actual status checks
+                # happen via the orchestrator tools when the user asks
+                _ = sm.list_all()
+        except Exception:
+            pass
+
         if self._on_update:
             self._on_update()
