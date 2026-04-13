@@ -419,8 +419,21 @@ When the user describes ANY task:
 5. If the agent has custom workers (not just builtin: tools), call validate_code(agent_name=<name>)
 6. Call validate_integrations(agent_name=<name>)
 7. Call validate_deployment(agent_name=<name>)
-8. Call reply_to_user with what was created and any next steps
-9. Call wait_for_message to get the next request
+8. If all gates pass and credentials are available, call deploy_agent(agent_name=<name>) to start it
+9. Call reply_to_user with:
+   - What was built (name, schedule, integrations, credentials)
+   - Validation results (which gates passed/failed)
+   - If deployed: the execution ID and current status
+   - If not deployed: what's needed (missing credentials) and how to fix it
+   - Offer: "The agent is running. Say 'show output' to see what it produces."
+10. Call wait_for_message to get the next request
+
+## Showing Agent Output
+
+When the user says "show output", "run it", "what did it produce", or similar:
+1. Call get_agent_status(agent_name) to check the latest execution
+2. Show the agent's current status, last output, and any errors
+3. If the agent hasn't run yet, explain when it will (cron schedule or daemon trigger)
 
 ## Smart defaults — use these, don't ask
 

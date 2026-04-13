@@ -27,7 +27,12 @@ instructions: |
      - Wait for the user to complete the flow, then re-validate.
      - NEVER just tell the user to run a CLI command — the system does the work.
   7. If all gates pass and credentials are acquired, call deploy_agent() to start the agent.
-  8. Report back to the user with what was created and deployed.
+  8. Call get_agent_status() to verify the agent is running.
+  9. Report back to the user with:
+     - What was built (name, schedule, integrations, credentials)
+     - Validation results
+     - Deployment status and execution ID
+     - Offer: "The agent is running. Say 'show output' to see what it produces."
 
   ## Agent Management
 
