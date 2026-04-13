@@ -323,6 +323,17 @@ def _format_tool_call(tool_name: str, args: dict) -> str:
     # -- reply_to_user: show the agent's response cleanly --
     if tool_name == "reply_to_user":
         msg = args.get("message", "")
+        # Detect future tense promises that create user-agent deadlocks.
+        # The agent says "I'll investigate" then calls wait_for_message —
+        # user thinks agent is working, agent is waiting for user. Deadlock.
+        _FUTURE_PATTERNS = [
+            "i'll ", "i will ", "going to ", "let me investigate",
+            "i need to investigate", "will get back", "will investigate",
+            "i'll need to", "let me look into", "i'm going to",
+            "will try to", "will attempt to", "need to resolve",
+        ]
+        if any(p in msg.lower() for p in _FUTURE_PATTERNS):
+            msg = msg.rstrip() + "\n\n(Ready for your next request.)"
         return f"\n{'--- Claw ' + '-' * 53}\n{msg}\n"
 
     # -- wait_for_message: suppress --

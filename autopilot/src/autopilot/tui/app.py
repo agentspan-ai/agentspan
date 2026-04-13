@@ -353,7 +353,16 @@ def build_orchestrator(tui_append_fn=None):
 
     @tool
     def reply_to_user(message: str) -> str:
-        """Send your response to the user. Call this when done with the current request."""
+        """Send your response to the user. Call this ONLY when ALL work is complete."""
+        _FUTURE = ["i'll ", "i will ", "going to ", "let me investigate",
+                    "need to investigate", "will get back", "will investigate",
+                    "let me look into", "i'm going to", "will try to"]
+        if any(p in message.lower() for p in _FUTURE):
+            return (
+                "WARNING: Your reply uses future tense. Complete all work BEFORE replying. "
+                "Fix errors NOW or report what happened in past tense. "
+                "Rewrite your reply without future promises and call reply_to_user again."
+            )
         return "ok"
 
     @tool
