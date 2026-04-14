@@ -366,6 +366,11 @@ func (m AgentsModel) Update(msg tea.Msg) (AgentsModel, tea.Cmd) {
 		if f, ok := form.(*huh.Form); ok {
 			m.runForm = f
 			if m.runForm.State == huh.StateCompleted {
+				if v := m.runForm.GetString("agent"); v != "" || m.runAgentName == "" {
+					m.runAgentName = v
+				}
+				m.runPrompt = m.runForm.GetString("prompt")
+				m.runSessionID = m.runForm.GetString("session_id")
 				return m, m.startAgent()
 			}
 			if m.runForm.State == huh.StateAborted {
@@ -379,6 +384,12 @@ func (m AgentsModel) Update(msg tea.Msg) (AgentsModel, tea.Cmd) {
 		if f, ok := form.(*huh.Form); ok {
 			m.createForm = f
 			if m.createForm.State == huh.StateCompleted {
+				if v := m.createForm.GetString("name"); v != "" || m.createName == "" {
+					m.createName = v
+				}
+				if v := m.createForm.GetString("model"); v != "" || m.createModel == "" {
+					m.createModel = v
+				}
 				return m, m.createAgent()
 			}
 			if m.createForm.State == huh.StateAborted {
@@ -556,11 +567,23 @@ func (m AgentsModel) handleListKey(key string) (AgentsModel, tea.Cmd) {
 // activateButton executes the action for the given button index.
 // updateRunForm routes a key to the run huh form, handling completion/abort.
 func (m AgentsModel) updateRunForm(msg tea.Msg) (AgentsModel, tea.Cmd) {
+	// huh does not bind esc to abort by default — intercept it here.
+	if key, ok := msg.(tea.KeyPressMsg); ok && key.String() == "esc" {
+		m.pane = PaneList
+		m.runForm = nil
+		m.runFormErr = ""
+		return m, nil
+	}
 	form, cmd := m.runForm.Update(msg)
 	if f, ok := form.(*huh.Form); ok {
 		m.runForm = f
 		switch m.runForm.State {
 		case huh.StateCompleted:
+			if v := m.runForm.GetString("agent"); v != "" || m.runAgentName == "" {
+				m.runAgentName = v
+			}
+			m.runPrompt = m.runForm.GetString("prompt")
+			m.runSessionID = m.runForm.GetString("session_id")
 			return m, m.startAgent()
 		case huh.StateAborted:
 			m.pane = PaneList
@@ -573,11 +596,23 @@ func (m AgentsModel) updateRunForm(msg tea.Msg) (AgentsModel, tea.Cmd) {
 
 // updateCreateForm routes a key to the create huh form, handling completion/abort.
 func (m AgentsModel) updateCreateForm(msg tea.Msg) (AgentsModel, tea.Cmd) {
+	// huh does not bind esc to abort by default — intercept it here.
+	if key, ok := msg.(tea.KeyPressMsg); ok && key.String() == "esc" {
+		m.pane = PaneList
+		m.createForm = nil
+		return m, nil
+	}
 	form, cmd := m.createForm.Update(msg)
 	if f, ok := form.(*huh.Form); ok {
 		m.createForm = f
 		switch m.createForm.State {
 		case huh.StateCompleted:
+			if v := m.createForm.GetString("name"); v != "" || m.createName == "" {
+				m.createName = v
+			}
+			if v := m.createForm.GetString("model"); v != "" || m.createModel == "" {
+				m.createModel = v
+			}
 			return m, m.createAgent()
 		case huh.StateAborted:
 			m.pane = PaneList
@@ -855,6 +890,13 @@ func (m AgentsModel) renderDetail(cw, ch int) string {
 
 func (m AgentsModel) renderRunForm(cw, ch int) string {
 	var content strings.Builder
+	if m.runAgentName != "" {
+		content.WriteString(ui.CardRow("Agent:", lipgloss.NewStyle().
+			Bold(true).
+			Foreground(ui.ColorLimeGreen).
+			Render(m.runAgentName)))
+		content.WriteString("\n\n")
+	}
 	if m.runForm != nil && m.runForm.State != huh.StateCompleted {
 		content.WriteString(m.runForm.View())
 	}
@@ -862,7 +904,13 @@ func (m AgentsModel) renderRunForm(cw, ch int) string {
 		content.WriteString("\n\n" + ui.ErrorBanner(cw-8, m.runFormErr))
 	}
 	content.WriteString("\n\n" + ui.DimStyle.Render("  tab next field  enter run  esc back to list"))
-	return ui.ContentPanel(cw, ch, "Run Agent", content.String())
+	title := "Run Agent"
+	if m.runAgentName != "" {
+		title = "Run Agent: " + lipgloss.NewStyle().
+			Foreground(ui.ColorLimeGreen).
+			Render(m.runAgentName)
+	}
+	return ui.ContentPanel(cw, ch, title, content.String())
 }
 
 func (m AgentsModel) renderStream(cw, ch int) string {
@@ -967,42 +1015,57 @@ func (m *AgentsModel) buildRunForm() *huh.Form {
 		opts = []huh.Option[string]{huh.NewOption("(no agents registered)", "")}
 	}
 
-	return huh.NewForm(
-		huh.NewGroup(
+	fields := []huh.Field{
+		huh.NewInput().
+			Key("prompt").
+			Title("Prompt").
+			Description("What should the agent do?").
+			CharLimit(4000).
+			Value(&m.runPrompt),
+		huh.NewInput().
+			Key("session_id").
+			Title("Session ID  (optional)").
+			Description("Leave blank for a new session").
+			Placeholder("sess_abc123").
+			Value(&m.runSessionID),
+	}
+	if m.runAgentName == "" {
+		fields = append([]huh.Field{
 			huh.NewSelect[string]().
+				Key("agent").
 				Title("Agent").
 				Description("Select the registered agent to run").
 				Options(opts...).
 				Value(&m.runAgentName),
-			huh.NewText().
-				Title("Prompt").
-				Description("What should the agent do?").
-				CharLimit(4000).
-				Value(&m.runPrompt),
-			huh.NewInput().
-				Title("Session ID  (optional)").
-				Description("Leave blank for a new session").
-				Placeholder("sess_abc123").
-				Value(&m.runSessionID),
-		),
+		}, fields...)
+	}
+
+	form := huh.NewForm(
+		huh.NewGroup(fields...),
 	).WithTheme(huh.ThemeFunc(agentspanHuhTheme))
+	primeFormFocus(form)
+	return form
 }
 
 func (m *AgentsModel) buildCreateForm() *huh.Form {
-	return huh.NewForm(
+	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().
+				Key("name").
 				Title("Agent Name").
 				Description("A unique identifier (e.g. my-agent, summarizer)").
 				Placeholder("my-agent").
 				Value(&m.createName),
 			huh.NewInput().
+				Key("model").
 				Title("Model").
 				Description("LLM to use  (provider/model-name)").
 				Placeholder("openai/gpt-4o").
 				Value(&m.createModel),
 		),
 	).WithTheme(huh.ThemeFunc(agentspanHuhTheme))
+	primeFormFocus(form)
+	return form
 }
 
 // ─── Commands ────────────────────────────────────────────────────────────────
@@ -1025,6 +1088,13 @@ func (m AgentsModel) startAgent() tea.Cmd {
 	name := m.runAgentName
 	prompt := m.runPrompt
 	sessionID := m.runSessionID
+	if m.runForm != nil {
+		if v := m.runForm.GetString("agent"); v != "" || name == "" {
+			name = v
+		}
+		prompt = m.runForm.GetString("prompt")
+		sessionID = m.runForm.GetString("session_id")
+	}
 	c := m.client
 	return func() tea.Msg {
 		agentDef, err := c.GetAgent(name, nil)
@@ -1046,6 +1116,14 @@ func (m AgentsModel) startAgent() tea.Cmd {
 func (m AgentsModel) createAgent() tea.Cmd {
 	name := m.createName
 	model := m.createModel
+	if m.createForm != nil {
+		if v := m.createForm.GetString("name"); v != "" || name == "" {
+			name = v
+		}
+		if v := m.createForm.GetString("model"); v != "" || model == "" {
+			model = v
+		}
+	}
 	return func() tea.Msg {
 		if name == "" {
 			return AgentCreatedMsg{Err: fmt.Errorf("agent name cannot be empty")}
@@ -1192,6 +1270,15 @@ func wordWrap(s string, width int) string {
 		lines = append(lines, cur.String())
 	}
 	return strings.Join(lines, "\n")
+}
+
+func primeFormFocus(form *huh.Form) {
+	if form == nil {
+		return
+	}
+	if field := form.GetFocusedField(); field != nil {
+		_ = field.Focus()
+	}
 }
 
 // ─── Examples pane ────────────────────────────────────────────────────────────
@@ -1895,18 +1982,18 @@ func NewAgentsRunWithConfig(c *client.Client, preselected, serverURL string) Age
 
 // ─── Test accessors (exported for tui package tests) ─────────────────────────
 
-func (m AgentsModel) Cursor() int        { return m.cursor }
-func (m AgentsModel) BtnCursor() int     { return m.btnCursor }
-func (m AgentsModel) Searching() bool    { return m.searching }
-func (m AgentsModel) Search() string     { return m.search }
-func (m AgentsModel) Pane() AgentsPane   { return m.pane }
-func (m AgentsModel) DelConfirm() bool   { return m.delConfirm }
-func (m AgentsModel) RunAgentName() string { return m.runAgentName }
-func (m AgentsModel) ExLang() string     { return m.exLang }
-func (m AgentsModel) ExSearching() bool  { return m.exSearching }
-func (m AgentsModel) ExSearch() string   { return m.exSearch }
+func (m AgentsModel) Cursor() int              { return m.cursor }
+func (m AgentsModel) BtnCursor() int           { return m.btnCursor }
+func (m AgentsModel) Searching() bool          { return m.searching }
+func (m AgentsModel) Search() string           { return m.search }
+func (m AgentsModel) Pane() AgentsPane         { return m.pane }
+func (m AgentsModel) DelConfirm() bool         { return m.delConfirm }
+func (m AgentsModel) RunAgentName() string     { return m.runAgentName }
+func (m AgentsModel) ExLang() string           { return m.exLang }
+func (m AgentsModel) ExSearching() bool        { return m.exSearching }
+func (m AgentsModel) ExSearch() string         { return m.exSearch }
 func (m AgentsModel) ExSelected() map[int]bool { return m.exSelected }
-func (m AgentsModel) ExLoading() bool    { return m.exLoading }
+func (m AgentsModel) ExLoading() bool          { return m.exLoading }
 
 func (m *AgentsModel) SetFiltered(agents []AgentsTestEntry) {
 	m.filtered = make([]client.AgentSummary, len(agents))

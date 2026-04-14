@@ -19,5 +19,9 @@ export default defineConfig({
     globals: true,
     testTimeout: 60_000,
     include: ["tests/**/*.test.ts", "../../tests/e2e/*.test.ts"],
+    reporters: ["verbose", "junit"],
+    outputFile: {
+      junit: "../../e2e-results/junit-ts.xml",
+    },
   },
 });

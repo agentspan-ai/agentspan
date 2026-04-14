@@ -1077,9 +1077,10 @@ public class AgentService {
             result.put("reasonForIncompletion", reason);
         }
 
-        // Find pending HUMAN task
+        // Find pending HUMAN or PULL_WORKFLOW_MESSAGES task
         for (Task task : workflow.getTasks()) {
-            if ("HUMAN".equals(task.getTaskType()) && task.getStatus() == Task.Status.IN_PROGRESS) {
+            if (("HUMAN".equals(task.getTaskType()) || "PULL_WORKFLOW_MESSAGES".equals(task.getTaskType()))
+                    && task.getStatus() == Task.Status.IN_PROGRESS) {
                 Map<String, Object> pendingTool = new LinkedHashMap<>();
                 pendingTool.put("taskRefName", task.getReferenceTaskName());
                 if (task.getInputData() != null) {

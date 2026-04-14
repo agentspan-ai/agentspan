@@ -87,11 +87,18 @@ def _passthrough_task_def(name: str) -> Any:
 
 def _has_stateful_tools(agent: Any) -> bool:
     """Return True if the agent is stateful or any @tool has stateful=True."""
-    from agentspan.agents.tool import get_tool_defs
+    from agentspan.agents.tool import ToolDef, get_tool_defs
 
     if getattr(agent, "stateful", False):
         return True
-    for td in get_tool_defs(getattr(agent, "tools", [])):
+    # Only inspect tools that can carry stateful metadata — callables
+    # (@tool / @worker_task) and ToolDef instances.  Plain strings (e.g.
+    # built-in tool names) can never be stateful and must be skipped so
+    # get_tool_def() does not raise TypeError.
+    resolvable = [
+        t for t in getattr(agent, "tools", []) if callable(t) or isinstance(t, ToolDef)
+    ]
+    for td in get_tool_defs(resolvable):
         if getattr(td, "stateful", False):
             return True
     for sub in getattr(agent, "agents", []):

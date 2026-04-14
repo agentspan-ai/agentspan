@@ -18,21 +18,17 @@ type ConfigSavedMsg struct {
 // ─── Model ───────────────────────────────────────────────────────────────────
 
 type ConfigureModel struct {
-	width      int
-	height     int
-	serverURL  string
-	authKey    string
-	authSecret string
-	form       *huh.Form
-	saved      bool
-	err        string
+	width     int
+	height    int
+	serverURL string
+	form      *huh.Form
+	saved     bool
+	err       string
 }
 
 func NewConfigure(cfg *config.Config) ConfigureModel {
 	m := ConfigureModel{
-		serverURL:  cfg.ServerURL,
-		authKey:    cfg.AuthKey,
-		authSecret: cfg.AuthSecret,
+		serverURL: cfg.ServerURL,
 	}
 	m.form = m.buildForm()
 	return m
@@ -60,11 +56,11 @@ func (m ConfigureModel) Update(msg tea.Msg) (ConfigureModel, tea.Cmd) {
 		}
 
 	case tea.KeyPressMsg:
-		switch msg.String() {
-		case "esc":
-			if m.form != nil && m.form.State != huh.StateCompleted {
-				return m, nil
-			}
+		// huh does not bind esc to abort by default — intercept it here
+		// to cancel the form and return to the content panel.
+		if msg.String() == "esc" && m.form != nil && m.form.State == huh.StateNormal {
+			m.form = m.buildForm()
+			return m, m.form.Init()
 		}
 	}
 
@@ -73,6 +69,7 @@ func (m ConfigureModel) Update(msg tea.Msg) (ConfigureModel, tea.Cmd) {
 		if f, ok := form.(*huh.Form); ok {
 			m.form = f
 			if m.form.State == huh.StateCompleted {
+				m.serverURL = m.form.GetString("server_url")
 				return m, m.saveConfig()
 			}
 		}
@@ -91,8 +88,6 @@ func (m ConfigureModel) View() string {
 		"Current Configuration",
 		[]string{
 			ui.CardRow("Server URL", m.serverURL),
-			ui.CardRow("Auth Key", maskValue(m.authKey)),
-			ui.CardRow("Auth Secret", maskValue(m.authSecret)),
 			ui.CardRow("Config file", "~/.agentspan/config.json"),
 		},
 	)
@@ -121,47 +116,26 @@ func (m *ConfigureModel) buildForm() *huh.Form {
 	return huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().
+				Key("server_url").
 				Title("Server URL").
 				Description("AgentSpan runtime server URL").
 				Placeholder("http://localhost:6767").
 				Value(&m.serverURL),
-
-			huh.NewInput().
-				Title("Auth Key").
-				Description("Optional: for Orkes Cloud auth").
-				Value(&m.authKey),
-
-			huh.NewInput().
-				Title("Auth Secret").
-				Description("Optional: for Orkes Cloud auth").
-				EchoMode(huh.EchoModePassword).
-				Value(&m.authSecret),
 		),
 	).WithTheme(huh.ThemeFunc(agentspanHuhTheme))
 }
 
 func (m ConfigureModel) saveConfig() tea.Cmd {
 	serverURL := m.serverURL
-	authKey := m.authKey
-	authSecret := m.authSecret
+	if m.form != nil {
+		serverURL = m.form.GetString("server_url")
+	}
 	return func() tea.Msg {
 		cfg := config.Load()
 		cfg.ServerURL = serverURL
-		cfg.AuthKey = authKey
-		cfg.AuthSecret = authSecret
 		saveErr := config.Save(cfg)
 		return ConfigSavedMsg{Err: saveErr}
 	}
-}
-
-func maskValue(v string) string {
-	if v == "" {
-		return ui.DimStyle.Render("(not set)")
-	}
-	if len(v) <= 8 {
-		return strings.Repeat("●", len(v))
-	}
-	return v[:4] + strings.Repeat("●", 8) + v[len(v)-4:]
 }
 
 func lipglossInfoBox(width int, title string, rows []string) string {

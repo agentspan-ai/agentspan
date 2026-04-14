@@ -72,10 +72,10 @@ builder.addEdge('chat', END);
 const checkpointer = new MemorySaver();
 const graph = builder.compile({ checkpointer, name: "persistent_memory_chatbot" });
 
-// Add agentspan metadata for extraction
+// Add agentspan metadata for graph-structure extraction.
+// Do NOT set tools on StateGraphs — only model + framework.
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',
-  tools: [],
   framework: 'langgraph',
 };
 

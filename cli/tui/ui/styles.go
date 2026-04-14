@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"image/color"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -25,65 +26,129 @@ func SpinnerTickCmd() tea.Cmd {
 // Sidebar width constant.
 const SidebarWidth = 20
 
+// IsDarkBackground tracks whether the terminal has a dark background.
+// Updated automatically via tea.BackgroundColorMsg; defaults to true.
+var IsDarkBackground = true
+
+// Color vars are reassigned by SetTheme(). Views reference these at render
+// time so they always pick up the active palette. Colors are kept terminal-
+// native where possible so custom macOS Terminal profiles can control the
+// actual rendered palette rather than fighting fixed RGB values.
 var (
-	ColorLimeGreen  = lipgloss.Color("#A8FF3E") // primary accent, selected, active
-	ColorGreen      = lipgloss.Color("#39D353") // success, COMPLETED, checkmarks
-	ColorDarkGreen  = lipgloss.Color("#1A7F37") // borders, sidebar bg tint
-	ColorGrey       = lipgloss.Color("#6E7681") // dimmed text, secondary labels
-	ColorDarkGrey   = lipgloss.Color("#2D333B") // panel backgrounds
-	ColorDeepBg     = lipgloss.Color("#1C2128") // stream/log viewport bg
-	ColorWhite      = lipgloss.Color("#E6EDF3") // primary body text
-	ColorBrightGrey = lipgloss.Color("#8B949E") // meta labels, timestamps
-	ColorRed        = lipgloss.Color("#F85149") // errors, FAILED
-	ColorYellow     = lipgloss.Color("#D29922") // warnings, RUNNING/PAUSED
-	ColorBlue       = lipgloss.Color("#58A6FF") // tool calls
+	ColorLimeGreen  color.Color // primary accent, selected, active
+	ColorGreen      color.Color // success, COMPLETED, checkmarks
+	ColorDarkGreen  color.Color // borders, sidebar bg tint
+	ColorGrey       color.Color // dimmed text, secondary labels
+	ColorDarkGrey   color.Color // panel backgrounds
+	ColorDeepBg     color.Color // stream/log viewport bg
+	ColorWhite      color.Color // primary body text
+	ColorBrightGrey color.Color // meta labels, timestamps
+	ColorRed        color.Color // errors, FAILED
+	ColorYellow     color.Color // warnings, RUNNING/PAUSED
+	ColorBlue       color.Color // tool calls
+	ColorTableAlt   color.Color // alternating table row bg
+	ColorDangerBg   color.Color // danger button border
+	ColorBg         color.Color // full-screen background (nil = terminal default)
+	hasBg           bool        // whether to paint an explicit full-screen bg
 )
+
+// SetTheme reconfigures all color and style vars for the given background.
+// Call this from AppModel.Update when tea.BackgroundColorMsg arrives.
+func SetTheme(isDark bool) {
+	IsDarkBackground = isDark
+	if isDark {
+		setDarkPalette()
+	} else {
+		setLightPalette()
+	}
+	rebuildStyles()
+}
+
+func setDarkPalette() { setTerminalPalette(true) }
+
+func setLightPalette() { setTerminalPalette(false) }
+
+func setTerminalPalette(isDark bool) {
+	lightDark := lipgloss.LightDark(isDark)
+	noColor := lipgloss.NoColor{}
+
+	ColorLimeGreen = lightDark(lipgloss.Green, lipgloss.BrightGreen)
+	ColorGreen = lightDark(lipgloss.Green, lipgloss.BrightGreen)
+	ColorDarkGreen = lipgloss.BrightBlack
+	ColorGrey = lipgloss.BrightBlack
+	ColorDarkGrey = noColor
+	ColorDeepBg = noColor
+	ColorWhite = noColor
+	ColorBrightGrey = lipgloss.BrightBlack
+	ColorRed = lightDark(lipgloss.Red, lipgloss.BrightRed)
+	ColorYellow = lightDark(lipgloss.Yellow, lipgloss.BrightYellow)
+	ColorBlue = lightDark(lipgloss.Blue, lipgloss.BrightBlue)
+	ColorTableAlt = noColor
+	ColorDangerBg = lightDark(lipgloss.Red, lipgloss.BrightRed)
+	ColorBg = noColor
+	hasBg = false
+}
+
+func init() {
+	// Default to dark theme; overridden when BackgroundColorMsg arrives.
+	setDarkPalette()
+	rebuildStyles()
+}
 
 // ─── Base Styles ────────────────────────────────────────────────────────────
 
 var (
-	// Subtle divider line
+	Divider             string
+	LogoStyle           lipgloss.Style
+	MetaStyle           lipgloss.Style
+	SectionHeadingStyle lipgloss.Style
+	DimStyle            lipgloss.Style
+	ErrorStyle          lipgloss.Style
+	SuccessStyle        lipgloss.Style
+	WarnStyle           lipgloss.Style
+	KeyStyle            lipgloss.Style
+	HintStyle           lipgloss.Style
+	KeyHintSep          string
+)
+
+// rebuildStyles reconstructs all style vars from the current color palette.
+func rebuildStyles() {
 	Divider = lipgloss.NewStyle().
 		Foreground(ColorDarkGreen).
 		Render("─")
 
-	// Logo / brand text
 	LogoStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(ColorLimeGreen)
+		Bold(true).
+		Foreground(ColorLimeGreen)
 
-	// Version & meta text
 	MetaStyle = lipgloss.NewStyle().
-			Foreground(ColorGrey)
+		Foreground(ColorGrey)
 
-	// Bold section headings inside panels
 	SectionHeadingStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(ColorLimeGreen)
+		Bold(true).
+		Foreground(ColorLimeGreen)
 
-	// Dimmed secondary text
 	DimStyle = lipgloss.NewStyle().
-			Foreground(ColorGrey).
-			Faint(true)
+		Foreground(ColorGrey).
+		Faint(true)
 
-	// Error text
 	ErrorStyle = lipgloss.NewStyle().
-			Foreground(ColorRed).
-			Bold(true)
+		Foreground(ColorRed).
+		Bold(true)
 
-	// Success text
 	SuccessStyle = lipgloss.NewStyle().
-			Foreground(ColorGreen)
+		Foreground(ColorGreen)
 
-	// Warning text
 	WarnStyle = lipgloss.NewStyle().
-			Foreground(ColorYellow)
+		Foreground(ColorYellow)
 
-	// Key hint — for footer help bar
-	KeyStyle   = lipgloss.NewStyle().Foreground(ColorLimeGreen).Bold(true)
-	HintStyle  = lipgloss.NewStyle().Foreground(ColorGrey).Faint(true)
+	KeyStyle = lipgloss.NewStyle().Foreground(ColorLimeGreen).Bold(true)
+	HintStyle = lipgloss.NewStyle().Foreground(ColorGrey).Faint(true)
 	KeyHintSep = HintStyle.Render("  ")
-)
+
+	rebuildNavStyles()
+	rebuildHeaderFooterStyles()
+}
 
 // ─── Pattern 1: Panel ────────────────────────────────────────────────────────
 // Used as the outer wrapper for major content sections.
@@ -92,6 +157,7 @@ func PanelStyle(width, height int) lipgloss.Style {
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(ColorDarkGreen).
+		Background(ColorBg).
 		Padding(0, 1).
 		Width(width).
 		Height(height)
@@ -101,6 +167,7 @@ func PanelStyleFlat(width int) lipgloss.Style {
 	return lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
 		BorderForeground(ColorDarkGreen).
+		Background(ColorBg).
 		Padding(0, 1).
 		Width(width)
 }
@@ -109,6 +176,7 @@ func InnerPanelStyle(width int) lipgloss.Style {
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(ColorGrey).
+		Background(ColorBg).
 		Padding(0, 1).
 		Width(width)
 }
@@ -166,7 +234,7 @@ func NewDataTable() *table.Table {
 			}
 			return lipgloss.NewStyle().
 				Foreground(ColorWhite).
-				Background(lipgloss.Color("#252B32")).
+				Background(ColorTableAlt).
 				Padding(0, 1)
 		})
 }
@@ -186,35 +254,46 @@ func StreamContainerStyle(width, height int) lipgloss.Style {
 // ─── Nav Item Styles ─────────────────────────────────────────────────────────
 
 var (
+	NavItemStyle         lipgloss.Style
+	NavItemSelectedStyle lipgloss.Style
+	NavItemActiveStyle   lipgloss.Style
+)
+
+func rebuildNavStyles() {
 	NavItemStyle = lipgloss.NewStyle().
-			Foreground(ColorBrightGrey).
-			Padding(0, 1)
+		Foreground(ColorBrightGrey).
+		Padding(0, 1)
 
 	NavItemSelectedStyle = lipgloss.NewStyle().
-				Foreground(ColorLimeGreen).
-				Background(ColorDarkGreen).
-				Bold(true).
-				Padding(0, 1)
+		Foreground(ColorLimeGreen).
+		Background(ColorDarkGreen).
+		Bold(true).
+		Padding(0, 1)
 
 	NavItemActiveStyle = lipgloss.NewStyle().
-				Foreground(ColorGreen).
-				Padding(0, 1)
-)
+		Foreground(ColorGreen).
+		Padding(0, 1)
+}
 
 // ─── Header / Footer bar styles ──────────────────────────────────────────────
 
 var (
+	HeaderStyle lipgloss.Style
+	FooterStyle lipgloss.Style
+)
+
+func rebuildHeaderFooterStyles() {
 	HeaderStyle = lipgloss.NewStyle().
-			Background(ColorDarkGrey).
-			Foreground(ColorWhite).
-			Padding(0, 1)
+		Background(ColorDarkGrey).
+		Foreground(ColorWhite).
+		Padding(0, 1)
 
 	FooterStyle = lipgloss.NewStyle().
-			Background(ColorDarkGrey).
-			Foreground(ColorGrey).
-			Faint(true).
-			Padding(0, 1)
-)
+		Background(ColorDarkGrey).
+		Foreground(ColorGrey).
+		Faint(true).
+		Padding(0, 1)
+}
 
 // ─── Form Panel ──────────────────────────────────────────────────────────────
 
@@ -271,7 +350,7 @@ func Button(label string, active bool, danger bool) string {
 		s = lipgloss.NewStyle().
 			Foreground(ColorRed).
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#4A1010")).
+			BorderForeground(ColorDangerBg).
 			Padding(0, 1)
 	default:
 		s = lipgloss.NewStyle().
