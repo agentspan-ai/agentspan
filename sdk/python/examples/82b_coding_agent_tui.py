@@ -380,6 +380,16 @@ def _format_event(event) -> str:
             id_str = f" {args.get('id', '')}" if "id" in args else ""
             return f"  [{tool_name}{id_str}]\n"
 
+        if tool_name == "spawn_agent":
+            name = args.get("name", "sub-agent")
+            task_str = args.get("task", "")[:80]
+            label = f"'{name}'" if name else ""
+            return f"  [spawn] {label} {task_str}\n"
+
+        if tool_name in ("check_agent", "wait_for_agent", "stop_agent", "list_agents"):
+            id_str = f" {args.get('id', '')}" if "id" in args else ""
+            return f"  [{tool_name}{id_str}]\n"
+
         return f"  [{tool_name}] {args}\n"
 
     if etype == EventType.TOOL_RESULT:
