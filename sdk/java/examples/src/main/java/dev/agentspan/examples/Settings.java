@@ -8,7 +8,7 @@ package dev.agentspan.examples;
  *
  * <p>Set these before running examples:
  * <pre>
- * export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+ * export AGENTSPAN_SERVER_URL=http://localhost:6767/api
  * export AGENTSPAN_LLM_MODEL=openai/gpt-4o
  * export AGENTSPAN_AUTH_KEY=your-key       # optional
  * export AGENTSPAN_AUTH_SECRET=your-secret # optional
@@ -18,7 +18,7 @@ public class Settings {
     private static final java.util.Map<String, String> ENV = System.getenv();
 
     public static final String SERVER_URL =
-        ENV.getOrDefault("AGENTSPAN_SERVER_URL", "http://localhost:8080/api");
+        ENV.getOrDefault("AGENTSPAN_SERVER_URL", "http://localhost:6767/api");
 
     public static final String LLM_MODEL =
         ENV.getOrDefault("AGENTSPAN_LLM_MODEL", "openai/gpt-4o");

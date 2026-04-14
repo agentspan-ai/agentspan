@@ -11,7 +11,7 @@ package dev.agentspan;
  *
  * <p>Environment variables:
  * <ul>
- *   <li>{@code AGENTSPAN_SERVER_URL} — server URL (default: http://localhost:8080/api)</li>
+ *   <li>{@code AGENTSPAN_SERVER_URL} — server URL (default: http://localhost:6767/api)</li>
  *   <li>{@code AGENTSPAN_AUTH_KEY} — authentication key</li>
  *   <li>{@code AGENTSPAN_AUTH_SECRET} — authentication secret</li>
  *   <li>{@code AGENTSPAN_WORKER_POLL_MS} — worker poll interval in ms (default: 100)</li>
@@ -40,7 +40,7 @@ public class AgentConfig {
             String authSecret,
             int workerPollIntervalMs,
             int workerThreadCount) {
-        this.serverUrl = serverUrl != null ? serverUrl : "http://localhost:8080/api";
+        this.serverUrl = serverUrl != null ? serverUrl : "http://localhost:6767/api";
         this.authKey = authKey;
         this.authSecret = authSecret;
         this.workerPollIntervalMs = workerPollIntervalMs > 0 ? workerPollIntervalMs : 100;
@@ -54,7 +54,7 @@ public class AgentConfig {
      */
     public static AgentConfig fromEnv() {
         return new AgentConfig(
-            env("AGENTSPAN_SERVER_URL", "http://localhost:8080/api"),
+            env("AGENTSPAN_SERVER_URL", "http://localhost:6767/api"),
             env("AGENTSPAN_AUTH_KEY", null),
             env("AGENTSPAN_AUTH_SECRET", null),
             Integer.parseInt(env("AGENTSPAN_WORKER_POLL_MS", "100")),
