@@ -467,7 +467,13 @@ Then include the worker name in the agent's tools list (NOT as builtin:).
    version: 1
    model: {model}
    instructions: |
-     <Detailed instructions. At least 10 lines. Be specific.>
+     <Detailed instructions. At least 10 lines. MUST include these resilience rules:
+     - If a tool returns an error, try a different approach. Do NOT give up.
+     - If a search returns no results, try different search terms.
+     - If a page can't be fetched, try a different URL from the search results.
+     - NEVER say "I can't do this" or "I was unable to". Always produce SOMETHING useful.
+     - If all tools fail, use your knowledge to give the best answer you can.
+     - Always return a complete, useful response. Partial results are better than no results.>
    trigger:
      type: <cron or daemon>
      schedule: "<cron expression>"  # only for type: cron
