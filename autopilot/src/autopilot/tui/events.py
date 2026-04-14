@@ -474,8 +474,12 @@ def _format_tool_result(tool_name: str, result) -> str:
 
     # -- deploy_agent -- show the agent's actual output
     if tool_name == "deploy_agent":
-        if result_str.startswith("Error"):
-            return f"  {_CROSS} Deployment failed: {result_str}\n"
+        if result_str.startswith("Error") or "Agent failed:" in result_str:
+            return f"  {_CROSS} Deployment failed:\n{result_str}\n"
+        if "Failed to install dependencies" in result_str:
+            return f"  {_CROSS} Dependency installation failed:\n{result_str}\n"
+        if "syntax error" in result_str.lower():
+            return f"  {_CROSS} Worker code error:\n{result_str}\n"
 
         lines = []
 

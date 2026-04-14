@@ -481,38 +481,68 @@ def deploy_agent(agent_name: str) -> str:
     try:
         import json as _json
 
-        # Run agent via subprocess — installs deps + starts AgentRuntime with workers
+        # Run agent via subprocess — installs deps + validates + starts AgentRuntime
         script = f"""
-import os, sys, json, subprocess
+import os, sys, json, subprocess, traceback
 os.environ.setdefault('AGENTSPAN_LOG_LEVEL', 'WARNING')
 sys.path.insert(0, '{str(Path(__file__).parent.parent)}')
 from pathlib import Path
 
 agent_dir = Path('{str(agent_dir)}')
 
-# Install worker dependencies if requirements.txt exists
-req_file = agent_dir / 'workers' / 'requirements.txt'
-if req_file.exists():
-    deps = [l.strip() for l in req_file.read_text().splitlines() if l.strip()]
-    if deps:
-        subprocess.run(
-            [sys.executable, '-m', 'pip', 'install', '--quiet'] + deps,
-            capture_output=True, timeout=60,
-        )
+try:
+    # Step 1: Install worker dependencies
+    req_file = agent_dir / 'workers' / 'requirements.txt'
+    if req_file.exists():
+        deps = [l.strip() for l in req_file.read_text().splitlines() if l.strip()]
+        if deps:
+            result = subprocess.run(
+                [sys.executable, '-m', 'pip', 'install', '--quiet'] + deps,
+                capture_output=True, text=True, timeout=60,
+            )
+            if result.returncode != 0:
+                print('AGENT_RESULT:' + json.dumps({{
+                    'execution_id': '',
+                    'status': 'ERROR',
+                    'output': f'Failed to install dependencies: {{result.stderr[:500]}}',
+                }}))
+                sys.exit(1)
 
-from agentspan.agents import AgentRuntime
-from autopilot.loader import load_agent
+    # Step 2: Validate workers can be imported
+    workers_dir = agent_dir / 'workers'
+    if workers_dir.exists():
+        for py_file in workers_dir.glob('*.py'):
+            try:
+                compile(py_file.read_text(), str(py_file), 'exec')
+            except SyntaxError as e:
+                print('AGENT_RESULT:' + json.dumps({{
+                    'execution_id': '',
+                    'status': 'ERROR',
+                    'output': f'Worker {{py_file.name}} has syntax error: {{e}}',
+                }}))
+                sys.exit(1)
 
-agent = load_agent(agent_dir)
-with AgentRuntime() as runtime:
-    handle = runtime.start(agent, 'Execute the agent task now. Produce output immediately.')
-    result = handle.join(timeout=120)
-    output = {{
-        'execution_id': handle.execution_id,
-        'status': result.status if result else 'UNKNOWN',
-        'output': str(result.output)[:2000] if result and result.output else '',
-    }}
-    print('AGENT_RESULT:' + json.dumps(output))
+    # Step 3: Load and run the agent
+    from agentspan.agents import AgentRuntime
+    from autopilot.loader import load_agent
+
+    agent = load_agent(agent_dir)
+    with AgentRuntime() as runtime:
+        handle = runtime.start(agent, 'Execute the agent task now. Produce output immediately.')
+        result = handle.join(timeout=120)
+        output = {{
+            'execution_id': handle.execution_id,
+            'status': result.status if result else 'UNKNOWN',
+            'output': str(result.output)[:2000] if result and result.output else '',
+        }}
+        print('AGENT_RESULT:' + json.dumps(output))
+
+except Exception as e:
+    print('AGENT_RESULT:' + json.dumps({{
+        'execution_id': '',
+        'status': 'ERROR',
+        'output': f'Agent failed: {{str(e)[:500]}}\\n{{traceback.format_exc()[-500:]}}',
+    }}))
 """
         proc = subprocess.run(
             [sys.executable, "-c", script],
