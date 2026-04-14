@@ -3,10 +3,11 @@
 
 """Coding Agent TUI — a filesystem-aware coding assistant with a split-pane terminal UI.
 
-Like 82_coding_agent.py, but with two improvements:
+Like 82_coding_agent.py, but with three improvements:
 
   - Background process tools: run servers and watchers without blocking the agent.
   - prompt_toolkit TUI: scrollable output + always-available input prompt.
+  - Sub-agent spawning: delegate independent sub-tasks to parallel sub-agents.
 
 Usage:
     python 82b_coding_agent_tui.py                      # new session in current dir
