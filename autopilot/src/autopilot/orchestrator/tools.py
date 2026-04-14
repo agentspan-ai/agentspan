@@ -481,16 +481,29 @@ def deploy_agent(agent_name: str) -> str:
     try:
         import json as _json
 
-        # Run agent via subprocess — starts AgentRuntime with proper workers
+        # Run agent via subprocess — installs deps + starts AgentRuntime with workers
         script = f"""
-import os, sys, json
+import os, sys, json, subprocess
 os.environ.setdefault('AGENTSPAN_LOG_LEVEL', 'WARNING')
 sys.path.insert(0, '{str(Path(__file__).parent.parent)}')
-from agentspan.agents import AgentRuntime
-from autopilot.loader import load_agent
 from pathlib import Path
 
-agent = load_agent(Path('{str(agent_dir)}'))
+agent_dir = Path('{str(agent_dir)}')
+
+# Install worker dependencies if requirements.txt exists
+req_file = agent_dir / 'workers' / 'requirements.txt'
+if req_file.exists():
+    deps = [l.strip() for l in req_file.read_text().splitlines() if l.strip()]
+    if deps:
+        subprocess.run(
+            [sys.executable, '-m', 'pip', 'install', '--quiet'] + deps,
+            capture_output=True, timeout=60,
+        )
+
+from agentspan.agents import AgentRuntime
+from autopilot.loader import load_agent
+
+agent = load_agent(agent_dir)
 with AgentRuntime() as runtime:
     handle = runtime.start(agent, 'Execute the agent task now. Produce output immediately.')
     result = handle.join(timeout=120)
@@ -1023,21 +1036,24 @@ def acquire_credentials(credential_name: str) -> str:
 
 
 @tool
-def generate_worker(agent_name: str, tool_name: str, description: str, parameters: str = "", implementation: str = "") -> str:
+def generate_worker(agent_name: str, tool_name: str, description: str, parameters: str = "", implementation: str = "", dependencies: str = "") -> str:
     """Generate a custom Python worker for an agent. The worker MUST contain real executable code.
 
     Creates a worker file at ~/.agentspan/autopilot/agents/<agent_name>/workers/<tool_name>.py
     with a @tool-decorated function containing the provided implementation.
+    Also creates/updates requirements.txt with any pip dependencies needed.
 
     Args:
         agent_name: Name of the agent to add the worker to.
         tool_name: Name for the tool function (snake_case).
         description: What the tool should do.
         parameters: Comma-separated parameters with types, e.g. "limit: int = 1000".
-        implementation: The ACTUAL Python code for the function body. This must be
-            real, executable Python — NOT a skeleton or placeholder. The code should
-            compute the result and return it as a string.
+        implementation: The ACTUAL Python code for the function body. Must be
+            real, executable Python. Use try/except for error handling.
             Example: "primes = [i for i in range(2, limit+1) if all(i%j!=0 for j in range(2,int(i**0.5)+1))]\\nreturn str(primes)"
+        dependencies: Comma-separated pip package names needed by this worker.
+            Example: "qrcode,pillow" or "requests,beautifulsoup4"
+            These are written to requirements.txt and installed before the agent runs.
 
     Returns:
         The generated worker code and file path.
@@ -1084,6 +1100,35 @@ def {tool_name}({params}) -> str:
     worker_path = workers_dir / f"{tool_name}.py"
     worker_path.write_text(code)
 
+    # Write/update requirements.txt with dependencies
+    if dependencies.strip():
+        req_path = workers_dir / "requirements.txt"
+        existing_deps = set()
+        if req_path.exists():
+            existing_deps = {line.strip() for line in req_path.read_text().splitlines() if line.strip()}
+        new_deps = {d.strip() for d in dependencies.split(",") if d.strip()}
+        all_deps = sorted(existing_deps | new_deps)
+        req_path.write_text("\n".join(all_deps) + "\n")
+
+    # Validate the worker compiles (AST check)
+    import ast
+    try:
+        ast.parse(code)
+    except SyntaxError as e:
+        return f"Error: generated worker has a syntax error: {e}"
+
+    # Install dependencies if any
+    if dependencies.strip():
+        try:
+            dep_list = [d.strip() for d in dependencies.split(",") if d.strip()]
+            subprocess.run(
+                [sys.executable, "-m", "pip", "install", "--quiet"] + dep_list,
+                capture_output=True,
+                timeout=60,
+            )
+        except Exception:
+            pass  # Best effort — will be caught at runtime if missing
+
     # Update agent.yaml to include the new tool
     yaml_path = agent_dir / "agent.yaml"
     if yaml_path.exists():
@@ -1094,11 +1139,11 @@ def {tool_name}({params}) -> str:
             agent_config["tools"] = tools_list
             yaml_path.write_text(yaml.dump(agent_config, default_flow_style=False, sort_keys=False))
 
+    dep_msg = f"\nDependencies: {dependencies}" if dependencies.strip() else ""
     return (
-        f"Generated worker at {worker_path}\n\n"
+        f"Generated worker at {worker_path}{dep_msg}\n\n"
         f"```python\n{code}```\n\n"
-        f"The tool '{tool_name}' has been added to {agent_name}'s agent.yaml.\n"
-        f"Edit the worker file to implement the actual logic, then deploy with deploy_agent."
+        f"The tool '{tool_name}' has been added to {agent_name}'s agent.yaml."
     )
 
 

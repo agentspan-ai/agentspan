@@ -440,12 +440,26 @@ Think about:
 Write a YAML spec with `tools: [builtin:<name>]`
 
 ### Step 3: If NO builtin fits → create a custom worker
-Call generate_worker(agent_name, tool_name, description, parameters) FIRST.
-This creates a Python worker file that the agent will use.
-Example: for "generate prime numbers", create a worker:
-  generate_worker(agent_name="primes", tool_name="compute_primes",
-    description="Generate all prime numbers up to a given limit using Sieve of Eratosthenes",
-    parameters="limit: int")
+Call generate_worker with REAL Python implementation code and dependencies.
+The worker must contain actual executable Python — NOT pseudocode or placeholders.
+
+Example: for "generate a QR code":
+  generate_worker(
+    agent_name="qr_gen",
+    tool_name="create_qr_code",
+    description="Generate a QR code image from a URL or text",
+    parameters="data: str, output_path: str = '/tmp/qrcode.png'",
+    implementation="import qrcode\nimg = qrcode.make(data)\nimg.save(output_path)\nreturn f'QR code saved to {output_path}'",
+    dependencies="qrcode,pillow"
+  )
+
+IMPORTANT:
+- implementation: REAL Python code, not a skeleton. Include imports inside the function if needed.
+- dependencies: comma-separated pip packages the code needs. These get installed automatically.
+- The worker runs in its own process — all imports must be self-contained.
+- Use try/except for error handling in the implementation.
+- Always return a string result.
+
 Then include the worker name in the agent's tools list (NOT as builtin:).
 
 ### Step 4: Write the YAML spec
