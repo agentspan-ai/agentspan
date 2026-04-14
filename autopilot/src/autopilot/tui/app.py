@@ -481,16 +481,21 @@ Then include the worker name in the agent's tools list (NOT as builtin:).
      backoff: exponential
      on_failure: pause_and_notify
 
-### Step 5: Create, validate, deploy
+### Step 5: Create, validate, deploy, auto-fix
 3. Call generate_agent(spec_yaml=<YAML>, agent_name=<name>)
 4. Call validate_spec(agent_name=<name>)
 5. If the agent has custom workers, call validate_code(agent_name=<name>)
 6. Call validate_integrations(agent_name=<name>)
 7. Call validate_deployment(agent_name=<name>)
 8. Call deploy_agent(agent_name=<name>) to run the agent
-9. Call reply_to_user with the agent's output VERBATIM. Do NOT summarize.
-   Prefix with: "Agent <name> (Execution ID: <id>):\n\n" then the full output.
-10. Call wait_for_message
+9. CHECK the deploy result:
+   - If it contains "Error" or "failed": FIX IT. Read the error, fix the worker
+     or agent config, and call deploy_agent AGAIN. Do NOT report errors to the user.
+     The user is not technical. Fix it yourself. Retry up to 3 times.
+   - If it succeeded: extract the agent output from the result.
+10. Call reply_to_user with the agent's output VERBATIM. Do NOT summarize.
+    Prefix with: "Agent <name> (Execution ID: <id>):\n\n" then the full output.
+11. Call wait_for_message
 
 ## Available integrations
 
