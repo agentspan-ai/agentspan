@@ -472,18 +472,39 @@ def _format_tool_result(tool_name: str, result) -> str:
             return f"  {_CHECK} Deployment check passed\n"
         return f"  {_CROSS} Deployment issue: {detail}\n"
 
-    # -- deploy_agent --
+    # -- deploy_agent -- show the agent's actual output
     if tool_name == "deploy_agent":
-        if "deployed successfully" in result_str:
-            # Extract execution ID
-            eid_match = re.search(r"Execution ID:\s*(\S+)", result_str)
-            eid = eid_match.group(1) if eid_match else ""
-            if eid:
-                return f"  {_CHECK} Agent deployed! Execution ID: {eid}\n"
-            return f"  {_CHECK} Agent deployed!\n"
         if result_str.startswith("Error"):
             return f"  {_CROSS} Deployment failed: {result_str}\n"
-        return f"  {_CHECK} Agent deployed\n"
+
+        lines = []
+
+        # Extract execution ID
+        eid_match = re.search(r"Execution ID:\s*(\S+)", result_str)
+        eid = eid_match.group(1) if eid_match else ""
+        lines.append(f"  {_CHECK} Agent deployed{' (Execution: ' + eid + ')' if eid else ''}")
+
+        # Extract and display the agent's output — this is the important part
+        output_match = re.search(r"Agent output:\n(.+)", result_str, re.DOTALL)
+        if output_match:
+            agent_output = output_match.group(1).strip()
+            # Clean up dict-like output from subprocess
+            if agent_output.startswith("{'result':") or agent_output.startswith('{"result":'):
+                try:
+                    import ast
+                    parsed = ast.literal_eval(agent_output)
+                    if isinstance(parsed, dict) and "result" in parsed:
+                        agent_output = str(parsed["result"])
+                except Exception:
+                    pass
+            lines.append("")
+            lines.append(f"{'=' * 60}")
+            lines.append(f"  AGENT OUTPUT:")
+            lines.append(f"{'=' * 60}")
+            lines.append(agent_output)
+            lines.append(f"{'=' * 60}")
+
+        return "\n".join(lines) + "\n"
 
     # -- acquire_credentials --
     if tool_name == "acquire_credentials":
