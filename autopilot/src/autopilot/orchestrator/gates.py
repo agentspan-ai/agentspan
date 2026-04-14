@@ -15,8 +15,11 @@ sequence and returns a combined report.
 from __future__ import annotations
 
 import ast
+import importlib
 import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 from typing import List, Optional
 
@@ -188,6 +191,40 @@ def validate_spec(agent_name: str) -> str:
 # Gate 2 — Code validation
 # ---------------------------------------------------------------------------
 
+def _agent_has_only_builtin_tools(agent_name: str, config: Optional[AutopilotConfig] = None) -> bool:
+    """Return True if all tool references in agent.yaml are builtin or known integrations."""
+    try:
+        raw = _load_agent_yaml(agent_name, config)
+    except Exception:
+        return False
+    tools_list = raw.get("tools", [])
+    if not tools_list:
+        return True
+    registry = get_default_registry()
+    known_integrations = set(registry.list_integrations())
+    for ref in tools_list:
+        if not isinstance(ref, str):
+            return False
+        if ref.startswith("builtin:"):
+            continue
+        # Check if the bare name is a known integration (LLM may omit "builtin:")
+        if ref in known_integrations:
+            continue
+        # Check if it's a known tool name belonging to an integration
+        is_known = False
+        for int_name in known_integrations:
+            int_tools = registry.get_tools(int_name)
+            for t in int_tools:
+                if hasattr(t, "_tool_def") and t._tool_def.name == ref:
+                    is_known = True
+                    break
+            if is_known:
+                break
+        if not is_known:
+            return False
+    return True
+
+
 @tool
 def validate_code(agent_name: str) -> str:
     """Validate an agent's worker code compiles and follows conventions.
@@ -196,14 +233,25 @@ def validate_code(agent_name: str) -> str:
     @tool decorated function, type hints on function signatures, and no
     obvious security issues (os.system, eval, exec).
 
+    If the agent only uses builtin integrations (no custom workers),
+    returns PASS with a note rather than failing on missing .py files.
+
     Returns 'PASS' or 'FAIL: <reasons>'.
     """
     workers_dir = _agent_dir(agent_name) / "workers"
+
+    # Check if agent only uses builtin tools — no custom workers expected
+    builtin_only = _agent_has_only_builtin_tools(agent_name)
+
     if not workers_dir.exists():
+        if builtin_only:
+            return "PASS: no custom workers to validate — agent uses only builtin integrations"
         return "FAIL: workers/ directory does not exist"
 
     py_files = sorted(workers_dir.glob("*.py"))
     if not py_files:
+        if builtin_only:
+            return "PASS: no custom workers to validate — agent uses only builtin integrations"
         return "FAIL: no .py files found in workers/"
 
     errors: List[str] = []
@@ -349,6 +397,131 @@ def validate_deployment(agent_name: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Gate 5 — Worker execution validation
+# ---------------------------------------------------------------------------
+
+@tool
+def validate_worker_execution(agent_name: str) -> str:
+    """Test-run each worker in the agent's workers/ directory.
+
+    For each .py file: installs dependencies if requirements.txt exists,
+    imports the module, finds the @tool function, calls it with a simple
+    test argument, and verifies it returns a string without raising.
+
+    Returns 'PASS' or 'FAIL: <reasons>'.
+    """
+    workers_dir = _agent_dir(agent_name) / "workers"
+    if not workers_dir.exists():
+        return "PASS: no workers/ directory — nothing to test-run"
+
+    py_files = sorted(workers_dir.glob("*.py"))
+    if not py_files:
+        return "PASS: no .py files in workers/ — nothing to test-run"
+
+    errors: List[str] = []
+
+    # Install dependencies first if requirements.txt exists
+    req_file = workers_dir / "requirements.txt"
+    if req_file.exists():
+        deps = [l.strip() for l in req_file.read_text().splitlines() if l.strip()]
+        if deps:
+            try:
+                subprocess.run(
+                    [sys.executable, "-m", "pip", "install", "--quiet"] + deps,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    check=True,
+                )
+            except Exception as exc:
+                errors.append(f"failed to install dependencies: {exc}")
+                return "FAIL: " + "; ".join(errors)
+
+    for py_file in py_files:
+        fname = py_file.name
+
+        # Build a subprocess script that imports the module, finds
+        # the @tool function, calls it with a simple test arg, and
+        # verifies the result is a string.
+        test_script = f"""
+import sys, importlib.util, json
+spec = importlib.util.spec_from_file_location("worker", {str(py_file)!r})
+mod = importlib.util.module_from_spec(spec)
+try:
+    spec.loader.exec_module(mod)
+except Exception as e:
+    print(json.dumps({{"error": f"import failed: {{e}}"}}))
+    sys.exit(0)
+
+# Find functions with _tool_def attribute (the @tool decorator sets this)
+tool_fns = [
+    getattr(mod, name)
+    for name in dir(mod)
+    if callable(getattr(mod, name)) and hasattr(getattr(mod, name), "_tool_def")
+]
+
+if not tool_fns:
+    print(json.dumps({{"error": "no @tool function found"}}))
+    sys.exit(0)
+
+for fn in tool_fns:
+    try:
+        import inspect
+        sig = inspect.signature(fn)
+        # Build default args: empty string for str, 0 for int, etc.
+        kwargs = {{}}
+        for pname, param in sig.parameters.items():
+            if param.default is not inspect.Parameter.empty:
+                kwargs[pname] = param.default
+            elif param.annotation is str or param.annotation == "str":
+                kwargs[pname] = ""
+            elif param.annotation is int or param.annotation == "int":
+                kwargs[pname] = 0
+            elif param.annotation is float or param.annotation == "float":
+                kwargs[pname] = 0.0
+            elif param.annotation is bool or param.annotation == "bool":
+                kwargs[pname] = False
+            else:
+                kwargs[pname] = ""
+        result = fn(**kwargs)
+        if not isinstance(result, str):
+            print(json.dumps({{"error": f"{{fn.__name__}} returned {{type(result).__name__}}, expected str"}}))
+            sys.exit(0)
+    except Exception as e:
+        print(json.dumps({{"error": f"{{fn.__name__}} raised: {{e}}"}}))
+        sys.exit(0)
+
+print(json.dumps({{"ok": True}}))
+"""
+        try:
+            proc = subprocess.run(
+                [sys.executable, "-c", test_script],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            import json
+            for line in proc.stdout.strip().splitlines():
+                try:
+                    data = json.loads(line)
+                    if "error" in data:
+                        errors.append(f"{fname}: {data['error']}")
+                except json.JSONDecodeError:
+                    pass
+            if proc.returncode != 0 and not any(fname in e for e in errors):
+                stderr = proc.stderr.strip()[-200:] if proc.stderr else "unknown error"
+                errors.append(f"{fname}: subprocess failed (rc={proc.returncode}): {stderr}")
+        except subprocess.TimeoutExpired:
+            errors.append(f"{fname}: timed out after 10s")
+        except Exception as exc:
+            errors.append(f"{fname}: {exc}")
+
+    if errors:
+        return "FAIL: " + "; ".join(errors)
+    return "PASS"
+
+
+# ---------------------------------------------------------------------------
 # Combined runner
 # ---------------------------------------------------------------------------
 
@@ -362,13 +535,14 @@ def run_all_gates(agent_name: str) -> str:
         "spec": validate_spec(agent_name),
         "code": validate_code(agent_name),
         "integrations": validate_integrations(agent_name),
+        "worker_execution": validate_worker_execution(agent_name),
         "deployment": validate_deployment(agent_name),
     }
 
     lines: List[str] = [f"Validation report for agent '{agent_name}':", ""]
     all_pass = True
     for gate_name, result in results.items():
-        status = "PASS" if result == "PASS" else "FAIL"
+        status = "PASS" if result.startswith("PASS") else "FAIL"
         if status == "FAIL":
             all_pass = False
         lines.append(f"  [{status}] {gate_name}: {result}")

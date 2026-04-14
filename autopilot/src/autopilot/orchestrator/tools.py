@@ -484,77 +484,25 @@ def deploy_agent(agent_name: str) -> str:
     try:
         import json as _json
 
-        # Run agent via subprocess — installs deps + validates + starts AgentRuntime
-        script = f"""
-import os, sys, json, subprocess, traceback
-os.environ.setdefault('AGENTSPAN_LOG_LEVEL', 'WARNING')
-sys.path.insert(0, '{str(Path(__file__).parent.parent)}')
-from pathlib import Path
-
-agent_dir = Path('{str(agent_dir)}')
-
-try:
-    # Step 1: Install worker dependencies
-    req_file = agent_dir / 'workers' / 'requirements.txt'
-    if req_file.exists():
-        deps = [l.strip() for l in req_file.read_text().splitlines() if l.strip()]
-        if deps:
-            result = subprocess.run(
-                [sys.executable, '-m', 'pip', 'install', '--quiet'] + deps,
-                capture_output=True, text=True, timeout=60,
-            )
-            if result.returncode != 0:
-                print('AGENT_RESULT:' + json.dumps({{
-                    'execution_id': '',
-                    'status': 'ERROR',
-                    'output': f'Failed to install dependencies: {{result.stderr[-500:]}}',
-                }}))
-                sys.exit(1)
-
-    # Step 2: Validate workers can be imported
-    workers_dir = agent_dir / 'workers'
-    if workers_dir.exists():
-        for py_file in workers_dir.glob('*.py'):
-            try:
-                compile(py_file.read_text(), str(py_file), 'exec')
-            except SyntaxError as e:
-                print('AGENT_RESULT:' + json.dumps({{
-                    'execution_id': '',
-                    'status': 'ERROR',
-                    'output': f'Worker {{py_file.name}} has syntax error: {{e}}',
-                }}))
-                sys.exit(1)
-
-    # Step 3: Load and run the agent
-    from agentspan.agents import AgentRuntime
-    from autopilot.loader import load_agent
-
-    agent = load_agent(agent_dir)
-    with AgentRuntime() as runtime:
-        handle = runtime.start(agent, 'Execute the agent task now. Produce output immediately.')
-        result = handle.join(timeout={deploy_timeout})
-        output = {{
-            'execution_id': handle.execution_id,
-            'status': result.status if result else 'UNKNOWN',
-            'output': str(result.output)[:2000] if result and result.output else '',
-        }}
-        print('AGENT_RESULT:' + json.dumps(output))
-
-except Exception as e:
-    print('AGENT_RESULT:' + json.dumps({{
-        'execution_id': '',
-        'status': 'ERROR',
-        'output': f'Agent failed: {{str(e)[-500:]}}\\n{{traceback.format_exc()[-500:]}}',
-    }}))
-"""
+        # Run agent via the deploy runner subprocess script
+        _deploy_runner_path = str(
+            Path(__file__).parent / "_deploy_runner.py"
+        )
+        _src_path = str(Path(__file__).parent.parent)
 
         def _do_deploy():
             proc = subprocess.run(
-                [sys.executable, "-c", script],
+                [sys.executable, _deploy_runner_path],
                 capture_output=True,
                 text=True,
                 timeout=deploy_timeout + 30,
-                env={**os.environ, "AUTOPILOT_BASE_DIR": str(config.autopilot_dir)},
+                env={
+                    **os.environ,
+                    "AUTOPILOT_BASE_DIR": str(config.autopilot_dir),
+                    "DEPLOY_AGENT_DIR": str(agent_dir),
+                    "DEPLOY_TIMEOUT": str(deploy_timeout),
+                    "DEPLOY_SRC_PATH": _src_path,
+                },
             )
 
             # Parse the result from subprocess stdout
@@ -579,10 +527,56 @@ except Exception as e:
 
             return execution_id, agent_output, server_status
 
-        result = retry_with_policy(
-            _do_deploy, policy, retryable_exceptions=(RuntimeError,),
-        )
-        execution_id, agent_output, server_status = result
+        # --- Self-healing: parse errors and fix before blind retry ---
+        import re as _re
+
+        last_deploy_error: Optional[Exception] = None
+        deploy_result = None
+
+        for _attempt in range(policy.max_retries + 1):
+            try:
+                deploy_result = _do_deploy()
+                break
+            except RuntimeError as exc:
+                last_deploy_error = exc
+                err_msg = str(exc)
+
+                # Deterministic fix: missing Python module → pip install
+                mod_match = _re.search(
+                    r"ModuleNotFoundError: No module named '([^']+)'", err_msg
+                )
+                if mod_match:
+                    missing_mod = mod_match.group(1).split(".")[0]
+                    try:
+                        subprocess.run(
+                            [sys.executable, "-m", "pip", "install", "--quiet", missing_mod],
+                            capture_output=True, text=True, timeout=60,
+                        )
+                    except Exception:
+                        pass
+                    continue  # retry after install
+
+                # Deterministic: SyntaxError — cannot auto-fix, return details
+                if "SyntaxError" in err_msg:
+                    raise  # bubble up immediately, LLM must fix the code
+
+                # Transient: ConnectionError — retry with backoff
+                if "ConnectionError" in err_msg or "ConnectionRefused" in err_msg:
+                    import time as _time
+                    _time.sleep(policy.get_delay(_attempt))
+                    continue
+
+                # Unknown — retry with backoff for remaining attempts
+                if _attempt < policy.max_retries:
+                    import time as _time
+                    _time.sleep(policy.get_delay(_attempt))
+                    continue
+                raise
+
+        if deploy_result is None:
+            raise last_deploy_error  # type: ignore[misc]
+
+        execution_id, agent_output, server_status = deploy_result
 
         # Verify on server
         try:
@@ -759,9 +753,95 @@ Requested changes: {changes}
 
 Generate the updated agent.yaml with the changes applied.
 Increment the version number by 1.
-Return ONLY the updated YAML, no explanation."""
+Return ONLY the updated YAML, no explanation.
+
+IMPORTANT: After generating the updated YAML, call save_agent_config(agent_name='{agent_name}', updated_yaml=<the updated YAML>) to persist the changes."""
 
     return template
+
+
+@tool
+def save_agent_config(agent_name: str, updated_yaml: str) -> str:
+    """Persist an updated agent configuration to disk.
+
+    Call this after update_agent() returns the current config. Pass the
+    new YAML (with changes applied and version incremented) to write it
+    to agent.yaml, regenerate expanded_prompt.md, and commit via git.
+
+    Returns a success message or an error description.
+    """
+    config = _get_config()
+    agent_dir = config.agents_dir / agent_name
+
+    yaml_path = agent_dir / "agent.yaml"
+    if not yaml_path.exists():
+        return f"Error: Agent '{agent_name}' not found at {agent_dir}."
+
+    # Strip markdown code fences if the LLM wrapped the YAML
+    cleaned = updated_yaml.strip()
+    if cleaned.startswith("```"):
+        lines = cleaned.split("\n")
+        lines = [l for l in lines if not l.strip().startswith("```")]
+        cleaned = "\n".join(lines)
+
+    # Parse and validate
+    try:
+        spec = yaml.safe_load(cleaned)
+    except yaml.YAMLError as exc:
+        return f"Error: Invalid YAML — {exc}"
+
+    if not isinstance(spec, dict):
+        return "Error: Updated config must be a YAML mapping."
+
+    # Read old version to ensure version was incremented
+    try:
+        with open(yaml_path) as f:
+            old_spec = yaml.safe_load(f) or {}
+        old_version = old_spec.get("version", 1)
+    except Exception:
+        old_version = 1
+
+    new_version = spec.get("version", old_version)
+    if new_version <= old_version:
+        spec["version"] = old_version + 1
+
+    # Write agent.yaml
+    yaml_path.write_text(yaml.dump(spec, default_flow_style=False, sort_keys=False))
+
+    # Regenerate expanded_prompt.md
+    instructions = spec.get("instructions", "")
+    trigger = spec.get("trigger", {})
+    tools = spec.get("tools", [])
+    creds = spec.get("credentials", [])
+
+    prompt_content = f"""# {agent_name}
+
+## Instructions
+
+{instructions}
+
+## Configuration
+
+- **Model:** {spec.get('model', 'default')}
+- **Trigger:** {trigger.get('type', 'daemon') if isinstance(trigger, dict) else trigger}{' — schedule: ' + trigger.get('schedule', '') if isinstance(trigger, dict) and trigger.get('schedule') else ''}
+- **Tools:** {', '.join(str(t) for t in tools)}
+- **Credentials:** {', '.join(str(c) for c in creds)}
+- **Error handling:** {spec.get('error_handling', {}).get('max_retries', 3)} retries, {spec.get('error_handling', {}).get('backoff', 'exponential')} backoff
+"""
+    prompt_path = agent_dir / "expanded_prompt.md"
+    prompt_path.write_text(prompt_content)
+
+    # Auto-commit for version tracking
+    try:
+        commit_agent_change(agent_name, f"updated agent v{spec['version']}", config)
+    except Exception:
+        pass  # Git commit is best-effort
+
+    return (
+        f"Agent '{agent_name}' updated successfully.\n"
+        f"Version: {spec['version']}\n"
+        f"Files written: agent.yaml, expanded_prompt.md"
+    )
 
 
 @tool
@@ -998,8 +1078,12 @@ def get_notifications(since: str = "") -> str:
 def check_credentials(agent_name: str) -> str:
     """Check if all required credentials for an agent are available.
 
-    Reads the agent's agent.yaml and checks each credential requirement.
+    Reads the agent's agent.yaml and checks each credential against
+    the environment. Reports 'present' or 'MISSING' for each, and
+    returns an overall PASS/FAIL verdict.
     """
+    import os as _os
+
     config = _get_config()
     agent_dir = config.agents_dir / agent_name
 
@@ -1015,14 +1099,23 @@ def check_credentials(agent_name: str) -> str:
         return f"Agent '{agent_name}' does not require any credentials."
 
     lines = [f"Credential check for '{agent_name}':", ""]
+    missing_count = 0
     for cred in credentials_needed:
-        lines.append(f"  - {cred}: required")
+        if _os.environ.get(cred):
+            lines.append(f"  - {cred}: present")
+        else:
+            lines.append(f"  - {cred}: MISSING")
+            missing_count += 1
 
     lines.append("")
-    lines.append(
-        "Use acquire_credentials('<credential_name>') to seamlessly set up missing "
-        "credentials (opens browser for OAuth/API key flows)."
-    )
+    if missing_count > 0:
+        lines.append(f"FAIL: {missing_count} credential(s) missing.")
+        lines.append(
+            "Use acquire_credentials('<credential_name>') to seamlessly set up missing "
+            "credentials (opens browser for OAuth/API key flows)."
+        )
+    else:
+        lines.append("PASS: all credentials present.")
 
     return "\n".join(lines)
 
@@ -1165,6 +1258,7 @@ def {tool_name}({params}) -> str:
         return f"Error: generated worker has a syntax error: {e}"
 
     # Install dependencies if any
+    pip_warning = ""
     if dependencies.strip():
         import subprocess
         import sys
@@ -1175,9 +1269,10 @@ def {tool_name}({params}) -> str:
                 [sys.executable, "-m", "pip", "install", "--quiet"] + dep_list,
                 capture_output=True,
                 timeout=60,
+                check=True,
             )
-        except Exception:
-            pass  # Best effort — will be caught at runtime if missing
+        except Exception as pip_err:
+            pip_warning = f"\nWarning: failed to install dependencies: {pip_err}"
 
     # Update agent.yaml to include the new tool
     yaml_path = agent_dir / "agent.yaml"
@@ -1191,7 +1286,7 @@ def {tool_name}({params}) -> str:
 
     dep_msg = f"\nDependencies: {dependencies}" if dependencies.strip() else ""
     return (
-        f"Generated worker at {worker_path}{dep_msg}\n\n"
+        f"Generated worker at {worker_path}{dep_msg}{pip_warning}\n\n"
         f"```python\n{code}```\n\n"
         f"The tool '{tool_name}' has been added to {agent_name}'s agent.yaml."
     )
@@ -1284,6 +1379,7 @@ def get_orchestrator_tools() -> list:
         validate_deployment,
         validate_integrations,
         validate_spec,
+        validate_worker_execution,
     )
 
     return [
@@ -1294,6 +1390,7 @@ def get_orchestrator_tools() -> list:
         list_agents,
         signal_agent,
         update_agent,
+        save_agent_config,
         pause_agent,
         resume_agent,
         archive_agent,
@@ -1309,4 +1406,5 @@ def get_orchestrator_tools() -> list:
         validate_code,
         validate_integrations,
         validate_deployment,
+        validate_worker_execution,
     ]
