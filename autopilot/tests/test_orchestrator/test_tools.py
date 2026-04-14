@@ -511,15 +511,20 @@ class TestGenerateWorker:
         assert "new_tool" in updated_yaml["tools"]
         assert "existing_tool" in updated_yaml["tools"]
 
-    def test_raises_for_nonexistent_agent(self, monkeypatch, tmp_path: Path):
+    def test_creates_agent_dir_if_missing(self, monkeypatch, tmp_path: Path):
+        """generate_worker creates the agent directory if it doesn't exist yet."""
         _make_config_env(monkeypatch, tmp_path)
 
-        with pytest.raises(RuntimeError, match="not found"):
-            generate_worker(
-                agent_name="ghost",
-                tool_name="something",
-                description="whatever",
-            )
+        generate_worker(
+            agent_name="new_agent",
+            tool_name="my_tool",
+            description="does something",
+            implementation="return 'done'",
+        )
+
+        worker_path = tmp_path / "agents" / "new_agent" / "workers" / "my_tool.py"
+        assert worker_path.exists()
+        assert "return 'done'" in worker_path.read_text()
 
     def test_includes_implementation_code(self, monkeypatch, tmp_path: Path):
         agents_dir = _make_config_env(monkeypatch, tmp_path)

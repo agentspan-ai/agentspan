@@ -1044,8 +1044,9 @@ def generate_worker(agent_name: str, tool_name: str, description: str, parameter
     """
     config = _get_config()
     agent_dir = config.agents_dir / agent_name
-    if not agent_dir.exists():
-        raise RuntimeError(f"Agent '{agent_name}' not found at {agent_dir}")
+    # Create agent directory if it doesn't exist yet — generate_worker
+    # may be called before generate_agent
+    agent_dir.mkdir(parents=True, exist_ok=True)
 
     if not tool_name.isidentifier():
         raise RuntimeError(f"Invalid tool name '{tool_name}' — must be a valid Python identifier")
