@@ -478,6 +478,9 @@ def deploy_agent(agent_name: str) -> str:
     # Solution: run the agent in a SUBPROCESS. This creates a completely
     # independent process with its own AgentRuntime that properly starts
     # workers for tool execution (web_search, fetch_page, etc.).
+    # Read configurable timeout (default 120s for agent, +30s for subprocess wrapper)
+    deploy_timeout = error_handling.get("timeout_seconds", 120)
+
     try:
         import json as _json
 
@@ -504,7 +507,7 @@ try:
                 print('AGENT_RESULT:' + json.dumps({{
                     'execution_id': '',
                     'status': 'ERROR',
-                    'output': f'Failed to install dependencies: {{result.stderr[:500]}}',
+                    'output': f'Failed to install dependencies: {{result.stderr[-500:]}}',
                 }}))
                 sys.exit(1)
 
@@ -529,7 +532,7 @@ try:
     agent = load_agent(agent_dir)
     with AgentRuntime() as runtime:
         handle = runtime.start(agent, 'Execute the agent task now. Produce output immediately.')
-        result = handle.join(timeout=120)
+        result = handle.join(timeout={deploy_timeout})
         output = {{
             'execution_id': handle.execution_id,
             'status': result.status if result else 'UNKNOWN',
@@ -541,36 +544,45 @@ except Exception as e:
     print('AGENT_RESULT:' + json.dumps({{
         'execution_id': '',
         'status': 'ERROR',
-        'output': f'Agent failed: {{str(e)[:500]}}\\n{{traceback.format_exc()[-500:]}}',
+        'output': f'Agent failed: {{str(e)[-500:]}}\\n{{traceback.format_exc()[-500:]}}',
     }}))
 """
-        proc = subprocess.run(
-            [sys.executable, "-c", script],
-            capture_output=True,
-            text=True,
-            timeout=150,
-            env={**os.environ, "AUTOPILOT_BASE_DIR": str(config.autopilot_dir)},
+
+        def _do_deploy():
+            proc = subprocess.run(
+                [sys.executable, "-c", script],
+                capture_output=True,
+                text=True,
+                timeout=deploy_timeout + 30,
+                env={**os.environ, "AUTOPILOT_BASE_DIR": str(config.autopilot_dir)},
+            )
+
+            # Parse the result from subprocess stdout
+            execution_id = ""
+            agent_output = ""
+            server_status = "ACTIVE"
+
+            for line in proc.stdout.splitlines():
+                if line.startswith("AGENT_RESULT:"):
+                    result_data = _json.loads(line[len("AGENT_RESULT:"):])
+                    execution_id = result_data.get("execution_id", "")
+                    agent_output = result_data.get("output", "")
+                    status = result_data.get("status", "")
+                    if status in ("COMPLETED", "FinishReason.STOP"):
+                        server_status = "ACTIVE"
+                    break
+
+            if not execution_id:
+                # Check stderr for errors — truncate from END so actual error is visible
+                err = proc.stderr.strip()[-500:] if proc.stderr else "Unknown error"
+                raise RuntimeError(f"Agent subprocess failed: {err}")
+
+            return execution_id, agent_output, server_status
+
+        result = retry_with_policy(
+            _do_deploy, policy, retryable_exceptions=(RuntimeError,),
         )
-
-        # Parse the result from subprocess stdout
-        execution_id = ""
-        agent_output = ""
-        server_status = "ACTIVE"
-
-        for line in proc.stdout.splitlines():
-            if line.startswith("AGENT_RESULT:"):
-                result_data = _json.loads(line[len("AGENT_RESULT:"):])
-                execution_id = result_data.get("execution_id", "")
-                agent_output = result_data.get("output", "")
-                status = result_data.get("status", "")
-                if status in ("COMPLETED", "FinishReason.STOP"):
-                    server_status = "ACTIVE"
-                break
-
-        if not execution_id:
-            # Check stderr for errors
-            err = proc.stderr.strip()[:500] if proc.stderr else "Unknown error"
-            raise RuntimeError(f"Agent subprocess failed: {err}")
+        execution_id, agent_output, server_status = result
 
         # Verify on server
         try:
@@ -1154,6 +1166,9 @@ def {tool_name}({params}) -> str:
 
     # Install dependencies if any
     if dependencies.strip():
+        import subprocess
+        import sys
+
         try:
             dep_list = [d.strip() for d in dependencies.split(",") if d.strip()]
             subprocess.run(
