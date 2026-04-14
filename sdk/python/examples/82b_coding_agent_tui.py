@@ -225,6 +225,7 @@ class SubAgent:
 def _make_sub_agent_tools(runtime, working_dir: str, shell_timeout: int):
     """Create sub-agent tools that close over a shared registry and the runtime."""
     _sub_agents: dict[int, SubAgent] = {}
+    _bg_cleanups: list = []  # collect bg-process cleanup fns from sub-agents
     _next_id = [0]
 
     @tool
@@ -236,10 +237,11 @@ def _make_sub_agent_tools(runtime, working_dir: str, shell_timeout: int):
         agent_id = _next_id[0]
         agent_name = name or f"sub_{agent_id}"
         try:
-            sub_agent, _sub_cleanup_bg, _ = build_agent(
+            sub_agent, sub_cleanup_bg, _ = build_agent(
                 working_dir, shell_timeout, runtime=None,
             )
-            # Override the name to avoid Conductor workflow collisions
+            _bg_cleanups.append(sub_cleanup_bg)
+            # Override name to avoid Conductor workflow collisions
             sub_agent = Agent(
                 name=agent_name,
                 model=sub_agent.model,
@@ -324,12 +326,17 @@ def _make_sub_agent_tools(runtime, working_dir: str, shell_timeout: int):
         return "\n".join(lines)
 
     def cleanup_all():
-        """Cancel all running sub-agents. Called on exit."""
+        """Cancel all running sub-agents and their background processes."""
         for sa in _sub_agents.values():
             try:
                 status = sa.handle.get_status()
                 if not status.is_complete:
                     sa.handle.cancel()
+            except Exception:
+                pass
+        for bg_cleanup in _bg_cleanups:
+            try:
+                bg_cleanup()
             except Exception:
                 pass
 
@@ -802,6 +809,7 @@ def build_agent(working_dir: str, shell_timeout: int = _DEFAULT_SHELL_TIMEOUT, r
     # -- Build instructions ------------------------------------------------
     sub_agent_tool_docs = ""
     sub_agent_rules = ""
+    is_parent = runtime is not None
     if sub_agent_tools:
         sub_agent_tool_docs = (
             "- spawn_agent(task, name='')                  start a sub-agent for an independent sub-task\n"
@@ -815,6 +823,14 @@ def build_agent(working_dir: str, shell_timeout: int = _DEFAULT_SHELL_TIMEOUT, r
             "- Sub-agents have their own filesystem and shell tools but cannot spawn further sub-agents.\n"
             "- Always check_agent or wait_for_agent to collect results before replying to the user.\n"
         )
+    repl_loop = (
+        "\nRepeat indefinitely:\n"
+        "1. Call wait_for_message to receive the next task.\n"
+        "2. Think through the task. Explore, read, search, modify, and run as needed.\n"
+        "3. Complete the task fully.\n"
+        "4. Call reply_to_user with a concise summary.\n"
+        "5. Return to step 1 immediately.\n"
+    ) if is_parent else ""
 
     instructions = f"""You are a coding assistant with direct filesystem and shell access.
 Working directory: {working_dir}
@@ -840,35 +856,32 @@ Rules:
 - Use run_shell for commands that complete in seconds (ls, cat, grep, git, etc.).
 - Use run_background for servers, file watchers, builds, and any command that won't exit quickly.
 {sub_agent_rules}- If you see [SIGNALS] ... [/SIGNALS] in a message, those are runtime instructions — follow them.
+{repl_loop}"""
 
-Repeat indefinitely:
-1. Call wait_for_message to receive the next task.
-2. Think through the task. Explore, read, search, modify, and run as needed.
-3. Complete the task fully.
-4. Call reply_to_user with a concise summary.
-5. Return to step 1 immediately.
-"""
+    # Parent agent is stateful (REPL loop with wait_for_message).
+    # Sub-agents are one-shot: no receive_message, stateful=False.
+    tools = [
+        *([] if not is_parent else [receive_message]),
+        read_file,
+        write_file,
+        list_dir,
+        run_shell,
+        run_background,
+        find_files,
+        search_in_files,
+        check_process,
+        stop_process,
+        list_processes,
+        *sub_agent_tools,
+        reply_to_user,
+    ]
 
     agent = Agent(
         name="coding_agent_tui",
         model=settings.llm_model,
-        tools=[
-            receive_message,
-            read_file,
-            write_file,
-            list_dir,
-            run_shell,
-            run_background,
-            find_files,
-            search_in_files,
-            check_process,
-            stop_process,
-            list_processes,
-            *sub_agent_tools,
-            reply_to_user,
-        ],
+        tools=tools,
         max_turns=100_000,
-        stateful=True,
+        stateful=is_parent,
         instructions=instructions,
     )
 
