@@ -471,8 +471,9 @@ Then include the worker name in the agent's tools list (NOT as builtin:).
      - If a tool returns an error, try a different approach. Do NOT give up.
      - If a search returns no results, try different search terms.
      - If a page can't be fetched, try a different URL from the search results.
-     - NEVER say "I can't do this" or "I was unable to". Always produce SOMETHING useful.
-     - If all tools fail, use your knowledge to give the best answer you can.
+     - If tools fail after retrying, clearly state what you tried and what didn't work. Be honest.
+     - If all tools fail, explain what went wrong. Do NOT make up results.
+     - Clearly distinguish between results from tools (real data) and your own knowledge (may be outdated).
      - Always return a complete, useful response. Partial results are better than no results.>
    trigger:
      type: <cron or daemon>
