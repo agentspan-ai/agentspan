@@ -521,23 +521,27 @@ class TestGenerateWorker:
                 description="whatever",
             )
 
-    def test_includes_api_docs_in_comment(self, monkeypatch, tmp_path: Path):
+    def test_includes_implementation_code(self, monkeypatch, tmp_path: Path):
         agents_dir = _make_config_env(monkeypatch, tmp_path)
-        _write_agent_yaml(agents_dir, "doc_agent", {
-            "name": "doc_agent",
+        _write_agent_yaml(agents_dir, "math_agent", {
+            "name": "math_agent",
             "model": "openai/gpt-4o",
             "tools": [],
         })
 
         generate_worker(
-            agent_name="doc_agent",
-            tool_name="call_api",
-            description="Call the Foo API",
-            api_docs="https://docs.foo.com/v1/endpoints",
+            agent_name="math_agent",
+            tool_name="add_numbers",
+            description="Add two numbers",
+            parameters="a: int, b: int",
+            implementation="result = a + b\nreturn str(result)",
         )
 
-        content = (agents_dir / "doc_agent" / "workers" / "call_api.py").read_text()
-        assert "docs.foo.com" in content
+        content = (agents_dir / "math_agent" / "workers" / "add_numbers.py").read_text()
+        assert "result = a + b" in content
+        assert "return str(result)" in content
+        assert "@tool" in content
+        assert "NotImplementedError" not in content
 
 
 # ---------------------------------------------------------------------------
