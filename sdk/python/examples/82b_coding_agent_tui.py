@@ -209,6 +209,133 @@ def _make_bg_tools(working_dir: str):
 
 
 # ---------------------------------------------------------------------------
+# Sub-agent registry
+# ---------------------------------------------------------------------------
+
+@dataclass
+class SubAgent:
+    id: int
+    name: str
+    task: str
+    handle: object  # AgentHandle
+    started_at: float = field(default_factory=time.time)
+
+
+def _make_sub_agent_tools(runtime, working_dir: str, shell_timeout: int):
+    """Create sub-agent tools that close over a shared registry and the runtime."""
+    _sub_agents: dict[int, SubAgent] = {}
+    _next_id = [0]
+
+    @tool
+    def spawn_agent(task: str, name: str = "") -> str:
+        """Start a sub-agent to work on a task independently. Returns immediately with an ID.
+        The sub-agent has the same tools as you (filesystem, shell, background processes).
+        Use for independent sub-tasks that can run in parallel with your work."""
+        _next_id[0] += 1
+        agent_id = _next_id[0]
+        agent_name = name or f"sub_{agent_id}"
+        try:
+            sub_agent, _sub_cleanup_bg, _ = build_agent(
+                working_dir, shell_timeout, runtime=None,
+            )
+            # Override the name to avoid Conductor workflow collisions
+            sub_agent = Agent(
+                name=agent_name,
+                model=sub_agent.model,
+                tools=sub_agent.tools,
+                max_turns=sub_agent.max_turns,
+                stateful=sub_agent.stateful,
+                instructions=sub_agent.instructions,
+            )
+            handle = runtime.start(sub_agent, task)
+        except Exception as exc:
+            return f"Error spawning sub-agent: {exc}"
+        sa = SubAgent(id=agent_id, name=agent_name, task=task, handle=handle)
+        _sub_agents[agent_id] = sa
+        return f"[agent:{agent_id}] Spawned '{agent_name}' for: {task[:100]}"
+
+    @tool
+    def check_agent(id: int) -> str:
+        """Check status and output of a spawned sub-agent."""
+        sa = _sub_agents.get(id)
+        if sa is None:
+            return f"Error: no sub-agent with id {id}."
+        try:
+            status = sa.handle.get_status()
+        except Exception as exc:
+            return f"Error checking sub-agent {id}: {exc}"
+        if status.is_complete:
+            output = status.output or "(no output)"
+            return f"[agent:{id}] '{sa.name}' COMPLETED\n{output}"
+        if status.is_running:
+            task_info = f" (current: {status.current_task})" if status.current_task else ""
+            return f"[agent:{id}] '{sa.name}' RUNNING{task_info}"
+        return f"[agent:{id}] '{sa.name}' {status.status}"
+
+    @tool
+    def wait_for_agent(id: int, timeout: int = 300) -> str:
+        """Wait for a sub-agent to complete and return its full result.
+        Blocks until the sub-agent finishes or the timeout is reached."""
+        sa = _sub_agents.get(id)
+        if sa is None:
+            return f"Error: no sub-agent with id {id}."
+        try:
+            result = sa.handle.join(timeout=timeout)
+            output = result.output or "(no output)"
+            return f"[agent:{id}] '{sa.name}' COMPLETED\n{output}"
+        except TimeoutError:
+            return (
+                f"[agent:{id}] '{sa.name}' still running "
+                f"(timed out after {timeout}s)"
+            )
+        except Exception as exc:
+            return f"Error waiting for sub-agent {id}: {exc}"
+
+    @tool
+    def stop_agent(id: int) -> str:
+        """Stop a running sub-agent gracefully."""
+        sa = _sub_agents.get(id)
+        if sa is None:
+            return f"Error: no sub-agent with id {id}."
+        try:
+            status = sa.handle.get_status()
+            if status.is_complete:
+                return f"[agent:{id}] '{sa.name}' already completed"
+            sa.handle.stop()
+            return f"[agent:{id}] '{sa.name}' stop requested"
+        except Exception as exc:
+            return f"Error stopping sub-agent {id}: {exc}"
+
+    @tool
+    def list_agents() -> str:
+        """List all spawned sub-agents with their status."""
+        if not _sub_agents:
+            return "No sub-agents."
+        lines = []
+        for sa in _sub_agents.values():
+            try:
+                status = sa.handle.get_status()
+                state = "COMPLETED" if status.is_complete else "RUNNING" if status.is_running else status.status
+            except Exception:
+                state = "UNKNOWN"
+            task_short = sa.task[:60] + ("..." if len(sa.task) > 60 else "")
+            lines.append(f"  [agent:{sa.id}] '{sa.name}'  {state}  {task_short}")
+        return "\n".join(lines)
+
+    def cleanup_all():
+        """Cancel all running sub-agents. Called on exit."""
+        for sa in _sub_agents.values():
+            try:
+                status = sa.handle.get_status()
+                if not status.is_complete:
+                    sa.handle.cancel()
+            except Exception:
+                pass
+
+    return spawn_agent, check_agent, wait_for_agent, stop_agent, list_agents, cleanup_all
+
+
+# ---------------------------------------------------------------------------
 # Event formatting
 # ---------------------------------------------------------------------------
 
