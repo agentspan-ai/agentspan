@@ -635,10 +635,12 @@ def _run_tui_repl(
 # Agent builder
 # ---------------------------------------------------------------------------
 
-def build_agent(working_dir: str, shell_timeout: int = _DEFAULT_SHELL_TIMEOUT):
-    """Build the coding agent and return (agent, cleanup_fn).
+def build_agent(working_dir: str, shell_timeout: int = _DEFAULT_SHELL_TIMEOUT, runtime=None):
+    """Build the coding agent and return (agent, cleanup_bg, cleanup_sub).
 
-    Returns a tuple so the caller can clean up background processes on exit.
+    When *runtime* is provided, sub-agent tools are included.  When
+    ``runtime=None`` (used by sub-agents themselves) those tools are
+    omitted to prevent recursive spawning.
     """
 
     receive_message = wait_for_message_tool(
@@ -650,6 +652,15 @@ def build_agent(working_dir: str, shell_timeout: int = _DEFAULT_SHELL_TIMEOUT):
     run_background, check_process, stop_process, list_processes, cleanup_bg = (
         _make_bg_tools(working_dir)
     )
+
+    # Sub-agent tools (only when runtime is available — omitted for sub-agents)
+    sub_agent_tools: list = []
+    cleanup_sub = None
+    if runtime is not None:
+        spawn_agent, check_agent, wait_for_agent, stop_agent, list_agents, cleanup_sub = (
+            _make_sub_agent_tools(runtime, working_dir, shell_timeout)
+        )
+        sub_agent_tools = [spawn_agent, check_agent, wait_for_agent, stop_agent, list_agents]
 
     @tool
     def read_file(path: str) -> str:
@@ -787,6 +798,56 @@ def build_agent(working_dir: str, shell_timeout: int = _DEFAULT_SHELL_TIMEOUT):
         """Send your response to the user. Call this when the task is complete."""
         return "ok"
 
+    # -- Build instructions ------------------------------------------------
+    sub_agent_tool_docs = ""
+    sub_agent_rules = ""
+    if sub_agent_tools:
+        sub_agent_tool_docs = (
+            "- spawn_agent(task, name='')                  start a sub-agent for an independent sub-task\n"
+            "- check_agent(id)                             check sub-agent status/output\n"
+            "- wait_for_agent(id, timeout=300)             block until sub-agent completes\n"
+            "- stop_agent(id)                              stop a running sub-agent\n"
+            "- list_agents()                               list all sub-agents\n"
+        )
+        sub_agent_rules = (
+            "- Use spawn_agent for independent sub-tasks that can run in parallel with your work.\n"
+            "- Sub-agents have their own filesystem and shell tools but cannot spawn further sub-agents.\n"
+            "- Always check_agent or wait_for_agent to collect results before replying to the user.\n"
+        )
+
+    instructions = f"""You are a coding assistant with direct filesystem and shell access.
+Working directory: {working_dir}
+
+Available tools:
+- read_file(path)                              read any text file
+- write_file(path, content)                    create or overwrite a file
+- list_dir(path=".")                           list directory contents
+- run_shell(command)                           run a quick shell command (cwd: {working_dir}, timeout: {shell_timeout}s)
+- run_background(command)                      start a long-running process (servers, watchers, builds)
+- check_process(id)                            get new output from a background process
+- stop_process(id)                             terminate a background process
+- list_processes()                             list all background processes
+- find_files(pattern, path=".")               find files by glob, e.g. "**/*.py"
+- search_in_files(regex, path=".", file_glob) grep files by regex
+{sub_agent_tool_docs}- reply_to_user(message)                       send your response to the user
+
+Rules:
+- Work autonomously. Do not ask for permission before reading files, running commands, or writing.
+- Make as many tool calls as needed to fully complete the task before replying.
+- Keep replies concise: what was done, what changed, key output. No lengthy explanations.
+- If the task is ambiguous, make a reasonable assumption and proceed.
+- Use run_shell for commands that complete in seconds (ls, cat, grep, git, etc.).
+- Use run_background for servers, file watchers, builds, and any command that won't exit quickly.
+{sub_agent_rules}- If you see [SIGNALS] ... [/SIGNALS] in a message, those are runtime instructions — follow them.
+
+Repeat indefinitely:
+1. Call wait_for_message to receive the next task.
+2. Think through the task. Explore, read, search, modify, and run as needed.
+3. Complete the task fully.
+4. Call reply_to_user with a concise summary.
+5. Return to step 1 immediately.
+"""
+
     agent = Agent(
         name="coding_agent_tui",
         model=settings.llm_model,
@@ -802,45 +863,15 @@ def build_agent(working_dir: str, shell_timeout: int = _DEFAULT_SHELL_TIMEOUT):
             check_process,
             stop_process,
             list_processes,
+            *sub_agent_tools,
             reply_to_user,
         ],
         max_turns=100_000,
         stateful=True,
-        instructions=f"""You are a coding assistant with direct filesystem and shell access.
-Working directory: {working_dir}
-
-Available tools:
-- read_file(path)                              read any text file
-- write_file(path, content)                    create or overwrite a file
-- list_dir(path=".")                           list directory contents
-- run_shell(command)                           run a quick shell command (cwd: {working_dir}, timeout: {shell_timeout}s)
-- run_background(command)                      start a long-running process (servers, watchers, builds)
-- check_process(id)                            get new output from a background process
-- stop_process(id)                             terminate a background process
-- list_processes()                             list all background processes
-- find_files(pattern, path=".")               find files by glob, e.g. "**/*.py"
-- search_in_files(regex, path=".", file_glob) grep files by regex
-- reply_to_user(message)                       send your response to the user
-
-Rules:
-- Work autonomously. Do not ask for permission before reading files, running commands, or writing.
-- Make as many tool calls as needed to fully complete the task before replying.
-- Keep replies concise: what was done, what changed, key output. No lengthy explanations.
-- If the task is ambiguous, make a reasonable assumption and proceed.
-- Use run_shell for commands that complete in seconds (ls, cat, grep, git, etc.).
-- Use run_background for servers, file watchers, builds, and any command that won't exit quickly.
-- If you see [SIGNALS] ... [/SIGNALS] in a message, those are runtime instructions — follow them.
-
-Repeat indefinitely:
-1. Call wait_for_message to receive the next task.
-2. Think through the task. Explore, read, search, modify, and run as needed.
-3. Complete the task fully.
-4. Call reply_to_user with a concise summary.
-5. Return to step 1 immediately.
-""",
+        instructions=instructions,
     )
 
-    return agent, cleanup_bg
+    return agent, cleanup_bg, cleanup_sub
 
 
 # ---------------------------------------------------------------------------
@@ -884,9 +915,12 @@ def _parse_args() -> argparse.Namespace:
 def main() -> None:
     args = _parse_args()
     working_dir = os.path.abspath(args.cwd or os.getcwd())
-    agent, cleanup_bg = build_agent(working_dir, shell_timeout=args.timeout)
 
     with AgentRuntime() as runtime:
+        agent, cleanup_bg, cleanup_sub = build_agent(
+            working_dir, shell_timeout=args.timeout, runtime=runtime,
+        )
+
         if args.resume:
             if not args.session_file.exists():
                 print(f"No session file found at {args.session_file}.")
@@ -905,9 +939,13 @@ def main() -> None:
             args.session_file.write_text(execution_id)
             print(f"Session saved to {args.session_file}")
 
-        _run_tui_repl(
-            runtime, handle, execution_id, working_dir, args.timeout, cleanup_bg,
-        )
+        try:
+            _run_tui_repl(
+                runtime, handle, execution_id, working_dir, args.timeout, cleanup_bg,
+            )
+        finally:
+            if cleanup_sub:
+                cleanup_sub()
 
 
 if __name__ == "__main__":
