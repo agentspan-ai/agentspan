@@ -13,6 +13,7 @@ from autopilot.orchestrator.gates import (
     validate_deployment,
     validate_integrations,
     validate_spec,
+    validate_worker_execution,
 )
 
 
@@ -295,17 +296,30 @@ def run_it(code: str) -> str:
 
 
 class TestValidateCodeNoWorkers:
-    def test_no_py_files_fails(self, monkeypatch, tmp_path):
+    def test_no_py_files_with_builtin_tools_passes(self, monkeypatch, tmp_path):
+        """Agent with only builtin tools should PASS even without .py files."""
         agents_dir = _make_config_env(monkeypatch, tmp_path)
+        # _VALID_SPEC has tools: ["builtin:local_fs"] — all builtin
         _write_agent_yaml(agents_dir, "empty_workers", _VALID_SPEC)
 
         result = validate_code("empty_workers")
+        assert result.startswith("PASS")
+        assert "no custom workers" in result.lower()
+
+    def test_no_py_files_with_custom_tools_fails(self, monkeypatch, tmp_path):
+        """Agent with custom (non-builtin) tool refs should FAIL without .py files."""
+        agents_dir = _make_config_env(monkeypatch, tmp_path)
+        spec_with_custom = {**_VALID_SPEC, "tools": ["my_custom_worker"]}
+        _write_agent_yaml(agents_dir, "custom_no_code", spec_with_custom)
+
+        result = validate_code("custom_no_code")
         assert result.startswith("FAIL")
         assert "no .py files" in result.lower()
 
 
 class TestValidateCodeNoWorkersDir:
-    def test_missing_workers_dir_fails(self, monkeypatch, tmp_path):
+    def test_missing_workers_dir_builtin_passes(self, monkeypatch, tmp_path):
+        """Agent with only builtin tools should PASS even without workers/ directory."""
         agents_dir = _make_config_env(monkeypatch, tmp_path)
         agent_dir = agents_dir / "no_workers_dir"
         agent_dir.mkdir(parents=True)
@@ -313,6 +327,17 @@ class TestValidateCodeNoWorkersDir:
         # Intentionally do NOT create workers/ directory
 
         result = validate_code("no_workers_dir")
+        assert result.startswith("PASS")
+
+    def test_missing_workers_dir_custom_fails(self, monkeypatch, tmp_path):
+        """Agent with custom tools should FAIL without workers/ directory."""
+        agents_dir = _make_config_env(monkeypatch, tmp_path)
+        agent_dir = agents_dir / "no_workers_custom"
+        agent_dir.mkdir(parents=True)
+        spec_with_custom = {**_VALID_SPEC, "tools": ["my_worker"]}
+        (agent_dir / "agent.yaml").write_text(yaml.dump(spec_with_custom))
+
+        result = validate_code("no_workers_custom")
         assert result.startswith("FAIL")
 
 
@@ -469,8 +494,8 @@ class TestRunAllGatesAllPass:
 
         result = run_all_gates("all_pass")
         assert "Overall: PASS" in result
-        # All four gates should show PASS
-        assert result.count("[PASS]") == 4
+        # All five gates should show PASS
+        assert result.count("[PASS]") == 5
         assert "[FAIL]" not in result
 
 
@@ -502,4 +527,64 @@ class TestRunAllGatesWithFailures:
         assert "spec:" in result
         assert "code:" in result
         assert "integrations:" in result
+        assert "worker_execution:" in result
         assert "deployment:" in result
+
+
+# ---------------------------------------------------------------------------
+# Gate 5 — validate_worker_execution
+# ---------------------------------------------------------------------------
+
+class TestValidateWorkerExecutionNoWorkers:
+    def test_no_workers_dir_passes(self, monkeypatch, tmp_path):
+        agents_dir = _make_config_env(monkeypatch, tmp_path)
+        agent_dir = agents_dir / "no_workers"
+        agent_dir.mkdir(parents=True)
+        (agent_dir / "agent.yaml").write_text(yaml.dump({"name": "no_workers"}))
+
+        result = validate_worker_execution("no_workers")
+        assert result.startswith("PASS")
+
+    def test_empty_workers_dir_passes(self, monkeypatch, tmp_path):
+        agents_dir = _make_config_env(monkeypatch, tmp_path)
+        _write_agent_yaml(agents_dir, "empty_workers", {"name": "empty_workers"})
+
+        result = validate_worker_execution("empty_workers")
+        assert result.startswith("PASS")
+
+
+class TestValidateWorkerExecutionValid:
+    def test_valid_worker_passes(self, monkeypatch, tmp_path):
+        agents_dir = _make_config_env(monkeypatch, tmp_path)
+        agent_dir = _write_agent_yaml(agents_dir, "exec_ok", _VALID_SPEC)
+        _write_worker(agent_dir, "helper.py", _VALID_WORKER)
+
+        result = validate_worker_execution("exec_ok")
+        assert result == "PASS"
+
+
+class TestValidateWorkerExecutionFailing:
+    def test_worker_that_raises_fails(self, monkeypatch, tmp_path):
+        agents_dir = _make_config_env(monkeypatch, tmp_path)
+        agent_dir = _write_agent_yaml(agents_dir, "exec_fail", _VALID_SPEC)
+        _write_worker(agent_dir, "bad_worker.py", '''\
+"""Worker that always raises."""
+from agentspan.agents import tool
+
+@tool
+def boom(query: str) -> str:
+    """Always fails."""
+    raise ValueError("intentional failure")
+''')
+
+        result = validate_worker_execution("exec_fail")
+        assert result.startswith("FAIL")
+        assert "intentional failure" in result
+
+    def test_worker_with_syntax_error_fails(self, monkeypatch, tmp_path):
+        agents_dir = _make_config_env(monkeypatch, tmp_path)
+        agent_dir = _write_agent_yaml(agents_dir, "exec_syntax", _VALID_SPEC)
+        _write_worker(agent_dir, "broken.py", "def foo(:\n  pass\n")
+
+        result = validate_worker_execution("exec_syntax")
+        assert result.startswith("FAIL")

@@ -21,6 +21,7 @@ from autopilot.orchestrator.tools import (
     init_autopilot_repo,
     list_agents,
     resolve_integrations,
+    save_agent_config,
     signal_agent,
 )
 
@@ -344,9 +345,50 @@ class TestCheckCredentials:
             "credentials": ["STRIPE_KEY", "DB_PASSWORD"],
         })
 
+        # Neither credential is in the environment
+        monkeypatch.delenv("STRIPE_KEY", raising=False)
+        monkeypatch.delenv("DB_PASSWORD", raising=False)
+
         result = check_credentials("needs_creds")
         assert "STRIPE_KEY" in result
         assert "DB_PASSWORD" in result
+        assert "MISSING" in result
+        assert "FAIL" in result
+
+    def test_present_credentials_pass(self, monkeypatch, tmp_path: Path):
+        agents_dir = _make_config_env(monkeypatch, tmp_path)
+
+        _write_agent_yaml(agents_dir, "has_creds", {
+            "name": "has_creds",
+            "model": "openai/gpt-4o",
+            "credentials": ["MY_KEY"],
+        })
+
+        monkeypatch.setenv("MY_KEY", "some-value")
+
+        result = check_credentials("has_creds")
+        assert "MY_KEY" in result
+        assert "present" in result
+        assert "PASS" in result
+
+    def test_mixed_credentials(self, monkeypatch, tmp_path: Path):
+        agents_dir = _make_config_env(monkeypatch, tmp_path)
+
+        _write_agent_yaml(agents_dir, "mixed_creds", {
+            "name": "mixed_creds",
+            "model": "openai/gpt-4o",
+            "credentials": ["PRESENT_KEY", "ABSENT_KEY"],
+        })
+
+        monkeypatch.setenv("PRESENT_KEY", "val")
+        monkeypatch.delenv("ABSENT_KEY", raising=False)
+
+        result = check_credentials("mixed_creds")
+        assert "PRESENT_KEY" in result
+        assert "present" in result
+        assert "ABSENT_KEY" in result
+        assert "MISSING" in result
+        assert "FAIL" in result
 
     def test_missing_agent_returns_error(self, monkeypatch, tmp_path: Path):
         _make_config_env(monkeypatch, tmp_path)
@@ -590,3 +632,94 @@ class TestGitVersioning:
             text=True,
         )
         assert "[test_agent] created agent" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# save_agent_config
+# ---------------------------------------------------------------------------
+
+
+class TestSaveAgentConfig:
+    def test_writes_updated_yaml(self, monkeypatch, tmp_path: Path):
+        agents_dir = _make_config_env(monkeypatch, tmp_path)
+
+        _write_agent_yaml(agents_dir, "save_test", {
+            "name": "save_test",
+            "model": "openai/gpt-4o",
+            "version": 1,
+            "instructions": "Original instructions.",
+        })
+
+        updated = yaml.dump({
+            "name": "save_test",
+            "model": "openai/gpt-4o",
+            "version": 2,
+            "instructions": "Updated instructions with foxnews.",
+        })
+
+        result = save_agent_config("save_test", updated)
+        assert "updated successfully" in result
+        assert "Version: 2" in result
+
+        # Verify file on disk
+        written = yaml.safe_load((agents_dir / "save_test" / "agent.yaml").read_text())
+        assert written["version"] == 2
+        assert "foxnews" in written["instructions"]
+
+    def test_increments_version_if_not_incremented(self, monkeypatch, tmp_path: Path):
+        agents_dir = _make_config_env(monkeypatch, tmp_path)
+
+        _write_agent_yaml(agents_dir, "ver_test", {
+            "name": "ver_test",
+            "model": "openai/gpt-4o",
+            "version": 3,
+        })
+
+        # Pass same version — should auto-increment
+        updated = yaml.dump({
+            "name": "ver_test",
+            "model": "openai/gpt-4o",
+            "version": 3,
+        })
+
+        save_agent_config("ver_test", updated)
+        written = yaml.safe_load((agents_dir / "ver_test" / "agent.yaml").read_text())
+        assert written["version"] == 4
+
+    def test_regenerates_expanded_prompt(self, monkeypatch, tmp_path: Path):
+        agents_dir = _make_config_env(monkeypatch, tmp_path)
+
+        _write_agent_yaml(agents_dir, "prompt_regen", {
+            "name": "prompt_regen",
+            "model": "openai/gpt-4o",
+            "version": 1,
+            "instructions": "Old prompt.",
+        })
+
+        updated = yaml.dump({
+            "name": "prompt_regen",
+            "model": "openai/gpt-4o",
+            "version": 2,
+            "instructions": "New fancy prompt.",
+        })
+
+        save_agent_config("prompt_regen", updated)
+        prompt_text = (agents_dir / "prompt_regen" / "expanded_prompt.md").read_text()
+        assert "New fancy prompt." in prompt_text
+
+    def test_missing_agent_returns_error(self, monkeypatch, tmp_path: Path):
+        _make_config_env(monkeypatch, tmp_path)
+        result = save_agent_config("nonexistent", "name: x")
+        assert "Error" in result
+
+    def test_invalid_yaml_returns_error(self, monkeypatch, tmp_path: Path):
+        agents_dir = _make_config_env(monkeypatch, tmp_path)
+
+        _write_agent_yaml(agents_dir, "bad_yaml_test", {
+            "name": "bad_yaml_test",
+            "model": "openai/gpt-4o",
+            "version": 1,
+        })
+
+        result = save_agent_config("bad_yaml_test", "}{not valid yaml")
+        assert "Error" in result

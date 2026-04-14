@@ -624,3 +624,99 @@ class TestEdgeCases:
         assert has_any_response, (
             "Orchestrator produced no response at all for weird input"
         )
+
+
+# ===========================================================================
+# Category 4: Update and existing-agent flows (2 tests)
+# ===========================================================================
+
+
+@pytest.mark.e2e
+class TestUpdateAndExistingAgent:
+
+    def test_update_agent_modifies_yaml(self, sim):
+        """Create agent with CNN, update to also include foxnews, verify YAML changed."""
+        # Turn 1: create the agent
+        r1 = sim.send(
+            "create an agent that monitors cnn.com using web_search. "
+            "Name it cnn_monitor."
+        )
+
+        print(f"\n  Turn 1 tool calls: {r1['tool_calls']}")
+        assert "generate_agent" in r1["tool_calls"], (
+            f"Turn 1: expected generate_agent, got {r1['tool_calls']}"
+        )
+
+        # Verify the agent was created on disk
+        agents_dir = sim.tmp_dir / "agents"
+        agent_dir = agents_dir / "cnn_monitor"
+        if not agent_dir.exists():
+            # LLM may have picked a different name
+            agent_dirs = [d for d in agents_dir.iterdir() if d.is_dir() and (d / "agent.yaml").exists()]
+            assert len(agent_dirs) >= 1, "Turn 1 should have created an agent on disk"
+            agent_dir = agent_dirs[0]
+
+        yaml_before = agent_dir / "agent.yaml"
+        assert yaml_before.exists()
+
+        # Turn 2: update the agent to also include foxnews
+        agent_name = agent_dir.name
+        r2 = sim.send(
+            f"update agent {agent_name} to also monitor foxnews.com"
+        )
+
+        print(f"  Turn 2 tool calls: {r2['tool_calls']}")
+
+        # The update flow should call update_agent or save_agent_config
+        has_update = (
+            "update_agent" in r2["tool_calls"]
+            or "save_agent_config" in r2["tool_calls"]
+        )
+        assert has_update, (
+            f"Turn 2: expected update_agent or save_agent_config, got {r2['tool_calls']}"
+        )
+
+        # If save_agent_config was called, verify YAML was modified on disk
+        if "save_agent_config" in r2["tool_calls"]:
+            updated_config = yaml.safe_load(yaml_before.read_text())
+            yaml_str = yaml.dump(updated_config).lower()
+            assert "foxnews" in yaml_str or "fox" in yaml_str, (
+                f"agent.yaml should mention foxnews after update: {yaml_str[:500]}"
+            )
+
+    def test_run_existing_agent(self, sim):
+        """Pre-create an agent directory, ask to run it -- should deploy, not create."""
+        agents_dir = sim.tmp_dir / "agents"
+
+        # Pre-create the agent directory
+        agent_dir = agents_dir / "my_existing_agent"
+        agent_dir.mkdir(parents=True, exist_ok=True)
+        (agent_dir / "workers").mkdir(exist_ok=True)
+        spec = {
+            "name": "my_existing_agent",
+            "model": "openai/gpt-4o",
+            "instructions": "You are a test agent. Return 'hello world'.",
+            "trigger": {"type": "daemon"},
+            "tools": ["builtin:local_fs"],
+            "credentials": [],
+            "error_handling": {
+                "max_retries": 3,
+                "backoff": "exponential",
+                "on_failure": "pause_and_notify",
+            },
+        }
+        (agent_dir / "agent.yaml").write_text(yaml.dump(spec, default_flow_style=False))
+
+        # Ask the orchestrator to run this existing agent
+        r = sim.send("run my_existing_agent")
+
+        print(f"\n  Tool calls: {r['tool_calls']}")
+
+        # Should call deploy_agent (not generate_agent) for the existing agent
+        assert "deploy_agent" in r["tool_calls"], (
+            f"Expected deploy_agent for pre-existing agent, got {r['tool_calls']}"
+        )
+        # Should NOT have called generate_agent
+        assert "generate_agent" not in r["tool_calls"], (
+            f"Should not generate a new agent when one exists: {r['tool_calls']}"
+        )
