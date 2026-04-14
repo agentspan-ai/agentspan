@@ -370,15 +370,20 @@ def acquire_google_oauth(
     client_id = client_id or os.environ.get("GOOGLE_CLIENT_ID", "")
     client_secret = client_secret or os.environ.get("GOOGLE_CLIENT_SECRET", "")
 
-    if not client_id:
-        print("Enter your Google OAuth Client ID: ", end="", flush=True)
-        client_id = input().strip()
-    if not client_secret:
-        print("Enter your Google OAuth Client Secret: ", end="", flush=True)
-        client_secret = input().strip()
-
     if not client_id or not client_secret:
-        return "Error: Google OAuth Client ID and Secret are required."
+        # Guide the user to provide these values
+        return (
+            "To set up Gmail access, I need your Google OAuth credentials.\n\n"
+            "1. Go to https://console.cloud.google.com/apis/credentials\n"
+            "2. Create an OAuth 2.0 Client ID (type: Desktop App)\n"
+            "3. Copy the Client ID and Client Secret\n"
+            "4. Set them as credentials:\n"
+            "   agentspan credentials set GOOGLE_CLIENT_ID <your-client-id>\n"
+            "   agentspan credentials set GOOGLE_CLIENT_SECRET <your-client-secret>\n\n"
+            "Or provide them in the chat:\n"
+            "   'my google client id is <id> and secret is <secret>'\n\n"
+            "Once set, ask me again to set up Gmail."
+        )
 
     port = _find_free_port()
     redirect_uri = f"http://localhost:{port}/callback"
@@ -472,15 +477,19 @@ def acquire_microsoft_oauth(
     client_id = client_id or os.environ.get("MICROSOFT_CLIENT_ID", "")
     client_secret = client_secret or os.environ.get("MICROSOFT_CLIENT_SECRET", "")
 
-    if not client_id:
-        print("Enter your Microsoft App (Client) ID: ", end="", flush=True)
-        client_id = input().strip()
-    if not client_secret:
-        print("Enter your Microsoft App Client Secret: ", end="", flush=True)
-        client_secret = input().strip()
-
     if not client_id or not client_secret:
-        return "Error: Microsoft Client ID and Secret are required."
+        return (
+            "To set up Outlook access, I need your Microsoft OAuth credentials.\n\n"
+            "1. Go to https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps\n"
+            "2. Register an app, add a redirect URI: http://localhost\n"
+            "3. Copy the Application (client) ID and create a Client Secret\n"
+            "4. Set them as credentials:\n"
+            "   agentspan credentials set MICROSOFT_CLIENT_ID <your-client-id>\n"
+            "   agentspan credentials set MICROSOFT_CLIENT_SECRET <your-client-secret>\n\n"
+            "Or provide them in the chat:\n"
+            "   'my microsoft client id is <id> and secret is <secret>'\n\n"
+            "Once set, ask me again to set up Outlook."
+        )
 
     port = _find_free_port()
     redirect_uri = f"http://localhost:{port}/callback"
