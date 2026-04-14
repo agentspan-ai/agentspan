@@ -557,7 +557,7 @@ def _run_tui_repl(
     _event_queue: queue.Queue = queue.Queue()
     _stop_requested = [False]
     _app_exited = threading.Event()
-    _session_ended = [False]  # True when the workflow completes (DONE)
+    _needs_restart = [False]  # True when workflow completes, next message auto-restarts
     _new_session_requested = [False]  # True when user types /new
     _current_handle = [handle]  # mutable ref so we can restart
     _current_execution_id = [execution_id]
@@ -815,19 +815,40 @@ def _run_tui_repl(
 
         # Normal chat message
         if cmd.message:
-            # If the session has ended, don't try to auto-restart.
-            # The user must type /new to start a fresh session.
-            if _session_ended[0]:
-                _append(
-                    f"\n  Session ended. Type /new to start a new session.\n"
-                )
-                return
-
             _append(f"\n{_THIN_SEP}\nYou: {cmd.message}\n{_THIN_SEP}\n")
 
-            if agent_state[0] == AgentState.BUSY:
+            # If the previous execution ended (DONE), transparently start a new one
+            if _needs_restart[0]:
+                _needs_restart[0] = False
+                _append("  Working...\n")
+                try:
+                    new_handle = runtime.start(agent, cmd.message)
+                    _current_handle[0] = new_handle
+                    _current_execution_id[0] = new_handle.execution_id
+                    agent_state[0] = AgentState.BUSY
+
+                    # Start new stream + consumer threads
+                    stop_ev = threading.Event()
+
+                    def _stream_restarted():
+                        try:
+                            for ev in new_handle.stream():
+                                if _stop_requested[0] or stop_ev.is_set():
+                                    return
+                                _event_queue.put(ev)
+                        except Exception as exc:
+                            if not _stop_requested[0]:
+                                _event_queue.put(("__error__", str(exc)))
+
+                    threading.Thread(target=_stream_restarted, daemon=True, name="claw-stream").start()
+                    threading.Thread(target=_consume_events, daemon=True, name="claw-consumer").start()
+                except Exception as exc:
+                    _append(f"  Error: {exc}\n")
+            elif agent_state[0] == AgentState.BUSY:
                 _append("  (queued \u2014 agent is busy)\n")
-            runtime.send_message(_current_execution_id[0], {"text": cmd.message})
+                runtime.send_message(_current_execution_id[0], {"text": cmd.message})
+            else:
+                runtime.send_message(_current_execution_id[0], {"text": cmd.message})
 
     input_area = TextArea(
         height=1,
@@ -940,9 +961,9 @@ def _run_tui_repl(
 
                 elif event.type == EventType.DONE:
                     # The workflow completed — the LLM didn't call
-                    # wait_for_message.  Instead of auto-restarting (which
-                    # leaks workers), mark the session as ended and let the
-                    # user decide to type /new.
+                    # wait_for_message. Show any output, then silently
+                    # mark as ready for next message. The session NEVER
+                    # ends unless the user types /end or /stop.
                     text = format_event(event)
                     _append(text)
                     if event.output:
@@ -952,16 +973,12 @@ def _run_tui_repl(
                         if out and str(out).strip():
                             _append(f"\n{str(out).strip()}\n")
 
-                    agent_state[0] = AgentState.DONE
-                    _session_ended[0] = True
-                    _append(
-                        f"\n{_SEPARATOR}\n"
-                        f"  Session ended. Type /new to start a new session.\n"
-                        f"{_SEPARATOR}\n"
-                    )
-                    if session_manager:
-                        session_manager.mark_completed(_current_execution_id[0])
-                    return  # Exit consumer — TUI stays alive for /new
+                    # Mark as needing restart on next message, but
+                    # DON'T show "Session ended" — just show ready prompt
+                    agent_state[0] = AgentState.WAITING
+                    _needs_restart[0] = True
+                    _append(f"\n{_SEPARATOR}\n  Ready for your next request.\n{_SEPARATOR}\n")
+                    return  # Exit consumer — TUI stays alive
 
                 # Format and display the event
                 text = format_event(event)
