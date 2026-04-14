@@ -449,7 +449,7 @@ Example: for "generate a QR code":
     tool_name="create_qr_code",
     description="Generate a QR code image from a URL or text",
     parameters="data: str, output_path: str = '/tmp/qrcode.png'",
-    implementation="import qrcode\nimg = qrcode.make(data)\nimg.save(output_path)\nreturn f'QR code saved to {output_path}'",
+    implementation="import qrcode\\nimg = qrcode.make(data)\\nimg.save(output_path)\\nreturn f'QR code saved to {{output_path}}'",
     dependencies="qrcode,pillow"
   )
 
