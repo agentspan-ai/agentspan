@@ -831,11 +831,24 @@ def _run_tui_repl(
             _append(f"\n{_THIN_SEP}\nYou: {cmd.message}\n{_THIN_SEP}\n")
 
             # If the previous execution ended (DONE), transparently start a new one
+            # with conversation history for context continuity
             if _needs_restart[0]:
                 _needs_restart[0] = False
                 _append("  Working...\n")
                 try:
-                    new_handle = runtime.start(agent, cmd.message)
+                    # Carry conversation history so the orchestrator has context
+                    history_text = output_area.text
+                    # Take the last 3000 chars as context (keeps it manageable)
+                    if len(history_text) > 3000:
+                        history_text = history_text[-3000:]
+                    context_prompt = (
+                        "CONVERSATION CONTEXT (previous exchanges in this session — "
+                        "use this to understand what the user is referring to, "
+                        "do NOT repeat or reference this context directly):\n"
+                        f"---\n{history_text}\n---\n\n"
+                        f"User's new message: {cmd.message}"
+                    )
+                    new_handle = runtime.start(agent, context_prompt)
                     _current_handle[0] = new_handle
                     _current_execution_id[0] = new_handle.execution_id
                     agent_state[0] = AgentState.BUSY
