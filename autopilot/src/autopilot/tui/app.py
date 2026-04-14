@@ -438,37 +438,47 @@ Before creating a new agent, check if a matching agent already exists:
 
 For ANY user request that requires action:
 
-### Step 1: Determine what the agent needs
-Think about:
-- What the agent should do (step by step)
-- Does a builtin integration cover this? (web_search for web queries, local_fs for files, etc.)
-- If NO builtin integration fits the task, you MUST create a custom worker
+### Step 1: Decompose the request into capabilities
+Break the user's request into individual capabilities needed:
+- Example: "generate a QR code and email it" needs TWO capabilities:
+  1. QR code generation (no builtin exists)
+  2. Email sending (builtin:gmail exists)
 
-### Step 2: If a builtin integration fits → use it
-Write a YAML spec with `tools: [builtin:<name>]`
+### Step 2: Map each capability to a tool
+For EACH capability:
+- Check if a builtin integration covers it → use builtin:<name>
+- If no builtin fits → call generate_worker to create a custom Python worker
 
-### Step 3: If NO builtin fits → create a custom worker
-Call generate_worker with REAL Python implementation code and dependencies.
-The worker must contain actual executable Python — NOT pseudocode or placeholders.
+An agent can have MULTIPLE tools — mix of builtins and custom workers.
 
-Example: for "generate a QR code":
+### Step 3: Create custom workers (one per capability gap)
+For EACH capability that needs a custom worker, call generate_worker SEPARATELY:
+
   generate_worker(
-    agent_name="qr_gen",
-    tool_name="create_qr_code",
-    description="Generate a QR code image from a URL or text",
-    parameters="data: str, output_path: str = '/tmp/qrcode.png'",
-    implementation="import qrcode\\nimg = qrcode.make(data)\\nimg.save(output_path)\\nreturn f'QR code saved to {{output_path}}'",
-    dependencies="qrcode,pillow"
+    agent_name="<agent_name>",
+    tool_name="<capability_name>",  # snake_case
+    description="<what this worker does>",
+    parameters="<typed parameters>",
+    implementation="<REAL Python code>",
+    dependencies="<pip packages needed>"
   )
 
-IMPORTANT:
-- implementation: REAL Python code, not a skeleton. Include imports inside the function if needed.
-- dependencies: comma-separated pip packages the code needs. These get installed automatically.
-- The worker runs in its own process — all imports must be self-contained.
-- Use try/except for error handling in the implementation.
-- Always return a string result.
+Example: "generate a QR code and email it to me" creates:
+  1. generate_worker(agent_name="qr_email", tool_name="create_qr_code",
+       description="Generate QR code image from text",
+       parameters="data: str, output_path: str = '/tmp/qr.png'",
+       implementation="import qrcode\\nimg = qrcode.make(data)\\nimg.save(output_path)\\nreturn output_path",
+       dependencies="qrcode,pillow")
+  2. No worker needed for email — use builtin:gmail
 
-Then include the worker name in the agent's tools list (NOT as builtin:).
+Then the agent YAML has tools: [create_qr_code, builtin:gmail]
+
+WORKER RULES:
+- implementation: REAL executable Python. NOT pseudocode.
+- dependencies: comma-separated pip packages. Installed automatically.
+- All imports must be inside the function body.
+- Use try/except. Always return a string.
+- ONE worker per capability. Multiple workers per agent is normal.
 
 ### Step 4: Write the YAML spec
    name: <snake_case_descriptive_name>
