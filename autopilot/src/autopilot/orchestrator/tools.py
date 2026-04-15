@@ -548,7 +548,7 @@ def deploy_agent(agent_name: str) -> str:
                 last_deploy_error = exc
                 err_msg = str(exc)
 
-                # Deterministic fix: missing Python module → pip install
+                # --- Auto-fix: missing Python module → pip install and retry ---
                 mod_match = _re.search(
                     r"ModuleNotFoundError: No module named '([^']+)'", err_msg
                 )
@@ -563,17 +563,51 @@ def deploy_agent(agent_name: str) -> str:
                         pass
                     continue  # retry after install
 
-                # Deterministic: SyntaxError — cannot auto-fix, return details
-                if "SyntaxError" in err_msg:
-                    raise  # bubble up immediately, LLM must fix the code
+                # --- Auto-fix: pip install failed → try with --user flag or uv ---
+                if "Failed to install dependencies" in err_msg:
+                    # Read requirements.txt and try installing differently
+                    req_file = agent_dir / "workers" / "requirements.txt"
+                    if req_file.exists():
+                        deps = [l.strip() for l in req_file.read_text().splitlines() if l.strip()]
+                        if deps:
+                            try:
+                                # Try with --user flag
+                                subprocess.run(
+                                    [sys.executable, "-m", "pip", "install", "--user", "--quiet"] + deps,
+                                    capture_output=True, text=True, timeout=60,
+                                )
+                            except Exception:
+                                pass
+                    continue  # retry after install attempt
 
-                # Transient: ConnectionError — retry with backoff
-                if "ConnectionError" in err_msg or "ConnectionRefused" in err_msg:
+                # --- Auto-fix: ImportError → same as ModuleNotFoundError ---
+                import_match = _re.search(
+                    r"ImportError: cannot import name '([^']+)' from '([^']+)'", err_msg
+                )
+                if not import_match:
+                    import_match = _re.search(r"ImportError: No module named '([^']+)'", err_msg)
+                if import_match:
+                    missing_mod = import_match.group(1).split(".")[0]
+                    try:
+                        subprocess.run(
+                            [sys.executable, "-m", "pip", "install", "--quiet", missing_mod],
+                            capture_output=True, text=True, timeout=60,
+                        )
+                    except Exception:
+                        pass
+                    continue
+
+                # --- SyntaxError: cannot auto-fix, return details for LLM ---
+                if "SyntaxError" in err_msg:
+                    raise  # bubble up immediately
+
+                # --- Transient: network errors → retry with backoff ---
+                if any(p in err_msg for p in ("ConnectionError", "ConnectionRefused", "TimeoutError", "timeout")):
                     import time as _time
                     _time.sleep(policy.get_delay(_attempt))
                     continue
 
-                # Unknown — retry with backoff for remaining attempts
+                # --- Unknown: retry with backoff ---
                 if _attempt < policy.max_retries:
                     import time as _time
                     _time.sleep(policy.get_delay(_attempt))
