@@ -13,15 +13,28 @@
  * No mocks. Real server, real LLM.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { Agent, AgentRuntime, tool, TextMention, MaxMessage, TextGate } from "@agentspan-ai/sdk";
-import { checkServerHealth, MODEL, TIMEOUT, getWorkflow, runDiagnostic } from "./helpers";
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import {
+  Agent,
+  AgentRuntime,
+  tool,
+  TextMention,
+  MaxMessage,
+  TextGate,
+} from '@agentspan-ai/sdk';
+import {
+  checkServerHealth,
+  MODEL,
+  TIMEOUT,
+  getWorkflow,
+  runDiagnostic,
+} from './helpers';
 
 let runtime: AgentRuntime;
 
 beforeAll(async () => {
   const healthy = await checkServerHealth();
-  if (!healthy) throw new Error("Server not available");
+  if (!healthy) throw new Error('Server not available');
   runtime = new AgentRuntime();
 });
 
@@ -29,15 +42,18 @@ afterAll(() => runtime.shutdown());
 
 // ── Deterministic tools ──────────────────────────────────────────────────
 
-const echoTool = tool(async (args: { text: string }) => `echo:${args.text}`, {
-  name: "echo_tool",
-  description: "Echo the input text back.",
-  inputSchema: {
-    type: "object",
-    properties: { text: { type: "string", description: "Text to echo" } },
-    required: ["text"],
+const echoTool = tool(
+  async (args: { text: string }) => `echo:${args.text}`,
+  {
+    name: 'echo_tool',
+    description: 'Echo the input text back.',
+    inputSchema: {
+      type: 'object',
+      properties: { text: { type: 'string', description: 'Text to echo' } },
+      required: ['text'],
+    },
   },
-});
+);
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -54,45 +70,48 @@ async function getLoopIterations(executionId: string): Promise<number> {
   const wf = await getWorkflow(executionId);
   const tasks = (wf.tasks ?? []) as Record<string, unknown>[];
   for (const task of tasks) {
-    if (task.taskType === "DO_WHILE") {
+    if (task.taskType === 'DO_WHILE') {
       return ((task.outputData as Record<string, unknown>)?.iteration ?? 0) as number;
     }
   }
   return 0;
 }
 
-async function _findSubWorkflowTasks(executionId: string): Promise<WorkflowTask[]> {
+async function findSubWorkflowTasks(executionId: string): Promise<WorkflowTask[]> {
   const wf = await getWorkflow(executionId);
   const tasks = (wf.tasks ?? []) as WorkflowTask[];
   return tasks.filter((t) => {
-    const taskType = t.taskType ?? (t as unknown as Record<string, unknown>).type ?? "";
-    return taskType === "SUB_WORKFLOW";
+    const taskType = t.taskType ?? (t as unknown as Record<string, unknown>).type ?? '';
+    return taskType === 'SUB_WORKFLOW';
   });
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────
 
-describe("Suite 12: Termination & Gates", { timeout: 300_000 }, () => {
+describe('Suite 12: Termination & Gates', { timeout: 300_000 }, () => {
   // ── TextMention ──────────────────────────────────────────────
 
-  it("text mention terminates early", async () => {
+  it('text mention terminates early', async () => {
     const agent = new Agent({
-      name: "e2e_s12_text_term",
+      name: 'e2e_s12_text_term',
       model: MODEL,
       maxTurns: 3,
       instructions:
-        "You MUST include the exact text TASK_COMPLETE in every response. " +
-        "Answer the user's question and always end with TASK_COMPLETE.",
+        'You MUST include the exact text TASK_COMPLETE in every response. ' +
+        'Answer the user\'s question and always end with TASK_COMPLETE.',
       tools: [echoTool],
-      termination: new TextMention("TASK_COMPLETE"),
+      termination: new TextMention('TASK_COMPLETE'),
     });
 
-    const result = await runtime.run(agent, "Say hello.", { timeout: TIMEOUT });
+    const result = await runtime.run(agent, 'Say hello.', { timeout: TIMEOUT });
     const diag = runDiagnostic(result as unknown as Record<string, unknown>);
 
-    expect(result.executionId, `[TextMention] No executionId. ${diag}`).toBeTruthy();
     expect(
-      ["COMPLETED", "TERMINATED"],
+      result.executionId,
+      `[TextMention] No executionId. ${diag}`,
+    ).toBeTruthy();
+    expect(
+      ['COMPLETED', 'TERMINATED'],
       `[TextMention] Expected COMPLETED or TERMINATED, got '${result.status}'. ${diag}`,
     ).toContain(result.status);
 
@@ -110,23 +129,27 @@ describe("Suite 12: Termination & Gates", { timeout: 300_000 }, () => {
 
   // ── MaxMessage ─────────────────────────────────────────────
 
-  it("max message terminates at limit", async () => {
+  it('max message terminates at limit', async () => {
     const agent = new Agent({
-      name: "e2e_s12_max_msg",
+      name: 'e2e_s12_max_msg',
       model: MODEL,
       maxTurns: 25,
       instructions:
-        "You are a helpful assistant. Answer the user's question. " + "Keep your answers concise.",
+        'You are a helpful assistant. Answer the user\'s question. ' +
+        'Keep your answers concise.',
       tools: [echoTool],
       termination: new MaxMessage(3),
     });
 
-    const result = await runtime.run(agent, "Count from 1 to 100.", { timeout: TIMEOUT });
+    const result = await runtime.run(agent, 'Count from 1 to 100.', { timeout: TIMEOUT });
     const diag = runDiagnostic(result as unknown as Record<string, unknown>);
 
-    expect(result.executionId, `[MaxMessage] No executionId. ${diag}`).toBeTruthy();
     expect(
-      ["COMPLETED", "TERMINATED"],
+      result.executionId,
+      `[MaxMessage] No executionId. ${diag}`,
+    ).toBeTruthy();
+    expect(
+      ['COMPLETED', 'TERMINATED'],
       `[MaxMessage] Expected COMPLETED or TERMINATED, got '${result.status}'. ${diag}`,
     ).toContain(result.status);
 
@@ -150,19 +173,19 @@ describe("Suite 12: Termination & Gates", { timeout: 300_000 }, () => {
 
   // ── TextGate stops pipeline ────────────────────────────────
 
-  it("text gate compiles INLINE + SWITCH into pipeline", async () => {
+  it('text gate compiles INLINE + SWITCH into pipeline', async () => {
     const checker = new Agent({
-      name: "e2e_s12_checker_stop",
+      name: 'e2e_s12_checker_stop',
       model: MODEL,
       maxTurns: 2,
-      instructions: "Check for issues.",
-      gate: new TextGate({ text: "STOP" }),
+      instructions: 'Check for issues.',
+      gate: new TextGate({ text: 'STOP' }),
     });
     const fixer = new Agent({
-      name: "e2e_s12_fixer_stop",
+      name: 'e2e_s12_fixer_stop',
       model: MODEL,
       maxTurns: 2,
-      instructions: "Fix any issues found.",
+      instructions: 'Fix any issues found.',
       tools: [echoTool],
     });
     const pipeline = checker.pipe(fixer);
@@ -177,8 +200,8 @@ describe("Suite 12: Termination & Gates", { timeout: 300_000 }, () => {
 
     function collect(taskList: Array<Record<string, unknown>>) {
       for (const t of taskList) {
-        allTaskRefs.push((t.taskReferenceName as string) ?? "");
-        allTaskTypes.push((t.type as string) ?? "");
+        allTaskRefs.push((t.taskReferenceName as string) ?? '');
+        allTaskTypes.push((t.type as string) ?? '');
         const cases = (t.decisionCases ?? {}) as Record<string, Array<Record<string, unknown>>>;
         for (const caseTasks of Object.values(cases)) {
           collect(caseTasks);
@@ -189,35 +212,35 @@ describe("Suite 12: Termination & Gates", { timeout: 300_000 }, () => {
     collect(tasks);
 
     // Gate should produce an INLINE task (the JS gate check)
-    const gateTasks = allTaskRefs.filter((r) => r.toLowerCase().includes("gate"));
+    const gateTasks = allTaskRefs.filter((r) => r.toLowerCase().includes('gate'));
     expect(
       gateTasks.length,
-      `[TextGate] No gate task found in workflow definition. Task refs: ${allTaskRefs.join(", ")}`,
+      `[TextGate] No gate task found in workflow definition. Task refs: ${allTaskRefs.join(', ')}`,
     ).toBeGreaterThan(0);
 
     // Gate should produce a SWITCH task (continue vs stop)
     expect(
       allTaskTypes,
-      `[TextGate] No SWITCH task found. Task types: ${allTaskTypes.join(", ")}. ` +
+      `[TextGate] No SWITCH task found. Task types: ${allTaskTypes.join(', ')}. ` +
         `TextGate should compile to INLINE + SWITCH.`,
-    ).toContain("SWITCH");
+    ).toContain('SWITCH');
   });
 
   // ── TextGate SWITCH has continue and stop branches ──────────
 
-  it("text gate SWITCH has continue and stop branches", async () => {
+  it('text gate SWITCH has continue and stop branches', async () => {
     const checker = new Agent({
-      name: "e2e_s12_checker_pass",
+      name: 'e2e_s12_checker_pass',
       model: MODEL,
       maxTurns: 2,
-      instructions: "Check for issues.",
-      gate: new TextGate({ text: "STOP" }),
+      instructions: 'Check for issues.',
+      gate: new TextGate({ text: 'STOP' }),
     });
     const fixer = new Agent({
-      name: "e2e_s12_fixer_pass",
+      name: 'e2e_s12_fixer_pass',
       model: MODEL,
       maxTurns: 2,
-      instructions: "Fix any issues found.",
+      instructions: 'Fix any issues found.',
       tools: [echoTool],
     });
     const pipeline = checker.pipe(fixer);
@@ -227,10 +250,10 @@ describe("Suite 12: Termination & Gates", { timeout: 300_000 }, () => {
     const tasks = (wfDef.tasks ?? []) as Array<Record<string, unknown>>;
 
     // Find the SWITCH task
-    const switchTasks = tasks.filter((t) => t.type === "SWITCH");
+    const switchTasks = tasks.filter((t) => t.type === 'SWITCH');
     expect(
       switchTasks.length,
-      `[TextGate SWITCH] No SWITCH task found. Task types: ${tasks.map((t) => t.type).join(", ")}`,
+      `[TextGate SWITCH] No SWITCH task found. Task types: ${tasks.map((t) => t.type).join(', ')}`,
     ).toBeGreaterThan(0);
 
     const switchTask = switchTasks[0];
@@ -238,12 +261,12 @@ describe("Suite 12: Termination & Gates", { timeout: 300_000 }, () => {
 
     // Must have a "continue" case with at least one task (the fixer)
     expect(
-      "continue" in decisionCases,
-      `[TextGate SWITCH] No 'continue' case. Cases: ${Object.keys(decisionCases).join(", ")}. ` +
+      'continue' in decisionCases,
+      `[TextGate SWITCH] No 'continue' case. Cases: ${Object.keys(decisionCases).join(', ')}. ` +
         `Without a continue case, the fixer can never run.`,
     ).toBe(true);
 
-    const continueTasks = decisionCases["continue"] ?? [];
+    const continueTasks = decisionCases['continue'] ?? [];
     expect(
       continueTasks.length,
       `[TextGate SWITCH] 'continue' case is empty — fixer sub-workflow should be in this branch.`,
@@ -252,19 +275,19 @@ describe("Suite 12: Termination & Gates", { timeout: 300_000 }, () => {
 
   // ── Invalid model fails ────────────────────────────────────
 
-  it("invalid model fails", async () => {
+  it('invalid model fails', async () => {
     const agent = new Agent({
-      name: "e2e_s12_bad_model",
-      model: "nonexistent/xyz-model-does-not-exist",
-      instructions: "This agent should never execute successfully.",
+      name: 'e2e_s12_bad_model',
+      model: 'nonexistent/xyz-model-does-not-exist',
+      instructions: 'This agent should never execute successfully.',
       tools: [echoTool],
     });
 
-    const result = await runtime.run(agent, "Hello.", { timeout: TIMEOUT });
+    const result = await runtime.run(agent, 'Hello.', { timeout: TIMEOUT });
     const diag = runDiagnostic(result as unknown as Record<string, unknown>);
 
     expect(
-      ["FAILED", "TERMINATED"],
+      ['FAILED', 'TERMINATED'],
       `[Invalid model] Expected FAILED or TERMINATED for ` +
         `nonexistent model 'nonexistent/xyz-model-does-not-exist', ` +
         `got '${result.status}'. The server should reject unknown ` +

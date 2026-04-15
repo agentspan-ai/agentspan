@@ -1,7 +1,7 @@
-import { readdirSync } from "fs";
-import { join, extname } from "path";
-import { Agent } from "../src/agent.js";
-import { detectFramework } from "../src/frameworks/detect.js";
+import { readdirSync, statSync } from 'fs';
+import { join, extname } from 'path';
+import { Agent } from '../src/agent.js';
+import { detectFramework } from '../src/frameworks/detect.js';
 
 export interface DiscoveredAgent {
   obj: unknown;
@@ -11,18 +11,8 @@ export interface DiscoveredAgent {
 
 /** Directories that should never be scanned during discovery. */
 const SKIP_DIRS = new Set([
-  "node_modules",
-  ".git",
-  "dist",
-  "build",
-  ".next",
-  ".venv",
-  "venv",
-  "__pycache__",
-  ".tox",
-  ".eggs",
-  "coverage",
-  ".nyc_output",
+  'node_modules', '.git', 'dist', 'build', '.next', '.venv', 'venv',
+  '__pycache__', '.tox', '.eggs', 'coverage', '.nyc_output',
 ]);
 
 /**
@@ -33,17 +23,13 @@ function collectFiles(dir: string): string[] {
   const results: string[] = [];
   const entries = readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
-    if (entry.name.startsWith(".") || SKIP_DIRS.has(entry.name)) continue;
+    if (entry.name.startsWith('.') || SKIP_DIRS.has(entry.name)) continue;
     const fullPath = join(dir, entry.name);
     if (entry.isDirectory() && !entry.isSymbolicLink()) {
       results.push(...collectFiles(fullPath));
     } else if (entry.isFile()) {
       const ext = extname(entry.name);
-      if (
-        (ext === ".ts" || ext === ".js") &&
-        !entry.name.startsWith("_") &&
-        !entry.name.endsWith(".d.ts")
-      ) {
+      if ((ext === '.ts' || ext === '.js') && !entry.name.startsWith('_') && !entry.name.endsWith('.d.ts')) {
         results.push(fullPath);
       }
     }
@@ -65,19 +51,19 @@ export async function discoverAllAgents(scanPath: string): Promise<DiscoveredAge
     try {
       const mod = await import(fullPath);
       for (const exportValue of Object.values(mod)) {
-        if (exportValue == null || typeof exportValue !== "object") continue;
+        if (exportValue == null || typeof exportValue !== 'object') continue;
 
         const isNative = exportValue instanceof Agent;
         const frameworkId = isNative ? null : detectFramework(exportValue);
 
         if (isNative || frameworkId) {
           const name = (exportValue as any).name;
-          if (name && typeof name === "string" && !seenNames.has(name)) {
+          if (name && typeof name === 'string' && !seenNames.has(name)) {
             seenNames.add(name);
             found.push({
               obj: exportValue,
               name,
-              framework: frameworkId ?? "native",
+              framework: frameworkId ?? 'native',
             });
           }
         }

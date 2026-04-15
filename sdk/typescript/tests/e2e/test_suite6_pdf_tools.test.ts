@@ -9,15 +9,21 @@
  * No mocks. Real server, real LLM.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { Agent, AgentRuntime, pdfTool } from "@agentspan-ai/sdk";
-import { checkServerHealth, MODEL, TIMEOUT, getWorkflow, runDiagnostic } from "./helpers";
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { Agent, AgentRuntime, pdfTool } from '@agentspan-ai/sdk';
+import {
+  checkServerHealth,
+  MODEL,
+  TIMEOUT,
+  getWorkflow,
+  runDiagnostic,
+} from './helpers';
 
 let runtime: AgentRuntime;
 
 beforeAll(async () => {
   const healthy = await checkServerHealth();
-  if (!healthy) throw new Error("Server not available");
+  if (!healthy) throw new Error('Server not available');
   runtime = new AgentRuntime();
 });
 
@@ -63,24 +69,22 @@ async function findPdfTask(executionId: string) {
   const tasks = (wf.tasks ?? []) as Record<string, unknown>[];
   return tasks.find(
     (t) =>
-      String(t.taskType ?? "").includes("GENERATE_PDF") ||
-      String(t.taskDefName ?? "").includes("GENERATE_PDF") ||
-      String(t.taskType ?? "")
-        .toLowerCase()
-        .includes("pdf"),
+      String(t.taskType ?? '').includes('GENERATE_PDF') ||
+      String(t.taskDefName ?? '').includes('GENERATE_PDF') ||
+      String(t.taskType ?? '').toLowerCase().includes('pdf'),
   );
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────
 
-describe("Suite 6: PDF Tools", { timeout: 300_000 }, () => {
-  it("PDF generation and plan validation", async () => {
-    const pdf = pdfTool({ name: "generate_pdf", description: "Generate a PDF from markdown." });
+describe('Suite 6: PDF Tools', { timeout: 300_000 }, () => {
+  it('PDF generation and plan validation', async () => {
+    const pdf = pdfTool({ name: 'generate_pdf', description: 'Generate a PDF from markdown.' });
     const agent = new Agent({
-      name: "e2e_ts_pdf_gen",
+      name: 'e2e_ts_pdf_gen',
       model: MODEL,
       instructions:
-        "You generate PDF documents from markdown. Call generate_pdf with the exact markdown provided.",
+        'You generate PDF documents from markdown. Call generate_pdf with the exact markdown provided.',
       tools: [pdf],
     });
 
@@ -88,8 +92,8 @@ describe("Suite 6: PDF Tools", { timeout: 300_000 }, () => {
     const plan = (await runtime.plan(agent)) as Record<string, unknown>;
     const ad = getAgentDef(plan);
     const tools = (ad.tools ?? []) as Record<string, unknown>[];
-    const pdfTools = tools.filter((t) => t.toolType === "generate_pdf");
-    expect(pdfTools.length, "Expected 1 generate_pdf tool").toBe(1);
+    const pdfTools = tools.filter((t) => t.toolType === 'generate_pdf');
+    expect(pdfTools.length, 'Expected 1 generate_pdf tool').toBe(1);
 
     // ── Step 1: Generate PDF ────────────────────────────────────
     const result = await runtime.run(
@@ -100,14 +104,14 @@ describe("Suite 6: PDF Tools", { timeout: 300_000 }, () => {
 
     const diag = runDiagnostic(result as unknown as Record<string, unknown>);
     expect(result.executionId).toBeTruthy();
-    expect(result.status, `[PDF Gen] ${diag}`).toBe("COMPLETED");
+    expect(result.status, `[PDF Gen] ${diag}`).toBe('COMPLETED');
 
     // ── Step 2: Verify GENERATE_PDF task ────────────────────────
     const pdfTask = await findPdfTask(result.executionId);
-    expect(pdfTask, "[PDF Gen] No GENERATE_PDF task in workflow").toBeDefined();
-    expect(pdfTask!.status, "[PDF Gen] GENERATE_PDF task status").toBe("COMPLETED");
+    expect(pdfTask, '[PDF Gen] No GENERATE_PDF task in workflow').toBeDefined();
+    expect(pdfTask!.status, '[PDF Gen] GENERATE_PDF task status').toBe('COMPLETED');
 
     const outputData = pdfTask!.outputData as Record<string, unknown> | undefined;
-    expect(outputData, "[PDF Gen] Empty outputData").toBeDefined();
+    expect(outputData, '[PDF Gen] Empty outputData').toBeDefined();
   });
 });

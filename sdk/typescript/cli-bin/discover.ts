@@ -1,26 +1,25 @@
-import { parseArgs } from "node:util";
-import { resolve } from "node:path";
-import { discoverAllAgents } from "./shared.js";
+import { parseArgs } from 'node:util';
+import { resolve } from 'node:path';
+import { discoverAllAgents } from './shared.js';
+import type { DiscoveredAgent } from './shared.js';
 
 export interface DiscoveryEntry {
   name: string;
   framework: string;
 }
 
-export function formatDiscoveryResult(
-  agents: { obj: unknown; name: string; framework: string }[],
-): DiscoveryEntry[] {
-  return agents.map((a) => ({ name: a.name, framework: a.framework }));
+export function formatDiscoveryResult(agents: { obj: unknown; name: string; framework: string }[]): DiscoveryEntry[] {
+  return agents.map(a => ({ name: a.name, framework: a.framework }));
 }
 
 async function main() {
   const { values } = parseArgs({
-    options: { path: { type: "string" } },
+    options: { path: { type: 'string' } },
     strict: false,
   });
 
   if (!values.path) {
-    console.error("Error: --path is required");
+    console.error('Error: --path is required');
     process.exit(1);
   }
 
@@ -45,7 +44,7 @@ async function main() {
   }
 }
 
-const isMain = process.argv[1]?.endsWith("discover.ts") || process.argv[1]?.endsWith("discover.js");
+const isMain = process.argv[1]?.endsWith('discover.ts') || process.argv[1]?.endsWith('discover.js');
 if (isMain) {
   main();
 }

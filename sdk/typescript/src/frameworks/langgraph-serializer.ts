@@ -404,7 +404,8 @@ function _serializeGraphStructure(
 
   // Detect messages-based state: signal to server to wrap prompt as
   // [{"role": "user", "content": prompt}] instead of plain string.
-  const hasMessagesField = inputKey === "messages" || _hasMessagesInSchema(graph);
+  const hasMessagesField =
+    inputKey === "messages" || _hasMessagesInSchema(graph);
   if (hasMessagesField) {
     graphConfig._input_is_messages = true;
   }
@@ -921,7 +922,9 @@ function _isReactAgentGraph(graph: unknown): boolean {
     const g = graph as Record<string, unknown>;
     const nodes = g.nodes;
     if (!nodes || typeof nodes !== "object") return false;
-    const keys: string[] = nodes instanceof Map ? Array.from(nodes.keys()) : Object.keys(nodes);
+    const keys: string[] = nodes instanceof Map
+      ? Array.from(nodes.keys())
+      : Object.keys(nodes);
     return keys.includes("agent") && keys.includes("tools");
   } catch {
     return false;
@@ -940,12 +943,12 @@ function _hasMessagesInSchema(graph: unknown): boolean {
     // Check channels
     const channels = g.channels;
     if (channels) {
-      const keys = channels instanceof Map ? Array.from(channels.keys()) : Object.keys(channels);
+      const keys = channels instanceof Map
+        ? Array.from(channels.keys())
+        : Object.keys(channels);
       if (keys.includes("messages")) return true;
     }
-  } catch {
-    /* ignore */
-  }
+  } catch { /* ignore */ }
   return false;
 }
 

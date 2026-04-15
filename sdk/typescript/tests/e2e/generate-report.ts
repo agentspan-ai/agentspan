@@ -4,13 +4,13 @@
  * Usage: npx tsx tests/e2e/generate-report.ts <junit.xml> <output.html>
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from 'node:fs';
 
 const xmlPath = process.argv[2];
 const htmlPath = process.argv[3];
 
 if (!xmlPath || !htmlPath) {
-  console.error("Usage: npx tsx generate-report.ts <junit.xml> <output.html>");
+  console.error('Usage: npx tsx generate-report.ts <junit.xml> <output.html>');
   process.exit(1);
 }
 
@@ -20,7 +20,7 @@ interface TestCase {
   name: string;
   classname: string;
   time: number;
-  status: "PASSED" | "FAILED" | "ERROR" | "SKIPPED";
+  status: 'PASSED' | 'FAILED' | 'ERROR' | 'SKIPPED';
   detail: string;
   errorSummary: string;
   location: string;
@@ -40,35 +40,35 @@ function parseJunit(xml: string): TestCase[] {
 
   while ((match = tcRegex.exec(xml)) !== null) {
     const attrs = match[1];
-    const body = match[2] ?? "";
+    const body = match[2] ?? '';
 
-    const name = attrs.match(/name="([^"]*)"/)?.[1] ?? "";
-    const classname = attrs.match(/classname="([^"]*)"/)?.[1] ?? "";
-    const time = parseFloat(attrs.match(/time="([^"]*)"/)?.[1] ?? "0");
+    const name = attrs.match(/name="([^"]*)"/)?.[ 1] ?? '';
+    const classname = attrs.match(/classname="([^"]*)"/)?.[ 1] ?? '';
+    const time = parseFloat(attrs.match(/time="([^"]*)"/)?.[ 1] ?? '0');
 
-    const failureMsg = body.match(/<failure[^>]*message="([^"]*)"/)?.[1] ?? "";
-    const failureBody = body.match(/<failure[^>]*>([\s\S]*?)<\/failure>/)?.[1] ?? "";
-    const errorMsg = body.match(/<error[^>]*message="([^"]*)"/)?.[1] ?? "";
-    const errorBody = body.match(/<error[^>]*>([\s\S]*?)<\/error>/)?.[1] ?? "";
-    const skipMsg = body.match(/<skipped[^>]*message="([^"]*)"/)?.[1] ?? "";
-    const hasSkipped = body.includes("<skipped");
-    const hasFailure = body.includes("<failure");
-    const hasError = body.includes("<error");
+    const failureMsg = body.match(/<failure[^>]*message="([^"]*)"/)?.[ 1] ?? '';
+    const failureBody = body.match(/<failure[^>]*>([\s\S]*?)<\/failure>/)?.[ 1] ?? '';
+    const errorMsg = body.match(/<error[^>]*message="([^"]*)"/)?.[ 1] ?? '';
+    const errorBody = body.match(/<error[^>]*>([\s\S]*?)<\/error>/)?.[ 1] ?? '';
+    const skipMsg = body.match(/<skipped[^>]*message="([^"]*)"/)?.[ 1] ?? '';
+    const hasSkipped = body.includes('<skipped');
+    const hasFailure = body.includes('<failure');
+    const hasError = body.includes('<error');
 
-    let status: TestCase["status"] = "PASSED";
-    let detail = "";
-    let message = "";
+    let status: TestCase['status'] = 'PASSED';
+    let detail = '';
+    let message = '';
 
     if (hasFailure) {
-      status = "FAILED";
+      status = 'FAILED';
       detail = failureBody || failureMsg;
       message = failureMsg;
     } else if (hasError) {
-      status = "ERROR";
+      status = 'ERROR';
       detail = errorBody || errorMsg;
       message = errorMsg;
     } else if (hasSkipped) {
-      status = "SKIPPED";
+      status = 'SKIPPED';
       detail = skipMsg;
       message = skipMsg;
     }
@@ -88,35 +88,33 @@ function parseJunit(xml: string): TestCase[] {
 
 function unescapeXml(s: string): string {
   return s
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'");
 }
 
 function extractErrorSummary(message: string, detail: string): string {
-  for (const line of detail.split("\n")) {
+  for (const line of detail.split('\n')) {
     const trimmed = line.trim();
-    if (trimmed.startsWith("AssertionError:"))
-      return trimmed.slice("AssertionError:".length).trim();
-    if (trimmed.startsWith("Error:")) return trimmed.slice("Error:".length).trim();
+    if (trimmed.startsWith('AssertionError:')) return trimmed.slice('AssertionError:'.length).trim();
+    if (trimmed.startsWith('Error:')) return trimmed.slice('Error:'.length).trim();
   }
   if (message) {
-    if (message.startsWith("AssertionError:"))
-      return message.slice("AssertionError:".length).trim();
-    return message.split("\n")[0].trim();
+    if (message.startsWith('AssertionError:')) return message.slice('AssertionError:'.length).trim();
+    return message.split('\n')[0].trim();
   }
-  return "";
+  return '';
 }
 
 function extractLocation(detail: string): string {
   const locations: string[] = [];
-  for (const line of detail.split("\n")) {
+  for (const line of detail.split('\n')) {
     const m = line.trim().match(/(\S+\.ts):(\d+):/);
     if (m) locations.push(`${m[1]}:${m[2]}`);
   }
-  return locations.at(-1) ?? "";
+  return locations.at(-1) ?? '';
 }
 
 // ── Suite grouping ──────────────────────────────────────────────────────
@@ -126,11 +124,11 @@ function suiteKeyFromClassname(classname: string): string {
   const m = classname.match(/test_suite(\d+)_([a-z_]+)/);
   if (m) {
     const num = m[1];
-    const words = m[2].replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    const words = m[2].replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
     return `Suite ${num}: ${words}`;
   }
   // Fallback: use last segment after >
-  const parts = classname.split(">");
+  const parts = classname.split('>');
   return parts.at(-1)?.trim() || classname;
 }
 
@@ -148,39 +146,37 @@ function groupBySuite(tests: TestCase[]): Suite[] {
 
 function esc(text: string): string {
   return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 function renderHtml(tests: TestCase[]): string {
   const suites = groupBySuite(tests);
-  const passed = tests.filter((t) => t.status === "PASSED").length;
-  const failed = tests.filter((t) => t.status === "FAILED" || t.status === "ERROR").length;
-  const skipped = tests.filter((t) => t.status === "SKIPPED").length;
+  const passed = tests.filter((t) => t.status === 'PASSED').length;
+  const failed = tests.filter((t) => t.status === 'FAILED' || t.status === 'ERROR').length;
+  const skipped = tests.filter((t) => t.status === 'SKIPPED').length;
   const total = tests.length;
   const totalTime = tests.reduce((s, t) => s + t.time, 0);
-  const timestamp = new Date().toISOString().replace("T", " ").slice(0, 19);
-  const overall = failed === 0 ? "PASSED" : "FAILED";
-  const overallColor = failed === 0 ? "#22c55e" : "#ef4444";
+  const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 19);
+  const overall = failed === 0 ? 'PASSED' : 'FAILED';
+  const overallColor = failed === 0 ? '#22c55e' : '#ef4444';
 
   const statusColors: Record<string, string> = {
-    PASSED: "#22c55e",
-    FAILED: "#ef4444",
-    ERROR: "#f97316",
-    SKIPPED: "#eab308",
+    PASSED: '#22c55e',
+    FAILED: '#ef4444',
+    ERROR: '#f97316',
+    SKIPPED: '#eab308',
   };
 
   const testRows: string[] = [];
   for (const suite of suites) {
-    const suiteId = suite.name.replace(/[^a-zA-Z0-9]/g, "_");
-    const suitePass = suite.tests.filter((t) => t.status === "PASSED").length;
-    const suiteFail = suite.tests.filter(
-      (t) => t.status === "FAILED" || t.status === "ERROR",
-    ).length;
+    const suiteId = suite.name.replace(/[^a-zA-Z0-9]/g, '_');
+    const suitePass = suite.tests.filter((t) => t.status === 'PASSED').length;
+    const suiteFail = suite.tests.filter((t) => t.status === 'FAILED' || t.status === 'ERROR').length;
     const suiteTotal = suite.tests.length;
-    const suiteStatusColor = suiteFail === 0 ? "#22c55e" : "#ef4444";
+    const suiteStatusColor = suiteFail === 0 ? '#22c55e' : '#ef4444';
     const suiteLabel =
       suiteFail === 0
         ? `${suitePass}/${suiteTotal} passed`
@@ -194,10 +190,10 @@ function renderHtml(tests: TestCase[]): string {
     );
 
     for (const t of suite.tests) {
-      const color = statusColors[t.status] ?? "#888";
+      const color = statusColors[t.status] ?? '#888';
       const detailParts: string[] = [];
 
-      if ((t.status === "FAILED" || t.status === "ERROR") && t.errorSummary) {
+      if ((t.status === 'FAILED' || t.status === 'ERROR') && t.errorSummary) {
         detailParts.push(`<div class='error-summary'>${esc(t.errorSummary)}</div>`);
       }
       if (t.location) {
@@ -208,21 +204,19 @@ function renderHtml(tests: TestCase[]): string {
           `<details><summary>Full traceback</summary><pre>${esc(t.detail)}</pre></details>`,
         );
       }
-      if (t.status === "SKIPPED" && t.errorSummary) {
+      if (t.status === 'SKIPPED' && t.errorSummary) {
         detailParts.push(`<span class='skip-reason'>${esc(t.errorSummary)}</span>`);
       }
 
       const rowClass =
-        "suite-row " +
-        suiteId +
-        (t.status === "FAILED" || t.status === "ERROR" ? " failed-row" : "");
+        'suite-row ' + suiteId + (t.status === 'FAILED' || t.status === 'ERROR' ? ' failed-row' : '');
 
       testRows.push(
         `<tr class='${rowClass}'>` +
           `<td>${esc(t.name)}</td>` +
           `<td style='color:${color};font-weight:bold'>${t.status}</td>` +
           `<td>${t.time.toFixed(2)}s</td>` +
-          `<td>${detailParts.join("\n")}</td>` +
+          `<td>${detailParts.join('\n')}</td>` +
           `</tr>`,
       );
     }
@@ -305,7 +299,7 @@ function toggleSuite(suiteId) {
 <table>
 <thead><tr><th>Test</th><th>Status</th><th>Time</th><th>Detail</th></tr></thead>
 <tbody>
-${testRows.join("\n")}
+${testRows.join('\n')}
 </tbody>
 </table>
 </body>
@@ -315,7 +309,7 @@ ${testRows.join("\n")}
 // ── Main ────────────────────────────────────────────────────────────────
 
 try {
-  const xml = readFileSync(xmlPath, "utf-8");
+  const xml = readFileSync(xmlPath, 'utf-8');
   const tests = parseJunit(xml);
   const html = renderHtml(tests);
   writeFileSync(htmlPath, html);

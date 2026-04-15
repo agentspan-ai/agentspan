@@ -1,5 +1,5 @@
-import { defineConfig } from "vitest/config";
-import path from "path";
+import { defineConfig } from 'vitest/config';
+import path from 'path';
 
 export default defineConfig({
   esbuild: {
@@ -12,16 +12,16 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@agentspan-ai/sdk": path.resolve(__dirname, "src/index.ts"),
+      '@agentspan-ai/sdk': path.resolve(__dirname, 'src/index.ts'),
     },
   },
   test: {
     globals: true,
     testTimeout: 60_000,
-    include: ["tests/**/*.test.ts", "../../tests/e2e/*.test.ts"],
-    reporters: ["verbose", "junit"],
+    include: ['tests/**/*.test.ts', '../../tests/e2e/*.test.ts'],
+    reporters: ['verbose', 'junit'],
     outputFile: {
-      junit: "../../e2e-results/junit-ts.xml",
+      junit: '../../e2e-results/junit-ts.xml',
     },
   },
 });
