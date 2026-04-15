@@ -125,6 +125,9 @@ export class AgentConfigSerializer {
     // Model
     if (agent.model) config.model = agent.model;
 
+    // Base URL (per-agent LLM provider endpoint override)
+    if (agent.baseUrl) config.baseUrl = agent.baseUrl;
+
     // Instructions: string as-is, PromptTemplate → wire format, function → call it
     if (agent.instructions !== undefined && agent.instructions !== null) {
       config.instructions = this.serializeInstructions(agent.instructions);
