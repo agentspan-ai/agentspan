@@ -14,6 +14,7 @@ import org.conductoross.conductor.ai.models.LLMWorkerInput;
 import org.conductoross.conductor.ai.providers.anthropic.AnthropicConfiguration;
 import org.conductoross.conductor.ai.providers.azureopenai.AzureOpenAIConfiguration;
 import org.conductoross.conductor.ai.providers.cohere.CohereAIConfiguration;
+import org.conductoross.conductor.ai.providers.gemini.GeminiVertex;
 import org.conductoross.conductor.ai.providers.gemini.GeminiVertexConfiguration;
 import org.conductoross.conductor.ai.providers.grok.GrokAIConfiguration;
 import org.conductoross.conductor.ai.providers.huggingface.HuggingFaceConfiguration;
@@ -237,7 +238,8 @@ public class AgentspanAIModelProvider extends AIModelProvider {
 
     /**
      * Create a Gemini model using API key auth via REST transport.
-     * This avoids the Vertex AI gRPC path which requires IAM credentials.
+     * Uses the upstream GeminiVertex which handles the API key path properly
+     * with GoogleGenAiChatModel (full tool calling support).
      */
     private AIModel createGeminiApiKeyModel(String apiKey) {
         String projectId = resolveUserCredential("GOOGLE_CLOUD_PROJECT");
@@ -245,6 +247,6 @@ public class AgentspanAIModelProvider extends AIModelProvider {
         config.setApiKey(apiKey);
         config.setProjectId(projectId != null ? projectId : "google-ai-studio");
         config.setLocation("us-central1");
-        return new GeminiApiKeyModel(config, apiKey);
+        return new GeminiVertex(config);
     }
 }
