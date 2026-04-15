@@ -29,6 +29,9 @@ if src_path:
 
 os.environ.setdefault("AGENTSPAN_LOG_LEVEL", "WARNING")
 
+# Use the Python executable from the TUI environment — guaranteed to have pip
+_PYTHON = os.environ.get("AUTOPILOT_PYTHON", sys.executable)
+
 
 def _emit(execution_id: str = "", status: str = "ERROR", output: str = "") -> None:
     """Print the AGENT_RESULT JSON line and exit."""
@@ -50,7 +53,7 @@ def main() -> None:
             deps = [l.strip() for l in req_file.read_text().splitlines() if l.strip()]
             if deps:
                 result = subprocess.run(
-                    [sys.executable, "-m", "pip", "install", "--quiet"] + deps,
+                    [_PYTHON, "-m", "pip", "install", "--quiet"] + deps,
                     capture_output=True,
                     text=True,
                     timeout=60,

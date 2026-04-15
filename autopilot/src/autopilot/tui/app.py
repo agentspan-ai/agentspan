@@ -1116,6 +1116,12 @@ def _parse_args() -> argparse.Namespace:
 def main() -> None:
     args = _parse_args()
 
+    # Lock in the current Python executable for all subprocesses.
+    # This ensures deploy_agent, generate_worker, and pip install
+    # use the SAME Python/venv that started the TUI — not whatever
+    # sys.executable resolves to in a forked daemon worker process.
+    os.environ["AUTOPILOT_PYTHON"] = sys.executable
+
     # Check if we're running in an interactive terminal
     if not sys.stdin.isatty():
         print("Error: Agentspan Claw TUI requires an interactive terminal.")

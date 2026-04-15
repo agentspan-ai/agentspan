@@ -491,8 +491,10 @@ def deploy_agent(agent_name: str) -> str:
         _src_path = str(Path(__file__).parent.parent)
 
         def _do_deploy():
+            # Use the Python that started the TUI — guaranteed to have pip + all deps
+            python_exe = os.environ.get("AUTOPILOT_PYTHON", sys.executable)
             proc = subprocess.run(
-                [sys.executable, _deploy_runner_path],
+                [python_exe, _deploy_runner_path],
                 capture_output=True,
                 text=True,
                 timeout=deploy_timeout + 30,
@@ -556,7 +558,7 @@ def deploy_agent(agent_name: str) -> str:
                     missing_mod = mod_match.group(1).split(".")[0]
                     try:
                         subprocess.run(
-                            [sys.executable, "-m", "pip", "install", "--quiet", missing_mod],
+                            [os.environ.get("AUTOPILOT_PYTHON", sys.executable), "-m", "pip", "install", "--quiet", missing_mod],
                             capture_output=True, text=True, timeout=60,
                         )
                     except Exception:
@@ -573,7 +575,7 @@ def deploy_agent(agent_name: str) -> str:
                             try:
                                 # Try with --user flag
                                 subprocess.run(
-                                    [sys.executable, "-m", "pip", "install", "--user", "--quiet"] + deps,
+                                    [os.environ.get("AUTOPILOT_PYTHON", sys.executable), "-m", "pip", "install", "--user", "--quiet"] + deps,
                                     capture_output=True, text=True, timeout=60,
                                 )
                             except Exception:
@@ -590,7 +592,7 @@ def deploy_agent(agent_name: str) -> str:
                     missing_mod = import_match.group(1).split(".")[0]
                     try:
                         subprocess.run(
-                            [sys.executable, "-m", "pip", "install", "--quiet", missing_mod],
+                            [os.environ.get("AUTOPILOT_PYTHON", sys.executable), "-m", "pip", "install", "--quiet", missing_mod],
                             capture_output=True, text=True, timeout=60,
                         )
                     except Exception:
@@ -1307,7 +1309,7 @@ def {tool_name}({params}) -> str:
         try:
             dep_list = [d.strip() for d in dependencies.split(",") if d.strip()]
             subprocess.run(
-                [sys.executable, "-m", "pip", "install", "--quiet"] + dep_list,
+                [os.environ.get("AUTOPILOT_PYTHON", sys.executable), "-m", "pip", "install", "--quiet"] + dep_list,
                 capture_output=True,
                 timeout=60,
                 check=True,
