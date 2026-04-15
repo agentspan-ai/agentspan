@@ -30,6 +30,9 @@ public class AgentConfig {
     private String description;
     private String model;
 
+    /** Custom base URL for the LLM provider (per-agent override). */
+    private String baseUrl;
+
     /**
      * Instructions can be a plain string or a PromptTemplateRef object.
      * When serialized from Python, callable instructions are resolved to strings.

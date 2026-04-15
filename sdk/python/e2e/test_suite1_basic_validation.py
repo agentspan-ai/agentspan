@@ -148,6 +148,19 @@ def _sub_workflow_names(tasks: list) -> list[str]:
     return names
 
 
+def _find_llm_tasks(tasks: list) -> list[dict]:
+    """Find all LLM_CHAT_COMPLETE tasks recursively (including inside DO_WHILE)."""
+    found = []
+    for t in tasks:
+        if t.get("type") == "LLM_CHAT_COMPLETE":
+            found.append(t)
+        # Recurse into DO_WHILE loopOver tasks
+        for inner in t.get("loopOver", []):
+            if inner.get("type") == "LLM_CHAT_COMPLETE":
+                found.append(inner)
+    return found
+
+
 def _assert_plan_structure(result: dict, expected_name: str) -> dict:
     """Validate top-level plan() result structure. Returns workflowDef."""
     assert "workflowDef" in result, (
@@ -998,4 +1011,50 @@ class TestSuite1BasicValidation:
             f"  Judge model: {JUDGE_MODEL}\n"
             f"  To debug: inspect the workflowDef JSON returned by "
             f"runtime.plan() and compare against the agent spec."
+        )
+
+
+# ── Suite 1.x: Base URL tests ─────────────────────────────────────────
+
+
+class TestBaseUrl:
+    """Verify base_url flows through compilation to LLM task inputParameters."""
+
+    def test_base_url_in_compiled_workflow(self, runtime):
+        """Per-agent base_url appears in LLM_CHAT_COMPLETE task inputParameters."""
+        agent = Agent(
+            name="e2e_base_url",
+            model=MODEL,
+            instructions="Say hello.",
+            base_url="https://my-custom-proxy.example.com/v1",
+        )
+        result = runtime.plan(agent)
+        wf = _assert_plan_structure(result, "e2e_base_url")
+        tasks = wf.get("tasks", [])
+        llm_tasks = _find_llm_tasks(tasks)
+
+        assert llm_tasks, "No LLM_CHAT_COMPLETE task found in workflow"
+        llm_input_params = llm_tasks[0].get("inputParameters", {})
+        assert llm_input_params.get("baseUrl") == "https://my-custom-proxy.example.com/v1", (
+            f"Expected baseUrl='https://my-custom-proxy.example.com/v1' in LLM task "
+            f"inputParameters, got: {llm_input_params.get('baseUrl')}"
+        )
+
+    def test_no_base_url_when_omitted(self, runtime):
+        """When base_url is not set, no baseUrl key appears in LLM task inputParameters."""
+        agent = Agent(
+            name="e2e_no_base_url",
+            model=MODEL,
+            instructions="Say hello.",
+        )
+        result = runtime.plan(agent)
+        wf = _assert_plan_structure(result, "e2e_no_base_url")
+        tasks = wf.get("tasks", [])
+        llm_tasks = _find_llm_tasks(tasks)
+
+        assert llm_tasks, "No LLM_CHAT_COMPLETE task found in workflow"
+        llm_input_params = llm_tasks[0].get("inputParameters", {})
+        assert "baseUrl" not in llm_input_params, (
+            f"baseUrl should NOT be present when not set on Agent, "
+            f"but found: {llm_input_params.get('baseUrl')}"
         )

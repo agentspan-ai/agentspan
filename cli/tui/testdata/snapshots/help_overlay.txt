@@ -4,7 +4,8 @@
 │   Navigation (Sidebar — default mode)                                                                                                                                                                                │
 │   ↑ / k move up                                                                                            ↓ / j move down                                                                                           │
 │   enter select view                                                                                        tab focus content panel                                                                                   │
-│   1-0 jump to view directly                                                                                q quit                                                                                                    │
+│   1-0 jump to view directly                                                                                ctrl+t toggle light/dark theme                                                                            │
+│   q quit                                                                                                                                                                                                             │
 │                                                                                                                                                                                                                      │
 │   Navigation (Content Panel)                                                                                                                                                                                         │
 │   ↑↓ scroll / move cursor                                                                                  enter confirm / open detail                                                                               │
@@ -43,6 +44,5 @@
 │                                                                                                                                                                                                                      │
 │                                                                                                                                                                                                                      │
 │                                                                                                                                                                                                                      │
-│                                                                                                                                                                                                                      │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- ↑↓ navigate  enter open view  1-0 jump  ? help  q quit                                                                                                                                                                     
+ ↑↓ navigate  enter open view  1-0 jump  ctrl+t light  ? help  q quit                                                                                                                                                       

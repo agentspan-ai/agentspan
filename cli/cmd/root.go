@@ -4,6 +4,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -19,17 +20,15 @@ var (
 	Date      = "unknown"
 )
 
+var (
+	startTUI   = tui.Start
+	isTerminal = term.IsTerminal
+)
+
 var rootCmd = &cobra.Command{
 	Use:   "agentspan",
 	Short: "CLI for the AgentSpan runtime",
 	Long:  "Create, run, and manage AI agents powered by the AgentSpan runtime.",
-	// When invoked with no subcommand and stdout is a TTY, launch the TUI.
-	RunE: func(cmd *cobra.Command, args []string) error {
-		if isTTY() {
-			return tui.Start(Version)
-		}
-		return cmd.Help()
-	},
 }
 
 var versionCmd = &cobra.Command{
@@ -40,9 +39,16 @@ var versionCmd = &cobra.Command{
 	},
 }
 
-// isTTY returns true if stdout is connected to a terminal.
-func isTTY() bool {
-	return term.IsTerminal(int(os.Stdout.Fd()))
+var tuiCmd = &cobra.Command{
+	Use:          "tui",
+	Short:        "Launch the interactive terminal UI",
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := requireInteractiveTerminal(os.Stdin, os.Stdout); err != nil {
+			return err
+		}
+		return startTUI(Version)
+	},
 }
 
 func Execute() {
@@ -54,4 +60,15 @@ func Execute() {
 func init() {
 	rootCmd.PersistentFlags().StringVar(&serverURL, "server", "", "Runtime server URL (default: http://localhost:6767)")
 	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(tuiCmd)
+}
+
+func requireInteractiveTerminal(stdin, stdout *os.File) error {
+	if stdin == nil || stdout == nil {
+		return errors.New("agentspan tui requires an interactive terminal (TTY)")
+	}
+	if !isTerminal(int(stdin.Fd())) || !isTerminal(int(stdout.Fd())) {
+		return errors.New("agentspan tui requires an interactive terminal (TTY)")
+	}
+	return nil
 }

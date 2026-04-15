@@ -185,9 +185,8 @@ agentspan doctor
 ### `agentspan configure` — Configuration
 
 ```bash
-# Set server URL and auth credentials
+# Set server URL
 agentspan configure --url http://myserver:6767
-agentspan configure --auth-key KEY --auth-secret SECRET
 
 # Override server URL for a single command
 agentspan --server http://other:6767 agent list
@@ -208,8 +207,7 @@ Configuration is stored in `~/.agentspan/config.json`. Environment variables tak
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `AGENTSPAN_SERVER_URL` | Server URL | `http://localhost:6767` |
-| `AGENTSPAN_AUTH_KEY` | Auth key | — |
-| `AGENTSPAN_AUTH_SECRET` | Auth secret | — |
+| `AGENTSPAN_API_KEY` | Bearer token for authenticated servers | — |
 
 **Precedence:** CLI flags > env vars > config file > defaults
 

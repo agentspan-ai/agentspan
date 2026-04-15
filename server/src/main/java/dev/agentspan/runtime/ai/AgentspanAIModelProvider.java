@@ -14,6 +14,7 @@ import org.conductoross.conductor.ai.models.LLMWorkerInput;
 import org.conductoross.conductor.ai.providers.anthropic.AnthropicConfiguration;
 import org.conductoross.conductor.ai.providers.azureopenai.AzureOpenAIConfiguration;
 import org.conductoross.conductor.ai.providers.cohere.CohereAIConfiguration;
+import org.conductoross.conductor.ai.providers.gemini.GeminiVertex;
 import org.conductoross.conductor.ai.providers.gemini.GeminiVertexConfiguration;
 import org.conductoross.conductor.ai.providers.grok.GrokAIConfiguration;
 import org.conductoross.conductor.ai.providers.huggingface.HuggingFaceConfiguration;
@@ -63,6 +64,16 @@ public class AgentspanAIModelProvider extends AIModelProvider {
             Map.entry("gemini", "GEMINI_API_KEY"),
             Map.entry("google_gemini", "GEMINI_API_KEY"));
 
+    /** Maps Conductor provider names to base URL env var names. */
+    private static final Map<String, String> PROVIDER_TO_BASE_URL_ENV = Map.ofEntries(
+            Map.entry("openai", "OPENAI_BASE_URL"),
+            Map.entry("anthropic", "ANTHROPIC_BASE_URL"),
+            Map.entry("mistral", "MISTRAL_BASE_URL"),
+            Map.entry("cohere", "COHERE_BASE_URL"),
+            Map.entry("grok", "GROK_BASE_URL"),
+            Map.entry("perplexity", "PERPLEXITY_BASE_URL"),
+            Map.entry("azureopenai", "AZURE_OPENAI_BASE_URL"));
+
     private final CredentialResolutionService resolutionService;
     private final ExecutionTokenService tokenService;
 
@@ -84,18 +95,27 @@ public class AgentspanAIModelProvider extends AIModelProvider {
             return super.getModel(input);
         }
 
+        // Resolve per-agent base URL (from task input) or env var fallback
+        String baseUrl = resolveBaseUrl(provider);
+
         // Try per-user credential resolution
         log.debug("getModel called for provider='{}' model='{}'", provider, input.getModel());
         String userApiKey = resolveUserApiKey(provider);
         log.debug("resolveUserApiKey('{}') returned: {}", provider, userApiKey != null ? "key found" : "null");
-        if (userApiKey != null) {
+        if (userApiKey != null || baseUrl != null) {
             try {
-                AIModel model = createModelWithKey(provider, userApiKey);
-                if (model != null) {
-                    log.debug("Per-user AIModel created for provider '{}'", provider);
-                    // Register in provider map so Conductor's executor can find it
-                    getProviderToLLM().put(provider.toLowerCase(), model);
-                    return model;
+                // If we have a base URL but no user key, try the server-wide key
+                if (userApiKey == null) {
+                    String envVar = PROVIDER_TO_ENV_VAR.get(provider.toLowerCase());
+                    userApiKey = envVar != null ? System.getenv(envVar) : null;
+                }
+                if (userApiKey != null) {
+                    AIModel model = createModelWithKey(provider, userApiKey, baseUrl);
+                    if (model != null) {
+                        log.debug("Per-user AIModel created for provider '{}' baseUrl='{}'", provider, baseUrl);
+                        getProviderToLLM().put(provider.toLowerCase(), model);
+                        return model;
+                    }
                 }
             } catch (Exception e) {
                 log.warn("Failed to create per-user AIModel for '{}': {}", provider, e.getMessage(), e);
@@ -186,38 +206,55 @@ public class AgentspanAIModelProvider extends AIModelProvider {
     }
 
     /**
-     * Create a fresh AIModel instance with a per-user API key.
-     * Uses the server-wide model's base URL/endpoint config as defaults,
-     * only overriding the API key.
+     * Resolve base URL: per-agent (from task input) > env var > null (use provider default).
      */
-    private AIModel createModelWithKey(String provider, String apiKey) {
-        // Get the server-wide model to inherit base URL and other config
-        AIModel serverModel = getProviderToLLM().get(provider.toLowerCase());
-        String baseUrl = null;
+    @SuppressWarnings("unchecked")
+    private String resolveBaseUrl(String provider) {
+        // 1. Per-agent base URL from task input
+        try {
+            TaskContext ctx = TaskContext.get();
+            if (ctx != null && ctx.getTask() != null) {
+                Object taskBaseUrl = ctx.getTask().getInputData().get("baseUrl");
+                if (taskBaseUrl instanceof String s && !s.isBlank()) {
+                    log.debug("Using per-agent baseUrl for provider '{}': {}", provider, s);
+                    return s;
+                }
+            }
+        } catch (Exception e) {
+            // ignore
+        }
 
+        // 2. Env var fallback (e.g. OPENAI_BASE_URL)
+        String envVarName = PROVIDER_TO_BASE_URL_ENV.get(provider.toLowerCase());
+        if (envVarName != null) {
+            String envVal = System.getenv(envVarName);
+            if (envVal != null && !envVal.isBlank()) {
+                log.debug("Using env var {} for provider '{}': {}", envVarName, provider, envVal);
+                return envVal;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Create a fresh AIModel instance with a per-user API key and optional base URL.
+     */
+    private AIModel createModelWithKey(String provider, String apiKey, String baseUrl) {
         ModelConfiguration<? extends AIModel> config =
                 switch (provider.toLowerCase()) {
-                    case "openai" -> {
-                        var c = new OpenAIConfiguration(apiKey, null, null);
-                        yield c;
-                    }
-                    case "anthropic" -> {
-                        var c = new AnthropicConfiguration(apiKey, null, null, null, null);
-                        yield c;
-                    }
-                    case "azureopenai" -> {
-                        var c = new AzureOpenAIConfiguration(apiKey, null, null, null);
-                        yield c;
-                    }
-                    case "mistral" -> new MistralAIConfiguration(apiKey, null);
-                    case "cohere" -> new CohereAIConfiguration(apiKey, null);
-                    case "grok" -> new GrokAIConfiguration(apiKey, null);
+                    case "openai" -> new OpenAIConfiguration(apiKey, baseUrl, null);
+                    case "anthropic" -> new AnthropicConfiguration(apiKey, baseUrl, null, null, null);
+                    case "azureopenai" -> new AzureOpenAIConfiguration(apiKey, baseUrl, null, null);
+                    case "mistral" -> new MistralAIConfiguration(apiKey, baseUrl);
+                    case "cohere" -> new CohereAIConfiguration(apiKey, baseUrl);
+                    case "grok" -> new GrokAIConfiguration(apiKey, baseUrl);
                     case "huggingface" -> {
                         var c = new HuggingFaceConfiguration();
                         c.setApiKey(apiKey);
                         yield c;
                     }
-                    case "perplexity" -> new PerplexityAIConfiguration(apiKey, null);
+                    case "perplexity" -> new PerplexityAIConfiguration(apiKey, baseUrl);
                     case "gemini", "google_gemini" -> null; // Handled below
                     default -> null;
                 };
@@ -237,7 +274,8 @@ public class AgentspanAIModelProvider extends AIModelProvider {
 
     /**
      * Create a Gemini model using API key auth via REST transport.
-     * This avoids the Vertex AI gRPC path which requires IAM credentials.
+     * Uses the upstream GeminiVertex which handles the API key path properly
+     * with GoogleGenAiChatModel (full tool calling support).
      */
     private AIModel createGeminiApiKeyModel(String apiKey) {
         String projectId = resolveUserCredential("GOOGLE_CLOUD_PROJECT");
@@ -245,6 +283,6 @@ public class AgentspanAIModelProvider extends AIModelProvider {
         config.setApiKey(apiKey);
         config.setProjectId(projectId != null ? projectId : "google-ai-studio");
         config.setLocation("us-central1");
-        return new GeminiApiKeyModel(config, apiKey);
+        return new GeminiVertex(config);
     }
 }
