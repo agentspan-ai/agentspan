@@ -966,6 +966,11 @@ public class AgentCompiler {
         inputs.put("llmProvider", parsed.getProvider());
         inputs.put("model", parsed.getModel());
 
+        // Per-agent base URL override
+        if (config.getBaseUrl() != null && !config.getBaseUrl().isBlank()) {
+            inputs.put("baseUrl", config.getBaseUrl());
+        }
+
         // Build messages
         List<Object> messages = new ArrayList<>();
 
