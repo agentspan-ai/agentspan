@@ -752,3 +752,51 @@ describe("Suite 1: Basic Validation", () => {
     },
   );
 });
+
+// ── Suite 1.x: Base URL tests ─────────────────────────────────────────
+
+function findLlmTasks(tasks: Record<string, unknown>[]): Record<string, unknown>[] {
+  const found: Record<string, unknown>[] = [];
+  for (const t of tasks) {
+    if (t.type === 'LLM_CHAT_COMPLETE') found.push(t);
+    for (const inner of (t.loopOver ?? []) as Record<string, unknown>[]) {
+      if (inner.type === 'LLM_CHAT_COMPLETE') found.push(inner);
+    }
+  }
+  return found;
+}
+
+describe('Base URL', () => {
+  it('per-agent baseUrl appears in LLM task inputParameters', async () => {
+    const agent = new Agent({
+      name: 'e2e_base_url',
+      model: MODEL,
+      instructions: 'Say hello.',
+      baseUrl: 'https://my-custom-proxy.example.com/v1',
+    });
+    const result = await runtime.plan(agent);
+    const wf = result.workflowDef as Record<string, unknown>;
+    const tasks = (wf.tasks ?? []) as Record<string, unknown>[];
+    const llmTasks = findLlmTasks(tasks);
+
+    expect(llmTasks.length).toBeGreaterThan(0);
+    const params = llmTasks[0].inputParameters as Record<string, unknown>;
+    expect(params.baseUrl).toBe('https://my-custom-proxy.example.com/v1');
+  });
+
+  it('no baseUrl in LLM task when omitted from Agent', async () => {
+    const agent = new Agent({
+      name: 'e2e_no_base_url',
+      model: MODEL,
+      instructions: 'Say hello.',
+    });
+    const result = await runtime.plan(agent);
+    const wf = result.workflowDef as Record<string, unknown>;
+    const tasks = (wf.tasks ?? []) as Record<string, unknown>[];
+    const llmTasks = findLlmTasks(tasks);
+
+    expect(llmTasks.length).toBeGreaterThan(0);
+    const params = llmTasks[0].inputParameters as Record<string, unknown>;
+    expect(params.baseUrl).toBeUndefined();
+  });
+});

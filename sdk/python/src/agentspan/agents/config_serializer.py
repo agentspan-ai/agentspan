@@ -69,6 +69,7 @@ class AgentConfigSerializer:
         config: Dict[str, Any] = {
             "name": agent.name,
             "model": agent.model or None,
+            "baseUrl": getattr(agent, "base_url", None),
             "strategy": agent.strategy if agent.agents else None,
             "maxTurns": agent.max_turns,
             "timeoutSeconds": agent.timeout_seconds,

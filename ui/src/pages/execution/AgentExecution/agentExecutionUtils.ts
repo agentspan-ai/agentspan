@@ -691,6 +691,7 @@ export function transformWorkflowExecutionToAgentRun(
         if (condensed) events.push(condensed);
 
         const model = llmTask.inputData?.model as string | undefined;
+        const llmBaseUrl = llmTask.inputData?.baseUrl as string | undefined;
         const finishReason =
           ((llmTask.outputData?.finishReason as string) ?? "stop").toLowerCase();
         const result = llmTask.outputData?.result;
@@ -716,6 +717,7 @@ export function transformWorkflowExecutionToAgentRun(
           type: EventType.THINKING,
           timestamp: llmTask.startTime ?? 0,
           toolName: model,
+          baseUrl: llmBaseUrl,
           summary: `${model ?? "LLM"} · ${messages.length} messages${tools.length ? ` · ${tools.length} tools` : ""}`,
           detail: {
             input: {
@@ -1069,6 +1071,7 @@ export function transformWorkflowExecutionToAgentRun(
         if (condensed) rootEvents.push(condensed);
 
         const model = task.inputData?.model as string | undefined;
+        const rootBaseUrl = task.inputData?.baseUrl as string | undefined;
         const finishReason = ((task.outputData?.finishReason as string) ?? "stop").toLowerCase();
         const result = task.outputData?.result;
         const promptTokens = (task.outputData?.promptTokens as number) || 0;
@@ -1086,6 +1089,7 @@ export function transformWorkflowExecutionToAgentRun(
           id: `${task.taskId}-llm`,
           type: EventType.THINKING,
           toolName: model,
+          baseUrl: rootBaseUrl,
           timestamp: task.startTime ?? 0,
           summary: `${model ?? "LLM"} · ${messages.length} messages${tools.length ? ` · ${tools.length} tools` : ""}`,
           detail: {
@@ -1331,6 +1335,7 @@ function taskToEvents(task: ExecutionTask): AgentEvent[] {
         | undefined
     ) ?? [];
     const model = task.inputData?.model as string | undefined;
+    const taskBaseUrl = task.inputData?.baseUrl as string | undefined;
     const result = task.outputData?.result;
     const finishReason = (task.outputData?.finishReason as string | undefined)
       ?.toLowerCase() ?? "stop";
@@ -1347,6 +1352,7 @@ function taskToEvents(task: ExecutionTask): AgentEvent[] {
       id: `${task.taskId}-invoke`,
       type: EventType.THINKING,
       toolName: model,
+      baseUrl: taskBaseUrl,
       timestamp: task.startTime ?? 0,
       summary: `${model ?? "LLM"} · ${messages.length} messages${tools.length ? ` · ${tools.length} tools` : ""}`,
       detail: {

@@ -87,6 +87,8 @@ export interface ConversationMemory {
 export interface AgentOptions {
   name: string;
   model?: string | ClaudeCode;
+  /** Custom base URL for the LLM provider (overrides env var defaults). */
+  baseUrl?: string;
   instructions?: string | PromptTemplate | ((...args: unknown[]) => string);
   tools?: unknown[]; // Normalized via normalizeToolInput at serialization
   agents?: Agent[];
@@ -130,6 +132,8 @@ export interface AgentOptions {
 export class Agent {
   readonly name: string;
   readonly model?: string;
+  /** Custom base URL for the LLM provider (overrides env var defaults). */
+  readonly baseUrl?: string;
   readonly instructions?: string | PromptTemplate | ((...args: unknown[]) => string);
   readonly tools: unknown[];
   readonly agents: Agent[];
@@ -181,6 +185,7 @@ export class Agent {
       this.model = options.model;
     }
 
+    this.baseUrl = options.baseUrl;
     this.instructions = options.instructions;
     this.tools = [...(options.tools ?? [])];
     this.agents = options.agents ?? [];
