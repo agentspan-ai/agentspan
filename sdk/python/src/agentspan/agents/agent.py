@@ -359,6 +359,7 @@ class Agent:
         thinking_budget_tokens: Optional[int] = None,
         required_tools: Optional[List[str]] = None,
         gate: Optional[Any] = None,
+        base_url: Optional[str] = None,
         credentials: Optional[List[Any]] = None,
         stateful: bool = False,
     ) -> None:
@@ -390,6 +391,7 @@ class Agent:
         else:
             self.model = model
 
+        self.base_url = base_url
         self.instructions = instructions
         self.tools: List[Any] = list(tools) if tools else []
 

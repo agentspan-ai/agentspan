@@ -49,8 +49,10 @@ export interface AgentEvent {
   summary: string;
   /** Full detail - JSON object or text */
   detail?: unknown;
-  /** For TOOL_CALL: tool name */
+  /** For TOOL_CALL: tool name; for LLM: model name */
   toolName?: string;
+  /** For LLM: custom base URL override (for debugging) */
+  baseUrl?: string;
   /** For TOOL_CALL: tool arguments */
   toolArgs?: Record<string, unknown>;
   /** For HANDOFF: target agent name */

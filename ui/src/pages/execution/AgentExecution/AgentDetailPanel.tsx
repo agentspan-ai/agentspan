@@ -804,6 +804,7 @@ function SummaryContent({ node, onDrillIn }: { node: DetailNodeData; onDrillIn?:
           <SummaryRow label="Kind" value="LLM Call" />
           <SummaryRow label="Status" value={<StatusBadgeInline status={node.status} />} />
           {ev?.toolName && <SummaryRow label="Model" value={<ModelValue model={ev.toolName} />} />}
+          {ev?.baseUrl && <SummaryRow label="Base URL" value={ev.baseUrl} />}
           {tok && (tok.promptTokens + tok.completionTokens) > 0 && <SummaryRow label="Total tokens" value={formatTokens(tok.promptTokens + tok.completionTokens)} />}
           {tok && tok.promptTokens > 0 && <SummaryRow label="Prompt tokens" value={formatTokens(tok.promptTokens)} />}
           {tok && tok.completionTokens > 0 && <SummaryRow label="Completion tokens" value={formatTokens(tok.completionTokens)} />}
