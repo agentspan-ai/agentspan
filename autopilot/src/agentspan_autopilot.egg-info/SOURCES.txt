@@ -52,6 +52,7 @@ src/autopilot/integrations/web_search/tools.py
 src/autopilot/integrations/whatsapp/__init__.py
 src/autopilot/integrations/whatsapp/tools.py
 src/autopilot/orchestrator/__init__.py
+src/autopilot/orchestrator/_deploy_runner.py
 src/autopilot/orchestrator/gates.py
 src/autopilot/orchestrator/retry.py
 src/autopilot/orchestrator/server.py

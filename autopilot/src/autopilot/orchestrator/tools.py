@@ -521,9 +521,16 @@ def deploy_agent(agent_name: str) -> str:
                     break
 
             if not execution_id:
-                # Check stderr for errors — truncate from END so actual error is visible
-                err = proc.stderr.strip()[-500:] if proc.stderr else "Unknown error"
-                raise RuntimeError(f"Agent subprocess failed: {err}")
+                # Gather ALL available error info — never say "Unknown error"
+                err_parts = []
+                if proc.stderr and proc.stderr.strip():
+                    err_parts.append(f"stderr: {proc.stderr.strip()[-800:]}")
+                if proc.stdout and proc.stdout.strip():
+                    # Show stdout too — it may have useful info even without AGENT_RESULT
+                    err_parts.append(f"stdout: {proc.stdout.strip()[-800:]}")
+                err_parts.append(f"exit_code: {proc.returncode}")
+                err = "\n".join(err_parts)
+                raise RuntimeError(f"Agent subprocess failed:\n{err}")
 
             return execution_id, agent_output, server_status
 
