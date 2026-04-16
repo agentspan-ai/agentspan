@@ -53,6 +53,39 @@ class OrchestratorError(Exception):
     """Raised for orchestrator-level errors (missing agents, bad state, etc.)."""
 
 
+def _validate_output(output: str, user_request: str = "") -> tuple[bool, str]:
+    """Check if agent output is acceptable. Returns (is_valid, reason).
+
+    Programmatic quality gate — catches empty output, error messages,
+    and code-only responses that indicate the agent failed to produce
+    real results.
+    """
+    if not output or len(output.strip()) < 10:
+        return False, "Output is empty or too short"
+
+    failure_patterns = [
+        "unable to", "could not", "error in", "failed to",
+        "no results", "cannot access", "not available",
+        "i was unable", "i couldn't", "error:", "traceback",
+    ]
+    lower = output.lower()
+    for pattern in failure_patterns:
+        if pattern in lower:
+            return False, f"Output contains failure pattern: '{pattern}'"
+
+    # Check if output is just a code snippet instead of actual results
+    if output.strip().startswith("```") and output.strip().endswith("```"):
+        code_lines = output.strip().split("\n")
+        non_code_lines = [
+            l for l in code_lines
+            if not l.startswith("```") and not l.startswith("    ") and not l.startswith("def ")
+        ]
+        if len(non_code_lines) < 3:
+            return False, "Output is just a code snippet, not actual results"
+
+    return True, "Output acceptable"
+
+
 def build_integration_catalog() -> str:
     """Build a human-readable integration catalog with credential info.
 
@@ -442,6 +475,16 @@ def deploy_agent(agent_name: str) -> str:
     if not (agent_dir / "agent.yaml").exists():
         return f"Error: Agent '{agent_name}' not found at {agent_dir}."
 
+    # --- Gap A: Mandatory gates before deployment ---
+    from autopilot.orchestrator.gates import run_all_gates
+
+    gates_result = run_all_gates(agent_name)
+    if "[FAIL]" in gates_result:
+        return (
+            f"Deployment blocked — validation failed:\n{gates_result}\n"
+            f"Fix the issues and try again."
+        )
+
     sm = _get_state_manager(config)
 
     # Update state to DEPLOYING
@@ -534,6 +577,14 @@ def deploy_agent(agent_name: str) -> str:
                 err = "\n".join(err_parts)
                 raise RuntimeError(f"Agent subprocess failed:\n{err}")
 
+            # --- Gap B: Programmatic output quality validation ---
+            output_valid, output_reason = _validate_output(agent_output)
+            if not output_valid:
+                raise RuntimeError(
+                    f"Agent produced unacceptable output ({output_reason}).\n"
+                    f"Output was: {agent_output[:500]}"
+                )
+
             return execution_id, agent_output, server_status
 
         # --- Self-healing: parse errors and fix before blind retry ---
@@ -614,10 +665,23 @@ def deploy_agent(agent_name: str) -> str:
                     import time as _time
                     _time.sleep(policy.get_delay(_attempt))
                     continue
-                raise
+
+                # --- Gap C: Enforce retry — never allow "giving up" ---
+                raise RuntimeError(
+                    f"DEPLOYMENT FAILED after {policy.max_retries + 1} attempts.\n"
+                    f"Last error: {last_deploy_error}\n\n"
+                    f"ACTION REQUIRED: The worker code needs to be rewritten.\n"
+                    f"Call generate_worker with corrected implementation, then deploy_agent again."
+                )
 
         if deploy_result is None:
-            raise last_deploy_error  # type: ignore[misc]
+            # --- Gap C: Enforce retry — never allow "giving up" ---
+            raise RuntimeError(
+                f"DEPLOYMENT FAILED after {policy.max_retries + 1} attempts.\n"
+                f"Last error: {last_deploy_error}\n\n"
+                f"ACTION REQUIRED: The worker code needs to be rewritten.\n"
+                f"Call generate_worker with corrected implementation, then deploy_agent again."
+            )
 
         execution_id, agent_output, server_status = deploy_result
 
