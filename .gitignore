@@ -33,3 +33,5 @@ node_modules/
 /*.ts
 /tsconfig.json
 cli/agentspan
+sdk/java/examples/target/
+sdk/java/target/
