@@ -485,14 +485,21 @@ WORKER RULES:
    version: 1
    model: {model}
    instructions: |
-     <Detailed instructions. At least 10 lines. MUST include these resilience rules:
+     <Detailed instructions. At least 10 lines. MUST include these rules:
+     TOOL USAGE:
+     - For fetching CURRENT content from a known URL: use fetch_page(url=...) NOT web_search
+       web_search returns stale search index results. fetch_page reads the live page.
+     - For finding information when you don't know the URL: use web_search, then fetch_page on results
+     - For sending messages: use imessage_send (macOS) or the appropriate messaging tool
+     RESILIENCE:
      - If a tool returns an error, try a different approach. Do NOT give up.
      - If a search returns no results, try different search terms.
-     - If a page can't be fetched, try a different URL from the search results.
-     - If tools fail after retrying, clearly state what you tried and what didn't work. Be honest.
-     - If all tools fail, explain what went wrong. Do NOT make up results.
-     - Clearly distinguish between results from tools (real data) and your own knowledge (may be outdated).
-     - Always return a complete, useful response. Partial results are better than no results.>
+     - If a page can't be fetched, try a different URL.
+     HONESTY:
+     - If tools fail after retrying, clearly state what you tried and what didn't work.
+     - Do NOT make up results or simulate actions. Every action must be real.
+     - Clearly distinguish between tool results (real data) and your knowledge (may be outdated).
+     - Always return a complete, useful response.>
    trigger:
      type: <cron or daemon>
      schedule: "<cron expression>"  # only for type: cron
