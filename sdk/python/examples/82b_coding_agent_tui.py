@@ -16,7 +16,7 @@ Usage:
 Requirements:
     - pip install prompt_toolkit
     - Conductor server (conductor.workflow-message-queue.enabled=true)
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - AGENTSPAN_LLM_MODEL=anthropic/claude-sonnet-4-20250514
 """
 
