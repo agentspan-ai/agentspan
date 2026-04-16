@@ -1426,6 +1426,9 @@ def {tool_name}({params}) -> str:
     if yaml_path.exists():
         agent_config = yaml.safe_load(yaml_path.read_text()) or {}
         tools_list = agent_config.get("tools", [])
+        # Ensure tools_list is actually a list (LLM sometimes writes dicts)
+        if not isinstance(tools_list, list):
+            tools_list = [str(tools_list)]
         if tool_name not in tools_list:
             tools_list.append(tool_name)
             agent_config["tools"] = tools_list
