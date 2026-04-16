@@ -8,6 +8,9 @@ management tools are fully deterministic.
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -24,6 +27,31 @@ from autopilot.registry import get_default_registry
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _pip_install(packages: list[str], timeout: int = 60) -> subprocess.CompletedProcess:
+    """Install pip packages using uv (preferred) or python -m pip (fallback).
+
+    uv-managed venvs don't have pip installed, so we try uv first.
+    """
+    import shutil
+
+    # Try uv pip install first (works in uv-managed venvs)
+    uv_path = shutil.which("uv")
+    if uv_path:
+        result = subprocess.run(
+            [uv_path, "pip", "install", "--quiet"] + packages,
+            capture_output=True, text=True, timeout=timeout,
+        )
+        if result.returncode == 0:
+            return result
+
+    # Fallback to python -m pip
+    python_exe = os.environ.get("AUTOPILOT_PYTHON", sys.executable)
+    return subprocess.run(
+        [python_exe, "-m", "pip", "install", "--quiet"] + packages,
+        capture_output=True, text=True, timeout=timeout,
+    )
+
 
 def _get_config() -> AutopilotConfig:
     """Load the autopilot config from environment / file."""
@@ -608,27 +636,20 @@ def deploy_agent(agent_name: str) -> str:
                 if mod_match:
                     missing_mod = mod_match.group(1).split(".")[0]
                     try:
-                        subprocess.run(
-                            [os.environ.get("AUTOPILOT_PYTHON", sys.executable), "-m", "pip", "install", "--quiet", missing_mod],
-                            capture_output=True, text=True, timeout=60,
-                        )
+                        _pip_install([missing_mod])
                     except Exception:
                         pass
                     continue  # retry after install
 
                 # --- Auto-fix: pip install failed → try with --user flag or uv ---
                 if "Failed to install dependencies" in err_msg:
-                    # Read requirements.txt and try installing differently
+                    # Read requirements.txt and try installing
                     req_file = agent_dir / "workers" / "requirements.txt"
                     if req_file.exists():
                         deps = [l.strip() for l in req_file.read_text().splitlines() if l.strip()]
                         if deps:
                             try:
-                                # Try with --user flag
-                                subprocess.run(
-                                    [os.environ.get("AUTOPILOT_PYTHON", sys.executable), "-m", "pip", "install", "--user", "--quiet"] + deps,
-                                    capture_output=True, text=True, timeout=60,
-                                )
+                                _pip_install(deps)
                             except Exception:
                                 pass
                     continue  # retry after install attempt
@@ -642,10 +663,7 @@ def deploy_agent(agent_name: str) -> str:
                 if import_match:
                     missing_mod = import_match.group(1).split(".")[0]
                     try:
-                        subprocess.run(
-                            [os.environ.get("AUTOPILOT_PYTHON", sys.executable), "-m", "pip", "install", "--quiet", missing_mod],
-                            capture_output=True, text=True, timeout=60,
-                        )
+                        _pip_install([missing_mod])
                     except Exception:
                         pass
                     continue
@@ -1397,12 +1415,9 @@ def {tool_name}({params}) -> str:
 
         try:
             dep_list = [d.strip() for d in dependencies.split(",") if d.strip()]
-            subprocess.run(
-                [os.environ.get("AUTOPILOT_PYTHON", sys.executable), "-m", "pip", "install", "--quiet"] + dep_list,
-                capture_output=True,
-                timeout=60,
-                check=True,
-            )
+            result = _pip_install(dep_list)
+            if result.returncode != 0:
+                raise RuntimeError(result.stderr[-300:] if result.stderr else "install failed")
         except Exception as pip_err:
             pip_warning = f"\nWarning: failed to install dependencies: {pip_err}"
 

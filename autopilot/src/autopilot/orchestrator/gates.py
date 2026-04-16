@@ -426,13 +426,18 @@ def validate_worker_execution(agent_name: str) -> str:
         deps = [l.strip() for l in req_file.read_text().splitlines() if l.strip()]
         if deps:
             try:
-                subprocess.run(
-                    [sys.executable, "-m", "pip", "install", "--quiet"] + deps,
-                    capture_output=True,
-                    text=True,
-                    timeout=60,
-                    check=True,
-                )
+                import shutil
+                uv_path = shutil.which("uv")
+                if uv_path:
+                    subprocess.run(
+                        [uv_path, "pip", "install", "--quiet"] + deps,
+                        capture_output=True, text=True, timeout=60, check=True,
+                    )
+                else:
+                    subprocess.run(
+                        [sys.executable, "-m", "pip", "install", "--quiet"] + deps,
+                        capture_output=True, text=True, timeout=60, check=True,
+                    )
             except Exception as exc:
                 errors.append(f"failed to install dependencies: {exc}")
                 return "FAIL: " + "; ".join(errors)

@@ -47,17 +47,24 @@ def main() -> None:
     deploy_timeout = int(os.environ.get("DEPLOY_TIMEOUT", "120"))
 
     try:
-        # Step 1: Install worker dependencies
+        # Step 1: Install worker dependencies (uv preferred, pip fallback)
+        import shutil
         req_file = agent_dir / "workers" / "requirements.txt"
         if req_file.exists():
             deps = [l.strip() for l in req_file.read_text().splitlines() if l.strip()]
             if deps:
-                result = subprocess.run(
-                    [_PYTHON, "-m", "pip", "install", "--quiet"] + deps,
-                    capture_output=True,
-                    text=True,
-                    timeout=60,
-                )
+                # Try uv first (uv-managed venvs don't have pip)
+                uv_path = shutil.which("uv")
+                if uv_path:
+                    result = subprocess.run(
+                        [uv_path, "pip", "install", "--quiet"] + deps,
+                        capture_output=True, text=True, timeout=60,
+                    )
+                else:
+                    result = subprocess.run(
+                        [_PYTHON, "-m", "pip", "install", "--quiet"] + deps,
+                        capture_output=True, text=True, timeout=60,
+                    )
                 if result.returncode != 0:
                     _emit(output=f"Failed to install dependencies: {result.stderr[-500:]}")
                     sys.exit(1)
