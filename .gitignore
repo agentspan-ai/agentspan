@@ -1,6 +1,12 @@
 .DS_Store
 .idea/
 __pycache__/
+
+# Java build artifacts
+*.class
+target/
+sdk/java/examples/target/
+sdk/java/target/
 sdk/python/.coverage
 sdk/python/.env
 sdk/python/validation/.env
