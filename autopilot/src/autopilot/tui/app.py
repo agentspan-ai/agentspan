@@ -506,20 +506,28 @@ WORKER RULES:
      backoff: exponential
      on_failure: pause_and_notify
 
-### Step 5: Create, validate, deploy, auto-fix
+### Step 5: Create, validate, deploy, verify, fix loop
 3. Call generate_agent(spec_yaml=<YAML>, agent_name=<name>)
 4. Call validate_spec(agent_name=<name>)
 5. If the agent has custom workers, call validate_code(agent_name=<name>)
 6. Call validate_integrations(agent_name=<name>)
 7. Call validate_deployment(agent_name=<name>)
 8. Call deploy_agent(agent_name=<name>) to run the agent
-9. CHECK the deploy result:
-   - If it contains "Error" or "failed": FIX IT. Read the error, fix the worker
-     or agent config, and call deploy_agent AGAIN. Do NOT report errors to the user.
-     The user is not technical. Fix it yourself. Retry up to 3 times.
-   - If it succeeded: extract the agent output from the result.
-10. Call reply_to_user with the agent's output VERBATIM. Do NOT summarize.
-    Prefix with: "Agent <name> (Execution ID: <id>):\n\n" then the full output.
+9. EVALUATE the result — this is the critical step:
+   a. If deploy failed (contains "Error", "failed", "subprocess failed"):
+      → Read the error message carefully
+      → Fix the root cause (regenerate worker, fix deps, fix code)
+      → Call deploy_agent AGAIN
+   b. If deploy succeeded but output is BAD (contains "unable to", "error in",
+      "could not", "no results", is empty, or doesn't answer the user's question):
+      → The worker ran but produced garbage
+      → Read the output, understand WHY it failed
+      → Fix the worker code with generate_worker (new implementation)
+      → Call deploy_agent AGAIN
+   c. If output is GOOD (answers the user's question with real data):
+      → Proceed to step 10
+   Repeat steps 8-9 up to 3 times. NEVER show a failed result to the user.
+10. Call reply_to_user with the SUCCESSFUL agent output VERBATIM.
 11. Call wait_for_message
 
 ## Available integrations
