@@ -1348,13 +1348,37 @@ public class MultiAgentCompiler {
         // 2. HumanTask
         String humanRef = config.getName() + "_pick_agent";
         Map<String, String> agentOptions = new LinkedHashMap<>();
+        List<String> agentNames = new ArrayList<>();
         for (int i = 0; i < config.getAgents().size(); i++) {
-            agentOptions.put(config.getAgents().get(i).getName(), String.valueOf(i));
+            String name = config.getAgents().get(i).getName();
+            agentOptions.put(name, String.valueOf(i));
+            agentNames.add(name);
         }
+
+        // Response schema: human must pick one of the available agent names.
+        // Without this schema, response_schema is absent from pendingTool and
+        // the Python/Java CLI handler never prompts the human — defaulting to
+        // the first agent every time.
+        Map<String, Object> selectedProp = new LinkedHashMap<>();
+        selectedProp.put("type", "string");
+        selectedProp.put("title", "Select Agent");
+        selectedProp.put("description", "Choose which agent should respond next: "
+                + String.join(", ", agentNames));
+        selectedProp.put("enum", agentNames);
+        Map<String, Object> responseSchema = new LinkedHashMap<>();
+        responseSchema.put("type", "object");
+        responseSchema.put("required", List.of("selected"));
+        responseSchema.put("properties", Map.of("selected", selectedProp));
+        Map<String, Object> responseUiSchema = new LinkedHashMap<>();
+        responseUiSchema.put("ui:order", List.of("selected"));
+        responseUiSchema.put("selected", Map.of("ui:widget", "select"));
+
         HumanTaskBuilder.Pipeline humanPipeline = HumanTaskBuilder.create(
                         humanRef, config.getName() + ": Select next agent")
                 .contextInput("agent_options", agentOptions)
                 .contextInput("conversation", "${workflow.variables.conversation}")
+                .responseSchema(responseSchema)
+                .responseUiSchema(responseUiSchema)
                 .build();
         WorkflowTask humanTask = humanPipeline.getTasks().get(0);
 
