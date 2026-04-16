@@ -153,6 +153,8 @@ def write_file(file_path: str, content: str) -> str:
         file_path: Path relative to repo root
         content:   Full file content to write
     """
+    if content is None:
+        return "Error: content is required — pass the full file text to write"
     if DRY_RUN:
         return f"[DRY RUN] Would write {len(content)} chars to {file_path}"
     full_path = REPO_PATH / file_path
