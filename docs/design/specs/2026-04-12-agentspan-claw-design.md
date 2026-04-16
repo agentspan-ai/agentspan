@@ -748,6 +748,25 @@ Local folder retains previous versions via git (the `~/.agentspan/autopilot/` di
 
 ---
 
+## Worker Integrity
+
+### No fakes. No simulations. No examples.
+
+Every worker MUST perform real work. A worker that returns "simulated result" or "in production this would..." is **not a worker** — it is a lie.
+
+If the user says "send me a text at 551-689-2423":
+- **Wrong**: `return f"Text message sent to {phone}: {message}"` ← this is a fake
+- **Right**: Use `builtin:imessage` (macOS), `builtin:whatsapp`, Twilio API, or another real messaging service
+- **If no service available**: Tell the user what credentials are needed. Do NOT fake the action.
+
+Rules:
+1. Every worker must call a real API, execute real computation, or interact with a real system
+2. If the worker cannot perform the action (missing credentials, missing API), it must return an honest error — not a simulated success
+3. The orchestrator must use existing builtin integrations before writing custom workers
+4. Custom workers must contain real, executable code with real side effects
+
+---
+
 ## Testing Philosophy
 
 ### Workflow completion is NOT success
