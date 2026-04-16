@@ -1362,8 +1362,7 @@ public class MultiAgentCompiler {
         Map<String, Object> selectedProp = new LinkedHashMap<>();
         selectedProp.put("type", "string");
         selectedProp.put("title", "Select Agent");
-        selectedProp.put("description", "Choose which agent should respond next: "
-                + String.join(", ", agentNames));
+        selectedProp.put("description", "Choose which agent should respond next: " + String.join(", ", agentNames));
         selectedProp.put("enum", agentNames);
         Map<String, Object> responseSchema = new LinkedHashMap<>();
         responseSchema.put("type", "object");
