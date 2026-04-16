@@ -92,9 +92,23 @@ def _validate_output(output: str, user_request: str = "") -> tuple[bool, str]:
         return False, "Output is empty or too short"
 
     failure_patterns = [
-        "unable to", "could not", "error in", "failed to",
-        "no results", "cannot access", "not available",
-        "i was unable", "i couldn't", "error:", "traceback",
+        # Direct failures
+        "unable to", "could not", "cannot ", "failed to", "error in",
+        "error:", "traceback", "exception", "no results",
+        # LLM cop-outs — agent giving up instead of doing the work
+        "i was unable", "i couldn't", "i cannot", "i'm unable",
+        "cannot be retrieved", "could not be retrieved", "could not be fetched",
+        "cannot be accessed", "not available", "not accessible",
+        "data cannot be", "information cannot be", "content cannot be",
+        # Deflection — agent punting to the user
+        "try again later", "assist you with something else", "let me know",
+        "please try again", "please check", "you can try",
+        "if you'd like", "if you want me to",
+        # Non-answers
+        "i don't have access", "i don't have the ability",
+        "beyond my capabilities", "outside my scope",
+        "unfortunately", "i apologize", "i'm sorry",
+        "as an ai", "as a language model",
     ]
     lower = output.lower()
     for pattern in failure_patterns:

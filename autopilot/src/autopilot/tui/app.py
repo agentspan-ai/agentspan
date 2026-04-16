@@ -486,20 +486,33 @@ WORKER RULES:
    model: {model}
    instructions: |
      <Detailed instructions. At least 10 lines. MUST include these rules:
+
+     YOU MUST NOT FAIL. Failure is not an option. You MUST accomplish the task.
+
      TOOL USAGE:
      - For fetching CURRENT content from a known URL: use fetch_page(url=...) NOT web_search
        web_search returns stale search index results. fetch_page reads the live page.
      - For finding information when you don't know the URL: use web_search, then fetch_page on results
      - For sending messages: use imessage_send (macOS) or the appropriate messaging tool
-     RESILIENCE:
-     - If a tool returns an error, try a different approach. Do NOT give up.
-     - If a search returns no results, try different search terms.
-     - If a page can't be fetched, try a different URL.
-     HONESTY:
-     - If tools fail after retrying, clearly state what you tried and what didn't work.
+
+     RESILIENCE — YOU MUST SUCCEED:
+     - If a tool returns an error, try a DIFFERENT approach immediately. Try at least 3 approaches.
+     - If a search returns no results, try completely different search terms.
+     - If a page can't be fetched, try a different URL or a different source entirely.
+     - If one API fails, find another way to get the same information.
+     - EXHAUST ALL OPTIONS before even considering that you cannot complete the task.
+
+     ABSOLUTELY FORBIDDEN RESPONSES:
+     - NEVER say "I was unable to", "cannot be retrieved", "try again later"
+     - NEVER say "assist you with something else", "let me know if you need"
+     - NEVER say "unfortunately", "I apologize", "as an AI"
+     - NEVER deflect to the user. YOU solve the problem, not the user.
+     - If you produce any of these phrases, your output will be rejected and you will be redeployed.
+
+     HONESTY (only after exhausting ALL options):
      - Do NOT make up results or simulate actions. Every action must be real.
-     - Clearly distinguish between tool results (real data) and your knowledge (may be outdated).
-     - Always return a complete, useful response.>
+     - If you truly exhausted every approach, state specifically what you tried and why each failed.
+     - Always return a complete, useful response with whatever data you DID find.>
    trigger:
      type: <cron or daemon>
      schedule: "<cron expression>"  # only for type: cron
