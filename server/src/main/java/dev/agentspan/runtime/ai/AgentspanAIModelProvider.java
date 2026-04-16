@@ -187,6 +187,18 @@ public class AgentspanAIModelProvider extends AIModelProvider {
     }
 
     /**
+     * Returns true if the provider is available: either configured at startup (via environment
+     * variables / application.properties) or has an API key credential in the current user's store.
+     *
+     * <p>Used by {@link dev.agentspan.runtime.util.ProviderValidator} so that credentials
+     * added via the UI take effect immediately without requiring a server restart.</p>
+     */
+    public boolean isProviderConfigured(String provider) {
+        if (getProviderToLLM().containsKey(provider.toLowerCase())) return true;
+        return resolveUserApiKey(provider) != null;
+    }
+
+    /**
      * Resolve any named credential for the current user.
      */
     private String resolveUserCredential(String credentialName) {
@@ -206,7 +218,10 @@ public class AgentspanAIModelProvider extends AIModelProvider {
     }
 
     /**
-     * Resolve base URL: per-agent (from task input) > env var > null (use provider default).
+     * Resolve base URL: per-agent (from task input) > credential store > env var > null.
+     *
+     * <p>Credential store is checked before the raw env var so that manually-set credentials
+     * and env-var-seeded credentials (via {@code CredentialEnvSeeder}) both work.</p>
      */
     @SuppressWarnings("unchecked")
     private String resolveBaseUrl(String provider) {
@@ -224,14 +239,21 @@ public class AgentspanAIModelProvider extends AIModelProvider {
             // ignore
         }
 
-        // 2. Env var fallback (e.g. OPENAI_BASE_URL)
         String envVarName = PROVIDER_TO_BASE_URL_ENV.get(provider.toLowerCase());
-        if (envVarName != null) {
-            String envVal = System.getenv(envVarName);
-            if (envVal != null && !envVal.isBlank()) {
-                log.debug("Using env var {} for provider '{}': {}", envVarName, provider, envVal);
-                return envVal;
-            }
+        if (envVarName == null) return null;
+
+        // 2. Credential store (covers env-var-seeded and manually-set credentials)
+        String credVal = resolveUserCredential(envVarName);
+        if (credVal != null && !credVal.isBlank()) {
+            log.debug("Using credential {} for provider '{}': {}", envVarName, provider, credVal);
+            return credVal;
+        }
+
+        // 3. Direct env var fallback
+        String envVal = System.getenv(envVarName);
+        if (envVal != null && !envVal.isBlank()) {
+            log.debug("Using env var {} for provider '{}': {}", envVarName, provider, envVal);
+            return envVal;
         }
 
         return null;
