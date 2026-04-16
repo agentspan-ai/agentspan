@@ -1252,11 +1252,36 @@ def generate_worker(agent_name: str, tool_name: str, description: str, parameter
     params = parameters.strip() if parameters.strip() else "input_data: str"
 
     # Build implementation — wrap in try/except so the worker NEVER crashes.
-    # It always returns a string: either the result or an error description.
-    # This lets the agent reason about errors and retry with different inputs.
     if implementation.strip():
-        impl_lines = implementation.strip().split("\n")
+        impl_text = implementation.strip()
+
+        # Fix common LLM mistake: implementation is a full function definition
+        # instead of just the function body. Detect and extract the body.
+        if impl_text.startswith("def "):
+            # The LLM wrote a whole function — extract just the body
+            lines = impl_text.split("\n")
+            # Skip the "def func_name(...):" line
+            body_lines = []
+            base_indent = None
+            for line in lines[1:]:
+                if base_indent is None and line.strip():
+                    base_indent = len(line) - len(line.lstrip())
+                if base_indent is not None:
+                    # Remove the base indentation
+                    if line.strip():
+                        body_lines.append(line[base_indent:] if len(line) >= base_indent else line)
+                    else:
+                        body_lines.append("")
+            if body_lines:
+                impl_text = "\n".join(body_lines)
+
+        impl_lines = impl_text.split("\n")
         inner_body = "\n".join(f"        {line}" for line in impl_lines)
+
+        # Ensure the implementation returns something — if no return statement, add one
+        if "return " not in impl_text:
+            inner_body += f"\n        return 'Tool {tool_name} completed successfully.'"
+
         impl_body = f"    try:\n{inner_body}\n    except Exception as _err:\n        return f\"Error in {tool_name}: {{_err}}\""
     else:
         impl_body = f'    return "Tool {tool_name} executed successfully."'
