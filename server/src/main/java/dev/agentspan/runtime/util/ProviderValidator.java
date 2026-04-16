@@ -10,6 +10,7 @@ import java.util.Optional;
 import org.springframework.stereotype.Component;
 
 import dev.agentspan.runtime.ai.AgentspanAIModelProvider;
+
 import lombok.RequiredArgsConstructor;
 
 @Component
@@ -28,9 +29,8 @@ public class ProviderValidator {
         if (aiModelProvider.isProviderConfigured(provider)) {
             return Optional.empty();
         }
-        return Optional.of(
-                "Model provider '" + provider + "' is not configured. "
-                        + "Add an API key for '" + provider + "' on the Credentials page. "
-                        + "Docs: " + DOCS_URL);
+        return Optional.of("Model provider '" + provider + "' is not configured. "
+                + "Add an API key for '" + provider + "' on the Credentials page. "
+                + "Docs: " + DOCS_URL);
     }
 }
