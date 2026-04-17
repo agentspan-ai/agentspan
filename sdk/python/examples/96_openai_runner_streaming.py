@@ -16,9 +16,17 @@ The diff:
     -from agents import Runner
     +from agentspan import Runner
 
-Note: Agentspan's stream_async() returns an AsyncAgentStream that yields
-AgentEvent objects. Event types: "thinking", "tool_call", "tool_result",
-"message", "done", "error". Use event.type and event.content.
+Agentspan's streaming model differs from openai-agents in that it streams
+*execution events* (LLM calls, tool calls, results) rather than tokens.
+The final response arrives in the "done" event's output field.
+
+Event types:
+    "thinking"    — an LLM or tool task has started (content = task name)
+    "tool_call"   — the LLM called a tool (tool_name, args)
+    "tool_result" — a tool completed (tool_name, result)
+    "message"     — an intermediate agent message
+    "done"        — execution complete; output contains the final answer
+    "error"       — execution failed
 
 Requirements:
     - uv add openai-agents
@@ -48,10 +56,23 @@ async def main():
     stream = await Runner.run_streamed(agent, input="Please tell me 5 jokes.")
 
     # Iterate Agentspan AgentEvent objects as they arrive from the server.
+    # Agentspan streams execution events — the final answer is in the "done" event.
     async for event in stream:
-        if event.type in ("thinking", "message") and event.content:
+        if event.type == "thinking" and event.content:
+            # Show which task is running (LLM or tool name)
+            print(f"[{event.content}] thinking...", flush=True)
+        elif event.type == "tool_call":
+            print(f"\n[tool] {event.tool_name}({event.args})", flush=True)
+        elif event.type == "tool_result":
+            print(f"[result] {event.result}", flush=True)
+        elif event.type == "message" and event.content:
             print(event.content, end="", flush=True)
         elif event.type == "done":
+            # Extract the final output from the done event
+            output = event.output
+            if isinstance(output, dict):
+                output = output.get("result", output)
+            print(output)
             break
 
     # Final result is also available after streaming.

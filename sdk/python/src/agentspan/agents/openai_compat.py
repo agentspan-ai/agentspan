@@ -44,6 +44,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from typing import Any, Optional
 
 logger = logging.getLogger("agentspan.agents.openai_compat")
@@ -85,13 +86,17 @@ class RunResult:
 # ── Helpers ────────────────────────────────────────────────────────────────
 
 
-def _model_to_agentspan(model: str) -> str:
+def _model_to_agentspan(model: Any) -> str:
     """Add a provider prefix when the model name lacks one.
 
     ``"gpt-4o"``         → ``"openai/gpt-4o"``
     ``"claude-opus-4-6"``→ ``"anthropic/claude-opus-4-6"``
     ``"openai/gpt-4o"``  → ``"openai/gpt-4o"``  (already qualified)
+    ``None``             → ``""`` (Agentspan uses AGENTSPAN_LLM_MODEL env var)
     """
+    if not model:
+        return ""
+    model = str(model)
     if "/" in model:
         return model
     if model.startswith(("gpt", "o1", "o3", "o4")):
@@ -125,6 +130,23 @@ def _run_async_safely(coro: Any) -> Any:
         return loop.run_until_complete(coro)
 
 
+class _CtxStub:
+    """Minimal stand-in for RunContextWrapper passed to on_invoke_tool.
+
+    openai-agents' FunctionTool.on_invoke_tool(ctx, json_str) accesses
+    ctx attributes for tracing/span creation.  When executing inside an
+    Agentspan worker (outside of an openai-agents Runner loop) there is
+    no real RunContextWrapper, so we supply a stub that silently returns
+    None for any attribute access rather than raising AttributeError.
+    """
+
+    def __getattr__(self, name: str) -> Any:
+        return None
+
+
+_CTX_STUB = _CtxStub()
+
+
 def _convert_function_tool(ft: Any) -> Any:
     """Convert an openai-agents ``FunctionTool`` to an Agentspan ``ToolDef``.
 
@@ -144,7 +166,7 @@ def _convert_function_tool(ft: Any) -> Any:
 
     def _sync_wrapper(**kwargs: Any) -> Any:
         input_json = json.dumps(kwargs)
-        result = on_invoke(None, input_json)
+        result = on_invoke(_CTX_STUB, input_json)
         if asyncio.iscoroutine(result):
             return _run_async_safely(result)
         return result
@@ -185,7 +207,10 @@ def _to_agentspan_agent(agent: Any) -> Any:
     if not isinstance(instructions, str):
         instructions = str(instructions) if instructions else ""
 
-    model: str = _model_to_agentspan(getattr(agent, "model", "openai/gpt-4o"))
+    _raw_model = getattr(agent, "model", None)
+    model: str = _model_to_agentspan(_raw_model) if _raw_model else (
+        os.environ.get("AGENTSPAN_LLM_MODEL", "openai/gpt-4o")
+    )
 
     raw_tools: list = getattr(agent, "tools", []) or []
     agentspan_tools = []
@@ -210,6 +235,37 @@ def _to_agentspan_agent(agent: Any) -> Any:
 
 
 # ── Runner ─────────────────────────────────────────────────────────────────
+
+
+def _run_agent(starting_agent: Any, max_turns: int) -> Any:
+    """Resolve the agent to pass to the Agentspan runtime.
+
+    Foreign framework agents (openai-agents, google-adk, …) are passed
+    through unchanged — the runtime's :func:`detect_framework` handles
+    serialisation and tool registration.  Native Agentspan Agents are also
+    passed through unchanged (with optional ``max_turns`` override).  Only
+    truly unknown objects fall back to :func:`_to_agentspan_agent`.
+    """
+    from agentspan.agents.agent import Agent as AgentspanAgent
+    from agentspan.agents.frameworks.serializer import detect_framework
+
+    if isinstance(starting_agent, AgentspanAgent):
+        if max_turns != 10:
+            starting_agent.max_turns = max_turns
+        return starting_agent
+
+    framework = detect_framework(starting_agent)
+    if framework is not None:
+        # Framework agent (e.g. openai-agents) — pass directly so the
+        # runtime registers the *original* tool functions as Conductor
+        # workers (preserving correct parameter names and types).
+        return starting_agent
+
+    # Unknown type — attempt duck-type conversion
+    agent = _to_agentspan_agent(starting_agent)
+    if max_turns != 10:
+        agent.max_turns = max_turns
+    return agent
 
 
 class Runner:
@@ -260,10 +316,7 @@ class Runner:
         """
         from agentspan.agents.run import run as agentspan_run
 
-        agent = _to_agentspan_agent(starting_agent)
-        if max_turns != 10:
-            agent.max_turns = max_turns
-
+        agent = _run_agent(starting_agent, max_turns)
         result = agentspan_run(agent, input)
         return RunResult(result)
 
@@ -293,10 +346,7 @@ class Runner:
         """
         from agentspan.agents.run import run_async
 
-        agent = _to_agentspan_agent(starting_agent)
-        if max_turns != 10:
-            agent.max_turns = max_turns
-
+        agent = _run_agent(starting_agent, max_turns)
         result = await run_async(agent, input)
         return RunResult(result)
 
@@ -333,8 +383,5 @@ class Runner:
         """
         from agentspan.agents.run import stream_async
 
-        agent = _to_agentspan_agent(starting_agent)
-        if max_turns != 10:
-            agent.max_turns = max_turns
-
+        agent = _run_agent(starting_agent, max_turns)
         return await stream_async(agent, input)
