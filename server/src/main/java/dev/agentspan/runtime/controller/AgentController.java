@@ -357,4 +357,9 @@ public class AgentController {
     public WorkflowDef getAgentDefinition(@PathVariable String name, @RequestParam(required = false) Integer version) {
         return agentService.getAgentDefinition(name, version);
     }
+
+    @DeleteMapping("/definitions/{name}")
+    public void deleteAgentDefinition(@PathVariable String name, @RequestParam(required = false) Integer version) {
+        agentService.deleteAgent(name, version);
+    }
 }
