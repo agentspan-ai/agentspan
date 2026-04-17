@@ -411,7 +411,7 @@ export default function AgentDefinitions() {
               // @ts-ignore
               deleteWorkflowVersionAction.mutate({
                 method: "delete",
-                path: `agent/definitions/${encodeURIComponent(
+                path: `/agent/${encodeURIComponent(
                   confirmDelete.workflowName,
                 )}?version=${confirmDelete.workflowVersion}`,
               });
