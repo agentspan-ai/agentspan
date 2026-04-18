@@ -3,8 +3,17 @@
 
 """Router Agent — LLM-based routing to specialists.
 
-Demonstrates the router strategy where a parent agent routes
-to the appropriate sub-agent based on the user's request.
+Demonstrates the router strategy where a dedicated router/classifier agent
+decides which specialist sub-agent handles each request.
+
+Architecture:
+    team (ROUTER, router=selector)
+    ├── planner   — design/architecture tasks
+    ├── coder     — implementation tasks
+    └── reviewer  — code review tasks
+
+The selector is a separate agent whose only job is routing.
+It is NOT one of the specialist agents.
 
 Requirements:
     - Conductor server with LLM support
@@ -35,19 +44,27 @@ reviewer = Agent(
     instructions="You review code. Check for bugs, style issues, and suggest improvements.",
 )
 
-# ── Router (LLM decides who to use) ────────────────────────────────
+# ── Dedicated router/classifier (separate from specialists) ─────────
+
+selector = Agent(
+    name="dev_team_selector",
+    model=settings.llm_model,
+    instructions=(
+        "You are a request classifier. Select the right specialist:\n"
+        "- planner: for design, architecture, or planning tasks\n"
+        "- coder: for writing or implementing code\n"
+        "- reviewer: for reviewing, auditing, or improving existing code"
+    ),
+)
+
+# ── Router team ─────────────────────────────────────────────────────
 
 team = Agent(
     name="dev_team",
     model=settings.llm_model,
-    instructions=(
-        "You are the tech lead. Route requests to the right team member: "
-        "planner for design/architecture, coder for implementation, "
-        "reviewer for code review."
-    ),
     agents=[planner, coder, reviewer],
     strategy=Strategy.ROUTER,
-    router=planner,  # Required for router strategy
+    router=selector,  # dedicated classifier — not one of the specialists
 )
 
 
@@ -64,4 +81,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(team)
-
