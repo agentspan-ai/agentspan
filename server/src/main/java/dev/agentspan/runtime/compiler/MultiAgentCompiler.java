@@ -6,6 +6,7 @@
 package dev.agentspan.runtime.compiler;
 
 import static dev.agentspan.runtime.compiler.AgentCompiler.ref;
+import static dev.agentspan.runtime.compiler.AgentCompiler.toRef;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -82,13 +83,13 @@ public class MultiAgentCompiler {
         wf.setDescription("Handoff agent: " + config.getName());
 
         AgentCompiler.ResolvedInstructions instructionsPlan =
-                resolveInstructionsPlan(config, config.getName() + "_instructions");
+                resolveInstructionsPlan(config, toRef(config.getName()) + "_instructions");
         String instructions = instructionsPlan.getText();
         List<AgentConfig> agents = config.getAgents();
         List<String> agentNames = agents.stream().map(AgentConfig::getName).toList();
         int maxTurns = config.getMaxTurns() > 0 ? config.getMaxTurns() : 25;
-        String loopRef = config.getName() + "_loop";
-        String routerRef = config.getName() + "_router";
+        String loopRef = toRef(config.getName()) + "_loop";
+        String routerRef = toRef(config.getName()) + "_router";
 
         // Build agent descriptions for routing prompt
         StringBuilder agentsInfo = new StringBuilder();
@@ -105,7 +106,7 @@ public class MultiAgentCompiler {
         }
 
         // 0. Context resolve: INLINE → null-coalesce input.context
-        String handoffCtxResolveRef = config.getName() + "_ctx_resolve";
+        String handoffCtxResolveRef = toRef(config.getName()) + "_ctx_resolve";
         WorkflowTask handoffCtxResolve = new WorkflowTask();
         handoffCtxResolve.setType("INLINE");
         handoffCtxResolve.setTaskReferenceName(handoffCtxResolveRef);
@@ -117,7 +118,7 @@ public class MultiAgentCompiler {
         // 1. Init: seed conversation variable with prompt + context
         WorkflowTask initVar = new WorkflowTask();
         initVar.setType("SET_VARIABLE");
-        initVar.setTaskReferenceName(config.getName() + "_init");
+        initVar.setTaskReferenceName(toRef(config.getName()) + "_init");
         String introductions = buildIntroductions(config);
         Map<String, Object> initParams = new LinkedHashMap<>();
         if (!introductions.isEmpty()) {
@@ -148,7 +149,7 @@ public class MultiAgentCompiler {
         WorkflowTask routerLlm = buildIterativeRouterLlm(routerRef, parsed, systemPrompt);
 
         // 2b. Record routing decision in conversation so the router sees its own history
-        String routeAnnotateRef = config.getName() + "_route_annotate";
+        String routeAnnotateRef = toRef(config.getName()) + "_route_annotate";
         WorkflowTask routeAnnotate = new WorkflowTask();
         routeAnnotate.setType("INLINE");
         routeAnnotate.setTaskReferenceName(routeAnnotateRef);
@@ -164,13 +165,13 @@ public class MultiAgentCompiler {
 
         WorkflowTask routeAnnotateSet = new WorkflowTask();
         routeAnnotateSet.setType("SET_VARIABLE");
-        routeAnnotateSet.setTaskReferenceName(config.getName() + "_route_set");
+        routeAnnotateSet.setTaskReferenceName(toRef(config.getName()) + "_route_set");
         routeAnnotateSet.setInputParameters(Map.of("conversation", ref(routeAnnotateRef + ".output.result")));
 
         // 3. Switch on router output
         WorkflowTask switchTask = new WorkflowTask();
         switchTask.setType("SWITCH");
-        switchTask.setTaskReferenceName(config.getName() + "_switch");
+        switchTask.setTaskReferenceName(toRef(config.getName()) + "_switch");
         switchTask.setEvaluatorType("value-param");
         switchTask.setExpression("switchCaseValue");
         switchTask.setInputParameters(Map.of("switchCaseValue", ref(routerRef + ".output.result")));
@@ -185,7 +186,7 @@ public class MultiAgentCompiler {
         // DONE case: no-op inline task
         WorkflowTask doneTask = new WorkflowTask();
         doneTask.setType("INLINE");
-        doneTask.setTaskReferenceName(config.getName() + "_done_noop");
+        doneTask.setTaskReferenceName(toRef(config.getName()) + "_done_noop");
         doneTask.setInputParameters(Map.of(
                 "evaluatorType", "graaljs",
                 "expression", "(function() { return {result: 'done'}; })()"));
@@ -213,7 +214,7 @@ public class MultiAgentCompiler {
         // 5. Final answer LLM: synthesize from accumulated conversation
         WorkflowTask finalLlm = new WorkflowTask();
         finalLlm.setName("LLM_CHAT_COMPLETE");
-        finalLlm.setTaskReferenceName(config.getName() + "_final");
+        finalLlm.setTaskReferenceName(toRef(config.getName()) + "_final");
         finalLlm.setType("LLM_CHAT_COMPLETE");
         Map<String, Object> finalInputs = new LinkedHashMap<>();
         finalInputs.put("llmProvider", parsed.getProvider());
@@ -238,7 +239,7 @@ public class MultiAgentCompiler {
         wf.setTasks(tasks);
         wf.setOutputParameters(Map.of(
                 "result",
-                ref(config.getName() + "_final.output.result"),
+                ref(toRef(config.getName()) + "_final.output.result"),
                 "context",
                 "${workflow.variables._agent_state}"));
         agentCompiler.applyTimeout(wf, config);
@@ -255,7 +256,7 @@ public class MultiAgentCompiler {
         String prevOutputRef = "${workflow.input.prompt}";
 
         // Initialize context from input (INLINE → SET_VARIABLE pattern)
-        String seqCtxResolveRef = config.getName() + "_ctx_init_resolve";
+        String seqCtxResolveRef = toRef(config.getName()) + "_ctx_init_resolve";
         WorkflowTask seqCtxResolve = new WorkflowTask();
         seqCtxResolve.setType("INLINE");
         seqCtxResolve.setTaskReferenceName(seqCtxResolveRef);
@@ -267,13 +268,13 @@ public class MultiAgentCompiler {
 
         WorkflowTask seqCtxInit = new WorkflowTask();
         seqCtxInit.setType("SET_VARIABLE");
-        seqCtxInit.setTaskReferenceName(config.getName() + "_ctx_init");
+        seqCtxInit.setTaskReferenceName(toRef(config.getName()) + "_ctx_init");
         seqCtxInit.setInputParameters(Map.of("context", "${" + seqCtxResolveRef + ".output.result}"));
         tasks.add(seqCtxInit);
 
         for (int i = 0; i < config.getAgents().size(); i++) {
             AgentConfig sub = config.getAgents().get(i);
-            String taskRef = config.getName() + "_step_" + i + "_" + sub.getName();
+            String taskRef = toRef(config.getName()) + "_step_" + i + "_" + sub.getName();
             String mediaRef = "${workflow.input.media}";
 
             // For non-first agents, combine the original user prompt with the
@@ -289,7 +290,7 @@ public class MultiAgentCompiler {
             tasks.add(task);
 
             // Merge child context back into pipeline context
-            String mergeRef = config.getName() + "_ctx_merge_" + i;
+            String mergeRef = toRef(config.getName()) + "_ctx_merge_" + i;
             WorkflowTask mergeTask = new WorkflowTask();
             mergeTask.setType("INLINE");
             mergeTask.setTaskReferenceName(mergeRef);
@@ -304,7 +305,7 @@ public class MultiAgentCompiler {
                     JavaScriptBuilder.flatMergeContextScript()));
             tasks.add(mergeTask);
 
-            String ctxSetRef = config.getName() + "_ctx_set_" + i;
+            String ctxSetRef = toRef(config.getName()) + "_ctx_set_" + i;
             WorkflowTask ctxSet = new WorkflowTask();
             ctxSet.setType("SET_VARIABLE");
             ctxSet.setTaskReferenceName(ctxSetRef);
@@ -323,14 +324,14 @@ public class MultiAgentCompiler {
 
                 // Gate check: if this stage has a gate, insert INLINE + SWITCH
                 if (sub.getGate() != null) {
-                    String gateRef = config.getName() + "_gate_" + i;
+                    String gateRef = toRef(config.getName()) + "_gate_" + i;
                     WorkflowTask gateTask = GateCompiler.compileGate(sub.getGate(), gateRef, coercedRef);
                     tasks.add(gateTask);
 
                     // SWITCH: "continue" → remaining stages, "stop" → end pipeline
                     WorkflowTask switchTask = new WorkflowTask();
                     switchTask.setType("SWITCH");
-                    switchTask.setTaskReferenceName(config.getName() + "_gate_switch_" + i);
+                    switchTask.setTaskReferenceName(toRef(config.getName()) + "_gate_switch_" + i);
                     switchTask.setEvaluatorType("value-param");
                     switchTask.setExpression("switchCaseValue");
                     switchTask.setInputParameters(
@@ -347,7 +348,7 @@ public class MultiAgentCompiler {
                     // After the SWITCH, add an output-selector INLINE task.
                     // It walks the stages in reverse and returns the first non-null result.
                     // This ensures the workflow output is always the deepest stage that ran.
-                    String selectorRef = config.getName() + "_output_selector";
+                    String selectorRef = toRef(config.getName()) + "_output_selector";
                     WorkflowTask selector = buildOutputSelector(config, i, selectorRef);
                     tasks.add(selector);
 
@@ -381,7 +382,7 @@ public class MultiAgentCompiler {
 
         for (int i = startIndex; i < config.getAgents().size(); i++) {
             AgentConfig sub = config.getAgents().get(i);
-            String taskRef = config.getName() + "_step_" + i + "_" + sub.getName();
+            String taskRef = toRef(config.getName()) + "_step_" + i + "_" + sub.getName();
             String mediaRef = "${workflow.input.media}";
 
             // Combine original prompt with previous output via string interpolation
@@ -400,13 +401,13 @@ public class MultiAgentCompiler {
 
                 // Nested gate
                 if (sub.getGate() != null) {
-                    String gateRef = config.getName() + "_gate_" + i;
+                    String gateRef = toRef(config.getName()) + "_gate_" + i;
                     WorkflowTask gateTask = GateCompiler.compileGate(sub.getGate(), gateRef, coercedRef);
                     tasks.add(gateTask);
 
                     WorkflowTask switchTask = new WorkflowTask();
                     switchTask.setType("SWITCH");
-                    switchTask.setTaskReferenceName(config.getName() + "_gate_switch_" + i);
+                    switchTask.setTaskReferenceName(toRef(config.getName()) + "_gate_switch_" + i);
                     switchTask.setEvaluatorType("value-param");
                     switchTask.setExpression("switchCaseValue");
                     switchTask.setInputParameters(
@@ -456,7 +457,7 @@ public class MultiAgentCompiler {
         // Add each stage's output as s0, s1, s2, ...
         for (int i = 0; i < config.getAgents().size(); i++) {
             AgentConfig sub = config.getAgents().get(i);
-            String taskRef = config.getName() + "_step_" + i + "_" + sub.getName();
+            String taskRef = toRef(config.getName()) + "_step_" + i + "_" + sub.getName();
             String resultRef = AgentCompiler.subAgentResultRef(sub, taskRef);
             inputs.put("s" + i, resultRef);
         }
@@ -477,7 +478,7 @@ public class MultiAgentCompiler {
         List<WorkflowTask> tasks = new ArrayList<>();
 
         // Context init: INLINE → SET_VARIABLE (null-coalesce input.context)
-        String parCtxResolveRef = config.getName() + "_ctx_resolve";
+        String parCtxResolveRef = toRef(config.getName()) + "_ctx_resolve";
         WorkflowTask parCtxResolve = new WorkflowTask();
         parCtxResolve.setType("INLINE");
         parCtxResolve.setTaskReferenceName(parCtxResolveRef);
@@ -489,14 +490,14 @@ public class MultiAgentCompiler {
 
         WorkflowTask parCtxInit = new WorkflowTask();
         parCtxInit.setType("SET_VARIABLE");
-        parCtxInit.setTaskReferenceName(config.getName() + "_ctx_init");
+        parCtxInit.setTaskReferenceName(toRef(config.getName()) + "_ctx_init");
         parCtxInit.setInputParameters(Map.of("context", "${" + parCtxResolveRef + ".output.result}"));
         tasks.add(parCtxInit);
 
         // Build fork task
         WorkflowTask forkTask = new WorkflowTask();
         forkTask.setType("FORK_JOIN");
-        forkTask.setTaskReferenceName(config.getName() + "_fork");
+        forkTask.setTaskReferenceName(toRef(config.getName()) + "_fork");
 
         List<List<WorkflowTask>> forkTasks = new ArrayList<>();
         List<String> joinOn = new ArrayList<>();
@@ -504,7 +505,7 @@ public class MultiAgentCompiler {
 
         for (int i = 0; i < config.getAgents().size(); i++) {
             AgentConfig sub = config.getAgents().get(i);
-            String taskRef = config.getName() + "_parallel_" + i + "_" + sub.getName();
+            String taskRef = toRef(config.getName()) + "_parallel_" + i + "_" + sub.getName();
             WorkflowTask task = agentCompiler.compileSubAgent(
                     sub,
                     taskRef,
@@ -521,14 +522,14 @@ public class MultiAgentCompiler {
         // Join task — joinOn on both fork and join (matches Python SDK toJSON)
         WorkflowTask joinTask = new WorkflowTask();
         joinTask.setType("JOIN");
-        joinTask.setTaskReferenceName(config.getName() + "_fork_join");
+        joinTask.setTaskReferenceName(toRef(config.getName()) + "_fork_join");
         joinTask.setJoinOn(joinOn);
 
         // INLINE task to aggregate per-agent results into a consistent format:
         //   { "result": "<joined string>", "subResults": { "agentName": "output", ... } }
         WorkflowTask aggregateTask = new WorkflowTask();
         aggregateTask.setType("INLINE");
-        aggregateTask.setTaskReferenceName(config.getName() + "_aggregate");
+        aggregateTask.setTaskReferenceName(toRef(config.getName()) + "_aggregate");
         Map<String, Object> aggInputs = new LinkedHashMap<>();
         aggInputs.put("evaluatorType", "graaljs");
 
@@ -536,7 +537,7 @@ public class MultiAgentCompiler {
         Map<String, Object> agentResults = new LinkedHashMap<>();
         for (int i = 0; i < config.getAgents().size(); i++) {
             AgentConfig sub = config.getAgents().get(i);
-            String taskRef = config.getName() + "_parallel_" + i + "_" + sub.getName();
+            String taskRef = toRef(config.getName()) + "_parallel_" + i + "_" + sub.getName();
             agentResults.put(sub.getName(), AgentCompiler.subAgentResultRef(sub, taskRef));
         }
         aggInputs.put("agentResults", agentResults);
@@ -548,7 +549,7 @@ public class MultiAgentCompiler {
         aggregateTask.setInputParameters(aggInputs);
 
         // Namespaced context merge: INLINE merges parent context + each child's context under agent name
-        String ctxMergeRef = config.getName() + "_ctx_merge";
+        String ctxMergeRef = toRef(config.getName()) + "_ctx_merge";
         WorkflowTask ctxMergeTask = new WorkflowTask();
         ctxMergeTask.setType("INLINE");
         ctxMergeTask.setTaskReferenceName(ctxMergeRef);
@@ -563,7 +564,7 @@ public class MultiAgentCompiler {
         ctxMergeTask.setInputParameters(mergeInputs);
 
         // SET_VARIABLE to persist merged context
-        String ctxSetRef = config.getName() + "_ctx_set";
+        String ctxSetRef = toRef(config.getName()) + "_ctx_set";
         WorkflowTask ctxSet = new WorkflowTask();
         ctxSet.setType("SET_VARIABLE");
         ctxSet.setTaskReferenceName(ctxSetRef);
@@ -573,7 +574,7 @@ public class MultiAgentCompiler {
         wf.setTasks(tasks);
 
         // Output references the INLINE task's result + merged context
-        String aggRef = config.getName() + "_aggregate";
+        String aggRef = toRef(config.getName()) + "_aggregate";
         wf.setOutputParameters(Map.of(
                 "result", "${" + aggRef + ".output.result.result}",
                 "subResults", "${" + aggRef + ".output.result.subResults}",
@@ -629,14 +630,14 @@ public class MultiAgentCompiler {
         WorkflowDef wf = agentCompiler.createWorkflow(config);
         wf.setDescription("Router agent: " + config.getName());
         AgentCompiler.ResolvedInstructions parentInstructions =
-                resolveInstructionsPlan(config, config.getName() + "_instructions");
+                resolveInstructionsPlan(config, toRef(config.getName()) + "_instructions");
         List<WorkflowTask> preTasks = new ArrayList<>(parentInstructions.getPreTasks());
 
         List<AgentConfig> agents = config.getAgents();
         List<String> agentNames = agents.stream().map(AgentConfig::getName).toList();
         int maxTurns = config.getMaxTurns() > 0 ? config.getMaxTurns() : 25;
-        String loopRef = config.getName() + "_loop";
-        String routerRef = config.getName() + "_router";
+        String loopRef = toRef(config.getName()) + "_loop";
+        String routerRef = toRef(config.getName()) + "_router";
 
         StringBuilder agentsInfo = new StringBuilder();
         for (AgentConfig a : agents) {
@@ -652,7 +653,7 @@ public class MultiAgentCompiler {
         }
 
         // 0. Context resolve: INLINE → null-coalesce input.context
-        String routerCtxResolveRef = config.getName() + "_ctx_resolve";
+        String routerCtxResolveRef = toRef(config.getName()) + "_ctx_resolve";
         WorkflowTask routerCtxResolve = new WorkflowTask();
         routerCtxResolve.setType("INLINE");
         routerCtxResolve.setTaskReferenceName(routerCtxResolveRef);
@@ -664,7 +665,7 @@ public class MultiAgentCompiler {
         // 1. Init: seed conversation variable + context
         WorkflowTask initVar = new WorkflowTask();
         initVar.setType("SET_VARIABLE");
-        initVar.setTaskReferenceName(config.getName() + "_init");
+        initVar.setTaskReferenceName(toRef(config.getName()) + "_init");
         String introductions = buildIntroductions(config);
         Map<String, Object> routerInitParams = new LinkedHashMap<>();
         if (!introductions.isEmpty()) {
@@ -708,7 +709,7 @@ public class MultiAgentCompiler {
             if (router instanceof AgentConfig routerAgent) {
                 routerParsed = ModelParser.parse(routerAgent.getModel());
                 AgentCompiler.ResolvedInstructions routerInstructions =
-                        resolveInstructionsPlan(routerAgent, config.getName() + "_router_instructions");
+                        resolveInstructionsPlan(routerAgent, toRef(config.getName()) + "_router_instructions");
                 preTasks.addAll(routerInstructions.getPreTasks());
                 routerInstr = routerInstructions.getText();
             } else {
@@ -734,7 +735,7 @@ public class MultiAgentCompiler {
         }
 
         // 2b. Record routing decision in conversation
-        String routeAnnotateRef = config.getName() + "_route_annotate";
+        String routeAnnotateRef = toRef(config.getName()) + "_route_annotate";
         WorkflowTask routeAnnotate = new WorkflowTask();
         routeAnnotate.setType("INLINE");
         routeAnnotate.setTaskReferenceName(routeAnnotateRef);
@@ -750,13 +751,13 @@ public class MultiAgentCompiler {
 
         WorkflowTask routeAnnotateSet = new WorkflowTask();
         routeAnnotateSet.setType("SET_VARIABLE");
-        routeAnnotateSet.setTaskReferenceName(config.getName() + "_route_set");
+        routeAnnotateSet.setTaskReferenceName(toRef(config.getName()) + "_route_set");
         routeAnnotateSet.setInputParameters(Map.of("conversation", ref(routeAnnotateRef + ".output.result")));
 
         // 3. Switch on router output
         WorkflowTask switchTask = new WorkflowTask();
         switchTask.setType("SWITCH");
-        switchTask.setTaskReferenceName(config.getName() + "_switch");
+        switchTask.setTaskReferenceName(toRef(config.getName()) + "_switch");
         switchTask.setEvaluatorType("value-param");
         switchTask.setExpression("switchCaseValue");
         switchTask.setInputParameters(Map.of("switchCaseValue", ref(routerRef + ".output.result")));
@@ -771,7 +772,7 @@ public class MultiAgentCompiler {
         // DONE case: no-op
         WorkflowTask doneTask = new WorkflowTask();
         doneTask.setType("INLINE");
-        doneTask.setTaskReferenceName(config.getName() + "_done_noop");
+        doneTask.setTaskReferenceName(toRef(config.getName()) + "_done_noop");
         doneTask.setInputParameters(Map.of(
                 "evaluatorType", "graaljs",
                 "expression", "(function() { return {result: 'done'}; })()"));
@@ -799,7 +800,7 @@ public class MultiAgentCompiler {
         // 5. Final answer LLM
         WorkflowTask finalLlm = new WorkflowTask();
         finalLlm.setName("LLM_CHAT_COMPLETE");
-        finalLlm.setTaskReferenceName(config.getName() + "_final");
+        finalLlm.setTaskReferenceName(toRef(config.getName()) + "_final");
         finalLlm.setType("LLM_CHAT_COMPLETE");
         Map<String, Object> finalInputs = new LinkedHashMap<>();
         finalInputs.put("llmProvider", parsed.getProvider());
@@ -824,7 +825,7 @@ public class MultiAgentCompiler {
         wf.setTasks(preTasks);
         wf.setOutputParameters(Map.of(
                 "result",
-                ref(config.getName() + "_final.output.result"),
+                ref(toRef(config.getName()) + "_final.output.result"),
                 "context",
                 "${workflow.variables._agent_state}"));
         agentCompiler.applyTimeout(wf, config);
@@ -839,11 +840,11 @@ public class MultiAgentCompiler {
         wf.setDescription(label + " discussion: " + config.getName());
 
         int numAgents = config.getAgents().size();
-        String loopRef = config.getName() + "_loop";
+        String loopRef = toRef(config.getName()) + "_loop";
         int maxTurns = config.getMaxTurns() > 0 ? config.getMaxTurns() : 25;
 
         // 0. Context resolve: INLINE → null-coalesce input.context
-        String rotCtxResolveRef = config.getName() + "_ctx_resolve";
+        String rotCtxResolveRef = toRef(config.getName()) + "_ctx_resolve";
         WorkflowTask rotCtxResolve = new WorkflowTask();
         rotCtxResolve.setType("INLINE");
         rotCtxResolve.setTaskReferenceName(rotCtxResolveRef);
@@ -855,7 +856,7 @@ public class MultiAgentCompiler {
         // 1. Init: seed conversation + context
         WorkflowTask initVar = new WorkflowTask();
         initVar.setType("SET_VARIABLE");
-        initVar.setTaskReferenceName(config.getName() + "_init");
+        initVar.setTaskReferenceName(toRef(config.getName()) + "_init");
         Map<String, Object> initInputs = new LinkedHashMap<>();
         String introductions = buildIntroductions(config);
         if (!introductions.isEmpty()) {
@@ -873,7 +874,7 @@ public class MultiAgentCompiler {
         String selectScript = buildSelectScript(config, numAgents, loopRef, random);
         WorkflowTask selectTask = new WorkflowTask();
         selectTask.setType("INLINE");
-        selectTask.setTaskReferenceName(config.getName() + "_select");
+        selectTask.setTaskReferenceName(toRef(config.getName()) + "_select");
         Map<String, Object> selectInputs = new LinkedHashMap<>();
         selectInputs.put("evaluatorType", "graaljs");
         selectInputs.put("expression", selectScript);
@@ -886,10 +887,11 @@ public class MultiAgentCompiler {
         // 2b. Switch to selected agent
         WorkflowTask switchTask = new WorkflowTask();
         switchTask.setType("SWITCH");
-        switchTask.setTaskReferenceName(config.getName() + "_switch");
+        switchTask.setTaskReferenceName(toRef(config.getName()) + "_switch");
         switchTask.setEvaluatorType("value-param");
         switchTask.setExpression("switchCaseValue");
-        switchTask.setInputParameters(Map.of("switchCaseValue", ref(config.getName() + "_select.output.result")));
+        switchTask.setInputParameters(
+                Map.of("switchCaseValue", ref(toRef(config.getName()) + "_select.output.result")));
 
         Map<String, List<WorkflowTask>> cases = new LinkedHashMap<>();
         for (int i = 0; i < numAgents; i++) {
@@ -907,7 +909,7 @@ public class MultiAgentCompiler {
             WorkflowTask stopWhenTask = TerminationCompiler.compileStopWhenForConversation(
                     config.getStopWhen().getTaskName(), config.getName(), loopRef);
             loopTasks.add(stopWhenTask);
-            stopWhenRef = config.getName() + "_stop_when";
+            stopWhenRef = toRef(config.getName()) + "_stop_when";
         }
 
         String terminationRef = null;
@@ -915,7 +917,7 @@ public class MultiAgentCompiler {
             WorkflowTask termTask = TerminationCompiler.compileTerminationForConversation(
                     config.getTermination(), config.getName(), loopRef);
             loopTasks.add(termTask);
-            terminationRef = config.getName() + "_termination";
+            terminationRef = toRef(config.getName()) + "_termination";
         }
 
         // 4. DoWhile loop
@@ -950,10 +952,10 @@ public class MultiAgentCompiler {
         WorkflowDef wf = agentCompiler.createWorkflow(config);
         wf.setDescription("Swarm orchestration: " + config.getName());
         AgentCompiler.ResolvedInstructions instructionsPlan =
-                resolveInstructionsPlan(config, config.getName() + "_instructions");
+                resolveInstructionsPlan(config, toRef(config.getName()) + "_instructions");
 
         int numAgents = config.getAgents().size();
-        String loopRef = config.getName() + "_loop";
+        String loopRef = toRef(config.getName()) + "_loop";
         int maxTurns = config.getMaxTurns() > 0 ? config.getMaxTurns() : 25;
 
         // Build allSwarmAgents list (parent + sub-agents) for transfer tool generation
@@ -974,7 +976,7 @@ public class MultiAgentCompiler {
         allSwarmAgents.addAll(config.getAgents());
 
         // 0. Context resolve: INLINE → null-coalesce input.context
-        String swarmCtxResolveRef = config.getName() + "_ctx_resolve";
+        String swarmCtxResolveRef = toRef(config.getName()) + "_ctx_resolve";
         WorkflowTask swarmCtxResolve = new WorkflowTask();
         swarmCtxResolve.setType("INLINE");
         swarmCtxResolve.setTaskReferenceName(swarmCtxResolveRef);
@@ -986,7 +988,7 @@ public class MultiAgentCompiler {
         // 1. Init — track conversation, active_agent, last_response, transfer state, context
         WorkflowTask initVar = new WorkflowTask();
         initVar.setType("SET_VARIABLE");
-        initVar.setTaskReferenceName(config.getName() + "_init");
+        initVar.setTaskReferenceName(toRef(config.getName()) + "_init");
         Map<String, Object> initInputs = new LinkedHashMap<>();
         String introductions = buildIntroductions(config);
         initInputs.put(
@@ -1002,7 +1004,7 @@ public class MultiAgentCompiler {
         // 2. Switch by active_agent
         WorkflowTask switchTask = new WorkflowTask();
         switchTask.setType("SWITCH");
-        switchTask.setTaskReferenceName(config.getName() + "_switch");
+        switchTask.setTaskReferenceName(toRef(config.getName()) + "_switch");
         switchTask.setEvaluatorType("value-param");
         switchTask.setExpression("switchCaseValue");
         switchTask.setInputParameters(Map.of("switchCaseValue", "${workflow.variables.active_agent}"));
@@ -1020,9 +1022,9 @@ public class MultiAgentCompiler {
         switchTask.setDecisionCases(cases);
 
         // 3. Handoff check worker — checks transfer first, then conditions
-        String handoffRef = config.getName() + "_handoff_check";
+        String handoffRef = toRef(config.getName()) + "_handoff_check";
         WorkflowTask handoffTask = new WorkflowTask();
-        handoffTask.setName(config.getName() + "_handoff_check");
+        handoffTask.setName(toRef(config.getName()) + "_handoff_check");
         handoffTask.setTaskReferenceName(handoffRef);
         handoffTask.setType("SIMPLE");
         Map<String, Object> handoffInputs = new LinkedHashMap<>();
@@ -1036,7 +1038,7 @@ public class MultiAgentCompiler {
         // Update active_agent
         WorkflowTask updateActive = new WorkflowTask();
         updateActive.setType("SET_VARIABLE");
-        updateActive.setTaskReferenceName(config.getName() + "_update_active");
+        updateActive.setTaskReferenceName(toRef(config.getName()) + "_update_active");
         updateActive.setInputParameters(Map.of("active_agent", ref(handoffRef + ".output.active_agent")));
 
         // 4. Optional stop_when / termination workers
@@ -1047,7 +1049,7 @@ public class MultiAgentCompiler {
             WorkflowTask stopWhenTask = TerminationCompiler.compileStopWhenForConversation(
                     config.getStopWhen().getTaskName(), config.getName(), loopRef);
             loopTasks.add(stopWhenTask);
-            stopWhenRef = config.getName() + "_stop_when";
+            stopWhenRef = toRef(config.getName()) + "_stop_when";
         }
 
         String terminationRef = null;
@@ -1055,7 +1057,7 @@ public class MultiAgentCompiler {
             WorkflowTask termTask = TerminationCompiler.compileTerminationForConversation(
                     config.getTermination(), config.getName(), loopRef);
             loopTasks.add(termTask);
-            terminationRef = config.getName() + "_termination";
+            terminationRef = toRef(config.getName()) + "_termination";
         }
 
         // 5. DoWhile — early termination when no handoff triggers
@@ -1081,7 +1083,7 @@ public class MultiAgentCompiler {
         // 5. Final synthesis LLM: combine all agents' work into a coherent response
         WorkflowTask finalLlm = new WorkflowTask();
         finalLlm.setName("LLM_CHAT_COMPLETE");
-        finalLlm.setTaskReferenceName(config.getName() + "_final");
+        finalLlm.setTaskReferenceName(toRef(config.getName()) + "_final");
         finalLlm.setType("LLM_CHAT_COMPLETE");
         Map<String, Object> finalInputs = new LinkedHashMap<>();
         ParsedModel parsed = ModelParser.parse(config.getModel());
@@ -1108,7 +1110,7 @@ public class MultiAgentCompiler {
         wf.setTasks(tasks);
         wf.setOutputParameters(Map.of(
                 "result",
-                ref(config.getName() + "_final.output.result"),
+                ref(toRef(config.getName()) + "_final.output.result"),
                 "context",
                 "${workflow.variables._agent_state}"));
         agentCompiler.applyTimeout(wf, config);
@@ -1320,11 +1322,11 @@ public class MultiAgentCompiler {
         wf.setDescription("Manual selection: " + config.getName());
 
         int numAgents = config.getAgents().size();
-        String loopRef = config.getName() + "_loop";
+        String loopRef = toRef(config.getName()) + "_loop";
         int maxTurns = config.getMaxTurns() > 0 ? config.getMaxTurns() : 25;
 
         // 0. Context resolve: INLINE → null-coalesce input.context
-        String manCtxResolveRef = config.getName() + "_ctx_resolve";
+        String manCtxResolveRef = toRef(config.getName()) + "_ctx_resolve";
         WorkflowTask manCtxResolve = new WorkflowTask();
         manCtxResolve.setType("INLINE");
         manCtxResolve.setTaskReferenceName(manCtxResolveRef);
@@ -1336,7 +1338,7 @@ public class MultiAgentCompiler {
         // 1. Init
         WorkflowTask initVar = new WorkflowTask();
         initVar.setType("SET_VARIABLE");
-        initVar.setTaskReferenceName(config.getName() + "_init");
+        initVar.setTaskReferenceName(toRef(config.getName()) + "_init");
         Map<String, Object> initInputs = new LinkedHashMap<>();
         String introductions = buildIntroductions(config);
         initInputs.put(
@@ -1346,7 +1348,7 @@ public class MultiAgentCompiler {
         initVar.setInputParameters(initInputs);
 
         // 2. HumanTask
-        String humanRef = config.getName() + "_pick_agent";
+        String humanRef = toRef(config.getName()) + "_pick_agent";
         Map<String, String> agentOptions = new LinkedHashMap<>();
         for (int i = 0; i < config.getAgents().size(); i++) {
             agentOptions.put(config.getAgents().get(i).getName(), String.valueOf(i));
@@ -1359,9 +1361,9 @@ public class MultiAgentCompiler {
         WorkflowTask humanTask = humanPipeline.getTasks().get(0);
 
         // Process selection worker
-        String processRef = config.getName() + "_process_selection";
+        String processRef = toRef(config.getName()) + "_process_selection";
         WorkflowTask processTask = new WorkflowTask();
-        processTask.setName(config.getName() + "_process_selection");
+        processTask.setName(toRef(config.getName()) + "_process_selection");
         processTask.setTaskReferenceName(processRef);
         processTask.setType("SIMPLE");
         processTask.setInputParameters(Map.of("human_output", ref(humanRef + ".output")));
@@ -1369,7 +1371,7 @@ public class MultiAgentCompiler {
         // 3. Switch to selected agent
         WorkflowTask switchTask = new WorkflowTask();
         switchTask.setType("SWITCH");
-        switchTask.setTaskReferenceName(config.getName() + "_switch");
+        switchTask.setTaskReferenceName(toRef(config.getName()) + "_switch");
         switchTask.setEvaluatorType("value-param");
         switchTask.setExpression("switchCaseValue");
         switchTask.setInputParameters(Map.of("switchCaseValue", ref(processRef + ".output.selected")));
@@ -1390,7 +1392,7 @@ public class MultiAgentCompiler {
             WorkflowTask stopWhenTask = TerminationCompiler.compileStopWhenForConversation(
                     config.getStopWhen().getTaskName(), config.getName(), loopRef);
             loopTasks.add(stopWhenTask);
-            stopWhenRef = config.getName() + "_stop_when";
+            stopWhenRef = toRef(config.getName()) + "_stop_when";
         }
 
         String terminationRef = null;
@@ -1398,7 +1400,7 @@ public class MultiAgentCompiler {
             WorkflowTask termTask = TerminationCompiler.compileTerminationForConversation(
                     config.getTermination(), config.getName(), loopRef);
             loopTasks.add(termTask);
-            terminationRef = config.getName() + "_termination";
+            terminationRef = toRef(config.getName()) + "_termination";
         }
 
         // 5. DoWhile
@@ -1430,7 +1432,7 @@ public class MultiAgentCompiler {
     // ── Guardrail wrapping ──────────────────────────────────────────
 
     private WorkflowDef wrapWithGuardrails(AgentConfig config, WorkflowDef strategyWf) {
-        String subRef = config.getName() + "_strategy";
+        String subRef = toRef(config.getName()) + "_strategy";
 
         // Run strategy as inline sub-workflow
         WorkflowTask subTask = new WorkflowTask();
@@ -1472,7 +1474,7 @@ public class MultiAgentCompiler {
                 "if ( $.%s_guardrail_loop['iteration'] < %d && (%s) ) { true; } else { false; }",
                 config.getName(), maxTurns, guardrailContinue);
 
-        String guardrailLoopRef = config.getName() + "_guardrail_loop";
+        String guardrailLoopRef = toRef(config.getName()) + "_guardrail_loop";
         Map<String, Object> loopInputs = new LinkedHashMap<>();
         loopInputs.put(guardrailLoopRef, "${" + guardrailLoopRef + "}");
         agentCompiler.addGuardrailInputs(loopInputs, guardrailRefs);
