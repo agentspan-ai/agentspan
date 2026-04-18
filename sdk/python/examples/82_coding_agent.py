@@ -1,7 +1,7 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Coding Agent REPL — a filesystem-aware coding assistant backed by the Conductor server.
+"""Coding Agent REPL — a filesystem-aware coding assistant backed by AgentSpan runtime.
 
 This example is a Claude Code-style assistant you can actually use in a working session.
 It runs as a durable Conductor workflow, giving you things a local agent cannot:
@@ -18,7 +18,7 @@ Usage:
     python 82_coding_agent.py --resume             # resume last session
 
 Requirements:
-    - Conductor server (conductor.workflow-message-queue.enabled=true)
+    - AgentSpan server running at http://localhost:6767
     - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - AGENTSPAN_LLM_MODEL=anthropic/claude-sonnet-4-20250514
 """

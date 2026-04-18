@@ -16,7 +16,7 @@ The agent loops forever:
 
 Requirements:
     - Kafka broker on localhost:9092 with topic le_random_topic
-    - Conductor server with WMQ support (conductor.workflow-message-queue.enabled=true)
+    - AgentSpan server running at http://localhost:6767
     - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
     - confluent-kafka  (uv pip install confluent-kafka)
