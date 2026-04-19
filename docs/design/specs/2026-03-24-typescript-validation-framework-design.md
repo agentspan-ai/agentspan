@@ -181,7 +181,7 @@ For agentspan execution, the example itself prints events via the streaming API.
 - Agent output from result.printResult() boundary markers
 - Tool call count
 - Status (COMPLETED/FAILED)
-- Workflow ID
+- Execution ID
 
 ### 5.3 Parallel Execution
 

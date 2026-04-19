@@ -13,6 +13,8 @@ dependencies = [
     "conductor-python>=1.3.10",
     "httpx>=0.24",
     "cloudpickle>=2.0",
+    "google-adk>=1.27.1",
+    "openai-agents>=0.12.2",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",

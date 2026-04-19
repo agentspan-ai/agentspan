@@ -41,16 +41,16 @@ from agentspan.agents.runtime.http_client import AgentHttpClient, SSEUnavailable
 logger = logging.getLogger("agentspan.agents.runtime")
 
 
-def _default_task_def(name: str) -> Any:
+def _default_task_def(name: str, *, response_timeout_seconds: int = 10) -> Any:
     """Create a TaskDef with standard retry policy for agent worker tasks.
 
     Timeout is 0 (no timeout) — the agent configuration controls execution
     duration, not the task definition.
 
-    response_timeout_seconds is 120 (2 minutes): if a worker fails to pick
-    up and respond to a task within 2 minutes, Conductor marks it as timed
-    out and retries.  Keeping this short prevents multi-hour CI hangs when
-    worker processes fail to start due to resource pressure.
+    response_timeout_seconds (default 10s): if a worker fails to respond
+    within this time, Conductor marks the task as timed out and retries.
+    Kept short to detect dead workers quickly; lease extension heartbeats
+    (at 80% of this value) keep long-running tasks alive automatically.
     """
     from conductor.client.http.models.task_def import TaskDef
 
@@ -59,7 +59,7 @@ def _default_task_def(name: str) -> Any:
     td.retry_logic = "LINEAR_BACKOFF"
     td.retry_delay_seconds = 2
     td.timeout_seconds = 0
-    td.response_timeout_seconds = 120
+    td.response_timeout_seconds = response_timeout_seconds
     td.timeout_policy = "RETRY"
     return td
 
@@ -70,8 +70,7 @@ def _passthrough_task_def(name: str) -> Any:
     Timeout is 0 (no timeout) — the agent configuration controls execution
     duration, not the task definition.
 
-    response_timeout_seconds is 120 (2 minutes): same reasoning as
-    _default_task_def.
+    response_timeout_seconds is 10s: same reasoning as _default_task_def.
     """
     from conductor.client.http.models.task_def import TaskDef
 
@@ -80,7 +79,7 @@ def _passthrough_task_def(name: str) -> Any:
     td.retry_logic = "LINEAR_BACKOFF"
     td.retry_delay_seconds = 2
     td.timeout_seconds = 0
-    td.response_timeout_seconds = 120
+    td.response_timeout_seconds = 10
     td.timeout_policy = "RETRY"
     return td
 
@@ -732,6 +731,7 @@ class AgentRuntime:
                     task_def=_default_task_def(w.name),
                     register_task_def=True,
                     overwrite_task_def=True,
+                    lease_extend_enabled=True,
                 )(wrapper)
             if workers:
                 self._registered_tool_names.update(w.name for w in workers)
@@ -1166,6 +1166,7 @@ class AgentRuntime:
                 task_def=_default_task_def(sw.name),
                 register_task_def=True,
                 overwrite_task_def=True,
+                lease_extend_enabled=True,
             )(wrapper)
             logger.debug("Registered skill worker '%s'", sw.name)
 
@@ -1266,6 +1267,7 @@ class AgentRuntime:
             register_task_def=True,
             overwrite_task_def=True,
             thread_count=_SYSTEM_WORKER_THREADS,
+            lease_extend_enabled=True,
         )(worker_fn)
 
     def _register_single_guardrail_worker(self, guardrail) -> None:
@@ -1340,6 +1342,7 @@ class AgentRuntime:
             register_task_def=True,
             overwrite_task_def=True,
             thread_count=_SYSTEM_WORKER_THREADS,
+            lease_extend_enabled=True,
         )(guardrail_worker)
 
     def _register_stop_when_worker(self, agent_name: str, stop_when_fn) -> None:
@@ -1364,6 +1367,7 @@ class AgentRuntime:
             register_task_def=True,
             overwrite_task_def=True,
             thread_count=_SYSTEM_WORKER_THREADS,
+            lease_extend_enabled=True,
         )(stop_when_worker)
 
     def _register_gate_worker(self, agent_name: str, gate_fn) -> None:
@@ -1388,6 +1392,7 @@ class AgentRuntime:
             register_task_def=True,
             overwrite_task_def=True,
             thread_count=_SYSTEM_WORKER_THREADS,
+            lease_extend_enabled=True,
         )(gate_worker)
 
     def _register_callback_worker(self, agent_name: str, position: str, callback_fn) -> None:
@@ -1416,6 +1421,7 @@ class AgentRuntime:
             register_task_def=True,
             overwrite_task_def=True,
             thread_count=_SYSTEM_WORKER_THREADS,
+            lease_extend_enabled=True,
         )(callback_worker)
 
     def _register_termination_worker(self, agent_name: str, termination_cond) -> None:
@@ -1440,6 +1446,7 @@ class AgentRuntime:
             register_task_def=True,
             overwrite_task_def=True,
             thread_count=_SYSTEM_WORKER_THREADS,
+            lease_extend_enabled=True,
         )(termination_worker)
 
     def _register_check_transfer_worker(self, agent_name: str) -> None:
@@ -1466,6 +1473,7 @@ class AgentRuntime:
             register_task_def=True,
             overwrite_task_def=True,
             thread_count=_SYSTEM_WORKER_THREADS,
+            lease_extend_enabled=True,
         )(check_transfer_worker)
 
     def _register_router_worker(self, agent: Agent) -> None:
@@ -1491,6 +1499,7 @@ class AgentRuntime:
             register_task_def=True,
             overwrite_task_def=True,
             thread_count=_SYSTEM_WORKER_THREADS,
+            lease_extend_enabled=True,
         )(router_worker)
 
     def _register_handoff_worker(self, agent: Agent) -> None:
@@ -1584,6 +1593,7 @@ class AgentRuntime:
             register_task_def=True,
             overwrite_task_def=True,
             thread_count=_SYSTEM_WORKER_THREADS,
+            lease_extend_enabled=True,
         )(handoff_check_worker)
 
     def _register_swarm_transfer_workers(self, agent: Agent) -> None:
@@ -1647,6 +1657,7 @@ class AgentRuntime:
                         register_task_def=True,
                         overwrite_task_def=True,
                         thread_count=_SYSTEM_WORKER_THREADS,
+                        lease_extend_enabled=True,
                     )(transfer_worker)
 
                 make_worker(tool_name, peer_name, is_unreachable)
@@ -1675,6 +1686,7 @@ class AgentRuntime:
             register_task_def=True,
             overwrite_task_def=True,
             thread_count=_SYSTEM_WORKER_THREADS,
+            lease_extend_enabled=True,
         )(process_selection_worker)
 
     # ── Prompt template resolution ─────────────────────────────────
@@ -2144,6 +2156,26 @@ class AgentRuntime:
 
     # ── Serve (runtime worker service) ─────────────────────────────
 
+    def _serve_framework_workers(self, agent_obj: Any, framework: str) -> None:
+        """Register workers for a foreign framework agent (LangGraph, etc.).
+
+        Mirrors the worker registration in ``_start_framework`` without
+        starting an execution — serialize the agent, detect the
+        serialization path, and register the appropriate workers.
+        """
+        from agentspan.agents.frameworks.serializer import serialize_agent
+
+        raw_config, workers = serialize_agent(agent_obj)
+
+        if workers and workers[0].func is None:
+            worker = workers[0]
+            worker.func = self._build_passthrough_func(agent_obj, framework, worker.name)
+            self._register_passthrough_worker(worker)
+        elif "_graph" in raw_config:
+            self._register_graph_workers(raw_config, workers)
+        else:
+            self._register_framework_workers(workers)
+
     def serve(
         self,
         *agents: Any,
@@ -2178,8 +2210,16 @@ class AgentRuntime:
             )
 
         # Register local Python worker functions for each agent
+        from agentspan.agents.frameworks.serializer import detect_framework
+
         has_new = False
         for agent in all_agents:
+            framework = detect_framework(agent)
+            if framework is not None:
+                self._serve_framework_workers(agent, framework)
+                has_new = True
+                continue
+
             self._register_workers(agent)
             worker_names = self._collect_worker_names(agent)
             new_workers = worker_names - self._registered_tool_names
@@ -2872,6 +2912,7 @@ class AgentRuntime:
                 task_def=_default_task_def(w.name),
                 register_task_def=True,
                 overwrite_task_def=True,
+                lease_extend_enabled=True,
             )(wrapper)
             logger.debug("Registered framework worker '%s'", w.name)
 
@@ -2900,7 +2941,7 @@ class AgentRuntime:
 
         Unlike _register_framework_workers, this does NOT call make_tool_worker —
         worker.func is already a pre-wrapped tool_worker(task) -> TaskResult closure.
-        Uses _passthrough_task_def (600s timeout) instead of _default_task_def (120s).
+        Uses _passthrough_task_def (600s timeout) instead of _default_task_def (10s).
         """
         from conductor.client.worker.worker_task import worker_task
 
@@ -2913,6 +2954,7 @@ class AgentRuntime:
             register_task_def=True,
             overwrite_task_def=True,
             thread_count=self._config.worker_thread_count,
+            lease_extend_enabled=True,
         )(worker.func)
         logger.debug("Registered passthrough worker '%s'", worker.name)
 
@@ -2935,8 +2977,8 @@ class AgentRuntime:
         the workers are pre-wrapped Task→TaskResult functions built by
         make_node_worker / make_router_worker in langgraph.py.
 
-        Uses _default_task_def (120s) since each node is a quick task, not a
-        long-running passthrough.
+        Uses _default_task_def (10s response timeout) since each node is a
+        quick task, not a long-running passthrough.
         """
         if not workers:
             return
@@ -2985,6 +3027,7 @@ class AgentRuntime:
                 task_def=_default_task_def(w.name),
                 register_task_def=True,
                 overwrite_task_def=True,
+                lease_extend_enabled=True,
             )(wrapped)
             logger.debug("Registered graph worker '%s' (llm_role=%s)", w.name, llm_role)
 

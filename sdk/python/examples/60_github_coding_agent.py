@@ -401,7 +401,7 @@ if __name__ == "__main__":
             print(output)
 
         print(f"\nFinish reason: {result.finish_reason}")
-        print(f"Workflow ID: {result.execution_id}")
+        print(f"Execution ID: {result.execution_id}")
 
         # Production pattern:
         # 1. Deploy once during CI/CD:

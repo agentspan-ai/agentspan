@@ -115,8 +115,8 @@ def start_workflow(prompt: str, workflow_file: Path, client_info_file: Path, tim
 
         print(f"Client PID: {os.getpid()}")
         print(f"Client PGID: {os.getpgid(0)}")
-        print(f"Workflow ID: {handle.execution_id}")
-        print(f"Saved workflow ID to: {workflow_file}")
+        print(f"Execution ID: {handle.execution_id}")
+        print(f"Saved execution ID to: {workflow_file}")
         print(f"Saved client info to: {client_info_file}")
         print("Waiting for the workflow to reach a durable WAITING state...")
 
@@ -169,7 +169,7 @@ def show_status(execution_id: str, timeout_seconds: int) -> None:
 def resume_workflow(execution_id: str, timeout_seconds: int, approve: bool) -> None:
     with AgentRuntime() as runtime:
         runtime.serve(agent, blocking=False)
-        print(f"Reconnected to workflow: {execution_id}")
+        print(f"Reconnected to execution: {execution_id}")
         status = runtime.get_status(execution_id)
         print_status("  [initial]", status)
 
@@ -230,9 +230,9 @@ def parse_args() -> argparse.Namespace:
 
     status = sub.add_parser(
         "status",
-        help="Query workflow status by execution_id or saved file.",
+        help="Query execution status by execution_id or saved file.",
     )
-    status.add_argument("--workflow-id", default="", help="Workflow ID (overrides --file).")
+    status.add_argument("--execution-id", default="", help="Execution ID (overrides --file).")
     status.add_argument(
         "--file",
         type=Path,
@@ -250,7 +250,7 @@ def parse_args() -> argparse.Namespace:
         "resume",
         help="Reconnect to the saved workflow and optionally approve it.",
     )
-    resume.add_argument("--workflow-id", default="", help="Workflow ID (overrides --file).")
+    resume.add_argument("--execution-id", default="", help="Execution ID (overrides --file).")
     resume.add_argument(
         "--file",
         type=Path,
