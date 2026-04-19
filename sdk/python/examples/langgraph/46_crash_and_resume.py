@@ -35,7 +35,7 @@ Production pattern:
     runtime.serve(graph)
 
     # Trigger executions from anywhere:
-    runtime.start(graph, "prompt")  # or via server API / UI
+    runtime.start("sales_analyst", "prompt")  # or via server API / UI
 
 Requirements:
     - AGENTSPAN_SERVER_URL=http://localhost:6767/api
@@ -118,9 +118,10 @@ with AgentRuntime() as runtime:
     runtime.deploy(graph)
     print("Agent deployed to server.")
 
-    # Start an execution
+    # Start an execution by name — the agent is already deployed on the server,
+    # so we only need to send the name and prompt (not the full graph object).
     handle = runtime.start(
-        graph,
+        "sales_analyst",
         "Fetch the Q4 2025 sales data, run a full trend analysis on it, "
         "then generate an executive summary report. "
         "Call each tool in sequence — do not skip any step.",

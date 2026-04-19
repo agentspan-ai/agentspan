@@ -7,6 +7,7 @@ import {
   EventType,
   ExecutionMetrics,
   FinishReason,
+  TaskAttempt,
   TokenUsage,
 } from "./types";
 
@@ -209,8 +210,61 @@ function toMs(value: string | number | undefined | null): number {
 /** Maps task status to a tri-state success flag: true=completed, false=failed, undefined=in-progress */
 function taskSuccess(status: string): boolean | undefined {
   if (status === "COMPLETED") return true;
-  if (status === "FAILED") return false;
+  if (status === "FAILED" || status === "TIMED_OUT") return false;
   return undefined; // IN_PROGRESS → caller shows spinner
+}
+
+/**
+ * Deduplicate retried tasks: when Conductor retries a timed-out/failed task,
+ * BOTH the original attempt AND the retry appear in the task list with the same
+ * referenceTaskName but increasing retryCount. Keep only the latest attempt
+ * (highest retryCount) and return a map of referenceTaskName → total attempts.
+ */
+function deduplicateRetriedTasks(tasks: ExecutionTask[]): {
+  tasks: ExecutionTask[];
+  attemptCounts: Map<string, number>;
+  attemptGroups: Map<string, ExecutionTask[]>;
+} {
+  const byRef = new Map<string, ExecutionTask[]>();
+  for (const t of tasks) {
+    const ref = t.referenceTaskName;
+    if (!byRef.has(ref)) byRef.set(ref, []);
+    byRef.get(ref)!.push(t);
+  }
+  const deduped: ExecutionTask[] = [];
+  const attemptCounts = new Map<string, number>();
+  const attemptGroups = new Map<string, ExecutionTask[]>();
+  for (const [ref, group] of byRef) {
+    if (group.length > 1) {
+      attemptCounts.set(ref, group.length);
+      // Sort ascending by retryCount so attempt[0]=oldest, last=latest
+      group.sort((a, b) => (a.retryCount ?? 0) - (b.retryCount ?? 0));
+      attemptGroups.set(ref, group);
+    }
+    // Keep the latest attempt (last after ascending sort)
+    deduped.push(group[group.length - 1]);
+  }
+  return { tasks: deduped, attemptCounts, attemptGroups };
+}
+
+function buildAllAttempts(
+  refName: string,
+  attemptGroups: Map<string, ExecutionTask[]>,
+): TaskAttempt[] | undefined {
+  const group = attemptGroups.get(refName);
+  if (!group || group.length <= 1) return undefined;
+  return group.map((t): TaskAttempt => ({
+    taskId: t.taskId ?? "",
+    retryCount: t.retryCount ?? 0,
+    status: t.status,
+    startTime: t.startTime ?? undefined,
+    endTime: t.endTime ?? undefined,
+    durationMs: t.endTime && t.startTime ? t.endTime - t.startTime : 0,
+    workerId: (t as any).workerId ?? undefined,
+    reasonForIncompletion: t.reasonForIncompletion ?? undefined,
+    inputData: t.inputData as Record<string, unknown> | undefined,
+    outputData: t.outputData as Record<string, unknown> | undefined,
+  }));
 }
 
 function mapTaskStatus(status: string): AgentStatus {
@@ -536,16 +590,19 @@ export function transformWorkflowExecutionToAgentRun(
       const agentTasks = iterTasks.filter(isAgentSubWorkflow);
 
       // LLM tasks directly in this iteration (tool-calling agent pattern)
-      const iterLlmTasks = iterTasks.filter(
-        (t) => t.taskType === "LLM_CHAT_COMPLETE",
+      // Dedup retried tasks so timed-out attempts don't appear as parallel forks
+      const { tasks: iterLlmTasks } = deduplicateRetriedTasks(
+        iterTasks.filter((t) => t.taskType === "LLM_CHAT_COMPLETE"),
       );
 
       // Tool worker tasks — any non-infra, non-subworkflow, non-LLM task
-      const toolWorkerTasks = iterTasks.filter(
-        (t) =>
-          !ITER_INFRA.has(t.taskType) &&
-          t.taskType !== "SUB_WORKFLOW" &&
-          t.taskType !== "LLM_CHAT_COMPLETE",
+      const { tasks: toolWorkerTasks, attemptCounts: toolAttemptCounts, attemptGroups: toolAttemptGroups } = deduplicateRetriedTasks(
+        iterTasks.filter(
+          (t) =>
+            !ITER_INFRA.has(t.taskType) &&
+            t.taskType !== "SUB_WORKFLOW" &&
+            t.taskType !== "LLM_CHAT_COMPLETE",
+        ),
       );
 
       // SWARM self-calls: iterations where the agent IS the root agent itself
@@ -870,6 +927,8 @@ export function transformWorkflowExecutionToAgentRun(
               workerId: (toolTask as any).workerId ?? undefined,
               reasonForIncompletion: toolTask.reasonForIncompletion ?? undefined,
               retryCount: toolTask.retryCount,
+              totalAttempts: toolAttemptCounts.get(toolTask.referenceTaskName),
+              allAttempts: buildAllAttempts(toolTask.referenceTaskName, toolAttemptGroups),
               pollCount: toolTask.pollCount,
               seq: toolTask.seq,
               queueWaitTime: toolTask.queueWaitTime,
@@ -892,6 +951,7 @@ export function transformWorkflowExecutionToAgentRun(
               }
             })();
 
+        const toolTotalAttempts = toolAttemptCounts.get(toolTask.referenceTaskName);
         events.push({
           id: `${toolTask.taskId}-tool`,
           type: EventType.TOOL_CALL,
@@ -913,6 +973,8 @@ export function transformWorkflowExecutionToAgentRun(
             workerId: (toolTask as any).workerId ?? undefined,
             reasonForIncompletion: toolTask.reasonForIncompletion ?? undefined,
             retryCount: toolTask.retryCount,
+            totalAttempts: toolTotalAttempts,
+            allAttempts: buildAllAttempts(toolTask.referenceTaskName, toolAttemptGroups),
             pollCount: toolTask.pollCount,
             seq: toolTask.seq,
             queueWaitTime: toolTask.queueWaitTime,
@@ -1056,12 +1118,15 @@ export function transformWorkflowExecutionToAgentRun(
   // This handles: simple single-LLM agents (greeter, triage_router_wf),
   // final synthesis tasks, and Claude Code agent tool calls + sub-agents.
   // Sub-agents are included in the same turn to preserve execution order.
+  // Dedup retried tasks so timed-out attempts don't duplicate events.
+  const { tasks: dedupedRootTasks, attemptCounts: rootAttemptCounts, attemptGroups: rootAttemptGroups } =
+    deduplicateRetriedTasks(rootActiveTasks);
   let finalOutput: string | undefined;
-  if (rootActiveTasks.length > 0) {
+  if (dedupedRootTasks.length > 0) {
     const rootEvents: AgentEvent[] = [];
     let rootPrompt = 0, rootCompletion = 0;
 
-    for (const task of rootActiveTasks) {
+    for (const task of dedupedRootTasks) {
       // Skip the framework task (_fw_task) — it represents the agent itself, not a tool call.
       // Its outputData is used for the final agent output below.
       if (task.referenceTaskName === "_fw_task") continue;
@@ -1189,6 +1254,8 @@ export function transformWorkflowExecutionToAgentRun(
                 workerId: (task as any).workerId ?? undefined,
                 reasonForIncompletion: task.reasonForIncompletion ?? undefined,
                 retryCount: task.retryCount,
+                totalAttempts: rootAttemptCounts.get(task.referenceTaskName),
+                allAttempts: buildAllAttempts(task.referenceTaskName, rootAttemptGroups),
                 pollCount: task.pollCount,
                 seq: task.seq,
                 queueWaitTime: task.queueWaitTime,
@@ -1320,7 +1387,7 @@ const SKIP_TASK_TYPES = new Set([
  *   - Invocation               → TOOL_CALL
  *   - Result                   → TOOL_RESULT
  */
-function taskToEvents(task: ExecutionTask): AgentEvent[] {
+function taskToEvents(task: ExecutionTask, attemptCounts?: Map<string, number>, attemptGroups?: Map<string, ExecutionTask[]>): AgentEvent[] {
   const events: AgentEvent[] = [];
   const durationMs =
     task.endTime && task.startTime ? task.endTime - task.startTime : 0;
@@ -1453,6 +1520,8 @@ function taskToEvents(task: ExecutionTask): AgentEvent[] {
           workerId: (task as any).workerId ?? undefined,
           reasonForIncompletion: task.reasonForIncompletion ?? undefined,
           retryCount: task.retryCount,
+          totalAttempts: attemptCounts?.get(task.referenceTaskName),
+          allAttempts: attemptGroups ? buildAllAttempts(task.referenceTaskName, attemptGroups) : undefined,
           pollCount: task.pollCount,
           seq: task.seq,
           queueWaitTime: task.queueWaitTime,
@@ -1483,6 +1552,8 @@ function taskToEvents(task: ExecutionTask): AgentEvent[] {
           workerId: (task as any).workerId ?? (task as any).workerTask?.workerId ?? undefined,
           reasonForIncompletion: task.reasonForIncompletion ?? undefined,
           retryCount: task.retryCount,
+          totalAttempts: attemptCounts?.get(task.referenceTaskName),
+          allAttempts: attemptGroups ? buildAllAttempts(task.referenceTaskName, attemptGroups) : undefined,
           pollCount: task.pollCount,
           seq: task.seq,
           queueWaitTime: task.queueWaitTime,
@@ -1514,7 +1585,9 @@ export function transformSubWorkflowToAgentRun(
   }
 
   // Simple agent: group tasks into turns split at each LLM_CHAT_COMPLETE boundary
-  const activeTasks = tasks.filter((t) => !SKIP_TASK_TYPES.has(t.taskType));
+  // Dedup retried tasks so timed-out attempts don't appear as separate events
+  const { tasks: activeTasks, attemptCounts: subAttemptCounts, attemptGroups: subAttemptGroups } =
+    deduplicateRetriedTasks(tasks.filter((t) => !SKIP_TASK_TYPES.has(t.taskType)));
 
   // Split into turn buckets at each LLM_CHAT_COMPLETE task
   const turnBuckets: ExecutionTask[][] = [];
@@ -1530,7 +1603,7 @@ export function transformSubWorkflowToAgentRun(
   if (turnBuckets.length === 0) turnBuckets.push(activeTasks);
 
   const turns: AgentTurn[] = turnBuckets.map((bucketTasks, idx): AgentTurn => {
-    const events: AgentEvent[] = bucketTasks.flatMap(taskToEvents);
+    const events: AgentEvent[] = bucketTasks.flatMap(t => taskToEvents(t, subAttemptCounts, subAttemptGroups));
     const llmTask = bucketTasks.find((t) => t.taskType === "LLM_CHAT_COMPLETE");
     const promptTokens = (llmTask?.outputData?.promptTokens as number) || 0;
     const completionTokens =
