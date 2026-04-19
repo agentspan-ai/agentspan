@@ -18,7 +18,7 @@ describe("Agent", () => {
       expect(a.tools).toEqual([]);
       expect(a.agents).toEqual([]);
       expect(a.maxTurns).toBe(25);
-      expect(a.timeoutSeconds).toBe(0);
+      expect(a.timeoutSeconds).toBe(10);
       expect(a.external).toBe(false);
       expect(a.planner).toBe(false);
       expect(a.guardrails).toEqual([]);
