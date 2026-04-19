@@ -28,8 +28,8 @@ Scenario:
     aggregates the three answers into a side-by-side comparison report.
 
 Requirements:
-    - Conductor server with WMQ support
-    - AGENTSPAN_SERVER_URL=http://host.docker.internal:6767/api
+    - AgentSpan server running at http://localhost:6767
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - AGENTSPAN_LLM_MODEL=anthropic/claude-sonnet-4-20250514
 """
 
