@@ -197,7 +197,7 @@ export class Agent {
     this.maxTurns = options.maxTurns ?? 25;
     this.maxTokens = options.maxTokens;
     this.temperature = options.temperature;
-    this.timeoutSeconds = options.timeoutSeconds ?? 10;
+    this.timeoutSeconds = options.timeoutSeconds ?? 0;
     this.external = options.external ?? false;
     this.stopWhen = options.stopWhen;
     this.termination = options.termination;

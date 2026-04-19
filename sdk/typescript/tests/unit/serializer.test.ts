@@ -63,7 +63,7 @@ describe("serializeAgent() — simple agent", () => {
     expect(config.model).toBe("openai/gpt-4o");
     // Default values are always emitted (matching Python)
     expect(config.maxTurns).toBe(25);
-    expect(config.timeoutSeconds).toBe(10);
+    expect(config.timeoutSeconds).toBe(0);
     expect(config.external).toBe(false);
     // No strategy without agents
     expect(config).not.toHaveProperty("strategy");
