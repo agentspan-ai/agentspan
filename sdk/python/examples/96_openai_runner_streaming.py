@@ -16,30 +16,35 @@ The diff:
     -from agents import Runner
     +from agentspan import Runner
 
-Agentspan's streaming model differs from openai-agents in that it streams
-*execution events* (LLM calls, tool calls, results) rather than tokens.
-The final response arrives in the "done" event's output field.
-
-Event types:
-    "thinking"    — an LLM or tool task has started (content = task name)
-    "tool_call"   — the LLM called a tool (tool_name, args)
-    "tool_result" — a tool completed (tool_name, result)
-    "message"     — an intermediate agent message
+Note on streaming: Agentspan streams execution events rather than tokens.
+The event types are:
+    "thinking"    — an LLM or tool task started (content = task name)
+    "tool_call"   — the LLM called a tool
+    "tool_result" — a tool completed
     "done"        — execution complete; output contains the final answer
     "error"       — execution failed
 
+The final answer always arrives in the "done" event's output field.
+
 Requirements:
-    - uv add openai-agents
+    - uv add openai-agents          (from sdk/python/)
     - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o
 
-Usage:
-    python 96_openai_runner_streaming.py
+Usage (from sdk/python/):
+    uv run python examples/96_openai_runner_streaming.py
 """
 
 import asyncio
 
-from agents import Agent
+try:
+    from agents import Agent
+except ImportError:
+    raise SystemExit(
+        "openai-agents not installed.\n"
+        "Install it with (from sdk/python/): uv add openai-agents\n"
+        "Then run: uv run python examples/96_openai_runner_streaming.py"
+    )
 
 # ── Only this line changes ──────────────────────────────────────────────────
 # from agents import Runner          # ← original (runs directly on OpenAI)
@@ -55,29 +60,20 @@ async def main():
 
     stream = await Runner.run_streamed(agent, input="Please tell me 5 jokes.")
 
-    # Iterate Agentspan AgentEvent objects as they arrive from the server.
-    # Agentspan streams execution events — the final answer is in the "done" event.
     async for event in stream:
-        if event.type == "thinking" and event.content:
-            # Show which task is running (LLM or tool name)
-            print(f"[{event.content}] thinking...", flush=True)
-        elif event.type == "tool_call":
+        if event.type == "tool_call":
             print(f"\n[tool] {event.tool_name}({event.args})", flush=True)
         elif event.type == "tool_result":
             print(f"[result] {event.result}", flush=True)
-        elif event.type == "message" and event.content:
-            print(event.content, end="", flush=True)
         elif event.type == "done":
-            # Extract the final output from the done event
             output = event.output
             if isinstance(output, dict):
                 output = output.get("result", output)
             print(output)
             break
 
-    # Final result is also available after streaming.
     result = await stream.get_result()
-    print("\n\nExecution ID:", result.execution_id)
+    print("\nExecution ID:", result.execution_id)
 
 
 if __name__ == "__main__":

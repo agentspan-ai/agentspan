@@ -21,17 +21,24 @@ Agentspan records every handoff decision in the execution history — you can
 replay the full agent-to-agent routing in the Agentspan UI.
 
 Requirements:
-    - uv add openai-agents
+    - uv add openai-agents          (from sdk/python/)
     - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o
 
-Usage:
-    python 95_openai_runner_handoffs.py
+Usage (from sdk/python/):
+    uv run python examples/95_openai_runner_handoffs.py
 """
 
 import asyncio
 
-from agents import Agent
+try:
+    from agents import Agent
+except ImportError:
+    raise SystemExit(
+        "openai-agents not installed.\n"
+        "Install it with (from sdk/python/): uv add openai-agents\n"
+        "Then run: uv run python examples/95_openai_runner_handoffs.py"
+    )
 
 # ── Only this line changes ──────────────────────────────────────────────────
 # from agents import Runner          # ← original (runs directly on OpenAI)

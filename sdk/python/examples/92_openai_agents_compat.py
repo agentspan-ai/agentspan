@@ -1,10 +1,11 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""OpenAI Agents SDK compatibility — drop-in Runner replacement.
+"""OpenAI Agents SDK migration — drop-in Runner replacement.
 
 Shows how to migrate an openai-agents script to Agentspan by changing
-one import line.  Everything else stays identical.
+one import line.  Everything else — Agent definition, @function_tool
+decorators, Runner.run_sync() call, result.final_output — stays identical.
 
 Before (runs directly against OpenAI):
     from agents import Runner
@@ -12,153 +13,63 @@ Before (runs directly against OpenAI):
 After (runs on Agentspan — durable, observable, scalable):
     from agentspan import Runner
 
-The rest of the code — Agent definition, @function_tool decorators,
-Runner.run_sync() call, result.final_output — is unchanged.
-
-Two usage patterns are shown:
-
-Pattern A — keep openai-agents for Agent/function_tool, swap only Runner::
-
-    from agentspan import Runner           # ← change this one line
-    from agents import Agent, function_tool  # ← unchanged
-
-Pattern B — use Agentspan for everything (no openai-agents dependency)::
-
-    from agentspan import Runner, function_tool
-    from agentspan.agents import Agent
+The diff:
+    -from agents import Runner
+    +from agentspan import Runner
 
 Requirements:
+    - uv add openai-agents          (from sdk/python/)
     - AGENTSPAN_SERVER_URL=http://localhost:6767/api
-    - AGENTSPAN_LLM_MODEL=openai/gpt-4o (or anthropic/claude-opus-4-6)
+    - AGENTSPAN_LLM_MODEL=openai/gpt-4o (or any supported model)
 
-Usage:
-    # Pattern A (requires openai-agents installed: uv add openai-agents)
-    python 92_openai_agents_compat.py --pattern a
-
-    # Pattern B (Agentspan only, no openai-agents needed)
-    python 92_openai_agents_compat.py --pattern b
-    python 92_openai_agents_compat.py           # default: pattern b
+Usage (from sdk/python/):
+    uv run python examples/92_openai_agents_compat.py
 """
 
-import argparse
-
-
-# ── Pattern B — pure Agentspan, no openai-agents dependency ────────────────
-
-def run_pattern_b() -> None:
-    """Run using Agentspan's own Agent and function_tool (same result)."""
-    from agentspan import Runner, function_tool
-    from agentspan.agents import Agent
-    from settings import settings
-
-    @function_tool
-    def get_weather(city: str) -> str:
-        """Return the current weather for a city.
-
-        Args:
-            city: Name of the city.
-        """
-        return f"72°F and sunny in {city}"
-
-    @function_tool
-    def get_time(timezone: str) -> str:
-        """Return the current time in a timezone.
-
-        Args:
-            timezone: IANA timezone name (e.g. 'America/New_York').
-        """
-        from datetime import datetime
-        import zoneinfo
-
-        try:
-            tz = zoneinfo.ZoneInfo(timezone)
-            return datetime.now(tz).strftime("%H:%M %Z")
-        except Exception:
-            return f"Unknown timezone: {timezone}"
-
-    agent = Agent(
-        name="weather_assistant_b",
-        model=settings.llm_model,
-        tools=[get_weather, get_time],
-        instructions=(
-            "You are a helpful assistant that answers questions about weather and time. "
-            "Always use the provided tools to look up real data."
-        ),
+try:
+    from agents import Agent, function_tool
+except ImportError:
+    raise SystemExit(
+        "openai-agents not installed.\n"
+        "Install it with (from sdk/python/): uv add openai-agents\n"
+        "Then run: uv run python examples/92_openai_agents_compat.py"
     )
 
-    result = Runner.run_sync(agent, "What's the weather in NYC and what time is it there?")
-    print(result.final_output)
+# ── Only this line changes ──────────────────────────────────────────────────
+# from agents import Runner          # ← original (runs directly on OpenAI)
+from agentspan import Runner         # ← agentspan (runs on Agentspan)
+# ───────────────────────────────────────────────────────────────────────────
 
 
-# ── Pattern A — keep openai-agents Agent/function_tool, swap only Runner ───
+@function_tool
+def get_weather(city: str) -> str:
+    """Return the current weather for a city."""
+    return f"72°F and sunny in {city}"
 
-def run_pattern_a() -> None:
-    """Run with openai-agents Agent but Agentspan's Runner.
 
-    Requires: uv add openai-agents
-    """
+@function_tool
+def get_time(timezone: str) -> str:
+    """Return the current time in a timezone (e.g. 'America/New_York')."""
+    import zoneinfo
+    from datetime import datetime
+
     try:
-        from agents import Agent, function_tool
-    except ImportError:
-        print("openai-agents not installed. Run: uv add openai-agents")
-        print("Falling back to pattern B...")
-        run_pattern_b()
-        return
+        tz = zoneinfo.ZoneInfo(timezone)
+        return datetime.now(tz).strftime("%H:%M %Z")
+    except Exception:
+        return f"Unknown timezone: {timezone}"
 
-    # ── The ONE line you change ────────────────────────────────────────────
-    # from agents import Runner     # ← original openai-agents import
-    from agentspan import Runner    # ← drop-in Agentspan replacement
 
-    @function_tool
-    def get_weather(city: str) -> str:
-        """Return the current weather for a city.
-
-        Args:
-            city: Name of the city.
-        """
-        return f"72°F and sunny in {city}"
-
-    @function_tool
-    def get_time(timezone: str) -> str:
-        """Return the current time in a timezone.
-
-        Args:
-            timezone: IANA timezone name (e.g. 'America/New_York').
-        """
-        from datetime import datetime
-        import zoneinfo
-
-        try:
-            tz = zoneinfo.ZoneInfo(timezone)
-            return datetime.now(tz).strftime("%H:%M %Z")
-        except Exception:
-            return f"Unknown timezone: {timezone}"
-
-    agent = Agent(
-        name="weather_assistant_a",
-        model="gpt-4o",
-        tools=[get_weather, get_time],
-        instructions=(
-            "You are a helpful assistant that answers questions about weather and time. "
-            "Always use the provided tools to look up real data."
-        ),
-    )
-
-    result = Runner.run_sync(agent, "What's the weather in NYC and what time is it there?")
-    print(result.final_output)
-
+agent = Agent(
+    name="weather_assistant",
+    model="gpt-4o",
+    tools=[get_weather, get_time],
+    instructions=(
+        "You are a helpful assistant that answers questions about weather and time. "
+        "Always use the provided tools."
+    ),
+)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="OpenAI Agents SDK compatibility demo")
-    parser.add_argument(
-        "--pattern",
-        choices=["a", "b"],
-        default="b",
-        help="a = openai-agents Agent + Agentspan Runner; b = pure Agentspan (default)",
-    )
-    args = parser.parse_args()
-
-    if args.pattern == "a":
-        run_pattern_a()
-    else:
-        run_pattern_b()
+    result = Runner.run_sync(agent, "What's the weather in NYC and what time is it there?")
+    print(result.final_output)

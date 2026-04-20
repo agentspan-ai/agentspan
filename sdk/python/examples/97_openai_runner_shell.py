@@ -1,13 +1,10 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""OpenAI Agents SDK migration — shell agent (local workspace).
+"""OpenAI Agents SDK migration — agent with shell tool.
 
-This example shows the same pattern as the old sandbox/basic.py from the
-openai-agents SDK with exactly ONE line changed. The old sandbox API
-(SandboxAgent, agents.sandbox) was removed in openai-agents ≥ 0.12. This
-version uses a @function_tool to execute shell commands in a temporary
-workspace — no Docker required.
+An openai-agents script that gives an agent shell access to a local
+workspace, migrated to Agentspan by changing ONE line.
 
 Before (runs directly against OpenAI):
     from agents import Runner
@@ -19,13 +16,12 @@ The diff:
     -from agents import Runner
     +from agentspan import Runner
 
-Architecture:
-    ShellAgent   — standard openai-agents Agent with a shell execution tool
-    Workspace    — temporary directory populated with demo files
-    AgentspanRunner — routes execution through Agentspan instead of OpenAI
+The agent, @function_tool definition, and Runner.run_sync() call are
+unchanged. Agentspan records every shell command the model executes in
+the execution history — visible in the Agentspan UI.
 
 Requirements:
-    - uv add openai-agents          (in sdk/python/)
+    - uv add openai-agents          (from sdk/python/)
     - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o
 
@@ -39,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shlex
 import subprocess
 import tempfile
 
@@ -48,7 +45,7 @@ except ImportError:
     raise SystemExit(
         "openai-agents not installed.\n"
         "Install it with (from sdk/python/): uv add openai-agents\n"
-        "Then run with: uv run python examples/97_openai_runner_shell.py"
+        "Then run: uv run python examples/97_openai_runner_shell.py"
     )
 
 # ── Only this line changes ──────────────────────────────────────────────────
@@ -59,14 +56,10 @@ from agentspan import Runner         # ← agentspan (runs on Agentspan)
 DEFAULT_QUESTION = "Summarize this project in 2 sentences."
 DEFAULT_MODEL = "gpt-4o"
 
-# Module-level workspace path set in main() before the agent runs.
-_WORKSPACE_DIR: str = ""
-
 
 def _create_workspace() -> str:
     """Create a temporary workspace with demo files and return its path."""
     workspace = tempfile.mkdtemp(prefix="agentspan_shell_")
-
     files = {
         "README.md": (
             "# Demo Project\n\n"
@@ -85,39 +78,44 @@ def _create_workspace() -> str:
         os.makedirs(os.path.dirname(abs_path), exist_ok=True)
         with open(abs_path, "w") as f:
             f.write(content)
-
     return workspace
 
 
-@function_tool
-def run_shell(command: str) -> str:
-    """Execute a shell command in the workspace directory and return its output.
+def _make_shell_tool(workspace: str):
+    """Return a @function_tool that runs commands inside *workspace*."""
 
-    Use standard Unix commands (ls, cat, find, grep, head) to inspect files.
-    """
-    if not _WORKSPACE_DIR:
-        return "Error: workspace not initialised"
-    try:
-        result = subprocess.run(
-            command,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=10,
-            cwd=_WORKSPACE_DIR,
-        )
-        output = result.stdout
-        if result.stderr:
-            output += "\n[stderr] " + result.stderr.strip()
-        return output.strip() or "(no output)"
-    except subprocess.TimeoutExpired:
-        return "Error: command timed out"
-    except Exception as exc:
-        return f"Error: {exc}"
+    @function_tool
+    def run_shell(command: str) -> str:
+        """Run a shell command in the workspace and return its output.
+
+        Use standard Unix commands (ls, cat, find, grep) to inspect files.
+        """
+        try:
+            result = subprocess.run(
+                shlex.split(command),
+                capture_output=True,
+                text=True,
+                timeout=10,
+                cwd=workspace,
+            )
+            output = result.stdout
+            if result.stderr:
+                output += "\n[stderr] " + result.stderr.strip()
+            return output.strip() or "(no output)"
+        except subprocess.TimeoutExpired:
+            return "Error: command timed out"
+        except Exception as exc:
+            return f"Error: {exc}"
+
+    return run_shell
 
 
-def _build_agent(model: str) -> Agent:
-    return Agent(
+def main(model: str, question: str) -> None:
+    workspace = _create_workspace()
+    print(f"Workspace: {workspace}")
+    print(f"Files: {os.listdir(workspace)}\n")
+
+    agent = Agent(
         name="ShellAssistant",
         model=model,
         instructions=(
@@ -125,28 +123,17 @@ def _build_agent(model: str) -> Agent:
             "Use the run_shell tool to inspect files before answering. "
             "Keep responses concise."
         ),
-        tools=[run_shell],
+        tools=[_make_shell_tool(workspace)],
     )
-
-
-def main(model: str, question: str) -> None:
-    global _WORKSPACE_DIR
-    _WORKSPACE_DIR = _create_workspace()
-
-    print(f"Workspace: {_WORKSPACE_DIR}")
-    print(f"Files: {os.listdir(_WORKSPACE_DIR)}\n")
-
-    agent = _build_agent(model)
 
     result = Runner.run_sync(agent, question)
     print("assistant>", result.final_output)
     print(f"\nExecution ID: {result.execution_id}")
-    print("(View full run in the Agentspan UI)")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Agentspan shell agent (local workspace)")
-    parser.add_argument("--model", default=DEFAULT_MODEL, help="LLM model to use")
-    parser.add_argument("--question", default=DEFAULT_QUESTION, help="Question to ask")
+    parser = argparse.ArgumentParser(description="Agentspan shell agent")
+    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--question", default=DEFAULT_QUESTION)
     args = parser.parse_args()
     main(args.model, args.question)

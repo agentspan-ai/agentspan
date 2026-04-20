@@ -22,20 +22,26 @@ worker task — if the process crashes mid-run, execution resumes from the
 last successful tool call.
 
 Requirements:
-    - uv add openai-agents
+    - uv add openai-agents          (from sdk/python/)
     - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o
 
-Usage:
-    python 94_openai_runner_tools.py
+Usage (from sdk/python/):
+    uv run python examples/94_openai_runner_tools.py
 """
 
 import asyncio
 from typing import Annotated
 
-from pydantic import BaseModel, Field
-
-from agents import Agent, function_tool
+try:
+    from agents import Agent, function_tool
+    from pydantic import BaseModel, Field
+except ImportError:
+    raise SystemExit(
+        "openai-agents not installed.\n"
+        "Install it with (from sdk/python/): uv add openai-agents\n"
+        "Then run: uv run python examples/94_openai_runner_tools.py"
+    )
 
 # ── Only this line changes ──────────────────────────────────────────────────
 # from agents import Runner          # ← original (runs directly on OpenAI)
@@ -52,7 +58,6 @@ class Weather(BaseModel):
 @function_tool
 def get_weather(city: Annotated[str, "The city to get the weather for"]) -> Weather:
     """Get the current weather information for a specified city."""
-    print("[debug] get_weather called")
     return Weather(city=city, temperature_range="14-20C", conditions="Sunny with wind.")
 
 
