@@ -9,7 +9,7 @@ import { Tab, Tabs } from "components";
 import Editor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { AgentEvent, AgentRunData, AgentStatus, EventType } from "./types";
+import { AgentEvent, AgentRunData, AgentStatus, EventType, TaskAttempt } from "./types";
 import { formatTokens, formatDuration, getModelIconPath } from "./agentExecutionUtils";
 import { toolCategoryForPanel, type ToolCategory } from "utils/agentTaskCategory";
 
@@ -827,6 +827,7 @@ function SummaryContent({ node, onDrillIn }: { node: DetailNodeData; onDrillIn?:
           {meta?.referenceTaskName && <SummaryRow label="Task reference" value={meta.referenceTaskName} />}
           {meta?.taskId && <SummaryRow label="Task execution id" value={meta.taskId} />}
           {meta?.retryCount != null && <SummaryRow label="Retry count" value={String(meta.retryCount)} />}
+          {meta?.totalAttempts != null && meta.totalAttempts > 1 && <SummaryRow label="Total attempts" value={String(meta.totalAttempts)} />}
           {fmt(meta?.scheduledTime) && <SummaryRow label="Scheduled time" value={fmt(meta?.scheduledTime)!} />}
           {fmt(meta?.startTime) && <SummaryRow label="Start time" value={fmt(meta?.startTime)!} />}
           {fmt(meta?.endTime) && <SummaryRow label="End time" value={fmt(meta?.endTime)!} />}
@@ -1029,6 +1030,34 @@ function resolveJsonData(node: DetailNodeData): unknown {
 
 // ─── Main panel ───────────────────────────────────────────────────────────────
 
+/** Build a DetailNodeData with taskMeta overridden from a past attempt */
+function buildAttemptNode(node: DetailNodeData, attempt: TaskAttempt): DetailNodeData {
+  const statusMap: Record<string, AgentStatus> = {
+    COMPLETED: AgentStatus.COMPLETED,
+    FAILED: AgentStatus.FAILED,
+    TIMED_OUT: AgentStatus.FAILED,
+    IN_PROGRESS: AgentStatus.RUNNING,
+  };
+  return {
+    ...node,
+    status: statusMap[attempt.status] ?? AgentStatus.RUNNING,
+    event: node.event ? {
+      ...node.event,
+      durationMs: attempt.durationMs,
+      success: attempt.status === "COMPLETED",
+      taskMeta: {
+        ...node.event.taskMeta,
+        taskId: attempt.taskId,
+        retryCount: attempt.retryCount,
+        startTime: attempt.startTime,
+        endTime: attempt.endTime,
+        workerId: attempt.workerId,
+        reasonForIncompletion: attempt.reasonForIncompletion,
+      },
+    } : undefined,
+  };
+}
+
 interface AgentDetailPanelProps {
   node: DetailNodeData;
   onClose: () => void;
@@ -1048,13 +1077,20 @@ const KIND_DISPLAY: Record<DetailNodeData["kind"], string> = {
 
 export function AgentDetailPanel({ node, onClose, onDrillIn }: AgentDetailPanelProps) {
   const [tab, setTab] = useState(SUMMARY_TAB);
+  const allAttempts = node.event?.taskMeta?.allAttempts;
+  const hasMultipleAttempts = allAttempts != null && allAttempts.length > 1;
+  // Default to the latest attempt (last in the array, which is sorted ascending by retryCount)
+  const [selectedAttemptIdx, setSelectedAttemptIdx] = useState(
+    hasMultipleAttempts ? allAttempts.length - 1 : 0,
+  );
   // Must be declared before any early returns to satisfy the Rules of Hooks
   const prevNodeId = useRef(node.label + node.kind);
 
-  // Reset tab to summary when the non-group node changes
+  // Reset tab to summary and attempt selection when the non-group node changes
   if (node.kind !== "group" && prevNodeId.current !== node.label + node.kind) {
     prevNodeId.current = node.label + node.kind;
     setTab(SUMMARY_TAB);
+    setSelectedAttemptIdx(hasMultipleAttempts ? allAttempts.length - 1 : 0);
   }
 
   // Group nodes get their own dedicated layout (no tabs)
@@ -1086,9 +1122,21 @@ export function AgentDetailPanel({ node, onClose, onDrillIn }: AgentDetailPanelP
     );
   }
 
-  const inputValue  = resolveInput(node);
-  const outputValue = resolveOutput(node);
-  const jsonData    = resolveJsonData(node);
+  // When viewing a past attempt, override input/output with that attempt's data
+  const selectedAttempt: TaskAttempt | null =
+    hasMultipleAttempts && selectedAttemptIdx < allAttempts.length - 1
+      ? allAttempts[selectedAttemptIdx]
+      : null;
+
+  const inputValue  = selectedAttempt ? (selectedAttempt.inputData ?? null) : resolveInput(node);
+  const outputValue = selectedAttempt
+    ? (selectedAttempt.status === "FAILED"
+        ? (selectedAttempt.reasonForIncompletion ?? null)
+        : (selectedAttempt.outputData ?? null))
+    : resolveOutput(node);
+  const jsonData = selectedAttempt
+    ? { ...selectedAttempt }
+    : resolveJsonData(node);
 
   const isAgentNode = node.kind === "start" || node.kind === "subagent";
   const hasInput  = inputValue  != null;
@@ -1132,6 +1180,46 @@ export function AgentDetailPanel({ node, onClose, onDrillIn }: AgentDetailPanelP
         </Box>
       </Box>
 
+      {/* ── Attempt selector (shown when task has multiple retry attempts) ── */}
+      {hasMultipleAttempts && (
+        <Box sx={{
+          px: 2.5, py: 1,
+          borderBottom: "1px solid", borderColor: "divider",
+          display: "flex", alignItems: "center", gap: 1.5,
+          backgroundColor: "#fffbeb",
+          flexShrink: 0,
+        }}>
+          <Typography sx={{ fontSize: "0.75rem", fontWeight: 600, color: "#92400e", whiteSpace: "nowrap" }}>
+            Attempt
+          </Typography>
+          <Select
+            size="small"
+            value={selectedAttemptIdx}
+            onChange={(e) => setSelectedAttemptIdx(Number(e.target.value))}
+            sx={{
+              fontSize: "0.75rem", height: 28,
+              "& .MuiSelect-select": { py: 0.25, px: 1 },
+              minWidth: 200,
+            }}
+          >
+            {allAttempts.map((attempt, idx) => {
+              const statusEmoji = attempt.status === "COMPLETED" ? "\u2705"
+                : attempt.status === "FAILED" || attempt.status === "TIMED_OUT" ? "\u274C"
+                : attempt.status === "IN_PROGRESS" ? "\u23F3"
+                : "\u2022";
+              const isLatest = idx === allAttempts.length - 1;
+              return (
+                <MenuItem key={attempt.taskId} value={idx} sx={{ fontSize: "0.75rem" }}>
+                  {statusEmoji} Attempt #{attempt.retryCount + 1}
+                  {isLatest ? " (latest)" : ""}
+                  {" \u2014 "}{attempt.taskId.slice(0, 8)}
+                </MenuItem>
+              );
+            })}
+          </Select>
+        </Box>
+      )}
+
       {/* ── Tabs ──────────────────────────────────────────────────────── */}
       <Box sx={{ flexShrink: 0 }}>
         <Tabs
@@ -1160,7 +1248,7 @@ export function AgentDetailPanel({ node, onClose, onDrillIn }: AgentDetailPanelP
         "&::-webkit-scrollbar": { display: "none" },
       }}>
         {tab === SUMMARY_TAB && (
-          <SummaryContent node={node} onDrillIn={onDrillIn} />
+          <SummaryContent node={selectedAttempt ? buildAttemptNode(node, selectedAttempt) : node} onDrillIn={onDrillIn} />
         )}
         {tab === INPUT_TAB && (
           <>

@@ -29,7 +29,7 @@ if __name__ == "__main__":
         )
         result.print_result()
         print("\n--- Metadata ---")
-        print(f"Workflow ID: {result.execution_id}")
+        print(f"Execution ID: {result.execution_id}")
         print(f"Status: {result.status}")
         if result.token_usage:
             print(f"Token usage: {result.token_usage}")

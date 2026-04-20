@@ -143,7 +143,7 @@ for example in "${EXAMPLES[@]}"; do
     if eval "$RUN_CMD" > "$LOG_FILE" 2>&1; then
         ELAPSED=$(( $(date +%s) - START_TIME ))
         # Extract workflow ID from output
-        WF_ID=$(sed -n 's/.*Workflow ID: \([^ ]*\).*/\1/p' "$LOG_FILE" | tail -1 || true)
+        WF_ID=$(sed -n 's/.*Execution ID: \([^ ]*\).*/\1/p' "$LOG_FILE" | tail -1 || true)
         if [[ -n "$WF_ID" ]]; then
             echo "PASS (${ELAPSED}s) workflow=$WF_ID"
         else
@@ -195,7 +195,7 @@ if [[ ${#FAILED[@]} -gt 0 ]]; then
         # Show last few lines of stderr/stdout for the error
         if [[ -f "$FAIL_LOG" ]]; then
             # Extract workflow ID from log
-            WF_ID=$(sed -n 's/.*Workflow ID: \([^ ]*\).*/\1/p' "$FAIL_LOG" | tail -1 || true)
+            WF_ID=$(sed -n 's/.*Execution ID: \([^ ]*\).*/\1/p' "$FAIL_LOG" | tail -1 || true)
             # Show Python traceback or last error lines
             ERROR_LINES=$(grep -A2 'Traceback\|Error\|Exception\|FAIL\|WARN' "$FAIL_LOG" | tail -10 || true)
             if [[ -n "$ERROR_LINES" ]]; then

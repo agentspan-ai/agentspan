@@ -104,7 +104,7 @@ def example_router():
             "    query = f\"SELECT * FROM users WHERE user='{username}' AND pass='{password}'\"\n"
             "    return db.execute(query)\n",
         )
-        print(f"Workflow ID: {result.execution_id}")
+        print(f"Execution ID: {result.execution_id}")
         print(f"Status:      {result.status}")
         print(f"Tokens:      {result.token_usage}")
         result.print_result()
@@ -151,7 +151,7 @@ def example_pipeline():
             "        return charge_card(card_number, amount)\n"
             "    return {'error': 'invalid amount'}\n",
         )
-        print(f"Workflow ID: {result.execution_id}")
+        print(f"Execution ID: {result.execution_id}")
         print(f"Status:      {result.status}")
         print(f"Tokens:      {result.token_usage}")
         if result.sub_results:
@@ -213,7 +213,7 @@ def example_parallel():
             "    output = subprocess.check_output(cmd, shell=True)\n"
             "    return output.decode()\n",
         )
-        print(f"Workflow ID: {result.execution_id}")
+        print(f"Execution ID: {result.execution_id}")
         print(f"Status:      {result.status}")
         print(f"Tokens:      {result.token_usage}")
         if result.sub_results:
@@ -277,7 +277,7 @@ def example_orchestrator():
             "    }\n"
             "    return {'status': 'COMPLETED', 'output': enriched}\n",
         )
-        print(f"Workflow ID: {result.execution_id}")
+        print(f"Execution ID: {result.execution_id}")
         print(f"Status:      {result.status}")
         print(f"Tokens:      {result.token_usage}")
         result.print_result()
@@ -324,7 +324,7 @@ def example_swarm():
             "- REST API for configuration\n"
             "- Middleware integration for Express.js",
         )
-        print(f"Workflow ID: {result.execution_id}")
+        print(f"Execution ID: {result.execution_id}")
         print(f"Status:      {result.status}")
         print(f"Tokens:      {result.token_usage}")
         result.print_result()

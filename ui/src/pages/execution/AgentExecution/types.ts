@@ -41,6 +41,19 @@ export interface TokenUsage {
   totalTokens: number;
 }
 
+export interface TaskAttempt {
+  taskId: string;
+  retryCount: number;
+  status: string;
+  startTime?: number;
+  endTime?: number;
+  durationMs: number;
+  workerId?: string;
+  reasonForIncompletion?: string;
+  inputData?: Record<string, unknown>;
+  outputData?: Record<string, unknown>;
+}
+
 export interface AgentEvent {
   id: string;
   type: EventType;
@@ -84,6 +97,10 @@ export interface AgentEvent {
     workerId?: string;
     reasonForIncompletion?: string;
     retryCount?: number;
+    /** Total execution attempts (original + retries). Present when > 1. */
+    totalAttempts?: number;
+    /** All task attempts (original + retries) — present when totalAttempts > 1 */
+    allAttempts?: TaskAttempt[];
     pollCount?: number;
     seq?: string;
     queueWaitTime?: number;
