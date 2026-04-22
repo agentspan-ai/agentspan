@@ -3,10 +3,11 @@
 
 """Coding Agent TUI — a filesystem-aware coding assistant with a split-pane terminal UI.
 
-Like 82_coding_agent.py, but with two improvements:
+Like 82_coding_agent.py, but with three improvements:
 
   - Background process tools: run servers and watchers without blocking the agent.
   - prompt_toolkit TUI: scrollable output + always-available input prompt.
+  - Sub-agent spawning: delegate independent sub-tasks to parallel sub-agents.
 
 Usage:
     python 82b_coding_agent_tui.py                      # new session in current dir
@@ -209,6 +210,140 @@ def _make_bg_tools(working_dir: str):
 
 
 # ---------------------------------------------------------------------------
+# Sub-agent registry
+# ---------------------------------------------------------------------------
+
+@dataclass
+class SubAgent:
+    id: int
+    name: str
+    task: str
+    handle: object  # AgentHandle
+    started_at: float = field(default_factory=time.time)
+
+
+def _make_sub_agent_tools(runtime, working_dir: str, shell_timeout: int):
+    """Create sub-agent tools that close over a shared registry and the runtime."""
+    _sub_agents: dict[int, SubAgent] = {}
+    _bg_cleanups: list = []  # collect bg-process cleanup fns from sub-agents
+    _next_id = [0]
+
+    @tool
+    def spawn_agent(task: str, name: str = "") -> str:
+        """Start a sub-agent to work on a task independently. Returns immediately with an ID.
+        The sub-agent has the same tools as you (filesystem, shell, background processes).
+        Use for independent sub-tasks that can run in parallel with your work."""
+        _next_id[0] += 1
+        agent_id = _next_id[0]
+        agent_name = name or f"sub_{agent_id}"
+        try:
+            sub_agent, sub_cleanup_bg, _ = build_agent(
+                working_dir, shell_timeout, runtime=None,
+            )
+            _bg_cleanups.append(sub_cleanup_bg)
+            # Override name to avoid Conductor workflow collisions
+            sub_agent = Agent(
+                name=agent_name,
+                model=sub_agent.model,
+                tools=sub_agent.tools,
+                max_turns=sub_agent.max_turns,
+                stateful=sub_agent.stateful,
+                instructions=sub_agent.instructions,
+            )
+            handle = runtime.start(sub_agent, task)
+        except Exception as exc:
+            return f"Error spawning sub-agent: {exc}"
+        sa = SubAgent(id=agent_id, name=agent_name, task=task, handle=handle)
+        _sub_agents[agent_id] = sa
+        return f"[agent:{agent_id}] Spawned '{agent_name}' for: {task[:100]}"
+
+    @tool
+    def check_agent(id: int) -> str:
+        """Check status and output of a spawned sub-agent."""
+        sa = _sub_agents.get(id)
+        if sa is None:
+            return f"Error: no sub-agent with id {id}."
+        try:
+            status = sa.handle.get_status()
+        except Exception as exc:
+            return f"Error checking sub-agent {id}: {exc}"
+        if status.is_complete:
+            output = status.output or "(no output)"
+            return f"[agent:{id}] '{sa.name}' COMPLETED\n{output}"
+        if status.is_running:
+            task_info = f" (current: {status.current_task})" if status.current_task else ""
+            return f"[agent:{id}] '{sa.name}' RUNNING{task_info}"
+        return f"[agent:{id}] '{sa.name}' {status.status}"
+
+    @tool
+    def wait_for_agent(id: int, timeout: int = 300) -> str:
+        """Wait for a sub-agent to complete and return its full result.
+        Blocks until the sub-agent finishes or the timeout is reached."""
+        sa = _sub_agents.get(id)
+        if sa is None:
+            return f"Error: no sub-agent with id {id}."
+        try:
+            result = sa.handle.join(timeout=timeout)
+            output = result.output or "(no output)"
+            return f"[agent:{id}] '{sa.name}' COMPLETED\n{output}"
+        except TimeoutError:
+            return (
+                f"[agent:{id}] '{sa.name}' still running "
+                f"(timed out after {timeout}s)"
+            )
+        except Exception as exc:
+            return f"Error waiting for sub-agent {id}: {exc}"
+
+    @tool
+    def stop_agent(id: int) -> str:
+        """Stop a running sub-agent gracefully."""
+        sa = _sub_agents.get(id)
+        if sa is None:
+            return f"Error: no sub-agent with id {id}."
+        try:
+            status = sa.handle.get_status()
+            if status.is_complete:
+                return f"[agent:{id}] '{sa.name}' already completed"
+            sa.handle.stop()
+            return f"[agent:{id}] '{sa.name}' stop requested"
+        except Exception as exc:
+            return f"Error stopping sub-agent {id}: {exc}"
+
+    @tool
+    def list_agents() -> str:
+        """List all spawned sub-agents with their status."""
+        if not _sub_agents:
+            return "No sub-agents."
+        lines = []
+        for sa in _sub_agents.values():
+            try:
+                status = sa.handle.get_status()
+                state = "COMPLETED" if status.is_complete else "RUNNING" if status.is_running else status.status
+            except Exception:
+                state = "UNKNOWN"
+            task_short = sa.task[:60] + ("..." if len(sa.task) > 60 else "")
+            lines.append(f"  [agent:{sa.id}] '{sa.name}'  {state}  {task_short}")
+        return "\n".join(lines)
+
+    def cleanup_all():
+        """Cancel all running sub-agents and their background processes."""
+        for sa in _sub_agents.values():
+            try:
+                status = sa.handle.get_status()
+                if not status.is_complete:
+                    sa.handle.cancel()
+            except Exception:
+                pass
+        for bg_cleanup in _bg_cleanups:
+            try:
+                bg_cleanup()
+            except Exception:
+                pass
+
+    return spawn_agent, check_agent, wait_for_agent, stop_agent, list_agents, cleanup_all
+
+
+# ---------------------------------------------------------------------------
 # Event formatting
 # ---------------------------------------------------------------------------
 
@@ -250,6 +385,16 @@ def _format_event(event) -> str:
             return f"  [grep]  {args.get('regex', '')}  in {args.get('path', '.')}\n"
 
         if tool_name in ("check_process", "stop_process", "list_processes"):
+            id_str = f" {args.get('id', '')}" if "id" in args else ""
+            return f"  [{tool_name}{id_str}]\n"
+
+        if tool_name == "spawn_agent":
+            name = args.get("name", "sub-agent")
+            task_str = args.get("task", "")[:80]
+            label = f"'{name}'" if name else ""
+            return f"  [spawn] {label} {task_str}\n"
+
+        if tool_name in ("check_agent", "wait_for_agent", "stop_agent", "list_agents"):
             id_str = f" {args.get('id', '')}" if "id" in args else ""
             return f"  [{tool_name}{id_str}]\n"
 
@@ -498,10 +643,12 @@ def _run_tui_repl(
 # Agent builder
 # ---------------------------------------------------------------------------
 
-def build_agent(working_dir: str, shell_timeout: int = _DEFAULT_SHELL_TIMEOUT):
-    """Build the coding agent and return (agent, cleanup_fn).
+def build_agent(working_dir: str, shell_timeout: int = _DEFAULT_SHELL_TIMEOUT, runtime=None):
+    """Build the coding agent and return (agent, cleanup_bg, cleanup_sub).
 
-    Returns a tuple so the caller can clean up background processes on exit.
+    When *runtime* is provided, sub-agent tools are included.  When
+    ``runtime=None`` (used by sub-agents themselves) those tools are
+    omitted to prevent recursive spawning.
     """
 
     receive_message = wait_for_message_tool(
@@ -513,6 +660,15 @@ def build_agent(working_dir: str, shell_timeout: int = _DEFAULT_SHELL_TIMEOUT):
     run_background, check_process, stop_process, list_processes, cleanup_bg = (
         _make_bg_tools(working_dir)
     )
+
+    # Sub-agent tools (only when runtime is available — omitted for sub-agents)
+    sub_agent_tools: list = []
+    cleanup_sub = None
+    if runtime is not None:
+        spawn_agent, check_agent, wait_for_agent, stop_agent, list_agents, cleanup_sub = (
+            _make_sub_agent_tools(runtime, working_dir, shell_timeout)
+        )
+        sub_agent_tools = [spawn_agent, check_agent, wait_for_agent, stop_agent, list_agents]
 
     @tool
     def read_file(path: str) -> str:
@@ -650,26 +806,33 @@ def build_agent(working_dir: str, shell_timeout: int = _DEFAULT_SHELL_TIMEOUT):
         """Send your response to the user. Call this when the task is complete."""
         return "ok"
 
-    agent = Agent(
-        name="coding_agent_tui",
-        model=settings.llm_model,
-        tools=[
-            receive_message,
-            read_file,
-            write_file,
-            list_dir,
-            run_shell,
-            run_background,
-            find_files,
-            search_in_files,
-            check_process,
-            stop_process,
-            list_processes,
-            reply_to_user,
-        ],
-        max_turns=100_000,
-        stateful=True,
-        instructions=f"""You are a coding assistant with direct filesystem and shell access.
+    # -- Build instructions ------------------------------------------------
+    sub_agent_tool_docs = ""
+    sub_agent_rules = ""
+    is_parent = runtime is not None
+    if sub_agent_tools:
+        sub_agent_tool_docs = (
+            "- spawn_agent(task, name='')                  start a sub-agent for an independent sub-task\n"
+            "- check_agent(id)                             check sub-agent status/output\n"
+            "- wait_for_agent(id, timeout=300)             block until sub-agent completes\n"
+            "- stop_agent(id)                              stop a running sub-agent\n"
+            "- list_agents()                               list all sub-agents\n"
+        )
+        sub_agent_rules = (
+            "- Use spawn_agent for independent sub-tasks that can run in parallel with your work.\n"
+            "- Sub-agents have their own filesystem and shell tools but cannot spawn further sub-agents.\n"
+            "- Always check_agent or wait_for_agent to collect results before replying to the user.\n"
+        )
+    repl_loop = (
+        "\nRepeat indefinitely:\n"
+        "1. Call wait_for_message to receive the next task.\n"
+        "2. Think through the task. Explore, read, search, modify, and run as needed.\n"
+        "3. Complete the task fully.\n"
+        "4. Call reply_to_user with a concise summary.\n"
+        "5. Return to step 1 immediately.\n"
+    ) if is_parent else ""
+
+    instructions = f"""You are a coding assistant with direct filesystem and shell access.
 Working directory: {working_dir}
 
 Available tools:
@@ -683,7 +846,7 @@ Available tools:
 - list_processes()                             list all background processes
 - find_files(pattern, path=".")               find files by glob, e.g. "**/*.py"
 - search_in_files(regex, path=".", file_glob) grep files by regex
-- reply_to_user(message)                       send your response to the user
+{sub_agent_tool_docs}- reply_to_user(message)                       send your response to the user
 
 Rules:
 - Work autonomously. Do not ask for permission before reading files, running commands, or writing.
@@ -692,18 +855,37 @@ Rules:
 - If the task is ambiguous, make a reasonable assumption and proceed.
 - Use run_shell for commands that complete in seconds (ls, cat, grep, git, etc.).
 - Use run_background for servers, file watchers, builds, and any command that won't exit quickly.
-- If you see [SIGNALS] ... [/SIGNALS] in a message, those are runtime instructions — follow them.
+{sub_agent_rules}- If you see [SIGNALS] ... [/SIGNALS] in a message, those are runtime instructions — follow them.
+{repl_loop}"""
 
-Repeat indefinitely:
-1. Call wait_for_message to receive the next task.
-2. Think through the task. Explore, read, search, modify, and run as needed.
-3. Complete the task fully.
-4. Call reply_to_user with a concise summary.
-5. Return to step 1 immediately.
-""",
+    # Parent agent is stateful (REPL loop with wait_for_message).
+    # Sub-agents are one-shot: no receive_message, stateful=False.
+    tools = [
+        *([] if not is_parent else [receive_message]),
+        read_file,
+        write_file,
+        list_dir,
+        run_shell,
+        run_background,
+        find_files,
+        search_in_files,
+        check_process,
+        stop_process,
+        list_processes,
+        *sub_agent_tools,
+        reply_to_user,
+    ]
+
+    agent = Agent(
+        name="coding_agent_tui",
+        model=settings.llm_model,
+        tools=tools,
+        max_turns=100_000,
+        stateful=is_parent,
+        instructions=instructions,
     )
 
-    return agent, cleanup_bg
+    return agent, cleanup_bg, cleanup_sub
 
 
 # ---------------------------------------------------------------------------
@@ -747,9 +929,12 @@ def _parse_args() -> argparse.Namespace:
 def main() -> None:
     args = _parse_args()
     working_dir = os.path.abspath(args.cwd or os.getcwd())
-    agent, cleanup_bg = build_agent(working_dir, shell_timeout=args.timeout)
 
     with AgentRuntime() as runtime:
+        agent, cleanup_bg, cleanup_sub = build_agent(
+            working_dir, shell_timeout=args.timeout, runtime=runtime,
+        )
+
         if args.resume:
             if not args.session_file.exists():
                 print(f"No session file found at {args.session_file}.")
@@ -768,9 +953,13 @@ def main() -> None:
             args.session_file.write_text(execution_id)
             print(f"Session saved to {args.session_file}")
 
-        _run_tui_repl(
-            runtime, handle, execution_id, working_dir, args.timeout, cleanup_bg,
-        )
+        try:
+            _run_tui_repl(
+                runtime, handle, execution_id, working_dir, args.timeout, cleanup_bg,
+            )
+        finally:
+            if cleanup_sub:
+                cleanup_sub()
 
 
 if __name__ == "__main__":
