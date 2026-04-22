@@ -127,7 +127,7 @@ export class AgentRuntime {
 
     // Register system workers filtered by server-provided list
     await this._registerSystemWorkers(nativeAgent, requiredWorkers);
-    this.workerManager.startPolling();
+    await this.workerManager.startPolling();
 
     try {
       // Create SSE stream
@@ -165,7 +165,7 @@ export class AgentRuntime {
             resultRec.messages = messages;
           }
 
-          const tokenUsage = _extractTokenUsage(execution);
+          const tokenUsage = await this._extractTokenUsage(executionId, options?.signal);
           if (tokenUsage) {
             resultRec.tokenUsage = tokenUsage;
           }
@@ -186,7 +186,7 @@ export class AgentRuntime {
 
       return result;
     } finally {
-      this.workerManager.stopPolling();
+      await this.workerManager.stopPolling();
     }
   }
 
@@ -232,17 +232,17 @@ export class AgentRuntime {
 
     // Register system workers filtered by server-provided list
     await this._registerSystemWorkers(nativeAgent, requiredWorkers);
-    this.workerManager.startPolling();
+    await this.workerManager.startPolling();
 
     const handle: AgentHandle = {
       executionId,
       correlationId,
 
-      getStatus: () => this._getStatus(executionId, options?.signal),
+      getStatus: () => this.getStatus(executionId, options?.signal),
 
       wait: async (pollIntervalMs = 500) => {
         while (true) {
-          const status = await this._getStatus(executionId, options?.signal);
+          const status = await this.getStatus(executionId, options?.signal);
           if (TERMINAL_STATUSES.has(status.status)) {
             const resultData: Parameters<typeof makeAgentResult>[0] = {
               output: status.output,
@@ -256,7 +256,7 @@ export class AgentRuntime {
               if (execution) {
                 resultData.toolCalls = _extractToolCalls(execution) as unknown[];
                 resultData.messages = _extractMessages(execution);
-                resultData.tokenUsage = _extractTokenUsage(execution) ?? undefined;
+                resultData.tokenUsage = (await this._extractTokenUsage(executionId, options?.signal)) ?? undefined;
 
                 // Replace junk output with execution data
                 if (_isOutputJunk(resultData.output)) {
@@ -382,13 +382,12 @@ export class AgentRuntime {
       await this._registerSystemWorkers(nativeAgent, null);
     }
 
-    this.workerManager.startPolling();
+    await this.workerManager.startPolling();
 
     // Keep process alive until SIGINT/SIGTERM
     return new Promise<void>((resolve) => {
       const onSignal = () => {
-        this.workerManager.stopPolling();
-        resolve();
+        void this.workerManager.stopPolling().then(() => resolve());
       };
       process.on("SIGINT", onSignal);
       process.on("SIGTERM", onSignal);
@@ -401,7 +400,7 @@ export class AgentRuntime {
    * Stop worker polling.
    */
   async shutdown(): Promise<void> {
-    this.workerManager.stopPolling();
+    await this.workerManager.stopPolling();
   }
 
   // ── Private helpers ───────────────────────────────────
@@ -471,9 +470,9 @@ export class AgentRuntime {
   }
 
   /**
-   * Get agent status.
+   * Get agent status by execution ID.
    */
-  private async _getStatus(executionId: string, signal?: AbortSignal): Promise<AgentStatus> {
+  async getStatus(executionId: string, signal?: AbortSignal): Promise<AgentStatus> {
     const response = await this._httpRequest(
       "GET",
       `/agent/${executionId}/status`,
@@ -503,6 +502,76 @@ export class AgentRuntime {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Extract aggregated token usage from the full execution tree.
+   * Mirrors Python's _extract_token_usage: recursively traverses sub-workflows
+   * to aggregate tokens from every LLM_CHAT_COMPLETE task in the tree.
+   */
+  private async _extractTokenUsage(
+    executionId: string,
+    signal?: AbortSignal,
+  ): Promise<{ promptTokens: number; completionTokens: number; totalTokens: number } | null> {
+    if (!executionId) return null;
+    const { prompt, completion, total, found } = await this._collectTokensById(
+      executionId,
+      new Set(),
+      signal,
+    );
+    if (!found) return null;
+    const finalTotal = total === 0 && (prompt > 0 || completion > 0) ? prompt + completion : total;
+    return { promptTokens: prompt, completionTokens: completion, totalTokens: finalTotal };
+  }
+
+  /**
+   * Recursively collect token counts via GET /api/agent/execution/{id}.
+   * Reads tokenUsage from each level and recurses into SUB_WORKFLOW tasks.
+   */
+  private async _collectTokensById(
+    executionId: string,
+    visited: Set<string>,
+    signal?: AbortSignal,
+  ): Promise<{ prompt: number; completion: number; total: number; found: boolean }> {
+    if (visited.has(executionId)) return { prompt: 0, completion: 0, total: 0, found: false };
+    visited.add(executionId);
+
+    const data = await this._fetchExecution(executionId, signal);
+    if (!data) return { prompt: 0, completion: 0, total: 0, found: false };
+
+    let totalPrompt = 0;
+    let totalCompletion = 0;
+    let totalTotal = 0;
+    let foundAny = false;
+
+    // Use server-computed token usage for this execution level
+    const level = _readTokenUsage(data);
+    if (level.found) {
+      foundAny = true;
+      totalPrompt += level.prompt;
+      totalCompletion += level.completion;
+      totalTotal += level.total;
+    }
+
+    // Recurse into sub-agent workflows
+    const tasks = (data.tasks ?? []) as Record<string, unknown>[];
+    for (const task of tasks) {
+      const taskType = String(task.taskType ?? "").toUpperCase();
+      if (taskType.includes("SUB_WORKFLOW")) {
+        const subId = task.subWorkflowId as string | undefined;
+        if (subId && !visited.has(subId)) {
+          const sub = await this._collectTokensById(subId, visited, signal);
+          if (sub.found) {
+            foundAny = true;
+            totalPrompt += sub.prompt;
+            totalCompletion += sub.completion;
+            totalTotal += sub.total;
+          }
+        }
+      }
+    }
+
+    return { prompt: totalPrompt, completion: totalCompletion, total: totalTotal, found: foundAny };
   }
 
   /**
@@ -1202,7 +1271,7 @@ export class AgentRuntime {
 
     this._registerExtractedWorkers(workers, options?.credentials);
 
-    this.workerManager.startPolling();
+    await this.workerManager.startPolling();
 
     try {
       // POST /agent/start with extracted config
@@ -1270,8 +1339,8 @@ export class AgentRuntime {
             resultRec.toolCalls = toolCalls;
           }
 
-          // Extract token usage
-          const tokenUsage = _extractTokenUsage(execution);
+          // Extract token usage (recursive across sub-workflows)
+          const tokenUsage = await this._extractTokenUsage(executionId, options?.signal);
           if (tokenUsage) {
             resultRec.tokenUsage = tokenUsage;
           }
@@ -1282,7 +1351,7 @@ export class AgentRuntime {
 
       return result;
     } finally {
-      this.workerManager.stopPolling();
+      await this.workerManager.stopPolling();
     }
   }
 
@@ -1302,7 +1371,7 @@ export class AgentRuntime {
 
     this._registerExtractedWorkers(workers, options?.credentials);
 
-    this.workerManager.startPolling();
+    await this.workerManager.startPolling();
 
     // POST /agent/start with extracted config
     const startPayload = {
@@ -1326,11 +1395,11 @@ export class AgentRuntime {
       executionId,
       correlationId,
 
-      getStatus: () => this._getStatus(executionId, options?.signal),
+      getStatus: () => this.getStatus(executionId, options?.signal),
 
       wait: async (pollIntervalMs = 500) => {
         while (true) {
-          const status = await this._getStatus(executionId, options?.signal);
+          const status = await this.getStatus(executionId, options?.signal);
           if (TERMINAL_STATUSES.has(status.status)) {
             const resultData: Parameters<typeof makeAgentResult>[0] = {
               output: status.output,
@@ -1344,7 +1413,7 @@ export class AgentRuntime {
               if (execution) {
                 resultData.toolCalls = _extractToolCalls(execution) as unknown[];
                 resultData.messages = _extractMessages(execution);
-                resultData.tokenUsage = _extractTokenUsage(execution) ?? undefined;
+                resultData.tokenUsage = (await this._extractTokenUsage(executionId, options?.signal)) ?? undefined;
 
                 // Replace junk output with execution data
                 if (_isOutputJunk(resultData.output)) {
@@ -1638,24 +1707,18 @@ function _extractToolCalls(execution: Record<string, unknown>): unknown[] {
 }
 
 /**
- * Extract aggregated token usage from execution.
- * Mirrors Python's _extract_token_usage: reads tokenUsage from execution data.
+ * Read token counts from a single execution level (no recursion).
  */
-function _extractTokenUsage(
+function _readTokenUsage(
   execution: Record<string, unknown>,
-): { promptTokens: number; completionTokens: number; totalTokens: number } | null {
+): { prompt: number; completion: number; total: number; found: boolean } {
   const tokenUsage = execution.tokenUsage as Record<string, unknown> | undefined;
-  if (!tokenUsage) return null;
+  if (!tokenUsage) return { prompt: 0, completion: 0, total: 0, found: false };
 
   const prompt = Number(tokenUsage.promptTokens ?? 0);
   const completion = Number(tokenUsage.completionTokens ?? 0);
-  let total = Number(tokenUsage.totalTokens ?? 0);
+  const total = Number(tokenUsage.totalTokens ?? 0);
 
-  if (!prompt && !completion && !total) return null;
-
-  if (total === 0 && (prompt > 0 || completion > 0)) {
-    total = prompt + completion;
-  }
-
-  return { promptTokens: prompt, completionTokens: completion, totalTokens: total };
+  if (!prompt && !completion && !total) return { prompt: 0, completion: 0, total: 0, found: false };
+  return { prompt, completion, total, found: true };
 }

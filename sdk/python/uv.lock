@@ -57,7 +57,7 @@ dev = [
 requires-dist = [
     { name = "anthropic", marker = "extra == 'testing'", specifier = ">=0.30" },
     { name = "cloudpickle", specifier = ">=2.0" },
-    { name = "conductor-python", specifier = ">=1.3.10" },
+    { name = "conductor-python", specifier = ">=1.3.11" },
     { name = "google-adk", specifier = ">=1.27.1" },
     { name = "google-adk", marker = "extra == 'validation'", specifier = ">=1.18.0" },
     { name = "httpx", specifier = ">=0.24" },
@@ -579,7 +579,7 @@ wheels = [
 
 [[package]]
 name = "conductor-python"
-version = "1.3.10"
+version = "1.3.11"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "astor" },
@@ -595,9 +595,9 @@ dependencies = [
     { name = "six" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/87/83/decd5e23fb0738f488870448e40d1583f013a05cd6d6febf57e63d5e094a/conductor_python-1.3.10.tar.gz", hash = "sha256:ddf64f1182e1b43715283a49622d2558321ad022619a5427ebbaa7d3ef53e479", size = 244556, upload-time = "2026-04-06T20:59:54.983Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/82/f5/cea2d12c2a18a872d33e95e352d8db7f34906b74bb5d9fd516b035e25c86/conductor_python-1.3.11.tar.gz", hash = "sha256:3e1b92206680f0ea2eb04067d01581c11fa58766be2b434c1143ca52138e33a0", size = 253409, upload-time = "2026-04-21T02:37:30.836Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/47/b3/7686707a3b335cd025add4477c3405f16347b9c220aa424e7ca06720d3cd/conductor_python-1.3.10-py3-none-any.whl", hash = "sha256:bb2a5c2c392c30c353e6dbc866dbbdcebde14b4b24d207dd8943fa656533c5d4", size = 395136, upload-time = "2026-04-06T20:59:56.232Z" },
+    { url = "https://files.pythonhosted.org/packages/52/fc/36221040700169da342d800f5922b9689c862a0b6a6b819c3cd38fa66047/conductor_python-1.3.11-py3-none-any.whl", hash = "sha256:c22dfe2fddf5aeec6d285ca6cd5960967f9376bb16dcb70062327cffa3ea9b87", size = 404572, upload-time = "2026-04-21T02:37:32.316Z" },
 ]
 
 [[package]]
