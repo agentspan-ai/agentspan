@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.OptionalInt;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.conductoross.conductor.ai.models.ChatCompletion;
 import org.conductoross.conductor.ai.models.ChatMessage;
@@ -193,8 +194,38 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
             sanitized.add(message);
         }
 
+        List<ChatMessage> collapsed = collapseSystemMessages(sanitized);
+
         messages.clear();
-        messages.addAll(sanitized);
+        messages.addAll(collapsed);
+    }
+
+    // Gemini (and some other providers) allow only one system message per request.
+    // Returns a new list where all SYSTEM entries are merged into a single
+    // SYSTEM message at the position of the first, joined with a blank line.
+    // Input list is not mutated.
+    private List<ChatMessage> collapseSystemMessages(List<ChatMessage> messages) {
+        long systemCount = messages.stream()
+                .filter(m -> m.getRole() == ChatMessage.Role.system)
+                .count();
+        if (systemCount <= 1) {
+            return messages;
+        }
+        String mergedText = messages.stream()
+                .filter(m -> m.getRole() == ChatMessage.Role.system)
+                .map(ChatMessage::getMessage)
+                .filter(s -> s != null && !s.isBlank())
+                .collect(Collectors.joining("\n\n"));
+        ChatMessage mergedSystemChatMessage = new ChatMessage(ChatMessage.Role.system, mergedText);
+
+        List<ChatMessage> result = new ArrayList<>(messages.size());
+        result.add(mergedSystemChatMessage);
+        for (ChatMessage m : messages) {
+            if (m.getRole() != ChatMessage.Role.system) {
+                result.add(m);
+            }
+        }
+        return result;
     }
 
     void validateRunnableConversation(ChatCompletion chatCompletion) {

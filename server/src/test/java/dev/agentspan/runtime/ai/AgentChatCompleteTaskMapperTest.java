@@ -280,6 +280,34 @@ class AgentChatCompleteTaskMapperTest {
     }
 
     @Test
+    void testSanitizeMessages_collapsesMultipleSystemMessages() {
+        ChatCompletion cc = new ChatCompletion();
+        cc.getMessages().add(new ChatMessage(ChatMessage.Role.system, "instr A"));
+        cc.getMessages().add(new ChatMessage(ChatMessage.Role.system, "feedback B"));
+        cc.getMessages().add(new ChatMessage(ChatMessage.Role.user, "hello"));
+
+        mapper.sanitizeMessages(cc);
+
+        assertThat(cc.getMessages()).hasSize(2);
+        assertThat(cc.getMessages().get(0).getRole()).isEqualTo(ChatMessage.Role.system);
+        assertThat(cc.getMessages().get(0).getMessage()).isEqualTo("instr A\n\nfeedback B");
+        assertThat(cc.getMessages().get(1).getRole()).isEqualTo(ChatMessage.Role.user);
+        assertThat(cc.getMessages().get(1).getMessage()).isEqualTo("hello");
+    }
+
+    @Test
+    void testSanitizeMessages_leavesSingleSystemMessageUntouched() {
+        ChatCompletion cc = new ChatCompletion();
+        cc.getMessages().add(new ChatMessage(ChatMessage.Role.system, "only one"));
+        cc.getMessages().add(new ChatMessage(ChatMessage.Role.user, "hello"));
+
+        mapper.sanitizeMessages(cc);
+
+        assertThat(cc.getMessages()).hasSize(2);
+        assertThat(cc.getMessages().get(0).getMessage()).isEqualTo("only one");
+    }
+
+    @Test
     void testValidateRunnableConversation_rejectsMissingUserInput() {
         ChatCompletion cc = new ChatCompletion();
         cc.getMessages().add(new ChatMessage(ChatMessage.Role.system, "You are helpful."));
