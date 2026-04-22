@@ -194,16 +194,28 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
             sanitized.add(message);
         }
 
-        List<ChatMessage> collapsed = collapseSystemMessages(sanitized);
+        List<ChatMessage> collapsed =
+                requiresSingleSystemMessage(chatCompletion) ? collapseSystemMessages(sanitized) : sanitized;
 
         messages.clear();
         messages.addAll(collapsed);
     }
 
-    // Gemini (and some other providers) allow only one system message per request.
-    // Returns a new list where all SYSTEM entries are merged into a single
-    // SYSTEM message at the position of the first, joined with a blank line.
-    // Input list is not mutated.
+    // Gemini's generateContent API accepts only one top-level `systemInstruction`.
+    // Spring AI's GoogleGenAiChatModel enforces this by throwing when multiple
+    // SYSTEM messages are present. Other providers (OpenAI, Anthropic, ...) accept
+    // the message list unchanged.
+    private boolean requiresSingleSystemMessage(ChatCompletion chatCompletion) {
+        String provider = chatCompletion.getLlmProvider();
+        if (provider == null) {
+            return false;
+        }
+        String lowerCase = provider.toLowerCase();
+        return lowerCase.contains("google") || lowerCase.contains("gemini");
+    }
+
+    // Merge all SYSTEM entries into a single SYSTEM message at the position of
+    // the first, joined with a blank line. Returns a new list; input not mutated.
     private List<ChatMessage> collapseSystemMessages(List<ChatMessage> messages) {
         long systemCount = messages.stream()
                 .filter(m -> m.getRole() == ChatMessage.Role.system)

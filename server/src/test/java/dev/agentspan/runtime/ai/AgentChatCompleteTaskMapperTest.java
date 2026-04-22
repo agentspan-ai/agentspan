@@ -280,8 +280,9 @@ class AgentChatCompleteTaskMapperTest {
     }
 
     @Test
-    void testSanitizeMessages_collapsesMultipleSystemMessages() {
+    void testSanitizeMessages_collapsesMultipleSystemMessages_forGemini() {
         ChatCompletion cc = new ChatCompletion();
+        cc.setLlmProvider("gemini");
         cc.getMessages().add(new ChatMessage(ChatMessage.Role.system, "instr A"));
         cc.getMessages().add(new ChatMessage(ChatMessage.Role.system, "feedback B"));
         cc.getMessages().add(new ChatMessage(ChatMessage.Role.user, "hello"));
@@ -296,8 +297,9 @@ class AgentChatCompleteTaskMapperTest {
     }
 
     @Test
-    void testSanitizeMessages_leavesSingleSystemMessageUntouched() {
+    void testSanitizeMessages_leavesSingleSystemMessageUntouched_forGemini() {
         ChatCompletion cc = new ChatCompletion();
+        cc.setLlmProvider("gemini");
         cc.getMessages().add(new ChatMessage(ChatMessage.Role.system, "only one"));
         cc.getMessages().add(new ChatMessage(ChatMessage.Role.user, "hello"));
 
@@ -305,6 +307,22 @@ class AgentChatCompleteTaskMapperTest {
 
         assertThat(cc.getMessages()).hasSize(2);
         assertThat(cc.getMessages().get(0).getMessage()).isEqualTo("only one");
+    }
+
+    @Test
+    void testSanitizeMessages_keepsMultipleSystemMessages_forOpenAI() {
+        ChatCompletion cc = new ChatCompletion();
+        cc.setLlmProvider("openai");
+        cc.getMessages().add(new ChatMessage(ChatMessage.Role.system, "instr A"));
+        cc.getMessages().add(new ChatMessage(ChatMessage.Role.system, "feedback B"));
+        cc.getMessages().add(new ChatMessage(ChatMessage.Role.user, "hello"));
+
+        mapper.sanitizeMessages(cc);
+
+        assertThat(cc.getMessages()).hasSize(3);
+        assertThat(cc.getMessages().get(0).getMessage()).isEqualTo("instr A");
+        assertThat(cc.getMessages().get(1).getMessage()).isEqualTo("feedback B");
+        assertThat(cc.getMessages().get(2).getRole()).isEqualTo(ChatMessage.Role.user);
     }
 
     @Test
