@@ -84,7 +84,7 @@ def _kill_server_on_port(port: int) -> bool:
 
 
 class ServerPool:
-    def __init__(self, base_port: int = 8080):
+    def __init__(self, base_port: int = 6767):
         self._base_port = base_port
         self._servers: dict[str, ServerInstance] = {}
         self._started = False

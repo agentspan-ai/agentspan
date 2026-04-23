@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -203,20 +204,41 @@ func downloadJAR(url, dest string, progress func(float64, string)) error {
 	return nil
 }
 
+// javaCmd returns the java binary path, preferring $JAVA_HOME/bin/java when set.
+func javaCmd() string {
+	if jh := os.Getenv("JAVA_HOME"); jh != "" {
+		p := filepath.Join(jh, "bin", "java")
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return "java"
+}
+
 // CheckJava returns (ok, versionString). ok=true means Java 21+ is available.
+// Prefers $JAVA_HOME/bin/java over PATH when JAVA_HOME is set.
 func CheckJava() (ok bool, version string) {
-	out, err := exec.Command("java", "-version").CombinedOutput()
+	out, err := exec.Command(javaCmd(), "-version").CombinedOutput()
 	if err != nil {
 		return false, ""
 	}
-	v := strings.TrimSpace(string(out))
-	// java -version outputs to stderr: 'openjdk version "21.0.3" ...'
-	for _, major := range []string{"21", "22", "23", "24", "25"} {
-		if strings.Contains(v, `"`+major) || strings.Contains(v, " "+major+".") {
-			return true, v
-		}
+
+	re := regexp.MustCompile(`version "(\d+[\d._]*)"`)
+	matches := re.FindStringSubmatch(string(out))
+	if len(matches) < 2 {
+		return false, strings.TrimSpace(string(out))
 	}
-	return false, v
+	ver := matches[1]
+
+	major := ver
+	if idx := strings.IndexAny(ver, "._"); idx > 0 {
+		major = ver[:idx]
+	}
+	majorNum, err := strconv.Atoi(major)
+	if err != nil {
+		return false, ver
+	}
+	return majorNum >= 21, ver
 }
 
 // CheckPortFree returns an error if the given port is already in use.
@@ -277,7 +299,7 @@ func Launch(jarPath string, opts Options, events chan<- StartEvent) (int, error)
 		env = append(env, "AGENT_DEFAULT_MODEL="+opts.Model)
 	}
 
-	proc := exec.Command("java", javaArgs...)
+	proc := exec.Command(javaCmd(), javaArgs...)
 	proc.Env = env
 	proc.Stdout = logF
 	proc.Stderr = logF
