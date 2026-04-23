@@ -9,7 +9,7 @@
 #   cd python && bash tests/run_compilation_comparison.sh
 #
 # Or with a custom server URL:
-#   SERVER_URL=http://myhost:8080/api bash tests/run_compilation_comparison.sh
+#   SERVER_URL=http://myhost:6767/api bash tests/run_compilation_comparison.sh
 
 set -euo pipefail
 
@@ -45,7 +45,7 @@ else
     # Wait for server to be ready (up to 60 seconds)
     echo -n "Waiting for server to start"
     for i in $(seq 1 30); do
-        if lsof -i :8080 2>/dev/null | grep -q LISTEN; then
+        if lsof -i :6767 2>/dev/null | grep -q LISTEN; then
             echo -e " ${GREEN}ready${NC}"
             break
         fi
@@ -53,7 +53,7 @@ else
         sleep 2
     done
 
-    if ! lsof -i :8080 2>/dev/null | grep -q LISTEN; then
+    if ! lsof -i :6767 2>/dev/null | grep -q LISTEN; then
         echo -e " ${RED}FAILED${NC}"
         echo "Server failed to start. Check /tmp/compilation-test-server.log"
         exit 1

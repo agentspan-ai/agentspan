@@ -47,7 +47,7 @@ public class Main {
 Set environment variables:
 
 ```bash
-export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+export AGENTSPAN_SERVER_URL=http://localhost:6767/api
 export AGENTSPAN_AUTH_KEY=your-key
 export AGENTSPAN_AUTH_SECRET=your-secret
 export AGENTSPAN_LLM_MODEL=openai/gpt-4o
@@ -60,7 +60,7 @@ import dev.agentspan.AgentConfig;
 import dev.agentspan.Agentspan;
 
 AgentConfig config = new AgentConfig(
-    "http://localhost:8080/api",
+    "http://localhost:6767/api",
     "my-key",
     "my-secret",
     100,  // poll interval ms
