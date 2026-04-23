@@ -131,6 +131,95 @@ agentspan agent delete mybot --version 1
 agentspan agent compile mybot.yaml
 ```
 
+### `agentspan agent deploy` — Deploy Agent Code
+
+Deploy agent source code to the AgentSpan runtime. Supports Python, TypeScript, and Java.
+
+```bash
+# Deploy from current directory
+agentspan agent deploy --name my-agent
+
+# Deploy with specific language/entry point
+agentspan agent deploy --name my-agent --language python --entry-point main.py
+
+# Deploy from a different directory
+agentspan agent deploy --name my-agent --dir ./my-agent-code
+
+# Deploy with resource limits
+agentspan agent deploy --name my-agent --cpu 500m --memory 512Mi --replicas 2
+
+# Dry run (generate manifest without uploading)
+agentspan agent deploy --name my-agent --dry-run
+
+# Skip confirmation prompts
+agentspan agent deploy --name my-agent --yes
+```
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--name, -n` | Agent name (DNS-compatible) | Required |
+| `--version, -v` | Version (semver) | Auto-increment |
+| `--language, -l` | Language: `python`, `typescript`, `java` | Auto-detect |
+| `--entry-point, -e` | Entry point file | Auto-detect |
+| `--runtime, -r` | Runtime version (e.g., `3.11` for Python) | Auto-detect |
+| `--dir, -d` | Source directory | `.` |
+| `--cpu` | CPU request | `100m` |
+| `--memory` | Memory request | `256Mi` |
+| `--replicas` | Number of replicas | `1` |
+| `--auto-start, -a` | Start after build | `true` |
+| `--dry-run` | Generate manifest only | `false` |
+| `--yes, -y` | Skip prompts | `false` |
+
+#### Language Detection
+
+The CLI auto-detects language based on project files:
+
+| Language | Detection |
+|----------|-----------|
+| Python | `pyproject.toml`, `requirements.txt`, `*.py` |
+| TypeScript | `tsconfig.json`, `package.json`, `*.ts` |
+| Java | `pom.xml`, `build.gradle`, `*.java` |
+
+#### Project Types
+
+**Python**
+- Simple scripts (`.py` files)
+- Packaged apps (`pyproject.toml` with dependencies)
+
+**TypeScript**
+- Simple scripts (`.js`/`.ts` files)
+- Compiled projects (`tsconfig.json` with `npm run build`)
+
+**Java**
+- Maven projects (`pom.xml`)
+- Gradle projects (`build.gradle`)
+
+#### Deploy Lock File
+
+On first deploy, a `.agentspan/deploy.lock` file is created:
+
+```json
+{
+  "name": "my-agent",
+  "current_version": "1.0.0",
+  "language": "python",
+  "entry_point": "main.py"
+}
+```
+
+Subsequent deploys auto-increment the version and reuse settings.
+
+#### Environment Variables
+
+Deployed agents receive these environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| `AGENT_NAME` | Agent name |
+| `AGENT_VERSION` | Deployed version |
+| `DEPLOY_ID` | Unique deployment ID |
+| `AGENTSPAN_SERVER_URL` | Runtime server URL |
+
 ### Execution Management
 
 ```bash

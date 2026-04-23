@@ -4,10 +4,15 @@
 package cmd
 
 import (
+	"archive/tar"
+	"bufio"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,10 +39,122 @@ type deployResult struct {
 	Error          *string `json:"error"`
 }
 
+// Manifest is the deployment manifest included in the tar (cloud deploys only).
+type Manifest struct {
+	ManifestVersion string         `json:"manifest_version"`
+	Name            string         `json:"name"`
+	Version         string         `json:"version"`
+	Language        string         `json:"language"`
+	RuntimeVersion  string         `json:"runtime_version"`
+	EntryPoint      string         `json:"entry_point"`
+	AutoStart       bool           `json:"auto_start"`
+	Resources       ResourceConfig `json:"resources"`
+	Metadata        ManifestMeta   `json:"metadata,omitempty"`
+}
+
+// ResourceConfig holds resource allocation settings for cloud deploys.
+type ResourceConfig struct {
+	CPURequest    string `json:"cpu_request"`
+	CPULimit      string `json:"cpu_limit"`
+	MemoryRequest string `json:"memory_request"`
+	MemoryLimit   string `json:"memory_limit"`
+	Replicas      int    `json:"replicas"`
+	Timeout       int    `json:"timeout"`
+}
+
+// ManifestMeta holds auto-generated metadata for cloud deploys.
+type ManifestMeta struct {
+	CLIVersion string    `json:"cli_version,omitempty"`
+	CreatedAt  time.Time `json:"created_at,omitempty"`
+	GitSHA     string    `json:"git_sha,omitempty"`
+}
+
+// UploadResponse from the ingest service (cloud deploys only).
+type UploadResponse struct {
+	DeployID  string `json:"deploy_id"`
+	StreamURL string `json:"stream_url"`
+	RequestID string `json:"request_id"`
+}
+
+// Hardcoded exclusions for tar creation (cloud deploys only).
+var defaultExclusions = []string{
+	// Version control
+	".git",
+	".gitignore",
+	".gitattributes",
+	".svn",
+	".hg",
+
+	// AgentSpan state
+	".agentspan",
+
+	// Python
+	"__pycache__",
+	"*.pyc",
+	"*.pyo",
+	"*.pyd",
+	".pytest_cache",
+	".mypy_cache",
+	".ruff_cache",
+	".tox",
+	".nox",
+	".eggs",
+	"*.egg-info",
+	".venv",
+	"venv",
+	"env",
+
+	// Secrets
+	".env",
+	".env.*",
+	"*.pem",
+	"*.key",
+
+	// Node/TypeScript
+	"node_modules",
+	".npm",
+	".yarn",
+	"dist",
+	"build",
+
+	// Java
+	"target",
+	"*.class",
+	"*.jar",
+	".gradle",
+
+	// IDE
+	".idea",
+	".vscode",
+	"*.swp",
+	"*.swo",
+
+	// OS
+	".DS_Store",
+	"Thumbs.db",
+
+	// Logs
+	"*.log",
+	"logs",
+}
+
 var deployCmd = &cobra.Command{
 	Use:   "deploy",
 	Short: "Deploy agents from your project to the AgentSpan server",
-	RunE:  runDeployCmd,
+	Long: `Discover agents in your project and deploy them to the AgentSpan server.
+
+For a local server, this registers the agent workflow definitions so they can
+be executed with 'agentspan agent run'. Workers still run on your machine.
+
+For a cloud server, this additionally packages and uploads your code so the
+server can run the workers remotely.
+
+Examples:
+  agentspan deploy                        # Deploy all agents
+  agentspan deploy -a my-agent            # Deploy a specific agent
+  agentspan deploy --dry-run              # Package without uploading (cloud only)
+`,
+	RunE: runDeployCmd,
 }
 
 func init() {
@@ -46,6 +163,11 @@ func init() {
 	deployCmd.Flags().StringP("package", "p", "", "Package/path to scan for agents")
 	deployCmd.Flags().BoolP("yes", "y", false, "Skip confirmation prompt")
 	deployCmd.Flags().Bool("json", false, "Output results as JSON")
+	deployCmd.Flags().Bool("dry-run", false, "Package code without uploading (cloud targets only)")
+	deployCmd.Flags().String("cpu", "100m", "CPU request (cloud targets only)")
+	deployCmd.Flags().String("memory", "256Mi", "Memory request (cloud targets only)")
+	deployCmd.Flags().Int("replicas", 1, "Number of replicas (cloud targets only)")
+	deployCmd.Flags().Int("timeout", 300, "Timeout in seconds (cloud targets only)")
 	rootCmd.AddCommand(deployCmd)
 }
 
@@ -62,6 +184,11 @@ func runDeployCmd(cmd *cobra.Command, args []string) error {
 	packageFlag, _ := cmd.Flags().GetString("package")
 	autoYes, _ := cmd.Flags().GetBool("yes")
 	jsonOutput, _ := cmd.Flags().GetBool("json")
+	dryRun, _ := cmd.Flags().GetBool("dry-run")
+	cpu, _ := cmd.Flags().GetString("cpu")
+	memory, _ := cmd.Flags().GetString("memory")
+	replicas, _ := cmd.Flags().GetInt("replicas")
+	timeout, _ := cmd.Flags().GetInt("timeout")
 
 	// Trim whitespace and filter out empty strings from --agents flag
 	{
@@ -98,6 +225,9 @@ func runDeployCmd(cmd *cobra.Command, args []string) error {
 
 	// 6. Load config, build env
 	cfg := getConfig()
+	if serverURL != "" {
+		cfg.ServerURL = serverURL
+	}
 	env := buildEnv(cfg)
 
 	// 7. Discover agents via subprocess
@@ -140,7 +270,7 @@ func runDeployCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// 10. Deploy via subprocess
+	// 10. Deploy definitions via subprocess (always — local and cloud)
 	names := make([]string, len(discovered))
 	for i, a := range discovered {
 		names[i] = a.Name
@@ -151,7 +281,7 @@ func runDeployCmd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("deploy agents: %w", err)
 	}
 
-	// 11. Output results
+	// 11. Output definition registration results
 	succeeded := 0
 	for _, r := range results {
 		if r.Success {
@@ -174,14 +304,84 @@ func runDeployCmd(cmd *cobra.Command, args []string) error {
 		fmt.Println(formatDeployOutput(results))
 	}
 
-	// 12. Return error if any failures
+	// 12. Return error if any definition registration failures
 	for _, r := range results {
 		if !r.Success {
 			return fmt.Errorf("one or more agents failed to deploy")
 		}
 	}
 
+	// 13. Cloud only: package and upload code so the server can run workers remotely
+	if isCloudServer(cfg.ServerURL) {
+		if err := uploadAgentCode(wd, language, names, cfg, dryRun, cpu, memory, replicas, timeout); err != nil {
+			return fmt.Errorf("code upload failed: %w", err)
+		}
+	}
+
 	return nil
+}
+
+// isCloudServer returns true if the server URL points to a remote (non-local) instance.
+func isCloudServer(serverURL string) bool {
+	return !strings.Contains(serverURL, "localhost") && !strings.Contains(serverURL, "127.0.0.1")
+}
+
+// uploadAgentCode packages the project into a tar.gz and uploads it to the cloud ingest service.
+func uploadAgentCode(srcDir, language string, agentNames []string, cfg *config.Config, dryRun bool, cpu, memory string, replicas, timeout int) error {
+	ingestURL := strings.TrimRight(cfg.ServerURL, "/")
+
+	manifest := &Manifest{
+		ManifestVersion: "1.0",
+		Name:            strings.Join(agentNames, ","),
+		Version:         "1.0.0",
+		Language:        language,
+		RuntimeVersion:  defaultRuntimeVersion(language),
+		EntryPoint:      defaultEntryPoint(language),
+		AutoStart:       true,
+		Resources: ResourceConfig{
+			CPURequest:    cpu,
+			CPULimit:      cpu,
+			MemoryRequest: memory,
+			MemoryLimit:   memory,
+			Replicas:      replicas,
+			Timeout:       timeout,
+		},
+		Metadata: ManifestMeta{
+			CLIVersion: Version,
+			CreatedAt:  time.Now().UTC(),
+			GitSHA:     getGitSHA(srcDir),
+		},
+	}
+
+	tarPath, err := createTar(srcDir, manifest)
+	if err != nil {
+		return fmt.Errorf("create tar: %w", err)
+	}
+	defer os.Remove(tarPath)
+
+	tarInfo, _ := os.Stat(tarPath)
+	color.New(color.FgGreen).Printf("Created package: %s (%d bytes)\n", filepath.Base(tarPath), tarInfo.Size())
+
+	if dryRun {
+		dstPath := fmt.Sprintf("agentspan-deploy-%s.tar.gz", time.Now().Format("20060102-150405"))
+		if err := copyFile(tarPath, dstPath); err != nil {
+			return err
+		}
+		color.New(color.FgYellow).Printf("Dry run: package saved to %s\n", dstPath)
+		return nil
+	}
+
+	color.New(color.FgCyan).Printf("Uploading code to: %s\n", ingestURL)
+
+	uploadResp, err := uploadPackage(ingestURL, tarPath, cfg)
+	if err != nil {
+		return fmt.Errorf("upload: %w", err)
+	}
+
+	color.New(color.FgGreen).Printf("Deploy ID: %s\n", uploadResp.DeployID)
+
+	streamURL := ingestURL + uploadResp.StreamURL
+	return streamDeployProgress(streamURL, cfg)
 }
 
 // detectLanguage determines the project language from marker files or the --language flag.
@@ -621,4 +821,326 @@ func formatDeployOutput(results []deployResult) string {
 	}
 
 	return buf.String()
+}
+
+// --- Cloud upload helpers ---
+
+func defaultRuntimeVersion(language string) string {
+	switch language {
+	case "python":
+		return "3.11"
+	case "typescript":
+		return "20"
+	default:
+		return "3.11"
+	}
+}
+
+func defaultEntryPoint(language string) string {
+	switch language {
+	case "python":
+		return "agent.py"
+	case "typescript":
+		return "src/agent.ts"
+	default:
+		return "agent.py"
+	}
+}
+
+func getGitSHA(dir string) string {
+	headPath := filepath.Join(dir, ".git", "HEAD")
+	data, err := os.ReadFile(headPath)
+	if err != nil {
+		return ""
+	}
+	content := strings.TrimSpace(string(data))
+	if strings.HasPrefix(content, "ref: ") {
+		refPath := filepath.Join(dir, ".git", strings.TrimPrefix(content, "ref: "))
+		refData, err := os.ReadFile(refPath)
+		if err != nil {
+			return ""
+		}
+		content = strings.TrimSpace(string(refData))
+	}
+	if len(content) >= 7 {
+		return content[:7]
+	}
+	return content
+}
+
+func createTar(sourceDir string, manifest *Manifest) (string, error) {
+	tmpFile, err := os.CreateTemp("", "agentspan-deploy-*.tar.gz")
+	if err != nil {
+		return "", fmt.Errorf("create temp file: %w", err)
+	}
+
+	gzWriter := gzip.NewWriter(tmpFile)
+	tarWriter := tar.NewWriter(gzWriter)
+
+	// Write manifest.json FIRST
+	manifestBytes, _ := json.MarshalIndent(manifest, "", "  ")
+	if err := tarWriter.WriteHeader(&tar.Header{
+		Name:    "manifest.json",
+		Size:    int64(len(manifestBytes)),
+		Mode:    0644,
+		ModTime: time.Now(),
+	}); err != nil {
+		return "", err
+	}
+	if _, err := tarWriter.Write(manifestBytes); err != nil {
+		return "", err
+	}
+
+	// Walk and add remaining files
+	err = filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, _ := filepath.Rel(sourceDir, path)
+		if relPath == "." {
+			return nil
+		}
+
+		// Check exclusions
+		if shouldExclude(relPath, info.IsDir()) {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		// Handle symlinks
+		if info.Mode()&os.ModeSymlink != 0 {
+			realPath, err := filepath.EvalSymlinks(path)
+			if err != nil {
+				return err
+			}
+			info, err = os.Stat(realPath)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Create header with normalized permissions
+		header, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			return err
+		}
+		header.Name = relPath
+
+		// Normalize permissions
+		if info.IsDir() {
+			header.Mode = 0755
+		} else {
+			header.Mode = 0644
+		}
+
+		if err := tarWriter.WriteHeader(header); err != nil {
+			return err
+		}
+
+		if !info.IsDir() {
+			file, err := os.Open(path)
+			if err != nil {
+				return err
+			}
+			defer file.Close()
+			_, err = io.Copy(tarWriter, file)
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		tmpFile.Close()
+		os.Remove(tmpFile.Name())
+		return "", err
+	}
+
+	tarWriter.Close()
+	gzWriter.Close()
+	tmpFile.Close()
+
+	return tmpFile.Name(), nil
+}
+
+func shouldExclude(path string, isDir bool) bool {
+	base := filepath.Base(path)
+
+	for _, pattern := range defaultExclusions {
+		if strings.Contains(pattern, "*") {
+			matched, _ := filepath.Match(pattern, base)
+			if matched {
+				return true
+			}
+		} else {
+			if base == pattern {
+				return true
+			}
+			parts := strings.Split(path, string(filepath.Separator))
+			for _, part := range parts {
+				if part == pattern {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	return err
+}
+
+func uploadPackage(ingestURL, tarPath string, cfg *config.Config) (*UploadResponse, error) {
+	file, err := os.Open(tarPath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	req, err := http.NewRequest("POST", ingestURL+"/v1/ingest", file)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/octet-stream")
+	if cfg.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
+	} else {
+		if cfg.AuthKey != "" {
+			req.Header.Set("X-Auth-Key", cfg.AuthKey)
+		}
+		if cfg.AuthSecret != "" {
+			req.Header.Set("X-Auth-Secret", cfg.AuthSecret)
+		}
+	}
+
+	client := &http.Client{Timeout: 5 * time.Minute}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusAccepted {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result UploadResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	return &result, nil
+}
+
+func streamDeployProgress(streamURL string, cfg *config.Config) error {
+	req, err := http.NewRequest("GET", streamURL, nil)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Accept", "text/event-stream")
+	if cfg.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
+	}
+
+	client := &http.Client{Timeout: 0} // No timeout for SSE
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("connect to stream: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	var eventType, eventData string
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		if line == "" {
+			if eventData != "" {
+				printDeployEvent(eventType, eventData)
+				eventType, eventData = "", ""
+			}
+			continue
+		}
+
+		if strings.HasPrefix(line, ":") {
+			continue
+		}
+
+		if strings.HasPrefix(line, "event:") {
+			eventType = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+		} else if strings.HasPrefix(line, "data:") {
+			eventData = strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		}
+	}
+
+	return scanner.Err()
+}
+
+func printDeployEvent(eventType, data string) {
+	var evt map[string]interface{}
+	if err := json.Unmarshal([]byte(data), &evt); err != nil {
+		fmt.Printf("[%s] %s\n", eventType, data)
+		return
+	}
+
+	stage, _ := evt["stage"].(string)
+	message, _ := evt["message"].(string)
+	progress, _ := evt["progress"].(float64)
+
+	switch eventType {
+	case "progress":
+		color.New(color.FgCyan).Printf("  [%s] %s (%d%%)\n", stage, message, int(progress))
+	case "log":
+		color.New(color.FgHiBlack).Printf("  %s\n", message)
+	case "error":
+		errMsg := ""
+		if errData, ok := evt["data"].(map[string]interface{}); ok {
+			errMsg, _ = errData["error"].(string)
+		}
+		color.New(color.FgRed, color.Bold).Printf("  [%s] %s: %s\n", stage, message, errMsg)
+	case "complete":
+		if stage == "deploy_complete" {
+			color.New(color.FgGreen, color.Bold).Println("\n✓ Deployment complete!")
+			if deployData, ok := evt["data"].(map[string]interface{}); ok {
+				if deployID, ok := deployData["deploy_id"].(string); ok {
+					fmt.Printf("  Deploy ID: %s\n", deployID)
+				}
+				if workflowID, ok := deployData["workflow_id"].(string); ok {
+					fmt.Printf("  Workflow ID: %s\n", workflowID)
+				}
+			}
+		} else {
+			color.New(color.FgGreen).Printf("  [%s] Complete\n", stage)
+		}
+	default:
+		fmt.Printf("  [%s] %s\n", eventType, truncate(data, 100))
+	}
 }
