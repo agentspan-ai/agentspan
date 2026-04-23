@@ -1,0 +1,241 @@
+// Copyright (c) 2025 Agentspan
+// Licensed under the MIT License.
+
+using System.Net.Http.Json;
+using System.Runtime.CompilerServices;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+
+namespace Agentspan;
+
+internal sealed class AgentHttpClient : IDisposable
+{
+    private readonly HttpClient _client;
+    private readonly string _baseUrl;
+
+    public AgentHttpClient(string serverUrl, string? authKey = null, string? authSecret = null)
+    {
+        _baseUrl = serverUrl.TrimEnd('/');
+        _client = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+        if (authKey    is not null) _client.DefaultRequestHeaders.Add("X-Auth-Key", authKey);
+        if (authSecret is not null) _client.DefaultRequestHeaders.Add("X-Auth-Secret", authSecret);
+    }
+
+    // ── Agent API ───────────────────────────────────────────
+
+    public async Task<string> StartAsync(JsonObject payload, CancellationToken ct = default)
+    {
+        var json = payload.ToJsonString();
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var resp = await _client.PostAsync($"{_baseUrl}/agent/start", content, ct);
+
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync(ct);
+            throw new AgentApiException((int)resp.StatusCode, resp.ReasonPhrase ?? "error", body);
+        }
+
+        var node = await resp.Content.ReadFromJsonAsync<JsonNode>(cancellationToken: ct);
+        return node?["executionId"]?.GetValue<string>()
+            ?? throw new AgentApiException(200, "No executionId in start response");
+    }
+
+    public async Task<JsonNode?> GetStatusAsync(string executionId, CancellationToken ct = default)
+    {
+        using var resp = await _client.GetAsync($"{_baseUrl}/agent/{executionId}/status", ct);
+        resp.EnsureSuccessStatusCode();
+        return await resp.Content.ReadFromJsonAsync<JsonNode>(cancellationToken: ct);
+    }
+
+    public async Task RespondAsync(string executionId, object body, CancellationToken ct = default)
+    {
+        var json = JsonSerializer.Serialize(body, AgentspanJson.Options);
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var resp = await _client.PostAsync($"{_baseUrl}/agent/{executionId}/respond", content, ct);
+        resp.EnsureSuccessStatusCode();
+    }
+
+    // ── SSE streaming ───────────────────────────────────────
+
+    public async IAsyncEnumerable<AgentEvent> StreamEventsAsync(
+        string executionId,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get,
+            $"{_baseUrl}/agent/stream/{executionId}");
+        request.Headers.Accept.ParseAdd("text/event-stream");
+
+        using var resp = await _client.SendAsync(
+            request, HttpCompletionOption.ResponseHeadersRead, ct);
+        resp.EnsureSuccessStatusCode();
+
+        await using var stream = await resp.Content.ReadAsStreamAsync(ct);
+        using var reader = new StreamReader(stream);
+
+        string? eventType = null;
+        string? eventId   = null;
+        var dataLines = new StringBuilder();
+
+        while (!ct.IsCancellationRequested && !reader.EndOfStream)
+        {
+            var line = await reader.ReadLineAsync(ct);
+            if (line is null) break;
+
+            // Heartbeat lines (start with ':') — skip
+            if (line.StartsWith(':')) continue;
+
+            if (line.StartsWith("event:"))
+            {
+                eventType = line["event:".Length..].Trim();
+            }
+            else if (line.StartsWith("id:"))
+            {
+                eventId = line["id:".Length..].Trim();
+            }
+            else if (line.StartsWith("data:"))
+            {
+                if (dataLines.Length > 0) dataLines.Append('\n');
+                dataLines.Append(line["data:".Length..].TrimStart());
+            }
+            else if (line.Length == 0 && dataLines.Length > 0)
+            {
+                // Blank line = end of event block
+                var ev = ParseEvent(eventType, dataLines.ToString());
+                eventType = null;
+                eventId   = null;
+                dataLines.Clear();
+
+                if (ev is not null)
+                {
+                    yield return ev;
+                    if (ev.Type == EventType.Done) yield break;
+                }
+            }
+        }
+    }
+
+    private static AgentEvent? ParseEvent(string? eventType, string data)
+    {
+        JsonNode? node = null;
+        try { node = JsonNode.Parse(data); } catch { /* skip malformed */ }
+
+        return eventType switch
+        {
+            "thinking" => new AgentEvent
+            {
+                Type    = EventType.Thinking,
+                Content = node?["content"]?.GetValue<string>(),
+            },
+            "tool_call" => new AgentEvent
+            {
+                Type     = EventType.ToolCall,
+                ToolName = node?["toolName"]?.GetValue<string>(),
+            },
+            "tool_result" => new AgentEvent
+            {
+                Type     = EventType.ToolResult,
+                ToolName = node?["toolName"]?.GetValue<string>(),
+            },
+            "guardrail_pass" => new AgentEvent
+            {
+                Type          = EventType.GuardrailPass,
+                GuardrailName = node?["guardrailName"]?.GetValue<string>(),
+            },
+            "guardrail_fail" => new AgentEvent
+            {
+                Type          = EventType.GuardrailFail,
+                GuardrailName = node?["guardrailName"]?.GetValue<string>(),
+                Content       = node?["message"]?.GetValue<string>(),
+            },
+            "waiting" => new AgentEvent { Type = EventType.Waiting },
+            "handoff"  => new AgentEvent
+            {
+                Type   = EventType.Handoff,
+                Target = node?["target"]?.GetValue<string>(),
+            },
+            "done" => new AgentEvent
+            {
+                Type    = EventType.Done,
+                Status  = node?["status"]?.GetValue<string>(),
+                Content = ExtractOutputText(node?["output"]),
+            },
+            "error" => new AgentEvent
+            {
+                Type    = EventType.Error,
+                Content = node?["message"]?.GetValue<string>(),
+            },
+            _ => null,
+        };
+    }
+
+    private static string? ExtractOutputText(JsonNode? output)
+    {
+        if (output is null) return null;
+        if (output is JsonObject obj && obj.TryGetPropertyValue("result", out var r))
+            return r?.GetValue<string>();
+        if (output is JsonValue v)
+        {
+            try { return v.GetValue<string>(); } catch { return null; }
+        }
+        return null;
+    }
+
+    // ── Worker / task polling ────────────────────────────────
+
+    /// <summary>Poll for a single task, returning raw <see cref="JsonElement"/> or null.</summary>
+    public async Task<JsonElement?> PollTaskRawAsync(string taskType, CancellationToken ct = default)
+    {
+        try
+        {
+            using var resp = await _client.GetAsync(
+                $"{_baseUrl}/tasks/poll/{Uri.EscapeDataString(taskType)}", ct);
+
+            if (resp.StatusCode is System.Net.HttpStatusCode.NoContent or
+                System.Net.HttpStatusCode.NotFound)
+                return null;
+            if (!resp.IsSuccessStatusCode) return null;
+
+            var text = await resp.Content.ReadAsStringAsync(ct);
+            if (string.IsNullOrWhiteSpace(text) || text == "null") return null;
+
+            return JsonSerializer.Deserialize<JsonElement>(text);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch { return null; }
+    }
+
+    public async Task ReportTaskSuccessAsync(
+        string taskId, string workflowId, object outputData, CancellationToken ct = default)
+    {
+        var body = JsonSerializer.Serialize(new
+        {
+            taskId,
+            workflowInstanceId = workflowId,
+            status = "COMPLETED",
+            outputData,
+        }, AgentspanJson.Options);
+
+        using var content = new StringContent(body, Encoding.UTF8, "application/json");
+        await _client.PostAsync($"{_baseUrl}/tasks", content, ct);
+        // Best-effort: ignore errors on task reporting
+    }
+
+    public async Task ReportTaskFailureAsync(
+        string taskId, string workflowId, string reason,
+        bool terminal = true, CancellationToken ct = default)
+    {
+        var body = JsonSerializer.Serialize(new
+        {
+            taskId,
+            workflowInstanceId = workflowId,
+            status = terminal ? "FAILED_WITH_TERMINAL_ERROR" : "FAILED",
+            reasonForIncompletion = reason,
+        }, AgentspanJson.Options);
+
+        using var content = new StringContent(body, Encoding.UTF8, "application/json");
+        await _client.PostAsync($"{_baseUrl}/tasks", content, ct);
+    }
+
+    public void Dispose() => _client.Dispose();
+}
