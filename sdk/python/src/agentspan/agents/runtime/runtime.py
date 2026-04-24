@@ -1144,7 +1144,7 @@ class AgentRuntime:
                     )
                     self._register_passthrough_worker(worker)
             elif not sub.external:
-                self._register_workers(sub, required_workers=required_workers)
+                self._register_workers(sub, required_workers=required_workers, domain=domain)
 
     # ── Worker registration helpers ────────────────────────────────
 
