@@ -57,6 +57,10 @@ GITHUB_CREDENTIAL = "GITHUB_TOKEN"
 # ── Skill Paths ──────────────────────────────────────────────
 DG_SKILL_PATH = "~/.claude/skills/dg"
 
+# ── Documentation Paths ──────────────────────────────────────
+DOCS_PLAN_DIR = "docs/plan"               # Where the Tech Lead writes the implementation plan
+DOCS_DESIGN_DIR = "docs/design"           # Where design docs go
+
 # ── Server ───────────────────────────────────────────────────
 SERVER_URL = "http://localhost:6767"
 
@@ -83,6 +87,8 @@ _fmt = {
     "branch_prefix": BRANCH_PREFIX,
     "max_review_cycles": MAX_REVIEW_CYCLES,
     "max_e2e_retries": MAX_E2E_RETRIES,
+    "docs_plan_dir": DOCS_PLAN_DIR,
+    "docs_design_dir": DOCS_DESIGN_DIR,
 }
 
 
