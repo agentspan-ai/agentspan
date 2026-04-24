@@ -267,6 +267,20 @@ class AgentConfigSerializer:
                 result["config"] = {}
             result["config"]["credentials"] = cred_names
 
+        # Retry configuration — pass through to server for TaskDef overrides.
+        if getattr(td, "retry_count", None) is not None:
+            if "config" not in result:
+                result["config"] = {}
+            result["config"]["retryCount"] = td.retry_count
+        if getattr(td, "retry_delay_seconds", None) is not None:
+            if "config" not in result:
+                result["config"] = {}
+            result["config"]["retryDelaySeconds"] = td.retry_delay_seconds
+        if getattr(td, "retry_logic", None) is not None:
+            if "config" not in result:
+                result["config"] = {}
+            result["config"]["retryLogic"] = td.retry_logic
+
         return result
 
     def _serialize_guardrail(self, guardrail: Any) -> dict:

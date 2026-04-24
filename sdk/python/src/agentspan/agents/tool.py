@@ -80,6 +80,9 @@ class ToolDef:
     isolated: bool = True
     credentials: List[Any] = field(default_factory=list)
     stateful: bool = False
+    retry_count: Optional[int] = None
+    retry_delay_seconds: Optional[int] = None
+    retry_logic: Optional[str] = None
 
 
 # ── @tool decorator ─────────────────────────────────────────────────────
@@ -100,6 +103,9 @@ def tool(
     isolated: bool = True,
     credentials: Optional[List[Any]] = None,
     stateful: bool = False,
+    retry_count: Optional[int] = None,
+    retry_delay_seconds: Optional[int] = None,
+    retry_logic: Optional[str] = None,
 ) -> Callable[[F], F]: ...
 
 
@@ -114,6 +120,9 @@ def tool(
     isolated: bool = True,
     credentials: Optional[List[Any]] = None,
     stateful: bool = False,
+    retry_count: Optional[int] = None,
+    retry_delay_seconds: Optional[int] = None,
+    retry_logic: Optional[str] = None,
 ) -> Any:
     """Register a Python function as a Conductor agent tool.
 
@@ -160,6 +169,9 @@ def tool(
             isolated=isolated,
             credentials=list(credentials) if credentials else [],
             stateful=stateful,
+            retry_count=retry_count,
+            retry_delay_seconds=retry_delay_seconds,
+            retry_logic=retry_logic,
         )
 
         @functools.wraps(fn)

@@ -184,6 +184,40 @@ def dangerous_action(target: str) -> dict:
 - `name` — Override the tool name (default: function name)
 - `approval_required` — Insert a `WaitTask` before execution for human approval
 - `timeout_seconds` — Maximum execution time
+- `retry_count` — Number of times Conductor retries the task on failure (default: `2`). Set to `0` to disable retries entirely.
+- `retry_delay_seconds` — Delay between retry attempts in seconds (default: `2`). Interpretation depends on `retry_logic`.
+- `retry_logic` — Backoff strategy between retries (default: `"LINEAR_BACKOFF"`). Valid values:
+  - `"FIXED"` — constant delay of `retry_delay_seconds` between every retry
+  - `"LINEAR_BACKOFF"` — delay grows linearly: `retry_delay_seconds × attempt`
+  - `"EXPONENTIAL_BACKOFF"` — delay doubles each attempt: `retry_delay_seconds × 2^attempt`
+
+**Retry configuration examples:**
+
+```python
+# Flaky external API — aggressive retries with exponential backoff
+@tool(retry_count=10, retry_delay_seconds=5, retry_logic="EXPONENTIAL_BACKOFF")
+def call_flaky_api(query: str) -> str:
+    """Call an unreliable third-party API."""
+    ...
+
+# Payment operation — no retries (avoid double-charges)
+@tool(retry_count=0)
+def process_payment(amount: float, card_token: str) -> dict:
+    """Charge a card. Must not be retried."""
+    ...
+
+# Internal service — fixed delay
+@tool(retry_count=3, retry_delay_seconds=2, retry_logic="FIXED")
+def query_internal_service(user_id: str) -> dict:
+    """Query an internal microservice."""
+    ...
+
+# Default behaviour — retry_count=2, retry_delay_seconds=2, LINEAR_BACKOFF
+@tool
+def get_weather(city: str) -> dict:
+    """Uses existing defaults — no retry params needed."""
+    ...
+```
 
 **How it works:**
 1. JSON Schema is generated from the function's type hints and docstring
@@ -209,15 +243,18 @@ A fully-resolved tool definition. Most users won't create these directly.
 
 ```python
 ToolDef(
-    name: str,                           # Tool name
-    description: str = "",               # Description for the LLM
-    input_schema: Dict = {},             # JSON Schema for inputs
-    output_schema: Dict = {},            # JSON Schema for outputs
-    func: Optional[Callable] = None,     # Python function (None for server-side)
-    approval_required: bool = False,     # Requires human approval
+    name: str,                                # Tool name
+    description: str = "",                    # Description for the LLM
+    input_schema: Dict = {},                  # JSON Schema for inputs
+    output_schema: Dict = {},                 # JSON Schema for outputs
+    func: Optional[Callable] = None,          # Python function (None for server-side)
+    approval_required: bool = False,          # Requires human approval
     timeout_seconds: Optional[int] = None,
-    tool_type: str = "worker",           # "worker", "http", or "mcp"
-    config: Dict = {},                   # Extra config (URL, headers, etc.)
+    tool_type: str = "worker",                # "worker", "http", or "mcp"
+    config: Dict = {},                        # Extra config (URL, headers, etc.)
+    retry_count: Optional[int] = None,        # None → default (2). 0 = no retries.
+    retry_delay_seconds: Optional[int] = None,# None → default (2)
+    retry_logic: Optional[str] = None,        # None → "LINEAR_BACKOFF". Also: "FIXED", "EXPONENTIAL_BACKOFF"
 )
 ```
 
