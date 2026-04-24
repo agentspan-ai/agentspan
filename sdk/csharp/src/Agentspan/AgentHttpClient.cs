@@ -169,7 +169,8 @@ internal sealed class AgentHttpClient : IDisposable
             "done" => new AgentEvent
             {
                 Type    = EventType.Done,
-                Status  = node?["status"]?.GetValue<string>(),
+                Status  = node?["output"]?["finishReason"]?.GetValue<string>()
+                       ?? node?["status"]?.GetValue<string>(),
                 Content = ExtractOutputText(node?["output"]),
             },
             "error" => new AgentEvent
