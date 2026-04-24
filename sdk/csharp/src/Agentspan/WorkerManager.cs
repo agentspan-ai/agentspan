@@ -24,6 +24,7 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
     private readonly CancellationTokenSource _cts = new();
     private readonly ILogger _logger;
     private readonly int _pollIntervalMs;
+    private readonly string[] _credentialNames;
     private Task? _pollTask;
     private Task? _executeTask;
 
@@ -32,13 +33,15 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
         string taskName,
         Func<Dictionary<string, JsonElement>, ToolContext?, Task<object?>> handler,
         int pollIntervalMs = 100,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        string[]? credentialNames = null)
     {
         _http = http;
         _taskName = taskName;
         _handler = handler;
         _pollIntervalMs = pollIntervalMs;
         _logger = logger ?? NullLogger.Instance;
+        _credentialNames = credentialNames ?? [];
         _taskChannel = Channel.CreateBounded<JsonElement>(new BoundedChannelOptions(100)
         {
             FullMode = BoundedChannelFullMode.Wait,
@@ -86,7 +89,29 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
                 var inputData = ExtractInputData(task);
                 var toolCtx   = ExtractToolContext(task);
 
-                var result = await _handler(inputData, toolCtx);
+                // Resolve and inject credentials as env vars for the duration of this call
+                var injectedKeys = new List<string>();
+                if (_credentialNames.Length > 0)
+                {
+                    var creds = await _http.ResolveCredentialsAsync(toolCtx?.ExecutionToken, _credentialNames, ct);
+                    foreach (var (k, v) in creds)
+                    {
+                        Environment.SetEnvironmentVariable(k, v);
+                        injectedKeys.Add(k);
+                    }
+                }
+
+                object? result;
+                try
+                {
+                    result = await _handler(inputData, toolCtx);
+                }
+                finally
+                {
+                    // Clean up injected env vars
+                    foreach (var k in injectedKeys)
+                        Environment.SetEnvironmentVariable(k, null);
+                }
 
                 // Wrap primitives — Conductor expects outputData as an object
                 object outputData = result switch
@@ -212,10 +237,10 @@ internal sealed class WorkerManager : IAsyncDisposable
         foreach (var tool in tools)
         {
             if (tool.Handler is null) continue;
-            if (_workers.Any(w => w is WorkerPollLoop wpl)) { /* check duplicate by name below */ }
 
             var handler = tool.Handler;
-            var loop = new WorkerPollLoop(_http, tool.Name, handler);
+            var loop = new WorkerPollLoop(_http, tool.Name, handler,
+                credentialNames: tool.Credentials.Length > 0 ? tool.Credentials : null);
             _workers.Add(loop);
         }
     }

@@ -194,6 +194,35 @@ internal sealed class AgentHttpClient : IDisposable
         return null;
     }
 
+    // ── Credential resolution ────────────────────────────────
+
+    /// <summary>
+    /// Resolve credential values from the server using the execution token.
+    /// Returns a dict of name → plaintext value (empty if names is empty or token is null).
+    /// </summary>
+    public async Task<Dictionary<string, string>> ResolveCredentialsAsync(
+        string? executionToken, IEnumerable<string> names, CancellationToken ct = default)
+    {
+        var nameList = names.ToList();
+        if (nameList.Count == 0 || string.IsNullOrEmpty(executionToken))
+            return new Dictionary<string, string>();
+
+        try
+        {
+            var body = JsonSerializer.Serialize(new { token = executionToken, names = nameList },
+                AgentspanJson.Options);
+            using var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+            using var resp = await _client.PostAsync($"{_baseUrl}/credentials/resolve", content, ct);
+
+            if (!resp.IsSuccessStatusCode) return new Dictionary<string, string>();
+
+            var result = await resp.Content.ReadFromJsonAsync<Dictionary<string, string>>(
+                cancellationToken: ct);
+            return result ?? new Dictionary<string, string>();
+        }
+        catch { return new Dictionary<string, string>(); }
+    }
+
     // ── Worker / task polling ────────────────────────────────
 
     /// <summary>Poll for a single task, returning raw <see cref="JsonElement"/> or null.</summary>
