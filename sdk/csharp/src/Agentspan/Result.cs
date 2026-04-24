@@ -220,14 +220,23 @@ public sealed class AgentHandle
 {
     private readonly string _executionId;
     private readonly AgentHttpClient _http;
+    private readonly string? _runId;
 
-    internal AgentHandle(string executionId, AgentHttpClient http)
+    internal AgentHandle(string executionId, AgentHttpClient http, string? runId = null)
     {
         _executionId = executionId;
         _http = http;
+        _runId = runId;
     }
 
     public string ExecutionId => _executionId;
+
+    /// <summary>
+    /// The domain UUID used for domain-based routing (stateful agents).
+    /// Set when the agent was started with <see cref="Agent.Stateful"/> = true,
+    /// or when resuming an existing execution via <see cref="AgentRuntime.ResumeAsync"/>.
+    /// </summary>
+    public string? RunId => _runId;
 
     /// <summary>Poll until the agent completes, then return the result.</summary>
     public async Task<AgentResult> WaitAsync(CancellationToken cancellationToken = default)

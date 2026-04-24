@@ -93,6 +93,57 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
         await StopWorkersAsync();
     }
 
+    // ── Resume ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Re-attach to an existing agent execution and re-register workers.
+    ///
+    /// Fetches the workflow from the server, extracts the worker domain from
+    /// its taskToDomain mapping (for stateful agents), and re-registers tool
+    /// workers under that domain. Works across process restarts — the workflow
+    /// is durable on the server.
+    /// </summary>
+    /// <param name="executionId">The execution ID from a previous StartAsync call.</param>
+    /// <param name="agent">The same Agent definition that was originally executed.</param>
+    public AgentHandle Resume(string executionId, Agent agent)
+        => ResumeAsync(executionId, agent).GetAwaiter().GetResult();
+
+    /// <summary>Async version of <see cref="Resume"/>.</summary>
+    public async Task<AgentHandle> ResumeAsync(string executionId, Agent agent, CancellationToken ct = default)
+    {
+        var domain = await ExtractDomainAsync(executionId, ct);
+
+        _workers ??= new WorkerManager(_http);
+        _workers.RegisterAgentTools(agent, domain);
+        _workers.Start();
+
+        return new AgentHandle(executionId, _http, domain);
+    }
+
+    private async Task<string?> ExtractDomainAsync(string executionId, CancellationToken ct)
+    {
+        try
+        {
+            var wf = await _http.GetWorkflowAsync(executionId, ct);
+            if (wf is null) return null;
+
+            var taskToDomain = wf["taskToDomain"];
+            if (taskToDomain is null) return null;
+
+            var domains = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (var kv in taskToDomain.AsObject())
+            {
+                var v = kv.Value?.GetValue<string>();
+                if (!string.IsNullOrEmpty(v))
+                    domains[v] = domains.TryGetValue(v, out var c) ? c + 1 : 1;
+            }
+
+            return domains.Count == 0 ? null
+                : domains.MaxBy(kv => kv.Value).Key;
+        }
+        catch { return null; }
+    }
+
     // ── WMQ (Workflow Message Queue) ─────────────────────────
 
     /// <summary>

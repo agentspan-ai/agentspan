@@ -277,15 +277,32 @@ internal sealed class AgentHttpClient : IDisposable
         catch { return new Dictionary<string, string>(); }
     }
 
-    // ── Worker / task polling ────────────────────────────────
+    // ── Workflow metadata ────────────────────────────────────
 
-    /// <summary>Poll for a single task, returning raw <see cref="JsonElement"/> or null.</summary>
-    public async Task<JsonElement?> PollTaskRawAsync(string taskType, CancellationToken ct = default)
+    /// <summary>Fetch the workflow definition (without tasks) to read taskToDomain.</summary>
+    public async Task<JsonNode?> GetWorkflowAsync(string executionId, CancellationToken ct = default)
     {
         try
         {
             using var resp = await _client.GetAsync(
-                $"{_baseUrl}/tasks/poll/{Uri.EscapeDataString(taskType)}", ct);
+                $"{_baseUrl}/workflow/{executionId}?includeTasks=false", ct);
+            if (!resp.IsSuccessStatusCode) return null;
+            return await resp.Content.ReadFromJsonAsync<JsonNode>(cancellationToken: ct);
+        }
+        catch { return null; }
+    }
+
+    // ── Worker / task polling ────────────────────────────────
+
+    /// <summary>Poll for a single task, returning raw <see cref="JsonElement"/> or null.</summary>
+    public async Task<JsonElement?> PollTaskRawAsync(string taskType, string? domain = null, CancellationToken ct = default)
+    {
+        try
+        {
+            var url = string.IsNullOrEmpty(domain)
+                ? $"{_baseUrl}/tasks/poll/{Uri.EscapeDataString(taskType)}"
+                : $"{_baseUrl}/tasks/poll/{Uri.EscapeDataString(taskType)}?workerDomain={Uri.EscapeDataString(domain)}";
+            using var resp = await _client.GetAsync(url, ct);
 
             if (resp.StatusCode is System.Net.HttpStatusCode.NoContent or
                 System.Net.HttpStatusCode.NotFound)

@@ -19,6 +19,7 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
 {
     private readonly AgentHttpClient _http;
     private readonly string _taskName;
+    private readonly string? _domain;
     private readonly Func<Dictionary<string, JsonElement>, ToolContext?, Task<object?>> _handler;
     private readonly Channel<JsonElement> _taskChannel;
     private readonly CancellationTokenSource _cts = new();
@@ -34,10 +35,12 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
         Func<Dictionary<string, JsonElement>, ToolContext?, Task<object?>> handler,
         int pollIntervalMs = 100,
         ILogger? logger = null,
-        string[]? credentialNames = null)
+        string[]? credentialNames = null,
+        string? domain = null)
     {
         _http = http;
         _taskName = taskName;
+        _domain = domain;
         _handler = handler;
         _pollIntervalMs = pollIntervalMs;
         _logger = logger ?? NullLogger.Instance;
@@ -62,7 +65,7 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
         {
             try
             {
-                var rawTask = await _http.PollTaskRawAsync(_taskName, ct);
+                var rawTask = await _http.PollTaskRawAsync(_taskName, _domain, ct);
                 if (rawTask is not null)
                     await _taskChannel.Writer.WriteAsync(rawTask.Value, ct);
             }
@@ -232,7 +235,7 @@ internal sealed class WorkerManager : IAsyncDisposable
 
     public WorkerManager(AgentHttpClient http) => _http = http;
 
-    public void RegisterTools(IEnumerable<ToolDef> tools)
+    public void RegisterTools(IEnumerable<ToolDef> tools, string? domain = null)
     {
         foreach (var tool in tools)
         {
@@ -240,12 +243,13 @@ internal sealed class WorkerManager : IAsyncDisposable
 
             var handler = tool.Handler;
             var loop = new WorkerPollLoop(_http, tool.Name, handler,
-                credentialNames: tool.Credentials.Length > 0 ? tool.Credentials : null);
+                credentialNames: tool.Credentials.Length > 0 ? tool.Credentials : null,
+                domain: domain);
             _workers.Add(loop);
         }
     }
 
-    public void RegisterGuardrails(IEnumerable<GuardrailDef> guardrails)
+    public void RegisterGuardrails(IEnumerable<GuardrailDef> guardrails, string? domain = null)
     {
         foreach (var g in guardrails)
         {
@@ -317,37 +321,37 @@ internal sealed class WorkerManager : IAsyncDisposable
                     ["guardrail_name"] = "",
                     ["should_continue"] = false,
                 };
-            });
+            }, domain: domain);
             _workers.Add(loop);
         }
     }
 
-    public void RegisterAgentTools(Agent agent)
+    public void RegisterAgentTools(Agent agent, string? domain = null)
     {
-        RegisterTools(agent.Tools);
-        RegisterGuardrails(agent.Guardrails);
-        RegisterCallbacks(agent);
+        RegisterTools(agent.Tools, domain);
+        RegisterGuardrails(agent.Guardrails, domain);
+        RegisterCallbacks(agent, domain);
 
         if (agent.Strategy == Strategy.Swarm && agent.Agents.Count > 0)
-            RegisterSwarmTransferWorkers(agent);
+            RegisterSwarmTransferWorkers(agent, domain);
 
         if (agent.Strategy == Strategy.Manual && agent.Agents.Count > 0)
-            RegisterManualSelectionWorker(agent);
+            RegisterManualSelectionWorker(agent, domain);
 
         foreach (var sub in agent.Agents)
-            RegisterAgentTools(sub);
+            RegisterAgentTools(sub, domain);
         if (agent.Router is not null)
-            RegisterAgentTools(agent.Router);
+            RegisterAgentTools(agent.Router, domain);
 
         // Recurse into agents wrapped as AgentTool
         foreach (var tool in agent.Tools)
         {
             if (tool.ToolType == "agent_tool" && tool.WrappedAgent is not null)
-                RegisterAgentTools(tool.WrappedAgent);
+                RegisterAgentTools(tool.WrappedAgent, domain);
         }
     }
 
-    private void RegisterCallbacks(Agent agent)
+    private void RegisterCallbacks(Agent agent, string? domain = null)
     {
         if (agent.BeforeModelCallback is not null)
         {
@@ -360,7 +364,7 @@ internal sealed class WorkerManager : IAsyncDisposable
                     messages = msgEl.EnumerateArray().ToList();
                 var result = cb(messages);
                 return Task.FromResult<object?>(result ?? new Dictionary<string, object>());
-            }));
+            }, domain: domain));
         }
 
         if (agent.AfterModelCallback is not null)
@@ -374,7 +378,7 @@ internal sealed class WorkerManager : IAsyncDisposable
                     : null;
                 var result = cb(llmResult);
                 return Task.FromResult<object?>(result ?? new Dictionary<string, object>());
-            }));
+            }, domain: domain));
         }
     }
 
@@ -383,7 +387,7 @@ internal sealed class WorkerManager : IAsyncDisposable
     /// Transfer workers: {sourceName}_transfer_to_{targetName} — no-op, returns {}
     /// Check-transfer workers: {agentName}_check_transfer — inspects toolCalls to detect handoffs
     /// </summary>
-    private void RegisterSwarmTransferWorkers(Agent agent)
+    private void RegisterSwarmTransferWorkers(Agent agent, string? domain = null)
     {
         var allNames = new List<string> { agent.Name };
         allNames.AddRange(agent.Agents.Select(a => a.Name));
@@ -399,7 +403,8 @@ internal sealed class WorkerManager : IAsyncDisposable
                 if (!registered.Add(toolName)) continue;
 
                 var loop = new WorkerPollLoop(_http, toolName,
-                    (_, _) => Task.FromResult<object?>(new Dictionary<string, object>()));
+                    (_, _) => Task.FromResult<object?>(new Dictionary<string, object>()),
+                    domain: domain);
                 _workers.Add(loop);
             }
         }
@@ -438,7 +443,7 @@ internal sealed class WorkerManager : IAsyncDisposable
                         ["is_transfer"] = false,
                         ["transfer_to"] = "",
                     });
-                });
+                }, domain: domain);
             _workers.Add(loop);
         }
 
@@ -489,7 +494,7 @@ internal sealed class WorkerManager : IAsyncDisposable
                 ["active_agent"] = activeAgent,
                 ["handoff"]      = false,
             });
-        });
+        }, domain: domain);
         _workers.Add(handoffLoop);
     }
 
@@ -497,7 +502,7 @@ internal sealed class WorkerManager : IAsyncDisposable
     /// Register a process_selection worker for Manual strategy.
     /// Converts human agent-name selection to agent index required by the server.
     /// </summary>
-    private void RegisterManualSelectionWorker(Agent agent)
+    private void RegisterManualSelectionWorker(Agent agent, string? domain = null)
     {
         var taskName   = $"{agent.Name}_process_selection";
         var nameToIdx  = agent.Agents.Select((a, i) => (a.Name, Index: i.ToString()))
@@ -533,7 +538,7 @@ internal sealed class WorkerManager : IAsyncDisposable
             }
 
             return Task.FromResult<object?>(new Dictionary<string, object> { ["selected"] = selected });
-        });
+        }, domain: domain);
 
         _workers.Add(loop);
     }
