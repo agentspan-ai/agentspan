@@ -45,6 +45,8 @@ public sealed class Agent
     public Dictionary<string, object>? Metadata { get; set; }
     public Type? OutputType { get; set; }
     public List<GuardrailDef> Guardrails { get; set; } = [];
+    public TerminationCondition? Termination { get; set; }
+    public Dictionary<string, List<string>>? AllowedTransitions { get; set; }
 
     public Agent(string name)
     {

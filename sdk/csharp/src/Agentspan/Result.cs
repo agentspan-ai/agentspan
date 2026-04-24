@@ -251,6 +251,24 @@ public sealed class AgentHandle
     public IAsyncEnumerable<AgentEvent> StreamAsync(CancellationToken cancellationToken = default)
         => _http.StreamEventsAsync(_executionId, cancellationToken);
 
+    /// <summary>Check the current status without blocking.</summary>
+    public async Task<AgentStatus> GetStatusAsync(CancellationToken cancellationToken = default)
+    {
+        var node = await _http.GetStatusAsync(_executionId, cancellationToken);
+        if (node is null) return new AgentStatus { ExecutionId = _executionId };
+
+        return new AgentStatus
+        {
+            ExecutionId  = node["executionId"]?.GetValue<string>() ?? _executionId,
+            IsComplete   = node["isComplete"]?.GetValue<bool>() ?? false,
+            IsRunning    = node["isRunning"]?.GetValue<bool>() ?? false,
+            IsWaiting    = node["isWaiting"]?.GetValue<bool>() ?? false,
+            StatusValue  = node["status"]?.GetValue<string>(),
+            Reason       = node["reason"]?.GetValue<string>(),
+            CurrentTask  = node["currentTask"]?.GetValue<string>(),
+        };
+    }
+
     public async Task RespondAsync(object response, CancellationToken cancellationToken = default)
         => await _http.RespondAsync(_executionId, response, cancellationToken);
 

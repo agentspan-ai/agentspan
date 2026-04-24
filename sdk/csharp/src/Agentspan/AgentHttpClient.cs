@@ -33,7 +33,7 @@ internal sealed class AgentHttpClient : IDisposable
         if (!resp.IsSuccessStatusCode)
         {
             var body = await resp.Content.ReadAsStringAsync(ct);
-            throw new AgentApiException((int)resp.StatusCode, resp.ReasonPhrase ?? "error", body);
+            throw new AgentApiException((int)resp.StatusCode, $"{resp.ReasonPhrase}: {body}", body);
         }
 
         var node = await resp.Content.ReadFromJsonAsync<JsonNode>(cancellationToken: ct);

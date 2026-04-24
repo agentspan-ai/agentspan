@@ -326,10 +326,177 @@ internal sealed class WorkerManager : IAsyncDisposable
     {
         RegisterTools(agent.Tools);
         RegisterGuardrails(agent.Guardrails);
+
+        if (agent.Strategy == Strategy.Swarm && agent.Agents.Count > 0)
+            RegisterSwarmTransferWorkers(agent);
+
+        if (agent.Strategy == Strategy.Manual && agent.Agents.Count > 0)
+            RegisterManualSelectionWorker(agent);
+
         foreach (var sub in agent.Agents)
             RegisterAgentTools(sub);
         if (agent.Router is not null)
             RegisterAgentTools(agent.Router);
+    }
+
+    /// <summary>
+    /// Register no-op transfer workers + check_transfer workers for every agent in a Swarm.
+    /// Transfer workers: {sourceName}_transfer_to_{targetName} — no-op, returns {}
+    /// Check-transfer workers: {agentName}_check_transfer — inspects toolCalls to detect handoffs
+    /// </summary>
+    private void RegisterSwarmTransferWorkers(Agent agent)
+    {
+        var allNames = new List<string> { agent.Name };
+        allNames.AddRange(agent.Agents.Select(a => a.Name));
+
+        // Register no-op transfer workers
+        var registered = new HashSet<string>();
+        foreach (var sourceName in allNames)
+        {
+            foreach (var targetName in allNames)
+            {
+                if (sourceName == targetName) continue;
+                var toolName = $"{sourceName}_transfer_to_{targetName}";
+                if (!registered.Add(toolName)) continue;
+
+                var loop = new WorkerPollLoop(_http, toolName,
+                    (_, _) => Task.FromResult<object?>(new Dictionary<string, object>()));
+                _workers.Add(loop);
+            }
+        }
+
+        // Register check_transfer workers for each agent in the swarm
+        foreach (var name in allNames)
+        {
+            var checkTaskName = $"{name}_check_transfer";
+            var loop = new WorkerPollLoop(_http, checkTaskName,
+                (args, _) =>
+                {
+                    // tool_calls is a list of {name, ...} objects
+                    if (args.TryGetValue("tool_calls", out var tcEl))
+                    {
+                        if (tcEl.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var tc in tcEl.EnumerateArray())
+                            {
+                                var tcName = tc.TryGetProperty("name", out var np)
+                                    ? np.GetString() ?? ""
+                                    : "";
+                                if (tcName.Contains("_transfer_to_"))
+                                {
+                                    var transferTarget = tcName.Split("_transfer_to_", 2)[1];
+                                    return Task.FromResult<object?>(new Dictionary<string, object>
+                                    {
+                                        ["is_transfer"] = true,
+                                        ["transfer_to"] = transferTarget,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    return Task.FromResult<object?>(new Dictionary<string, object>
+                    {
+                        ["is_transfer"] = false,
+                        ["transfer_to"] = "",
+                    });
+                });
+            _workers.Add(loop);
+        }
+
+        // Register handoff_check worker for the parent swarm agent
+        // Maps agent names to indices: parent=0, sub[0]=1, sub[1]=2, ...
+        var nameToIdx = new Dictionary<string, string> { [agent.Name] = "0" };
+        for (int i = 0; i < agent.Agents.Count; i++)
+            nameToIdx[agent.Agents[i].Name] = (i + 1).ToString();
+        var idxToName = nameToIdx.ToDictionary(kv => kv.Value, kv => kv.Key);
+        var allowedTransitions = agent.AllowedTransitions;
+
+        bool IsAllowed(string sourceIdx, string targetName)
+        {
+            if (allowedTransitions is null) return true;
+            var sourceName = idxToName.TryGetValue(sourceIdx, out var sn) ? sn : "";
+            return allowedTransitions.TryGetValue(sourceName, out var targets)
+                && targets.Contains(targetName);
+        }
+
+        bool IsTransferTruthy(JsonElement val) =>
+            val.ValueKind == JsonValueKind.True ||
+            (val.ValueKind == JsonValueKind.String &&
+             val.GetString()?.Trim().ToLower() == "true");
+
+        var handoffTaskName = $"{agent.Name}_handoff_check";
+        var handoffLoop = new WorkerPollLoop(_http, handoffTaskName, (args, _) =>
+        {
+            var activeAgent  = args.TryGetValue("active_agent",  out var ae) ? ae.GetString() ?? "0" : "0";
+            var isTransfer   = args.TryGetValue("is_transfer",   out var it) && IsTransferTruthy(it);
+            var transferTo   = args.TryGetValue("transfer_to",   out var tt) ? tt.GetString() ?? "" : "";
+
+            if (isTransfer && !string.IsNullOrEmpty(transferTo))
+            {
+                if (IsAllowed(activeAgent, transferTo))
+                {
+                    var targetIdx = nameToIdx.TryGetValue(transferTo, out var ti) ? ti : activeAgent;
+                    if (targetIdx != activeAgent)
+                        return Task.FromResult<object?>(new Dictionary<string, object>
+                        {
+                            ["active_agent"] = targetIdx,
+                            ["handoff"]      = true,
+                        });
+                }
+            }
+
+            return Task.FromResult<object?>(new Dictionary<string, object>
+            {
+                ["active_agent"] = activeAgent,
+                ["handoff"]      = false,
+            });
+        });
+        _workers.Add(handoffLoop);
+    }
+
+    /// <summary>
+    /// Register a process_selection worker for Manual strategy.
+    /// Converts human agent-name selection to agent index required by the server.
+    /// </summary>
+    private void RegisterManualSelectionWorker(Agent agent)
+    {
+        var taskName   = $"{agent.Name}_process_selection";
+        var nameToIdx  = agent.Agents.Select((a, i) => (a.Name, Index: i.ToString()))
+                                     .ToDictionary(t => t.Name, t => t.Index);
+
+        var loop = new WorkerPollLoop(_http, taskName, (args, _) =>
+        {
+            string selected = "0";
+
+            if (args.TryGetValue("human_output", out var ho))
+            {
+                if (ho.ValueKind == JsonValueKind.Object)
+                {
+                    // {"selected": "writer"} or {"agent": "writer"}
+                    string? agentName = null;
+                    if (ho.TryGetProperty("selected", out var sp)) agentName = sp.GetString();
+                    else if (ho.TryGetProperty("agent",    out var ap)) agentName = ap.GetString();
+
+                    if (agentName != null && nameToIdx.TryGetValue(agentName, out var idx))
+                        selected = idx;
+                    else if (agentName != null)
+                        selected = agentName; // pass through if already an index
+                }
+                else if (ho.ValueKind == JsonValueKind.String)
+                {
+                    var sv = ho.GetString() ?? "0";
+                    selected = nameToIdx.TryGetValue(sv, out var idx2) ? idx2 : sv;
+                }
+                else if (ho.ValueKind == JsonValueKind.Number)
+                {
+                    selected = ho.GetInt32().ToString();
+                }
+            }
+
+            return Task.FromResult<object?>(new Dictionary<string, object> { ["selected"] = selected });
+        });
+
+        _workers.Add(loop);
     }
 
     public void Start()

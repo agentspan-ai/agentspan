@@ -95,6 +95,21 @@ internal static class AgentConfigSerializer
         if (agent.Router is not null)
             cfg["router"] = SerializeAgent(agent.Router);
 
+        if (agent.Termination is not null)
+            cfg["termination"] = SerializeTermination(agent.Termination);
+
+        if (agent.AllowedTransitions is not null)
+        {
+            var at = new JsonObject();
+            foreach (var (key, targets) in agent.AllowedTransitions)
+            {
+                var arr = new JsonArray();
+                foreach (var t in targets) arr.Add(t);
+                at[key] = arr;
+            }
+            cfg["allowedTransitions"] = at;
+        }
+
         if (agent.Metadata is not null)
             cfg["metadata"] = JsonNode.Parse(JsonSerializer.Serialize(agent.Metadata, AgentspanJson.Options))!;
 
@@ -132,6 +147,54 @@ internal static class AgentConfigSerializer
             t["credentials"] = creds;
         }
         return t;
+    }
+
+    private static JsonNode SerializeTermination(TerminationCondition condition) => condition switch
+    {
+        TextMentionTermination t => new JsonObject
+        {
+            ["type"]          = "text_mention",
+            ["text"]          = t.Text,
+            ["caseSensitive"] = t.CaseSensitive,
+        },
+        StopMessageTermination s => new JsonObject
+        {
+            ["type"]        = "stop_message",
+            ["stopMessage"] = s.StopMessage,
+        },
+        MaxMessageTermination m => new JsonObject
+        {
+            ["type"]        = "max_message",
+            ["maxMessages"] = m.MaxMessages,
+        },
+        TokenUsageTermination tok => SerializeTokenUsageTermination(tok),
+        AndTermination and => new JsonObject
+        {
+            ["type"]       = "and",
+            ["conditions"] = SerializeTerminationList(and.Conditions),
+        },
+        OrTermination or => new JsonObject
+        {
+            ["type"]       = "or",
+            ["conditions"] = SerializeTerminationList(or.Conditions),
+        },
+        _ => new JsonObject { ["type"] = "unknown" },
+    };
+
+    private static JsonObject SerializeTokenUsageTermination(TokenUsageTermination tok)
+    {
+        var obj = new JsonObject { ["type"] = "token_usage" };
+        if (tok.MaxTotalTokens      is not null) obj["maxTotalTokens"]      = tok.MaxTotalTokens.Value;
+        if (tok.MaxPromptTokens     is not null) obj["maxPromptTokens"]     = tok.MaxPromptTokens.Value;
+        if (tok.MaxCompletionTokens is not null) obj["maxCompletionTokens"] = tok.MaxCompletionTokens.Value;
+        return obj;
+    }
+
+    private static JsonArray SerializeTerminationList(IReadOnlyList<TerminationCondition> conditions)
+    {
+        var arr = new JsonArray();
+        foreach (var c in conditions) arr.Add(SerializeTermination(c));
+        return arr;
     }
 
     private static JsonObject SerializeGuardrail(GuardrailDef g) => new()
