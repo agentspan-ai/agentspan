@@ -277,6 +277,32 @@ internal sealed class AgentHttpClient : IDisposable
         catch { return new Dictionary<string, string>(); }
     }
 
+    // ── Run by name ──────────────────────────────────────────
+
+    /// <summary>Start a pre-deployed workflow by name (no agentConfig payload).</summary>
+    public async Task<string> StartWorkflowByNameAsync(
+        string workflowName, string prompt, string sessionId = "", CancellationToken ct = default)
+    {
+        var payload = new
+        {
+            name = workflowName,
+            input = new { prompt, media = Array.Empty<string>(), sessionId },
+        };
+        var json = JsonSerializer.Serialize(payload, AgentspanJson.Options);
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var resp = await _client.PostAsync($"{_baseUrl}/workflow", content, ct);
+
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync(ct);
+            throw new AgentApiException((int)resp.StatusCode, $"{resp.ReasonPhrase}: {body}", body);
+        }
+
+        // Returns the execution ID as a bare string
+        var executionId = await resp.Content.ReadAsStringAsync(ct);
+        return executionId.Trim('"', ' ', '\n', '\r');
+    }
+
     // ── Workflow metadata ────────────────────────────────────
 
     /// <summary>Fetch the workflow definition (without tasks) to read taskToDomain.</summary>

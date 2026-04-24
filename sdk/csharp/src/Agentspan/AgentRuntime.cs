@@ -56,9 +56,17 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
     public AgentResult Run(Agent agent, string prompt, string? sessionId = null, IEnumerable<string>? media = null)
         => RunAsync(agent, prompt, sessionId, media: media).GetAwaiter().GetResult();
 
+    /// <summary>Run a pre-deployed agent by workflow name (synchronous).</summary>
+    public AgentResult Run(string workflowName, string prompt, string? sessionId = null)
+        => RunByNameAsync(workflowName, prompt, sessionId).GetAwaiter().GetResult();
+
     /// <summary>Start an agent synchronously and return a handle.</summary>
     public AgentHandle Start(Agent agent, string prompt, string? sessionId = null, IEnumerable<string>? media = null)
         => StartAsync(agent, prompt, sessionId, media: media).GetAwaiter().GetResult();
+
+    /// <summary>Start a pre-deployed agent by workflow name (synchronous).</summary>
+    public AgentHandle Start(string workflowName, string prompt, string? sessionId = null)
+        => StartByNameAsync(workflowName, prompt, sessionId).GetAwaiter().GetResult();
 
     // ── Async API ────────────────────────────────────────────
 
@@ -73,12 +81,28 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
         return result;
     }
 
+    /// <summary>Run a pre-deployed agent by workflow name and wait for the result.</summary>
+    public async Task<AgentResult> RunByNameAsync(
+        string workflowName, string prompt, string? sessionId = null, CancellationToken ct = default)
+    {
+        var handle = await StartByNameAsync(workflowName, prompt, sessionId, ct);
+        return await handle.WaitAsync(ct);
+    }
+
     /// <summary>Start an agent asynchronously and return a handle for streaming / HITL.</summary>
     public async Task<AgentHandle> StartAsync(
         Agent agent, string prompt, string? sessionId = null,
         IEnumerable<string>? media = null, CancellationToken ct = default)
     {
         return await StartInternalAsync(agent, prompt, sessionId, media, ct);
+    }
+
+    /// <summary>Start a pre-deployed agent by workflow name (no agentConfig payload).</summary>
+    public async Task<AgentHandle> StartByNameAsync(
+        string workflowName, string prompt, string? sessionId = null, CancellationToken ct = default)
+    {
+        var executionId = await _http.StartWorkflowByNameAsync(workflowName, prompt, sessionId ?? "", ct);
+        return new AgentHandle(executionId, _http);
     }
 
     /// <summary>Stream events from an agent execution.</summary>
