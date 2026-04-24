@@ -83,8 +83,69 @@ public sealed class ToolDef
     public bool External { get; init; }
     public int? TimeoutSeconds { get; init; }
     public string[] Credentials { get; init; } = [];
+    /// <summary>Tool type: "worker" (default), "agent_tool", or "external".</summary>
+    internal string? ToolType { get; init; }
+    /// <summary>For agent_tool: the wrapped agent and its runtime config.</summary>
+    internal Agent? WrappedAgent { get; init; }
+    internal int? AgentToolRetryCount { get; init; }
+    internal int? AgentToolRetryDelaySeconds { get; init; }
+    internal bool? AgentToolOptional { get; init; }
     // The backing delegate — null for remote/server-registered tools.
     internal Func<Dictionary<string, JsonElement>, ToolContext?, Task<object?>>? Handler { get; init; }
+}
+
+// ── AgentTool ──────────────────────────────────────────────
+
+/// <summary>
+/// Wrap an <see cref="Agent"/> as a callable tool (invoked as a sub-workflow).
+///
+/// Unlike sub-agents (which use handoff delegation), an agent tool is called
+/// inline by the parent LLM like a function call. The child agent runs its
+/// own workflow and returns the result as a tool output.
+/// </summary>
+public static class AgentTool
+{
+    /// <summary>Create a tool that runs the given agent as a sub-workflow.</summary>
+    /// <param name="agent">The child agent to wrap.</param>
+    /// <param name="name">Override tool name (defaults to the agent's name).</param>
+    /// <param name="description">Override tool description.</param>
+    /// <param name="retryCount">Retries on failure (default 2).</param>
+    /// <param name="retryDelaySeconds">Seconds between retries (default 2).</param>
+    /// <param name="optional">If true, failure doesn't fail the parent (default true).</param>
+    public static ToolDef Create(
+        Agent   agent,
+        string? name                = null,
+        string? description         = null,
+        int?    retryCount          = null,
+        int?    retryDelaySeconds   = null,
+        bool?   optional            = null)
+    {
+        var schema = new JsonObject
+        {
+            ["type"] = "object",
+            ["properties"] = new JsonObject
+            {
+                ["request"] = new JsonObject
+                {
+                    ["type"]        = "string",
+                    ["description"] = "The request or question to send to this agent.",
+                },
+            },
+            ["required"] = new JsonArray { "request" },
+        };
+
+        return new ToolDef
+        {
+            Name                      = name ?? agent.Name,
+            Description               = description ?? $"Invoke the {agent.Name} agent",
+            InputSchema               = schema,
+            ToolType                  = "agent_tool",
+            WrappedAgent              = agent,
+            AgentToolRetryCount       = retryCount,
+            AgentToolRetryDelaySeconds = retryDelaySeconds,
+            AgentToolOptional         = optional,
+        };
+    }
 }
 
 // ── ToolRegistry ───────────────────────────────────────────

@@ -136,21 +136,43 @@ internal static class AgentConfigSerializer
 
     private static JsonObject SerializeTool(ToolDef tool)
     {
+        var toolType = tool.ToolType
+            ?? (tool.External ? "external" : "worker");
+
         var t = new JsonObject
         {
             ["name"]        = tool.Name,
             ["description"] = tool.Description,
             ["inputSchema"] = JsonNode.Parse(tool.InputSchema.ToJsonString())!,
-            ["toolType"]    = tool.External ? "external" : "worker",
+            ["toolType"]    = toolType,
         };
-        if (tool.ApprovalRequired)      t["approvalRequired"] = true;
-        if (tool.TimeoutSeconds.HasValue) t["timeoutSeconds"]  = tool.TimeoutSeconds.Value;
+
+        if (tool.ApprovalRequired)        t["approvalRequired"] = true;
+        if (tool.TimeoutSeconds.HasValue)  t["timeoutSeconds"]   = tool.TimeoutSeconds.Value;
+
         if (tool.Credentials.Length > 0)
         {
             var creds = new JsonArray();
             foreach (var c in tool.Credentials) creds.Add(c);
             t["credentials"] = creds;
         }
+
+        // For agent_tool, embed the child agent config
+        if (toolType == "agent_tool" && tool.WrappedAgent is not null)
+        {
+            var config = new JsonObject
+            {
+                ["agentConfig"] = SerializeAgent(tool.WrappedAgent),
+            };
+            if (tool.AgentToolRetryCount.HasValue)
+                config["retryCount"] = tool.AgentToolRetryCount.Value;
+            if (tool.AgentToolRetryDelaySeconds.HasValue)
+                config["retryDelaySeconds"] = tool.AgentToolRetryDelaySeconds.Value;
+            if (tool.AgentToolOptional.HasValue)
+                config["optional"] = tool.AgentToolOptional.Value;
+            t["config"] = config;
+        }
+
         return t;
     }
 

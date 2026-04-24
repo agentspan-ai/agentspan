@@ -337,6 +337,13 @@ internal sealed class WorkerManager : IAsyncDisposable
             RegisterAgentTools(sub);
         if (agent.Router is not null)
             RegisterAgentTools(agent.Router);
+
+        // Recurse into agents wrapped as AgentTool
+        foreach (var tool in agent.Tools)
+        {
+            if (tool.ToolType == "agent_tool" && tool.WrappedAgent is not null)
+                RegisterAgentTools(tool.WrappedAgent);
+        }
     }
 
     /// <summary>
