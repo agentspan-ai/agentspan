@@ -601,7 +601,7 @@ def run_e2e_tests(suite: str = "", sdk: str = "both") -> str:
 
 
 _VALID_SECTIONS = {
-    "issue_context", "module_map", "implementation_plan", "test_plan",
+    "issue_context", "module_map", "implementation_plan", "test_plan", "change_context",
     "change_log", "review_findings", "test_results", "decisions", "status",
 }
 

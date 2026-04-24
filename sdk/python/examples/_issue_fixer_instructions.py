@@ -129,7 +129,23 @@ MODE: IMPLEMENTATION (implementation_plan exists, told to implement)
      - lint_and_format(module="<module>")
      - build_check(module="<module>")
   4. run_command("git add -A -- ':!.contextbook' && git commit -m 'fix: <description>'")
-  5. STOP calling tools. Your next response MUST contain ONLY this text:
+  5. Write change context JSON to contextbook for the PR description:
+     contextbook_write("change_context", '<JSON>') where JSON is:
+     {{
+       "issue_number": <N>,
+       "issue_title": "<title>",
+       "change_type": "bug_fix" or "feature",
+       "date": "<YYYY-MM-DD>",
+       "author": "agentspan-bot",
+       "root_cause": "<what was broken and why>",
+       "what_changed": [
+         {{"file": "<path>", "change": "<what was modified and why>"}}
+       ],
+       "testing": "<what tests were added or run>",
+       "risks": "<any risks or things to watch>",
+       "related_issues": [<any related issue numbers>]
+     }}
+  6. STOP calling tools. Your next response MUST contain ONLY this text:
      HANDOFF_TO_DG
 
 MODE: WRITING TESTS (test_plan exists, told to write tests)
@@ -139,7 +155,10 @@ MODE: WRITING TESTS (test_plan exists, told to write tests)
   2. write_file("<test_path>", "<test code>")
      Rules: No mocks. Real e2e. Algorithmic assertions. No LLM parsing.
   3. run_command("git add -A -- ':!.contextbook' && git commit -m 'test: add e2e tests'")
-  4. STOP calling tools. Your next response MUST contain ONLY this text:
+  4. Update change_context: contextbook_read("change_context"), then update the "testing"
+     field with what tests were added, and append test files to "what_changed".
+     contextbook_write("change_context", "<updated JSON>")
+  5. STOP calling tools. Your next response MUST contain ONLY this text:
      HANDOFF_TO_QA
 
 MODE: FIX FEEDBACK (review_findings has issues)
@@ -281,6 +300,7 @@ Complete in 5 turns or fewer.
 STEP 1 — Read context in parallel (1 turn):
   contextbook_read("issue_context")
   contextbook_read("change_log")
+  contextbook_read("change_context")
   run_command("git branch --show-current")
   run_command("git log --oneline -10")
 
@@ -290,11 +310,35 @@ STEP 2 — Push (1 turn):
   If no changes: run_command("git push origin HEAD")
 
 STEP 3 — Create PR (1 turn):
-  run_command("gh pr create --repo {repo} --base main --head $(git branch --show-current) --title 'Fix #<N>: <title>' --body 'Fixes #<N>\n\n## Summary\n<summary from contextbook>\n\n## Changes\n<from change_log>\n\n## Testing\n<from test_results or note>'")
+  Build the PR body with human-readable sections PLUS the change_context JSON block.
+  The JSON block goes in a <details> tag so it's collapsible but always present.
+
+  run_command with gh pr create. The body MUST follow this structure:
+
+  Fixes #<N>
+
+  ## Summary
+  <human-readable summary of the fix>
+
+  ## Changes
+  <list of files changed and why>
+
+  ## Testing
+  <what tests were added/run>
+
+  <details>
+  <summary>Change Context (machine-readable)</summary>
+
+  ```json
+  <paste the full change_context JSON from contextbook here>
+  ```
+
+  </details>
 
 STEP 4 — Output the PR URL. STOP.
 
 RULES:
+- The change_context JSON block is MANDATORY in the PR body.
 - Extract issue number from contextbook_read("issue_context"), not guessing.
 - Do NOT read source files. Do NOT try to implement anything.
 - If git push fails, try: git push --set-upstream origin $(git branch --show-current)
