@@ -7,8 +7,13 @@
 A multi-agent coding agent that takes a GitHub issue number, analyzes the
 codebase, implements a fix with tests, and creates a pull request.
 
-Architecture: Pipeline-wrapped swarm
-    Issue Analyst >> [SWARM: Tech Lead <-> Coder <-> DG <-> QA Lead] >> PR Creator
+Architecture: Deterministic pipeline with focused review loops
+
+    issue_analyst >> tech_lead >> [impl_loop: [code_review: coder <-> dg] <-> tl_review]
+                  >> [test_loop: coder <-> qa] >> docs_agent >> pr_creator
+
+Each review loop is a small SWARM with exactly 2 agents that alternate
+deterministically. No agent is skipped — DG always reviews, QA always tests.
 
 Usage:
     python 100_issue_fixer_agent.py <issue_number>
@@ -58,8 +63,9 @@ GITHUB_CREDENTIAL = "GITHUB_TOKEN"
 DG_SKILL_PATH = "~/.claude/skills/dg"
 
 # ── Documentation Paths ──────────────────────────────────────
-DOCS_PLAN_DIR = "docs/plan"               # Where the Tech Lead writes the implementation plan
-DOCS_DESIGN_DIR = "docs/design"           # Where design docs go
+DOCS_PLAN_DIR = "docs/plan"
+DOCS_DESIGN_DIR = "docs/design"
+QA_EVIDENCE_DIR = "qa-tests"           # QA testing evidence per issue
 
 # ── Server ───────────────────────────────────────────────────
 SERVER_URL = "http://localhost:6767"
@@ -67,7 +73,7 @@ SERVER_URL = "http://localhost:6767"
 # ── Timeouts & Limits ────────────────────────────────────────
 SWARM_MAX_TURNS = 500
 SWARM_TIMEOUT = 14400          # 4 hours
-E2E_TOOL_TIMEOUT = 5400        # 90 min — full e2e suite with margin
+E2E_TOOL_TIMEOUT = 5400        # 90 min
 MAX_REVIEW_CYCLES = 3
 MAX_E2E_RETRIES = 3
 
@@ -77,6 +83,7 @@ from _issue_fixer_instructions import (
     CODER_INSTRUCTIONS,
     DG_REVIEWER_INSTRUCTIONS,
     QA_LEAD_INSTRUCTIONS,
+    TL_REVIEW_INSTRUCTIONS,
     DOCS_AGENT_INSTRUCTIONS,
     PR_CREATOR_INSTRUCTIONS,
 )
@@ -89,6 +96,7 @@ _fmt = {
     "max_e2e_retries": MAX_E2E_RETRIES,
     "docs_plan_dir": DOCS_PLAN_DIR,
     "docs_design_dir": DOCS_DESIGN_DIR,
+    "qa_evidence_dir": QA_EVIDENCE_DIR,
 }
 
 
@@ -104,7 +112,9 @@ def _pr_created(context: dict, **kwargs) -> bool:
     return "github.com" in result and "/pull/" in result
 
 
-# ── Stage 1: Issue Analyst ────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════
+# Stage 1: Issue Analyst (pipeline)
+# ═══════════════════════════════════════════════════════════════
 
 issue_analyst = Agent(
     name="issue_analyst",
@@ -123,7 +133,9 @@ issue_analyst = Agent(
     instructions=ISSUE_ANALYST_INSTRUCTIONS.format(**_fmt),
 )
 
-# ── Stage 2: Swarm agents ────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════
+# Stage 2: Tech Lead — plan (pipeline)
+# ═══════════════════════════════════════════════════════════════
 
 tech_lead = Agent(
     name="tech_lead",
@@ -139,6 +151,12 @@ tech_lead = Agent(
     ],
     instructions=TECH_LEAD_INSTRUCTIONS.format(**_fmt),
 )
+
+# ═══════════════════════════════════════════════════════════════
+# Stage 3: Implementation Loop
+#   Inner: code_review_loop (coder <-> DG, until DG approves)
+#   Outer: impl_loop (code_review <-> TL review, until TL approves)
+# ═══════════════════════════════════════════════════════════════
 
 coder = Agent(
     name="coder",
@@ -184,6 +202,86 @@ dg_reviewer = Agent(
     instructions=DG_REVIEWER_INSTRUCTIONS.format(**_fmt),
 )
 
+# Inner loop: Coder <-> DG until DG says CODE_APPROVED
+code_review_loop = Agent(
+    name="code_review_loop",
+    model=SONNET,
+    stateful=True,
+    strategy=Strategy.SWARM,
+    agents=[coder, dg_reviewer],
+    handoffs=[
+        OnTextMention(text="HANDOFF_TO_CODER", target="coder"),
+        OnTextMention(text="HANDOFF_TO_DG", target="dg_reviewer"),
+    ],
+    termination=TextMentionTermination("CODE_APPROVED"),
+    max_turns=SWARM_MAX_TURNS,
+    max_tokens=60000,
+    timeout_seconds=SWARM_TIMEOUT,
+    instructions="Start with coder. Coder implements, DG reviews. Loop until DG says CODE_APPROVED.",
+)
+
+# Tech Lead final review
+tl_reviewer = Agent(
+    name="tl_reviewer",
+    model=OPUS,
+    stateful=True,
+    max_turns=30,
+    max_tokens=60000,
+    tools=[
+        read_file, grep_search, glob_find, list_directory,
+        file_outline, search_symbols, find_references,
+        git_diff, git_log, run_command,
+        contextbook_write, contextbook_read, contextbook_summary,
+    ],
+    instructions=TL_REVIEW_INSTRUCTIONS.format(**_fmt),
+)
+
+# Outer loop: code_review_loop <-> TL review until TL says IMPL_APPROVED
+impl_loop = Agent(
+    name="impl_loop",
+    model=SONNET,
+    stateful=True,
+    strategy=Strategy.SWARM,
+    agents=[code_review_loop, tl_reviewer],
+    handoffs=[
+        OnTextMention(text="NEEDS_REWORK", target="code_review_loop"),
+        OnTextMention(text="IMPL_APPROVED", target="tl_reviewer"),
+    ],
+    termination=TextMentionTermination("IMPL_APPROVED"),
+    max_turns=MAX_REVIEW_CYCLES * 2 + 2,  # bounded: code_review + tl_review per cycle
+    max_tokens=60000,
+    timeout_seconds=SWARM_TIMEOUT,
+    instructions="Start with code_review_loop. After code review, TL reviews. Loop until TL says IMPL_APPROVED.",
+)
+
+# ═══════════════════════════════════════════════════════════════
+# Stage 4: Test Loop (coder <-> QA, until QA says TESTS_PASS)
+# ═══════════════════════════════════════════════════════════════
+
+# Separate coder instance for test writing (same config, different name)
+test_coder = Agent(
+    name="test_coder",
+    model=SONNET,
+    stateful=True,
+    max_turns=200,
+    max_tokens=60000,
+    credentials=[GITHUB_CREDENTIAL],
+    cli_config=CliConfig(
+        allowed_commands=["git"],
+        allow_shell=True,
+        timeout=120,
+    ),
+    tools=[
+        read_file, write_file, edit_file, apply_patch,
+        grep_search, glob_find, list_directory,
+        file_outline, search_symbols, find_references,
+        git_diff, git_log, run_command, web_fetch,
+        lint_and_format, build_check, run_unit_tests,
+        contextbook_write, contextbook_read, contextbook_summary,
+    ],
+    instructions=CODER_INSTRUCTIONS.format(**_fmt),
+)
+
 qa_lead = Agent(
     name="qa_lead",
     model=SONNET,
@@ -192,35 +290,33 @@ qa_lead = Agent(
     max_tokens=60000,
     tools=[
         read_file, grep_search, glob_find, list_directory,
-        file_outline, git_diff, run_command,
+        file_outline, git_diff, run_command, web_fetch,
         run_unit_tests, run_e2e_tests,
         contextbook_write, contextbook_read, contextbook_summary,
     ],
     instructions=QA_LEAD_INSTRUCTIONS.format(**_fmt),
 )
 
-# ── Swarm assembly ────────────────────────────────────────────
-
-coding_swarm = Agent(
-    name="coding_swarm",
+test_loop = Agent(
+    name="test_loop",
     model=SONNET,
     stateful=True,
     strategy=Strategy.SWARM,
-    agents=[tech_lead, coder, dg_reviewer, qa_lead],
+    agents=[qa_lead, test_coder],
     handoffs=[
-        OnTextMention(text="HANDOFF_TO_CODER", target="coder"),
-        OnTextMention(text="HANDOFF_TO_DG", target="dg_reviewer"),
+        OnTextMention(text="HANDOFF_TO_CODER", target="test_coder"),
         OnTextMention(text="HANDOFF_TO_QA", target="qa_lead"),
-        OnTextMention(text="HANDOFF_TO_TECH_LEAD", target="tech_lead"),
     ],
-    termination=TextMentionTermination("SWARM_COMPLETE"),
+    termination=TextMentionTermination("TESTS_PASS"),
     max_turns=SWARM_MAX_TURNS,
     max_tokens=60000,
     timeout_seconds=SWARM_TIMEOUT,
-    instructions="Start with tech_lead. Iterate until QA Lead confirms ALL_TESTS_PASS.",
+    instructions="Start with qa_lead. QA plans tests, coder writes them, QA reviews + runs e2e. Loop until TESTS_PASS.",
 )
 
-# ── Stage 3: Documentation Agent ─────────────────────────────
+# ═══════════════════════════════════════════════════════════════
+# Stage 5: Documentation Agent (pipeline)
+# ═══════════════════════════════════════════════════════════════
 
 docs_agent = Agent(
     name="docs_agent",
@@ -237,7 +333,9 @@ docs_agent = Agent(
     instructions=DOCS_AGENT_INSTRUCTIONS.format(**_fmt),
 )
 
-# ── Stage 4: PR Creator ──────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════
+# Stage 6: PR Creator (pipeline)
+# ═══════════════════════════════════════════════════════════════
 
 pr_creator = Agent(
     name="pr_creator",
@@ -256,9 +354,11 @@ pr_creator = Agent(
     instructions=PR_CREATOR_INSTRUCTIONS.format(**_fmt),
 )
 
-# ── Full pipeline ─────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════
+# Full Pipeline
+# ═══════════════════════════════════════════════════════════════
 
-pipeline = issue_analyst >> coding_swarm >> docs_agent >> pr_creator
+pipeline = issue_analyst >> tech_lead >> impl_loop >> test_loop >> docs_agent >> pr_creator
 
 
 def main():
@@ -270,8 +370,6 @@ def main():
     idempotency_key = f"issue-{issue_number}"
 
     # Create a temp working directory with a random suffix.
-    # The Issue Analyst will clone the repo INTO this directory.
-    # All tools (read_file, edit_file, run_command, etc.) operate relative to it.
     work_dir = os.path.join(tempfile.gettempdir(), f"agentspan-fix-{uuid.uuid4().hex[:12]}")
     set_working_dir(work_dir)
     print(f"Working directory: {work_dir}")
@@ -287,10 +385,6 @@ def main():
         print(f"Idempotency key: {idempotency_key}")
         print(f"Monitor at: {SERVER_URL}/execution/{handle.execution_id}")
 
-        # join() blocks until the pipeline completes (or times out).
-        # Workers were already registered by start() under the execution's
-        # domain — calling serve() here would re-register them in the
-        # default domain, causing stateful tool tasks to stay SCHEDULED.
         result = handle.join(timeout=SWARM_TIMEOUT)
         result.print_result()
 
