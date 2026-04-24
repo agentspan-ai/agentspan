@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { isAbsolute, join } from "node:path";
-import type { ToolDef, ToolType, ToolContext, CredentialFile } from "./types.js";
+import type { ToolDef, ToolType, ToolContext, CredentialFile, RetryLogic } from "./types.js";
 import { ConfigurationError } from "./errors.js";
 
 // `import.meta.url` survives tsup's CJS build on Node 25 and breaks `require()`.
@@ -88,6 +88,12 @@ export interface ToolOptions {
   isolated?: boolean;
   credentials?: (string | CredentialFile)[];
   guardrails?: unknown[];
+  /** Number of retry attempts on failure. `undefined` → default (2). `0` = no retries. */
+  retryCount?: number;
+  /** Seconds between retries. `undefined` → default (2). */
+  retryDelaySeconds?: number;
+  /** Backoff strategy. `undefined` → `"LINEAR_BACKOFF"`. */
+  retryLogic?: RetryLogic;
 }
 
 /**
@@ -123,6 +129,9 @@ export function tool<TInput = unknown, TOutput = unknown>(
       credentials: options.credentials,
     }),
     ...(options.guardrails !== undefined && { guardrails: options.guardrails }),
+    ...(options.retryCount !== undefined && { retryCount: options.retryCount }),
+    ...(options.retryDelaySeconds !== undefined && { retryDelaySeconds: options.retryDelaySeconds }),
+    ...(options.retryLogic !== undefined && { retryLogic: options.retryLogic }),
   };
 
   // Create the wrapper function
@@ -256,6 +265,11 @@ export function getToolDef(obj: unknown): ToolDef {
       ...(raw.config !== undefined && {
         config: raw.config as Record<string, unknown>,
       }),
+      ...(raw.retryCount !== undefined && { retryCount: raw.retryCount as number }),
+      ...(raw.retryDelaySeconds !== undefined && {
+        retryDelaySeconds: raw.retryDelaySeconds as number,
+      }),
+      ...(raw.retryLogic !== undefined && { retryLogic: raw.retryLogic as RetryLogic }),
     };
   }
 
@@ -807,6 +821,12 @@ interface ToolDecoratorOptions {
   isolated?: boolean;
   credentials?: (string | CredentialFile)[];
   guardrails?: unknown[];
+  /** Number of retry attempts on failure. `undefined` → default (2). `0` = no retries. */
+  retryCount?: number;
+  /** Seconds between retries. `undefined` → default (2). */
+  retryDelaySeconds?: number;
+  /** Backoff strategy. `undefined` → `"LINEAR_BACKOFF"`. */
+  retryLogic?: RetryLogic;
 }
 
 /**
@@ -874,6 +894,9 @@ export function toolsFrom(instance: object): ToolFunction<unknown, unknown>[] {
       isolated: metadata.isolated,
       credentials: metadata.credentials,
       guardrails: metadata.guardrails,
+      retryCount: metadata.retryCount,
+      retryDelaySeconds: metadata.retryDelaySeconds,
+      retryLogic: metadata.retryLogic,
     });
 
     tools.push(wrapped);

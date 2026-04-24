@@ -289,6 +289,21 @@ export class AgentConfigSerializer {
       config.config = toolDef.config;
     }
 
+    // Retry configuration — merge into config dict (matches Python SDK wire format)
+    if (
+      toolDef.retryCount !== undefined ||
+      toolDef.retryDelaySeconds !== undefined ||
+      toolDef.retryLogic !== undefined
+    ) {
+      const existingConfig = (config.config as Record<string, unknown>) ?? {};
+      const retryConfig: Record<string, unknown> = {};
+      if (toolDef.retryCount !== undefined) retryConfig.retryCount = toolDef.retryCount;
+      if (toolDef.retryDelaySeconds !== undefined)
+        retryConfig.retryDelaySeconds = toolDef.retryDelaySeconds;
+      if (toolDef.retryLogic !== undefined) retryConfig.retryLogic = toolDef.retryLogic;
+      config.config = { ...existingConfig, ...retryConfig };
+    }
+
     return omitNulls(config);
   }
 

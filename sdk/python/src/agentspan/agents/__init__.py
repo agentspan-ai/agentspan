@@ -184,6 +184,7 @@ from agentspan.agents.openai_compat import RunResult, Runner
 
 # Tool decorator and constructors
 from agentspan.agents.tool import (
+    RetryLogic,
     ToolContext,
     ToolDef,
     agent_tool,
@@ -229,6 +230,7 @@ __all__ = [
     "tool",
     "ToolDef",
     "ToolContext",
+    "RetryLogic",
     "agent_tool",
     "api_tool",
     "http_tool",

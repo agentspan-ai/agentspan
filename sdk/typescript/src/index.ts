@@ -9,6 +9,7 @@ export type {
   ToolType,
   FrameworkId,
   GuardrailType,
+  RetryLogic,
   TokenUsage,
   ToolContext,
   GuardrailResult,

@@ -47,7 +47,7 @@ def _default_task_def(
     response_timeout_seconds: int = 10,
     retry_count: Optional[int] = None,
     retry_delay_seconds: Optional[int] = None,
-    retry_logic: Optional[str] = None,
+    retry_logic: Optional["RetryLogic"] = None,
 ) -> Any:
     """Create a TaskDef with standard retry policy for agent worker tasks.
 
@@ -60,13 +60,16 @@ def _default_task_def(
     (at 80% of this value) keep long-running tasks alive automatically.
 
     retry_count, retry_delay_seconds, retry_logic: optional per-tool overrides.
-    When None, the defaults (2, 2, "LINEAR_BACKOFF") are used.
+    When None, the defaults (2, 2, RetryLogic.LINEAR_BACKOFF) are used.
     """
     from conductor.client.http.models.task_def import TaskDef
+    from agentspan.agents.tool import RetryLogic
 
     td = TaskDef(name=name)
     td.retry_count = retry_count if retry_count is not None else 2
-    td.retry_logic = retry_logic if retry_logic is not None else "LINEAR_BACKOFF"
+    # RetryLogic is a str-Enum so .value gives the plain string Conductor expects
+    _default_logic = RetryLogic.LINEAR_BACKOFF.value
+    td.retry_logic = (retry_logic.value if isinstance(retry_logic, RetryLogic) else retry_logic) if retry_logic is not None else _default_logic
     td.retry_delay_seconds = retry_delay_seconds if retry_delay_seconds is not None else 2
     td.timeout_seconds = 0
     td.response_timeout_seconds = response_timeout_seconds

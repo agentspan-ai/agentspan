@@ -13,9 +13,26 @@ from __future__ import annotations
 import functools
 import inspect
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, TypeVar, overload
 
 F = TypeVar("F", bound=Callable[..., Any])
+
+
+# ── RetryLogic enum ─────────────────────────────────────────────────────
+
+
+class RetryLogic(str, Enum):
+    """Retry backoff strategy for Conductor TaskDef.
+
+    FIXED: constant delay of ``retry_delay_seconds`` between every retry.
+    LINEAR_BACKOFF: delay grows linearly (``retry_delay_seconds × attempt``). Default.
+    EXPONENTIAL_BACKOFF: delay doubles each attempt (``retry_delay_seconds × 2^attempt``).
+    """
+
+    FIXED = "FIXED"
+    LINEAR_BACKOFF = "LINEAR_BACKOFF"
+    EXPONENTIAL_BACKOFF = "EXPONENTIAL_BACKOFF"
 
 
 # ── ToolContext (dependency injection for tools) ────────────────────────
@@ -82,7 +99,7 @@ class ToolDef:
     stateful: bool = False
     retry_count: Optional[int] = None
     retry_delay_seconds: Optional[int] = None
-    retry_logic: Optional[str] = None
+    retry_logic: Optional[RetryLogic] = None
 
 
 # ── @tool decorator ─────────────────────────────────────────────────────
@@ -105,7 +122,7 @@ def tool(
     stateful: bool = False,
     retry_count: Optional[int] = None,
     retry_delay_seconds: Optional[int] = None,
-    retry_logic: Optional[str] = None,
+    retry_logic: Optional[RetryLogic] = None,
 ) -> Callable[[F], F]: ...
 
 
@@ -122,7 +139,7 @@ def tool(
     stateful: bool = False,
     retry_count: Optional[int] = None,
     retry_delay_seconds: Optional[int] = None,
-    retry_logic: Optional[str] = None,
+    retry_logic: Optional[RetryLogic] = None,
 ) -> Any:
     """Register a Python function as a Conductor agent tool.
 

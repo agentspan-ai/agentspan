@@ -84,6 +84,15 @@ export interface GuardrailDef {
 }
 
 /**
+ * Retry backoff strategy for Conductor TaskDef.
+ *
+ * FIXED: constant delay of `retryDelaySeconds` between every retry.
+ * LINEAR_BACKOFF: delay grows linearly (`retryDelaySeconds × attempt`). Default.
+ * EXPONENTIAL_BACKOFF: delay doubles each attempt (`retryDelaySeconds × 2^attempt`).
+ */
+export type RetryLogic = "FIXED" | "LINEAR_BACKOFF" | "EXPONENTIAL_BACKOFF";
+
+/**
  * Tool execution type determining where/how the tool runs.
  */
 export type ToolType =
@@ -263,6 +272,12 @@ export interface ToolDef {
   credentials?: (string | CredentialFile)[];
   guardrails?: unknown[];
   config?: Record<string, unknown>;
+  /** Number of retry attempts on failure. `undefined` → default (2). `0` = no retries. */
+  retryCount?: number;
+  /** Seconds between retries. `undefined` → default (2). */
+  retryDelaySeconds?: number;
+  /** Backoff strategy. `undefined` → `"LINEAR_BACKOFF"`. */
+  retryLogic?: RetryLogic;
 }
 
 // ── Agent result ─────────────────────────────────────────
