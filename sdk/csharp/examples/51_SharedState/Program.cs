@@ -12,6 +12,7 @@
 //   - AGENTSPAN_SERVER_URL=http://localhost:6767/api in environment
 //   - AGENTSPAN_LLM_MODEL set in environment
 
+using System.Text.Json;
 using Agentspan;
 using Agentspan.Examples;
 
@@ -67,8 +68,15 @@ internal sealed class ShoppingListTools
     private static List<string> GetItems(ToolContext? ctx)
     {
         if (ctx?.State is null) return [];
-        if (ctx.State.TryGetValue("shopping_list", out var raw) && raw is List<string> list)
-            return list;
+        if (!ctx.State.TryGetValue("shopping_list", out var raw) || raw is null) return [];
+
+        // In-memory list (after add within same invocation)
+        if (raw is List<string> list) return list;
+
+        // JsonElement from server-persisted state
+        if (raw is JsonElement je && je.ValueKind == JsonValueKind.Array)
+            return je.EnumerateArray().Select(e => e.GetString() ?? "").Where(s => s.Length > 0).ToList();
+
         return [];
     }
 

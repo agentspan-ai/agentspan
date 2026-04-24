@@ -48,6 +48,18 @@ internal sealed class AgentHttpClient : IDisposable
         return await resp.Content.ReadFromJsonAsync<JsonNode>(cancellationToken: ct);
     }
 
+    /// <summary>Fetch the full execution record (includes tokenUsage, finishReason).</summary>
+    public async Task<JsonNode?> GetExecutionAsync(string executionId, CancellationToken ct = default)
+    {
+        try
+        {
+            using var resp = await _client.GetAsync($"{_baseUrl}/agent/execution/{executionId}", ct);
+            if (!resp.IsSuccessStatusCode) return null;
+            return await resp.Content.ReadFromJsonAsync<JsonNode>(cancellationToken: ct);
+        }
+        catch { return null; }
+    }
+
     public async Task RespondAsync(string executionId, object body, CancellationToken ct = default)
     {
         var json = JsonSerializer.Serialize(body, AgentspanJson.Options);
@@ -77,10 +89,10 @@ internal sealed class AgentHttpClient : IDisposable
         string? eventId   = null;
         var dataLines = new StringBuilder();
 
-        while (!ct.IsCancellationRequested && !reader.EndOfStream)
+        while (!ct.IsCancellationRequested)
         {
             var line = await reader.ReadLineAsync(ct);
-            if (line is null) break;
+            if (line is null) break; // end of stream
 
             // Heartbeat lines (start with ':') — skip
             if (line.StartsWith(':')) continue;

@@ -37,17 +37,25 @@ var result = await runtime.RunAsync(agent, "What's the weather in NYC?");
 
 Console.WriteLine($"Status: {result.Status}");
 
-// The structured output lands in result.Output["result"] as a JSON string
-if (result.Output?.TryGetValue("result", out var raw) == true)
+// The structured output lands in result.Output["result"] as a JSON object
+if (result.Output?.TryGetValue("result", out var raw) == true && raw is not null)
 {
-    var report = JsonSerializer.Deserialize<WeatherReport>(raw?.ToString() ?? "{}", AgentspanJson.Options);
-    if (report is not null)
+    // raw is a boxed JsonElement; extract raw JSON text for deserialization
+    var jsonStr = raw is JsonElement je
+        ? (je.ValueKind == JsonValueKind.String ? je.GetString() : je.GetRawText())
+        : raw.ToString();
+
+    if (jsonStr is not null)
     {
-        Console.WriteLine($"City:           {report.City}");
-        Console.WriteLine($"Temperature:    {report.Temperature}°F");
-        Console.WriteLine($"Condition:      {report.Condition}");
-        Console.WriteLine($"Recommendation: {report.Recommendation}");
-        return;
+        var report = JsonSerializer.Deserialize<WeatherReport>(jsonStr, AgentspanJson.Options);
+        if (report is not null)
+        {
+            Console.WriteLine($"City:           {report.City}");
+            Console.WriteLine($"Temperature:    {report.Temperature}°F");
+            Console.WriteLine($"Condition:      {report.Condition}");
+            Console.WriteLine($"Recommendation: {report.Recommendation}");
+            return;
+        }
     }
 }
 

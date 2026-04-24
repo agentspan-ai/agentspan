@@ -150,13 +150,51 @@ public record AgentResult
     [JsonIgnore] public bool IsFailed   => Status == Status.Failed;
     [JsonIgnore] public bool IsRejected => FinishReason == Agentspan.FinishReason.Rejected;
 
-    /// <summary>Print a one-line summary of the result.</summary>
+    /// <summary>Print a formatted summary of the result, mirroring Python's print_result().</summary>
     public void PrintResult()
     {
-        var text = Output?.GetValueOrDefault("result")?.ToString()
-                ?? Output?.GetValueOrDefault("output")?.ToString()
-                ?? "(no result)";
-        Console.WriteLine($"[{Status}] {text}");
+        const int width = 50;
+        var border = new string('═', width);
+        Console.WriteLine($"\n╒{border}╕");
+        Console.WriteLine($"│ {"Agent Output".PadRight(width - 1)}│");
+        Console.WriteLine($"╘{border}╛");
+        Console.WriteLine();
+
+        if (IsFailed && Error is not null)
+        {
+            Console.WriteLine($"ERROR: {Error}");
+            Console.WriteLine();
+        }
+        else if (Output is not null)
+        {
+            if (Output.TryGetValue("result", out var result) && result is not null)
+            {
+                Console.WriteLine(result);
+                Console.WriteLine();
+            }
+            else
+            {
+                foreach (var (key, value) in Output)
+                {
+                    Console.WriteLine($"--- {key} ---");
+                    Console.WriteLine(value);
+                    Console.WriteLine();
+                }
+            }
+        }
+
+        if (TokenUsage is not null)
+            Console.WriteLine($"Tokens: {TokenUsage.TotalTokens} total ({TokenUsage.PromptTokens} prompt, {TokenUsage.CompletionTokens} completion)");
+        else
+            Console.WriteLine("Tokens: —");
+
+        if (FinishReason.HasValue)
+            Console.WriteLine($"Finish reason: FinishReason.{FinishReason.Value}");
+
+        if (!string.IsNullOrEmpty(ExecutionId))
+            Console.WriteLine($"Execution ID: {ExecutionId}");
+
+        Console.WriteLine();
     }
 }
 
@@ -199,7 +237,11 @@ public sealed class AgentHandle
             var status = await _http.GetStatusAsync(_executionId, cancellationToken);
             var s = status?["status"]?.GetValue<string>() ?? "";
             if (s is "COMPLETED" or "FAILED" or "TERMINATED" or "TIMED_OUT")
-                return BuildResult(status!, s);
+            {
+                // Fetch full execution record for token usage and finish reason
+                var execution = await _http.GetExecutionAsync(_executionId, cancellationToken);
+                return BuildResult(status!, s, execution);
+            }
             await Task.Delay(500, cancellationToken);
         }
         throw new OperationCanceledException();
@@ -218,7 +260,7 @@ public sealed class AgentHandle
     public async Task RejectAsync(string? reason = null, CancellationToken cancellationToken = default)
         => await _http.RespondAsync(_executionId, new { approved = false, reason }, cancellationToken);
 
-    private static AgentResult BuildResult(JsonNode status, string statusStr)
+    private static AgentResult BuildResult(JsonNode status, string statusStr, JsonNode? execution = null)
     {
         var output = status["output"];
         var parsedStatus = statusStr switch
@@ -241,12 +283,39 @@ public sealed class AgentHandle
             outputDict = new Dictionary<string, object> { ["result"] = output.ToString() };
         }
 
+        // Extract token usage from the full execution record
+        TokenUsage? tokenUsage = null;
+        if (execution?["tokenUsage"] is JsonObject tuObj)
+        {
+            tokenUsage = new TokenUsage(
+                PromptTokens:     tuObj["promptTokens"]?.GetValue<int>() ?? 0,
+                CompletionTokens: tuObj["completionTokens"]?.GetValue<int>() ?? 0,
+                TotalTokens:      tuObj["totalTokens"]?.GetValue<int>() ?? 0
+            );
+        }
+
+        // Extract finish reason from output (server puts it in output.finishReason)
+        FinishReason? finishReason = null;
+        var frStr = output?["finishReason"]?.GetValue<string>()?.ToUpperInvariant();
+        finishReason = frStr switch
+        {
+            "STOP"      => Agentspan.FinishReason.Stop,
+            "LENGTH"    => Agentspan.FinishReason.Length,
+            "TOOL_CALL" or "TOOL_CALLS" => Agentspan.FinishReason.ToolCalls,
+            "ERROR"     => Agentspan.FinishReason.Error,
+            "GUARDRAIL" => Agentspan.FinishReason.Guardrail,
+            "REJECTED"  => Agentspan.FinishReason.Rejected,
+            _           => null,
+        };
+
         return new AgentResult
         {
-            ExecutionId = status["executionId"]?.GetValue<string>() ?? "",
-            Status = parsedStatus,
-            Output = outputDict,
-            Error = status["error"]?.GetValue<string>(),
+            ExecutionId  = status["executionId"]?.GetValue<string>() ?? "",
+            Status       = parsedStatus,
+            Output       = outputDict,
+            Error        = status["error"]?.GetValue<string>(),
+            TokenUsage   = tokenUsage,
+            FinishReason = finishReason,
         };
     }
 }

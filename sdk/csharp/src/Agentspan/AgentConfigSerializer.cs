@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Schema;
 
 namespace Agentspan;
 
@@ -35,6 +36,15 @@ internal static class AgentConfigSerializer
         if (agent.Introduction     is not null) cfg["introduction"]     = agent.Introduction;
         if (agent.External)                     cfg["external"]         = true;
         if (agent.Planner)                      cfg["planner"]          = true;
+
+        if (agent.OutputType is not null)
+        {
+            cfg["outputType"] = new JsonObject
+            {
+                ["schema"]    = GenerateSchema(agent.OutputType),
+                ["className"] = agent.OutputType.Name,
+            };
+        }
 
         if (agent.RequiredTools?.Count > 0)
         {
@@ -91,6 +101,13 @@ internal static class AgentConfigSerializer
         return cfg;
     }
 
+    private static JsonNode GenerateSchema(Type type)
+    {
+        var opts = new JsonSerializerOptions(AgentspanJson.Options);
+        opts.MakeReadOnly(populateMissingResolver: true);
+        return JsonSchemaExporter.GetJsonSchemaAsNode(opts, type);
+    }
+
     private static string StrategyToWire(Strategy strategy) => strategy switch
     {
         Strategy.RoundRobin => "round_robin",
@@ -119,16 +136,17 @@ internal static class AgentConfigSerializer
 
     private static JsonObject SerializeGuardrail(GuardrailDef g) => new()
     {
-        ["name"]       = g.Name,
-        ["position"]   = g.Position == Position.Input ? "input" : "output",
-        ["onFail"]     = g.OnFail switch
+        ["name"]          = g.Name,
+        ["position"]      = g.Position == Position.Input ? "input" : "output",
+        ["onFail"]        = g.OnFail switch
         {
             OnFail.Retry => "retry",
             OnFail.Fix   => "fix",
             OnFail.Human => "human",
             _            => "raise",
         },
-        ["maxRetries"] = g.MaxRetries,
-        ["workerName"] = g.Name,  // Conductor task name = guardrail name
+        ["maxRetries"]    = g.MaxRetries,
+        ["guardrailType"] = "custom",
+        ["taskName"]      = g.Name,  // Conductor task name = guardrail name
     };
 }

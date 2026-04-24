@@ -86,9 +86,6 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
                 var inputData = ExtractInputData(task);
                 var toolCtx   = ExtractToolContext(task);
 
-                // Credential resolution (future: inject into env vars)
-                // Currently credentials are handled server-side via the credential store.
-
                 var result = await _handler(inputData, toolCtx);
 
                 // Wrap primitives — Conductor expects outputData as an object
@@ -102,6 +99,33 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
                     bool b    => new { result = b },
                     _         => result,
                 };
+
+                // Include state updates so the server can persist shared state
+                if (toolCtx?.State is { Count: > 0 } state)
+                {
+                    if (outputData is Dictionary<string, object> outDict)
+                        outDict["_state_updates"] = state;
+                    else if (outputData is Dictionary<string, object?> outDictN)
+                        outDictN["_state_updates"] = state;
+                    else
+                    {
+                        // Wrap in a dictionary with both result and state
+                        var wrapper = new Dictionary<string, object?> { ["_state_updates"] = state };
+                        // Re-serialize result into wrapper
+                        var resultJson = JsonSerializer.Serialize(outputData, AgentspanJson.Options);
+                        var resultNode = JsonNode.Parse(resultJson);
+                        if (resultNode is JsonObject obj)
+                        {
+                            foreach (var kv in obj)
+                                wrapper[kv.Key] = kv.Value?.DeepClone();
+                        }
+                        else
+                        {
+                            wrapper["result"] = outputData;
+                        }
+                        outputData = wrapper;
+                    }
+                }
 
                 await _http.ReportTaskSuccessAsync(taskId, workflowId, outputData, ct);
             }
@@ -137,13 +161,28 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
     private static ToolContext? ExtractToolContext(JsonElement task)
     {
         if (!task.TryGetProperty("inputData", out var inputData)) return null;
-        if (!inputData.TryGetProperty("__agentspan_ctx__", out var ctxEl)) return null;
 
-        try
+        // Extract base context (execution token etc.)
+        ToolContext? ctx = null;
+        if (inputData.TryGetProperty("__agentspan_ctx__", out var ctxEl))
         {
-            return JsonSerializer.Deserialize<ToolContext>(ctxEl.GetRawText(), AgentspanJson.Options);
+            try { ctx = JsonSerializer.Deserialize<ToolContext>(ctxEl.GetRawText(), AgentspanJson.Options); }
+            catch { }
         }
-        catch { return null; }
+
+        // Extract shared state from _agent_state (persisted across tool calls by the server)
+        Dictionary<string, object>? state = null;
+        if (inputData.TryGetProperty("_agent_state", out var agentStateEl) &&
+            agentStateEl.ValueKind == JsonValueKind.Object)
+        {
+            state = new Dictionary<string, object>();
+            foreach (var prop in agentStateEl.EnumerateObject())
+                state[prop.Name] = prop.Value.Clone();
+        }
+
+        if (ctx is null && state is null) return null;
+
+        return (ctx ?? new ToolContext()) with { State = state ?? ctx?.State };
     }
 
     public async ValueTask DisposeAsync()
@@ -186,16 +225,72 @@ internal sealed class WorkerManager : IAsyncDisposable
         foreach (var g in guardrails)
         {
             if (g.Handler is null) continue;
-            var handler = g.Handler;
+            var handler    = g.Handler;
+            var onFail     = g.OnFail;
+            var maxRetries = g.MaxRetries;
+            var gName      = g.Name;
+
             var loop = new WorkerPollLoop(_http, g.Name, async (args, _ctx) =>
             {
-                string content = args.TryGetValue("content", out var el) ? el.GetString() ?? "" : "";
-                var result = await handler(content);
-                return (object)new Dictionary<string, object>
+                string content = args.TryGetValue("content", out var contentEl)
+                    ? (contentEl.ValueKind == JsonValueKind.String
+                        ? contentEl.GetString() ?? ""
+                        : contentEl.GetRawText())
+                    : "";
+
+                int iteration = args.TryGetValue("iteration", out var iterEl) &&
+                                iterEl.ValueKind == JsonValueKind.Number
+                    ? iterEl.GetInt32()
+                    : 0;
+
+                GuardrailResult result;
+                try
                 {
-                    ["passed"]      = result.Passed,
-                    ["message"]     = result.Message ?? "",
-                    ["fixedOutput"] = result.FixedOutput ?? "",
+                    result = await handler(content);
+                }
+                catch (Exception ex)
+                {
+                    var effectiveOnFailOnEx = onFail;
+                    if (effectiveOnFailOnEx == OnFail.Retry && iteration >= maxRetries)
+                        effectiveOnFailOnEx = OnFail.Raise;
+                    return (object)new Dictionary<string, object?>
+                    {
+                        ["passed"]         = false,
+                        ["message"]        = $"Guardrail error: {ex.Message}",
+                        ["on_fail"]        = effectiveOnFailOnEx.ToString().ToLowerInvariant(),
+                        ["fixed_output"]   = null,
+                        ["guardrail_name"] = gName,
+                        ["should_continue"] = effectiveOnFailOnEx == OnFail.Retry,
+                    };
+                }
+
+                if (!result.Passed)
+                {
+                    var effectiveOnFail = onFail;
+                    if (effectiveOnFail == OnFail.Retry && iteration >= maxRetries)
+                        effectiveOnFail = OnFail.Raise;
+                    if (effectiveOnFail == OnFail.Fix && result.FixedOutput is null)
+                        effectiveOnFail = OnFail.Raise;
+
+                    return (object)new Dictionary<string, object?>
+                    {
+                        ["passed"]         = false,
+                        ["message"]        = result.Message ?? "",
+                        ["on_fail"]        = effectiveOnFail.ToString().ToLowerInvariant(),
+                        ["fixed_output"]   = result.FixedOutput,
+                        ["guardrail_name"] = gName,
+                        ["should_continue"] = effectiveOnFail == OnFail.Retry,
+                    };
+                }
+
+                return (object)new Dictionary<string, object?>
+                {
+                    ["passed"]         = true,
+                    ["message"]        = "",
+                    ["on_fail"]        = "pass",
+                    ["fixed_output"]   = null,
+                    ["guardrail_name"] = "",
+                    ["should_continue"] = false,
                 };
             });
             _workers.Add(loop);
