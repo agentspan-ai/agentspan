@@ -22,7 +22,10 @@ Requirements:
     - Full build toolchain (Go, Java 21, Python 3.10+, Node.js, pnpm, uv)
 """
 
+import os
 import sys
+import tempfile
+import uuid
 
 from agentspan.agents import Agent, AgentRuntime, Strategy, skill, agent_tool
 from agentspan.agents.cli_config import CliConfig
@@ -30,6 +33,7 @@ from agentspan.agents.handoff import OnTextMention
 from agentspan.agents.termination import TextMentionTermination
 
 from _issue_fixer_tools import (
+    set_working_dir, get_working_dir,
     read_file, write_file, edit_file, apply_patch, list_directory, file_outline,
     glob_find, grep_search, search_symbols, find_references,
     git_diff, git_log, git_blame,
@@ -219,7 +223,7 @@ pr_creator = Agent(
     max_tokens=8192,
     credentials=[GITHUB_CREDENTIAL],
     cli_config=CliConfig(
-        allowed_commands=["gh", "git"],
+        allowed_commands=["gh", "git", "find"],
         allow_shell=True,
         timeout=60,
     ),
@@ -241,10 +245,18 @@ def main():
     issue_number = int(sys.argv[1])
     idempotency_key = f"issue-{issue_number}"
 
+    # Create a temp working directory with a random suffix.
+    # The Issue Analyst will clone the repo INTO this directory.
+    # All tools (read_file, edit_file, run_command, etc.) operate relative to it.
+    work_dir = os.path.join(tempfile.gettempdir(), f"agentspan-fix-{uuid.uuid4().hex[:12]}")
+    set_working_dir(work_dir)
+    print(f"Working directory: {work_dir}")
+
     with AgentRuntime() as rt:
         handle = rt.start(
             pipeline,
-            f"Fix issue #{issue_number} from {REPO}",
+            f"Fix issue #{issue_number} from {REPO}. "
+            f"The repo will be cloned into the working directory: {work_dir}",
             idempotency_key=idempotency_key,
         )
         print(f"Execution started: {handle.execution_id}")

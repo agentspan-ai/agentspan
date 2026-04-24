@@ -1,6 +1,10 @@
 # sdk/python/examples/_issue_fixer_tools.py
 """Reusable @tool functions for the Issue Fixer Agent.
 
+All tools operate relative to a shared working directory set via
+``set_working_dir(path)`` before any agent runs. This is typically a
+temp folder where the target repo is cloned.
+
 Provides 21 tools organized into 5 categories:
 - File operations (read, write, edit, patch, list, outline)
 - Search & navigation (glob, grep, symbols, references)
@@ -19,11 +23,52 @@ from pathlib import Path
 
 from agentspan.agents import tool
 
-# Limits
+# ── Working directory ──────────────────────────────────────────
+
+_WORKING_DIR: str = ""
+
+
+def set_working_dir(path: str) -> None:
+    """Set the shared working directory for all tools.
+
+    Must be called before any agent runs. Typically a temp folder where
+    the target repo will be cloned into by the Issue Analyst.
+    """
+    global _WORKING_DIR
+    _WORKING_DIR = str(path)
+    os.makedirs(_WORKING_DIR, exist_ok=True)
+
+
+def get_working_dir() -> str:
+    """Return the current working directory."""
+    return _WORKING_DIR
+
+
+def _resolve(path: str) -> Path:
+    """Resolve a path relative to the working directory.
+
+    Absolute paths are returned as-is. Relative paths are resolved
+    against _WORKING_DIR. If _WORKING_DIR is unset, resolves against CWD.
+    """
+    p = Path(path)
+    if p.is_absolute():
+        return p
+    base = Path(_WORKING_DIR) if _WORKING_DIR else Path.cwd()
+    return base / p
+
+
+def _cwd() -> str:
+    """Return the working directory for subprocess calls."""
+    return _WORKING_DIR or None
+
+
+# ── Limits ─────────────────────────────────────────────────────
+
 _MAX_FILE_BYTES = 500_000      # 500 KB
 _MAX_OUTPUT_LINES = 200        # truncate long outputs
 _MAX_COMMAND_OUTPUT = 16_000   # chars for command output
 _DEFAULT_TIMEOUT = 120         # seconds for shell commands
+E2E_TOOL_TIMEOUT = 5400        # 90 min — full e2e suite with margin
 
 # Module detection mapping: directory prefix -> module name
 _MODULE_MAP = {
@@ -34,9 +79,6 @@ _MODULE_MAP = {
     "ui": "ui",
 }
 
-# E2E test timeout
-E2E_TOOL_TIMEOUT = 5400        # 90 min — full e2e suite with margin
-
 
 # ── File Operations ──────────────────────────────────────────
 
@@ -44,8 +86,9 @@ E2E_TOOL_TIMEOUT = 5400        # 90 min — full e2e suite with margin
 @tool
 def read_file(path: str, start_line: int = 0, end_line: int = 0) -> str:
     """Read a file's contents with optional line range. Returns lines with line numbers.
-    If start_line and end_line are both 0, reads the entire file."""
-    target = Path(path)
+    If start_line and end_line are both 0, reads the entire file.
+    Paths are relative to the repo working directory."""
+    target = _resolve(path)
     if not target.exists():
         return f"Error: {path!r} does not exist."
     if target.is_dir():
@@ -70,8 +113,9 @@ def read_file(path: str, start_line: int = 0, end_line: int = 0) -> str:
 
 @tool
 def write_file(path: str, content: str) -> str:
-    """Write content to a file, creating parent directories as needed. Overwrites existing files."""
-    target = Path(path)
+    """Write content to a file, creating parent directories as needed. Overwrites existing files.
+    Paths are relative to the repo working directory."""
+    target = _resolve(path)
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
@@ -82,8 +126,9 @@ def write_file(path: str, content: str) -> str:
 
 @tool
 def edit_file(path: str, old_string: str, new_string: str) -> str:
-    """Replace exact text in a file. Fails if old_string is not found or matches more than once."""
-    target = Path(path)
+    """Replace exact text in a file. Fails if old_string is not found or matches more than once.
+    Paths are relative to the repo working directory."""
+    target = _resolve(path)
     if not target.exists():
         return f"Error: {path!r} does not exist."
     try:
@@ -101,20 +146,20 @@ def edit_file(path: str, old_string: str, new_string: str) -> str:
 
 
 @tool
-def apply_patch(patch: str, working_dir: str = ".") -> str:
-    """Apply a unified diff patch. Returns success/failure details."""
+def apply_patch(patch: str) -> str:
+    """Apply a unified diff patch to the repo. Returns success/failure details."""
     try:
         proc = subprocess.run(
             ["git", "apply", "--check", "-"],
             input=patch, capture_output=True, text=True,
-            cwd=working_dir, timeout=30,
+            cwd=_cwd(), timeout=30,
         )
         if proc.returncode != 0:
             return f"Error: patch would not apply cleanly:\n{proc.stderr.strip()}"
         proc = subprocess.run(
             ["git", "apply", "-"],
             input=patch, capture_output=True, text=True,
-            cwd=working_dir, timeout=30,
+            cwd=_cwd(), timeout=30,
         )
         if proc.returncode == 0:
             return "Patch applied successfully."
@@ -125,8 +170,9 @@ def apply_patch(patch: str, working_dir: str = ".") -> str:
 
 @tool
 def list_directory(path: str = ".", max_depth: int = 2) -> str:
-    """List directory contents in tree format up to max_depth levels deep."""
-    target = Path(path)
+    """List directory contents in tree format up to max_depth levels deep.
+    Paths are relative to the repo working directory."""
+    target = _resolve(path)
     if not target.exists():
         return f"Error: {path!r} does not exist."
     if not target.is_dir():
@@ -141,7 +187,6 @@ def list_directory(path: str = ".", max_depth: int = 2) -> str:
             entries = sorted(dir_path.iterdir(), key=lambda p: (p.is_file(), p.name))
         except PermissionError:
             return
-        # Skip hidden dirs and common noise
         entries = [e for e in entries if not e.name.startswith(".") and e.name not in ("node_modules", "__pycache__", ".git", "dist", "build")]
         for i, entry in enumerate(entries):
             is_last = i == len(entries) - 1
@@ -192,8 +237,9 @@ _OUTLINE_PATTERNS = {
 @tool
 def file_outline(path: str) -> str:
     """Show the structure of a file: classes, functions, methods, interfaces.
-    Works across Python, Go, Java, TypeScript, and React."""
-    target = Path(path)
+    Works across Python, Go, Java, TypeScript, and React.
+    Paths are relative to the repo working directory."""
+    target = _resolve(path)
     if not target.exists():
         return f"Error: {path!r} does not exist."
     ext = target.suffix
@@ -223,8 +269,9 @@ def file_outline(path: str) -> str:
 
 @tool
 def glob_find(pattern: str, path: str = ".") -> str:
-    """Find files matching a glob pattern (e.g. '**/*.py'). Returns sorted file paths."""
-    base = Path(path)
+    """Find files matching a glob pattern (e.g. '**/*.py'). Returns sorted file paths.
+    Paths are relative to the repo working directory."""
+    base = _resolve(path)
     if not base.exists():
         return f"Error: {path!r} does not exist."
     try:
@@ -242,15 +289,17 @@ def glob_find(pattern: str, path: str = ".") -> str:
 @tool
 def grep_search(pattern: str, path: str = ".", glob_filter: str = "", max_results: int = 50) -> str:
     """Search file contents with regex pattern. Returns matching lines as file:line: content.
-    Uses ripgrep (rg) for speed, falls back to Python regex if rg is not available."""
+    Uses ripgrep (rg) for speed, falls back to Python regex if rg is not available.
+    Paths are relative to the repo working directory."""
+    resolved_path = str(_resolve(path))
     rg = shutil.which("rg")
     if rg:
         cmd = [rg, "--no-heading", "--line-number", "--max-count", str(max_results), "--color", "never"]
         if glob_filter:
             cmd.extend(["--glob", glob_filter])
-        cmd.extend([pattern, path])
+        cmd.extend([pattern, resolved_path])
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30, cwd=_cwd())
             if proc.returncode == 0:
                 lines = proc.stdout.strip().splitlines()
                 if len(lines) > max_results:
@@ -268,7 +317,8 @@ def grep_search(pattern: str, path: str = ".", glob_filter: str = "", max_result
     except re.error as exc:
         return f"Invalid regex: {exc}"
     results = []
-    for filepath in sorted(Path(path).rglob(glob_filter or "*")):
+    base = _resolve(path)
+    for filepath in sorted(base.rglob(glob_filter or "*")):
         if not filepath.is_file() or filepath.stat().st_size > _MAX_FILE_BYTES:
             continue
         try:
@@ -300,7 +350,8 @@ _SYMBOL_DEF_PATTERNS = {
 def search_symbols(name: str, kind: str = "", path: str = ".") -> str:
     """Find definitions of classes, functions, types, interfaces, or structs.
     kind: 'class', 'function', 'type', 'interface', 'struct', or '' for all.
-    Returns file:line: definition_line."""
+    Paths are relative to the repo working directory."""
+    resolved_path = str(_resolve(path))
     if kind and kind not in _SYMBOL_DEF_PATTERNS:
         return f"Error: unknown kind {kind!r}. Use: class, function, type, interface, struct, or empty for all."
     patterns = {kind: _SYMBOL_DEF_PATTERNS[kind]} if kind else _SYMBOL_DEF_PATTERNS
@@ -309,9 +360,9 @@ def search_symbols(name: str, kind: str = "", path: str = ".") -> str:
     for k, pat_template in patterns.items():
         pat = pat_template.format(name=re.escape(name))
         if rg:
-            cmd = [rg, "--no-heading", "--line-number", "--color", "never", pat, path]
+            cmd = [rg, "--no-heading", "--line-number", "--color", "never", pat, resolved_path]
             try:
-                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30, cwd=_cwd())
                 if proc.returncode == 0:
                     for line in proc.stdout.strip().splitlines():
                         results.append(f"[{k}] {line}")
@@ -319,7 +370,7 @@ def search_symbols(name: str, kind: str = "", path: str = ".") -> str:
                 continue
         else:
             compiled = re.compile(pat)
-            for filepath in sorted(Path(path).rglob("*")):
+            for filepath in sorted(Path(resolved_path).rglob("*")):
                 if not filepath.is_file() or filepath.stat().st_size > _MAX_FILE_BYTES:
                     continue
                 try:
@@ -336,21 +387,21 @@ def search_symbols(name: str, kind: str = "", path: str = ".") -> str:
 @tool
 def find_references(symbol: str, path: str = ".") -> str:
     """Find all usages of a symbol (excludes definitions). Returns file:line: context.
-    Useful for blast radius analysis — 'if I change this, what breaks?'"""
+    Useful for blast radius analysis — 'if I change this, what breaks?'
+    Paths are relative to the repo working directory."""
+    resolved_path = str(_resolve(path))
     rg = shutil.which("rg")
     if not rg:
         return "Error: ripgrep (rg) is required for find_references. Install it: brew install ripgrep"
-    # Find all mentions
-    cmd = [rg, "--no-heading", "--line-number", "--color", "never", "--word-regexp", symbol, path]
+    cmd = [rg, "--no-heading", "--line-number", "--color", "never", "--word-regexp", symbol, resolved_path]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30, cwd=_cwd())
         if proc.returncode != 0:
             return f"No references found for {symbol!r} in {path!r}."
         all_lines = proc.stdout.strip().splitlines()
     except Exception as exc:
         return f"Error: {exc}"
 
-    # Filter out definitions (lines that look like def/class/func/type/interface declarations)
     def_pattern = re.compile(
         r"^\s*(?:export\s+)?(?:abstract\s+)?(?:public\s+)?(?:private\s+)?(?:protected\s+)?"
         r"(?:static\s+)?(?:async\s+)?(?:def|function|func|class|type|interface|struct|enum|const)\s+"
@@ -358,7 +409,6 @@ def find_references(symbol: str, path: str = ".") -> str:
     )
     references = []
     for line in all_lines:
-        # line format: file:lineno:content
         parts = line.split(":", 2)
         if len(parts) >= 3:
             content = parts[2].strip()
@@ -383,7 +433,7 @@ def git_diff(base: str = "main", path: str = "") -> str:
     if path:
         cmd.extend(["--", path])
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30, cwd=_cwd())
         output = proc.stdout.strip()
         if not output:
             return f"No diff between current state and {base!r}" + (f" for {path!r}" if path else "") + "."
@@ -401,7 +451,7 @@ def git_log(path: str = "", max_count: int = 20) -> str:
     if path:
         cmd.extend(["--", path])
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30, cwd=_cwd())
         return proc.stdout.strip() or "No commits found."
     except Exception as exc:
         return f"Error: {exc}"
@@ -415,7 +465,7 @@ def git_blame(path: str, start_line: int = 0, end_line: int = 0) -> str:
         cmd.extend([f"-L{start_line},{end_line}"])
     cmd.append(path)
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30, cwd=_cwd())
         if proc.returncode != 0:
             return f"Error: {proc.stderr.strip()}"
         return proc.stdout.strip() or f"No blame data for {path!r}."
@@ -454,7 +504,7 @@ def lint_and_format(module: str = "", path: str = "") -> str:
     if not cmd:
         return f"Error: unknown module {resolved!r}. Known: {', '.join(_LINT_COMMANDS)}."
     try:
-        proc = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=_DEFAULT_TIMEOUT)
+        proc = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=_DEFAULT_TIMEOUT, cwd=_cwd())
         output = (proc.stdout + proc.stderr).strip()
         if len(output) > _MAX_COMMAND_OUTPUT:
             output = output[:_MAX_COMMAND_OUTPUT] + "\n... (truncated)"
@@ -483,7 +533,7 @@ def build_check(module: str = "") -> str:
     if not cmd:
         return f"Error: unknown module {module!r}. Known: {', '.join(_BUILD_COMMANDS)}."
     try:
-        proc = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=_DEFAULT_TIMEOUT)
+        proc = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=_DEFAULT_TIMEOUT, cwd=_cwd())
         output = (proc.stdout + proc.stderr).strip()
         if len(output) > _MAX_COMMAND_OUTPUT:
             output = output[:_MAX_COMMAND_OUTPUT] + "\n... (truncated)"
@@ -509,14 +559,14 @@ def run_unit_tests(module: str, command: str = "") -> str:
     if not cmd:
         return f"Error: unknown module {module!r} and no command provided. Known: {', '.join(_UNIT_TEST_COMMANDS)}."
     try:
-        proc = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=600)
+        proc = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=600, cwd=_cwd())
         output = (proc.stdout + proc.stderr).strip()
         if len(output) > _MAX_COMMAND_OUTPUT:
             output = output[:_MAX_COMMAND_OUTPUT] + "\n... (truncated)"
         status = "PASS" if proc.returncode == 0 else f"FAIL (exit {proc.returncode})"
         return f"[{module}] unit_tests: {status}\n{output}"
     except subprocess.TimeoutExpired:
-        return f"Error: tests timed out after 600s."
+        return "Error: tests timed out after 600s."
     except Exception as exc:
         return f"Error: {exc}"
 
@@ -534,6 +584,7 @@ def run_e2e_tests(suite: str = "", sdk: str = "both") -> str:
             " ".join(cmd), shell=True,
             capture_output=True, text=True,
             timeout=E2E_TOOL_TIMEOUT,
+            cwd=_cwd(),
         )
         output = (proc.stdout + proc.stderr).strip()
         if len(output) > _MAX_COMMAND_OUTPUT * 2:
@@ -549,12 +600,16 @@ def run_e2e_tests(suite: str = "", sdk: str = "both") -> str:
 # ── Contextbook Tools ────────────────────────────────────────
 
 
-# Contextbook directory — created alongside the repo clone
-_CONTEXTBOOK_DIR = Path(".contextbook")
 _VALID_SECTIONS = {
     "issue_context", "module_map", "implementation_plan", "test_plan",
     "change_log", "review_findings", "test_results", "decisions", "status",
 }
+
+
+def _contextbook_dir() -> Path:
+    """Return the contextbook directory, inside the working directory."""
+    base = Path(_WORKING_DIR) if _WORKING_DIR else Path.cwd()
+    return base / ".contextbook"
 
 
 @tool(stateful=True)
@@ -565,8 +620,9 @@ def contextbook_write(section: str, content: str, append: bool = False) -> str:
     append=True adds to existing content; append=False replaces the section."""
     if section not in _VALID_SECTIONS:
         return f"Error: invalid section {section!r}. Valid: {', '.join(sorted(_VALID_SECTIONS))}"
-    _CONTEXTBOOK_DIR.mkdir(exist_ok=True)
-    filepath = _CONTEXTBOOK_DIR / f"{section}.md"
+    cb = _contextbook_dir()
+    cb.mkdir(parents=True, exist_ok=True)
+    filepath = cb / f"{section}.md"
     try:
         if append and filepath.exists():
             existing = filepath.read_text(encoding="utf-8")
@@ -582,13 +638,13 @@ def contextbook_write(section: str, content: str, append: bool = False) -> str:
 def contextbook_read(section: str = "") -> str:
     """Read from the contextbook. If section is empty, returns table of contents
     (all section names + first line summary). If section is specified, returns full content."""
-    if not _CONTEXTBOOK_DIR.exists():
+    cb = _contextbook_dir()
+    if not cb.exists():
         return "Contextbook is empty. No sections written yet."
     if not section:
-        # Table of contents
         toc = []
         for name in sorted(_VALID_SECTIONS):
-            filepath = _CONTEXTBOOK_DIR / f"{name}.md"
+            filepath = cb / f"{name}.md"
             if filepath.exists():
                 first_line = filepath.read_text(encoding="utf-8").split("\n")[0][:100]
                 size = filepath.stat().st_size
@@ -598,7 +654,7 @@ def contextbook_read(section: str = "") -> str:
         return "Contextbook sections:\n" + "\n".join(toc)
     if section not in _VALID_SECTIONS:
         return f"Error: invalid section {section!r}. Valid: {', '.join(sorted(_VALID_SECTIONS))}"
-    filepath = _CONTEXTBOOK_DIR / f"{section}.md"
+    filepath = cb / f"{section}.md"
     if not filepath.exists():
         return f"Section '{section}' has not been written yet."
     return filepath.read_text(encoding="utf-8")
@@ -608,14 +664,14 @@ def contextbook_read(section: str = "") -> str:
 def contextbook_summary() -> str:
     """Returns a condensed summary of ALL contextbook sections.
     Designed to be called after context compaction or crash recovery for quick re-orientation."""
-    if not _CONTEXTBOOK_DIR.exists():
+    cb = _contextbook_dir()
+    if not cb.exists():
         return "Contextbook is empty. No sections written yet."
     summary_parts = []
     for name in sorted(_VALID_SECTIONS):
-        filepath = _CONTEXTBOOK_DIR / f"{name}.md"
+        filepath = cb / f"{name}.md"
         if filepath.exists():
             content = filepath.read_text(encoding="utf-8")
-            # Take first 500 chars as summary
             preview = content[:500]
             if len(content) > 500:
                 preview += f"\n... ({len(content):,} chars total)"
@@ -629,15 +685,13 @@ def contextbook_summary() -> str:
 
 
 @tool
-def run_command(command: str, working_dir: str = "", timeout: int = 300) -> str:
-    """Execute a shell command and return stdout+stderr with exit code.
-    working_dir defaults to current directory if empty."""
-    cwd = working_dir or None
+def run_command(command: str, timeout: int = 300) -> str:
+    """Execute a shell command in the repo working directory and return stdout+stderr with exit code."""
     try:
         proc = subprocess.run(
-            command, shell=True, cwd=cwd,
+            command, shell=True, cwd=_cwd(),
             capture_output=True, text=True,
-            timeout=min(timeout, 600),  # cap at 10 min
+            timeout=min(timeout, 600),
         )
         output = (proc.stdout + proc.stderr).strip()
         if len(output) > _MAX_COMMAND_OUTPUT:
