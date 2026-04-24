@@ -155,16 +155,21 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
                     }
                 }
 
-                await _http.ReportTaskSuccessAsync(taskId, workflowId, outputData, ct);
+                // Use a fresh token for reporting so that worker shutdown (ct cancellation)
+                // doesn't prevent the completed task from being acknowledged on the server.
+                using var reportCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                await _http.ReportTaskSuccessAsync(taskId, workflowId, outputData, reportCts.Token);
             }
             catch (TerminalToolException ex)
             {
-                await _http.ReportTaskFailureAsync(taskId, workflowId, ex.Message, terminal: true, ct);
+                using var reportCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                await _http.ReportTaskFailureAsync(taskId, workflowId, ex.Message, terminal: true, reportCts.Token);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Worker execution error for {TaskName}", _taskName);
-                await _http.ReportTaskFailureAsync(taskId, workflowId, ex.Message, terminal: false, ct);
+                using var reportCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                await _http.ReportTaskFailureAsync(taskId, workflowId, ex.Message, terminal: false, reportCts.Token);
             }
         }
     }
