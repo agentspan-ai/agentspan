@@ -944,7 +944,7 @@ class AgentRuntime:
 
         # 0. Skill workers — register script and read_skill_file workers
         if getattr(agent, "_framework", None) == "skill":
-            self._register_skill_workers(agent)
+            self._register_skill_workers(agent, domain=domain)
             return  # Skill agents have no native tools/guardrails/sub-agents
 
         def _server_needs(task_name: str) -> bool:
@@ -1148,7 +1148,7 @@ class AgentRuntime:
 
     # ── Worker registration helpers ────────────────────────────────
 
-    def _register_skill_workers(self, agent: Agent) -> None:
+    def _register_skill_workers(self, agent: Agent, domain: "Optional[str]" = None) -> None:
         """Register skill workers (scripts + read_skill_file) for a skill-based agent."""
         from conductor.client.worker.worker_task import worker_task
 
@@ -1166,6 +1166,7 @@ class AgentRuntime:
                 task_def=_default_task_def(sw.name),
                 register_task_def=True,
                 overwrite_task_def=True,
+                domain=domain,
                 lease_extend_enabled=True,
             )(wrapper)
             logger.debug("Registered skill worker '%s'", sw.name)
