@@ -84,7 +84,8 @@ from _issue_fixer_instructions import (
     TECH_LEAD_INSTRUCTIONS,
     CODER_INSTRUCTIONS,
     DG_REVIEWER_INSTRUCTIONS,
-    QA_LEAD_INSTRUCTIONS,
+    QA_PLANNER_INSTRUCTIONS,
+    QA_REVIEWER_INSTRUCTIONS,
     TL_REVIEW_INSTRUCTIONS,
     DOCS_AGENT_INSTRUCTIONS,
     PR_CREATOR_INSTRUCTIONS,
@@ -238,13 +239,14 @@ impl_loop = Agent(
     agents=[code_then_review, tl_reviewer],
     handoffs=[
         OnTextMention(text="NEEDS_REWORK", target="coder_dg_reviewer"),
-        OnTextMention(text="IMPL_APPROVED", target="tl_reviewer"),
+        OnTextMention(text="HANDOFF_TO_CODER", target="coder_dg_reviewer"),
+        OnTextMention(text="CODE_APPROVED", target="tl_reviewer"),
     ],
     termination=TextMentionTermination("IMPL_APPROVED"),
-    max_turns=MAX_REVIEW_CYCLES * 2 + 2,  # bounded: code_review + tl_review per cycle
+    max_turns=MAX_REVIEW_CYCLES * 2 + 2,
     max_tokens=60000,
     timeout_seconds=SWARM_TIMEOUT,
-    instructions="Start with code_review_loop. After code review, TL reviews. Loop until TL says IMPL_APPROVED.",
+    instructions="Start with coder_dg_reviewer. After code+DG review, TL reviews. Loop until TL says IMPL_APPROVED.",
 )
 
 # ═══════════════════════════════════════════════════════════════
@@ -287,10 +289,10 @@ qa_lead = Agent(
         run_unit_tests, run_e2e_tests,
         contextbook_write, contextbook_read, contextbook_summary,
     ],
-    instructions=QA_LEAD_INSTRUCTIONS.format(**_fmt),
+    instructions=QA_PLANNER_INSTRUCTIONS.format(**_fmt),
 )
 
-# QA reviewer: runs e2e tests and captures evidence (separate instance for sequential pipeline)
+# QA reviewer: reviews tests, runs e2e, captures evidence
 qa_reviewer = Agent(
     name="qa_reviewer",
     model=SONNET,
@@ -298,13 +300,12 @@ qa_reviewer = Agent(
     max_turns=80,
     max_tokens=60000,
     tools=[
-        read_file, grep_search, glob_find, list_directory,
+        read_file, write_file, grep_search, glob_find, list_directory,
         file_outline, git_diff, run_command, web_fetch,
-        write_file,
         run_unit_tests, run_e2e_tests,
         contextbook_write, contextbook_read, contextbook_summary,
     ],
-    instructions=QA_LEAD_INSTRUCTIONS.format(**_fmt),
+    instructions=QA_REVIEWER_INSTRUCTIONS.format(**_fmt),
 )
 
 # Sequential: QA plans → coder writes tests → QA reviews + runs e2e
