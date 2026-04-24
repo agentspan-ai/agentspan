@@ -24,8 +24,9 @@ Step 1 — Fetch issue AND check contextbook (parallel — 2 tools at once):
   contextbook_read()
   run_command("gh issue view <N> --repo {repo} --json number,title,body,author,labels,comments")
 
-Step 2 — Clone and branch (3 sequential commands):
+Step 2 — Clone and branch (4 sequential commands):
   run_command("gh repo clone {repo} .")
+  run_command("echo '.contextbook/' >> .gitignore && git add .gitignore && git commit -m 'chore: ignore contextbook'")
   run_command("git checkout -b {branch_prefix}<N>")
   run_command("git push -u origin {branch_prefix}<N>")
 
@@ -122,7 +123,7 @@ MODE: IMPLEMENTATION (implementation_plan exists, told to implement)
      - contextbook_write("change_log", "Changed <files>: <what was done>")
      - lint_and_format(module="<module>")
      - build_check(module="<module>")
-  4. run_command("git add -A && git commit -m 'fix: <description>'")
+  4. run_command("git add -A -- ':!.contextbook' && git commit -m 'fix: <description>'")
   5. STOP calling tools. Your next response MUST contain ONLY this text:
      HANDOFF_TO_DG
 
@@ -132,7 +133,7 @@ MODE: WRITING TESTS (test_plan exists, told to write tests)
      read_file("sdk/python/e2e/conftest.py")
   2. write_file("<test_path>", "<test code>")
      Rules: No mocks. Real e2e. Algorithmic assertions. No LLM parsing.
-  3. run_command("git add -A && git commit -m 'test: add e2e tests'")
+  3. run_command("git add -A -- ':!.contextbook' && git commit -m 'test: add e2e tests'")
   4. STOP calling tools. Your next response MUST contain ONLY this text:
      HANDOFF_TO_QA
 
@@ -140,7 +141,7 @@ MODE: FIX FEEDBACK (review_findings has issues)
   1. contextbook_read("review_findings")
   2. Fix each issue with edit_file
   3. lint_and_format, build_check
-  4. run_command("git add -A && git commit -m 'fix: address review feedback'")
+  4. run_command("git add -A -- ':!.contextbook' && git commit -m 'fix: address review feedback'")
   5. STOP calling tools. Output: HANDOFF_TO_DG or HANDOFF_TO_QA
 
 CRITICAL RULES:
@@ -225,7 +226,7 @@ IF BUG FIX:
   - No example needed.
   - Update any existing docs that reference the fixed behavior (if applicable).
   - If no doc changes needed, just output: "No documentation changes needed for bug fix."
-  - run_command("git add -A && git diff --cached --stat") — if changes, commit:
+  - run_command("git add -A -- ':!.contextbook' && git diff --cached --stat") — if changes, commit:
     run_command("git commit -m 'docs: update documentation for bug fix'")
   - Done. Output the final status.
 
@@ -251,7 +252,7 @@ IF FEATURE:
      - Add the new example to the README with edit_file
 
   3. COMMIT:
-     run_command("git add -A && git commit -m 'docs: add documentation and example for <feature>'")
+     run_command("git add -A -- ':!.contextbook' && git commit -m 'docs: add documentation and example for <feature>'")
 
   Output a summary of what docs/examples were created.
 
@@ -273,7 +274,7 @@ STEP 1 — Read context in parallel (1 turn):
   run_command("git log --oneline -10")
 
 STEP 2 — Push (1 turn):
-  run_command("git add -A && git status --short")
+  run_command("git add -A -- ':!.contextbook' && git status --short")
   If changes: run_command("git commit -m 'fix: final changes' && git push origin HEAD")
   If no changes: run_command("git push origin HEAD")
 
