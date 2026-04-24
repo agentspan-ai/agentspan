@@ -86,6 +86,8 @@ from _issue_fixer_instructions import (
     TL_REVIEW_INSTRUCTIONS,
     DOCS_AGENT_INSTRUCTIONS,
     PR_CREATOR_INSTRUCTIONS,
+    PR_FEEDBACK_INSTRUCTIONS,
+    PR_UPDATER_INSTRUCTIONS,
 )
 
 # Format instruction templates with project constants
@@ -355,30 +357,103 @@ pr_creator = Agent(
 )
 
 # ═══════════════════════════════════════════════════════════════
-# Full Pipeline
+# Stage 7: PR Feedback Agent (feedback mode only)
+#   Fetches PR comments/reviews, writes them to contextbook
 # ═══════════════════════════════════════════════════════════════
 
+pr_feedback = Agent(
+    name="pr_feedback",
+    model=SONNET,
+    stateful=True,
+    max_turns=20,
+    max_tokens=16000,
+    credentials=[GITHUB_CREDENTIAL],
+    cli_config=CliConfig(
+        allowed_commands=["gh", "git"],
+        allow_shell=True,
+        timeout=60,
+    ),
+    tools=[contextbook_write, contextbook_read, web_fetch],
+    instructions=PR_FEEDBACK_INSTRUCTIONS.format(**_fmt),
+)
+
+# ═══════════════════════════════════════════════════════════════
+# Stage 8: PR Updater (feedback mode only)
+#   Pushes changes and updates the existing PR
+# ═══════════════════════════════════════════════════════════════
+
+pr_updater = Agent(
+    name="pr_updater",
+    model=SONNET,
+    stateful=True,
+    max_turns=10,
+    max_tokens=8192,
+    credentials=[GITHUB_CREDENTIAL],
+    cli_config=CliConfig(
+        allowed_commands=["gh", "git"],
+        allow_shell=True,
+        timeout=60,
+    ),
+    tools=[git_diff, git_log, contextbook_read, run_command],
+    instructions=PR_UPDATER_INSTRUCTIONS.format(**_fmt),
+)
+
+# ═══════════════════════════════════════════════════════════════
+# Pipelines
+# ═══════════════════════════════════════════════════════════════
+
+# New issue → full pipeline
 pipeline = issue_analyst >> tech_lead >> impl_loop >> test_loop >> docs_agent >> pr_creator
+
+# PR feedback → address comments, re-review, re-test, update PR
+feedback_pipeline = pr_feedback >> impl_loop >> test_loop >> pr_updater
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python 100_issue_fixer_agent.py <issue_number>")
-        sys.exit(1)
+    import argparse
 
-    issue_number = int(sys.argv[1])
-    idempotency_key = f"issue-{issue_number}"
+    parser = argparse.ArgumentParser(
+        description="Issue Fixer Agent — autonomous GitHub issue to PR pipeline",
+        epilog="Examples:\n"
+               "  python 100_issue_fixer_agent.py 42           # Fix issue #42\n"
+               "  python 100_issue_fixer_agent.py 42 --pr 157  # Address PR #157 feedback\n",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("issue_number", type=int, help="GitHub issue number to fix")
+    parser.add_argument("--pr", type=int, default=None, help="Existing PR number to address feedback on")
+    args = parser.parse_args()
+
+    issue_number = args.issue_number
+    pr_number = args.pr
 
     # Create a temp working directory with a random suffix.
     work_dir = os.path.join(tempfile.gettempdir(), f"agentspan-fix-{uuid.uuid4().hex[:12]}")
     set_working_dir(work_dir)
     print(f"Working directory: {work_dir}")
 
+    if pr_number:
+        # Feedback mode: address PR comments
+        idempotency_key = f"issue-{issue_number}-pr-{pr_number}-feedback"
+        active_pipeline = feedback_pipeline
+        prompt = (
+            f"Address feedback on PR #{pr_number} for issue #{issue_number} "
+            f"in repo {REPO}. The repo will be cloned into: {work_dir}"
+        )
+        print(f"Mode: PR feedback (PR #{pr_number})")
+    else:
+        # New issue mode: full pipeline
+        idempotency_key = f"issue-{issue_number}"
+        active_pipeline = pipeline
+        prompt = (
+            f"Fix issue #{issue_number} from {REPO}. "
+            f"The repo will be cloned into the working directory: {work_dir}"
+        )
+        print(f"Mode: New issue fix")
+
     with AgentRuntime() as rt:
         handle = rt.start(
-            pipeline,
-            f"Fix issue #{issue_number} from {REPO}. "
-            f"The repo will be cloned into the working directory: {work_dir}",
+            active_pipeline,
+            prompt,
             idempotency_key=idempotency_key,
         )
         print(f"Execution started: {handle.execution_id}")
