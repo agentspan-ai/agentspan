@@ -96,6 +96,57 @@ public sealed class ToolDef
     internal Func<Dictionary<string, JsonElement>, ToolContext?, Task<object?>>? Handler { get; init; }
 }
 
+// ── ToolDef factory ────────────────────────────────────────
+
+/// <summary>
+/// Creates <see cref="ToolDef"/> instances with custom handlers for use in examples
+/// and application code where the <c>ToolAttribute</c> pattern is not practical
+/// (e.g., dynamically-named tools, per-instance closures).
+/// </summary>
+public static class ToolDefFactory
+{
+    /// <summary>
+    /// Create a local worker <see cref="ToolDef"/> with a custom async handler.
+    /// </summary>
+    /// <param name="name">Tool name shown to the LLM (e.g. "submit_answer_alpha").</param>
+    /// <param name="description">Human-readable description for the LLM.</param>
+    /// <param name="handler">Async delegate: receives named args and returns the result.</param>
+    /// <param name="inputSchema">Optional JSON Schema for the tool parameters. If null,
+    ///   a permissive object schema is used.</param>
+    /// <param name="credentials">Optional credential names to inject before invocation.</param>
+    public static ToolDef Create(
+        string name,
+        string description,
+        Func<Dictionary<string, JsonElement>, ToolContext?, Task<object?>> handler,
+        JsonObject? inputSchema = null,
+        string[]? credentials = null)
+    {
+        return new ToolDef
+        {
+            Name        = name,
+            Description = description,
+            InputSchema = inputSchema ?? new JsonObject { ["type"] = "object", ["properties"] = new JsonObject() },
+            Credentials = credentials ?? [],
+            Handler     = handler,
+        };
+    }
+
+    /// <summary>
+    /// Create a local worker <see cref="ToolDef"/> with a synchronous handler.
+    /// </summary>
+    public static ToolDef Create(
+        string name,
+        string description,
+        Func<Dictionary<string, JsonElement>, ToolContext?, object?> handler,
+        JsonObject? inputSchema = null,
+        string[]? credentials = null)
+    {
+        return Create(name, description,
+            (args, ctx) => Task.FromResult(handler(args, ctx)),
+            inputSchema, credentials);
+    }
+}
+
 // ── AgentTool ──────────────────────────────────────────────
 
 /// <summary>
