@@ -34,20 +34,21 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
     // ── Synchronous convenience wrappers ────────────────────
 
     /// <summary>Run an agent synchronously (blocks until done).</summary>
-    public AgentResult Run(Agent agent, string prompt, string? sessionId = null)
-        => RunAsync(agent, prompt, sessionId).GetAwaiter().GetResult();
+    public AgentResult Run(Agent agent, string prompt, string? sessionId = null, IEnumerable<string>? media = null)
+        => RunAsync(agent, prompt, sessionId, media: media).GetAwaiter().GetResult();
 
     /// <summary>Start an agent synchronously and return a handle.</summary>
-    public AgentHandle Start(Agent agent, string prompt, string? sessionId = null)
-        => StartAsync(agent, prompt, sessionId).GetAwaiter().GetResult();
+    public AgentHandle Start(Agent agent, string prompt, string? sessionId = null, IEnumerable<string>? media = null)
+        => StartAsync(agent, prompt, sessionId, media: media).GetAwaiter().GetResult();
 
     // ── Async API ────────────────────────────────────────────
 
     /// <summary>Run an agent and wait for the result.</summary>
     public async Task<AgentResult> RunAsync(
-        Agent agent, string prompt, string? sessionId = null, CancellationToken ct = default)
+        Agent agent, string prompt, string? sessionId = null,
+        IEnumerable<string>? media = null, CancellationToken ct = default)
     {
-        var handle = await StartInternalAsync(agent, prompt, sessionId, ct);
+        var handle = await StartInternalAsync(agent, prompt, sessionId, media, ct);
         var result = await handle.WaitAsync(ct);
         await StopWorkersAsync();
         return result;
@@ -55,17 +56,19 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
 
     /// <summary>Start an agent asynchronously and return a handle for streaming / HITL.</summary>
     public async Task<AgentHandle> StartAsync(
-        Agent agent, string prompt, string? sessionId = null, CancellationToken ct = default)
+        Agent agent, string prompt, string? sessionId = null,
+        IEnumerable<string>? media = null, CancellationToken ct = default)
     {
-        return await StartInternalAsync(agent, prompt, sessionId, ct);
+        return await StartInternalAsync(agent, prompt, sessionId, media, ct);
     }
 
     /// <summary>Stream events from an agent execution.</summary>
     public async IAsyncEnumerable<AgentEvent> StreamAsync(
         Agent agent, string prompt, string? sessionId = null,
+        IEnumerable<string>? media = null,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
     {
-        var handle = await StartInternalAsync(agent, prompt, sessionId, ct);
+        var handle = await StartInternalAsync(agent, prompt, sessionId, media, ct);
         await foreach (var evt in handle.StreamAsync(ct))
             yield return evt;
         await StopWorkersAsync();
@@ -74,14 +77,15 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
     // ── Internal ─────────────────────────────────────────────
 
     private async Task<AgentHandle> StartInternalAsync(
-        Agent agent, string prompt, string? sessionId, CancellationToken ct)
+        Agent agent, string prompt, string? sessionId,
+        IEnumerable<string>? media, CancellationToken ct)
     {
         // Fresh worker manager per run
         _workers ??= new WorkerManager(_http);
         _workers.RegisterAgentTools(agent);
         _workers.Start();
 
-        var payload      = AgentConfigSerializer.Serialize(agent, prompt, sessionId ?? "");
+        var payload      = AgentConfigSerializer.Serialize(agent, prompt, sessionId ?? "", media);
         var executionId  = await _http.StartAsync(payload, ct);
         return new AgentHandle(executionId, _http);
     }

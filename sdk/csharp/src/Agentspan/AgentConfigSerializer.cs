@@ -10,14 +10,19 @@ namespace Agentspan;
 /// <summary>Serialize an Agent tree to the wire format the server expects.</summary>
 internal static class AgentConfigSerializer
 {
-    public static JsonObject Serialize(Agent agent, string prompt, string sessionId = "")
+    public static JsonObject Serialize(Agent agent, string prompt, string sessionId = "",
+        IEnumerable<string>? media = null)
     {
+        var mediaArr = new JsonArray();
+        if (media is not null)
+            foreach (var url in media) mediaArr.Add(url);
+
         return new JsonObject
         {
             ["agentConfig"] = SerializeAgent(agent),
             ["prompt"]      = prompt,
             ["sessionId"]   = sessionId,
-            ["media"]       = new JsonArray(),
+            ["media"]       = mediaArr,
         };
     }
 
