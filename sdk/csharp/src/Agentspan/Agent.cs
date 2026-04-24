@@ -44,6 +44,7 @@ public sealed class Agent
     public string? Introduction { get; set; }
     public Dictionary<string, object>? Metadata { get; set; }
     public Type? OutputType { get; set; }
+    public List<GuardrailDef> Guardrails { get; set; } = [];
 
     public Agent(string name)
     {

@@ -181,9 +181,31 @@ internal sealed class WorkerManager : IAsyncDisposable
         }
     }
 
+    public void RegisterGuardrails(IEnumerable<GuardrailDef> guardrails)
+    {
+        foreach (var g in guardrails)
+        {
+            if (g.Handler is null) continue;
+            var handler = g.Handler;
+            var loop = new WorkerPollLoop(_http, g.Name, async (args, _ctx) =>
+            {
+                string content = args.TryGetValue("content", out var el) ? el.GetString() ?? "" : "";
+                var result = await handler(content);
+                return (object)new Dictionary<string, object>
+                {
+                    ["passed"]      = result.Passed,
+                    ["message"]     = result.Message ?? "",
+                    ["fixedOutput"] = result.FixedOutput ?? "",
+                };
+            });
+            _workers.Add(loop);
+        }
+    }
+
     public void RegisterAgentTools(Agent agent)
     {
         RegisterTools(agent.Tools);
+        RegisterGuardrails(agent.Guardrails);
         foreach (var sub in agent.Agents)
             RegisterAgentTools(sub);
         if (agent.Router is not null)

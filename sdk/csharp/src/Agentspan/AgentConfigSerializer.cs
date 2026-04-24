@@ -65,6 +65,13 @@ internal static class AgentConfigSerializer
             cfg["tools"] = tools;
         }
 
+        if (agent.Guardrails.Count > 0)
+        {
+            var guardrails = new JsonArray();
+            foreach (var g in agent.Guardrails) guardrails.Add(SerializeGuardrail(g));
+            cfg["guardrails"] = guardrails;
+        }
+
         if (agent.Agents.Count > 0)
         {
             var agents = new JsonArray();
@@ -109,4 +116,19 @@ internal static class AgentConfigSerializer
         }
         return t;
     }
+
+    private static JsonObject SerializeGuardrail(GuardrailDef g) => new()
+    {
+        ["name"]       = g.Name,
+        ["position"]   = g.Position == Position.Input ? "input" : "output",
+        ["onFail"]     = g.OnFail switch
+        {
+            OnFail.Retry => "retry",
+            OnFail.Fix   => "fix",
+            OnFail.Human => "human",
+            _            => "raise",
+        },
+        ["maxRetries"] = g.MaxRetries,
+        ["workerName"] = g.Name,  // Conductor task name = guardrail name
+    };
 }
