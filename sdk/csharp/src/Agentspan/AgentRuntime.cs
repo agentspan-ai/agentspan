@@ -93,6 +93,22 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
         await StopWorkersAsync();
     }
 
+    // ── WMQ (Workflow Message Queue) ─────────────────────────
+
+    /// <summary>
+    /// Push a message into a running agent's Workflow Message Queue.
+    /// The agent must have a <see cref="WaitForMessageTool"/> to receive messages.
+    /// Requires conductor.workflow-message-queue.enabled=true on the server.
+    /// </summary>
+    /// <param name="executionId">The running workflow execution ID.</param>
+    /// <param name="message">Any JSON-serializable object. Strings are wrapped as {"message": value}.</param>
+    public async Task SendMessageAsync(string executionId, object message, CancellationToken ct = default)
+        => await _http.SendWorkflowMessageAsync(executionId, message, ct);
+
+    /// <summary>Push a message into a running agent's Workflow Message Queue (synchronous).</summary>
+    public void SendMessage(string executionId, object message)
+        => SendMessageAsync(executionId, message).GetAwaiter().GetResult();
+
     // ── Internal ─────────────────────────────────────────────
 
     private async Task<AgentHandle> StartInternalAsync(

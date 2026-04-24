@@ -99,7 +99,7 @@ internal static class AgentConfigSerializer
         if (agent.Tools.Count > 0)
         {
             var tools = new JsonArray();
-            foreach (var t in agent.Tools) tools.Add(SerializeTool(t));
+            foreach (var t in agent.Tools) tools.Add(SerializeTool(t, agent.Stateful));
             cfg["tools"] = tools;
         }
 
@@ -166,7 +166,7 @@ internal static class AgentConfigSerializer
         _ => strategy.ToString().ToLowerInvariant(),
     };
 
-    private static JsonObject SerializeTool(ToolDef tool)
+    private static JsonObject SerializeTool(ToolDef tool, bool agentStateful = false)
     {
         var toolType = tool.ToolType
             ?? (tool.External ? "external" : "worker");
@@ -178,6 +178,10 @@ internal static class AgentConfigSerializer
             ["inputSchema"] = JsonNode.Parse(tool.InputSchema.ToJsonString())!,
             ["toolType"]    = toolType,
         };
+
+        // Stateful routing: propagate agent.Stateful to worker tools
+        if (agentStateful && toolType is "worker" or "external")
+            t["stateful"] = true;
 
         if (tool.ApprovalRequired)        t["approvalRequired"] = true;
         if (tool.TimeoutSeconds.HasValue)  t["timeoutSeconds"]   = tool.TimeoutSeconds.Value;

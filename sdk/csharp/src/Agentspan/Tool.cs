@@ -444,6 +444,93 @@ public static class MediaTools
     };
 }
 
+// ── WaitForMessageTool ─────────────────────────────────────
+
+/// <summary>
+/// Creates a tool that dequeues messages from the Workflow Message Queue
+/// (Conductor PULL_WORKFLOW_MESSAGES task). No worker process is needed —
+/// the server handles the task directly.
+///
+/// Use <see cref="AgentRuntime.SendMessageAsync"/> to push messages from outside the workflow.
+/// </summary>
+public static class WaitForMessageTool
+{
+    /// <summary>
+    /// Create a tool that dequeues messages from the Workflow Message Queue.
+    /// </summary>
+    /// <param name="name">Tool name (shown to the LLM).</param>
+    /// <param name="description">Human-readable description for the LLM.</param>
+    /// <param name="batchSize">Maximum number of messages to dequeue per invocation (default 1).</param>
+    /// <param name="blocking">If true (default), the task blocks until at least one message is available.</param>
+    public static ToolDef Create(
+        string name        = "wait_for_message",
+        string description = "Wait until a message is sent to this agent, then return its contents.",
+        int    batchSize   = 1,
+        bool   blocking    = true)
+    {
+        var schema = new JsonObject
+        {
+            ["type"]       = "object",
+            ["properties"] = new JsonObject(),
+        };
+        var config = new Dictionary<string, object> { ["batchSize"] = batchSize };
+        if (!blocking) config["blocking"] = false;
+        return new ToolDef
+        {
+            Name        = name,
+            Description = description,
+            InputSchema = schema,
+            ToolType    = "pull_workflow_messages",
+            Config      = config,
+        };
+    }
+}
+
+// ── ApiTools ────────────────────────────────────────────────
+
+/// <summary>
+/// Creates tools from an OpenAPI spec, Swagger spec, or Postman collection.
+/// At compile time the server discovers API operations and expands them
+/// into individual tools. No worker process needed — calls execute as
+/// Conductor HTTP tasks.
+/// </summary>
+public static class ApiTools
+{
+    /// <summary>
+    /// Create tool(s) from an OpenAPI spec URL, Swagger spec, or base URL for auto-discovery.
+    /// </summary>
+    /// <param name="url">URL to the spec or base URL for auto-discovery.</param>
+    /// <param name="name">Override name (defaults to spec title).</param>
+    /// <param name="description">Override description.</param>
+    /// <param name="headers">Global HTTP headers applied to all endpoints (use ${NAME} for credential placeholders).</param>
+    /// <param name="toolNames">Optional whitelist of operation IDs to include.</param>
+    /// <param name="maxTools">If operations exceed this, LLM selects the most relevant (default 64).</param>
+    /// <param name="credentials">Credential names referenced by ${NAME} in headers.</param>
+    public static ToolDef Create(
+        string                      url,
+        string?                     name        = null,
+        string?                     description = null,
+        Dictionary<string, string>? headers     = null,
+        List<string>?               toolNames   = null,
+        int                         maxTools    = 64,
+        string[]?                   credentials = null)
+    {
+        var config = new Dictionary<string, object> { ["url"] = url };
+        if (headers    is not null) config["headers"]    = headers;
+        if (toolNames  is not null) config["tool_names"] = toolNames;
+        config["max_tools"] = maxTools;
+
+        return new ToolDef
+        {
+            Name        = name        ?? "api_tools",
+            Description = description ?? $"API tools from {url}",
+            ToolType    = "api",
+            Config      = config,
+            Credentials = credentials ?? [],
+        };
+    }
+}
+
 // ── ToolRegistry ───────────────────────────────────────────
 
 /// <summary>Build <see cref="ToolDef"/> instances from class instances using reflection.</summary>

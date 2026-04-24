@@ -278,6 +278,27 @@ public sealed class AgentHandle
     public async Task RejectAsync(string? reason = null, CancellationToken cancellationToken = default)
         => await _http.RespondAsync(_executionId, new { approved = false, reason }, cancellationToken);
 
+    /// <summary>
+    /// Gracefully stop the agent execution. Sets _stop_requested to true — the
+    /// agent's loop exits after the current iteration completes. Status → COMPLETED.
+    /// Also unblocks any blocking WaitForMessage calls.
+    /// </summary>
+    public async Task StopAsync(CancellationToken cancellationToken = default)
+        => await _http.StopAgentAsync(_executionId, cancellationToken);
+
+    /// <summary>Gracefully stop the agent execution (synchronous).</summary>
+    public void Stop() => StopAsync().GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Immediately cancel the agent execution. Status → TERMINATED.
+    /// For graceful stop, use <see cref="StopAsync"/> instead.
+    /// </summary>
+    public async Task CancelAsync(string reason = "", CancellationToken cancellationToken = default)
+        => await _http.CancelAgentAsync(_executionId, reason, cancellationToken);
+
+    /// <summary>Immediately cancel the agent execution (synchronous).</summary>
+    public void Cancel(string reason = "") => CancelAsync(reason).GetAwaiter().GetResult();
+
     private static AgentResult BuildResult(JsonNode status, string statusStr, JsonNode? execution = null)
     {
         var output = status["output"];

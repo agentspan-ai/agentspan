@@ -56,12 +56,75 @@ public sealed class Agent
     public List<GuardrailDef> Guardrails { get; set; } = [];
     public TerminationCondition? Termination { get; set; }
     public Dictionary<string, List<string>>? AllowedTransitions { get; set; }
+    /// <summary>
+    /// If true, each worker tool for this agent uses domain-based routing so that
+    /// all tasks for this execution are sent to the same worker process.
+    /// Required for agents that use WaitForMessageTool in stateful (long-running) mode.
+    /// </summary>
+    public bool Stateful { get; set; }
 
     public Agent(string name)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Agent name cannot be empty.", nameof(name));
         Name = name;
+    }
+
+    /// <summary>
+    /// Create a scatter-gather coordinator agent.
+    ///
+    /// The coordinator decomposes a problem into N independent sub-tasks,
+    /// dispatches the worker agent N times in parallel (via agent_tool),
+    /// and synthesizes the results. N is determined at runtime by the LLM.
+    /// </summary>
+    /// <param name="name">Name for the coordinator agent.</param>
+    /// <param name="worker">The worker Agent that handles each sub-task.</param>
+    /// <param name="model">LLM model for the coordinator. Defaults to worker's model.</param>
+    /// <param name="instructions">Additional instructions appended after the auto-generated prefix.</param>
+    /// <param name="tools">Extra tools for the coordinator (in addition to the worker tool).</param>
+    /// <param name="retryCount">Retries per sub-task on failure.</param>
+    /// <param name="retryDelaySeconds">Delay between retries in seconds.</param>
+    /// <param name="failFast">When true, a single sub-task failure fails the whole scatter-gather.</param>
+    /// <param name="timeoutSeconds">Overall timeout (defaults to 300s for scatter-gather).</param>
+    public static Agent ScatterGather(
+        string        name,
+        Agent         worker,
+        string?       model              = null,
+        string?       instructions       = null,
+        List<ToolDef>? tools             = null,
+        int?          retryCount         = null,
+        int?          retryDelaySeconds  = null,
+        bool          failFast           = false,
+        int?          timeoutSeconds     = null)
+    {
+        const string prefix =
+            "You are a coordinator that decomposes problems into independent sub-tasks.\n\n" +
+            "WORKFLOW:\n" +
+            "1. Analyze the input and identify independent sub-problems\n" +
+            "2. Call the '{worker}' tool MULTIPLE TIMES IN PARALLEL — once per sub-problem, each with a clear, self-contained prompt\n" +
+            "3. After all results return, synthesize them into a unified answer\n\n" +
+            "IMPORTANT: Issue all '{worker}' tool calls in a SINGLE response to maximize parallelism.\n";
+
+        var workerTool = AgentTool.Create(
+            agent:              worker,
+            retryCount:         retryCount,
+            retryDelaySeconds:  retryDelaySeconds,
+            optional:           !failFast ? true : null);
+
+        var allTools = new List<ToolDef> { workerTool };
+        if (tools is not null) allTools.AddRange(tools);
+
+        var fullInstructions = instructions is not null
+            ? prefix.Replace("{worker}", worker.Name) + "\n" + instructions
+            : prefix.Replace("{worker}", worker.Name);
+
+        return new Agent(name)
+        {
+            Model          = model ?? worker.Model,
+            Instructions   = fullInstructions,
+            Tools          = allTools,
+            TimeoutSeconds = timeoutSeconds ?? 300,
+        };
     }
 
     /// <summary>Sequential pipeline: left >> right >> ...</summary>

@@ -83,6 +83,45 @@ internal sealed class AgentHttpClient : IDisposable
         resp.EnsureSuccessStatusCode();
     }
 
+    /// <summary>Push a message into a running agent's Workflow Message Queue.</summary>
+    public async Task SendWorkflowMessageAsync(string executionId, object message, CancellationToken ct = default)
+    {
+        object payload = message is string s
+            ? new Dictionary<string, object> { ["message"] = s }
+            : message;
+        var json = JsonSerializer.Serialize(payload, AgentspanJson.Options);
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var resp = await _client.PostAsync($"{_baseUrl}/workflow/{executionId}/messages", content, ct);
+        resp.EnsureSuccessStatusCode();
+    }
+
+    /// <summary>Gracefully stop an agent — sets _stop_requested and unblocks WMQ waits.</summary>
+    public async Task StopAgentAsync(string executionId, CancellationToken ct = default)
+    {
+        // Signal the agent to stop
+        using var emptyContent = new StringContent("{}", Encoding.UTF8, "application/json");
+        using var resp = await _client.PostAsync($"{_baseUrl}/agent/{executionId}/stop", emptyContent, ct);
+        // Best-effort — ignore failures (agent may have already completed)
+
+        // Also unblock any blocking PULL_WORKFLOW_MESSAGES wait
+        try
+        {
+            await SendWorkflowMessageAsync(executionId, new Dictionary<string, object> { ["_signal"] = "stop" }, ct);
+        }
+        catch { /* ignore — WMQ may not be enabled */ }
+    }
+
+    /// <summary>Immediately cancel an agent execution (TERMINATED status).</summary>
+    public async Task CancelAgentAsync(string executionId, string reason = "", CancellationToken ct = default)
+    {
+        var url = string.IsNullOrEmpty(reason)
+            ? $"{_baseUrl}/workflow/{executionId}"
+            : $"{_baseUrl}/workflow/{executionId}?reason={Uri.EscapeDataString(reason)}";
+        using var req = new HttpRequestMessage(HttpMethod.Delete, url);
+        using var resp = await _client.SendAsync(req, ct);
+        // Best-effort
+    }
+
     // ── SSE streaming ───────────────────────────────────────
 
     public async IAsyncEnumerable<AgentEvent> StreamEventsAsync(
