@@ -22,7 +22,7 @@ Execute these steps IN ORDER. Call multiple tools at once when they are independ
 
 Step 1 — Fetch issue AND check contextbook (parallel — 2 tools at once):
   contextbook_read()
-  run_command("gh issue view <N> --repo {repo} --json number,title,body,author,labels,comments")
+  run_command("gh issue view <N> --repo {repo} --json number,title,body,author,labels,comments,assignees,milestone,state,createdAt,updatedAt,closedAt,reactionGroups")
 
 Step 2 — Clone and branch (4 sequential commands):
   run_command("gh repo clone {repo} .")
