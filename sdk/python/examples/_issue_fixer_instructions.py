@@ -82,17 +82,22 @@ PHASE 3 — Review e2e test patterns (1-2 turns):
     And 1-2 test_suite*.py files relevant to the module
 
 PHASE 4 — WRITE THE PLAN (this is your most important job):
-  You MUST call contextbook_write for BOTH of these before you hand off:
+  You MUST write the plan to BOTH the contextbook AND the docs folder.
 
-  contextbook_write("implementation_plan", "...") with:
+  First, write the implementation plan as a markdown file:
+    run_command("mkdir -p {docs_plan_dir}")
+    write_file("{docs_plan_dir}/issue-<N>-plan.md", "<full plan>")
+
+  The plan must contain:
     - Root cause: what's broken and why
     - Files to change: exact paths and functions
     - Changes: what to do in each file, with enough detail for the Coder to implement
+    - Test strategy: which tests to add, what assertions
     - Risks and edge cases
 
-  contextbook_write("test_plan", "...") with:
-    - Which existing e2e suites cover this area
-    - New test cases needed (specific assertions, deterministic, no mocks)
+  Then write to contextbook (for agent communication):
+    contextbook_write("implementation_plan", "<same plan content>")
+    contextbook_write("test_plan", "<test strategy section>")
 
 PHASE 5 — HAND OFF:
   contextbook_write("status", "Plan complete. Ready for implementation.")
@@ -231,15 +236,21 @@ IF BUG FIX:
   - Done. Output the final status.
 
 IF FEATURE:
-  You MUST do BOTH of these:
+  You MUST do ALL THREE of these:
 
-  1. UPDATE DOCUMENTATION:
+  1. WRITE DESIGN DOC:
+     - Create a design doc in the docs folder:
+       run_command("mkdir -p {docs_design_dir}")
+       write_file("{docs_design_dir}/issue-<N>-<feature-slug>.md", "<design doc>")
+     - The design doc should explain: what the feature does, API surface, usage examples
+
+  2. UPDATE DOCUMENTATION:
      - Find the relevant doc file: glob_find("**/*.md", "docs/")
      - Read the existing docs: read_file("docs/python-sdk/api-reference.md") or similar
      - Add/update documentation for the new feature using edit_file or write_file
      - Documentation should explain: what the feature does, how to use it, parameters
 
-  2. CREATE AN EXAMPLE (MANDATORY for features):
+  3. CREATE AN EXAMPLE (MANDATORY for features):
      - Read 1-2 existing examples for patterns: list_directory("sdk/python/examples/")
      - Pick the next available number: e.g., if 97 is the last, create 98_<feature>.py
      - write_file("sdk/python/examples/<NN>_<feature_name>.py", "<example code>")
@@ -251,8 +262,8 @@ IF FEATURE:
      - Read the existing examples README: read_file("sdk/python/examples/README.md")
      - Add the new example to the README with edit_file
 
-  3. COMMIT:
-     run_command("git add -A -- ':!.contextbook' && git commit -m 'docs: add documentation and example for <feature>'")
+  4. COMMIT:
+     run_command("git add -A -- ':!.contextbook' && git commit -m 'docs: add design doc, documentation, and example for <feature>'")
 
   Output a summary of what docs/examples were created.
 
