@@ -626,13 +626,19 @@ public static class CliTool
             Credentials = credentials ?? [],
             Handler     = async (args, _ctx) =>
             {
-                var command = args.TryGetValue("command", out var cmdEl) && cmdEl.ValueKind == JsonValueKind.String
+                var rawCommand = args.TryGetValue("command", out var cmdEl) && cmdEl.ValueKind == JsonValueKind.String
                     ? cmdEl.GetString() ?? ""
                     : "";
-                if (string.IsNullOrEmpty(command))
+                if (string.IsNullOrEmpty(rawCommand))
                     return (object)new Dictionary<string, object> { ["status"] = "error", ["stderr"] = "No command provided." };
 
-                // Validate whitelist
+                // If the LLM packed "gh repo list ..." into the command field, split it.
+                // The first token is the executable; the rest prepend to args.
+                var cmdParts = rawCommand.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                var command  = cmdParts[0];
+                var prefixArgs = cmdParts.Length > 1 ? cmdParts[1..].ToList() : [];
+
+                // Validate whitelist against the executable name (first token, basename)
                 if (allowed.Count > 0)
                 {
                     var baseName = System.IO.Path.GetFileName(command);
@@ -644,9 +650,10 @@ public static class CliTool
                         };
                 }
 
-                var argsList = args.TryGetValue("args", out var argsEl) && argsEl.ValueKind == JsonValueKind.Array
+                var explicitArgs = args.TryGetValue("args", out var argsEl) && argsEl.ValueKind == JsonValueKind.Array
                     ? argsEl.EnumerateArray().Select(e => e.GetString() ?? "").ToList()
                     : [];
+                var argsList = prefixArgs.Concat(explicitArgs).ToList();
                 var cwd  = args.TryGetValue("cwd",  out var cwdEl)  && cwdEl.ValueKind  == JsonValueKind.String  ? cwdEl.GetString()  : null;
                 var shell = args.TryGetValue("shell", out var shEl) && shEl.ValueKind   == JsonValueKind.True;
 
