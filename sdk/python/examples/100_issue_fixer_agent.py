@@ -39,7 +39,7 @@ from _issue_fixer_tools import (
     git_diff, git_log, git_blame,
     lint_and_format, build_check, run_unit_tests, run_e2e_tests,
     contextbook_write, contextbook_read, contextbook_summary,
-    run_command,
+    run_command, web_fetch,
 )
 
 # ── Project-Specific Configuration ────────────────────────────
@@ -134,7 +134,7 @@ tech_lead = Agent(
     tools=[
         read_file, grep_search, glob_find, list_directory,
         file_outline, search_symbols, find_references,
-        git_log, git_blame, run_command,
+        git_log, git_blame, run_command, web_fetch,
         contextbook_write, contextbook_read, contextbook_summary,
     ],
     instructions=TECH_LEAD_INSTRUCTIONS.format(**_fmt),
@@ -156,7 +156,7 @@ coder = Agent(
         read_file, write_file, edit_file, apply_patch,
         grep_search, glob_find, list_directory,
         file_outline, search_symbols, find_references,
-        git_diff, git_log, run_command,
+        git_diff, git_log, run_command, web_fetch,
         lint_and_format, build_check, run_unit_tests,
         contextbook_write, contextbook_read, contextbook_summary,
     ],
@@ -231,7 +231,7 @@ docs_agent = Agent(
     tools=[
         read_file, write_file, edit_file,
         grep_search, glob_find, list_directory,
-        file_outline, git_diff, run_command,
+        file_outline, git_diff, run_command, web_fetch,
         contextbook_read, contextbook_summary,
     ],
     instructions=DOCS_AGENT_INSTRUCTIONS.format(**_fmt),
