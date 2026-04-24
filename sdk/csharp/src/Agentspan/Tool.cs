@@ -83,13 +83,15 @@ public sealed class ToolDef
     public bool External { get; init; }
     public int? TimeoutSeconds { get; init; }
     public string[] Credentials { get; init; } = [];
-    /// <summary>Tool type: "worker" (default), "agent_tool", or "external".</summary>
+    /// <summary>Tool type: "worker" (default), "agent_tool", "external", or media types.</summary>
     internal string? ToolType { get; init; }
     /// <summary>For agent_tool: the wrapped agent and its runtime config.</summary>
     internal Agent? WrappedAgent { get; init; }
     internal int? AgentToolRetryCount { get; init; }
     internal int? AgentToolRetryDelaySeconds { get; init; }
     internal bool? AgentToolOptional { get; init; }
+    /// <summary>For server-side tools (media, pdf): static config passed to Conductor.</summary>
+    internal Dictionary<string, object>? Config { get; init; }
     // The backing delegate — null for remote/server-registered tools.
     internal Func<Dictionary<string, JsonElement>, ToolContext?, Task<object?>>? Handler { get; init; }
 }
@@ -146,6 +148,139 @@ public static class AgentTool
             AgentToolOptional         = optional,
         };
     }
+}
+
+// ── MediaTools ─────────────────────────────────────────────
+
+/// <summary>
+/// Factory methods for server-side media generation tools (no worker process needed).
+/// The Conductor server calls the AI provider directly.
+/// </summary>
+public static class MediaTools
+{
+    /// <summary>Create a tool that generates images (Conductor GENERATE_IMAGE task).</summary>
+    public static ToolDef Image(
+        string name,
+        string description,
+        string llmProvider,
+        string model,
+        JsonObject? inputSchema = null,
+        Dictionary<string, object>? extra = null)
+    {
+        var schema = inputSchema ?? DefaultImageSchema();
+        var config = new Dictionary<string, object>
+        {
+            ["taskType"]    = "GENERATE_IMAGE",
+            ["llmProvider"] = llmProvider,
+            ["model"]       = model,
+        };
+        if (extra is not null) foreach (var (k, v) in extra) config[k] = v;
+        return new ToolDef { Name = name, Description = description, InputSchema = schema, ToolType = "generate_image", Config = config };
+    }
+
+    /// <summary>Create a tool that generates audio / TTS (Conductor GENERATE_AUDIO task).</summary>
+    public static ToolDef Audio(
+        string name,
+        string description,
+        string llmProvider,
+        string model,
+        JsonObject? inputSchema = null,
+        Dictionary<string, object>? extra = null)
+    {
+        var schema = inputSchema ?? DefaultAudioSchema();
+        var config = new Dictionary<string, object>
+        {
+            ["taskType"]    = "GENERATE_AUDIO",
+            ["llmProvider"] = llmProvider,
+            ["model"]       = model,
+        };
+        if (extra is not null) foreach (var (k, v) in extra) config[k] = v;
+        return new ToolDef { Name = name, Description = description, InputSchema = schema, ToolType = "generate_audio", Config = config };
+    }
+
+    /// <summary>Create a tool that generates video (Conductor GENERATE_VIDEO task).</summary>
+    public static ToolDef Video(
+        string name,
+        string description,
+        string llmProvider,
+        string model,
+        JsonObject? inputSchema = null,
+        Dictionary<string, object>? extra = null)
+    {
+        var schema = inputSchema ?? DefaultVideoSchema();
+        var config = new Dictionary<string, object>
+        {
+            ["taskType"]    = "GENERATE_VIDEO",
+            ["llmProvider"] = llmProvider,
+            ["model"]       = model,
+        };
+        if (extra is not null) foreach (var (k, v) in extra) config[k] = v;
+        return new ToolDef { Name = name, Description = description, InputSchema = schema, ToolType = "generate_video", Config = config };
+    }
+
+    /// <summary>Create a tool that generates PDFs from markdown (Conductor GENERATE_PDF task).</summary>
+    public static ToolDef Pdf(
+        string name = "generate_pdf",
+        string description = "Generate a PDF document from markdown text.",
+        JsonObject? inputSchema = null,
+        Dictionary<string, object>? extra = null)
+    {
+        var schema = inputSchema ?? DefaultPdfSchema();
+        var config = new Dictionary<string, object> { ["taskType"] = "GENERATE_PDF" };
+        if (extra is not null) foreach (var (k, v) in extra) config[k] = v;
+        return new ToolDef { Name = name, Description = description, InputSchema = schema, ToolType = "generate_pdf", Config = config };
+    }
+
+    private static JsonObject DefaultImageSchema() => new()
+    {
+        ["type"] = "object",
+        ["properties"] = new JsonObject
+        {
+            ["prompt"]  = new JsonObject { ["type"] = "string", ["description"] = "Text description of the image to generate." },
+            ["style"]   = new JsonObject { ["type"] = "string", ["description"] = "Image style: 'vivid' or 'natural'." },
+            ["width"]   = new JsonObject { ["type"] = "integer", ["description"] = "Image width in pixels.", ["default"] = 1024 },
+            ["height"]  = new JsonObject { ["type"] = "integer", ["description"] = "Image height in pixels.", ["default"] = 1024 },
+            ["size"]    = new JsonObject { ["type"] = "string", ["description"] = "Image size (e.g. '1024x1024'). Alternative to width/height." },
+            ["n"]       = new JsonObject { ["type"] = "integer", ["description"] = "Number of images to generate.", ["default"] = 1 },
+        },
+        ["required"] = new JsonArray { "prompt" },
+    };
+
+    private static JsonObject DefaultAudioSchema() => new()
+    {
+        ["type"] = "object",
+        ["properties"] = new JsonObject
+        {
+            ["text"]  = new JsonObject { ["type"] = "string", ["description"] = "Text to convert to speech." },
+            ["voice"] = new JsonObject { ["type"] = "string", ["description"] = "Voice to use.", ["enum"] = new JsonArray { "alloy", "echo", "fable", "onyx", "nova", "shimmer" }, ["default"] = "alloy" },
+            ["speed"] = new JsonObject { ["type"] = "number", ["description"] = "Speech speed multiplier (0.25 to 4.0).", ["default"] = 1.0 },
+        },
+        ["required"] = new JsonArray { "text" },
+    };
+
+    private static JsonObject DefaultVideoSchema() => new()
+    {
+        ["type"] = "object",
+        ["properties"] = new JsonObject
+        {
+            ["prompt"]   = new JsonObject { ["type"] = "string", ["description"] = "Text description of the video scene." },
+            ["duration"] = new JsonObject { ["type"] = "integer", ["description"] = "Video duration in seconds.", ["default"] = 5 },
+            ["size"]     = new JsonObject { ["type"] = "string", ["description"] = "Video size (e.g. '1280x720')." },
+        },
+        ["required"] = new JsonArray { "prompt" },
+    };
+
+    private static JsonObject DefaultPdfSchema() => new()
+    {
+        ["type"] = "object",
+        ["properties"] = new JsonObject
+        {
+            ["markdown"]     = new JsonObject { ["type"] = "string", ["description"] = "Markdown text to convert to PDF." },
+            ["pageSize"]     = new JsonObject { ["type"] = "string", ["description"] = "Page size: A4, LETTER, LEGAL, A3, or A5.", ["default"] = "A4" },
+            ["theme"]        = new JsonObject { ["type"] = "string", ["description"] = "Style preset: 'default' or 'compact'.", ["default"] = "default" },
+        },
+        ["required"] = new JsonArray { "markdown" },
+    };
 }
 
 // ── ToolRegistry ───────────────────────────────────────────

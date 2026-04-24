@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Agentspan
 // Licensed under the MIT License.
 
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Agentspan;
@@ -38,8 +39,16 @@ public sealed class Agent
     public int? TimeoutSeconds { get; set; }
     public bool External { get; set; }
     public bool Planner { get; set; }
+    public bool LocalCodeExecution { get; set; }
+    public List<string>? AllowedLanguages { get; set; }
+    public List<string>? AllowedCommands { get; set; }
+    public CodeExecutionConfig? CodeExecution { get; set; }
     public string? IncludeContents { get; set; }
     public int? ThinkingBudgetTokens { get; set; }
+    /// <summary>Called before each LLM invocation. Receives the messages list; return empty dict to continue, non-empty to skip LLM.</summary>
+    public Func<List<JsonElement>?, Dictionary<string, object>?>? BeforeModelCallback { get; set; }
+    /// <summary>Called after each LLM invocation. Receives the LLM result; return empty dict to keep, non-empty to override.</summary>
+    public Func<string?, Dictionary<string, object>?>? AfterModelCallback { get; set; }
     public List<string>? RequiredTools { get; set; }
     public string? Introduction { get; set; }
     public Dictionary<string, object>? Metadata { get; set; }

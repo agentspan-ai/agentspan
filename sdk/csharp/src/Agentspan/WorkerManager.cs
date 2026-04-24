@@ -326,6 +326,7 @@ internal sealed class WorkerManager : IAsyncDisposable
     {
         RegisterTools(agent.Tools);
         RegisterGuardrails(agent.Guardrails);
+        RegisterCallbacks(agent);
 
         if (agent.Strategy == Strategy.Swarm && agent.Agents.Count > 0)
             RegisterSwarmTransferWorkers(agent);
@@ -343,6 +344,37 @@ internal sealed class WorkerManager : IAsyncDisposable
         {
             if (tool.ToolType == "agent_tool" && tool.WrappedAgent is not null)
                 RegisterAgentTools(tool.WrappedAgent);
+        }
+    }
+
+    private void RegisterCallbacks(Agent agent)
+    {
+        if (agent.BeforeModelCallback is not null)
+        {
+            var cb = agent.BeforeModelCallback;
+            var taskName = $"{agent.Name}_before_model";
+            _workers.Add(new WorkerPollLoop(_http, taskName, (args, _) =>
+            {
+                List<JsonElement>? messages = null;
+                if (args.TryGetValue("messages", out var msgEl) && msgEl.ValueKind == JsonValueKind.Array)
+                    messages = msgEl.EnumerateArray().ToList();
+                var result = cb(messages);
+                return Task.FromResult<object?>(result ?? new Dictionary<string, object>());
+            }));
+        }
+
+        if (agent.AfterModelCallback is not null)
+        {
+            var cb = agent.AfterModelCallback;
+            var taskName = $"{agent.Name}_after_model";
+            _workers.Add(new WorkerPollLoop(_http, taskName, (args, _) =>
+            {
+                string? llmResult = args.TryGetValue("llm_result", out var resEl) && resEl.ValueKind == JsonValueKind.String
+                    ? resEl.GetString()
+                    : null;
+                var result = cb(llmResult);
+                return Task.FromResult<object?>(result ?? new Dictionary<string, object>());
+            }));
         }
     }
 

@@ -42,6 +42,29 @@ internal static class AgentConfigSerializer
         if (agent.External)                     cfg["external"]         = true;
         if (agent.Planner)                      cfg["planner"]          = true;
 
+        if (agent.LocalCodeExecution || agent.CodeExecution is not null
+            || agent.AllowedLanguages is not null || agent.AllowedCommands is not null)
+        {
+            var ce = new JsonObject { ["enabled"] = true };
+            var langs = agent.CodeExecution?.AllowedLanguages ?? agent.AllowedLanguages;
+            var cmds  = agent.CodeExecution?.AllowedCommands  ?? agent.AllowedCommands;
+            var timeout = agent.CodeExecution?.Timeout;
+            if (langs is not null && langs.Count > 0)
+            {
+                var arr = new JsonArray();
+                foreach (var l in langs) arr.Add(l);
+                ce["allowedLanguages"] = arr;
+            }
+            if (cmds is not null && cmds.Count > 0)
+            {
+                var arr = new JsonArray();
+                foreach (var c in cmds) arr.Add(c);
+                ce["allowedCommands"] = arr;
+            }
+            if (timeout.HasValue) ce["timeout"] = timeout.Value;
+            cfg["codeExecution"] = ce;
+        }
+
         if (agent.OutputType is not null)
         {
             cfg["outputType"] = new JsonObject
@@ -118,6 +141,15 @@ internal static class AgentConfigSerializer
         if (agent.Metadata is not null)
             cfg["metadata"] = JsonNode.Parse(JsonSerializer.Serialize(agent.Metadata, AgentspanJson.Options))!;
 
+        // Lifecycle callbacks — emit position + taskName pairs
+        var callbackArr = new JsonArray();
+        if (agent.BeforeModelCallback is not null)
+            callbackArr.Add(new JsonObject { ["position"] = "before_model", ["taskName"] = $"{agent.Name}_before_model" });
+        if (agent.AfterModelCallback is not null)
+            callbackArr.Add(new JsonObject { ["position"] = "after_model",  ["taskName"] = $"{agent.Name}_after_model" });
+        if (callbackArr.Count > 0)
+            cfg["callbacks"] = callbackArr;
+
         return cfg;
     }
 
@@ -171,6 +203,12 @@ internal static class AgentConfigSerializer
             if (tool.AgentToolOptional.HasValue)
                 config["optional"] = tool.AgentToolOptional.Value;
             t["config"] = config;
+        }
+
+        // For server-side tools (media, pdf), emit the static config object
+        if (tool.Config is not null && toolType != "agent_tool")
+        {
+            t["config"] = JsonNode.Parse(JsonSerializer.Serialize(tool.Config, AgentspanJson.Options))!;
         }
 
         return t;
