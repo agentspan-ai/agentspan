@@ -397,3 +397,92 @@ RULES:
 - Do NOT read source files. Do NOT try to implement anything.
 - If git push fails, try: git push --set-upstream origin $(git branch --show-current)
 """
+
+PR_FEEDBACK_INSTRUCTIONS = """\
+You fetch PR comments and review feedback, then prepare the repo for addressing them.
+
+IMPORTANT: All tools operate in a shared working directory. Clone the repo to "." (current dir).
+
+Execute these steps IN ORDER. Call multiple tools at once when independent.
+
+Step 1 — Fetch PR details and comments (parallel — multiple tools):
+  run_command("gh pr view <PR_NUMBER> --repo {repo} --json number,title,body,state,headRefName,comments,reviews,reviewRequests")
+  run_command("gh pr diff <PR_NUMBER> --repo {repo}")
+  contextbook_read()
+
+Step 2 — Clone and checkout the PR branch:
+  run_command("gh repo clone {repo} .")
+  run_command("echo '.contextbook/' >> .gitignore")
+  Extract the branch name from the PR data (headRefName field).
+  run_command("git checkout <branch_name>")
+
+Step 3 — Fetch the issue for full context:
+  Extract the issue number from the PR body (look for "Fixes #N" or "#N" references).
+  run_command("gh issue view <N> --repo {repo} --json number,title,body,author,labels,comments,assignees,milestone,state,createdAt,updatedAt,closedAt,reactionGroups")
+
+Step 4 — Parse and write all feedback to contextbook:
+  Extract ALL review comments and PR comments. For each, capture:
+  - Who commented (author)
+  - What they said (body)
+  - Which file/line they commented on (if inline review)
+  - Whether it's a request for changes, approval, or general comment
+
+  contextbook_write("issue_context", "<issue JSON>")
+  contextbook_write("review_findings", "<structured list of ALL feedback items>")
+  contextbook_write("status", "PR feedback collected. Ready for implementation.")
+
+  If any comment references external links, use web_fetch to read them and include
+  the relevant context in review_findings.
+
+Step 5 — Output a summary of the feedback to address.
+
+RULES:
+- Capture ALL comments — don't skip any.
+- Inline review comments must include the file path and line number.
+- Distinguish between: requested changes, suggestions, questions, approvals.
+"""
+
+PR_UPDATER_INSTRUCTIONS = """\
+You push changes and update an existing PR. Changes were already committed by previous agents.
+Complete in 5 turns or fewer.
+
+STEP 1 — Read context (1 turn, parallel):
+  contextbook_read("change_log")
+  contextbook_read("change_context")
+  contextbook_read("review_findings")
+  run_command("git branch --show-current")
+  run_command("git log --oneline -10")
+
+STEP 2 — Push (1 turn):
+  run_command("git add -A -- ':!.contextbook' && git status --short")
+  If changes: run_command("git commit -m 'fix: address PR feedback' && git push origin HEAD")
+  If no changes: run_command("git push origin HEAD")
+
+STEP 3 — Add a comment to the PR summarizing what was addressed (1 turn):
+  Build a comment that lists each feedback item and how it was addressed.
+  run_command("gh pr comment <PR_NUMBER> --repo {repo} --body '<comment>'")
+
+  The comment should follow this structure:
+  ## Feedback Addressed
+
+  | Feedback | Resolution |
+  |----------|------------|
+  | <reviewer comment 1> | <what was done> |
+  | <reviewer comment 2> | <what was done> |
+
+  <details>
+  <summary>Change Context</summary>
+
+  ```json
+  <change_context JSON>
+  ```
+
+  </details>
+
+STEP 4 — Output the PR URL. STOP.
+
+RULES:
+- Do NOT create a new PR. Update the existing one by pushing to the same branch.
+- Add a PR comment summarizing changes — don't edit the PR body.
+- Extract PR number from the prompt or contextbook.
+"""
