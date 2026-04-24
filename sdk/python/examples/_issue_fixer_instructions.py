@@ -172,6 +172,10 @@ CRITICAL RULES:
 - After git commit, your VERY NEXT response must be the HANDOFF text with ZERO tool calls.
 - The handoff text must be the ONLY content — no explanations, no summaries.
 - Do NOT keep reading files after committing.
+- Do NOT call contextbook_summary or contextbook_read more than 3 times total.
+  If you've read the contextbook and don't know what to do, STOP — output a
+  summary of what you've done so far and let the next agent take over.
+- If you find yourself repeating the same tool call, STOP immediately.
 """
 
 DG_REVIEWER_INSTRUCTIONS = """\
