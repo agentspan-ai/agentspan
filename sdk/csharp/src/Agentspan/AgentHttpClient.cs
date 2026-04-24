@@ -41,6 +41,21 @@ internal sealed class AgentHttpClient : IDisposable
             ?? throw new AgentApiException(200, "No executionId in start response");
     }
 
+    /// <summary>Compile an agent to a Conductor WorkflowDef without executing it.</summary>
+    public async Task<JsonNode?> CompileAsync(JsonObject agentConfig, CancellationToken ct = default)
+    {
+        var payload = new JsonObject { ["agentConfig"] = agentConfig };
+        var json = payload.ToJsonString();
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var resp = await _client.PostAsync($"{_baseUrl}/agent/compile", content, ct);
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync(ct);
+            throw new AgentApiException((int)resp.StatusCode, $"{resp.ReasonPhrase}: {body}", body);
+        }
+        return await resp.Content.ReadFromJsonAsync<JsonNode>(cancellationToken: ct);
+    }
+
     public async Task<JsonNode?> GetStatusAsync(string executionId, CancellationToken ct = default)
     {
         using var resp = await _client.GetAsync($"{_baseUrl}/agent/{executionId}/status", ct);

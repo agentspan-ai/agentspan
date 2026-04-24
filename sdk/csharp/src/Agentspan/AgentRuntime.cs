@@ -31,6 +31,25 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
         _http = new AgentHttpClient(serverUrl, authKey, authSecret);
     }
 
+    // ── Plan (dry-run compile) ────────────────────────────────
+
+    /// <summary>
+    /// Compile an agent to a Conductor WorkflowDef without executing it.
+    /// Returns the raw server response including the workflow definition.
+    /// Useful for inspecting, debugging, or CI/CD validation.
+    /// </summary>
+    public JsonNode? Plan(Agent agent) => PlanAsync(agent).GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Compile an agent to a Conductor WorkflowDef without executing it.
+    /// Returns the raw server response including the workflow definition.
+    /// </summary>
+    public async Task<JsonNode?> PlanAsync(Agent agent, CancellationToken ct = default)
+    {
+        var agentConfig = AgentConfigSerializer.SerializeAgent(agent);
+        return await _http.CompileAsync(agentConfig, ct);
+    }
+
     // ── Synchronous convenience wrappers ────────────────────
 
     /// <summary>Run an agent synchronously (blocks until done).</summary>
