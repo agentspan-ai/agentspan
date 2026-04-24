@@ -31,6 +31,53 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
         _http = new AgentHttpClient(serverUrl, authKey, authSecret);
     }
 
+    // ── Deploy / Serve ────────────────────────────────────────
+
+    /// <summary>
+    /// Compile and register an agent's workflow on the server without executing it.
+    /// This is a CI/CD step: push agent definitions without starting workers.
+    /// </summary>
+    public DeploymentInfo[] Deploy(params Agent[] agents) => DeployAsync(agents).GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Compile and register agents on the server without executing them.
+    /// Returns one <see cref="DeploymentInfo"/> per agent.
+    /// </summary>
+    public async Task<DeploymentInfo[]> DeployAsync(params Agent[] agents)
+    {
+        var results = new DeploymentInfo[agents.Length];
+        for (int i = 0; i < agents.Length; i++)
+        {
+            var agentConfig = AgentConfigSerializer.SerializeAgent(agents[i]);
+            var registeredName = await _http.DeployAsync(agentConfig);
+            results[i] = new DeploymentInfo(RegisteredName: registeredName, AgentName: agents[i].Name);
+        }
+        return results;
+    }
+
+    /// <summary>
+    /// Register local tool workers and block until <paramref name="ct"/> is cancelled.
+    /// The workflow must already exist on the server (deployed via <see cref="DeployAsync"/>
+    /// or a prior <see cref="RunAsync"/> call in any process).
+    /// </summary>
+    public async Task ServeAsync(Agent agent, CancellationToken ct = default)
+        => await ServeAsync(ct, agent);
+
+    /// <summary>
+    /// Register local tool workers for multiple agents and block until cancelled.
+    /// </summary>
+    public async Task ServeAsync(CancellationToken ct = default, params Agent[] agents)
+    {
+        _workers ??= new WorkerManager(_http);
+        foreach (var agent in agents)
+            _workers.RegisterAgentTools(agent);
+        _workers.Start();
+
+        try { await Task.Delay(Timeout.Infinite, ct); }
+        catch (OperationCanceledException) { }
+        finally { await StopWorkersAsync(); }
+    }
+
     // ── Plan (dry-run compile) ────────────────────────────────
 
     /// <summary>
