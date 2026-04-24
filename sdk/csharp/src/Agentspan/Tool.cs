@@ -575,6 +575,157 @@ public static class ApiTools
     }
 }
 
+// ── CliTool ─────────────────────────────────────────────────
+
+/// <summary>
+/// Creates a <c>run_command</c> worker tool that executes CLI commands locally.
+/// Use this when the LLM needs to run shell commands from a whitelist.
+///
+/// The generated tool accepts: command, args (string[]), cwd (string), shell (bool).
+/// Returns: {status, exit_code, stdout, stderr}.
+/// </summary>
+public static class CliTool
+{
+    /// <summary>
+    /// Create a CLI tool that runs whitelisted commands.
+    /// </summary>
+    /// <param name="allowedCommands">Optional whitelist of allowed command names (e.g. ["git", "ls"]).
+    /// Empty list means no restrictions.</param>
+    /// <param name="name">Tool name shown to the LLM (default: "run_command").</param>
+    /// <param name="timeoutSeconds">Maximum execution time per command (default: 30).</param>
+    /// <param name="credentials">Credential names to inject into the process environment.</param>
+    public static ToolDef Create(
+        IEnumerable<string>? allowedCommands = null,
+        string  name           = "run_command",
+        int     timeoutSeconds = 30,
+        string[]? credentials  = null)
+    {
+        var allowed = allowedCommands?.ToList() ?? [];
+
+        var schema = new JsonObject
+        {
+            ["type"]     = "object",
+            ["properties"] = new JsonObject
+            {
+                ["command"] = new JsonObject { ["type"] = "string",  ["description"] = "The command to run." },
+                ["args"]    = new JsonObject { ["type"] = "array",   ["items"] = new JsonObject { ["type"] = "string" }, ["description"] = "Arguments to pass to the command." },
+                ["cwd"]     = new JsonObject { ["type"] = "string",  ["description"] = "Working directory." },
+                ["shell"]   = new JsonObject { ["type"] = "boolean", ["description"] = "Run in a shell (not recommended)." },
+            },
+            ["required"] = new JsonArray { "command" },
+        };
+
+        var desc = $"Run a CLI command. Timeout: {timeoutSeconds}s.";
+        if (allowed.Count > 0) desc += $" Allowed: {string.Join(", ", allowed)}.";
+
+        return new ToolDef
+        {
+            Name        = name,
+            Description = desc,
+            InputSchema = schema,
+            Credentials = credentials ?? [],
+            Handler     = async (args, _ctx) =>
+            {
+                var command = args.TryGetValue("command", out var cmdEl) && cmdEl.ValueKind == JsonValueKind.String
+                    ? cmdEl.GetString() ?? ""
+                    : "";
+                if (string.IsNullOrEmpty(command))
+                    return (object)new Dictionary<string, object> { ["status"] = "error", ["stderr"] = "No command provided." };
+
+                // Validate whitelist
+                if (allowed.Count > 0)
+                {
+                    var baseName = System.IO.Path.GetFileName(command);
+                    if (!allowed.Contains(baseName, StringComparer.OrdinalIgnoreCase))
+                        return (object)new Dictionary<string, object>
+                        {
+                            ["status"] = "error",
+                            ["stderr"] = $"Command '{baseName}' is not allowed. Allowed: {string.Join(", ", allowed)}",
+                        };
+                }
+
+                var argsList = args.TryGetValue("args", out var argsEl) && argsEl.ValueKind == JsonValueKind.Array
+                    ? argsEl.EnumerateArray().Select(e => e.GetString() ?? "").ToList()
+                    : [];
+                var cwd  = args.TryGetValue("cwd",  out var cwdEl)  && cwdEl.ValueKind  == JsonValueKind.String  ? cwdEl.GetString()  : null;
+                var shell = args.TryGetValue("shell", out var shEl) && shEl.ValueKind   == JsonValueKind.True;
+
+                try
+                {
+                    using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
+                    using var proc = new System.Diagnostics.Process();
+
+                    if (shell)
+                    {
+                        // Build shell command string
+                        var fullCmd = command + " " + string.Join(" ", argsList.Select(a => $"\"{a}\""));
+                        proc.StartInfo = new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName               = Environment.OSVersion.Platform == PlatformID.Win32NT ? "cmd.exe" : "/bin/sh",
+                            Arguments              = Environment.OSVersion.Platform == PlatformID.Win32NT ? $"/c {fullCmd}" : $"-c \"{fullCmd}\"",
+                            RedirectStandardOutput = true,
+                            RedirectStandardError  = true,
+                            UseShellExecute        = false,
+                            CreateNoWindow         = true,
+                            WorkingDirectory       = cwd ?? "",
+                        };
+                    }
+                    else
+                    {
+                        proc.StartInfo = new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName               = command,
+                            RedirectStandardOutput = true,
+                            RedirectStandardError  = true,
+                            UseShellExecute        = false,
+                            CreateNoWindow         = true,
+                            WorkingDirectory       = cwd ?? "",
+                        };
+                        foreach (var a in argsList) proc.StartInfo.ArgumentList.Add(a);
+                    }
+
+                    proc.Start();
+                    var stdout = await proc.StandardOutput.ReadToEndAsync(cts.Token);
+                    var stderr = await proc.StandardError.ReadToEndAsync(cts.Token);
+                    await proc.WaitForExitAsync(cts.Token);
+
+                    return (object)new Dictionary<string, object>
+                    {
+                        ["status"]    = proc.ExitCode == 0 ? "success" : "error",
+                        ["exit_code"] = proc.ExitCode,
+                        ["stdout"]    = stdout,
+                        ["stderr"]    = stderr,
+                    };
+                }
+                catch (OperationCanceledException)
+                {
+                    return (object)new Dictionary<string, object>
+                    {
+                        ["status"] = "error",
+                        ["stderr"] = $"Command timed out after {timeoutSeconds}s",
+                    };
+                }
+                catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 2)
+                {
+                    return (object)new Dictionary<string, object>
+                    {
+                        ["status"] = "error",
+                        ["stderr"] = $"Command not found: {command}",
+                    };
+                }
+                catch (Exception ex)
+                {
+                    return (object)new Dictionary<string, object>
+                    {
+                        ["status"] = "error",
+                        ["stderr"] = ex.Message,
+                    };
+                }
+            },
+        };
+    }
+}
+
 // ── ToolRegistry ───────────────────────────────────────────
 
 /// <summary>Build <see cref="ToolDef"/> instances from class instances using reflection.</summary>

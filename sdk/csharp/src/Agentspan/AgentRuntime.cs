@@ -184,6 +184,41 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
     public void SendMessage(string executionId, object message)
         => SendMessageAsync(executionId, message).GetAwaiter().GetResult();
 
+    // ── Status / respond by execution ID ────────────────────
+
+    /// <summary>Check the current status of an existing execution.</summary>
+    public async Task<AgentStatus> GetStatusAsync(string executionId, CancellationToken ct = default)
+    {
+        var node = await _http.GetStatusAsync(executionId, ct);
+        if (node is null) return new AgentStatus { ExecutionId = executionId };
+        return new AgentStatus
+        {
+            ExecutionId  = node["executionId"]?.GetValue<string>() ?? executionId,
+            IsComplete   = node["isComplete"]?.GetValue<bool>() ?? false,
+            IsRunning    = node["isRunning"]?.GetValue<bool>() ?? false,
+            IsWaiting    = node["isWaiting"]?.GetValue<bool>() ?? false,
+            StatusValue  = node["status"]?.GetValue<string>(),
+            Reason       = node["reason"]?.GetValue<string>(),
+            CurrentTask  = node["currentTask"]?.GetValue<string>(),
+            PendingTool  = node["pendingTool"] is not null
+                ? System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(
+                    node["pendingTool"]!.ToJsonString(), AgentspanJson.Options)
+                : null,
+        };
+    }
+
+    /// <summary>Check the current status of an existing execution (synchronous).</summary>
+    public AgentStatus GetStatus(string executionId)
+        => GetStatusAsync(executionId).GetAwaiter().GetResult();
+
+    /// <summary>Respond to a waiting HITL approval or HumanTool question.</summary>
+    public async Task RespondAsync(string executionId, object response, CancellationToken ct = default)
+        => await _http.RespondAsync(executionId, response, ct);
+
+    /// <summary>Respond to a waiting HITL approval or HumanTool question (synchronous).</summary>
+    public void Respond(string executionId, object response)
+        => RespondAsync(executionId, response).GetAwaiter().GetResult();
+
     // ── Internal ─────────────────────────────────────────────
 
     private async Task<AgentHandle> StartInternalAsync(
