@@ -2812,3 +2812,54 @@ class TestHandoffIndexing:
         # Allowed: coder → qa_tester
         result = handoff_check("qa_tester", "2")
         assert result == {"active_agent": "3", "handoff": True}
+
+
+class TestDefaultTaskDefRetryOverride:
+    """Test _default_task_def() retry override parameters."""
+
+    def test_default_task_def_uses_hardcoded_defaults(self):
+        """_default_task_def('t') uses retry_count=2 and retry_delay_seconds=2 by default."""
+        from agentspan.agents.runtime.runtime import _default_task_def
+
+        td = _default_task_def("test_task")
+        assert td.retry_count == 2
+        assert td.retry_delay_seconds == 2
+
+    def test_default_task_def_overrides_retry_count(self):
+        """_default_task_def('t', retry_count=10) sets retry_count=10."""
+        from agentspan.agents.runtime.runtime import _default_task_def
+
+        td = _default_task_def("test_task", retry_count=10)
+        assert td.retry_count == 10
+        assert td.retry_delay_seconds == 2  # default unchanged
+
+    def test_default_task_def_overrides_retry_delay(self):
+        """_default_task_def('t', retry_delay_seconds=5) sets retry_delay_seconds=5."""
+        from agentspan.agents.runtime.runtime import _default_task_def
+
+        td = _default_task_def("test_task", retry_delay_seconds=5)
+        assert td.retry_count == 2  # default unchanged
+        assert td.retry_delay_seconds == 5
+
+    def test_default_task_def_zero_retry_count(self):
+        """_default_task_def('t', retry_count=0) sets retry_count=0 (not default 2)."""
+        from agentspan.agents.runtime.runtime import _default_task_def
+
+        td = _default_task_def("test_task", retry_count=0)
+        assert td.retry_count == 0
+
+    def test_default_task_def_both_overrides(self):
+        """_default_task_def('t', retry_count=7, retry_delay_seconds=3) sets both."""
+        from agentspan.agents.runtime.runtime import _default_task_def
+
+        td = _default_task_def("test_task", retry_count=7, retry_delay_seconds=3)
+        assert td.retry_count == 7
+        assert td.retry_delay_seconds == 3
+
+    def test_default_task_def_none_uses_defaults(self):
+        """Passing None explicitly still uses the hardcoded defaults."""
+        from agentspan.agents.runtime.runtime import _default_task_def
+
+        td = _default_task_def("test_task", retry_count=None, retry_delay_seconds=None)
+        assert td.retry_count == 2
+        assert td.retry_delay_seconds == 2

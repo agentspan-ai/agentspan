@@ -844,3 +844,86 @@ class TestToolCredentialParams:
         assert td.approval_required is True
         assert td.isolated is False
         assert "KEY" in td.credentials
+
+
+class TestToolDecoratorRetryConfig:
+    """Test retry_count and retry_delay_seconds params on @tool decorator."""
+
+    def test_retry_count_stored_in_tool_def(self):
+        """@tool(retry_count=10) stores retry_count=10 in ToolDef."""
+
+        @tool(retry_count=10)
+        def my_tool(x: str) -> str:
+            """A tool."""
+            return x
+
+        assert my_tool._tool_def.retry_count == 10
+
+    def test_retry_delay_seconds_stored_in_tool_def(self):
+        """@tool(retry_delay_seconds=5) stores retry_delay_seconds=5 in ToolDef."""
+
+        @tool(retry_delay_seconds=5)
+        def my_tool(x: str) -> str:
+            """A tool."""
+            return x
+
+        assert my_tool._tool_def.retry_delay_seconds == 5
+
+    def test_both_retry_params_stored(self):
+        """@tool(retry_count=10, retry_delay_seconds=5) stores both correctly."""
+
+        @tool(retry_count=10, retry_delay_seconds=5)
+        def my_tool(x: str) -> str:
+            """A tool."""
+            return x
+
+        td = my_tool._tool_def
+        assert td.retry_count == 10
+        assert td.retry_delay_seconds == 5
+
+    def test_zero_retry_count_stored(self):
+        """@tool(retry_count=0) stores 0, not None — important edge case."""
+
+        @tool(retry_count=0)
+        def my_tool(x: str) -> str:
+            """A tool."""
+            return x
+
+        assert my_tool._tool_def.retry_count == 0
+
+    def test_default_retry_params_are_none(self):
+        """Bare @tool leaves retry_count and retry_delay_seconds as None."""
+
+        @tool
+        def my_tool(x: str) -> str:
+            """A tool."""
+            return x
+
+        td = my_tool._tool_def
+        assert td.retry_count is None
+        assert td.retry_delay_seconds is None
+
+    def test_retry_params_with_other_params(self):
+        """retry_count and retry_delay_seconds work alongside other @tool params."""
+
+        @tool(name="custom_retry_tool", retry_count=3, retry_delay_seconds=1)
+        def my_tool(x: str) -> str:
+            """A tool."""
+            return x
+
+        td = my_tool._tool_def
+        assert td.name == "custom_retry_tool"
+        assert td.retry_count == 3
+        assert td.retry_delay_seconds == 1
+
+    def test_retry_params_preserved_via_get_tool_def(self):
+        """get_tool_def() returns ToolDef with retry params intact."""
+
+        @tool(retry_count=7, retry_delay_seconds=4)
+        def my_tool(x: str) -> str:
+            """A tool."""
+            return x
+
+        td = get_tool_def(my_tool)
+        assert td.retry_count == 7
+        assert td.retry_delay_seconds == 4

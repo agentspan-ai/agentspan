@@ -184,6 +184,34 @@ def dangerous_action(target: str) -> dict:
 - `name` — Override the tool name (default: function name)
 - `approval_required` — Insert a `WaitTask` before execution for human approval
 - `timeout_seconds` — Maximum execution time
+- `retry_count` — Number of times Conductor will retry the task on failure (default: `2`). Set to `0` to disable retries entirely.
+- `retry_delay_seconds` — Seconds to wait between retry attempts (default: `2`).
+
+### Retry Configuration
+
+By default every `@tool` worker task is registered with `retry_count=2` and `retry_delay_seconds=2`. You can override these per-tool to match the reliability characteristics of the underlying operation:
+
+```python
+# Flaky external API — retry aggressively
+@tool(retry_count=10, retry_delay_seconds=5)
+def call_flaky_api(query: str) -> str:
+    """Call an unreliable third-party API."""
+    ...
+
+# Payment processing — fail immediately, never silently retry
+@tool(retry_count=0)
+def process_payment(amount: float, card_token: str) -> dict:
+    """Charge a payment card. Must not be retried automatically."""
+    ...
+
+# Default behaviour (retry_count=2, retry_delay_seconds=2)
+@tool
+def get_weather(city: str) -> dict:
+    """Get current weather for a city."""
+    ...
+```
+
+These values are passed directly to the Conductor `TaskDef` when the tool is registered, so they take effect for every execution of that worker task.
 
 **How it works:**
 1. JSON Schema is generated from the function's type hints and docstring
@@ -218,6 +246,8 @@ ToolDef(
     timeout_seconds: Optional[int] = None,
     tool_type: str = "worker",           # "worker", "http", or "mcp"
     config: Dict = {},                   # Extra config (URL, headers, etc.)
+    retry_count: Optional[int] = None,   # Conductor task retry count (default: 2)
+    retry_delay_seconds: Optional[int] = None,  # Seconds between retries (default: 2)
 )
 ```
 

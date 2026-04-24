@@ -182,6 +182,7 @@ python examples/adk/01_basic_agent.py
 | 14 | [Existing Workers](14_existing_workers.py) | Use existing `@worker_task` functions directly as agent tools |
 | 33 | [Single Turn Tool](33_single_turn_tool.py) | Single-turn tool invocation with immediate response |
 | 33 | [External Workers](33_external_workers.py) | Reference workers in other services via `@tool(external=True)` — no local code needed |
+| 98 | [Tool Retry Config](98_tool_retry_config.py) | Per-tool `retry_count` and `retry_delay_seconds` — default, aggressive, and zero-retry patterns |
 
 ## Multi-Agent Orchestration
 
