@@ -73,6 +73,7 @@ from _issue_fixer_instructions import (
     CODER_INSTRUCTIONS,
     DG_REVIEWER_INSTRUCTIONS,
     QA_LEAD_INSTRUCTIONS,
+    DOCS_AGENT_INSTRUCTIONS,
     PR_CREATOR_INSTRUCTIONS,
 )
 
@@ -213,7 +214,24 @@ coding_swarm = Agent(
     instructions="Start with tech_lead. Iterate until QA Lead confirms ALL_TESTS_PASS.",
 )
 
-# ── Stage 3: PR Creator ──────────────────────────────────────
+# ── Stage 3: Documentation Agent ─────────────────────────────
+
+docs_agent = Agent(
+    name="docs_agent",
+    model=SONNET,
+    stateful=True,
+    max_turns=40,
+    max_tokens=60000,
+    tools=[
+        read_file, write_file, edit_file,
+        grep_search, glob_find, list_directory,
+        file_outline, git_diff, run_command,
+        contextbook_read, contextbook_summary,
+    ],
+    instructions=DOCS_AGENT_INSTRUCTIONS.format(**_fmt),
+)
+
+# ── Stage 4: PR Creator ──────────────────────────────────────
 
 pr_creator = Agent(
     name="pr_creator",
@@ -234,7 +252,7 @@ pr_creator = Agent(
 
 # ── Full pipeline ─────────────────────────────────────────────
 
-pipeline = issue_analyst >> coding_swarm >> pr_creator
+pipeline = issue_analyst >> coding_swarm >> docs_agent >> pr_creator
 
 
 def main():
