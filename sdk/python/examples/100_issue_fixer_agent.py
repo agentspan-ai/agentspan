@@ -7,13 +7,15 @@
 A multi-agent coding agent that takes a GitHub issue number, analyzes the
 codebase, implements a fix with tests, and creates a pull request.
 
-Architecture: Deterministic pipeline with focused review loops
+Architecture: Deterministic pipeline with sequential review stages
 
-    issue_analyst >> tech_lead >> [impl_loop: [code_review: coder <-> dg] <-> tl_review]
-                  >> [test_loop: coder <-> qa] >> docs_agent >> pr_creator
+    issue_analyst >> tech_lead >> [impl_loop: (coder >> dg) <-> tl_review]
+                  >> (qa_lead >> test_coder >> qa_reviewer) >> docs_agent >> pr_creator
 
-Each review loop is a small SWARM with exactly 2 agents that alternate
-deterministically. No agent is skipped — DG always reviews, QA always tests.
+Code review is SEQUENTIAL (coder >> dg_reviewer) — DG is GUARANTEED to run
+after every coder execution. No handoff text needed.
+The impl_loop SWARM wraps this with TL review for approval/rework cycles.
+Testing is SEQUENTIAL: QA plans >> coder writes >> QA reviews + runs e2e.
 
 Usage:
     python 100_issue_fixer_agent.py <issue_number>
@@ -204,23 +206,10 @@ dg_reviewer = Agent(
     instructions=DG_REVIEWER_INSTRUCTIONS.format(**_fmt),
 )
 
-# Inner loop: Coder <-> DG until DG says CODE_APPROVED
-code_review_loop = Agent(
-    name="code_review_loop",
-    model=SONNET,
-    stateful=True,
-    strategy=Strategy.SWARM,
-    agents=[coder, dg_reviewer],
-    handoffs=[
-        OnTextMention(text="HANDOFF_TO_CODER", target="coder"),
-        OnTextMention(text="HANDOFF_TO_DG", target="dg_reviewer"),
-    ],
-    termination=TextMentionTermination("CODE_APPROVED"),
-    max_turns=SWARM_MAX_TURNS,
-    max_tokens=60000,
-    timeout_seconds=SWARM_TIMEOUT,
-    instructions="Start with coder. Coder implements, DG reviews. Loop until DG says CODE_APPROVED.",
-)
+# Sequential: coder runs THEN DG reviews — deterministic, no handoff text needed.
+# A SWARM relied on the coder LLM to output handoff text, which it never did.
+# Sequential guarantees DG runs after every coder execution.
+code_then_review = coder >> dg_reviewer
 
 # Tech Lead final review
 tl_reviewer = Agent(
@@ -238,15 +227,17 @@ tl_reviewer = Agent(
     instructions=TL_REVIEW_INSTRUCTIONS.format(**_fmt),
 )
 
-# Outer loop: code_review_loop <-> TL review until TL says IMPL_APPROVED
+# Outer loop: (coder >> DG) <-> TL review until TL says IMPL_APPROVED
+# Each iteration: coder implements (sequential), DG reviews (sequential),
+# then TL does final review. If TL says NEEDS_REWORK, back to coder >> DG.
 impl_loop = Agent(
     name="impl_loop",
     model=SONNET,
     stateful=True,
     strategy=Strategy.SWARM,
-    agents=[code_review_loop, tl_reviewer],
+    agents=[code_then_review, tl_reviewer],
     handoffs=[
-        OnTextMention(text="NEEDS_REWORK", target="code_review_loop"),
+        OnTextMention(text="NEEDS_REWORK", target="coder_dg_reviewer"),
         OnTextMention(text="IMPL_APPROVED", target="tl_reviewer"),
     ],
     termination=TextMentionTermination("IMPL_APPROVED"),
@@ -291,7 +282,7 @@ qa_lead = Agent(
     max_turns=80,
     max_tokens=60000,
     tools=[
-        read_file, grep_search, glob_find, list_directory,
+        read_file, write_file, grep_search, glob_find, list_directory,
         file_outline, git_diff, run_command, web_fetch,
         run_unit_tests, run_e2e_tests,
         contextbook_write, contextbook_read, contextbook_summary,
@@ -299,22 +290,26 @@ qa_lead = Agent(
     instructions=QA_LEAD_INSTRUCTIONS.format(**_fmt),
 )
 
-test_loop = Agent(
-    name="test_loop",
+# QA reviewer: runs e2e tests and captures evidence (separate instance for sequential pipeline)
+qa_reviewer = Agent(
+    name="qa_reviewer",
     model=SONNET,
     stateful=True,
-    strategy=Strategy.SWARM,
-    agents=[qa_lead, test_coder],
-    handoffs=[
-        OnTextMention(text="HANDOFF_TO_CODER", target="test_coder"),
-        OnTextMention(text="HANDOFF_TO_QA", target="qa_lead"),
-    ],
-    termination=TextMentionTermination("TESTS_PASS"),
-    max_turns=SWARM_MAX_TURNS,
+    max_turns=80,
     max_tokens=60000,
-    timeout_seconds=SWARM_TIMEOUT,
-    instructions="Start with qa_lead. QA plans tests, coder writes them, QA reviews + runs e2e. Loop until TESTS_PASS.",
+    tools=[
+        read_file, grep_search, glob_find, list_directory,
+        file_outline, git_diff, run_command, web_fetch,
+        write_file,
+        run_unit_tests, run_e2e_tests,
+        contextbook_write, contextbook_read, contextbook_summary,
+    ],
+    instructions=QA_LEAD_INSTRUCTIONS.format(**_fmt),
 )
+
+# Sequential: QA plans → coder writes tests → QA reviews + runs e2e
+# All three steps are deterministic — no handoff text needed.
+test_then_verify = qa_lead >> test_coder >> qa_reviewer
 
 # ═══════════════════════════════════════════════════════════════
 # Stage 5: Documentation Agent (pipeline)
@@ -403,10 +398,10 @@ pr_updater = Agent(
 # ═══════════════════════════════════════════════════════════════
 
 # New issue → full pipeline
-pipeline = issue_analyst >> tech_lead >> impl_loop >> test_loop >> docs_agent >> pr_creator
+pipeline = issue_analyst >> tech_lead >> impl_loop >> test_then_verify >> docs_agent >> pr_creator
 
 # PR feedback → address comments, re-review, re-test, update PR
-feedback_pipeline = pr_feedback >> impl_loop >> test_loop >> pr_updater
+feedback_pipeline = pr_feedback >> impl_loop >> test_then_verify >> pr_updater
 
 
 def main():
