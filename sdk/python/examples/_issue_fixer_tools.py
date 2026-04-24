@@ -701,3 +701,57 @@ def run_command(command: str, timeout: int = 300) -> str:
         return f"Error: command timed out after {timeout}s."
     except Exception as exc:
         return f"Error: {exc}"
+
+
+# ── Web Fetch ────────────────────────────────────────────────
+
+
+@tool
+def web_fetch(url: str) -> str:
+    """Fetch content from a URL and return it as text. Useful for reading external
+    documentation, referenced links in issues, RFCs, API docs, etc.
+    HTML is converted to plain text. Returns first 16,000 chars."""
+    import urllib.request
+    import html.parser
+
+    class _HTMLToText(html.parser.HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self._texts = []
+            self._skip = False
+        def handle_starttag(self, tag, attrs):
+            if tag in ("script", "style", "noscript"):
+                self._skip = True
+        def handle_endtag(self, tag):
+            if tag in ("script", "style", "noscript"):
+                self._skip = False
+            if tag in ("p", "div", "br", "li", "h1", "h2", "h3", "h4", "h5", "h6", "tr"):
+                self._texts.append("\n")
+        def handle_data(self, data):
+            if not self._skip:
+                self._texts.append(data)
+        def get_text(self):
+            return "".join(self._texts)
+
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "AgentSpan-IssueFixer/1.0"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            content_type = resp.headers.get("Content-Type", "")
+            raw = resp.read(500_000).decode("utf-8", errors="replace")
+
+            if "html" in content_type.lower():
+                parser = _HTMLToText()
+                parser.feed(raw)
+                text = parser.get_text()
+            else:
+                text = raw
+
+            # Clean up whitespace
+            lines = [line.strip() for line in text.splitlines()]
+            text = "\n".join(line for line in lines if line)
+
+            if len(text) > _MAX_COMMAND_OUTPUT:
+                text = text[:_MAX_COMMAND_OUTPUT] + f"\n... (truncated, {len(text):,} chars total)"
+            return text if text.strip() else f"No readable content at {url}"
+    except Exception as exc:
+        return f"Error fetching {url}: {exc}"
