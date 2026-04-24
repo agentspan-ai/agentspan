@@ -150,6 +150,167 @@ public static class AgentTool
     }
 }
 
+// ── HttpTools ──────────────────────────────────────────────
+
+/// <summary>
+/// Factory for server-side HTTP tools (Conductor HttpTask).
+/// No worker process is needed — the Conductor server makes the HTTP call.
+/// </summary>
+public static class HttpTools
+{
+    /// <summary>Create a tool backed by an HTTP endpoint.</summary>
+    public static ToolDef Create(
+        string name,
+        string description,
+        string url,
+        string method = "GET",
+        Dictionary<string, string>? headers = null,
+        JsonObject? inputSchema = null,
+        string[]? credentials = null)
+    {
+        var config = new Dictionary<string, object>
+        {
+            ["url"]         = url,
+            ["method"]      = method.ToUpperInvariant(),
+            ["headers"]     = headers ?? new(),
+            ["accept"]      = new List<string> { "application/json" },
+            ["contentType"] = "application/json",
+        };
+        return new ToolDef
+        {
+            Name        = name,
+            Description = description,
+            InputSchema = inputSchema ?? new JsonObject { ["type"] = "object", ["properties"] = new JsonObject() },
+            ToolType    = "http",
+            Config      = config,
+            Credentials = credentials ?? [],
+        };
+    }
+}
+
+// ── McpTools ───────────────────────────────────────────────
+
+/// <summary>
+/// Factory for MCP server tools (Conductor ListMcpTools + CallMcpTool).
+/// No worker process is needed.
+/// </summary>
+public static class McpTools
+{
+    /// <summary>Create tool(s) from an MCP server.</summary>
+    public static ToolDef Create(
+        string serverUrl,
+        string? name = null,
+        string? description = null,
+        Dictionary<string, string>? headers = null,
+        List<string>? toolNames = null,
+        int maxTools = 64,
+        string[]? credentials = null)
+    {
+        var config = new Dictionary<string, object>
+        {
+            ["server_url"] = serverUrl,
+            ["max_tools"]  = maxTools,
+        };
+        if (headers is not null && headers.Count > 0)   config["headers"]    = headers;
+        if (toolNames is not null && toolNames.Count > 0) config["tool_names"] = toolNames;
+
+        return new ToolDef
+        {
+            Name        = name ?? "mcp_tools",
+            Description = description ?? $"MCP tools from {serverUrl}",
+            InputSchema = new JsonObject { ["type"] = "object", ["properties"] = new JsonObject() },
+            ToolType    = "mcp",
+            Config      = config,
+            Credentials = credentials ?? [],
+        };
+    }
+}
+
+// ── RagTools ───────────────────────────────────────────────
+
+/// <summary>
+/// Factory for RAG tools: vector database indexing and search.
+/// No worker process is needed — the Conductor server handles embedding and storage.
+/// </summary>
+public static class RagTools
+{
+    /// <summary>Create a tool that indexes documents into a vector database.</summary>
+    public static ToolDef Index(
+        string name,
+        string description,
+        string vectorDb,
+        string index,
+        string embeddingModelProvider,
+        string embeddingModel,
+        string @namespace = "default_ns",
+        int? chunkSize = null,
+        int? chunkOverlap = null,
+        int? dimensions = null,
+        JsonObject? inputSchema = null)
+    {
+        var schema = inputSchema ?? new JsonObject
+        {
+            ["type"] = "object",
+            ["properties"] = new JsonObject
+            {
+                ["text"]     = new JsonObject { ["type"] = "string", ["description"] = "The text content to index." },
+                ["docId"]    = new JsonObject { ["type"] = "string", ["description"] = "Unique document identifier." },
+                ["metadata"] = new JsonObject { ["type"] = "object", ["description"] = "Optional metadata to store with the document." },
+            },
+            ["required"] = new JsonArray { "text", "docId" },
+        };
+        var config = new Dictionary<string, object>
+        {
+            ["taskType"]               = "LLM_INDEX_TEXT",
+            ["vectorDB"]               = vectorDb,
+            ["namespace"]              = @namespace,
+            ["index"]                  = index,
+            ["embeddingModelProvider"] = embeddingModelProvider,
+            ["embeddingModel"]         = embeddingModel,
+        };
+        if (chunkSize.HasValue)    config["chunkSize"]    = chunkSize.Value;
+        if (chunkOverlap.HasValue) config["chunkOverlap"] = chunkOverlap.Value;
+        if (dimensions.HasValue)   config["dimensions"]   = dimensions.Value;
+        return new ToolDef { Name = name, Description = description, InputSchema = schema, ToolType = "rag_index", Config = config };
+    }
+
+    /// <summary>Create a tool that searches a vector database.</summary>
+    public static ToolDef Search(
+        string name,
+        string description,
+        string vectorDb,
+        string index,
+        string embeddingModelProvider,
+        string embeddingModel,
+        string @namespace = "default_ns",
+        int maxResults = 5,
+        int? dimensions = null,
+        JsonObject? inputSchema = null)
+    {
+        var schema = inputSchema ?? new JsonObject
+        {
+            ["type"] = "object",
+            ["properties"] = new JsonObject
+            {
+                ["query"] = new JsonObject { ["type"] = "string", ["description"] = "The search query." },
+            },
+            ["required"] = new JsonArray { "query" },
+        };
+        var config = new Dictionary<string, object>
+        {
+            ["taskType"]               = "LLM_SEARCH_INDEX",
+            ["vectorDB"]               = vectorDb,
+            ["namespace"]              = @namespace,
+            ["index"]                  = index,
+            ["embeddingModelProvider"] = embeddingModelProvider,
+            ["embeddingModel"]         = embeddingModel,
+            ["maxResults"]             = maxResults,
+        };
+        if (dimensions.HasValue) config["dimensions"] = dimensions.Value;
+        return new ToolDef { Name = name, Description = description, InputSchema = schema, ToolType = "rag_search", Config = config };
+    }
+}
+
 // ── MediaTools ─────────────────────────────────────────────
 
 /// <summary>

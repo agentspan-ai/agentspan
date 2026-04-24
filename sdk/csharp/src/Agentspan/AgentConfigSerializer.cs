@@ -182,7 +182,10 @@ internal static class AgentConfigSerializer
         if (tool.ApprovalRequired)        t["approvalRequired"] = true;
         if (tool.TimeoutSeconds.HasValue)  t["timeoutSeconds"]   = tool.TimeoutSeconds.Value;
 
-        if (tool.Credentials.Length > 0)
+        // For worker/external tools, credentials go at top level.
+        // For all other tool types (http, mcp, media, rag), they go inside config.
+        bool isWorkerTool = toolType is "worker" or "external";
+        if (tool.Credentials.Length > 0 && isWorkerTool)
         {
             var creds = new JsonArray();
             foreach (var c in tool.Credentials) creds.Add(c);
@@ -205,10 +208,22 @@ internal static class AgentConfigSerializer
             t["config"] = config;
         }
 
-        // For server-side tools (media, pdf), emit the static config object
+        // For server-side tools (http, mcp, media, pdf, rag), emit the static config object.
+        // Also embed credentials inside config (server requirement for non-worker tools).
         if (tool.Config is not null && toolType != "agent_tool")
         {
-            t["config"] = JsonNode.Parse(JsonSerializer.Serialize(tool.Config, AgentspanJson.Options))!;
+            // Merge credentials into config if present
+            var configCopy = new Dictionary<string, object>(tool.Config);
+            if (!isWorkerTool && tool.Credentials.Length > 0)
+                configCopy["credentials"] = tool.Credentials.ToList();
+            t["config"] = JsonNode.Parse(JsonSerializer.Serialize(configCopy, AgentspanJson.Options))!;
+        }
+        else if (!isWorkerTool && tool.Credentials.Length > 0)
+        {
+            // No config dict yet — create one just for credentials
+            t["config"] = JsonNode.Parse(JsonSerializer.Serialize(
+                new Dictionary<string, object> { ["credentials"] = tool.Credentials.ToList() },
+                AgentspanJson.Options))!;
         }
 
         return t;
