@@ -122,7 +122,7 @@ tech_lead = Agent(
     name="tech_lead",
     model=OPUS,
     stateful=True,
-    max_turns=30,
+    max_turns=80,
     max_tokens=60000,
     tools=[
         read_file, grep_search, glob_find, list_directory,
@@ -137,7 +137,7 @@ coder = Agent(
     name="coder",
     model=SONNET,
     stateful=True,
-    max_turns=100,
+    max_turns=200,
     max_tokens=60000,
     credentials=[GITHUB_CREDENTIAL],
     cli_config=CliConfig(
@@ -181,7 +181,7 @@ qa_lead = Agent(
     name="qa_lead",
     model=SONNET,
     stateful=True,
-    max_turns=40,
+    max_turns=80,
     max_tokens=60000,
     tools=[
         read_file, grep_search, glob_find, list_directory,
