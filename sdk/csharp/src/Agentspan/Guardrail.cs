@@ -141,3 +141,96 @@ public static class RegexGuardrail
         int     maxRetries = 3)
         => Create([pattern], mode, name, message, position, onFail, maxRetries);
 }
+
+// ── LLMGuardrail ───────────────────────────────────────────
+
+/// <summary>
+/// A guardrail that uses an LLM to evaluate content against a safety policy.
+/// The model receives the policy + content and must respond with JSON:
+///   {"passed": true/false, "reason": "..."}
+///
+/// Requires OPENAI_API_KEY in the environment (or set the apiKey parameter).
+/// </summary>
+public static class LLMGuardrail
+{
+    private static readonly System.Net.Http.HttpClient _http = new();
+
+    public static GuardrailDef Create(
+        string  model,
+        string  policy,
+        string? name       = null,
+        int?    maxTokens  = null,
+        Position position  = Position.Output,
+        OnFail  onFail     = OnFail.Retry,
+        int     maxRetries = 3,
+        string? apiKey     = null)
+    {
+        var guardrailName = name ?? "llm_guardrail";
+
+        return new GuardrailDef
+        {
+            Name       = guardrailName,
+            Position   = position,
+            OnFail     = onFail,
+            MaxRetries = maxRetries,
+            Handler    = async content =>
+            {
+                try
+                {
+                    var key  = apiKey ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? "";
+                    var prompt =
+                        "You are a content safety evaluator. Evaluate the following content against this policy:\n\n" +
+                        $"POLICY: {policy}\n\n" +
+                        $"CONTENT: {content}\n\n" +
+                        "Respond with ONLY a JSON object: {\"passed\": true/false, \"reason\": \"...\"}";
+
+                    // Parse provider/model format
+                    var modelName = model.Contains('/') ? model.Split('/', 2)[1] : model;
+                    var provider  = model.Contains('/') ? model.Split('/', 2)[0] : "openai";
+
+                    string apiUrl = provider switch
+                    {
+                        "anthropic" => "https://api.anthropic.com/v1/messages",
+                        _           => "https://api.openai.com/v1/chat/completions",
+                    };
+
+                    var requestBody = new
+                    {
+                        model    = modelName,
+                        messages = new[] { new { role = "user", content = prompt } },
+                        max_tokens = maxTokens ?? 300,
+                        temperature = 0,
+                    };
+
+                    var json = System.Text.Json.JsonSerializer.Serialize(requestBody);
+                    using var req = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Post, apiUrl);
+                    req.Headers.Add("Authorization", $"Bearer {key}");
+                    req.Content = new System.Net.Http.StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+                    using var resp = await _http.SendAsync(req);
+                    var body = await resp.Content.ReadAsStringAsync();
+                    var node = System.Text.Json.Nodes.JsonNode.Parse(body);
+                    var text = node?["choices"]?[0]?["message"]?["content"]?.GetValue<string>() ?? "";
+
+                    // Parse JSON response from LLM
+                    try
+                    {
+                        var resultNode = System.Text.Json.Nodes.JsonNode.Parse(text);
+                        var passed = resultNode?["passed"]?.GetValue<bool>() ?? false;
+                        var reason = resultNode?["reason"]?.GetValue<string>() ?? "";
+                        return new GuardrailResult(passed, reason);
+                    }
+                    catch
+                    {
+                        // If LLM didn't return valid JSON, be conservative and fail
+                        return new GuardrailResult(false, $"LLM guardrail returned unparseable response: {text[..Math.Min(200, text.Length)]}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    return new GuardrailResult(false, $"LLM guardrail evaluation error: {ex.Message}");
+                }
+            },
+        };
+    }
+}
