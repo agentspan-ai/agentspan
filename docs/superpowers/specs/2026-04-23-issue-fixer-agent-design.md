@@ -49,21 +49,32 @@ MAX_E2E_RETRIES = 3                        # Max e2e fail → fix → rerun loop
 ### Topology: Pipeline-Wrapped Swarm
 
 ```
-Issue Analyst  >>  [SWARM: Tech Lead <-> Coder <-> DG <-> QA Lead]  >>  PR Creator
-  (Stage 1)                     (Stage 2)                               (Stage 3)
+Issue Analyst  >>  [SWARM: Tech Lead <-> Coder <-> DG <-> QA Lead]  >>  Docs Agent  >>  PR Creator
+  (Stage 1)                     (Stage 2)                              (Stage 3)        (Stage 4)
 ```
 
-- **Stage 1 (Pipeline):** Issue Analyst — fetch issue, clone repo, create branch, identify module. One-shot, no iteration.
+- **Stage 1 (Pipeline):** Issue Analyst — fetch issue, clone repo into shared working directory, create branch, identify module. One-shot.
 - **Stage 2 (Swarm):** Core work. Four agents iterate until all tests pass.
-- **Stage 3 (Pipeline):** PR Creator — commit, push, create PR. One-shot, no iteration.
+- **Stage 3 (Pipeline):** Docs Agent — update documentation and create examples (mandatory for features). One-shot.
+- **Stage 4 (Pipeline):** PR Creator — commit, push, create PR. One-shot.
+
+### Working Directory
+
+All tools operate in a shared temp directory created at startup:
+```
+/tmp/agentspan-fix-<random-12-hex>/
+```
+The Issue Analyst clones the repo INTO this directory (`gh repo clone <repo> .`).
+All subsequent agents' tools (read_file, edit_file, run_command, contextbook, etc.)
+resolve paths relative to this directory. The contextbook lives at `.contextbook/` inside it.
 
 ### Swarm Handoff Flow
 
 ```
                     ┌─────────────────────────────────────────────┐
-                    │              CODING SWARM                   │
-                    │                                             │
-Issue Analyst ──>>──│  Tech Lead ──→ Coder ──→ DG ──→ QA Lead     │──>>── PR Creator
+                    │              CODING SWARM                    │
+                    │                                              │
+Issue Analyst ──>>──│  Tech Lead ──→ Coder ──→ DG ──→ QA Lead    │──>>── Docs Agent ──>>── PR Creator
                     │       ↑          ↑   ←──┘         │         │
                     │       │          └────────────────┘         │
                     │       └── (if fundamental rethink needed)   │
@@ -237,15 +248,33 @@ pr_creator = Agent(
     instructions=PR_CREATOR_INSTRUCTIONS,
 )
 
+# --- Stage 3: Documentation Agent ---
+docs_agent = Agent(
+    name="docs_agent",
+    model=SONNET,
+    stateful=True,
+    max_turns=40,
+    max_tokens=60000,
+    tools=[
+        read_file, write_file, edit_file,
+        grep_search, glob_find, list_directory,
+        file_outline, git_diff, run_command,
+        contextbook_read, contextbook_summary,
+    ],
+    instructions=DOCS_AGENT_INSTRUCTIONS,
+)
+
 # --- Full pipeline ---
-pipeline = issue_analyst >> coding_swarm >> pr_creator
+pipeline = issue_analyst >> coding_swarm >> docs_agent >> pr_creator
 ```
 
 **Key design notes:**
-- Agents use BOTH custom `@tool` functions AND `cli_config` simultaneously — the SDK supports this. Custom tools are passed via `tools=[]`, CLI commands are enabled via `cli_config`.
-- The DG reviewer is a **coordinator agent** that wraps the DG **skill** as an `agent_tool()`. The skill handles the internal Dinesh/Gilfoyle debate; the coordinator handles contextbook integration and handoff logic.
-- `contextbook_*` tools are custom `@tool(stateful=True)` functions (see Contextbook section). They work alongside `cli_config` commands.
+- All tools operate in a shared working directory (temp folder created at startup). The Issue Analyst clones the repo into this directory.
+- Agents use BOTH custom `@tool` functions AND `cli_config` simultaneously — the SDK supports this.
+- The DG reviewer is a **coordinator agent** that wraps the DG **skill** as an `agent_tool()`.
+- `contextbook_*` tools are custom `@tool(stateful=True)` functions stored at `{working_dir}/.contextbook/`.
 - Pipeline stages share context: output of stage N becomes input text for stage N+1.
+- Agents are instructed to call multiple independent tools in parallel (FORK) to save turns.
 
 ## Agents
 
@@ -277,7 +306,7 @@ pipeline = issue_analyst >> coding_swarm >> pr_creator
 | **Model** | `anthropic/claude-opus-4-6` — highest reasoning quality for architectural analysis |
 | **Role** | Analyze codebase, create detailed implementation plan + testing strategy |
 | **Tools** | `read_file`, `grep_search`, `glob_find`, `list_directory`, `file_outline`, `search_symbols`, `find_references`, `git_log`, `git_blame`, `run_command`, `contextbook_*` |
-| **Max turns** | 30 — planning is deep but bounded; if 30 turns isn't enough, the plan is too complex |
+| **Max turns** | 80 — needs room to read files (batch 3-5 per turn via parallel calls) and write plans |
 
 **Steps:**
 1. Read `issue_context` and `module_map` from contextbook
@@ -296,7 +325,7 @@ pipeline = issue_analyst >> coding_swarm >> pr_creator
 | **Role** | Implement fix, write tests, respond to review feedback |
 | **Tools** | All 21 tools (full read + write + git + test + contextbook) |
 | **Credentials** | `GITHUB_CREDENTIAL` |
-| **Max turns** | 100 — high because the coder does the most work (implement, test, fix feedback loops) |
+| **Max turns** | 200 — needs room for multiple implement-review-fix cycles |
 
 **Steps (implementation mode):**
 1. Read `implementation_plan` from contextbook
@@ -342,7 +371,7 @@ The DG skill is loaded via `skill()` and wrapped in a coordinator agent that:
 | **Model** | `anthropic/claude-sonnet-4-6` |
 | **Role** | Plan test suite, review test quality, run full e2e, gate the PR |
 | **Tools** | `read_file`, `grep_search`, `glob_find`, `list_directory`, `file_outline`, `git_diff`, `run_command`, `run_unit_tests`, `run_e2e_tests`, `contextbook_*` |
-| **Max turns** | 40 |
+| **Max turns** | 80 |
 
 **Test planning mode (after DG approves):**
 1. Read contextbook: `implementation_plan`, `change_log`, `review_findings`
@@ -361,7 +390,35 @@ The DG skill is loaded via `skill()` and wrapped in a coordinator agent that:
 4. If e2e passes → `SWARM_COMPLETE`
 5. If e2e fails → write failure details to `test_results`, `HANDOFF_TO_CODER`
 
-### PR Creator (Pipeline Stage 3)
+### Docs Agent (Pipeline Stage 3)
+
+| Property | Value |
+|---|---|
+| **Model** | `anthropic/claude-sonnet-4-6` |
+| **Role** | Update documentation and create examples for new features |
+| **Tools** | `read_file`, `write_file`, `edit_file`, `grep_search`, `glob_find`, `list_directory`, `file_outline`, `git_diff`, `run_command`, `contextbook_read`, `contextbook_summary` |
+| **Max turns** | 40 |
+
+**Decision logic:**
+1. Read `issue_context`, `implementation_plan`, `change_log` from contextbook
+2. Determine: is this a **bug fix** or a **feature**?
+
+**If bug fix:**
+- Update any existing docs that reference the fixed behavior (if applicable)
+- No example needed
+- Commit if changes made
+
+**If feature (MANDATORY):**
+1. **Update documentation** — find and update relevant docs in `docs/` (API reference, guides)
+2. **Create example** — write a complete, runnable example script in `sdk/python/examples/`:
+   - Pick the next available number (e.g., `98_<feature>.py`)
+   - Must be a complete runnable script following existing example conventions
+   - Must demonstrate how to use the new feature with a working agent
+   - Must include docstring explaining what it demonstrates
+3. **Update examples README** — add the new example to `sdk/python/examples/README.md`
+4. Commit all doc/example changes
+
+### PR Creator (Pipeline Stage 4)
 
 | Property | Value |
 |---|---|
@@ -479,29 +536,29 @@ ALWAYS update the contextbook when you:
 
 ### Tool Assignment Matrix
 
-| Tool | Issue Analyst | Tech Lead | Coder | DG Reviewer | QA Lead | PR Creator |
-|---|---|---|---|---|---|---|
-| `read_file` | | X | X | X | X | |
-| `write_file` | | | X | | | |
-| `edit_file` | | | X | | | |
-| `apply_patch` | | | X | | | |
-| `list_directory` | | X | X | | X | |
-| `file_outline` | | X | X | X | X | |
-| `glob_find` | | X | X | | X | |
-| `grep_search` | | X | X | X | X | |
-| `search_symbols` | | X | X | | | |
-| `find_references` | | X | X | | | |
-| `git_diff` | | | X | X | X | X |
-| `git_log` | | X | X | | | X |
-| `git_blame` | | X | | | | |
-| `lint_and_format` | | | X | | | |
-| `build_check` | | | X | | | |
-| `run_unit_tests` | | | X | | X | |
-| `run_e2e_tests` | | | | | X | |
-| `run_command` | X (cli_config) | X | X | | X | X (cli_config) |
-| `contextbook_write` | X | X | X | X | X | |
-| `contextbook_read` | X | X | X | X | X | X |
-| `contextbook_summary` | | X | X | X | X | |
+| Tool | Issue Analyst | Tech Lead | Coder | DG Reviewer | QA Lead | Docs Agent | PR Creator |
+|---|---|---|---|---|---|---|---|
+| `read_file` | | X | X | X | X | X | |
+| `write_file` | | | X | | | X | |
+| `edit_file` | | | X | | | X | |
+| `apply_patch` | | | X | | | | |
+| `list_directory` | | X | X | | X | X | |
+| `file_outline` | | X | X | X | X | X | |
+| `glob_find` | | X | X | | X | X | |
+| `grep_search` | | X | X | X | X | X | |
+| `search_symbols` | | X | X | | | | |
+| `find_references` | | X | X | | | | |
+| `git_diff` | | | X | X | X | X | X |
+| `git_log` | | X | X | | | | X |
+| `git_blame` | | X | | | | | |
+| `lint_and_format` | | | X | | | | |
+| `build_check` | | | X | | | | |
+| `run_unit_tests` | | | X | | X | | |
+| `run_e2e_tests` | | | | | X | | |
+| `run_command` | X (cli_config) | X | X | | X | X | X (cli_config) |
+| `contextbook_write` | X | X | X | X | X | | |
+| `contextbook_read` | X | X | X | X | X | X | X |
+| `contextbook_summary` | | X | X | X | X | X | |
 
 ## Target Repository Structure
 
