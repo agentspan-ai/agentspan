@@ -444,6 +444,50 @@ public static class MediaTools
     };
 }
 
+// ── HumanTool ──────────────────────────────────────────────
+
+/// <summary>
+/// Creates a tool that pauses execution for human input (Conductor HUMAN task).
+/// When the LLM calls this tool, the workflow pauses and presents the LLM's
+/// arguments to a human operator. No worker process is needed.
+/// </summary>
+public static class HumanTool
+{
+    private static readonly JsonObject DefaultSchema = new()
+    {
+        ["type"] = "object",
+        ["properties"] = new JsonObject
+        {
+            ["question"] = new JsonObject
+            {
+                ["type"]        = "string",
+                ["description"] = "The question or prompt to present to the human.",
+            },
+        },
+        ["required"] = new JsonArray { "question" },
+    };
+
+    /// <summary>
+    /// Create a tool that pauses execution for human input.
+    /// </summary>
+    /// <param name="name">Tool name (shown to the LLM).</param>
+    /// <param name="description">Description shown to both the LLM and the human operator.</param>
+    /// <param name="inputSchema">Optional custom JSON Schema. Defaults to {question: string}.</param>
+    public static ToolDef Create(
+        string       name        = "ask_user",
+        string       description = "Ask the user a question and wait for their response.",
+        JsonObject?  inputSchema = null)
+    {
+        return new ToolDef
+        {
+            Name        = name,
+            Description = description,
+            InputSchema = inputSchema ?? JsonNode.Parse(DefaultSchema.ToJsonString())!.AsObject(),
+            ToolType    = "human",
+        };
+    }
+}
+
 // ── WaitForMessageTool ─────────────────────────────────────
 
 /// <summary>
