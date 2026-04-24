@@ -94,6 +94,29 @@ public sealed class ToolDef
     internal Dictionary<string, object>? Config { get; init; }
     // The backing delegate — null for remote/server-registered tools.
     internal Func<Dictionary<string, JsonElement>, ToolContext?, Task<object?>>? Handler { get; init; }
+
+    /// <summary>Guardrails scoped to this tool's input or output (mirrors Python's @tool(guardrails=[...])).</summary>
+    public List<GuardrailDef> Guardrails { get; init; } = [];
+
+    /// <summary>Return a copy of this <see cref="ToolDef"/> with the given guardrails appended.</summary>
+    public ToolDef WithGuardrails(params GuardrailDef[] guardrails) => new ToolDef
+    {
+        Name                       = Name,
+        Description                = Description,
+        InputSchema                = InputSchema,
+        ApprovalRequired           = ApprovalRequired,
+        External                   = External,
+        TimeoutSeconds             = TimeoutSeconds,
+        Credentials                = Credentials,
+        ToolType                   = ToolType,
+        WrappedAgent               = WrappedAgent,
+        AgentToolRetryCount        = AgentToolRetryCount,
+        AgentToolRetryDelaySeconds = AgentToolRetryDelaySeconds,
+        AgentToolOptional          = AgentToolOptional,
+        Config                     = Config,
+        Handler                    = Handler,
+        Guardrails                 = [..Guardrails, ..guardrails],
+    };
 }
 
 // ── ToolDef factory ────────────────────────────────────────

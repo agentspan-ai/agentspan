@@ -335,6 +335,9 @@ internal sealed class WorkerManager : IAsyncDisposable
     {
         RegisterTools(agent.Tools, domain);
         RegisterGuardrails(agent.Guardrails, domain);
+        // Also register guardrails attached directly to individual tools
+        foreach (var tool in agent.Tools)
+            RegisterGuardrails(tool.Guardrails, domain);
         RegisterCallbacks(agent, domain);
 
         if (agent.Strategy == Strategy.Swarm && agent.Agents.Count > 0)

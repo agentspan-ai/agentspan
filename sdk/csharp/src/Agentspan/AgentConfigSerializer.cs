@@ -196,6 +196,14 @@ internal static class AgentConfigSerializer
             t["credentials"] = creds;
         }
 
+        // Tool-level guardrails (mirror Python's @tool(guardrails=[...]))
+        if (tool.Guardrails.Count > 0)
+        {
+            var gArr = new JsonArray();
+            foreach (var g in tool.Guardrails) gArr.Add(SerializeGuardrail(g));
+            t["guardrails"] = gArr;
+        }
+
         // For agent_tool, embed the child agent config
         if (toolType == "agent_tool" && tool.WrappedAgent is not null)
         {
