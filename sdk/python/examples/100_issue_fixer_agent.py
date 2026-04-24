@@ -251,7 +251,12 @@ def main():
         print(f"Idempotency key: {idempotency_key}")
         print(f"Monitor at: {SERVER_URL}/execution/{handle.execution_id}")
 
-        rt.serve(pipeline)
+        # join() blocks until the pipeline completes (or times out).
+        # Workers were already registered by start() under the execution's
+        # domain — calling serve() here would re-register them in the
+        # default domain, causing stateful tool tasks to stay SCHEDULED.
+        result = handle.join(timeout=SWARM_TIMEOUT)
+        result.print_result()
 
 
 if __name__ == "__main__":
