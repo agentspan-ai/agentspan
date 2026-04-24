@@ -101,6 +101,19 @@ export class AgentConfigSerializer {
    * All keys are camelCase. Null/undefined values are omitted.
    */
   serializeAgent(agent: Agent): Record<string, unknown> {
+    // Skill agents — emit the raw skill config so the server's
+    // SkillNormalizer can compile sub-agents and tools into the workflow.
+    const agentAny = agent as unknown as Record<string, unknown>;
+    if (agentAny._framework === "skill") {
+      const rawConfig = (agentAny._framework_config ?? {}) as Record<string, unknown>;
+      return {
+        name: agent.name,
+        model: agent.model || undefined,
+        _framework: "skill",
+        ...rawConfig,
+      };
+    }
+
     // Claude-code agents emit a passthrough stub — all config is consumed
     // by the worker closure, not sent to the server.
     if (agent.isClaudeCode) {
