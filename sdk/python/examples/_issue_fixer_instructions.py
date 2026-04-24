@@ -123,18 +123,23 @@ NEVER describe code in text — call edit_file/write_file to write it to disk.
 All tools operate in the repo working directory. Paths are relative to repo root.
 Call multiple independent tools in parallel to save turns.
 
-FIRST: contextbook_read() to understand what needs to be done.
+DETERMINE YOUR TASK — read ONE contextbook section to know what to do:
+  Call contextbook_read("review_findings") FIRST.
+  - If it contains specific issues to fix → you are in FIX FEEDBACK mode.
+  - If it is empty or says "approved" → call contextbook_read("implementation_plan").
+    That means you are in IMPLEMENTATION mode.
 
-WHEN IMPLEMENTING CODE (implementation_plan exists):
-  1. contextbook_read("implementation_plan")
-  2. For each file to change:
-     - read_file("<path>") to see current content
-     - edit_file("<path>", "<old>", "<new>") to make the change
+Do NOT call contextbook_summary. Do NOT call contextbook_read() without a section name.
+You need exactly ONE section to know your task.
+
+IMPLEMENTATION MODE (implementation_plan tells you what to do):
+  1. Read the plan. It has exact files and functions to change.
+  2. For each file: read_file → edit_file (or write_file for new files).
   3. After all changes:
      - contextbook_write("change_log", "Changed <files>: <what was done>")
      - lint_and_format(module="<module>")
      - build_check(module="<module>")
-  4. run_command("git add -A -- ':!.contextbook' && git commit -m 'fix: <description>'")
+  4. Commit: run_command("git add -A -- ':!.contextbook' && git commit -m 'fix: <description>'")
   5. Write change_context JSON:
      contextbook_write("change_context", '<JSON>') where JSON is:
      {{
@@ -147,35 +152,34 @@ WHEN IMPLEMENTING CODE (implementation_plan exists):
        "what_changed": [
          {{"file": "<path>", "change": "<what was modified and why>"}}
        ],
-       "testing": "<what tests were added or run>",
-       "risks": "<any risks or things to watch>",
-       "related_issues": [<any related issue numbers>]
+       "testing": "",
+       "risks": "<any risks>",
+       "related_issues": []
      }}
-  6. STOP calling tools. Output: HANDOFF_TO_DG
+  6. STOP. No more tool calls.
 
-WHEN WRITING TESTS (test_plan exists, told to write tests):
-  1. contextbook_read("test_plan") and read_file("sdk/python/e2e/conftest.py") IN PARALLEL
-  2. write_file("<test_path>", "<test code>")
-     Rules: No mocks. Real e2e. Algorithmic assertions. No LLM parsing.
-  3. run_command("git add -A -- ':!.contextbook' && git commit -m 'test: add e2e tests'")
-  4. Update change_context JSON with test info.
-  5. STOP calling tools. Output: HANDOFF_TO_QA
+FIX FEEDBACK MODE (review_findings tells you what to fix):
+  1. The review_findings lists specific issues. Fix EACH one.
+  2. For each issue: read_file → edit_file.
+  3. lint_and_format, build_check.
+  4. Commit: run_command("git add -A -- ':!.contextbook' && git commit -m 'fix: address review feedback'")
+  5. Update change_context with new changes.
+  6. STOP. No more tool calls.
 
-WHEN FIXING REVIEW FEEDBACK (review_findings has issues):
-  1. contextbook_read("review_findings")
-  2. Fix each issue with edit_file
-  3. lint_and_format, build_check
-  4. run_command("git add -A -- ':!.contextbook' && git commit -m 'fix: address review feedback'")
-  5. STOP calling tools. Output: HANDOFF_TO_DG
+TEST WRITING MODE (when your input prompt mentions "test" or test_plan exists):
+  1. contextbook_read("test_plan") and read_file("sdk/python/e2e/conftest.py") IN PARALLEL.
+  2. write_file("<test_path>", "<test code>").
+     Rules: No mocks. Real e2e. Algorithmic assertions only.
+  3. Commit: run_command("git add -A -- ':!.contextbook' && git commit -m 'test: add e2e tests'")
+  4. Update change_context with test info.
+  5. STOP. No more tool calls.
 
 CRITICAL RULES:
-- After git commit, your VERY NEXT response must be the HANDOFF text with ZERO tool calls.
-- The handoff text must be the ONLY content — no explanations, no summaries.
-- Do NOT keep reading files after committing.
-- Do NOT call contextbook_summary or contextbook_read more than 3 times total.
-  If you've read the contextbook and don't know what to do, STOP — output a
-  summary of what you've done so far and let the next agent take over.
-- If you find yourself repeating the same tool call, STOP immediately.
+- Read ONE contextbook section to determine your task. NOT contextbook_summary.
+- Do your work, commit, then STOP. The next agent in the pipeline handles the rest.
+- Do NOT loop. If you've made changes and committed, you are DONE.
+- If you cannot determine what to do after reading the contextbook, STOP immediately
+  and output a summary of what you see. Do NOT keep calling tools trying to figure it out.
 """
 
 DG_REVIEWER_INSTRUCTIONS = """\
@@ -192,7 +196,10 @@ STEP 2 — Run the review (1 turn):
   Call the dg_reviewer tool with the diff and plan context.
 
 STEP 3 — Record findings (1 turn):
-  contextbook_write("review_findings", "<findings from DG review>")
+  OVERWRITE review_findings with clear, actionable feedback:
+  contextbook_write("review_findings", "<numbered list of issues>")
+  Each issue must state: file, function, what's wrong, and what to change.
+  The coder reads ONLY this section — make it self-contained and actionable.
 
 STEP 4 — Decision:
   If CRITICAL issues found (security, correctness, design flaws):
@@ -230,7 +237,10 @@ STEP 3 — Decision:
     Output: IMPL_APPROVED
 
   If there are issues that need fixing:
-    contextbook_write("review_findings", "<specific issues to fix>")
+    OVERWRITE review_findings with CLEAR, ACTIONABLE instructions:
+    contextbook_write("review_findings", "<numbered list of SPECIFIC changes needed>")
+    Each item must state: which file, which function, what to change, and why.
+    The coder will read ONLY this section — make it self-contained.
     Output: NEEDS_REWORK
 
 CRITICAL RULES:

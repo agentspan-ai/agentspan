@@ -180,7 +180,7 @@ coder = Agent(
         file_outline, search_symbols, find_references,
         git_diff, git_log, run_command, web_fetch,
         lint_and_format, build_check, run_unit_tests,
-        contextbook_write, contextbook_read, contextbook_summary,
+        contextbook_write, contextbook_read,
     ],
     instructions=CODER_INSTRUCTIONS.format(**_fmt),
 )
@@ -270,7 +270,7 @@ test_coder = Agent(
         file_outline, search_symbols, find_references,
         git_diff, git_log, run_command, web_fetch,
         lint_and_format, build_check, run_unit_tests,
-        contextbook_write, contextbook_read, contextbook_summary,
+        contextbook_write, contextbook_read,
     ],
     instructions=CODER_INSTRUCTIONS.format(**_fmt),
 )
