@@ -1,10 +1,6 @@
 # sdk/python/examples/_issue_fixer_tools.py
 """Reusable @tool functions for the Issue Fixer Agent.
 
-All tools operate relative to a shared working directory set via
-``set_working_dir(path)`` before any agent runs. This is typically a
-temp folder where the target repo is cloned.
-
 Provides 21 tools organized into 5 categories:
 - File operations (read, write, edit, patch, list, outline)
 - Search & navigation (glob, grep, symbols, references)
@@ -23,52 +19,11 @@ from pathlib import Path
 
 from agentspan.agents import tool
 
-# ── Working directory ──────────────────────────────────────────
-
-_WORKING_DIR: str = ""
-
-
-def set_working_dir(path: str) -> None:
-    """Set the shared working directory for all tools.
-
-    Must be called before any agent runs. Typically a temp folder where
-    the target repo will be cloned into by the Issue Analyst.
-    """
-    global _WORKING_DIR
-    _WORKING_DIR = str(path)
-    os.makedirs(_WORKING_DIR, exist_ok=True)
-
-
-def get_working_dir() -> str:
-    """Return the current working directory."""
-    return _WORKING_DIR
-
-
-def _resolve(path: str) -> Path:
-    """Resolve a path relative to the working directory.
-
-    Absolute paths are returned as-is. Relative paths are resolved
-    against _WORKING_DIR. If _WORKING_DIR is unset, resolves against CWD.
-    """
-    p = Path(path)
-    if p.is_absolute():
-        return p
-    base = Path(_WORKING_DIR) if _WORKING_DIR else Path.cwd()
-    return base / p
-
-
-def _cwd() -> str:
-    """Return the working directory for subprocess calls."""
-    return _WORKING_DIR or None
-
-
-# ── Limits ─────────────────────────────────────────────────────
-
-_MAX_FILE_BYTES = 100_000      # 100 KB
+# Limits
+_MAX_FILE_BYTES = 500_000      # 500 KB
 _MAX_OUTPUT_LINES = 200        # truncate long outputs
 _MAX_COMMAND_OUTPUT = 16_000   # chars for command output
 _DEFAULT_TIMEOUT = 120         # seconds for shell commands
-E2E_TOOL_TIMEOUT = 5400        # 90 min — full e2e suite with margin
 
 # Module detection mapping: directory prefix -> module name
 _MODULE_MAP = {
@@ -79,22 +34,8 @@ _MODULE_MAP = {
     "ui": "ui",
 }
 
-_last_tool_calls: dict = {}
-_MAX_CONSECUTIVE = 2
-
-def _check_loop(tool_name: str, args_key: str) -> str:
-    prev = _last_tool_calls.get(tool_name)
-    if prev and prev[0] == args_key:
-        count = prev[1] + 1
-        _last_tool_calls[tool_name] = (args_key, count)
-        if count > _MAX_CONSECUTIVE:
-            return (
-                f"LOOP DETECTED: {tool_name} called {count} times with the same arguments. "
-                f"You already have this result. STOP calling this tool and proceed with your task."
-            )
-    else:
-        _last_tool_calls[tool_name] = (args_key, 1)
-    return ""
+# E2E test timeout
+E2E_TOOL_TIMEOUT = 5400        # 90 min — full e2e suite with margin
 
 
 # ── File Operations ──────────────────────────────────────────
@@ -103,12 +44,8 @@ def _check_loop(tool_name: str, args_key: str) -> str:
 @tool
 def read_file(path: str, start_line: int = 0, end_line: int = 0) -> str:
     """Read a file's contents with optional line range. Returns lines with line numbers.
-    If start_line and end_line are both 0, reads the entire file.
-    Paths are relative to the repo working directory."""
-    loop_err = _check_loop("read_file", f"{path}:{start_line}:{end_line}")
-    if loop_err:
-        return loop_err
-    target = _resolve(path)
+    If start_line and end_line are both 0, reads the entire file."""
+    target = Path(path)
     if not target.exists():
         return f"Error: {path!r} does not exist."
     if target.is_dir():
@@ -133,9 +70,8 @@ def read_file(path: str, start_line: int = 0, end_line: int = 0) -> str:
 
 @tool
 def write_file(path: str, content: str) -> str:
-    """Write content to a file, creating parent directories as needed. Overwrites existing files.
-    Paths are relative to the repo working directory."""
-    target = _resolve(path)
+    """Write content to a file, creating parent directories as needed. Overwrites existing files."""
+    target = Path(path)
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
@@ -146,9 +82,8 @@ def write_file(path: str, content: str) -> str:
 
 @tool
 def edit_file(path: str, old_string: str, new_string: str) -> str:
-    """Replace exact text in a file. Fails if old_string is not found or matches more than once.
-    Paths are relative to the repo working directory."""
-    target = _resolve(path)
+    """Replace exact text in a file. Fails if old_string is not found or matches more than once."""
+    target = Path(path)
     if not target.exists():
         return f"Error: {path!r} does not exist."
     try:
@@ -166,20 +101,20 @@ def edit_file(path: str, old_string: str, new_string: str) -> str:
 
 
 @tool
-def apply_patch(patch: str) -> str:
-    """Apply a unified diff patch to the repo. Returns success/failure details."""
+def apply_patch(patch: str, working_dir: str = ".") -> str:
+    """Apply a unified diff patch. Returns success/failure details."""
     try:
         proc = subprocess.run(
             ["git", "apply", "--check", "-"],
             input=patch, capture_output=True, text=True,
-            cwd=_cwd(), timeout=30,
+            cwd=working_dir, timeout=30,
         )
         if proc.returncode != 0:
             return f"Error: patch would not apply cleanly:\n{proc.stderr.strip()}"
         proc = subprocess.run(
             ["git", "apply", "-"],
             input=patch, capture_output=True, text=True,
-            cwd=_cwd(), timeout=30,
+            cwd=working_dir, timeout=30,
         )
         if proc.returncode == 0:
             return "Patch applied successfully."
@@ -190,9 +125,8 @@ def apply_patch(patch: str) -> str:
 
 @tool
 def list_directory(path: str = ".", max_depth: int = 2) -> str:
-    """List directory contents in tree format up to max_depth levels deep.
-    Paths are relative to the repo working directory."""
-    target = _resolve(path)
+    """List directory contents in tree format up to max_depth levels deep."""
+    target = Path(path)
     if not target.exists():
         return f"Error: {path!r} does not exist."
     if not target.is_dir():
@@ -207,6 +141,7 @@ def list_directory(path: str = ".", max_depth: int = 2) -> str:
             entries = sorted(dir_path.iterdir(), key=lambda p: (p.is_file(), p.name))
         except PermissionError:
             return
+        # Skip hidden dirs and common noise
         entries = [e for e in entries if not e.name.startswith(".") and e.name not in ("node_modules", "__pycache__", ".git", "dist", "build")]
         for i, entry in enumerate(entries):
             is_last = i == len(entries) - 1
@@ -257,9 +192,8 @@ _OUTLINE_PATTERNS = {
 @tool
 def file_outline(path: str) -> str:
     """Show the structure of a file: classes, functions, methods, interfaces.
-    Works across Python, Go, Java, TypeScript, and React.
-    Paths are relative to the repo working directory."""
-    target = _resolve(path)
+    Works across Python, Go, Java, TypeScript, and React."""
+    target = Path(path)
     if not target.exists():
         return f"Error: {path!r} does not exist."
     ext = target.suffix
@@ -289,9 +223,8 @@ def file_outline(path: str) -> str:
 
 @tool
 def glob_find(pattern: str, path: str = ".") -> str:
-    """Find files matching a glob pattern (e.g. '**/*.py'). Returns sorted file paths.
-    Paths are relative to the repo working directory."""
-    base = _resolve(path)
+    """Find files matching a glob pattern (e.g. '**/*.py'). Returns sorted file paths."""
+    base = Path(path)
     if not base.exists():
         return f"Error: {path!r} does not exist."
     try:
@@ -309,20 +242,15 @@ def glob_find(pattern: str, path: str = ".") -> str:
 @tool
 def grep_search(pattern: str, path: str = ".", glob_filter: str = "", max_results: int = 50) -> str:
     """Search file contents with regex pattern. Returns matching lines as file:line: content.
-    Uses ripgrep (rg) for speed, falls back to Python regex if rg is not available.
-    Paths are relative to the repo working directory."""
-    loop_err = _check_loop("grep_search", f"{pattern}:{path}:{glob_filter}")
-    if loop_err:
-        return loop_err
-    resolved_path = str(_resolve(path))
+    Uses ripgrep (rg) for speed, falls back to Python regex if rg is not available."""
     rg = shutil.which("rg")
     if rg:
         cmd = [rg, "--no-heading", "--line-number", "--max-count", str(max_results), "--color", "never"]
         if glob_filter:
             cmd.extend(["--glob", glob_filter])
-        cmd.extend([pattern, resolved_path])
+        cmd.extend([pattern, path])
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30, cwd=_cwd())
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
             if proc.returncode == 0:
                 lines = proc.stdout.strip().splitlines()
                 if len(lines) > max_results:
@@ -340,8 +268,7 @@ def grep_search(pattern: str, path: str = ".", glob_filter: str = "", max_result
     except re.error as exc:
         return f"Invalid regex: {exc}"
     results = []
-    base = _resolve(path)
-    for filepath in sorted(base.rglob(glob_filter or "*")):
+    for filepath in sorted(Path(path).rglob(glob_filter or "*")):
         if not filepath.is_file() or filepath.stat().st_size > _MAX_FILE_BYTES:
             continue
         try:
@@ -373,8 +300,7 @@ _SYMBOL_DEF_PATTERNS = {
 def search_symbols(name: str, kind: str = "", path: str = ".") -> str:
     """Find definitions of classes, functions, types, interfaces, or structs.
     kind: 'class', 'function', 'type', 'interface', 'struct', or '' for all.
-    Paths are relative to the repo working directory."""
-    resolved_path = str(_resolve(path))
+    Returns file:line: definition_line."""
     if kind and kind not in _SYMBOL_DEF_PATTERNS:
         return f"Error: unknown kind {kind!r}. Use: class, function, type, interface, struct, or empty for all."
     patterns = {kind: _SYMBOL_DEF_PATTERNS[kind]} if kind else _SYMBOL_DEF_PATTERNS
@@ -383,9 +309,9 @@ def search_symbols(name: str, kind: str = "", path: str = ".") -> str:
     for k, pat_template in patterns.items():
         pat = pat_template.format(name=re.escape(name))
         if rg:
-            cmd = [rg, "--no-heading", "--line-number", "--color", "never", pat, resolved_path]
+            cmd = [rg, "--no-heading", "--line-number", "--color", "never", pat, path]
             try:
-                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30, cwd=_cwd())
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
                 if proc.returncode == 0:
                     for line in proc.stdout.strip().splitlines():
                         results.append(f"[{k}] {line}")
@@ -393,7 +319,7 @@ def search_symbols(name: str, kind: str = "", path: str = ".") -> str:
                 continue
         else:
             compiled = re.compile(pat)
-            for filepath in sorted(Path(resolved_path).rglob("*")):
+            for filepath in sorted(Path(path).rglob("*")):
                 if not filepath.is_file() or filepath.stat().st_size > _MAX_FILE_BYTES:
                     continue
                 try:
@@ -410,21 +336,21 @@ def search_symbols(name: str, kind: str = "", path: str = ".") -> str:
 @tool
 def find_references(symbol: str, path: str = ".") -> str:
     """Find all usages of a symbol (excludes definitions). Returns file:line: context.
-    Useful for blast radius analysis — 'if I change this, what breaks?'
-    Paths are relative to the repo working directory."""
-    resolved_path = str(_resolve(path))
+    Useful for blast radius analysis — 'if I change this, what breaks?'"""
     rg = shutil.which("rg")
     if not rg:
         return "Error: ripgrep (rg) is required for find_references. Install it: brew install ripgrep"
-    cmd = [rg, "--no-heading", "--line-number", "--color", "never", "--word-regexp", symbol, resolved_path]
+    # Find all mentions
+    cmd = [rg, "--no-heading", "--line-number", "--color", "never", "--word-regexp", symbol, path]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30, cwd=_cwd())
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if proc.returncode != 0:
             return f"No references found for {symbol!r} in {path!r}."
         all_lines = proc.stdout.strip().splitlines()
     except Exception as exc:
         return f"Error: {exc}"
 
+    # Filter out definitions (lines that look like def/class/func/type/interface declarations)
     def_pattern = re.compile(
         r"^\s*(?:export\s+)?(?:abstract\s+)?(?:public\s+)?(?:private\s+)?(?:protected\s+)?"
         r"(?:static\s+)?(?:async\s+)?(?:def|function|func|class|type|interface|struct|enum|const)\s+"
@@ -432,6 +358,7 @@ def find_references(symbol: str, path: str = ".") -> str:
     )
     references = []
     for line in all_lines:
+        # line format: file:lineno:content
         parts = line.split(":", 2)
         if len(parts) >= 3:
             content = parts[2].strip()
@@ -456,7 +383,7 @@ def git_diff(base: str = "main", path: str = "") -> str:
     if path:
         cmd.extend(["--", path])
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30, cwd=_cwd())
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         output = proc.stdout.strip()
         if not output:
             return f"No diff between current state and {base!r}" + (f" for {path!r}" if path else "") + "."
@@ -474,7 +401,7 @@ def git_log(path: str = "", max_count: int = 20) -> str:
     if path:
         cmd.extend(["--", path])
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30, cwd=_cwd())
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         return proc.stdout.strip() or "No commits found."
     except Exception as exc:
         return f"Error: {exc}"
@@ -488,7 +415,7 @@ def git_blame(path: str, start_line: int = 0, end_line: int = 0) -> str:
         cmd.extend([f"-L{start_line},{end_line}"])
     cmd.append(path)
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30, cwd=_cwd())
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if proc.returncode != 0:
             return f"Error: {proc.stderr.strip()}"
         return proc.stdout.strip() or f"No blame data for {path!r}."
@@ -527,7 +454,7 @@ def lint_and_format(module: str = "", path: str = "") -> str:
     if not cmd:
         return f"Error: unknown module {resolved!r}. Known: {', '.join(_LINT_COMMANDS)}."
     try:
-        proc = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=_DEFAULT_TIMEOUT, cwd=_cwd())
+        proc = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=_DEFAULT_TIMEOUT)
         output = (proc.stdout + proc.stderr).strip()
         if len(output) > _MAX_COMMAND_OUTPUT:
             output = output[:_MAX_COMMAND_OUTPUT] + "\n... (truncated)"
@@ -556,7 +483,7 @@ def build_check(module: str = "") -> str:
     if not cmd:
         return f"Error: unknown module {module!r}. Known: {', '.join(_BUILD_COMMANDS)}."
     try:
-        proc = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=_DEFAULT_TIMEOUT, cwd=_cwd())
+        proc = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=_DEFAULT_TIMEOUT)
         output = (proc.stdout + proc.stderr).strip()
         if len(output) > _MAX_COMMAND_OUTPUT:
             output = output[:_MAX_COMMAND_OUTPUT] + "\n... (truncated)"
@@ -582,14 +509,14 @@ def run_unit_tests(module: str, command: str = "") -> str:
     if not cmd:
         return f"Error: unknown module {module!r} and no command provided. Known: {', '.join(_UNIT_TEST_COMMANDS)}."
     try:
-        proc = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=600, cwd=_cwd())
+        proc = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=600)
         output = (proc.stdout + proc.stderr).strip()
         if len(output) > _MAX_COMMAND_OUTPUT:
             output = output[:_MAX_COMMAND_OUTPUT] + "\n... (truncated)"
         status = "PASS" if proc.returncode == 0 else f"FAIL (exit {proc.returncode})"
         return f"[{module}] unit_tests: {status}\n{output}"
     except subprocess.TimeoutExpired:
-        return "Error: tests timed out after 600s."
+        return f"Error: tests timed out after 600s."
     except Exception as exc:
         return f"Error: {exc}"
 
@@ -607,7 +534,6 @@ def run_e2e_tests(suite: str = "", sdk: str = "both") -> str:
             " ".join(cmd), shell=True,
             capture_output=True, text=True,
             timeout=E2E_TOOL_TIMEOUT,
-            cwd=_cwd(),
         )
         output = (proc.stdout + proc.stderr).strip()
         if len(output) > _MAX_COMMAND_OUTPUT * 2:
@@ -623,16 +549,12 @@ def run_e2e_tests(suite: str = "", sdk: str = "both") -> str:
 # ── Contextbook Tools ────────────────────────────────────────
 
 
+# Contextbook directory — created alongside the repo clone
+_CONTEXTBOOK_DIR = Path(".contextbook")
 _VALID_SECTIONS = {
-    "issue_context", "module_map", "implementation_plan", "test_plan", "change_context",
+    "issue_context", "module_map", "implementation_plan", "test_plan",
     "change_log", "review_findings", "test_results", "decisions", "status",
 }
-
-
-def _contextbook_dir() -> Path:
-    """Return the contextbook directory, inside the working directory."""
-    base = Path(_WORKING_DIR) if _WORKING_DIR else Path.cwd()
-    return base / ".contextbook"
 
 
 @tool(stateful=True)
@@ -643,9 +565,8 @@ def contextbook_write(section: str, content: str, append: bool = False) -> str:
     append=True adds to existing content; append=False replaces the section."""
     if section not in _VALID_SECTIONS:
         return f"Error: invalid section {section!r}. Valid: {', '.join(sorted(_VALID_SECTIONS))}"
-    cb = _contextbook_dir()
-    cb.mkdir(parents=True, exist_ok=True)
-    filepath = cb / f"{section}.md"
+    _CONTEXTBOOK_DIR.mkdir(exist_ok=True)
+    filepath = _CONTEXTBOOK_DIR / f"{section}.md"
     try:
         if append and filepath.exists():
             existing = filepath.read_text(encoding="utf-8")
@@ -661,16 +582,13 @@ def contextbook_write(section: str, content: str, append: bool = False) -> str:
 def contextbook_read(section: str = "") -> str:
     """Read from the contextbook. If section is empty, returns table of contents
     (all section names + first line summary). If section is specified, returns full content."""
-    loop_err = _check_loop("contextbook_read", section)
-    if loop_err:
-        return loop_err
-    cb = _contextbook_dir()
-    if not cb.exists():
+    if not _CONTEXTBOOK_DIR.exists():
         return "Contextbook is empty. No sections written yet."
     if not section:
+        # Table of contents
         toc = []
         for name in sorted(_VALID_SECTIONS):
-            filepath = cb / f"{name}.md"
+            filepath = _CONTEXTBOOK_DIR / f"{name}.md"
             if filepath.exists():
                 first_line = filepath.read_text(encoding="utf-8").split("\n")[0][:100]
                 size = filepath.stat().st_size
@@ -680,7 +598,7 @@ def contextbook_read(section: str = "") -> str:
         return "Contextbook sections:\n" + "\n".join(toc)
     if section not in _VALID_SECTIONS:
         return f"Error: invalid section {section!r}. Valid: {', '.join(sorted(_VALID_SECTIONS))}"
-    filepath = cb / f"{section}.md"
+    filepath = _CONTEXTBOOK_DIR / f"{section}.md"
     if not filepath.exists():
         return f"Section '{section}' has not been written yet."
     return filepath.read_text(encoding="utf-8")
@@ -690,17 +608,14 @@ def contextbook_read(section: str = "") -> str:
 def contextbook_summary() -> str:
     """Returns a condensed summary of ALL contextbook sections.
     Designed to be called after context compaction or crash recovery for quick re-orientation."""
-    loop_err = _check_loop("contextbook_summary", "")
-    if loop_err:
-        return loop_err
-    cb = _contextbook_dir()
-    if not cb.exists():
+    if not _CONTEXTBOOK_DIR.exists():
         return "Contextbook is empty. No sections written yet."
     summary_parts = []
     for name in sorted(_VALID_SECTIONS):
-        filepath = cb / f"{name}.md"
+        filepath = _CONTEXTBOOK_DIR / f"{name}.md"
         if filepath.exists():
             content = filepath.read_text(encoding="utf-8")
+            # Take first 500 chars as summary
             preview = content[:500]
             if len(content) > 500:
                 preview += f"\n... ({len(content):,} chars total)"
@@ -714,16 +629,15 @@ def contextbook_summary() -> str:
 
 
 @tool
-def run_command(command: str, timeout: int = 300) -> str:
-    """Execute a shell command in the repo working directory and return stdout+stderr with exit code."""
-    loop_err = _check_loop("run_command", command)
-    if loop_err:
-        return loop_err
+def run_command(command: str, working_dir: str = "", timeout: int = 300) -> str:
+    """Execute a shell command and return stdout+stderr with exit code.
+    working_dir defaults to current directory if empty."""
+    cwd = working_dir or None
     try:
         proc = subprocess.run(
-            command, shell=True, cwd=_cwd(),
+            command, shell=True, cwd=cwd,
             capture_output=True, text=True,
-            timeout=min(timeout, 600),
+            timeout=min(timeout, 600),  # cap at 10 min
         )
         output = (proc.stdout + proc.stderr).strip()
         if len(output) > _MAX_COMMAND_OUTPUT:
@@ -733,425 +647,3 @@ def run_command(command: str, timeout: int = 300) -> str:
         return f"Error: command timed out after {timeout}s."
     except Exception as exc:
         return f"Error: {exc}"
-
-
-# ── Web Fetch ────────────────────────────────────────────────
-
-
-@tool
-def web_fetch(url: str) -> str:
-    """Fetch content from a URL and return it as text. Useful for reading external
-    documentation, referenced links in issues, RFCs, API docs, etc.
-    HTML is converted to plain text. Returns first 16,000 chars."""
-    import urllib.request
-    import html.parser
-
-    class _HTMLToText(html.parser.HTMLParser):
-        def __init__(self):
-            super().__init__()
-            self._texts = []
-            self._skip = False
-        def handle_starttag(self, tag, attrs):
-            if tag in ("script", "style", "noscript"):
-                self._skip = True
-        def handle_endtag(self, tag):
-            if tag in ("script", "style", "noscript"):
-                self._skip = False
-            if tag in ("p", "div", "br", "li", "h1", "h2", "h3", "h4", "h5", "h6", "tr"):
-                self._texts.append("\n")
-        def handle_data(self, data):
-            if not self._skip:
-                self._texts.append(data)
-        def get_text(self):
-            return "".join(self._texts)
-
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "AgentSpan-IssueFixer/1.0"})
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            content_type = resp.headers.get("Content-Type", "")
-            raw = resp.read(500_000).decode("utf-8", errors="replace")
-
-            if "html" in content_type.lower():
-                parser = _HTMLToText()
-                parser.feed(raw)
-                text = parser.get_text()
-            else:
-                text = raw
-
-            # Clean up whitespace
-            lines = [line.strip() for line in text.splitlines()]
-            text = "\n".join(line for line in lines if line)
-
-            if len(text) > _MAX_COMMAND_OUTPUT:
-                text = text[:_MAX_COMMAND_OUTPUT] + f"\n... (truncated, {len(text):,} chars total)"
-            return text if text.strip() else f"No readable content at {url}"
-    except Exception as exc:
-        return f"Error fetching {url}: {exc}"
-
-
-# ── Deterministic PR/Issue Tools ─────────────────────────────
-
-
-@tool
-def fetch_pr_context(repo: str, pr_number: int) -> str:
-    """Fetch PR details, diff, comments, reviews, and the linked issue in one call.
-
-    Clones the repo, checks out the PR branch, and writes everything to the
-    contextbook (issue_context, review_findings, module_map, status).
-    Returns a structured summary. No LLM needed — pure CLI orchestration.
-    """
-    import json as _json
-    results = []
-
-    def _run(cmd):
-        proc = subprocess.run(cmd, shell=True, cwd=_cwd(), capture_output=True, text=True, timeout=120)
-        return proc.stdout.strip(), proc.stderr.strip(), proc.returncode
-
-    # 1. Fetch PR details (use minimal fields to avoid scope issues)
-    pr_json_out, pr_err, rc = _run(
-        f"gh pr view {pr_number} --repo {repo} "
-        f"--json number,title,body,state,headRefName"
-    )
-    if rc != 0:
-        return f"Error fetching PR #{pr_number}: {pr_err}"
-
-    try:
-        pr_data = _json.loads(pr_json_out)
-    except:
-        pr_data = {"raw": pr_json_out}
-    results.append(f"PR #{pr_number}: {pr_data.get('title', '?')}")
-
-    # Fetch comments via REST API (no extra scopes needed beyond 'repo')
-    # Issue comments API covers both issue and PR conversation comments
-    comments_out, _, _ = _run(
-        f"gh api repos/{repo}/issues/{pr_number}/comments "
-        f"--jq '.[] | \"[\" + .user.login + \"]: \" + .body'"
-    )
-    # Inline review comments (file-level feedback)
-    review_comments_out, _, _ = _run(
-        f"gh api repos/{repo}/pulls/{pr_number}/comments "
-        f"--jq '.[] | .path + \":\" + (.line|tostring) + \" [\" + .user.login + \"]: \" + .body'"
-    )
-    # Review body text (approve/request changes summary)
-    reviews_out, _, _ = _run(
-        f"gh api repos/{repo}/pulls/{pr_number}/reviews "
-        f"--jq '.[] | select(.body != \"\") | \"[\" + .user.login + \"] (\" + .state + \"): \" + .body'"
-    )
-
-    # 2. Fetch PR diff (truncated to avoid payload issues)
-    diff_out, _, _ = _run(f"gh pr diff {pr_number} --repo {repo}")
-    if len(diff_out) > 8000:
-        diff_out = diff_out[:8000] + "\n...[diff truncated]"
-    results.append(f"Diff: {len(diff_out)} chars")
-
-    # 3. Clone and checkout
-    _run(f"gh repo clone {repo} .")
-    _run("echo '.contextbook/' >> .gitignore")
-    branch = pr_data.get("headRefName", f"fix/issue-{pr_number}")
-    _run(f"git checkout {branch}")
-    results.append(f"Branch: {branch}")
-
-    # 4. Extract issue number from PR body
-    body = pr_data.get("body", "")
-    issue_num = None
-    import re
-    match = re.search(r"[Ff]ixes?\s*#(\d+)", body)
-    if match:
-        issue_num = int(match.group(1))
-
-    # 5. Fetch issue if found (use API to get full details + comments)
-    issue_json = ""
-    if issue_num:
-        issue_out, _, rc = _run(
-            f"gh issue view {issue_num} --repo {repo} "
-            f"--json number,title,body,labels,state"
-        )
-        if rc == 0:
-            issue_json = issue_out
-            results.append(f"Issue #{issue_num} fetched")
-        # Also get issue comments
-        issue_comments_out, _, _ = _run(
-            f"gh api repos/{repo}/issues/{issue_num}/comments "
-            f"--jq '.[] | \"[\" + .user.login + \"]: \" + .body'"
-        )
-        if issue_comments_out.strip():
-            issue_json += "\n\n## Issue Comments\n" + issue_comments_out[:3000]
-
-    # 6. Extract review comments into structured feedback
-    feedback_items = []
-    if comments_out.strip():
-        feedback_items.append("## PR Comments\n" + comments_out[:2000])
-    if reviews_out.strip():
-        feedback_items.append("## Review Feedback\n" + reviews_out[:2000])
-    if review_comments_out.strip():
-        feedback_items.append("## Inline Review Comments\n" + review_comments_out[:2000])
-    feedback_text = "\n\n".join(feedback_items) if feedback_items else "No review comments found."
-
-    # 7. Write to contextbook
-    cb = _contextbook_dir()
-    cb.mkdir(parents=True, exist_ok=True)
-
-    if issue_json:
-        (cb / "issue_context.md").write_text(issue_json, encoding="utf-8")
-
-    review_doc = f"# PR #{pr_number} Review Feedback\n\n"
-    review_doc += f"## PR Title\n{pr_data.get('title', '?')}\n\n"
-    review_doc += f"## PR Body\n{body[:2000]}\n\n"
-    review_doc += f"{feedback_text}\n\n"
-    review_doc += f"## Diff\n```diff\n{diff_out}\n```\n"
-    (cb / "review_findings.md").write_text(review_doc, encoding="utf-8")
-
-    (cb / "status.md").write_text(
-        f"PR feedback collected for PR #{pr_number}. Ready for implementation.",
-        encoding="utf-8"
-    )
-
-    # Return the FULL context so the next pipeline stage has everything.
-    # The return value becomes the downstream agent's input prompt.
-    output_parts = [
-        f"# PR #{pr_number}: {pr_data.get('title', '?')}",
-        f"Branch: {branch}",
-    ]
-
-    # Issue details
-    if issue_num and issue_json:
-        try:
-            issue_data = _json.loads(issue_json.split("\n\n##")[0])  # JSON part only
-            output_parts.append(f"\n## Issue #{issue_num}: {issue_data.get('title', '?')}")
-            issue_body = issue_data.get("body", "")
-            if issue_body:
-                output_parts.append(issue_body[:3000])
-        except:
-            output_parts.append(f"\n## Issue #{issue_num}")
-            output_parts.append(issue_json[:3000])
-
-    # PR comments / review feedback
-    if feedback_text and feedback_text != "No review comments found.":
-        output_parts.append(f"\n{feedback_text}")
-    else:
-        output_parts.append("\nNo review comments found.")
-
-    # Diff
-    output_parts.append(f"\n## Diff\n```diff\n{diff_out}\n```")
-
-    output_parts.append(f"\nContextbook populated: issue_context, review_findings, status")
-
-    return "\n".join(output_parts)
-
-
-@tool
-def fetch_issue_context(repo: str, issue_number: int, branch_prefix: str = "fix/issue-") -> str:
-    """Fetch a GitHub issue, clone the repo, create a branch, and write contextbook.
-
-    Does everything the Issue Analyst LLM agent does, but deterministically in one call.
-    Returns structured output (REPO, BRANCH, ISSUE, MODULE, DETAILS).
-    """
-    import json as _json
-    results = []
-
-    def _run(cmd):
-        proc = subprocess.run(cmd, shell=True, cwd=_cwd(), capture_output=True, text=True, timeout=120)
-        return proc.stdout.strip(), proc.stderr.strip(), proc.returncode
-
-    # 1. Fetch issue
-    issue_out, err, rc = _run(
-        f"gh issue view {issue_number} --repo {repo} "
-        f"--json number,title,body,labels,state"
-    )
-    if rc != 0:
-        return f"Error fetching issue #{issue_number}: {err}"
-
-    try:
-        issue_data = _json.loads(issue_out)
-    except:
-        issue_data = {"title": "?", "body": issue_out}
-
-    title = issue_data.get("title", "?")
-    author = "unknown"  # author field requires read:user scope
-    body = issue_data.get("body", "")
-
-    # 2. Clone and branch
-    _run(f"gh repo clone {repo} .")
-    _run("echo '.contextbook/' >> .gitignore && git add .gitignore && git commit -m 'chore: ignore contextbook'")
-    branch = f"{branch_prefix}{issue_number}"
-    _run(f"git checkout -b {branch}")
-    _run(f"git push -u origin {branch}")
-
-    # 3. Detect module from issue body keywords
-    module = "unknown"
-    for keyword, mod in [("server", "server"), ("sdk/python", "sdk/python"), ("python sdk", "sdk/python"),
-                          ("typescript", "sdk/typescript"), ("ts sdk", "sdk/typescript"),
-                          ("cli", "cli"), ("ui", "ui")]:
-        if keyword.lower() in body.lower():
-            module = mod
-            break
-
-    # 4. Write contextbook
-    cb = _contextbook_dir()
-    cb.mkdir(parents=True, exist_ok=True)
-    (cb / "issue_context.md").write_text(issue_out, encoding="utf-8")
-    (cb / "module_map.md").write_text(f"{module}: detected from issue body keywords", encoding="utf-8")
-
-    # 5. Return FULL context — this becomes the downstream agent's input
-    labels = [l.get("name", "") for l in issue_data.get("labels", [])]
-    return (
-        f"REPO: {repo}\n"
-        f"BRANCH: {branch}\n"
-        f"ISSUE: #{issue_number} {title}\n"
-        f"MODULE: {module}\n"
-        f"LABELS: {', '.join(labels) if labels else 'none'}\n"
-        f"\n## Issue Body\n{body}\n"
-        f"\nContextbook populated: issue_context, module_map"
-    )
-
-
-@tool
-def create_pr(repo: str, issue_number: int, qa_evidence_dir: str = "qa-tests") -> str:
-    """Commit remaining changes, push the branch, and create a pull request.
-
-    Reads contextbook for issue context, change log, and change context.
-    Builds the PR body with human-readable sections + machine-readable JSON.
-    Returns the PR URL.
-    """
-    import json as _json
-    results = []
-
-    def _run(cmd):
-        proc = subprocess.run(cmd, shell=True, cwd=_cwd(), capture_output=True, text=True, timeout=120)
-        return proc.stdout.strip(), proc.stderr.strip(), proc.returncode
-
-    cb = _contextbook_dir()
-
-    # Read contextbook sections
-    issue_ctx = ""
-    if (cb / "issue_context.md").exists():
-        issue_ctx = (cb / "issue_context.md").read_text(encoding="utf-8")
-    change_log = ""
-    if (cb / "change_log.md").exists():
-        change_log = (cb / "change_log.md").read_text(encoding="utf-8")
-    change_context = ""
-    if (cb / "change_context.md").exists():
-        change_context = (cb / "change_context.md").read_text(encoding="utf-8")
-    test_results = ""
-    if (cb / "test_results.md").exists():
-        test_results = (cb / "test_results.md").read_text(encoding="utf-8")
-
-    # Parse issue title from context
-    title = f"Fix #{issue_number}"
-    try:
-        data = _json.loads(issue_ctx)
-        title = f"Fix #{issue_number}: {data.get('title', '')}"
-    except:
-        pass
-
-    # Stage, commit, push
-    _run("git add -A -- ':!.contextbook'")
-    status_out, _, _ = _run("git status --short")
-    if status_out.strip():
-        _run("git commit -m 'fix: final changes'")
-        results.append("Committed remaining changes")
-
-    branch_out, _, _ = _run("git branch --show-current")
-    push_out, push_err, rc = _run("git push origin HEAD")
-    if rc != 0:
-        _run(f"git push --set-upstream origin {branch_out}")
-    results.append(f"Pushed branch: {branch_out}")
-
-    # Build PR body
-    summary = change_log[:500] if change_log else "See commits for details."
-    testing = test_results[:300] if test_results else "See QA evidence folder."
-
-    body = (
-        f"Fixes #{issue_number}\n\n"
-        f"## Summary\n{summary}\n\n"
-        f"## Testing\n{testing}\n\n"
-        f"## QA Evidence\nSee `{qa_evidence_dir}/issue-{issue_number}/` for detailed test results.\n\n"
-    )
-    if change_context:
-        body += (
-            f"<details>\n<summary>Change Context (machine-readable)</summary>\n\n"
-            f"```json\n{change_context[:3000]}\n```\n\n</details>\n"
-        )
-
-    # Create PR
-    # Escape body for shell
-    body_escaped = body.replace("'", "'\\''")
-    pr_out, pr_err, rc = _run(
-        f"gh pr create --repo {repo} --base main --head {branch_out} "
-        f"--title '{title[:70]}' --body '{body_escaped}'"
-    )
-
-    if rc == 0 and "github.com" in pr_out:
-        results.append(f"PR created: {pr_out}")
-        return "\n".join(results) + f"\n\nPR_URL: {pr_out}"
-    else:
-        results.append(f"PR creation failed: {pr_err or pr_out}")
-        return "\n".join(results)
-
-
-@tool
-def update_pr(repo: str, pr_number: int) -> str:
-    """Push changes to the existing PR branch and add a comment summarizing what was addressed.
-
-    Reads contextbook for change log, change context, and review findings.
-    Pushes to the same branch and adds a PR comment with a feedback resolution table.
-    """
-    import json as _json
-    results = []
-
-    def _run(cmd):
-        proc = subprocess.run(cmd, shell=True, cwd=_cwd(), capture_output=True, text=True, timeout=120)
-        return proc.stdout.strip(), proc.stderr.strip(), proc.returncode
-
-    cb = _contextbook_dir()
-
-    # Read contextbook
-    change_log = ""
-    if (cb / "change_log.md").exists():
-        change_log = (cb / "change_log.md").read_text(encoding="utf-8")
-    change_context = ""
-    if (cb / "change_context.md").exists():
-        change_context = (cb / "change_context.md").read_text(encoding="utf-8")
-    review_findings = ""
-    if (cb / "review_findings.md").exists():
-        review_findings = (cb / "review_findings.md").read_text(encoding="utf-8")
-
-    # Stage, commit, push
-    _run("git add -A -- ':!.contextbook'")
-    status_out, _, _ = _run("git status --short")
-    if status_out.strip():
-        _run("git commit -m 'fix: address PR feedback'")
-        results.append("Committed changes")
-
-    _, _, rc = _run("git push origin HEAD")
-    if rc != 0:
-        branch_out, _, _ = _run("git branch --show-current")
-        _run(f"git push --set-upstream origin {branch_out}")
-    results.append("Pushed to branch")
-
-    # Build PR comment
-    comment = "## Feedback Addressed\n\n"
-    if change_log:
-        comment += f"### Changes Made\n{change_log[:1000]}\n\n"
-    if change_context:
-        comment += (
-            f"<details>\n<summary>Change Context</summary>\n\n"
-            f"```json\n{change_context[:2000]}\n```\n\n</details>\n"
-        )
-
-    # Post comment
-    comment_escaped = comment.replace("'", "'\\''")
-    _, err, rc = _run(
-        f"gh pr comment {pr_number} --repo {repo} --body '{comment_escaped}'"
-    )
-    if rc == 0:
-        results.append(f"Posted comment on PR #{pr_number}")
-    else:
-        results.append(f"Comment failed: {err}")
-
-    # Get PR URL
-    pr_out, _, _ = _run(f"gh pr view {pr_number} --repo {repo} --json url --jq .url")
-    if pr_out:
-        results.append(f"PR URL: {pr_out}")
-
-    return "\n".join(results)
