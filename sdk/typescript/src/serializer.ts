@@ -148,7 +148,7 @@ export class AgentConfigSerializer {
 
     // Tools
     if (agent.tools.length > 0) {
-      config.tools = agent.tools.map((t) => this.serializeTool(normalizeToolInput(t)));
+      config.tools = agent.tools.map((t) => this.serializeTool(normalizeToolInput(t), agent.stateful));
     }
 
     // Sub-agents (recursive)
@@ -263,7 +263,7 @@ export class AgentConfigSerializer {
   /**
    * Serialize a ToolDef to ToolConfig JSON.
    */
-  serializeTool(toolDef: ToolDef): Record<string, unknown> {
+  serializeTool(toolDef: ToolDef, agentStateful?: boolean): Record<string, unknown> {
     const config: Record<string, unknown> = {
       name: toolDef.name,
       description: toolDef.description,
@@ -278,7 +278,7 @@ export class AgentConfigSerializer {
     if (toolDef.timeoutSeconds !== undefined) {
       config.timeoutSeconds = toolDef.timeoutSeconds;
     }
-    if (toolDef.stateful) config.stateful = true;
+    if (agentStateful || toolDef.stateful) config.stateful = true;
 
     // Handle guardrails
     if (toolDef.guardrails && toolDef.guardrails.length > 0) {
