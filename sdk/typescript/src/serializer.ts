@@ -289,6 +289,16 @@ export class AgentConfigSerializer {
       config.config = toolDef.config;
     }
 
+    // Credentials (plain string names) — merge into config dict (matches Python SDK wire format)
+    // CredentialFile objects are passed through as-is on the top-level credentials field.
+    const stringCredentials = toolDef.credentials?.filter(
+      (c): c is string => typeof c === "string",
+    );
+    if (stringCredentials && stringCredentials.length > 0) {
+      const existingConfig = (config.config as Record<string, unknown>) ?? {};
+      config.config = { ...existingConfig, credentials: stringCredentials };
+    }
+
     // Retry configuration — merge into config dict (matches Python SDK wire format)
     if (
       toolDef.retryCount !== undefined ||
