@@ -195,6 +195,121 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
 
         messages.clear();
         messages.addAll(sanitized);
+
+        // Compact tool history: truncate old tool results to save payload space.
+        compactToolHistory(messages);
+    }
+
+    /**
+     * Compact tool message history to reduce payload size.
+     *
+     * <p>Applies three optimizations:</p>
+     * <ol>
+     *   <li><b>Truncate old tool results:</b> Tool results older than the most recent
+     *       {@code RECENT_TOOL_RESULTS_TO_KEEP} are truncated to {@code TOOL_RESULT_TRUNCATE_LENGTH}
+     *       characters. The LLM already consumed these results in prior turns.</li>
+     *   <li><b>Collapse write-only tools:</b> Tools like {@code contextbook_write} produce
+     *       confirmation messages ("wrote X chars") that add no value in history.
+     *       Their results are replaced with a short acknowledgment.</li>
+     *   <li><b>Keep only latest read per key:</b> For tools like {@code contextbook_read},
+     *       only the most recent result per section argument is kept in full;
+     *       older reads of the same section are truncated.</li>
+     * </ol>
+     */
+    private static final int RECENT_TOOL_RESULTS_TO_KEEP = 6;
+    private static final int TOOL_RESULT_TRUNCATE_LENGTH = 500;
+    private static final Set<String> WRITE_ONLY_TOOLS = Set.of(
+            "contextbook_write", "contextbook_summary"
+    );
+
+    void compactToolHistory(List<ChatMessage> messages) {
+        if (messages == null || messages.size() < 4) {
+            return;
+        }
+
+        // 1. Find all tool response messages and their positions
+        List<Integer> toolResponseIndices = new ArrayList<>();
+        for (int i = 0; i < messages.size(); i++) {
+            ChatMessage msg = messages.get(i);
+            if (msg.getRole() == ChatMessage.Role.tool && msg.getToolCalls() != null) {
+                toolResponseIndices.add(i);
+            }
+        }
+
+        if (toolResponseIndices.isEmpty()) {
+            return;
+        }
+
+        // 2. Track the latest contextbook_read per section argument for dedup
+        Map<String, Integer> latestReadBySection = new HashMap<>();
+        for (int idx : toolResponseIndices) {
+            ChatMessage msg = messages.get(idx);
+            for (ToolCall tc : msg.getToolCalls()) {
+                String name = tc.getName();
+                if (name != null && name.contains("contextbook_read")) {
+                    Object section = tc.getInputParameters() != null
+                            ? tc.getInputParameters().get("section")
+                            : null;
+                    String key = name + ":" + (section != null ? section.toString() : "toc");
+                    latestReadBySection.put(key, idx);
+                }
+            }
+        }
+
+        // 3. Compact: truncate old results, collapse writes, dedup reads
+        int recentCutoff = toolResponseIndices.size() - RECENT_TOOL_RESULTS_TO_KEEP;
+
+        for (int ri = 0; ri < toolResponseIndices.size(); ri++) {
+            int idx = toolResponseIndices.get(ri);
+            ChatMessage msg = messages.get(idx);
+            boolean isRecent = ri >= recentCutoff;
+
+            for (ToolCall tc : msg.getToolCalls()) {
+                String name = tc.getName() != null ? tc.getName() : "";
+
+                // Collapse write-only tools — result is just a confirmation
+                if (WRITE_ONLY_TOOLS.stream().anyMatch(name::contains)) {
+                    msg.setMessage("[ok]");
+                    if (tc.getOutput() != null) {
+                        tc.setOutput(Map.of("result", "[ok]"));
+                    }
+                    continue;
+                }
+
+                // For contextbook_read: keep full only if it's the latest read for that section
+                if (name.contains("contextbook_read")) {
+                    Object section = tc.getInputParameters() != null
+                            ? tc.getInputParameters().get("section")
+                            : null;
+                    String key = name + ":" + (section != null ? section.toString() : "toc");
+                    Integer latestIdx = latestReadBySection.get(key);
+                    if (latestIdx != null && latestIdx != idx) {
+                        // Not the latest read of this section — truncate
+                        truncateToolResult(msg, tc);
+                        continue;
+                    }
+                }
+
+                // Truncate old tool results (not recent)
+                if (!isRecent) {
+                    truncateToolResult(msg, tc);
+                }
+            }
+        }
+    }
+
+    private void truncateToolResult(ChatMessage msg, ToolCall tc) {
+        String text = msg.getMessage();
+        if (text != null && text.length() > TOOL_RESULT_TRUNCATE_LENGTH) {
+            msg.setMessage(text.substring(0, TOOL_RESULT_TRUNCATE_LENGTH) + "...[truncated]");
+        }
+        if (tc.getOutput() != null) {
+            Object result = tc.getOutput().get("result");
+            if (result != null && result.toString().length() > TOOL_RESULT_TRUNCATE_LENGTH) {
+                tc.setOutput(Map.of("result",
+                        result.toString().substring(0, TOOL_RESULT_TRUNCATE_LENGTH) + "...[truncated]"));
+            }
+        }
     }
 
     void validateRunnableConversation(ChatCompletion chatCompletion) {
@@ -345,7 +460,7 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
                         if (toolModel.getStatus().isSuccessful()) {
                             // For SUB_WORKFLOW tasks, extract clean result
                             Map<String, Object> toolOutput = toolModel.getOutputData();
-                            Map<String, Object> toolInput = toolModel.getInputData();
+                            Map<String, Object> toolInput = stripInternalFields(toolModel.getInputData());
 
                             if (TASK_TYPE_SUB_WORKFLOW.equals(toolModel.getTaskType())) {
                                 toolOutput = extractSubWorkflowResult(toolOutput);
@@ -359,7 +474,15 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
                                     .type(toolModel.getTaskType())
                                     .output(toolOutput)
                                     .build();
-                            toolResponses.add(new ChatMessage(ChatMessage.Role.tool, toolCallResult));
+
+                            // Set the message field so LLM provider adapters can
+                            // read the tool result as content. Without this, the
+                            // ChatMessage has message=null and the LLM sees empty
+                            // tool responses, causing it to retry the same tool call
+                            // in an infinite loop.
+                            ChatMessage toolMsg = new ChatMessage(ChatMessage.Role.tool, toolCallResult);
+                            toolMsg.setMessage(extractToolResultText(toolOutput));
+                            toolResponses.add(toolMsg);
                         } else {
                             // Failed tool — send error feedback to LLM
                             String reason = toolModel.getReasonForIncompletion();
@@ -368,13 +491,15 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
                             }
                             Map<String, Object> errorOutput = Map.of("status", "FAILED", "error", reason);
                             ToolCall toolCallResult = ToolCall.builder()
-                                    .inputParameters(toolModel.getInputData())
+                                    .inputParameters(stripInternalFields(toolModel.getInputData()))
                                     .name(toolModel.getTaskDefName())
                                     .taskReferenceName(uniqueRefName)
                                     .type(toolModel.getTaskType())
                                     .output(errorOutput)
                                     .build();
-                            toolResponses.add(new ChatMessage(ChatMessage.Role.tool, toolCallResult));
+                            ChatMessage errorMsg = new ChatMessage(ChatMessage.Role.tool, toolCallResult);
+                            errorMsg.setMessage(reason);
+                            toolResponses.add(errorMsg);
                         }
                     }
                 }
@@ -832,5 +957,52 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         Map<String, Object> clean = new HashMap<>(inputData);
         clean.remove("subWorkflowDefinition");
         return clean;
+    }
+
+    /**
+     * Strip internal dispatch fields from tool input before including in conversation history.
+     *
+     * <p>The dispatch layer injects {@code _agent_state} (accumulated agent state, can be 170+ KB)
+     * and {@code __agentspan_ctx__} (execution tokens) into tool inputs. These are internal
+     * plumbing — including them in every tool message bloats the conversation payload
+     * (170 KB × N tool calls = multi-MB overhead) and provides no value to the LLM.</p>
+     */
+    private Map<String, Object> stripInternalFields(Map<String, Object> inputData) {
+        if (inputData == null || inputData.isEmpty()) {
+            return inputData;
+        }
+        Map<String, Object> clean = new HashMap<>(inputData);
+        clean.remove("_agent_state");
+        clean.remove("__agentspan_ctx__");
+        clean.remove("method");  // internal dispatch method name
+        return clean;
+    }
+
+    /**
+     * Extract a text representation of a tool's output for the message content.
+     *
+     * <p>The Conductor AI ChatMessage stores tool results in ToolCall.output (a Map),
+     * but LLM providers (Anthropic, OpenAI) expect the result as a string in the
+     * message's content/message field. Without this, tool response messages have
+     * message=null and the LLM sees empty results, causing infinite retry loops.</p>
+     *
+     * @param toolOutput the tool's output map (typically contains a "result" key)
+     * @return string representation of the tool result
+     */
+    private String extractToolResultText(Map<String, Object> toolOutput) {
+        if (toolOutput == null || toolOutput.isEmpty()) {
+            return "";
+        }
+        // Prefer the "result" key if present (standard @tool output format)
+        Object result = toolOutput.get("result");
+        if (result != null) {
+            return result.toString();
+        }
+        // Fall back to JSON serialization of the full output
+        try {
+            return objectMapper.writeValueAsString(toolOutput);
+        } catch (Exception e) {
+            return toolOutput.toString();
+        }
     }
 }

@@ -182,6 +182,38 @@ CRITICAL RULES:
   and output a summary of what you see. Do NOT keep calling tools trying to figure it out.
 """
 
+TEST_CODER_INSTRUCTIONS = """\
+You are a test writer. You write e2e tests based on the test plan.
+NEVER describe code in text — call write_file to create the test file.
+
+All tools operate in the repo working directory. Paths are relative to repo root.
+
+STEP 1 — Read the test plan and an example test (parallel, 1 turn):
+  contextbook_read("test_plan")
+  read_file("sdk/python/e2e/conftest.py")
+
+STEP 2 — Read ONE existing test suite for patterns (1 turn):
+  Pick a relevant test_suite*.py file and read it with read_file.
+
+STEP 3 — Write the test file (1-2 turns):
+  write_file("<test_path>", "<complete test code>")
+  Rules:
+  - No mocks. Real e2e with live server.
+  - Algorithmic assertions only (status codes, task counts, output keys).
+  - No LLM output parsing.
+  - Follow conftest.py patterns (runtime, model fixtures).
+
+STEP 4 — Commit (1 turn):
+  run_command("git add -A -- ':!.contextbook' && git commit -m 'test: add e2e tests'")
+
+STEP 5 — STOP. No more tool calls. Output a summary of what you wrote.
+
+CRITICAL RULES:
+- You have at most 15 turns. Do NOT read files endlessly.
+- Read test_plan and 1-2 example files, then WRITE the test. That's it.
+- After committing, STOP immediately.
+"""
+
 DG_REVIEWER_INSTRUCTIONS = """\
 You are the Code Review Coordinator. Run adversarial reviews via the DG skill.
 
@@ -193,7 +225,11 @@ STEP 1 — Gather context (1 turn, parallel):
   git_diff("main")
 
 STEP 2 — Run the review (1 turn):
-  Call the dg_reviewer tool with the diff and plan context.
+  Call the dg_reviewer tool. Your prompt to the tool MUST start with:
+  "1\n\nDo NOT read comic-template.html. Do NOT generate comic output. Just provide findings as text.\n\n"
+  Then include the diff and plan context.
+  The "1" limits the review to a single round (one Gilfoyle critique + one Dinesh response).
+  Do NOT allow multiple rounds — one pass is sufficient.
 
 STEP 3 — Record findings (1 turn):
   OVERWRITE review_findings with clear, actionable feedback:

@@ -64,7 +64,7 @@ def _cwd() -> str:
 
 # ── Limits ─────────────────────────────────────────────────────
 
-_MAX_FILE_BYTES = 500_000      # 500 KB
+_MAX_FILE_BYTES = 100_000      # 100 KB
 _MAX_OUTPUT_LINES = 200        # truncate long outputs
 _MAX_COMMAND_OUTPUT = 16_000   # chars for command output
 _DEFAULT_TIMEOUT = 120         # seconds for shell commands
@@ -79,6 +79,23 @@ _MODULE_MAP = {
     "ui": "ui",
 }
 
+_last_tool_calls: dict = {}
+_MAX_CONSECUTIVE = 2
+
+def _check_loop(tool_name: str, args_key: str) -> str:
+    prev = _last_tool_calls.get(tool_name)
+    if prev and prev[0] == args_key:
+        count = prev[1] + 1
+        _last_tool_calls[tool_name] = (args_key, count)
+        if count > _MAX_CONSECUTIVE:
+            return (
+                f"LOOP DETECTED: {tool_name} called {count} times with the same arguments. "
+                f"You already have this result. STOP calling this tool and proceed with your task."
+            )
+    else:
+        _last_tool_calls[tool_name] = (args_key, 1)
+    return ""
+
 
 # ── File Operations ──────────────────────────────────────────
 
@@ -88,6 +105,9 @@ def read_file(path: str, start_line: int = 0, end_line: int = 0) -> str:
     """Read a file's contents with optional line range. Returns lines with line numbers.
     If start_line and end_line are both 0, reads the entire file.
     Paths are relative to the repo working directory."""
+    loop_err = _check_loop("read_file", f"{path}:{start_line}:{end_line}")
+    if loop_err:
+        return loop_err
     target = _resolve(path)
     if not target.exists():
         return f"Error: {path!r} does not exist."
@@ -291,6 +311,9 @@ def grep_search(pattern: str, path: str = ".", glob_filter: str = "", max_result
     """Search file contents with regex pattern. Returns matching lines as file:line: content.
     Uses ripgrep (rg) for speed, falls back to Python regex if rg is not available.
     Paths are relative to the repo working directory."""
+    loop_err = _check_loop("grep_search", f"{pattern}:{path}:{glob_filter}")
+    if loop_err:
+        return loop_err
     resolved_path = str(_resolve(path))
     rg = shutil.which("rg")
     if rg:
@@ -638,6 +661,9 @@ def contextbook_write(section: str, content: str, append: bool = False) -> str:
 def contextbook_read(section: str = "") -> str:
     """Read from the contextbook. If section is empty, returns table of contents
     (all section names + first line summary). If section is specified, returns full content."""
+    loop_err = _check_loop("contextbook_read", section)
+    if loop_err:
+        return loop_err
     cb = _contextbook_dir()
     if not cb.exists():
         return "Contextbook is empty. No sections written yet."
@@ -664,6 +690,9 @@ def contextbook_read(section: str = "") -> str:
 def contextbook_summary() -> str:
     """Returns a condensed summary of ALL contextbook sections.
     Designed to be called after context compaction or crash recovery for quick re-orientation."""
+    loop_err = _check_loop("contextbook_summary", "")
+    if loop_err:
+        return loop_err
     cb = _contextbook_dir()
     if not cb.exists():
         return "Contextbook is empty. No sections written yet."
@@ -687,6 +716,9 @@ def contextbook_summary() -> str:
 @tool
 def run_command(command: str, timeout: int = 300) -> str:
     """Execute a shell command in the repo working directory and return stdout+stderr with exit code."""
+    loop_err = _check_loop("run_command", command)
+    if loop_err:
+        return loop_err
     try:
         proc = subprocess.run(
             command, shell=True, cwd=_cwd(),
@@ -755,3 +787,371 @@ def web_fetch(url: str) -> str:
             return text if text.strip() else f"No readable content at {url}"
     except Exception as exc:
         return f"Error fetching {url}: {exc}"
+
+
+# ── Deterministic PR/Issue Tools ─────────────────────────────
+
+
+@tool
+def fetch_pr_context(repo: str, pr_number: int) -> str:
+    """Fetch PR details, diff, comments, reviews, and the linked issue in one call.
+
+    Clones the repo, checks out the PR branch, and writes everything to the
+    contextbook (issue_context, review_findings, module_map, status).
+    Returns a structured summary. No LLM needed — pure CLI orchestration.
+    """
+    import json as _json
+    results = []
+
+    def _run(cmd):
+        proc = subprocess.run(cmd, shell=True, cwd=_cwd(), capture_output=True, text=True, timeout=120)
+        return proc.stdout.strip(), proc.stderr.strip(), proc.returncode
+
+    # 1. Fetch PR details (use minimal fields to avoid scope issues)
+    pr_json_out, pr_err, rc = _run(
+        f"gh pr view {pr_number} --repo {repo} "
+        f"--json number,title,body,state,headRefName"
+    )
+    if rc != 0:
+        return f"Error fetching PR #{pr_number}: {pr_err}"
+
+    try:
+        pr_data = _json.loads(pr_json_out)
+    except:
+        pr_data = {"raw": pr_json_out}
+    results.append(f"PR #{pr_number}: {pr_data.get('title', '?')}")
+
+    # Fetch comments via REST API (no extra scopes needed beyond 'repo')
+    # Issue comments API covers both issue and PR conversation comments
+    comments_out, _, _ = _run(
+        f"gh api repos/{repo}/issues/{pr_number}/comments "
+        f"--jq '.[] | \"[\" + .user.login + \"]: \" + .body'"
+    )
+    # Inline review comments (file-level feedback)
+    review_comments_out, _, _ = _run(
+        f"gh api repos/{repo}/pulls/{pr_number}/comments "
+        f"--jq '.[] | .path + \":\" + (.line|tostring) + \" [\" + .user.login + \"]: \" + .body'"
+    )
+    # Review body text (approve/request changes summary)
+    reviews_out, _, _ = _run(
+        f"gh api repos/{repo}/pulls/{pr_number}/reviews "
+        f"--jq '.[] | select(.body != \"\") | \"[\" + .user.login + \"] (\" + .state + \"): \" + .body'"
+    )
+
+    # 2. Fetch PR diff (truncated to avoid payload issues)
+    diff_out, _, _ = _run(f"gh pr diff {pr_number} --repo {repo}")
+    if len(diff_out) > 8000:
+        diff_out = diff_out[:8000] + "\n...[diff truncated]"
+    results.append(f"Diff: {len(diff_out)} chars")
+
+    # 3. Clone and checkout
+    _run(f"gh repo clone {repo} .")
+    _run("echo '.contextbook/' >> .gitignore")
+    branch = pr_data.get("headRefName", f"fix/issue-{pr_number}")
+    _run(f"git checkout {branch}")
+    results.append(f"Branch: {branch}")
+
+    # 4. Extract issue number from PR body
+    body = pr_data.get("body", "")
+    issue_num = None
+    import re
+    match = re.search(r"[Ff]ixes?\s*#(\d+)", body)
+    if match:
+        issue_num = int(match.group(1))
+
+    # 5. Fetch issue if found (use API to get full details + comments)
+    issue_json = ""
+    if issue_num:
+        issue_out, _, rc = _run(
+            f"gh issue view {issue_num} --repo {repo} "
+            f"--json number,title,body,labels,state"
+        )
+        if rc == 0:
+            issue_json = issue_out
+            results.append(f"Issue #{issue_num} fetched")
+        # Also get issue comments
+        issue_comments_out, _, _ = _run(
+            f"gh api repos/{repo}/issues/{issue_num}/comments "
+            f"--jq '.[] | \"[\" + .user.login + \"]: \" + .body'"
+        )
+        if issue_comments_out.strip():
+            issue_json += "\n\n## Issue Comments\n" + issue_comments_out[:3000]
+
+    # 6. Extract review comments into structured feedback
+    feedback_items = []
+    if comments_out.strip():
+        feedback_items.append("## PR Comments\n" + comments_out[:2000])
+    if reviews_out.strip():
+        feedback_items.append("## Review Feedback\n" + reviews_out[:2000])
+    if review_comments_out.strip():
+        feedback_items.append("## Inline Review Comments\n" + review_comments_out[:2000])
+    feedback_text = "\n\n".join(feedback_items) if feedback_items else "No review comments found."
+
+    # 7. Write to contextbook
+    cb = _contextbook_dir()
+    cb.mkdir(parents=True, exist_ok=True)
+
+    if issue_json:
+        (cb / "issue_context.md").write_text(issue_json, encoding="utf-8")
+
+    review_doc = f"# PR #{pr_number} Review Feedback\n\n"
+    review_doc += f"## PR Title\n{pr_data.get('title', '?')}\n\n"
+    review_doc += f"## PR Body\n{body[:2000]}\n\n"
+    review_doc += f"{feedback_text}\n\n"
+    review_doc += f"## Diff\n```diff\n{diff_out}\n```\n"
+    (cb / "review_findings.md").write_text(review_doc, encoding="utf-8")
+
+    (cb / "status.md").write_text(
+        f"PR feedback collected for PR #{pr_number}. Ready for implementation.",
+        encoding="utf-8"
+    )
+
+    # Return the FULL context so the next pipeline stage has everything.
+    # The return value becomes the downstream agent's input prompt.
+    output_parts = [
+        f"# PR #{pr_number}: {pr_data.get('title', '?')}",
+        f"Branch: {branch}",
+    ]
+
+    # Issue details
+    if issue_num and issue_json:
+        try:
+            issue_data = _json.loads(issue_json.split("\n\n##")[0])  # JSON part only
+            output_parts.append(f"\n## Issue #{issue_num}: {issue_data.get('title', '?')}")
+            issue_body = issue_data.get("body", "")
+            if issue_body:
+                output_parts.append(issue_body[:3000])
+        except:
+            output_parts.append(f"\n## Issue #{issue_num}")
+            output_parts.append(issue_json[:3000])
+
+    # PR comments / review feedback
+    if feedback_text and feedback_text != "No review comments found.":
+        output_parts.append(f"\n{feedback_text}")
+    else:
+        output_parts.append("\nNo review comments found.")
+
+    # Diff
+    output_parts.append(f"\n## Diff\n```diff\n{diff_out}\n```")
+
+    output_parts.append(f"\nContextbook populated: issue_context, review_findings, status")
+
+    return "\n".join(output_parts)
+
+
+@tool
+def fetch_issue_context(repo: str, issue_number: int, branch_prefix: str = "fix/issue-") -> str:
+    """Fetch a GitHub issue, clone the repo, create a branch, and write contextbook.
+
+    Does everything the Issue Analyst LLM agent does, but deterministically in one call.
+    Returns structured output (REPO, BRANCH, ISSUE, MODULE, DETAILS).
+    """
+    import json as _json
+    results = []
+
+    def _run(cmd):
+        proc = subprocess.run(cmd, shell=True, cwd=_cwd(), capture_output=True, text=True, timeout=120)
+        return proc.stdout.strip(), proc.stderr.strip(), proc.returncode
+
+    # 1. Fetch issue
+    issue_out, err, rc = _run(
+        f"gh issue view {issue_number} --repo {repo} "
+        f"--json number,title,body,labels,state"
+    )
+    if rc != 0:
+        return f"Error fetching issue #{issue_number}: {err}"
+
+    try:
+        issue_data = _json.loads(issue_out)
+    except:
+        issue_data = {"title": "?", "body": issue_out}
+
+    title = issue_data.get("title", "?")
+    author = "unknown"  # author field requires read:user scope
+    body = issue_data.get("body", "")
+
+    # 2. Clone and branch
+    _run(f"gh repo clone {repo} .")
+    _run("echo '.contextbook/' >> .gitignore && git add .gitignore && git commit -m 'chore: ignore contextbook'")
+    branch = f"{branch_prefix}{issue_number}"
+    _run(f"git checkout -b {branch}")
+    _run(f"git push -u origin {branch}")
+
+    # 3. Detect module from issue body keywords
+    module = "unknown"
+    for keyword, mod in [("server", "server"), ("sdk/python", "sdk/python"), ("python sdk", "sdk/python"),
+                          ("typescript", "sdk/typescript"), ("ts sdk", "sdk/typescript"),
+                          ("cli", "cli"), ("ui", "ui")]:
+        if keyword.lower() in body.lower():
+            module = mod
+            break
+
+    # 4. Write contextbook
+    cb = _contextbook_dir()
+    cb.mkdir(parents=True, exist_ok=True)
+    (cb / "issue_context.md").write_text(issue_out, encoding="utf-8")
+    (cb / "module_map.md").write_text(f"{module}: detected from issue body keywords", encoding="utf-8")
+
+    # 5. Return FULL context — this becomes the downstream agent's input
+    labels = [l.get("name", "") for l in issue_data.get("labels", [])]
+    return (
+        f"REPO: {repo}\n"
+        f"BRANCH: {branch}\n"
+        f"ISSUE: #{issue_number} {title}\n"
+        f"MODULE: {module}\n"
+        f"LABELS: {', '.join(labels) if labels else 'none'}\n"
+        f"\n## Issue Body\n{body}\n"
+        f"\nContextbook populated: issue_context, module_map"
+    )
+
+
+@tool
+def create_pr(repo: str, issue_number: int, qa_evidence_dir: str = "qa-tests") -> str:
+    """Commit remaining changes, push the branch, and create a pull request.
+
+    Reads contextbook for issue context, change log, and change context.
+    Builds the PR body with human-readable sections + machine-readable JSON.
+    Returns the PR URL.
+    """
+    import json as _json
+    results = []
+
+    def _run(cmd):
+        proc = subprocess.run(cmd, shell=True, cwd=_cwd(), capture_output=True, text=True, timeout=120)
+        return proc.stdout.strip(), proc.stderr.strip(), proc.returncode
+
+    cb = _contextbook_dir()
+
+    # Read contextbook sections
+    issue_ctx = ""
+    if (cb / "issue_context.md").exists():
+        issue_ctx = (cb / "issue_context.md").read_text(encoding="utf-8")
+    change_log = ""
+    if (cb / "change_log.md").exists():
+        change_log = (cb / "change_log.md").read_text(encoding="utf-8")
+    change_context = ""
+    if (cb / "change_context.md").exists():
+        change_context = (cb / "change_context.md").read_text(encoding="utf-8")
+    test_results = ""
+    if (cb / "test_results.md").exists():
+        test_results = (cb / "test_results.md").read_text(encoding="utf-8")
+
+    # Parse issue title from context
+    title = f"Fix #{issue_number}"
+    try:
+        data = _json.loads(issue_ctx)
+        title = f"Fix #{issue_number}: {data.get('title', '')}"
+    except:
+        pass
+
+    # Stage, commit, push
+    _run("git add -A -- ':!.contextbook'")
+    status_out, _, _ = _run("git status --short")
+    if status_out.strip():
+        _run("git commit -m 'fix: final changes'")
+        results.append("Committed remaining changes")
+
+    branch_out, _, _ = _run("git branch --show-current")
+    push_out, push_err, rc = _run("git push origin HEAD")
+    if rc != 0:
+        _run(f"git push --set-upstream origin {branch_out}")
+    results.append(f"Pushed branch: {branch_out}")
+
+    # Build PR body
+    summary = change_log[:500] if change_log else "See commits for details."
+    testing = test_results[:300] if test_results else "See QA evidence folder."
+
+    body = (
+        f"Fixes #{issue_number}\n\n"
+        f"## Summary\n{summary}\n\n"
+        f"## Testing\n{testing}\n\n"
+        f"## QA Evidence\nSee `{qa_evidence_dir}/issue-{issue_number}/` for detailed test results.\n\n"
+    )
+    if change_context:
+        body += (
+            f"<details>\n<summary>Change Context (machine-readable)</summary>\n\n"
+            f"```json\n{change_context[:3000]}\n```\n\n</details>\n"
+        )
+
+    # Create PR
+    # Escape body for shell
+    body_escaped = body.replace("'", "'\\''")
+    pr_out, pr_err, rc = _run(
+        f"gh pr create --repo {repo} --base main --head {branch_out} "
+        f"--title '{title[:70]}' --body '{body_escaped}'"
+    )
+
+    if rc == 0 and "github.com" in pr_out:
+        results.append(f"PR created: {pr_out}")
+        return "\n".join(results) + f"\n\nPR_URL: {pr_out}"
+    else:
+        results.append(f"PR creation failed: {pr_err or pr_out}")
+        return "\n".join(results)
+
+
+@tool
+def update_pr(repo: str, pr_number: int) -> str:
+    """Push changes to the existing PR branch and add a comment summarizing what was addressed.
+
+    Reads contextbook for change log, change context, and review findings.
+    Pushes to the same branch and adds a PR comment with a feedback resolution table.
+    """
+    import json as _json
+    results = []
+
+    def _run(cmd):
+        proc = subprocess.run(cmd, shell=True, cwd=_cwd(), capture_output=True, text=True, timeout=120)
+        return proc.stdout.strip(), proc.stderr.strip(), proc.returncode
+
+    cb = _contextbook_dir()
+
+    # Read contextbook
+    change_log = ""
+    if (cb / "change_log.md").exists():
+        change_log = (cb / "change_log.md").read_text(encoding="utf-8")
+    change_context = ""
+    if (cb / "change_context.md").exists():
+        change_context = (cb / "change_context.md").read_text(encoding="utf-8")
+    review_findings = ""
+    if (cb / "review_findings.md").exists():
+        review_findings = (cb / "review_findings.md").read_text(encoding="utf-8")
+
+    # Stage, commit, push
+    _run("git add -A -- ':!.contextbook'")
+    status_out, _, _ = _run("git status --short")
+    if status_out.strip():
+        _run("git commit -m 'fix: address PR feedback'")
+        results.append("Committed changes")
+
+    _, _, rc = _run("git push origin HEAD")
+    if rc != 0:
+        branch_out, _, _ = _run("git branch --show-current")
+        _run(f"git push --set-upstream origin {branch_out}")
+    results.append("Pushed to branch")
+
+    # Build PR comment
+    comment = "## Feedback Addressed\n\n"
+    if change_log:
+        comment += f"### Changes Made\n{change_log[:1000]}\n\n"
+    if change_context:
+        comment += (
+            f"<details>\n<summary>Change Context</summary>\n\n"
+            f"```json\n{change_context[:2000]}\n```\n\n</details>\n"
+        )
+
+    # Post comment
+    comment_escaped = comment.replace("'", "'\\''")
+    _, err, rc = _run(
+        f"gh pr comment {pr_number} --repo {repo} --body '{comment_escaped}'"
+    )
+    if rc == 0:
+        results.append(f"Posted comment on PR #{pr_number}")
+    else:
+        results.append(f"Comment failed: {err}")
+
+    # Get PR URL
+    pr_out, _, _ = _run(f"gh pr view {pr_number} --repo {repo} --json url --jq .url")
+    if pr_out:
+        results.append(f"PR URL: {pr_out}")
+
+    return "\n".join(results)

@@ -417,6 +417,27 @@ class AgentRuntime:
         with _workflow_credentials_lock:
             _workflow_credentials.pop(execution_id, None)
 
+    def _pre_deploy_nested_skills(self, agent: Agent) -> None:
+        """Pre-deploy any skill agents nested inside agent_tool wrappers."""
+        from agentspan.agents.tool import get_tool_def
+
+        for t in getattr(agent, "tools", []):
+            try:
+                td = get_tool_def(t)
+            except Exception:
+                continue
+            if td.tool_type == "agent_tool" and td.config and "agent" in td.config:
+                nested = td.config["agent"]
+                if getattr(nested, "_framework", None) == "skill":
+                    workflow_name = self._deploy_via_server(nested, framework="skill")
+                    logger.info("Pre-deployed skill '%s' as workflow '%s'", nested.name, workflow_name)
+                    self._register_skill_workers(nested)
+                    td.config["workflowName"] = workflow_name
+                    td.config.pop("agent", None)
+
+        for sub in getattr(agent, "agents", []):
+            self._pre_deploy_nested_skills(sub)
+
     def _start_via_server(
         self,
         agent: Agent,
@@ -439,6 +460,8 @@ class AgentRuntime:
             The execution ID.
         """
         import requests as req_lib
+
+        self._pre_deploy_nested_skills(agent)
 
         from agentspan.agents.config_serializer import AgentConfigSerializer
 
@@ -2028,10 +2051,23 @@ class AgentRuntime:
         """
         import requests
 
-        from agentspan.agents.config_serializer import AgentConfigSerializer
+        from agentspan.agents.frameworks.serializer import detect_framework
 
-        serializer = AgentConfigSerializer()
-        config_json = serializer.serialize(agent)
+        framework = detect_framework(agent)
+        if framework:
+            from agentspan.agents.frameworks.serializer import serialize_agent
+
+            raw_config, _ = serialize_agent(agent)
+            payload = {
+                "framework": framework,
+                "rawConfig": raw_config,
+            }
+        else:
+            from agentspan.agents.config_serializer import AgentConfigSerializer
+
+            serializer = AgentConfigSerializer()
+            config_json = serializer.serialize(agent)
+            payload = {"agentConfig": config_json}
 
         server_url = self._config.server_url.rstrip("/")
         url = f"{server_url}/agent/compile"
@@ -2042,7 +2078,6 @@ class AgentRuntime:
         if self._config.auth_secret:
             headers["X-Auth-Secret"] = self._config.auth_secret
 
-        payload = {"agentConfig": config_json}
         response = requests.post(url, json=payload, headers=headers, timeout=30)
         try:
             response.raise_for_status()

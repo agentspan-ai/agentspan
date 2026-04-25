@@ -9,13 +9,14 @@ codebase, implements a fix with tests, and creates a pull request.
 
 Architecture: Deterministic pipeline with sequential review stages
 
-    issue_analyst >> tech_lead >> [impl_loop: (coder >> dg) <-> tl_review]
-                  >> (qa_lead >> test_coder >> qa_reviewer) >> docs_agent >> pr_creator
+    issue_analyst >> tech_lead >> [impl_loop: coder <-> tl_review]
+                  >> (qa_lead >> test_coder >> qa_reviewer)
+                  >> dg_reviewer >> (fix_coder >> fix_qa)
+                  >> docs_agent >> pr_creator
 
-Code review is SEQUENTIAL (coder >> dg_reviewer) — DG is GUARANTEED to run
-after every coder execution. No handoff text needed.
-The impl_loop SWARM wraps this with TL review for approval/rework cycles.
+The impl_loop SWARM handles coder <-> TL review for approval/rework cycles.
 Testing is SEQUENTIAL: QA plans >> coder writes >> QA reviews + runs e2e.
+DG review runs after testing, followed by fix+retest if needed.
 
 Usage:
     python 100_issue_fixer_agent.py <issue_number>
@@ -23,7 +24,7 @@ Usage:
 
 Requirements:
     - Agentspan server running
-    - GITHUB_TOKEN: agentspan credentials set GITHUB_TOKEN <your-token>
+    - GH_TOKEN: agentspan credentials set GH_TOKEN <your-token>
     - gh CLI installed and authenticated
     - DG skill: git clone https://github.com/v1r3n/dinesh-gilfoyle ~/.claude/skills/dg
     - Full build toolchain (Go, Java 21, Python 3.10+, Node.js, pnpm, uv)
@@ -41,6 +42,7 @@ from agentspan.agents.termination import TextMentionTermination
 
 from _issue_fixer_tools import (
     set_working_dir, get_working_dir,
+    fetch_issue_context, fetch_pr_context, create_pr, update_pr,
     read_file, write_file, edit_file, apply_patch, list_directory, file_outline,
     glob_find, grep_search, search_symbols, find_references,
     git_diff, git_log, git_blame,
@@ -59,7 +61,7 @@ OPUS = "anthropic/claude-opus-4-6"
 SONNET = "anthropic/claude-sonnet-4-6"
 
 # ── Credentials ──────────────────────────────────────────────
-GITHUB_CREDENTIAL = "GITHUB_TOKEN"
+GITHUB_CREDENTIAL = "GH_TOKEN"
 
 # ── Skill Paths ──────────────────────────────────────────────
 DG_SKILL_PATH = "~/.claude/skills/dg"
@@ -83,6 +85,7 @@ from _issue_fixer_instructions import (
     ISSUE_ANALYST_INSTRUCTIONS,
     TECH_LEAD_INSTRUCTIONS,
     CODER_INSTRUCTIONS,
+    TEST_CODER_INSTRUCTIONS,
     DG_REVIEWER_INSTRUCTIONS,
     QA_PLANNER_INSTRUCTIONS,
     QA_REVIEWER_INSTRUCTIONS,
@@ -118,24 +121,24 @@ def _pr_created(context: dict, **kwargs) -> bool:
 
 
 # ═══════════════════════════════════════════════════════════════
-# Stage 1: Issue Analyst (pipeline)
+# Stage 1: Issue Analyst — deterministic tool, no LLM needed
+#   Fetches issue, clones repo, creates branch, writes contextbook.
+#   One tool call replaces 10-20 LLM turns of CLI orchestration.
 # ═══════════════════════════════════════════════════════════════
 
 issue_analyst = Agent(
     name="issue_analyst",
     model=SONNET,
     stateful=True,
-    max_turns=20,
-    max_tokens=8192,
+    max_turns=2,
+    max_tokens=4096,
     credentials=[GITHUB_CREDENTIAL],
-    cli_config=CliConfig(
-        allowed_commands=["gh", "git", "mktemp", "ls", "find"],
-        allow_shell=True,
-        timeout=60,
+    tools=[fetch_issue_context],
+    instructions=(
+        f"Call fetch_issue_context with repo='{REPO}', the issue number from the prompt, "
+        f"and branch_prefix='{BRANCH_PREFIX}'. After the tool returns, output the FULL tool result "
+        f"as your response verbatim — the next agent needs REPO, BRANCH, ISSUE, MODULE, DETAILS."
     ),
-    tools=[contextbook_write, contextbook_read],
-    stop_when=_issue_analyzed,
-    instructions=ISSUE_ANALYST_INSTRUCTIONS.format(**_fmt),
 )
 
 # ═══════════════════════════════════════════════════════════════
@@ -146,7 +149,7 @@ tech_lead = Agent(
     name="tech_lead",
     model=OPUS,
     stateful=True,
-    max_turns=80,
+    max_turns=50,
     max_tokens=60000,
     tools=[
         read_file, grep_search, glob_find, list_directory,
@@ -189,9 +192,12 @@ coder = Agent(
 # DG skill + coordinator wrapper
 dg_skill = skill(
     DG_SKILL_PATH,
-    model=SONNET,
-    agent_models={"gilfoyle": OPUS, "dinesh": SONNET},
+    model=OPUS,
+    agent_models={"gilfoyle": SONNET, "dinesh": SONNET},
+    params={"rounds": 1},  # Limit to 1 round; also enforced in DG_REVIEWER_INSTRUCTIONS prompt prefix
 )
+# Note: the skill's internal max_turns is controlled by the server-side skill compiler.
+# The params={"rounds": 1} + coordinator prompt prefix "1\n..." both signal single-round.
 
 dg_reviewer = Agent(
     name="dg_reviewer",
@@ -206,11 +212,6 @@ dg_reviewer = Agent(
     ],
     instructions=DG_REVIEWER_INSTRUCTIONS.format(**_fmt),
 )
-
-# Sequential: coder runs THEN DG reviews — deterministic, no handoff text needed.
-# A SWARM relied on the coder LLM to output handoff text, which it never did.
-# Sequential guarantees DG runs after every coder execution.
-code_then_review = coder >> dg_reviewer
 
 # Tech Lead final review
 tl_reviewer = Agent(
@@ -228,37 +229,94 @@ tl_reviewer = Agent(
     instructions=TL_REVIEW_INSTRUCTIONS.format(**_fmt),
 )
 
-# Outer loop: (coder >> DG) <-> TL review until TL says IMPL_APPROVED
-# Each iteration: coder implements (sequential), DG reviews (sequential),
-# then TL does final review. If TL says NEEDS_REWORK, back to coder >> DG.
+# Outer loop: coder <-> TL review until TL says IMPL_APPROVED
 impl_loop = Agent(
     name="impl_loop",
     model=SONNET,
     stateful=True,
     strategy=Strategy.SWARM,
-    agents=[code_then_review, tl_reviewer],
+    agents=[coder, tl_reviewer],
     handoffs=[
-        OnTextMention(text="NEEDS_REWORK", target="coder_dg_reviewer"),
-        OnTextMention(text="HANDOFF_TO_CODER", target="coder_dg_reviewer"),
-        OnTextMention(text="CODE_APPROVED", target="tl_reviewer"),
+        OnTextMention(text="NEEDS_REWORK", target="coder"),
+        OnTextMention(text="HANDOFF_TO_CODER", target="coder"),
+        OnTextMention(text="IMPL_APPROVED", target="tl_reviewer"),
     ],
     termination=TextMentionTermination("IMPL_APPROVED"),
     max_turns=MAX_REVIEW_CYCLES * 2 + 2,
     max_tokens=60000,
     timeout_seconds=SWARM_TIMEOUT,
-    instructions="Start with coder_dg_reviewer. After code+DG review, TL reviews. Loop until TL says IMPL_APPROVED.",
+    instructions="Start with coder.",
 )
 
 # ═══════════════════════════════════════════════════════════════
 # Stage 4: Test Loop (coder <-> QA, until QA says TESTS_PASS)
 # ═══════════════════════════════════════════════════════════════
 
-# Separate coder instance for test writing (same config, different name)
+# Separate coder instance for test writing — reduced tools, focused instructions
 test_coder = Agent(
     name="test_coder",
     model=SONNET,
     stateful=True,
-    max_turns=50,
+    max_turns=15,
+    max_tokens=60000,
+    credentials=[GITHUB_CREDENTIAL],
+    cli_config=CliConfig(
+        allowed_commands=["git"],
+        allow_shell=True,
+        timeout=120,
+    ),
+    tools=[
+        read_file, write_file,
+        grep_search, glob_find, list_directory,
+        run_command, contextbook_read,
+    ],
+    instructions=TEST_CODER_INSTRUCTIONS.format(**_fmt),
+)
+
+qa_lead = Agent(
+    name="qa_lead",
+    model=SONNET,
+    stateful=True,
+    max_turns=30,
+    max_tokens=60000,
+    tools=[
+        read_file, write_file, grep_search, glob_find, list_directory,
+        file_outline, git_diff, run_command, web_fetch,
+        run_unit_tests, run_e2e_tests,
+        contextbook_write, contextbook_read, contextbook_summary,
+    ],
+    instructions=QA_PLANNER_INSTRUCTIONS.format(**_fmt),
+)
+
+# QA reviewer: reviews tests, runs e2e, captures evidence
+qa_reviewer = Agent(
+    name="qa_reviewer",
+    model=SONNET,
+    stateful=True,
+    max_turns=40,
+    max_tokens=60000,
+    tools=[
+        read_file, write_file, grep_search, glob_find, list_directory,
+        file_outline, git_diff, run_command, web_fetch,
+        run_unit_tests, run_e2e_tests,
+        contextbook_write, contextbook_read, contextbook_summary,
+    ],
+    instructions=QA_REVIEWER_INSTRUCTIONS.format(**_fmt),
+)
+
+# Sequential: QA plans → coder writes tests → QA reviews + runs e2e
+# All three steps are deterministic — no handoff text needed.
+test_then_verify = qa_lead >> test_coder >> qa_reviewer
+
+# ═══════════════════════════════════════════════════════════════
+# Stage 4b: Fix + Retest (post-DG rework)
+# ═══════════════════════════════════════════════════════════════
+
+fix_coder = Agent(
+    name="fix_coder",
+    model=SONNET,
+    stateful=True,
+    max_turns=25,
     max_tokens=60000,
     credentials=[GITHUB_CREDENTIAL],
     cli_config=CliConfig(
@@ -277,27 +335,11 @@ test_coder = Agent(
     instructions=CODER_INSTRUCTIONS.format(**_fmt),
 )
 
-qa_lead = Agent(
-    name="qa_lead",
+fix_qa = Agent(
+    name="fix_qa",
     model=SONNET,
     stateful=True,
-    max_turns=80,
-    max_tokens=60000,
-    tools=[
-        read_file, write_file, grep_search, glob_find, list_directory,
-        file_outline, git_diff, run_command, web_fetch,
-        run_unit_tests, run_e2e_tests,
-        contextbook_write, contextbook_read, contextbook_summary,
-    ],
-    instructions=QA_PLANNER_INSTRUCTIONS.format(**_fmt),
-)
-
-# QA reviewer: reviews tests, runs e2e, captures evidence
-qa_reviewer = Agent(
-    name="qa_reviewer",
-    model=SONNET,
-    stateful=True,
-    max_turns=80,
+    max_turns=30,
     max_tokens=60000,
     tools=[
         read_file, write_file, grep_search, glob_find, list_directory,
@@ -308,9 +350,7 @@ qa_reviewer = Agent(
     instructions=QA_REVIEWER_INSTRUCTIONS.format(**_fmt),
 )
 
-# Sequential: QA plans → coder writes tests → QA reviews + runs e2e
-# All three steps are deterministic — no handoff text needed.
-test_then_verify = qa_lead >> test_coder >> qa_reviewer
+fix_and_retest = fix_coder >> fix_qa
 
 # ═══════════════════════════════════════════════════════════════
 # Stage 5: Documentation Agent (pipeline)
@@ -332,66 +372,63 @@ docs_agent = Agent(
 )
 
 # ═══════════════════════════════════════════════════════════════
-# Stage 6: PR Creator (pipeline)
+# Stage 6: PR Creator — deterministic tool, no LLM needed
+#   Reads contextbook, commits, pushes, creates PR with change_context JSON.
 # ═══════════════════════════════════════════════════════════════
 
 pr_creator = Agent(
     name="pr_creator",
     model=SONNET,
     stateful=True,
-    max_turns=10,
-    max_tokens=8192,
+    max_turns=2,
+    max_tokens=4096,
     credentials=[GITHUB_CREDENTIAL],
-    cli_config=CliConfig(
-        allowed_commands=["gh", "git", "find"],
-        allow_shell=True,
-        timeout=60,
+    tools=[create_pr],
+    instructions=(
+        f"Call create_pr with repo='{REPO}', the issue number from the prompt, "
+        f"and qa_evidence_dir='{QA_EVIDENCE_DIR}'. After the tool returns, "
+        f"output the FULL tool result as your response — include the PR URL."
     ),
-    tools=[git_diff, git_log, contextbook_read],
-    stop_when=_pr_created,
-    instructions=PR_CREATOR_INSTRUCTIONS.format(**_fmt),
 )
 
 # ═══════════════════════════════════════════════════════════════
-# Stage 7: PR Feedback Agent (feedback mode only)
-#   Fetches PR comments/reviews, writes them to contextbook
+# Stage 7: PR Feedback — deterministic tool, no LLM needed
+#   Fetches PR comments/reviews, clones repo, writes contextbook.
+#   One tool call replaces 20 LLM turns of CLI orchestration.
 # ═══════════════════════════════════════════════════════════════
 
 pr_feedback = Agent(
     name="pr_feedback",
     model=SONNET,
     stateful=True,
-    max_turns=20,
-    max_tokens=16000,
+    max_turns=2,
+    max_tokens=4096,
     credentials=[GITHUB_CREDENTIAL],
-    cli_config=CliConfig(
-        allowed_commands=["gh", "git"],
-        allow_shell=True,
-        timeout=60,
+    tools=[fetch_pr_context],
+    instructions=(
+        f"Call fetch_pr_context with repo='{REPO}' and the PR number from the prompt. "
+        f"After the tool returns, output the FULL tool result as your response. "
+        f"Include all details — PR title, branch, feedback found, contextbook status."
     ),
-    tools=[contextbook_write, contextbook_read, web_fetch],
-    instructions=PR_FEEDBACK_INSTRUCTIONS.format(**_fmt),
 )
 
 # ═══════════════════════════════════════════════════════════════
-# Stage 8: PR Updater (feedback mode only)
-#   Pushes changes and updates the existing PR
+# Stage 8: PR Updater — deterministic tool, no LLM needed
+#   Pushes changes to existing branch, posts comment with feedback resolution.
 # ═══════════════════════════════════════════════════════════════
 
 pr_updater = Agent(
     name="pr_updater",
     model=SONNET,
     stateful=True,
-    max_turns=10,
-    max_tokens=8192,
+    max_turns=2,
+    max_tokens=4096,
     credentials=[GITHUB_CREDENTIAL],
-    cli_config=CliConfig(
-        allowed_commands=["gh", "git"],
-        allow_shell=True,
-        timeout=60,
+    tools=[update_pr],
+    instructions=(
+        f"Call update_pr with repo='{REPO}' and the PR number from the prompt. "
+        f"After the tool returns, output the FULL tool result as your response — include the PR URL."
     ),
-    tools=[git_diff, git_log, contextbook_read, run_command],
-    instructions=PR_UPDATER_INSTRUCTIONS.format(**_fmt),
 )
 
 # ═══════════════════════════════════════════════════════════════
@@ -399,10 +436,10 @@ pr_updater = Agent(
 # ═══════════════════════════════════════════════════════════════
 
 # New issue → full pipeline
-pipeline = issue_analyst >> tech_lead >> impl_loop >> test_then_verify >> docs_agent >> pr_creator
+pipeline = issue_analyst >> tech_lead >> impl_loop >> test_then_verify >> dg_reviewer >> fix_and_retest >> docs_agent >> pr_creator
 
 # PR feedback → address comments, re-review, re-test, update PR
-feedback_pipeline = pr_feedback >> impl_loop >> test_then_verify >> pr_updater
+feedback_pipeline = pr_feedback >> impl_loop >> test_then_verify >> dg_reviewer >> fix_and_retest >> pr_updater
 
 
 def main():

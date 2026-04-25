@@ -99,7 +99,11 @@ export class AgentRuntime {
     const nativeAgent = agent as Agent;
     const correlationId = generateCorrelationId();
 
-    // Serialize agent config
+    // Pre-deploy any skill agents nested inside agent_tool wrappers
+    // BEFORE serialization — modifies tool defs to replace skill configs with workflowName refs.
+    await this._preDeployNestedSkills(nativeAgent);
+
+    // Serialize agent config (after pre-deploy so skill configs are replaced)
     const payload = this.serializer.serialize(nativeAgent, prompt, {
       sessionId: options?.sessionId,
       media: options?.media,
@@ -204,6 +208,9 @@ export class AgentRuntime {
 
     const nativeAgent = agent as Agent;
     const correlationId = generateCorrelationId();
+
+    // Pre-deploy BEFORE serialization
+    await this._preDeployNestedSkills(nativeAgent);
 
     const payload = this.serializer.serialize(nativeAgent, prompt, {
       sessionId: options?.sessionId,
@@ -356,8 +363,15 @@ export class AgentRuntime {
   /**
    * Compile an agent to a workflow definition without executing.
    */
-  async plan(agent: Agent): Promise<object> {
-    const payload = this.serializer.serialize(agent);
+  async plan(agent: Agent | object): Promise<object> {
+    const framework = detectFramework(agent);
+    let payload: Record<string, unknown>;
+    if (framework !== null) {
+      const [rawConfig] = this._serializeFramework(agent, framework);
+      payload = { framework, rawConfig };
+    } else {
+      payload = this.serializer.serialize(agent as Agent);
+    }
     const response = await this._httpRequest("POST", "/agent/compile", payload);
     return response;
   }
@@ -617,6 +631,42 @@ export class AgentRuntime {
       return new Set(raw.map(String));
     }
     return null;
+  }
+
+  /**
+   * Pre-deploy any skill agents nested inside agent_tool wrappers.
+   * Skills have _framework fields that Jackson rejects in agentConfig.
+   * Deploys the skill separately via the framework path, then replaces
+   * the agent_tool config with a workflowName reference.
+   */
+  private async _preDeployNestedSkills(agent: Agent): Promise<void> {
+    const { getToolDef } = await import("./tool.js");
+
+    for (const t of agent.tools) {
+      try {
+        const td = getToolDef(t);
+        if (td.toolType === "agent_tool" && td.config?.agent) {
+          const nested = td.config.agent as Record<string, unknown>;
+          if (nested._framework === "skill") {
+            const [rawConfig] = this._serializeFramework(td.config.agent, "skill");
+            const deployResult = await this._httpRequest("POST", "/agent/deploy", {
+              framework: "skill",
+              rawConfig,
+            });
+            const workflowName = (deployResult as Record<string, unknown>).agentName as string;
+            td.config.workflowName = workflowName;
+            delete td.config.agent;
+          }
+        }
+      } catch {
+        // Skip non-tool items
+      }
+    }
+
+    // Recurse into sub-agents
+    for (const sub of agent.agents) {
+      await this._preDeployNestedSkills(sub);
+    }
   }
 
   /**
