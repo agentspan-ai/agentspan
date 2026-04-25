@@ -38,3 +38,4 @@ cli/agentspan
 target/
 sdk/java/examples/target/
 sdk/java/target/
+.contextbook/
