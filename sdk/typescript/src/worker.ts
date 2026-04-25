@@ -220,6 +220,7 @@ interface PendingWorker {
   taskName: string;
   handler: WorkerHandler;
   credentials?: string[];
+  domain?: string;
 }
 
 /**
@@ -251,12 +252,13 @@ export class WorkerManager {
    * Queue a worker for the given task name.
    * Replaces any existing worker with the same task name.
    */
-  addWorker(taskName: string, handler: WorkerHandler, credentials?: string[]): void {
-    const idx = this.pendingWorkers.findIndex((w) => w.taskName === taskName);
+  addWorker(taskName: string, handler: WorkerHandler, credentials?: string[], domain?: string): void {
+    // Track (taskName, domain) pairs — same name under different domains are distinct workers
+    const idx = this.pendingWorkers.findIndex((w) => w.taskName === taskName && w.domain === domain);
     if (idx >= 0) {
-      this.pendingWorkers[idx] = { taskName, handler, credentials };
+      this.pendingWorkers[idx] = { taskName, handler, credentials, domain };
     } else {
-      this.pendingWorkers.push({ taskName, handler, credentials });
+      this.pendingWorkers.push({ taskName, handler, credentials, domain });
     }
   }
 
@@ -320,6 +322,7 @@ export class WorkerManager {
       pollInterval: this.pollIntervalMs,
       concurrency: 1,
       leaseExtendEnabled: true,
+      ...(pw.domain ? { domain: pw.domain } : {}),
 
       async execute(
         task: Task,

@@ -185,6 +185,7 @@ export class AgentConfigSerializer {
     if (agent.temperature !== undefined) config.temperature = agent.temperature;
     config.timeoutSeconds = agent.timeoutSeconds;
     config.external = agent.external;
+    if (agent.stateful) config.stateful = true;
 
     // stopWhen
     if (agent.stopWhen) {
@@ -277,6 +278,7 @@ export class AgentConfigSerializer {
     if (toolDef.timeoutSeconds !== undefined) {
       config.timeoutSeconds = toolDef.timeoutSeconds;
     }
+    if (toolDef.stateful) config.stateful = true;
 
     // Handle guardrails
     if (toolDef.guardrails && toolDef.guardrails.length > 0) {

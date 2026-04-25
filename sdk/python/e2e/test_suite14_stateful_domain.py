@@ -11,7 +11,7 @@ Tests:
   - Stateful swarm handoff + check_transfer execute in domain
   - Pipeline sub-agent tools inherit parent's domain
   - Concurrent stateful executions are isolated (different domains)
-  - Non-stateful agents work without domain (regression guard)
+  - Agent without stateful flag works without domain
 
 Validation: all assertions inspect the workflow execution via server API.
 No mocks, no LLM output parsing, fully deterministic.
@@ -512,13 +512,12 @@ class TestSuite14StatefulDomain:
                 f"{[(t['taskDefName'], t.get('pollCount')) for t in scheduled]}"
             )
 
-    # ── Test 6: Non-stateful has no domain (regression) ────────────
+    # ── Test 6: Agent without stateful flag has no domain ──────────
 
     def test_non_stateful_no_domain(self, fresh_runtime, model):
-        """Non-stateful agent works without domain assignment.
+        """Agent without stateful=True works without domain assignment.
 
         Validates: taskToDomain is empty, tasks have no domain, execution completes.
-        This is a regression guard — the domain fix must not break non-stateful agents.
         """
         agent = Agent(
             name="e2e_s14_non_stateful",

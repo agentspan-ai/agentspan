@@ -103,6 +103,9 @@ export class AgentRuntime {
     // BEFORE serialization — modifies tool defs to replace skill configs with workflowName refs.
     await this._preDeployNestedSkills(nativeAgent);
 
+    // Generate domain UUID for stateful agents
+    const runId = this._hasStatefulTools(nativeAgent) ? crypto.randomUUID().replace(/-/g, "") : undefined;
+
     // Serialize agent config (after pre-deploy so skill configs are replaced)
     const payload = this.serializer.serialize(nativeAgent, prompt, {
       sessionId: options?.sessionId,
@@ -119,9 +122,12 @@ export class AgentRuntime {
     if (options?.context) {
       payload.context = options.context;
     }
+    if (runId) {
+      payload.runId = runId;
+    }
 
-    // Register tool workers (always needed) before calling the server
-    await this._registerToolWorkers(nativeAgent);
+    // Register tool workers with domain (for stateful isolation)
+    await this._registerToolWorkers(nativeAgent, runId);
 
     // Start agent — response may include requiredWorkers
     const startResponse = await this._httpRequest("POST", "/agent/start", payload, options?.signal);
@@ -129,8 +135,8 @@ export class AgentRuntime {
     const executionId = startResponse.executionId as string;
     const requiredWorkers = this._parseRequiredWorkers(startResponse);
 
-    // Register system workers filtered by server-provided list
-    await this._registerSystemWorkers(nativeAgent, requiredWorkers);
+    // Register system workers with domain
+    await this._registerSystemWorkers(nativeAgent, requiredWorkers, runId);
     await this.workerManager.startPolling();
 
     try {
@@ -212,6 +218,9 @@ export class AgentRuntime {
     // Pre-deploy BEFORE serialization
     await this._preDeployNestedSkills(nativeAgent);
 
+    // Generate domain UUID for stateful agents
+    const runId = this._hasStatefulTools(nativeAgent) ? crypto.randomUUID().replace(/-/g, "") : undefined;
+
     const payload = this.serializer.serialize(nativeAgent, prompt, {
       sessionId: options?.sessionId,
       media: options?.media,
@@ -227,9 +236,12 @@ export class AgentRuntime {
     if (options?.context) {
       payload.context = options.context;
     }
+    if (runId) {
+      payload.runId = runId;
+    }
 
-    // Register tool workers (always needed) before calling the server
-    await this._registerToolWorkers(nativeAgent);
+    // Register tool workers with domain
+    await this._registerToolWorkers(nativeAgent, runId);
 
     // Start agent — response may include requiredWorkers
     const startResponse = await this._httpRequest("POST", "/agent/start", payload, options?.signal);
@@ -237,8 +249,8 @@ export class AgentRuntime {
     const executionId = startResponse.executionId as string;
     const requiredWorkers = this._parseRequiredWorkers(startResponse);
 
-    // Register system workers filtered by server-provided list
-    await this._registerSystemWorkers(nativeAgent, requiredWorkers);
+    // Register system workers with domain
+    await this._registerSystemWorkers(nativeAgent, requiredWorkers, runId);
     await this.workerManager.startPolling();
 
     const handle: AgentHandle = {
@@ -634,6 +646,24 @@ export class AgentRuntime {
   }
 
   /**
+   * Check if an agent or any of its tools/sub-agents use stateful isolation.
+   * Mirrors Python SDK's _has_stateful_tools().
+   */
+  private _hasStatefulTools(agent: Agent): boolean {
+    if (agent.stateful) return true;
+    // Check tool-level stateful (synchronous check on already-normalized defs)
+    for (const t of agent.tools) {
+      if (typeof t === "object" && t !== null && (t as Record<string, unknown>).stateful) {
+        return true;
+      }
+    }
+    for (const sub of agent.agents) {
+      if (this._hasStatefulTools(sub)) return true;
+    }
+    return false;
+  }
+
+  /**
    * Pre-deploy any skill agents nested inside agent_tool wrappers.
    * Skills have _framework fields that Jackson rejects in agentConfig.
    * Deploys the skill separately via the framework path, then replaces
@@ -673,23 +703,25 @@ export class AgentRuntime {
    * Register tool workers (user-defined) for an agent tree.
    * These are always registered regardless of requiredWorkers.
    */
-  private async _registerToolWorkers(agent: Agent): Promise<void> {
+  private async _registerToolWorkers(agent: Agent, domain?: string): Promise<void> {
     const toolDefs = this._collectToolDefs(agent);
 
     for (const def of toolDefs) {
       const handler = def.func!;
-      // Extract credential names (string only; CredentialFile handled at serialization)
       const credNames =
         def.credentials?.filter((c): c is string => typeof c === "string") ?? undefined;
+      // Domain is only non-undefined when _hasStatefulTools returned true at the top level.
+      // All workers under that execution must poll in the same domain.
+      const workerDomain = domain;
       this.workerManager.addWorker(
         def.name,
         async (inputData) => {
           const toolContext = inputData["__toolContext__"];
-          // Remove internal injection
           delete inputData["__toolContext__"];
           return handler(inputData, toolContext);
         },
         credNames,
+        workerDomain,
       );
     }
 
@@ -714,6 +746,7 @@ export class AgentRuntime {
   private async _registerSystemWorkers(
     agent: Agent,
     requiredWorkers?: Set<string> | null,
+    domain?: string,
   ): Promise<void> {
     // Helper: check if a task name is needed (always true when requiredWorkers is absent)
     const isNeeded = (taskName: string): boolean =>
@@ -726,6 +759,7 @@ export class AgentRuntime {
         await this._registerTerminationWorker(
           agent.name,
           agent.termination as TerminationCondition,
+          domain,
         );
       }
     }
@@ -735,7 +769,7 @@ export class AgentRuntime {
       const gDef = this._normalizeGuardrailDef(g);
       if (gDef && gDef.func && gDef.taskName) {
         if (isNeeded(gDef.taskName)) {
-          await this._registerGuardrailWorker(gDef);
+          await this._registerGuardrailWorker(gDef, domain);
         }
       }
     }
@@ -744,20 +778,19 @@ export class AgentRuntime {
     if (agent.stopWhen) {
       const taskName = `${agent.name}_stop_when`;
       if (isNeeded(taskName)) {
-        await this._registerStopWhenWorker(agent.name, agent.stopWhen);
+        await this._registerStopWhenWorker(agent.name, agent.stopWhen, domain);
       }
     }
 
     // Callbacks
     if (agent.callbacks.length > 0) {
-      // Callbacks produce multiple task names ({agent}_{position}), register if any are needed
       const callbackTaskNames = Object.values(CALLBACK_POSITION_MAP).map(
         (pos) => `${agent.name}_${pos}`,
       );
       const anyCallbackNeeded =
         requiredWorkers == null || callbackTaskNames.some((t) => requiredWorkers.has(t));
       if (anyCallbackNeeded) {
-        await this._registerCallbackWorkers(agent.name, agent.callbacks, requiredWorkers);
+        await this._registerCallbackWorkers(agent.name, agent.callbacks, requiredWorkers, domain);
       }
     }
 
@@ -768,6 +801,7 @@ export class AgentRuntime {
         await this._registerGateWorker(
           agent.name,
           agent.gate.fn as (...args: unknown[]) => unknown,
+          domain,
         );
       }
     }
@@ -779,13 +813,13 @@ export class AgentRuntime {
         await this._registerRouterWorker(
           agent.name,
           agent.router as (...args: unknown[]) => string,
+          domain,
         );
       }
     }
 
-    // Swarm transfer workers (transfer_to_{peer} for each agent pair)
+    // Swarm transfer workers
     if (agent.agents.length > 0) {
-      // Register transfer workers if any transfer task is needed
       const allNames = [agent.name, ...agent.agents.map((a) => a.name)];
       const anyTransferNeeded =
         requiredWorkers == null ||
@@ -793,37 +827,37 @@ export class AgentRuntime {
           allNames.some((dst) => src !== dst && requiredWorkers.has(`${src}_transfer_to_${dst}`)),
         );
       if (anyTransferNeeded) {
-        await this._registerSwarmTransferWorkers(agent, requiredWorkers);
+        await this._registerSwarmTransferWorkers(agent, requiredWorkers, domain);
       }
     }
 
-    // Check transfer worker (detects _transfer_to_ in tool_calls)
+    // Check transfer worker
     {
       const taskName = `${agent.name}_check_transfer`;
       if (isNeeded(taskName)) {
-        await this._registerCheckTransferWorker(agent.name);
+        await this._registerCheckTransferWorker(agent.name, domain);
       }
     }
 
-    // Handoff check worker (swarm handoff detection)
+    // Handoff check worker
     if (agent.handoffs.length > 0 || agent.strategy === "swarm") {
       const taskName = `${agent.name}_handoff_check`;
       if (isNeeded(taskName)) {
-        await this._registerHandoffCheckWorker(agent);
+        await this._registerHandoffCheckWorker(agent, domain);
       }
     }
 
-    // Process selection worker (manual strategy)
+    // Process selection worker
     if (agent.strategy === "manual" && agent.agents.length > 0) {
       const taskName = `${agent.name}_process_selection`;
       if (isNeeded(taskName)) {
-        await this._registerProcessSelectionWorker(agent);
+        await this._registerProcessSelectionWorker(agent, domain);
       }
     }
 
-    // Recurse into sub-agents
+    // Recurse into sub-agents (pass domain)
     for (const subAgent of agent.agents) {
-      await this._registerSystemWorkers(subAgent, requiredWorkers);
+      await this._registerSystemWorkers(subAgent, requiredWorkers, domain);
     }
   }
 
@@ -835,6 +869,7 @@ export class AgentRuntime {
   private async _registerTerminationWorker(
     agentName: string,
     cond: TerminationCondition,
+    domain?: string,
   ): Promise<void> {
     const taskName = `${agentName}_termination`;
     this.workerManager.addWorker(taskName, async (inputData) => {
@@ -847,7 +882,7 @@ export class AgentRuntime {
       } catch {
         return { should_continue: true, reason: "" };
       }
-    });
+    }, undefined, domain);
   }
 
   /**
@@ -855,7 +890,7 @@ export class AgentRuntime {
    * Server dispatches {guardrail.taskName} with {content, iteration}.
    * Worker returns {passed, message, on_fail, ...}.
    */
-  private async _registerGuardrailWorker(gDef: GuardrailDef): Promise<void> {
+  private async _registerGuardrailWorker(gDef: GuardrailDef, domain?: string): Promise<void> {
     const taskName = gDef.taskName!;
     const fn = gDef.func!;
     this.workerManager.addWorker(taskName, async (inputData) => {
@@ -879,7 +914,7 @@ export class AgentRuntime {
           should_continue: false,
         };
       }
-    });
+    }, undefined, domain);
   }
 
   /**
@@ -890,6 +925,7 @@ export class AgentRuntime {
   private async _registerStopWhenWorker(
     agentName: string,
     stopWhenFn: (messages: unknown[], ...args: unknown[]) => boolean,
+    domain?: string,
   ): Promise<void> {
     const taskName = `${agentName}_stop_when`;
     this.workerManager.addWorker(taskName, async (inputData) => {
@@ -901,7 +937,7 @@ export class AgentRuntime {
       } catch {
         return { should_continue: true };
       }
-    });
+    }, undefined, domain);
   }
 
   /**
@@ -913,6 +949,7 @@ export class AgentRuntime {
     agentName: string,
     callbacks: CallbackHandler[],
     requiredWorkers?: Set<string> | null,
+    domain?: string,
   ): Promise<void> {
     for (const [methodName, wirePosition] of Object.entries(CALLBACK_POSITION_MAP)) {
       // Check if any handler implements this method
@@ -941,7 +978,7 @@ export class AgentRuntime {
         } catch {
           return {};
         }
-      });
+      }, undefined, domain);
     }
   }
 
@@ -953,6 +990,7 @@ export class AgentRuntime {
   private async _registerGateWorker(
     agentName: string,
     gateFn: (...args: unknown[]) => unknown,
+    domain?: string,
   ): Promise<void> {
     const taskName = `${agentName}_gate`;
     this.workerManager.addWorker(taskName, async (inputData) => {
@@ -966,7 +1004,7 @@ export class AgentRuntime {
       } catch {
         return { decision: "continue" };
       }
-    });
+    }, undefined, domain);
   }
 
   /**
@@ -977,6 +1015,7 @@ export class AgentRuntime {
   private async _registerRouterWorker(
     agentName: string,
     routerFn: (...args: unknown[]) => string,
+    domain?: string,
   ): Promise<void> {
     const taskName = `${agentName}_router_fn`;
     this.workerManager.addWorker(taskName, async (inputData) => {
@@ -987,7 +1026,7 @@ export class AgentRuntime {
       } catch {
         return { selected_agent: "" };
       }
-    });
+    }, undefined, domain);
   }
 
   /**
@@ -1004,6 +1043,7 @@ export class AgentRuntime {
   private async _registerSwarmTransferWorkers(
     agent: Agent,
     requiredWorkers?: Set<string> | null,
+    domain?: string,
   ): Promise<void> {
     // Build set of all valid transfer targets from allowed_transitions
     const allowed = agent.allowedTransitions;
@@ -1038,9 +1078,9 @@ export class AgentRuntime {
         if (isUnreachable) {
           this.workerManager.addWorker(toolName, async () => ({
             result: `ERROR: ${toolName} is not available. Use a different transfer tool, or if you are done, just provide your final response without calling any transfer tool.`,
-          }));
+          }), undefined, domain);
         } else {
-          this.workerManager.addWorker(toolName, async () => ({}));
+          this.workerManager.addWorker(toolName, async () => ({}), undefined, domain);
         }
       }
     }
@@ -1052,7 +1092,7 @@ export class AgentRuntime {
    * Worker scans for _transfer_to_ in tool call names.
    * Returns {is_transfer, transfer_to}.
    */
-  private async _registerCheckTransferWorker(agentName: string): Promise<void> {
+  private async _registerCheckTransferWorker(agentName: string, domain?: string): Promise<void> {
     const taskName = `${agentName}_check_transfer`;
     this.workerManager.addWorker(taskName, async (inputData) => {
       const toolCalls = Array.isArray(inputData["tool_calls"]) ? inputData["tool_calls"] : [];
@@ -1066,7 +1106,7 @@ export class AgentRuntime {
         }
       }
       return { is_transfer: false, transfer_to: "" };
-    });
+    }, undefined, domain);
   }
 
   /**
@@ -1076,7 +1116,7 @@ export class AgentRuntime {
    * 1. Primary: Transfer tool detected (is_transfer=true, transfer_to=<name>)
    * 2. Secondary: Condition-based handoffs (OnTextMention, OnCondition, etc.)
    */
-  private async _registerHandoffCheckWorker(agent: Agent): Promise<void> {
+  private async _registerHandoffCheckWorker(agent: Agent, domain?: string): Promise<void> {
     const taskName = `${agent.name}_handoff_check`;
     const handoffConditions = agent.handoffs;
 
@@ -1161,7 +1201,7 @@ export class AgentRuntime {
 
       // Neither transfer nor condition matched — loop exits
       return { active_agent: activeAgent, handoff: false };
-    });
+    }, undefined, domain);
   }
 
   /**
@@ -1170,7 +1210,7 @@ export class AgentRuntime {
    * Worker maps agent name to index.
    * Returns {selected}.
    */
-  private async _registerProcessSelectionWorker(agent: Agent): Promise<void> {
+  private async _registerProcessSelectionWorker(agent: Agent, domain?: string): Promise<void> {
     const taskName = `${agent.name}_process_selection`;
     const nameToIdx: Record<string, string> = {};
     agent.agents.forEach((sub, i) => {
@@ -1191,7 +1231,7 @@ export class AgentRuntime {
         return { selected };
       }
       return { selected: String(humanOutput) };
-    });
+    }, undefined, domain);
   }
 
   /**
