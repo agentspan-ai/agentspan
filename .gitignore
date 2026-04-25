@@ -38,3 +38,7 @@ cli/agentspan
 target/
 sdk/java/examples/target/
 sdk/java/target/
+
+# Superpowers skill docs (local only, not checked in)
+docs/superpowers/
+.contextbook/
