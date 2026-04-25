@@ -217,10 +217,9 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
      * </ol>
      */
     private static final int RECENT_TOOL_RESULTS_TO_KEEP = 6;
+
     private static final int TOOL_RESULT_TRUNCATE_LENGTH = 500;
-    private static final Set<String> WRITE_ONLY_TOOLS = Set.of(
-            "contextbook_write", "contextbook_summary"
-    );
+    private static final Set<String> WRITE_ONLY_TOOLS = Set.of("contextbook_write", "contextbook_summary");
 
     void compactToolHistory(List<ChatMessage> messages) {
         if (messages == null || messages.size() < 4) {
@@ -306,8 +305,8 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         if (tc.getOutput() != null) {
             Object result = tc.getOutput().get("result");
             if (result != null && result.toString().length() > TOOL_RESULT_TRUNCATE_LENGTH) {
-                tc.setOutput(Map.of("result",
-                        result.toString().substring(0, TOOL_RESULT_TRUNCATE_LENGTH) + "...[truncated]"));
+                tc.setOutput(Map.of(
+                        "result", result.toString().substring(0, TOOL_RESULT_TRUNCATE_LENGTH) + "...[truncated]"));
             }
         }
     }
@@ -974,7 +973,7 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         Map<String, Object> clean = new HashMap<>(inputData);
         clean.remove("_agent_state");
         clean.remove("__agentspan_ctx__");
-        clean.remove("method");  // internal dispatch method name
+        clean.remove("method"); // internal dispatch method name
         return clean;
     }
 
