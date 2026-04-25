@@ -154,6 +154,10 @@ describe('Suite 2: Tool Calling / Credential Lifecycle', { timeout: 300_000 }, (
     }
 
     // ── Step 4: Add credentials ──────────────────────────────────
+    // Fresh runtime so workers get execution tokens with the new credentials
+    await runtime.shutdown();
+    runtime = new AgentRuntime();
+
     credentialSet(CRED_A, 'secret-aaa-value');
     credentialSet(CRED_B, 'secret-bbb-value');
 
@@ -169,6 +173,12 @@ describe('Suite 2: Tool Calling / Credential Lifecycle', { timeout: 300_000 }, (
     expect(output2, `[With creds] output=${output2.slice(0, 300)}`).toContain('sec');
 
     // ── Step 5: Update credentials ───────────────────────────────
+    // Shutdown and recreate runtime so workers pick up fresh execution tokens
+    // with the updated credentials. Reusing stale workers causes them to resolve
+    // credentials with the old execution's token (race condition).
+    await runtime.shutdown();
+    runtime = new AgentRuntime();
+
     credentialSet(CRED_A, 'newval-xxx-updated');
     credentialSet(CRED_B, 'newval-yyy-updated');
 
