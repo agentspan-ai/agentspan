@@ -13,7 +13,9 @@
  * No mocks. Real server. Algorithmic assertions.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+
+vi.setConfig({ testTimeout: 300_000 }); // 5 min — skill execution tests involve real LLM calls
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
