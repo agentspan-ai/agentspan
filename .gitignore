@@ -42,3 +42,4 @@ sdk/java/target/
 # Superpowers skill docs (local only, not checked in)
 docs/superpowers/
 .contextbook/
+sdk/python/agentspan
