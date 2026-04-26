@@ -121,6 +121,8 @@ export interface AgentOptions {
   /** Shorthand: allowed CLI commands (implies cliCommands=true). */
   cliAllowedCommands?: string[];
   credentials?: (string | CredentialFile)[];
+  /** Stateful execution — each run gets a unique domain UUID for worker isolation. */
+  stateful?: boolean;
 }
 
 // ── Agent class ───────────────────────────────────────────
@@ -147,6 +149,7 @@ export class Agent {
   readonly temperature?: number;
   readonly timeoutSeconds: number;
   readonly external: boolean;
+  readonly stateful: boolean;
   readonly stopWhen?: (messages: unknown[], ...args: unknown[]) => boolean;
   readonly termination?: TerminationCondition;
   readonly handoffs: HandoffCondition[];
@@ -199,6 +202,7 @@ export class Agent {
     this.temperature = options.temperature;
     this.timeoutSeconds = options.timeoutSeconds ?? 0;
     this.external = options.external ?? false;
+    this.stateful = options.stateful ?? false;
     this.stopWhen = options.stopWhen;
     this.termination = options.termination;
     this.handoffs = options.handoffs ?? [];
