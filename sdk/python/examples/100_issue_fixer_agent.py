@@ -46,7 +46,7 @@ from _issue_fixer_tools import (
     git_diff, git_log, git_blame,
     lint_and_format, build_check, run_unit_tests, run_e2e_tests,
     contextbook_write, contextbook_read, contextbook_summary,
-    run_command, web_fetch,
+    run_command, web_fetch, fetch_pr_context, gather_review_context,
 )
 
 # ── Project-Specific Configuration ────────────────────────────
@@ -190,18 +190,19 @@ dg_skill = skill(
     DG_SKILL_PATH,
     model=SONNET,
     agent_models={"gilfoyle": OPUS, "dinesh": SONNET},
+    params={"cap": 1},
 )
 
 dg_reviewer = Agent(
     name="dg_reviewer",
     model=SONNET,
     stateful=True,
-    max_turns=15,
+    max_turns=3,
     max_tokens=60000,
     tools=[
+        gather_review_context,
         agent_tool(dg_skill, description="Run adversarial Dinesh vs Gilfoyle code review"),
-        read_file, grep_search, git_diff, file_outline,
-        contextbook_write, contextbook_read, contextbook_summary,
+        contextbook_write,
     ],
     instructions=DG_REVIEWER_INSTRUCTIONS.format(**_fmt),
 )
@@ -360,15 +361,10 @@ pr_feedback = Agent(
     name="pr_feedback",
     model=SONNET,
     stateful=True,
-    max_turns=20,
+    max_turns=10,
     max_tokens=16000,
     credentials=[GITHUB_CREDENTIAL],
-    cli_config=CliConfig(
-        allowed_commands=["gh", "git"],
-        allow_shell=True,
-        timeout=60,
-    ),
-    tools=[contextbook_write, contextbook_read, web_fetch],
+    tools=[fetch_pr_context, contextbook_write, web_fetch],
     instructions=PR_FEEDBACK_INSTRUCTIONS.format(**_fmt),
 )
 
