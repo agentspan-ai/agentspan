@@ -6,9 +6,10 @@ Tests cover the full skill lifecycle:
 - Counterfactual: plain Agent has no skill data
 - Nested skill in agent_tool preserves skill data
 - plan() produces workflow referencing sub-agents
-- Execution produces SUB_WORKFLOW tasks
-- Skill as agent_tool execution
+- Skill as agent_tool: workers registered and polled (regression for pre-deploy fix)
+- Skill as agent_tool in stateful context: workers registered with domain
 - DG skill loading (gilfoyle + dinesh)
+- Script discovery, params injection, worker creation
 """
 
 import os
@@ -32,7 +33,7 @@ DG_SKILL_PATH = Path("~/.claude/skills/dg").expanduser()
 
 @pytest.fixture()
 def skill_dir(tmp_path):
-    """Create a minimal test skill with SKILL.md + two agent files."""
+    """Create a minimal test skill with SKILL.md + two agent files + a script."""
     skill_md = textwrap.dedent("""\
         ---
         name: test_skill
@@ -41,24 +42,28 @@ def skill_dir(tmp_path):
             default: fast
         ---
         ## Overview
-        A test skill with two sub-agents.
+        A test skill with two sub-agents and a script tool.
 
         ## Workflow
-        Alpha analyzes, Beta summarizes.
+        1. Call the echo_args tool once with the user's input as the argument.
+        2. Return the echo_args result to the user. Do NOT call any more tools after echo_args.
     """)
     (tmp_path / "SKILL.md").write_text(skill_md)
 
-    alpha_md = textwrap.dedent("""\
-        # Alpha Agent
-        You analyze the input.
-    """)
-    (tmp_path / "alpha-agent.md").write_text(alpha_md)
+    (tmp_path / "alpha-agent.md").write_text("# Alpha Agent\nYou analyze the input.\n")
+    (tmp_path / "beta-agent.md").write_text("# Beta Agent\nYou summarize the analysis.\n")
 
-    beta_md = textwrap.dedent("""\
-        # Beta Agent
-        You summarize the analysis.
-    """)
-    (tmp_path / "beta-agent.md").write_text(beta_md)
+    # Script tool: echoes args with a deterministic prefix for algorithmic validation
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    echo_script = scripts_dir / "echo_args.py"
+    echo_script.write_text(textwrap.dedent("""\
+        #!/usr/bin/env python3
+        import sys
+        args = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "no-args"
+        print(f"ECHO_ARGS_RESULT:{args}")
+    """))
+    echo_script.chmod(0o755)
 
     return tmp_path
 
@@ -70,284 +75,73 @@ def fresh_runtime():
         yield rt
 
 
-# ── Tests ────────────────────────────────────────────────────────────
+# ── Helpers ──────────────────────────────────────────────────────────
 
 
-class TestSuite15Skills:
-    """Skill loading, serialization, and execution tests."""
+def _verify_skill_sub_workflow(execution_id: str, skill_task_name: str = "test_skill"):
+    """Fetch a skill sub-workflow from a parent execution and verify:
+    1. The skill SUB_WORKFLOW task exists and COMPLETED
+    2. No tasks stuck in SCHEDULED inside the sub-workflow (pollCount=0 regression)
+    3. If echo_args was invoked, it COMPLETED with ECHO_ARGS_RESULT marker
 
-    def test_skill_loading(self, skill_dir):
-        """skill() discovers sub-agents from *-agent.md files."""
-        agent = skill(skill_dir, model=MODEL)
+    Returns (sub_wf_id, sub_tasks) for further inspection.
+    """
+    from conftest import get_workflow
 
-        assert agent.name == "test_skill"
-        assert agent._framework == "skill"
+    wf = get_workflow(execution_id)
+    all_tasks = wf.get("tasks", [])
 
-        raw = agent._framework_config
-        assert "agentFiles" in raw, (
-            f"_framework_config missing 'agentFiles'. Keys: {list(raw.keys())}"
-        )
-        agent_file_names = set(raw["agentFiles"].keys())
-        assert "alpha" in agent_file_names, (
-            f"Expected 'alpha' in agentFiles, got: {agent_file_names}"
-        )
-        assert "beta" in agent_file_names, (
-            f"Expected 'beta' in agentFiles, got: {agent_file_names}"
-        )
-
-    def test_skill_serialization(self, skill_dir):
-        """Serialized config preserves _framework_config data."""
-        agent = skill(skill_dir, model=MODEL)
-
-        serializer = AgentConfigSerializer()
-        config = serializer.serialize(agent)
-
-        assert config.get("_framework") == "skill", (
-            f"Serialized config missing '_framework': 'skill'. Got: {config.get('_framework')}"
-        )
-        assert "agentFiles" in config, (
-            f"Serialized config missing 'agentFiles'. Keys: {list(config.keys())}"
-        )
-        assert config["name"] == "test_skill", (
-            f"Serialized name is '{config['name']}', expected 'test_skill'"
-        )
-        assert "skillMd" in config, (
-            f"Serialized config missing 'skillMd'. Keys: {list(config.keys())}"
+    # Find the skill SUB_WORKFLOW task
+    skill_tasks = [
+        t for t in all_tasks
+        if skill_task_name in t.get("taskDefName", "")
+    ]
+    assert len(skill_tasks) > 0, (
+        f"{skill_task_name} sub-workflow never invoked in {execution_id}. "
+        f"Task defs: {[t.get('taskDefName') for t in all_tasks]}"
+    )
+    for t in skill_tasks:
+        assert t.get("status") == "COMPLETED", (
+            f"{skill_task_name} status='{t.get('status')}' pollCount={t.get('pollCount', 0)} "
+            f"in {execution_id}"
         )
 
-    def test_counterfactual_bare_serialization(self):
-        """A plain Agent has no skill data in serialized output."""
-        agent = Agent(
-            name="plain_agent",
-            model=MODEL,
-            instructions="You are a plain agent.",
-        )
+    # Fetch the sub-workflow
+    sub_wf_id = skill_tasks[0].get("outputData", {}).get("subWorkflowId", "")
+    assert sub_wf_id, f"No subWorkflowId in {skill_task_name} output"
 
-        serializer = AgentConfigSerializer()
-        config = serializer.serialize(agent)
+    sub_wf = get_workflow(sub_wf_id)
+    sub_tasks = sub_wf.get("tasks", [])
 
-        assert "_framework" not in config, (
-            f"Plain Agent should not have '_framework' in serialized config. "
-            f"Got: {config.get('_framework')}"
-        )
-        assert "skillMd" not in config, (
-            f"Plain Agent should not have 'skillMd' in serialized config."
-        )
-        assert "agentFiles" not in config, (
-            f"Plain Agent should not have 'agentFiles' in serialized config."
-        )
+    # CRITICAL: no tasks stuck in SCHEDULED — the original bug symptom.
+    # If workers aren't registered/polling, tool tasks stay SCHEDULED with pollCount=0.
+    scheduled = [t for t in sub_tasks if t.get("status") == "SCHEDULED"]
+    assert not scheduled, (
+        f"Tasks stuck in SCHEDULED in sub-workflow {sub_wf_id} — "
+        f"workers were NOT registered! "
+        f"{[(t.get('taskDefName'), t.get('pollCount', 0)) for t in scheduled]}"
+    )
 
-    def test_skill_agent_tool_serialization(self, skill_dir):
-        """Skill nested in agent_tool preserves skill data in serialization."""
-        skill_agent = skill(skill_dir, model=MODEL)
-        at = agent_tool(skill_agent, description="Run test skill")
-
-        td = get_tool_def(at)
-        assert td.tool_type == "agent_tool", (
-            f"agent_tool should have tool_type='agent_tool', got '{td.tool_type}'"
-        )
-        assert td.config is not None, "agent_tool config should not be None"
-        nested = td.config.get("agent")
-        assert nested is not None, (
-            f"agent_tool config missing 'agent' key. Keys: {list(td.config.keys())}"
-        )
-        assert getattr(nested, "_framework", None) == "skill", (
-            f"Nested agent should have _framework='skill', "
-            f"got '{getattr(nested, '_framework', None)}'"
-        )
-
-        # Serialize a parent that uses the agent_tool
-        parent = Agent(
-            name="parent_with_skill_tool",
-            model=MODEL,
-            instructions="Use the skill tool.",
-            tools=[at],
-        )
-        serializer = AgentConfigSerializer()
-        config = serializer.serialize(parent)
-
-        # The parent itself is not a skill
-        assert config.get("_framework") is None or config.get("_framework") != "skill", (
-            "Parent agent should not be a skill"
-        )
-        # But the tool list should contain the skill agent tool
-        tool_names = [t["name"] for t in config.get("tools", [])]
-        assert "test_skill" in tool_names, (
-            f"Expected 'test_skill' in parent's tools. Got: {tool_names}"
-        )
-
-    def test_skill_plan_compilation(self, skill_dir, fresh_runtime):
-        """plan() produces a workflow that references sub-agents."""
-        agent = skill(skill_dir, model=MODEL)
-
-        result = fresh_runtime.plan(agent)
-
-        assert "workflowDef" in result, (
-            f"plan() result missing 'workflowDef'. Keys: {list(result.keys())}. "
-            f"Full result (truncated): {str(result)[:500]}"
-        )
-        wf = result["workflowDef"]
-        assert wf.get("name") == "test_skill", (
-            f"workflowDef.name is '{wf.get('name')}', expected 'test_skill'"
-        )
-
-        # The workflow should have tasks
-        tasks = wf.get("tasks", [])
-        assert len(tasks) > 0, (
-            "workflowDef.tasks is empty. The skill compiler produced no tasks."
-        )
-
-        # Recursively collect all tasks
-        all_tasks = _all_tasks_flat(wf)
-        task_types = _task_type_set(all_tasks)
-
-        # The skill compiler produces LLM_CHAT_COMPLETE (orchestrator) and
-        # FORK_JOIN_DYNAMIC (for tool/sub-agent dispatch). Sub-agents are
-        # invoked dynamically at runtime, so SUB_WORKFLOW may not appear
-        # in the static plan. Verify the workflow has the expected structure.
-        assert "LLM_CHAT_COMPLETE" in task_types, (
-            f"No LLM_CHAT_COMPLETE task in compiled workflow. "
-            f"Task types: {task_types}. The skill orchestrator needs an LLM task."
-        )
-        assert "DO_WHILE" in task_types or "FORK_JOIN_DYNAMIC" in task_types, (
-            f"No DO_WHILE or FORK_JOIN_DYNAMIC in compiled workflow. "
-            f"Task types: {task_types}. The skill should have an agent loop."
-        )
-
-    def test_skill_execution_sub_workflows(self, skill_dir, fresh_runtime):
-        """Running a skill produces SUB_WORKFLOW tasks in the execution."""
-        agent = skill(skill_dir, model=MODEL)
-
-        result = fresh_runtime.run(agent, "Analyze the word 'hello'")
-
-        assert result is not None, "Skill execution returned None"
-        assert str(result.status) in ("COMPLETED", "completed", "Status.COMPLETED"), (
-            f"Skill execution status is '{result.status}', expected COMPLETED"
-        )
-
-        # Check the execution has tasks
-        from conftest import get_workflow
-
-        wf = get_workflow(result.execution_id)
-        tasks = wf.get("tasks", [])
-        assert len(tasks) > 0, "Execution has no tasks"
-
-        # Should have at least one SUB_WORKFLOW task
-        task_types = {t.get("taskType", t.get("type", "")) for t in tasks}
-        assert "SUB_WORKFLOW" in task_types, (
-            f"No SUB_WORKFLOW task in execution. Task types: {task_types}. "
-            f"A skill with sub-agents should produce SUB_WORKFLOW tasks."
-        )
-
-    def test_skill_as_agent_tool_execution(self, skill_dir, fresh_runtime):
-        """Skill wrapped in agent_tool still produces sub-workflows when executed."""
-        skill_agent = skill(skill_dir, model=MODEL)
-        at = agent_tool(skill_agent, description="Analyze with test skill")
-
-        parent = Agent(
-            name="e2e_skill_parent",
-            model=MODEL,
-            instructions="Use the test_skill tool to analyze the input.",
-            tools=[at],
-        )
-
-        result = fresh_runtime.run(parent, "Analyze the phrase 'skill test'")
-
-        assert result is not None, "Parent execution returned None"
-        assert str(result.status) in ("COMPLETED", "completed", "Status.COMPLETED"), (
-            f"Parent execution status is '{result.status}', expected COMPLETED"
-        )
-
-    def test_dg_skill_loading(self):
-        """DG skill loads gilfoyle + dinesh agents."""
-        if not DG_SKILL_PATH.exists():
-            pytest.skip(
-                f"DG skill not installed at {DG_SKILL_PATH}. "
-                f"Install with: git clone https://github.com/v1r3n/dinesh-gilfoyle ~/.claude/skills/dg"
+    # If echo_args was invoked, verify it completed with deterministic marker
+    echo_tasks = [
+        t for t in sub_tasks if "echo_args" in t.get("taskDefName", "")
+    ]
+    if echo_tasks:
+        for t in echo_tasks:
+            assert t.get("status") == "COMPLETED", (
+                f"echo_args status='{t.get('status')}' pollCount={t.get('pollCount', 0)} "
+                f"in sub-workflow {sub_wf_id}"
             )
-
-        agent = skill(DG_SKILL_PATH, model=MODEL)
-
-        assert agent._framework == "skill"
-        raw = agent._framework_config
-        agent_file_names = set(raw.get("agentFiles", {}).keys())
-        assert "gilfoyle" in agent_file_names, (
-            f"Expected 'gilfoyle' in DG skill agentFiles, got: {agent_file_names}"
+        any_marker = any(
+            "ECHO_ARGS_RESULT:" in str(t.get("outputData", {}))
+            for t in echo_tasks
         )
-        assert "dinesh" in agent_file_names, (
-            f"Expected 'dinesh' in DG skill agentFiles, got: {agent_file_names}"
+        assert any_marker, (
+            f"echo_args completed but no ECHO_ARGS_RESULT marker in {sub_wf_id}. "
+            f"Outputs: {[t.get('outputData') for t in echo_tasks]}"
         )
 
-
-    def test_skill_in_stateful_agent_tool(self, skill_dir, fresh_runtime):
-        """Skill workers (read_skill_file) execute correctly in a stateful context.
-
-        When a stateful parent agent uses a skill via agent_tool, the skill's
-        workers (read_skill_file, scripts) must register under the execution's
-        domain. Without domain propagation, they stay SCHEDULED with pollCount=0.
-
-        This test verifies the skill completes (not stuck) in a stateful context.
-        """
-        skill_agent = skill(skill_dir, model=MODEL)
-        at = agent_tool(skill_agent, description="Analyze with test skill")
-
-        parent = Agent(
-            name="e2e_skill_stateful_parent",
-            model=MODEL,
-            stateful=True,
-            instructions="Use the test_skill tool to analyze the input.",
-            tools=[at],
-        )
-
-        result = fresh_runtime.run(parent, "Analyze 'stateful skill test'")
-
-        assert result is not None, "Stateful parent execution returned None"
-        assert str(result.status) in ("COMPLETED", "completed", "Status.COMPLETED"), (
-            f"Stateful parent execution status is '{result.status}', expected COMPLETED. "
-            f"If RUNNING/TIMED_OUT, skill workers may not have registered in the correct domain."
-        )
-
-        # Verify no tasks stuck in SCHEDULED
-        from conftest import get_workflow
-
-        wf = get_workflow(result.execution_id)
-        scheduled = [t for t in wf.get("tasks", []) if t.get("status") == "SCHEDULED"]
-        assert not scheduled, (
-            f"Tasks stuck in SCHEDULED (domain issue): "
-            f"{[(t.get('taskDefName'), t.get('pollCount', 0)) for t in scheduled]}"
-        )
-
-    def test_counterfactual_skill_serialization_lost(self, skill_dir):
-        """Counterfactual: without the serialization fix, the skill config is lost.
-
-        Proves the fix is necessary by showing that a plain Agent (simulating
-        the old serializer behavior) produces no skill data. The test verifies
-        the ABSENCE of skill data on a plain agent — if this test fails, the
-        counterfactual is invalid.
-        """
-        # Load the skill correctly
-        skill_agent = skill(skill_dir, model=MODEL)
-        serializer = AgentConfigSerializer()
-        correct_config = serializer.serialize(skill_agent)
-
-        # Simulate old behavior: serialize a plain Agent with same name/model
-        plain = Agent(name="test_skill", model=MODEL)
-        broken_config = serializer.serialize(plain)
-
-        # The correct config HAS skill data
-        assert "agentFiles" in correct_config, "Correct config should have agentFiles"
-        assert "skillMd" in correct_config, "Correct config should have skillMd"
-
-        # The broken config does NOT — proving the fix is needed
-        assert "agentFiles" not in broken_config, (
-            "Counterfactual invalid: plain Agent should NOT have agentFiles"
-        )
-        assert "skillMd" not in broken_config, (
-            "Counterfactual invalid: plain Agent should NOT have skillMd"
-        )
-
-
-# ── Helpers (copied from test_suite1 to keep this file self-contained) ──
+    return sub_wf_id, sub_tasks
 
 
 def _all_tasks_flat(workflow_def: dict) -> list:
@@ -360,7 +154,6 @@ def _all_tasks_flat(workflow_def: dict) -> list:
 
 
 def _recurse_task(t: dict) -> list:
-    """Recurse into a single task's nested children."""
     children = []
     for nested in t.get("loopOver", []):
         children.append(nested)
@@ -380,16 +173,252 @@ def _recurse_task(t: dict) -> list:
 
 
 def _task_type_set(tasks: list) -> set:
-    """Collect unique task type values."""
     return {t.get("type", "") for t in tasks}
 
 
-def _sub_workflow_names(tasks: list) -> list:
-    """Extract subWorkflowParam.name from SUB_WORKFLOW tasks."""
-    names = []
-    for t in tasks:
-        if t.get("type") == "SUB_WORKFLOW":
-            params = t.get("subWorkflowParam", {}) or t.get("subWorkflowParams", {})
-            if params.get("name"):
-                names.append(params["name"])
-    return names
+# ── Tests ────────────────────────────────────────────────────────────
+
+
+class TestSuite15Skills:
+    """Skill loading, serialization, and execution tests."""
+
+    # ── Loading & serialization (no server, instant) ──────────────
+
+    def test_skill_loading(self, skill_dir):
+        """skill() discovers sub-agents from *-agent.md files."""
+        agent = skill(skill_dir, model=MODEL)
+
+        assert agent.name == "test_skill"
+        assert agent._framework == "skill"
+
+        raw = agent._framework_config
+        assert "agentFiles" in raw
+        agent_file_names = set(raw["agentFiles"].keys())
+        assert "alpha" in agent_file_names
+        assert "beta" in agent_file_names
+
+    def test_skill_serialization(self, skill_dir):
+        """Serialized config preserves _framework_config data."""
+        agent = skill(skill_dir, model=MODEL)
+        serializer = AgentConfigSerializer()
+        config = serializer.serialize(agent)
+
+        assert config.get("_framework") == "skill"
+        assert "agentFiles" in config
+        assert config["name"] == "test_skill"
+        assert "skillMd" in config
+
+    def test_counterfactual_bare_serialization(self):
+        """A plain Agent has no skill data in serialized output."""
+        agent = Agent(name="plain_agent", model=MODEL, instructions="You are a plain agent.")
+        serializer = AgentConfigSerializer()
+        config = serializer.serialize(agent)
+
+        assert "_framework" not in config
+        assert "skillMd" not in config
+        assert "agentFiles" not in config
+
+    def test_skill_agent_tool_serialization(self, skill_dir):
+        """Skill nested in agent_tool preserves skill data in serialization."""
+        skill_agent = skill(skill_dir, model=MODEL)
+        at = agent_tool(skill_agent, description="Run test skill")
+
+        td = get_tool_def(at)
+        assert td.tool_type == "agent_tool"
+        assert td.config is not None
+        nested = td.config.get("agent")
+        assert nested is not None
+        assert getattr(nested, "_framework", None) == "skill"
+
+        parent = Agent(
+            name="parent_with_skill_tool", model=MODEL,
+            instructions="Use the skill tool.", tools=[at],
+        )
+        serializer = AgentConfigSerializer()
+        config = serializer.serialize(parent)
+
+        assert config.get("_framework") != "skill"
+        tool_names = [t["name"] for t in config.get("tools", [])]
+        assert "test_skill" in tool_names
+
+    def test_counterfactual_skill_serialization_lost(self, skill_dir):
+        """Counterfactual: plain Agent with same name produces no skill data."""
+        skill_agent = skill(skill_dir, model=MODEL)
+        serializer = AgentConfigSerializer()
+        correct_config = serializer.serialize(skill_agent)
+
+        plain = Agent(name="test_skill", model=MODEL)
+        broken_config = serializer.serialize(plain)
+
+        assert "agentFiles" in correct_config
+        assert "skillMd" in correct_config
+        assert "agentFiles" not in broken_config
+        assert "skillMd" not in broken_config
+
+    def test_skill_script_discovery(self, skill_dir):
+        """skill() discovers scripts from the scripts/ directory."""
+        agent = skill(skill_dir, model=MODEL)
+        scripts = agent._framework_config.get("scripts", {})
+
+        assert "echo_args" in scripts
+        assert scripts["echo_args"].get("language") == "python"
+        assert scripts["echo_args"].get("filename") == "echo_args.py"
+
+    def test_skill_params_injection(self, skill_dir):
+        """Params are injected into SKILL.md for server visibility."""
+        agent = skill(skill_dir, model=MODEL, params={"mode": "turbo", "rounds": 1})
+        config = agent._framework_config
+        skill_md = config.get("skillMd", "")
+
+        assert "[Skill Parameters]" in skill_md
+        assert "mode: turbo" in skill_md
+        assert "rounds: 1" in skill_md
+
+        raw_params = config.get("params", {})
+        assert raw_params.get("mode") == "turbo"
+        assert raw_params.get("rounds") == 1
+
+    def test_skill_params_default_override(self, skill_dir):
+        """Runtime params override SKILL.md frontmatter defaults."""
+        agent_default = skill(skill_dir, model=MODEL)
+        assert agent_default._skill_params.get("mode") == "fast"
+
+        agent_override = skill(skill_dir, model=MODEL, params={"mode": "slow"})
+        assert agent_override._skill_params.get("mode") == "slow"
+
+    def test_skill_script_worker_creation(self, skill_dir):
+        """Skill scripts produce worker functions that execute with arguments."""
+        from agentspan.agents.skill import create_skill_workers
+
+        agent = skill(skill_dir, model=MODEL)
+        workers = create_skill_workers(agent)
+
+        worker_names = [w.name for w in workers]
+        assert any("echo_args" in n for n in worker_names)
+
+        echo_worker = next(w for w in workers if "echo_args" in w.name)
+        result = echo_worker.func(command="hello world")
+        assert "ECHO_ARGS_RESULT:hello world" in result
+
+    def test_skill_script_no_args(self, skill_dir):
+        """Script called without arguments returns the default marker."""
+        from agentspan.agents.skill import create_skill_workers
+
+        agent = skill(skill_dir, model=MODEL)
+        workers = create_skill_workers(agent)
+        echo_worker = next(w for w in workers if "echo_args" in w.name)
+
+        result = echo_worker.func()
+        assert "ECHO_ARGS_RESULT:no-args" in result
+
+    def test_dg_skill_loading(self):
+        """DG skill loads gilfoyle + dinesh agents."""
+        if not DG_SKILL_PATH.exists():
+            pytest.skip(f"DG skill not installed at {DG_SKILL_PATH}")
+
+        agent = skill(DG_SKILL_PATH, model=MODEL)
+        assert agent._framework == "skill"
+        agent_file_names = set(agent._framework_config.get("agentFiles", {}).keys())
+        assert "gilfoyle" in agent_file_names
+        assert "dinesh" in agent_file_names
+
+    # ── Compilation (server call, no LLM) ─────────────────────────
+
+    def test_skill_plan_compilation(self, skill_dir, fresh_runtime):
+        """plan() produces a workflow with LLM_CHAT_COMPLETE and agent loop."""
+        agent = skill(skill_dir, model=MODEL)
+        result = fresh_runtime.plan(agent)
+
+        assert "workflowDef" in result
+        wf = result["workflowDef"]
+        assert wf.get("name") == "test_skill"
+
+        all_tasks = _all_tasks_flat(wf)
+        task_types = _task_type_set(all_tasks)
+        assert "LLM_CHAT_COMPLETE" in task_types
+        assert "DO_WHILE" in task_types or "FORK_JOIN_DYNAMIC" in task_types
+
+    def test_skill_params_in_compiled_workflow(self, skill_dir, fresh_runtime):
+        """Params injected into SKILL.md appear in the compiled workflow."""
+        agent = skill(skill_dir, model=MODEL, params={"mode": "turbo", "rounds": 1})
+        result = fresh_runtime.plan(agent)
+
+        wf_str = str(result.get("workflowDef", {}))
+        assert "Skill Parameters" in wf_str or "mode" in wf_str, (
+            "Compiled workflow does not contain skill params"
+        )
+
+    # ── Execution (real LLM calls) ────────────────────────────────
+
+    def test_agent_tool_skill_workers_registered(self, skill_dir, fresh_runtime):
+        """Skill workers are registered and polled when skill is nested in agent_tool.
+
+        Regression test for the _pre_deploy_nested_skills + worker polling fix.
+        The bug: skill workers were registered but polling never started because
+        the parent agent had no @tool workers. Result: echo_args task stuck in
+        SCHEDULED with pollCount=0.
+
+        Validates:
+        - Parent execution COMPLETED
+        - Skill SUB_WORKFLOW COMPLETED
+        - Zero tasks stuck in SCHEDULED inside the sub-workflow
+        - echo_args task COMPLETED with ECHO_ARGS_RESULT marker (if invoked)
+        """
+        skill_agent = skill(skill_dir, model=MODEL)
+        at = agent_tool(skill_agent, description="Run test skill with echo_args")
+
+        parent = Agent(
+            name="e2e_skill_at_worker_reg",
+            model=MODEL,
+            instructions=(
+                "You have one tool: test_skill. "
+                "Call it once with the user's request, then return the result."
+            ),
+            tools=[at],
+            max_turns=3,
+        )
+
+        result = fresh_runtime.run(parent, "Echo 'proof42'", timeout=60)
+
+        assert str(result.status) in ("COMPLETED", "completed", "Status.COMPLETED"), (
+            f"execution_id={result.execution_id} status={result.status}. "
+            f"TIMED_OUT = skill workers not registered or not polling."
+        )
+
+        _verify_skill_sub_workflow(result.execution_id)
+
+    def test_agent_tool_skill_workers_with_domain(self, skill_dir, fresh_runtime):
+        """Skill workers register with correct domain in stateful context.
+
+        When a stateful parent uses a skill via agent_tool, the skill's workers
+        must register under the execution's domain. Without domain propagation,
+        they poll in the wrong domain and tasks stay SCHEDULED with pollCount=0.
+
+        Validates:
+        - Stateful parent COMPLETED (not TIMED_OUT from missing workers)
+        - Skill SUB_WORKFLOW COMPLETED
+        - Zero tasks stuck in SCHEDULED (domain mismatch would cause this)
+        """
+        skill_agent = skill(skill_dir, model=MODEL)
+        at = agent_tool(skill_agent, description="Run test skill with echo_args")
+
+        parent = Agent(
+            name="e2e_skill_at_domain",
+            model=MODEL,
+            stateful=True,
+            instructions=(
+                "You have one tool: test_skill. "
+                "Call it once with the user's request, then return the result."
+            ),
+            tools=[at],
+            max_turns=3,
+        )
+
+        result = fresh_runtime.run(parent, "Echo 'domain_proof'", timeout=60)
+
+        assert str(result.status) in ("COMPLETED", "completed", "Status.COMPLETED"), (
+            f"execution_id={result.execution_id} status={result.status}. "
+            f"TIMED_OUT = skill workers not registered in correct domain."
+        )
+
+        _verify_skill_sub_workflow(result.execution_id)

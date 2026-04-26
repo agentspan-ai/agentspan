@@ -417,9 +417,15 @@ class AgentRuntime:
         with _workflow_credentials_lock:
             _workflow_credentials.pop(execution_id, None)
 
-    def _pre_deploy_nested_skills(self, agent: Agent) -> None:
-        """Pre-deploy any skill agents nested inside agent_tool wrappers."""
+    def _pre_deploy_nested_skills(self, agent: Agent) -> list:
+        """Pre-deploy any skill agents nested inside agent_tool wrappers.
+
+        Returns a list of skill agents that need their workers registered
+        (with domain) after run_id is generated.
+        """
         from agentspan.agents.tool import get_tool_def
+
+        skills_to_register: list = []
 
         for t in getattr(agent, "tools", []):
             try:
@@ -431,12 +437,15 @@ class AgentRuntime:
                 if getattr(nested, "_framework", None) == "skill":
                     workflow_name = self._deploy_via_server(nested, framework="skill")
                     logger.info("Pre-deployed skill '%s' as workflow '%s'", nested.name, workflow_name)
-                    self._register_skill_workers(nested)
+                    # Save for later registration with domain (run_id not known yet)
+                    skills_to_register.append(nested)
                     td.config["workflowName"] = workflow_name
                     td.config.pop("agent", None)
 
         for sub in getattr(agent, "agents", []):
-            self._pre_deploy_nested_skills(sub)
+            skills_to_register.extend(self._pre_deploy_nested_skills(sub))
+
+        return skills_to_register
 
     def _start_via_server(
         self,
@@ -461,7 +470,7 @@ class AgentRuntime:
         """
         import requests as req_lib
 
-        self._pre_deploy_nested_skills(agent)
+        pre_deployed_skills = self._pre_deploy_nested_skills(agent)
 
         from agentspan.agents.config_serializer import AgentConfigSerializer
 
@@ -484,6 +493,7 @@ class AgentRuntime:
             payload["credentials"] = credentials
         if run_id:
             payload["runId"] = run_id
+
         url = self._agent_api_url("/start")
         resp = req_lib.post(url, json=payload, headers=self._agent_api_headers(), timeout=30)
         try:
@@ -501,7 +511,7 @@ class AgentRuntime:
             )
         else:
             logger.info("Started agent '%s' via server (execution_id=%s)", agent.name, execution_id)
-        return execution_id, required_workers
+        return execution_id, required_workers, pre_deployed_skills
 
     async def _start_via_server_async(
         self,
@@ -517,6 +527,8 @@ class AgentRuntime:
         run_id: Optional[str] = None,
     ) -> str:
         """Async version of :meth:`_start_via_server`."""
+        pre_deployed_skills = self._pre_deploy_nested_skills(agent)
+
         from agentspan.agents.config_serializer import AgentConfigSerializer
 
         serializer = AgentConfigSerializer()
@@ -538,6 +550,7 @@ class AgentRuntime:
             payload["credentials"] = credentials
         if run_id:
             payload["runId"] = run_id
+
         data = await self._http.start_agent(payload)
         execution_id = data.get("executionId", "")
         required_workers: Optional[set] = None
@@ -549,7 +562,7 @@ class AgentRuntime:
             )
         else:
             logger.info("Started agent '%s' via server (execution_id=%s)", agent.name, execution_id)
-        return execution_id, required_workers
+        return execution_id, required_workers, pre_deployed_skills
 
     async def _start_framework_via_server_async(
         self,
@@ -1170,6 +1183,31 @@ class AgentRuntime:
                 self._register_workers(sub, required_workers=required_workers, domain=domain)
 
     # ── Worker registration helpers ────────────────────────────────
+
+    def _register_and_start_skill_workers(
+        self, skill_agents: list, domain: "Optional[str]" = None
+    ) -> None:
+        """Register pre-deployed skill workers and ensure polling is started.
+
+        Called after ``_prepare_workers`` for skills nested in ``agent_tool``
+        wrappers.  The parent agent may not have any ``@tool`` workers itself,
+        so ``_prepare_workers`` won't start the TaskRunner.  This method
+        handles both registration and polling start.
+        """
+        if not skill_agents:
+            return
+        for skill_agent in skill_agents:
+            self._register_skill_workers(skill_agent, domain=domain)
+        # Ensure the TaskRunner is polling — _prepare_workers may have
+        # skipped starting because the parent had no tool workers.
+        with self._worker_start_lock:
+            if not self._workers_started:
+                logger.info("Starting workers for pre-deployed skill workers")
+                self._worker_manager.start()
+                self._workers_started = True
+            else:
+                # Workers already running — inject new skill workers
+                self._worker_manager.start()
 
     def _register_skill_workers(self, agent: Agent, domain: "Optional[str]" = None) -> None:
         """Register skill workers (scripts + read_skill_file) for a skill-based agent."""
@@ -2457,7 +2495,7 @@ class AgentRuntime:
         # Start via server first to get requiredWorkers, then register
         # locally.  Conductor queues tasks so workers can start polling
         # immediately after registration without missing work.
-        execution_id, required_workers = self._start_via_server(
+        execution_id, required_workers, pre_deployed_skills = self._start_via_server(
             agent,
             resolved_prompt,
             media=media,
@@ -2470,6 +2508,7 @@ class AgentRuntime:
         )
 
         self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
+        self._register_and_start_skill_workers(pre_deployed_skills, domain=run_id)
 
         self._register_workflow_credentials(execution_id, credentials)
 
@@ -3964,7 +4003,7 @@ class AgentRuntime:
         run_id = uuid.uuid4().hex if _has_stateful_tools(agent) else None
 
         # Start via server first to get requiredWorkers, then register locally
-        execution_id, required_workers = await self._start_via_server_async(
+        execution_id, required_workers, pre_deployed_skills = await self._start_via_server_async(
             agent,
             resolved_prompt,
             media=media,
@@ -3977,6 +4016,7 @@ class AgentRuntime:
         )
 
         self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
+        self._register_and_start_skill_workers(pre_deployed_skills, domain=run_id)
         self._register_workflow_credentials(execution_id, credentials)
 
         effective_timeout = timeout or (

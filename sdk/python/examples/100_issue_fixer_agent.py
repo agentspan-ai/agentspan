@@ -194,10 +194,11 @@ dg_skill = skill(
     DG_SKILL_PATH,
     model=OPUS,
     agent_models={"gilfoyle": SONNET, "dinesh": SONNET},
-    params={"rounds": 1},  # Limit to 1 round; also enforced in DG_REVIEWER_INSTRUCTIONS prompt prefix
+    params={"rounds": 1},
 )
-# Note: the skill's internal max_turns is controlled by the server-side skill compiler.
-# The params={"rounds": 1} + coordinator prompt prefix "1\n..." both signal single-round.
+# Hard limit: 1 round = gilfoyle(1 turn) + dinesh(1 turn) + orchestrator(2 turns) = 4 max.
+# The params={"rounds": 1} + prompt prefix are hints; max_turns is the hard cap.
+dg_skill.max_turns = 4
 
 dg_reviewer = Agent(
     name="dg_reviewer",

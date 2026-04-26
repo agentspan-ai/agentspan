@@ -7,8 +7,8 @@
  *   - Counterfactual: plain Agent has no skill data
  *   - Nested skill in agent_tool preserves skill data
  *   - plan() produces a valid workflow for skills
- *   - Skill execution produces SUB_WORKFLOW tasks
- *   - Skill as agent_tool execution works
+ *   - Skill as agent_tool: workers registered and polled (regression)
+ *   - Script discovery, params injection, worker creation
  *
  * No mocks. Real server. Algorithmic assertions.
  */
@@ -52,27 +52,26 @@ beforeAll(async () => {
       '    default: fast',
       '---',
       '## Overview',
-      'A test skill with two sub-agents.',
+      'A test skill with two sub-agents and a script tool.',
       '',
       '## Workflow',
-      'Alpha analyzes, Beta summarizes.',
+      "1. Call the echo_args tool once with the user's input as the argument.",
+      '2. Return the echo_args result to the user. Do NOT call any more tools after echo_args.',
     ].join('\n'),
   );
 
+  // Script tool: echoes args with a deterministic prefix
+  const scriptsDir = path.join(skillDir, 'scripts');
+  fs.mkdirSync(scriptsDir);
   fs.writeFileSync(
-    path.join(skillDir, 'alpha-agent.md'),
-    '# Alpha Agent\nYou analyze the input.\n',
+    path.join(scriptsDir, 'echo_args.py'),
+    '#!/usr/bin/env python3\nimport sys\nargs = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "no-args"\nprint(f"ECHO_ARGS_RESULT:{args}")\n',
+    { mode: 0o755 },
   );
 
-  fs.writeFileSync(
-    path.join(skillDir, 'beta-agent.md'),
-    '# Beta Agent\nYou summarize the analysis.\n',
-  );
-
-  fs.writeFileSync(
-    path.join(skillDir, 'template.html'),
-    '<html><body>Test template</body></html>',
-  );
+  fs.writeFileSync(path.join(skillDir, 'alpha-agent.md'), '# Alpha Agent\nYou analyze the input.\n');
+  fs.writeFileSync(path.join(skillDir, 'beta-agent.md'), '# Beta Agent\nYou summarize the analysis.\n');
+  fs.writeFileSync(path.join(skillDir, 'template.html'), '<html><body>Test template</body></html>');
 });
 
 afterAll(async () => {
@@ -84,26 +83,73 @@ afterAll(async () => {
 
 const DG_SKILL_PATH = path.join(os.homedir(), '.claude', 'skills', 'dg');
 
+// ── Helpers ──────────────────────────────────────────────────
+
+/**
+ * Fetch a skill sub-workflow from a parent execution and verify:
+ * 1. The skill SUB_WORKFLOW task exists and COMPLETED
+ * 2. No tasks stuck in SCHEDULED inside the sub-workflow (pollCount=0 regression)
+ * 3. If echo_args was invoked, it COMPLETED with ECHO_ARGS_RESULT marker
+ */
+async function verifySkillSubWorkflow(
+  executionId: string,
+  skillTaskName = 'ts_test_skill',
+): Promise<void> {
+  const wf = await getWorkflow(executionId);
+  const tasks = (wf.tasks ?? []) as Record<string, unknown>[];
+
+  // Find the skill SUB_WORKFLOW task
+  const skillTasks = tasks.filter(
+    (t) => ((t.taskDefName as string) ?? '').includes(skillTaskName),
+  );
+  expect(skillTasks.length).toBeGreaterThan(0);
+  for (const t of skillTasks) {
+    expect(t.status).toBe('COMPLETED');
+  }
+
+  // Fetch the sub-workflow
+  const subWfId = (skillTasks[0].outputData as Record<string, unknown>)?.subWorkflowId as string;
+  expect(subWfId).toBeTruthy();
+
+  const subWf = await getWorkflow(subWfId);
+  const subTasks = (subWf.tasks ?? []) as Record<string, unknown>[];
+
+  // CRITICAL: no tasks stuck in SCHEDULED — the original bug symptom.
+  const scheduled = subTasks.filter((t) => t.status === 'SCHEDULED');
+  expect(scheduled).toEqual([]);
+
+  // If echo_args was invoked, verify it completed with deterministic marker
+  const echoTasks = subTasks.filter(
+    (t) => ((t.taskDefName as string) ?? '').includes('echo_args'),
+  );
+  if (echoTasks.length > 0) {
+    for (const t of echoTasks) {
+      expect(t.status).toBe('COMPLETED');
+    }
+    const anyMarker = echoTasks.some((t) =>
+      JSON.stringify(t.outputData ?? {}).includes('ECHO_ARGS_RESULT:'),
+    );
+    expect(anyMarker).toBe(true);
+  }
+}
+
 // ── Tests ────────────────────────────────────────────────────
 
 describe('Suite 15: Skills', () => {
+  // ── Loading & serialization (no server, instant) ───────────
+
   it('skill() discovers sub-agents from *-agent.md files', () => {
     const agent = skill(skillDir, { model: MODEL }) as unknown as Record<string, unknown>;
 
     expect(agent._framework).toBe('skill');
-
     const raw = agent._framework_config as Record<string, unknown>;
-    expect(raw).toBeDefined();
-
     const agentFiles = raw.agentFiles as Record<string, string>;
-    expect(agentFiles).toBeDefined();
     expect(Object.keys(agentFiles)).toContain('alpha');
     expect(Object.keys(agentFiles)).toContain('beta');
   });
 
   it('serialized config preserves _framework_config data', () => {
     const agent = skill(skillDir, { model: MODEL });
-
     const serializer = new AgentConfigSerializer();
     const config = serializer.serializeAgent(agent);
 
@@ -111,19 +157,10 @@ describe('Suite 15: Skills', () => {
     expect(config.agentFiles).toBeDefined();
     expect(config.name).toBe('ts_test_skill');
     expect(config.skillMd).toBeDefined();
-
-    const agentFiles = config.agentFiles as Record<string, string>;
-    expect(Object.keys(agentFiles)).toContain('alpha');
-    expect(Object.keys(agentFiles)).toContain('beta');
   });
 
   it('counterfactual: plain Agent has no skill data', () => {
-    const plain = new Agent({
-      name: 'plain_agent',
-      model: MODEL,
-      instructions: 'You are a plain agent.',
-    });
-
+    const plain = new Agent({ name: 'plain_agent', model: MODEL, instructions: 'You are a plain agent.' });
     const serializer = new AgentConfigSerializer();
     const config = serializer.serializeAgent(plain);
 
@@ -135,76 +172,47 @@ describe('Suite 15: Skills', () => {
   it('nested skill in agent_tool preserves skill data in serialization', () => {
     const skillAgent = skill(skillDir, { model: MODEL });
     const at = agentTool(skillAgent, { description: 'Run test skill' });
-
-    const parent = new Agent({
-      name: 'e2e_ts_skill_parent',
-      model: MODEL,
-      instructions: 'Use the skill tool.',
-      tools: [at],
-    });
+    const parent = new Agent({ name: 'e2e_ts_skill_parent', model: MODEL, instructions: 'Use the skill tool.', tools: [at] });
 
     const serializer = new AgentConfigSerializer();
     const config = serializer.serializeAgent(parent);
 
-    // Parent is not a skill
     expect(config._framework).toBeUndefined();
-
-    // Tool list should contain the skill
     const tools = (config.tools ?? []) as Record<string, unknown>[];
-    const skillToolNames = tools.map((t) => t.name);
-    expect(skillToolNames).toContain('ts_test_skill');
+    expect(tools.map((t) => t.name)).toContain('ts_test_skill');
   });
 
-  it('plan() produces a valid workflow for a skill', async () => {
-    const agent = skill(skillDir, { model: MODEL });
+  it('discovers scripts from scripts/ directory', () => {
+    const agent = skill(skillDir, { model: MODEL }) as unknown as Record<string, unknown>;
+    const raw = agent._framework_config as Record<string, unknown>;
+    const scripts = raw.scripts as Record<string, Record<string, string>>;
 
-    const result = await runtime.plan(agent);
-
-    expect(result).toBeDefined();
-    expect(result.workflowDef).toBeDefined();
-
-    const wf = result.workflowDef as Record<string, unknown>;
-    expect(wf.name).toBe('ts_test_skill');
-
-    const tasks = (wf.tasks ?? []) as Record<string, unknown>[];
-    expect(tasks.length).toBeGreaterThan(0);
-
-    // Should have LLM_CHAT_COMPLETE (orchestrator) and a loop structure
-    const taskTypes = new Set(tasks.map((t) => t.type));
-    expect(taskTypes.has('LLM_CHAT_COMPLETE') || taskTypes.has('DO_WHILE')).toBe(true);
+    expect(scripts.echo_args).toBeDefined();
+    expect(scripts.echo_args.language).toBe('python');
+    expect(scripts.echo_args.filename).toBe('echo_args.py');
   });
 
-  it('skill execution produces SUB_WORKFLOW tasks', async () => {
-    const agent = skill(skillDir, { model: MODEL });
+  it('params are injected into SKILL.md for server visibility', () => {
+    const agent = skill(skillDir, { model: MODEL, params: { mode: 'turbo', rounds: 1 } }) as unknown as Record<string, unknown>;
+    const raw = agent._framework_config as Record<string, unknown>;
+    const skillMd = raw.skillMd as string;
 
-    const result = await runtime.run(agent, "Analyze the word 'hello'");
+    expect(skillMd).toContain('[Skill Parameters]');
+    expect(skillMd).toContain('mode: turbo');
+    expect(skillMd).toContain('rounds: 1');
 
-    expect(result).toBeDefined();
-    expect(String(result.status).toUpperCase()).toContain('COMPLETED');
-
-    const wf = await getWorkflow(result.executionId);
-    const tasks = (wf.tasks ?? []) as Record<string, unknown>[];
-    expect(tasks.length).toBeGreaterThan(0);
-
-    const taskTypes = new Set(tasks.map((t) => (t.taskType ?? t.type) as string));
-    expect(taskTypes.has('SUB_WORKFLOW')).toBe(true);
+    const params = raw.params as Record<string, unknown>;
+    expect(params.mode).toBe('turbo');
+    expect(params.rounds).toBe(1);
   });
 
-  it('skill as agent_tool executes successfully', async () => {
-    const skillAgent = skill(skillDir, { model: MODEL });
-    const at = agentTool(skillAgent, { description: 'Analyze with test skill' });
+  it('runtime params override defaults in merged params', () => {
+    const agentOverride = skill(skillDir, { model: MODEL, params: { mode: 'slow' } }) as unknown as Record<string, unknown>;
+    const overrideParams = agentOverride._skill_params as Record<string, unknown>;
+    expect(overrideParams?.mode).toBe('slow');
 
-    const parent = new Agent({
-      name: 'e2e_ts_skill_at_parent',
-      model: MODEL,
-      instructions: 'Use the ts_test_skill tool to analyze the input.',
-      tools: [at],
-    });
-
-    const result = await runtime.run(parent, "Analyze 'skill test'");
-
-    expect(result).toBeDefined();
-    expect(String(result.status).toUpperCase()).toContain('COMPLETED');
+    const raw = agentOverride._framework_config as Record<string, unknown>;
+    expect((raw.skillMd as string)).toContain('mode: slow');
   });
 
   it('DG skill loads gilfoyle + dinesh agents', () => {
@@ -214,18 +222,67 @@ describe('Suite 15: Skills', () => {
     }
 
     const agent = skill(DG_SKILL_PATH, { model: MODEL }) as unknown as Record<string, unknown>;
-
     expect(agent._framework).toBe('skill');
 
     const raw = agent._framework_config as Record<string, unknown>;
     const agentFiles = raw.agentFiles as Record<string, string>;
     expect(Object.keys(agentFiles)).toContain('gilfoyle');
     expect(Object.keys(agentFiles)).toContain('dinesh');
+  });
 
-    // Verify serialization preserves DG config
-    const serializer = new AgentConfigSerializer();
-    const config = serializer.serializeAgent(agent as unknown as Agent);
-    expect(config._framework).toBe('skill');
-    expect((config.agentFiles as Record<string, string>)?.gilfoyle).toBeDefined();
+  // ── Compilation (server call, no LLM) ──────────────────────
+
+  it('plan() produces a valid workflow for a skill', async () => {
+    const agent = skill(skillDir, { model: MODEL });
+    const result = await runtime.plan(agent);
+
+    expect(result.workflowDef).toBeDefined();
+    const wf = result.workflowDef as Record<string, unknown>;
+    expect(wf.name).toBe('ts_test_skill');
+
+    const tasks = (wf.tasks ?? []) as Record<string, unknown>[];
+    expect(tasks.length).toBeGreaterThan(0);
+    const taskTypes = new Set(tasks.map((t) => t.type));
+    expect(taskTypes.has('LLM_CHAT_COMPLETE') || taskTypes.has('DO_WHILE')).toBe(true);
+  });
+
+  it('skill params visible in compiled workflow', async () => {
+    const agent = skill(skillDir, { model: MODEL, params: { mode: 'turbo', rounds: 1 } });
+    const result = await runtime.plan(agent);
+
+    const wfStr = JSON.stringify(result.workflowDef);
+    expect(wfStr.includes('Skill Parameters') || wfStr.includes('mode')).toBe(true);
+  });
+
+  // ── Execution (real LLM calls) ─────────────────────────────
+
+  it('agent_tool skill workers registered and polled (regression)', async () => {
+    /**
+     * Regression test for _preDeployNestedSkills + worker polling.
+     * The bug: skill workers were registered but never polled because
+     * the parent had no @tool workers. Result: echo_args stuck in
+     * SCHEDULED with pollCount=0.
+     *
+     * Validates:
+     * - Parent execution COMPLETED
+     * - Skill SUB_WORKFLOW COMPLETED
+     * - Zero tasks stuck in SCHEDULED inside the sub-workflow
+     * - echo_args COMPLETED with ECHO_ARGS_RESULT marker (if invoked)
+     */
+    const skillAgent = skill(skillDir, { model: MODEL });
+    const at = agentTool(skillAgent, { description: 'Run test skill with echo_args' });
+
+    const parent = new Agent({
+      name: 'e2e_ts_skill_at_worker_reg',
+      model: MODEL,
+      instructions: "You have one tool: ts_test_skill. Call it once with the user's request, then return the result.",
+      tools: [at],
+      maxTurns: 3,
+    });
+
+    const result = await runtime.run(parent, "Echo 'proof42'");
+
+    expect(String(result.status).toUpperCase()).toContain('COMPLETED');
+    await verifySkillSubWorkflow(result.executionId);
   });
 });

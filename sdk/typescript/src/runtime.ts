@@ -101,7 +101,7 @@ export class AgentRuntime {
 
     // Pre-deploy any skill agents nested inside agent_tool wrappers
     // BEFORE serialization — modifies tool defs to replace skill configs with workflowName refs.
-    await this._preDeployNestedSkills(nativeAgent);
+    const preDeployedSkills = await this._preDeployNestedSkills(nativeAgent);
 
     // Generate domain UUID for stateful agents
     const runId = this._hasStatefulTools(nativeAgent) ? crypto.randomUUID().replace(/-/g, "") : undefined;
@@ -128,6 +128,11 @@ export class AgentRuntime {
 
     // Register tool workers with domain (for stateful isolation)
     await this._registerToolWorkers(nativeAgent, runId);
+
+    // Register pre-deployed skill workers with domain
+    for (const skillAgent of preDeployedSkills) {
+      this._registerSkillWorkers(skillAgent, runId);
+    }
 
     // Start agent — response may include requiredWorkers
     const startResponse = await this._httpRequest("POST", "/agent/start", payload, options?.signal);
@@ -216,7 +221,7 @@ export class AgentRuntime {
     const correlationId = generateCorrelationId();
 
     // Pre-deploy BEFORE serialization
-    await this._preDeployNestedSkills(nativeAgent);
+    const preDeployedSkills = await this._preDeployNestedSkills(nativeAgent);
 
     // Generate domain UUID for stateful agents
     const runId = this._hasStatefulTools(nativeAgent) ? crypto.randomUUID().replace(/-/g, "") : undefined;
@@ -242,6 +247,11 @@ export class AgentRuntime {
 
     // Register tool workers with domain
     await this._registerToolWorkers(nativeAgent, runId);
+
+    // Register pre-deployed skill workers with domain
+    for (const skillAgent of preDeployedSkills) {
+      this._registerSkillWorkers(skillAgent, runId);
+    }
 
     // Start agent — response may include requiredWorkers
     const startResponse = await this._httpRequest("POST", "/agent/start", payload, options?.signal);
@@ -669,8 +679,9 @@ export class AgentRuntime {
    * Deploys the skill separately via the framework path, then replaces
    * the agent_tool config with a workflowName reference.
    */
-  private async _preDeployNestedSkills(agent: Agent): Promise<void> {
+  private async _preDeployNestedSkills(agent: Agent): Promise<Agent[]> {
     const { getToolDef } = await import("./tool.js");
+    const skillAgents: Agent[] = [];
 
     for (const t of agent.tools) {
       try {
@@ -678,13 +689,15 @@ export class AgentRuntime {
         if (td.toolType === "agent_tool" && td.config?.agent) {
           const nested = td.config.agent as Record<string, unknown>;
           if (nested._framework === "skill") {
-            const [rawConfig] = this._serializeFramework(td.config.agent, "skill");
+            const skillAgent = td.config.agent as Agent;
+            const [rawConfig] = this._serializeFramework(skillAgent, "skill");
             const deployResult = await this._httpRequest("POST", "/agent/deploy", {
               framework: "skill",
               rawConfig,
             });
             const workflowName = (deployResult as Record<string, unknown>).agentName as string;
             td.config.workflowName = workflowName;
+            skillAgents.push(skillAgent);
             delete td.config.agent;
           }
         }
@@ -695,8 +708,11 @@ export class AgentRuntime {
 
     // Recurse into sub-agents
     for (const sub of agent.agents) {
-      await this._preDeployNestedSkills(sub);
+      const nested = await this._preDeployNestedSkills(sub);
+      skillAgents.push(...nested);
     }
+
+    return skillAgents;
   }
 
   /**
@@ -735,6 +751,24 @@ export class AgentRuntime {
           }
         }
       }
+    }
+  }
+
+  /**
+   * Register skill workers (scripts + read_skill_file) for a skill-based agent.
+   */
+  private _registerSkillWorkers(agent: Agent, domain?: string): void {
+    const skillWorkers = createSkillWorkers(agent);
+    for (const sw of skillWorkers) {
+      this.workerManager.addWorker(
+        sw.name,
+        async (inputData: Record<string, unknown>) => {
+          const command = (inputData.command as string) ?? "";
+          return sw.func(command);
+        },
+        undefined,
+        domain,
+      );
     }
   }
 
