@@ -3610,7 +3610,7 @@ class AgentRuntime:
 
         # Start via server first to get requiredWorkers, then register locally
         effective_timeout = agent.timeout_seconds if agent.timeout_seconds > 0 else None
-        execution_id, required_workers = self._start_via_server(
+        execution_id, required_workers, pre_deployed_skills = self._start_via_server(
             agent,
             resolved_prompt,
             media=media,
@@ -3622,6 +3622,7 @@ class AgentRuntime:
         )
 
         self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
+        self._register_and_start_skill_workers(pre_deployed_skills, domain=run_id)
 
         return AgentHandle(
             execution_id=execution_id, runtime=self, correlation_id=correlation_id, run_id=run_id
@@ -4140,7 +4141,7 @@ class AgentRuntime:
 
         # Start via server first to get requiredWorkers, then register locally
         effective_timeout = agent.timeout_seconds if agent.timeout_seconds > 0 else None
-        execution_id, required_workers = await self._start_via_server_async(
+        execution_id, required_workers, pre_deployed_skills = await self._start_via_server_async(
             agent,
             resolved_prompt,
             media=media,
@@ -4152,6 +4153,7 @@ class AgentRuntime:
         )
 
         self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
+        self._register_and_start_skill_workers(pre_deployed_skills, domain=run_id)
 
         return AgentHandle(
             execution_id=execution_id, runtime=self, correlation_id=correlation_id, run_id=run_id
