@@ -308,8 +308,7 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
             Object result = tc.getOutput().get("result");
             if (result != null && result.toString().length() > TOOL_RESULT_TRUNCATE_LENGTH) {
                 Map<String, Object> output = new HashMap<>(tc.getOutput());
-                output.put("result",
-                        result.toString().substring(0, TOOL_RESULT_TRUNCATE_LENGTH) + "...[truncated]");
+                output.put("result", result.toString().substring(0, TOOL_RESULT_TRUNCATE_LENGTH) + "...[truncated]");
                 tc.setOutput(output);
             }
         }
