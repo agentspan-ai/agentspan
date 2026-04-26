@@ -156,6 +156,7 @@ describe('Suite 2: Tool Calling / Credential Lifecycle', { timeout: 300_000 }, (
     // ── Step 4: Add credentials ──────────────────────────────────
     // Fresh runtime so workers get execution tokens with the new credentials
     await runtime.shutdown();
+    await new Promise((r) => setTimeout(r, 2000)); // drain old workers
     runtime = new AgentRuntime();
 
     credentialSet(CRED_A, 'secret-aaa-value');
@@ -177,6 +178,11 @@ describe('Suite 2: Tool Calling / Credential Lifecycle', { timeout: 300_000 }, (
     // with the updated credentials. Reusing stale workers causes them to resolve
     // credentials with the old execution's token (race condition).
     await runtime.shutdown();
+    // Drain delay: stopPolling() signals the conductor poll loop to stop but
+    // in-flight task handlers may still complete asynchronously. Without this,
+    // the new runtime's workers can overlap with ghost handlers from the old
+    // runtime, causing credential resolution to fail.
+    await new Promise((r) => setTimeout(r, 2000));
     runtime = new AgentRuntime();
 
     credentialSet(CRED_A, 'newval-xxx-updated');
