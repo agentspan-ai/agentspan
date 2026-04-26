@@ -270,7 +270,9 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
                 if (WRITE_ONLY_TOOLS.stream().anyMatch(name::contains)) {
                     msg.setMessage("[ok]");
                     if (tc.getOutput() != null) {
-                        tc.setOutput(Map.of("result", "[ok]"));
+                        Map<String, Object> compactedOutput = new HashMap<>(tc.getOutput());
+                        compactedOutput.put("result", "[ok]");
+                        tc.setOutput(compactedOutput);
                     }
                     continue;
                 }
@@ -305,8 +307,10 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         if (tc.getOutput() != null) {
             Object result = tc.getOutput().get("result");
             if (result != null && result.toString().length() > TOOL_RESULT_TRUNCATE_LENGTH) {
-                tc.setOutput(Map.of(
-                        "result", result.toString().substring(0, TOOL_RESULT_TRUNCATE_LENGTH) + "...[truncated]"));
+                Map<String, Object> output = new HashMap<>(tc.getOutput());
+                output.put("result",
+                        result.toString().substring(0, TOOL_RESULT_TRUNCATE_LENGTH) + "...[truncated]");
+                tc.setOutput(output);
             }
         }
     }
