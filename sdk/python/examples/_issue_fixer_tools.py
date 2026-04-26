@@ -755,3 +755,145 @@ def web_fetch(url: str) -> str:
             return text if text.strip() else f"No readable content at {url}"
     except Exception as exc:
         return f"Error fetching {url}: {exc}"
+
+
+# ── Composite Tools (deterministic, reduce LLM turns) ───────
+
+
+@tool
+def gather_review_context() -> str:
+    """Gather all context needed for code review in one call:
+    implementation_plan, change_log, and git diff vs main."""
+    parts = []
+    cb = _contextbook_dir()
+    for section in ("implementation_plan", "change_log"):
+        filepath = cb / f"{section}.md"
+        if filepath.exists():
+            content = filepath.read_text(encoding="utf-8")
+            parts.append(f"=== {section.upper()} ===\n{content}")
+        else:
+            parts.append(f"=== {section.upper()} ===\n(not yet written)")
+    try:
+        proc = subprocess.run(
+            ["git", "diff", "main"], capture_output=True, text=True,
+            timeout=30, cwd=_cwd(),
+        )
+        diff = proc.stdout.strip()
+        if len(diff) > _MAX_COMMAND_OUTPUT:
+            diff = diff[:_MAX_COMMAND_OUTPUT] + f"\n... (truncated, {len(diff):,} chars)"
+        parts.append(f"=== GIT DIFF (vs main) ===\n{diff or '(no changes)'}")
+    except Exception as e:
+        parts.append(f"=== GIT DIFF (vs main) ===\nError: {e}")
+    return "\n\n".join(parts)
+
+
+@tool
+def fetch_pr_context(repo: str, pr_number: int) -> str:
+    """Fetch PR context in one call: PR details, comments, reviews, linked issue,
+    and clone + checkout the branch.
+
+    Returns structured JSON with all data needed to analyze PR feedback.
+    The repo is cloned into the working directory and the PR branch is checked out.
+    Does NOT fetch the diff — the coder agent reads files directly."""
+    import json as _json
+
+    errors = []
+    results = {}
+
+    def _run(cmd: str, timeout: int = 60) -> str:
+        try:
+            proc = subprocess.run(
+                cmd, shell=True, cwd=_cwd(),
+                capture_output=True, text=True, timeout=timeout,
+            )
+            out = (proc.stdout + proc.stderr).strip()
+            if proc.returncode != 0:
+                errors.append(f"[{proc.returncode}] {cmd}: {out[:500]}")
+            return out
+        except Exception as e:
+            errors.append(f"{cmd}: {e}")
+            return ""
+
+    # 1. PR details
+    pr_json_raw = _run(
+        f'gh pr view {pr_number} --repo {repo} '
+        f'--json number,title,body,state,headRefName,baseRefName,'
+        f'comments,reviews,reviewRequests,author,labels'
+    )
+    pr_data = {}
+    try:
+        pr_data = _json.loads(pr_json_raw)
+        results["pr"] = pr_data
+    except _json.JSONDecodeError:
+        results["pr_raw"] = pr_json_raw[:8000]
+
+    # 2. Linked issue
+    issue_number = None
+    body = pr_data.get("body", "") or ""
+    m = re.search(r'(?:Fixes|Closes|Resolves)\s+#(\d+)', body, re.IGNORECASE)
+    if m:
+        issue_number = int(m.group(1))
+    else:
+        m = re.search(r'#(\d+)', body)
+        if m:
+            issue_number = int(m.group(1))
+    results["issue_number"] = issue_number
+
+    if issue_number:
+        issue_json_raw = _run(
+            f'gh issue view {issue_number} --repo {repo} '
+            f'--json number,title,body,author,labels,comments,assignees,'
+            f'milestone,state,createdAt,updatedAt,closedAt,reactionGroups'
+        )
+        try:
+            results["issue"] = _json.loads(issue_json_raw)
+        except _json.JSONDecodeError:
+            results["issue_raw"] = issue_json_raw[:8000]
+
+    # 4. Clone and checkout
+    branch = pr_data.get("headRefName", f"pr-{pr_number}")
+    results["branch"] = branch
+    _run(f'gh repo clone {repo} .', timeout=120)
+    _run("echo '.contextbook/' >> .gitignore")
+    _run(f'git checkout {branch}')
+
+    # 5. Write issue_context to contextbook (deterministic, no LLM needed)
+    cb = _contextbook_dir()
+    cb.mkdir(parents=True, exist_ok=True)
+    if issue_number and "issue" in results:
+        (cb / "issue_context.md").write_text(
+            _json.dumps(results["issue"], indent=2, default=str), encoding="utf-8"
+        )
+
+    # 6. Structured comments
+    comments = []
+    for c in pr_data.get("comments", []):
+        comments.append({
+            "type": "pr_comment",
+            "author": c.get("author", {}).get("login", "unknown"),
+            "body": c.get("body", ""),
+            "createdAt": c.get("createdAt", ""),
+        })
+    for r in pr_data.get("reviews", []):
+        comments.append({
+            "type": "review",
+            "author": r.get("author", {}).get("login", "unknown"),
+            "state": r.get("state", ""),
+            "body": r.get("body", ""),
+            "createdAt": r.get("submittedAt", ""),
+        })
+    results["all_comments"] = comments
+
+    # 7. Inline review comments
+    inline_raw = _run(
+        f'gh api repos/{repo}/pulls/{pr_number}/comments '
+        f'--jq \'[.[] | {{path:.path,line:.line,body:.body,author:.user.login,createdAt:.created_at}}]\''
+    )
+    try:
+        results["inline_comments"] = _json.loads(inline_raw) if inline_raw.strip() else []
+    except _json.JSONDecodeError:
+        results["inline_comments"] = []
+
+    results["errors"] = errors
+    results["working_dir"] = _WORKING_DIR
+    return _json.dumps(results, indent=2, default=str)

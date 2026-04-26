@@ -399,47 +399,61 @@ RULES:
 """
 
 PR_FEEDBACK_INSTRUCTIONS = """\
-You fetch PR comments and review feedback, then prepare the repo for addressing them.
+You analyze PR feedback and prepare a clear TODO list for the coder.
 
-IMPORTANT: All tools operate in a shared working directory. Clone the repo to "." (current dir).
+You have ONE tool that fetches everything: fetch_pr_context.
+It returns JSON with: PR details, diff, issue, all comments (PR + review + inline).
+It also clones the repo and checks out the PR branch automatically.
 
-Execute these steps IN ORDER. Call multiple tools at once when independent.
+Complete in EXACTLY 2 turns. You are TERMINATED after writing the TODO list.
 
-Step 1 — Fetch PR details and comments (parallel — multiple tools):
-  run_command("gh pr view <PR_NUMBER> --repo {repo} --json number,title,body,state,headRefName,comments,reviews,reviewRequests")
-  run_command("gh pr diff <PR_NUMBER> --repo {repo}")
-  contextbook_read()
+TURN 1 — Fetch everything (1 tool call):
+  fetch_pr_context(repo="{repo}", pr_number=<PR_NUMBER>)
 
-Step 2 — Clone and checkout the PR branch:
-  run_command("gh repo clone {repo} .")
-  run_command("echo '.contextbook/' >> .gitignore")
-  Extract the branch name from the PR data (headRefName field).
-  run_command("git checkout <branch_name>")
+TURN 2 — Analyze and write (parallel tool calls + final output):
+  Analyze the returned JSON. For each comment, determine the action type:
+  - FIX: reviewer found a bug or correctness issue — must fix
+  - IMPLEMENT: reviewer wants new/changed functionality — must implement
+  - REFACTOR: reviewer wants code restructured — must refactor
+  - RESPOND: reviewer asked a question — needs an answer (in code or PR comment)
+  - NONE: approval, praise, or already-addressed — no action needed
 
-Step 3 — Fetch the issue for full context:
-  Extract the issue number from the PR body (look for "Fixes #N" or "#N" references).
-  run_command("gh issue view <N> --repo {repo} --json number,title,body,author,labels,comments,assignees,milestone,state,createdAt,updatedAt,closedAt,reactionGroups")
+  Call these tools in parallel:
+    contextbook_write("review_findings", "<structured findings — see format below>")
+    contextbook_write("issue_context", "<issue JSON from fetch_pr_context>")
+    contextbook_write("status", "PR feedback collected. Ready for implementation.")
 
-Step 4 — Parse and write all feedback to contextbook:
-  Extract ALL review comments and PR comments. For each, capture:
-  - Who commented (author)
-  - What they said (body)
-  - Which file/line they commented on (if inline review)
-  - Whether it's a request for changes, approval, or general comment
+  If any comment references external links, also call web_fetch in the same batch.
 
-  contextbook_write("issue_context", "<issue JSON>")
-  contextbook_write("review_findings", "<structured list of ALL feedback items>")
-  contextbook_write("status", "PR feedback collected. Ready for implementation.")
+  review_findings format:
+    ## TODO
+    Each item must have: action type, file:line (if inline), what to do, and who requested it.
 
-  If any comment references external links, use web_fetch to read them and include
-  the relevant context in review_findings.
+    ### FIX (must fix)
+    - [ ] `file.py:42` — Fix null check on response.data (reviewer: @alice)
+    - [ ] `api.ts:100` — Handle timeout error case (reviewer: @bob)
 
-Step 5 — Output a summary of the feedback to address.
+    ### IMPLEMENT (must implement)
+    - [ ] Add retry logic to the HTTP client (reviewer: @alice)
+
+    ### REFACTOR (must refactor)
+    - [ ] `utils.py` — Extract validation into a separate function (reviewer: @bob)
+
+    ### RESPOND (needs response)
+    - [ ] Why was the cache TTL changed to 60s? (reviewer: @alice)
+
+    ### NO ACTION
+    - @bob: "LGTM, nice cleanup" (approval)
+
+  After the tool calls, output the TODO section as your final text response.
+  The text MUST start with "## TODO" — this is the termination signal.
 
 RULES:
-- Capture ALL comments — don't skip any.
-- Inline review comments must include the file path and line number.
-- Distinguish between: requested changes, suggestions, questions, approvals.
+- Do NOT call fetch_pr_context more than once — it has everything.
+- Do NOT call contextbook_read — not needed.
+- Every actionable comment becomes a TODO item with a clear verb (Fix, Implement, Refactor, Respond).
+- The coder must be able to work from the TODO list alone without reading the original comments.
+- Complete in 2 turns. After outputting "## TODO", you are DONE.
 """
 
 PR_UPDATER_INSTRUCTIONS = """\

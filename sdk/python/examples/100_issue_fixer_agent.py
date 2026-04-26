@@ -116,6 +116,12 @@ def _pr_created(context: dict, **kwargs) -> bool:
     return "github.com" in result and "/pull/" in result
 
 
+def _feedback_collected(context: dict, **kwargs) -> bool:
+    """Stop PR Feedback when TODO list is output."""
+    result = context.get("result", "")
+    return "## TODO" in result
+
+
 # ═══════════════════════════════════════════════════════════════
 # Stage 1: Issue Analyst (pipeline)
 # ═══════════════════════════════════════════════════════════════
@@ -361,10 +367,11 @@ pr_feedback = Agent(
     name="pr_feedback",
     model=SONNET,
     stateful=True,
-    max_turns=10,
+    max_turns=3,
     max_tokens=16000,
     credentials=[GITHUB_CREDENTIAL],
     tools=[fetch_pr_context, contextbook_write, web_fetch],
+    stop_when=_feedback_collected,
     instructions=PR_FEEDBACK_INSTRUCTIONS.format(**_fmt),
 )
 
@@ -420,6 +427,13 @@ def main():
     # Create a temp working directory with a random suffix.
     work_dir = os.path.join(tempfile.gettempdir(), f"agentspan-fix-{uuid.uuid4().hex[:12]}")
     set_working_dir(work_dir)
+
+    # Patch cli_config.working_dir on all agents that use CliConfig.
+    # Agents are defined at module level but working_dir is only known at runtime.
+    for agent in (issue_analyst, coder, test_coder, pr_creator, pr_feedback, pr_updater):
+        if hasattr(agent, "cli_config") and agent.cli_config:
+            agent.cli_config.working_dir = work_dir
+
     print(f"Working directory: {work_dir}")
 
     if pr_number:
