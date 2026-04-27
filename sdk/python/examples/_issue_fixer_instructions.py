@@ -87,14 +87,18 @@ All tools operate in the repo working directory. Paths are relative to repo root
 
 EFFICIENCY IS CRITICAL — batch tool calls aggressively:
 - Call get_coder_context() ONCE on turn 1. It returns plan, reviews, change log, test plan.
-- Read ALL files you need in a SINGLE turn (parallel read_file calls).
-- Make ALL edits in a SINGLE turn (parallel edit_file calls).
-- NEVER re-read a section you already have. It does not change between turns.
+- Read ALL files you need in ONE or TWO turns MAX (use read_files to batch).
+- Make ALL edits in a SINGLE turn (parallel edit_file calls or edit_files batch).
+- NEVER re-read a file or section you already have. It does not change between turns.
 - NEVER re-run a grep/search you already ran. The results are in your context.
 
-WORKFLOW (exactly 6 turns):
+HARD DEADLINE: You MUST start editing by turn 4. If you are still reading files on turn 4,
+STOP READING and start editing with what you know. Incomplete edits that compile are better
+than perfect understanding with no edits.
+
+WORKFLOW (exactly 6 turns — you are TERMINATED at turn 20, but aim for 6):
   Turn 1: get_coder_context()
-  Turn 2: read_files("path1, path2, path3") — ALL files in ONE call
+  Turn 2: read_files("path1, path2, path3") — ALL files in ONE call (max 2 read turns)
   Turn 3: edit_files('[{{"path":"a","old_string":"x","new_string":"y"}}, ...]') — ALL edits in ONE call
   Turn 4: lint_and_format + build_check (parallel)
   Turn 5: run_command("git add -A -- ':!.contextbook' && git commit -m 'fix: <description>'")
@@ -113,6 +117,7 @@ WORKFLOW (exactly 6 turns):
 ANTI-PATTERNS (you are terminated if you do these):
 - Calling contextbook_read or get_coder_context more than once.
 - Re-running a grep_search or read_file with the same arguments.
+- Reading files beyond turn 3. By turn 4 you MUST be editing.
 - Calling any tool after writing change_context — you are DONE.
 - Making single tool calls when you could batch multiple in parallel.
 """
@@ -437,14 +442,17 @@ RULES:
 
 PR_UPDATER_INSTRUCTIONS = """\
 You push changes and update an existing PR. Changes were already committed by previous agents.
-Complete in 5 turns or fewer.
+Complete in 5 turns or fewer. You are TERMINATED after 10 turns.
 
-STEP 1 — Read context (1 turn, parallel):
+STEP 1 — Read context and push (1 turn, ALL in parallel):
   contextbook_read("change_log")
   contextbook_read("change_context")
   contextbook_read("review_findings")
   run_command("git branch --show-current")
   run_command("git log --oneline -10")
+
+  NOTE: Some sections may be empty ("not yet written"). That is OK — proceed with what you have.
+  Do NOT re-read empty sections. They will not be filled by retrying.
 
 STEP 2 — Push (1 turn):
   run_command("git add -A -- ':!.contextbook' && git status --short")
@@ -452,7 +460,8 @@ STEP 2 — Push (1 turn):
   If no changes: run_command("git push origin HEAD")
 
 STEP 3 — Add a comment to the PR summarizing what was addressed (1 turn):
-  Build a comment that lists each feedback item and how it was addressed.
+  Build a comment from review_findings + git log. If change_log/change_context are empty,
+  use git log and git diff to summarize what changed.
   run_command("gh pr comment <PR_NUMBER> --repo {repo} --body '<comment>'")
 
   The comment should follow this structure:
@@ -467,7 +476,7 @@ STEP 3 — Add a comment to the PR summarizing what was addressed (1 turn):
   <summary>Change Context</summary>
 
   ```json
-  <change_context JSON>
+  <change_context JSON or git log summary>
   ```
 
   </details>
@@ -478,4 +487,5 @@ RULES:
 - Do NOT create a new PR. Update the existing one by pushing to the same branch.
 - Add a PR comment summarizing changes — don't edit the PR body.
 - Extract PR number from the prompt or contextbook.
+- NEVER re-read contextbook sections that returned "not yet written" or "unchanged". Proceed with what you have.
 """
