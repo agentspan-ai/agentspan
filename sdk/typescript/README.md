@@ -172,6 +172,54 @@ const customCheck = guardrail(
 const agent = new Agent({ name: 'safe', guardrails: [piiBlocker, customCheck], ... });
 ```
 
+### Tool Retries
+
+Pass `retryCount` and `retryDelaySeconds` in the tool options to automatically retry on failure. Ideal for tools that call flaky external services.
+
+```typescript
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+
+let attempts = 0;
+
+const fetchData = tool(
+  async (args: { query: string }) => {
+    attempts += 1;
+    if (attempts < 3) throw new Error('Service temporarily unavailable');
+    return { result: `Data for 'null'`, fetchedOnAttempt: attempts };
+  },
+  {
+    name: 'fetch_data',
+    description: 'Fetch data from an external API (retries up to 3 times on failure).',
+    inputSchema: {
+      type: 'object',
+      properties: { query: { type: 'string' } },
+      required: ['query'],
+    },
+    retryCount: 3,
+    retryDelaySeconds: 2,
+  },
+);
+
+const agent = new Agent({ name: 'data_agent', model: 'openai/gpt-4o', tools: [fetchData] });
+
+const runtime = new AgentRuntime();
+try {
+  const result = await runtime.run(agent, "Fetch data for 'quarterly report'");
+  result.printResult();
+} finally {
+  await runtime.shutdown();
+}
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `retryCount` | `2` | Number of retry attempts after the first failure |
+| `retryDelaySeconds` | `2` | Seconds to wait between retries |
+
+To disable retries entirely, set `retryCount: 0`.
+
+See the [full example](../../examples/retry_example/typescript/agent.ts) for an end-to-end walkthrough.
+
 ### Human-in-the-Loop
 
 ```typescript
@@ -185,6 +233,60 @@ if (status.isWaiting) {
 
 const result = await handle.wait();
 ```
+
+### Tool Retries
+
+Tools can automatically retry on failure. Set `retryCount` (default: `2`) and `retryDelaySeconds` (default: `2`) in the tool options:
+
+```typescript
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+
+let callCount = 0;
+
+const fetchExchangeRate = tool(
+  async (args: { base: string; target: string }) => {
+    callCount += 1;
+    if (callCount <= 2) {
+      throw new Error('Upstream service unavailable — retrying...');
+    }
+    return { base: args.base, target: args.target, rate: 0.92 };
+  },
+  {
+    name: 'fetch_exchange_rate',
+    description: 'Fetch the exchange rate between two currencies.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        base:   { type: 'string' },
+        target: { type: 'string' },
+      },
+      required: ['base', 'target'],
+    },
+    retryCount: 3,
+    retryDelaySeconds: 1,
+  },
+);
+
+const agent = new Agent({
+  name: 'fx_agent',
+  model: 'openai/gpt-4o',
+  tools: [fetchExchangeRate],
+});
+
+const runtime = new AgentRuntime();
+try {
+  const result = await runtime.run(agent, 'What is the USD to EUR exchange rate?');
+  result.printResult();
+} finally {
+  await runtime.shutdown();
+}
+```
+
+**Defaults:** `retryCount: 2`, `retryDelaySeconds: 2`.
+
+**Disable retries:** pass `retryCount: 0`.
+
+Retries are durable — if the worker process restarts mid-retry, the server picks up exactly where it left off. See [`examples/retry_example/typescript/agent.ts`](../../examples/retry_example/typescript/agent.ts) for a runnable end-to-end example.
 
 ### Termination Conditions
 

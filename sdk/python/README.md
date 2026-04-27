@@ -258,6 +258,40 @@ with AgentRuntime() as runtime:
     result.print_result()
 ```
 
+### Tool Retries
+
+Pass `retry_count` and `retry_delay_seconds` to `@tool` to automatically retry on failure. This is ideal for tools that call flaky external services.
+
+```python
+from agentspan.agents import Agent, AgentRuntime, tool
+
+_attempts = 0
+
+@tool(retry_count=3, retry_delay_seconds=2)
+def fetch_data(query: str) -> dict:
+    """Fetch data from an external API (retries up to 3 times on failure)."""
+    global _attempts
+    _attempts += 1
+    if _attempts < 3:
+        raise ConnectionError("Service temporarily unavailable")
+    return {"result": f"Data for '{query}'", "fetched_on_attempt": _attempts}
+
+agent = Agent(name="data_agent", model="openai/gpt-4o", tools=[fetch_data])
+
+with AgentRuntime() as runtime:
+    result = runtime.run(agent, "Fetch data for 'quarterly report'")
+    result.print_result()
+```
+
+| Parameter | Default | Description |
+|---|---|---|
+| `retry_count` | `2` | Number of retry attempts after the first failure |
+| `retry_delay_seconds` | `2` | Seconds to wait between retries |
+
+To disable retries entirely, set `retry_count=0`.
+
+See the [full example](../../examples/retry_example/python/agent.py) for an end-to-end walkthrough.
+
 ### Human-in-the-Loop (Durable)
 
 ```python
@@ -386,6 +420,37 @@ with AgentRuntime() as runtime:
     result = runtime.run(agent, "Add apples, bananas, and cherries, then show the list.")
     result.print_result()
 ```
+
+### Tool Retries
+
+Tools can automatically retry on failure. Set `retry_count` (default: `2`) and `retry_delay_seconds` (default: `2`) on `@tool`:
+
+```python
+from agentspan.agents import Agent, AgentRuntime, tool
+
+_call_count = 0
+
+@tool(retry_count=3, retry_delay_seconds=1)
+def fetch_exchange_rate(base: str, target: str) -> dict:
+    """Fetch the exchange rate between two currencies."""
+    global _call_count
+    _call_count += 1
+    if _call_count <= 2:
+        raise ConnectionError("Upstream service unavailable — retrying...")
+    return {"base": base, "target": target, "rate": 0.92}
+
+agent = Agent(name="fx_agent", model="openai/gpt-4o", tools=[fetch_exchange_rate])
+
+with AgentRuntime() as runtime:
+    result = runtime.run(agent, "What is the USD to EUR exchange rate?")
+    result.print_result()
+```
+
+**Defaults:** `retry_count=2`, `retry_delay_seconds=2`.
+
+**Disable retries:** pass `retry_count=0`.
+
+Retries are durable — if the worker process restarts mid-retry, the server picks up exactly where it left off. See [`examples/retry_example/python/agent.py`](../../examples/retry_example/python/agent.py) for a runnable end-to-end example.
 
 ### Agent Lifecycle Callbacks
 
