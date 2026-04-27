@@ -1,16 +1,19 @@
-# AI Model Configuration
+---
+title: LLM Providers
+description: All supported LLM providers, model strings, and API key configuration
+---
 
-Agentspan supports 12+ AI providers out of the box. Configure them by setting environment variables before starting the server.
+# LLM Providers
+
+Agentspan supports 15+ AI providers. Set the environment variables for the providers you want to use before starting the server. The server auto-enables each provider when its key is present — no manual integration setup needed.
 
 ## Quick Setup
 
-Set the API key for the provider(s) you want to use:
-
 ```bash
-# OpenAI (most common)
+# OpenAI
 export OPENAI_API_KEY=sk-...
 
-# Anthropic (Claude)
+# Anthropic
 export ANTHROPIC_API_KEY=sk-ant-...
 
 # Google Gemini
@@ -19,6 +22,16 @@ export GOOGLE_CLOUD_PROJECT=your-gcp-project-id
 
 # Then start the server
 agentspan server start
+```
+
+## Model Format
+
+Specify models in your agents using `provider/model-name`:
+
+```python
+agent = Agent(name="bot", model="openai/gpt-4o")
+agent = Agent(name="bot", model="anthropic/claude-sonnet-4-6")
+agent = Agent(name="bot", model="google_gemini/gemini-2.0-flash")
 ```
 
 ## All Providers
@@ -34,8 +47,6 @@ agentspan server start
 
 **Embeddings:** `openai/text-embedding-3-small`, `openai/text-embedding-3-large`
 
-**Image generation:** `openai/dall-e-3`
-
 ---
 
 ### Anthropic (Claude)
@@ -44,7 +55,7 @@ agentspan server start
 |---|---|
 | `ANTHROPIC_API_KEY` | API key from [console.anthropic.com](https://console.anthropic.com/) |
 
-**Models:** `anthropic/claude-opus-4-20250514`, `anthropic/claude-sonnet-4-20250514`, `anthropic/claude-3-5-sonnet-20241022`, `anthropic/claude-3-haiku-20240307`
+**Models:** `anthropic/claude-opus-4-20250514`, `anthropic/claude-sonnet-4-6`, `anthropic/claude-3-5-sonnet-20241022`, `anthropic/claude-3-haiku-20240307`
 
 ---
 
@@ -53,13 +64,11 @@ agentspan server start
 | Variable | Description |
 |---|---|
 | `GEMINI_API_KEY` | API key from [aistudio.google.com](https://aistudio.google.com/apikey) |
-| `GOOGLE_CLOUD_PROJECT` | **Required.** GCP project ID |
+| `GOOGLE_CLOUD_PROJECT` | **Required.** Your GCP project ID |
 
 **Models:** `google_gemini/gemini-2.0-flash`, `google_gemini/gemini-1.5-pro`, `google_gemini/gemini-1.5-flash`
 
 **Embeddings:** `google_gemini/text-embedding-004`
-
-**Image generation:** `google_gemini/imagen-3.0-generate-002`
 
 ---
 
@@ -68,7 +77,7 @@ agentspan server start
 | Variable | Description |
 |---|---|
 | `AZURE_OPENAI_API_KEY` | API key from Azure portal |
-| `AZURE_OPENAI_ENDPOINT` | **Required.** Endpoint URL (e.g. `https://your-resource.openai.azure.com`) |
+| `AZURE_OPENAI_ENDPOINT` | **Required.** Endpoint URL, e.g. `https://your-resource.openai.azure.com` |
 | `AZURE_OPENAI_DEPLOYMENT` | **Required.** Deployment name |
 
 **Models:** `azure_openai/gpt-4o`, `azure_openai/gpt-4`, `azure_openai/gpt-3.5-turbo`
@@ -81,9 +90,6 @@ agentspan server start
 |---|---|
 | `AWS_ACCESS_KEY_ID` | AWS access key |
 | `AWS_SECRET_ACCESS_KEY` | AWS secret key |
-
-**Server properties (optional):**
-- `conductor.ai.bedrock.region` — defaults to `us-east-1`
 
 **Models:** `aws_bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0`, `aws_bedrock/anthropic.claude-3-haiku-20240307-v1:0`, `aws_bedrock/meta.llama3-70b-instruct-v1:0`, `aws_bedrock/amazon.titan-text-express-v1`
 
@@ -155,7 +161,17 @@ agentspan server start
 
 ---
 
-### Ollama (Local / Remote)
+### DeepSeek
+
+| Variable | Description |
+|---|---|
+| `DEEPSEEK_API_KEY` | API key from DeepSeek |
+
+**Models:** `deepseek/deepseek-chat`
+
+---
+
+### Ollama (local)
 
 No API key required. Ollama must be running and reachable.
 
@@ -163,55 +179,28 @@ No API key required. Ollama must be running and reachable.
 |---|---|
 | `OLLAMA_BASE_URL` | Ollama server URL (default: `http://localhost:11434`) |
 
-```bash
-# Local (default)
-# No configuration needed if Ollama is running on localhost
-
-# Remote or custom port
-export OLLAMA_BASE_URL=http://your-gpu-server:11434
-```
-
-Install Ollama: [ollama.com/download](https://ollama.com/download)
-
 **Models:** `ollama/llama3`, `ollama/mistral`, `ollama/phi3`, `ollama/codellama`
 
 **Embeddings:** `ollama/nomic-embed-text`
 
+Install Ollama: [ollama.com/download](https://ollama.com/download)
+
 ---
 
-## Model Format
+## Summary
 
-When specifying models in your agents, use the format `provider/model-name`:
-
-```python
-agent = Agent(name="my_agent", model="openai/gpt-4o")
-agent = Agent(name="my_agent", model="anthropic/claude-sonnet-4-20250514")
-agent = Agent(name="my_agent", model="google_gemini/gemini-2.0-flash")
-```
-
-## Server Properties
-
-These can be set as environment variables using the Spring Boot convention (dots become underscores, uppercase):
-
-| Property | Env Variable | Default | Description |
-|---|---|---|---|
-| `conductor.integrations.ai.enabled` | `CONDUCTOR_INTEGRATIONS_AI_ENABLED` | `true` | Enable/disable AI integration |
-| `conductor.ai.openai.api-key` | `OPENAI_API_KEY` | — | OpenAI API key |
-| `conductor.ai.openai.organization-id` | `OPENAI_ORG_ID` | — | OpenAI organization |
-| `conductor.ai.anthropic.api-key` | `ANTHROPIC_API_KEY` | — | Anthropic API key |
-| `conductor.ai.gemini.api-key` | `GEMINI_API_KEY` | — | Google Gemini API key |
-| `conductor.ai.gemini.project-id` | `GOOGLE_CLOUD_PROJECT` | — | GCP project ID |
-| `conductor.ai.gemini.location` | — | `us-central1` | GCP region |
-| `conductor.ai.azureopenai.api-key` | `AZURE_OPENAI_API_KEY` | — | Azure OpenAI API key |
-| `conductor.ai.azureopenai.base-url` | `AZURE_OPENAI_ENDPOINT` | — | Azure OpenAI endpoint |
-| `conductor.ai.azureopenai.deployment-name` | `AZURE_OPENAI_DEPLOYMENT` | — | Azure deployment name |
-| `conductor.ai.bedrock.access-key` | `AWS_ACCESS_KEY_ID` | — | AWS access key |
-| `conductor.ai.bedrock.secret-key` | `AWS_SECRET_ACCESS_KEY` | — | AWS secret key |
-| `conductor.ai.bedrock.region` | — | `us-east-1` | AWS region |
-| `conductor.ai.mistral.api-key` | `MISTRAL_API_KEY` | — | Mistral API key |
-| `conductor.ai.cohere.api-key` | `COHERE_API_KEY` | — | Cohere API key |
-| `conductor.ai.grok.api-key` | `XAI_API_KEY` | — | Grok/xAI API key |
-| `conductor.ai.perplexity.api-key` | `PERPLEXITY_API_KEY` | — | Perplexity API key |
-| `conductor.ai.huggingface.api-key` | `HUGGINGFACE_API_KEY` | — | Hugging Face token |
-| `conductor.ai.stabilityai.api-key` | `STABILITY_API_KEY` | — | Stability AI API key |
-| `conductor.ai.ollama.base-url` | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
+| Provider | Env Var | Model Prefix |
+|---|---|---|
+| OpenAI | `OPENAI_API_KEY` | `openai/` |
+| Anthropic | `ANTHROPIC_API_KEY` | `anthropic/` |
+| Google Gemini | `GEMINI_API_KEY` + `GOOGLE_CLOUD_PROJECT` | `google_gemini/` |
+| Azure OpenAI | `AZURE_OPENAI_API_KEY` + endpoint + deployment | `azure_openai/` |
+| AWS Bedrock | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` | `aws_bedrock/` |
+| Mistral | `MISTRAL_API_KEY` | `mistral/` |
+| Cohere | `COHERE_API_KEY` | `cohere/` |
+| Grok / xAI | `XAI_API_KEY` | `grok/` |
+| Perplexity | `PERPLEXITY_API_KEY` | `perplexity/` |
+| Hugging Face | `HUGGINGFACE_API_KEY` | `hugging_face/` |
+| Stability AI | `STABILITY_API_KEY` | `stabilityai/` |
+| DeepSeek | `DEEPSEEK_API_KEY` | `deepseek/` |
+| Ollama | `OLLAMA_BASE_URL` | `ollama/` |
