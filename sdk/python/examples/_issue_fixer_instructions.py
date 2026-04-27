@@ -124,7 +124,7 @@ ANTI-PATTERNS (you are terminated if you do these):
 
 DG_REVIEWER_INSTRUCTIONS = """\
 You are the Code Review Coordinator. You review the COMPLETE implementation including tests.
-You have EXACTLY 2 turns. You are TERMINATED after turn 2.
+You have EXACTLY 3 turns. You are TERMINATED after turn 3.
 
 TURN 1 — Call BOTH tools in parallel (MANDATORY — both in the SAME turn):
   gather_review_context()   — returns plan, change_log, and git diff
@@ -133,17 +133,22 @@ TURN 1 — Call BOTH tools in parallel (MANDATORY — both in the SAME turn):
   YOU MUST CALL BOTH TOOLS IN YOUR FIRST RESPONSE. Not one then the other.
   If you only call one tool on turn 1, you will run out of turns.
 
-TURN 2 — Record findings and output verdict:
+TURN 2 — Record findings (tool call):
   contextbook_write("review_findings", "<structured findings from DG review>")
-  Then output your decision as text:
-    If CRITICAL issues (security, correctness, design flaws): NEEDS_REWORK
-    If approved or only minor/style issues: CODE_APPROVED
+
+TURN 3 — Output verdict as TEXT ONLY (NO tool calls):
+  If CRITICAL issues (security, correctness, design flaws): NEEDS_REWORK
+  If approved or only minor/style issues: CODE_APPROVED
+
+  Your text response MUST contain exactly one of: CODE_APPROVED or NEEDS_REWORK.
+  This is the ONLY output the next agent sees. If you make a tool call on this turn,
+  your text may be lost and the next agent gets no verdict.
 
 RULES:
 - Call dg EXACTLY ONCE. Never call dg a second time.
 - ALWAYS call gather_review_context and dg in PARALLEL on turn 1.
 - Do NOT call contextbook_read — gather_review_context returns everything.
-- CODE_APPROVED or NEEDS_REWORK must appear in your response text.
+- Turn 3 MUST be text only — NO tool calls. The verdict is your text output.
 """
 
 FIX_CODER_INSTRUCTIONS = """\

@@ -22,6 +22,41 @@ import shutil
 from pathlib import Path
 
 from agentspan.agents import tool
+from agentspan.agents.tool import ToolContext
+
+# ── Agent-boundary isolation ──────────────────────────────────
+#
+# Tools are shared across agents in the same worker process.
+# Dedup caches (file hashes, grep results) must be reset when a
+# new agent starts — otherwise agent B gets "unchanged" for content
+# that agent A read but agent B never saw.
+#
+# We detect agent boundaries by tracking execution_id from ToolContext.
+# Each agent runs as a separate Conductor workflow with its own ID.
+# When the execution_id changes → new agent → clear all caches.
+# This is systematic — no developer discipline required.
+
+_last_execution_id: str = ""
+
+
+def _ensure_agent_boundary(context: ToolContext | None) -> None:
+    """Clear all dedup caches when the calling agent changes.
+
+    Detects agent boundaries via ToolContext.execution_id, which maps
+    to the Conductor workflow_instance_id. Each agent in a pipeline
+    runs as a separate sub-workflow with its own ID.
+    """
+    global _last_execution_id
+    if context is None:
+        return
+    eid = context.execution_id
+    if not eid:
+        return
+    if eid != _last_execution_id:
+        _last_execution_id = eid
+        _file_read_hashes.clear()
+        _grep_cache.clear()
+
 
 # ── Working directory ──────────────────────────────────────────
 
@@ -34,14 +69,12 @@ def set_working_dir(path: str) -> None:
     Must be called before any agent runs. Typically a temp folder where
     the target repo will be cloned into by the Issue Analyst.
     """
-    global _WORKING_DIR, _get_coder_context_called
+    global _WORKING_DIR, _last_execution_id
     _WORKING_DIR = str(path)
     os.makedirs(_WORKING_DIR, exist_ok=True)
-    # Reset all dedup caches for the new session
-    _get_coder_context_called = False
+    _last_execution_id = ""
     _file_read_hashes.clear()
     _grep_cache.clear()
-    _contextbook_content_hashes.clear()
 
 
 def get_working_dir() -> str:
@@ -91,11 +124,12 @@ _MIN_READ_LINES = 200  # minimum lines for ranged reads — prevents wasteful ti
 
 
 @tool
-def read_file(path: str, start_line: int = 0, end_line: int = 0) -> str:
+def read_file(path: str, start_line: int = 0, end_line: int = 0, context: ToolContext = None) -> str:
     """Read a file's contents. Returns lines with line numbers.
     If start_line/end_line are 0, reads the entire file (preferred).
     Only use line ranges for very large files (1000+ lines). Minimum range: 200 lines.
     Paths are relative to the repo working directory."""
+    _ensure_agent_boundary(context)
     target = _resolve(path)
     if not target.exists():
         return f"Error: {path!r} does not exist."
@@ -314,10 +348,11 @@ _grep_cache: dict[tuple, str] = {}
 
 
 @tool
-def grep_search(pattern: str, path: str = ".", glob_filter: str = "", max_results: int = 50) -> str:
+def grep_search(pattern: str, path: str = ".", glob_filter: str = "", max_results: int = 50, context: ToolContext = None) -> str:
     """Search file contents with regex pattern. Returns matching lines as file:line: content.
     Uses ripgrep (rg) for speed, falls back to Python regex if rg is not available.
     Paths are relative to the repo working directory."""
+    _ensure_agent_boundary(context)
     cache_key = (pattern, path, glob_filter)
     if cache_key in _grep_cache:
         return f"Duplicate search — same results as before. Use them from your context window.\n{_grep_cache[cache_key][:500]}"
@@ -603,9 +638,6 @@ _VALID_SECTIONS = {
     "change_log", "review_findings", "test_results", "decisions", "status",
 }
 
-# Dedup: track content hashes to block redundant reads
-_contextbook_content_hashes: dict[str, int] = {}
-
 
 def _contextbook_dir() -> Path:
     """Return the contextbook directory, inside the working directory."""
@@ -629,15 +661,6 @@ def contextbook_write(section: str, content: str, append: bool = False) -> str:
             existing = filepath.read_text(encoding="utf-8")
             content = existing.rstrip() + "\n\n" + content
         filepath.write_text(content, encoding="utf-8")
-        # Clear ALL dedup caches — contextbook_write is the natural
-        # pipeline stage boundary (every agent writes before finishing).
-        # Without this, the NEXT agent gets "unchanged" on sections
-        # the previous agent read but a different agent never saw.
-        global _get_coder_context_called
-        _contextbook_content_hashes.clear()
-        _file_read_hashes.clear()
-        _grep_cache.clear()
-        _get_coder_context_called = False
         mode = "appended to" if append else "wrote"
         return f"Contextbook: {mode} '{section}' ({len(content):,} chars)."
     except Exception as exc:
@@ -669,11 +692,6 @@ def contextbook_read(section: str = "") -> str:
     if not filepath.exists():
         return f"Section '{section}' has not been written yet."
     content = filepath.read_text(encoding="utf-8")
-    # Dedup: if content unchanged since last read, return short message
-    content_hash = hash(content)
-    if _contextbook_content_hashes.get(section) == content_hash:
-        return f"Section '{section}' unchanged since last read. Use the content already in your context window. Do NOT re-read."
-    _contextbook_content_hashes[section] = content_hash
     return content
 
 
@@ -777,18 +795,11 @@ def web_fetch(url: str) -> str:
 # ── Composite Tools (deterministic, reduce LLM turns) ───────
 
 
-_get_coder_context_called = False
-
-
 @tool
 def get_coder_context() -> str:
     """Read ALL contextbook sections the coder needs in one call:
     implementation_plan, review_findings, change_log, test_plan, and change_context.
     Call this ONCE at the start of your work. Do not call it again."""
-    global _get_coder_context_called
-    if _get_coder_context_called:
-        return "Already called — all context is in your conversation. Do NOT call again. Proceed with implementation."
-    _get_coder_context_called = True
     cb = _contextbook_dir()
     parts = []
     for section in ("implementation_plan", "review_findings", "change_log", "test_plan", "change_context"):
@@ -796,8 +807,6 @@ def get_coder_context() -> str:
         if filepath.exists():
             content = filepath.read_text(encoding="utf-8")
             parts.append(f"=== {section.upper()} ===\n{content}")
-            # Also mark these sections as read for contextbook_read dedup
-            _contextbook_content_hashes[section] = hash(content)
         else:
             parts.append(f"=== {section.upper()} ===\n(not yet written)")
     return "\n\n".join(parts)

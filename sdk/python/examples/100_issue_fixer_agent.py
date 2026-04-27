@@ -110,9 +110,22 @@ def _feedback_collected(context: dict, **kwargs) -> bool:
 
 
 def _review_decided(context: dict, **kwargs) -> bool:
-    """Stop DG Reviewer when a verdict is output."""
+    """Stop DG Reviewer when a verdict is output or written to contextbook."""
     result = context.get("result", "")
-    return "CODE_APPROVED" in result or "NEEDS_REWORK" in result
+    if "CODE_APPROVED" in result or "NEEDS_REWORK" in result:
+        return True
+    # Fallback: verdict may be in contextbook_write args if LLM didn't output text
+    for msg in context.get("messages", []):
+        if not isinstance(msg, dict):
+            continue
+        content = msg.get("content", "")
+        if isinstance(content, str) and "wrote 'review_findings'" in content:
+            return True
+        if isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and "wrote 'review_findings'" in str(part.get("text", "")):
+                    return True
+    return False
 
 
 def _tech_lead_done(context: dict, **kwargs) -> bool:
@@ -262,7 +275,7 @@ def main():
         name="coder",
         model=SONNET,
         stateful=True,
-        max_turns=20,
+        max_turns=100,
         max_tokens=60000,
         credentials=[GITHUB_CREDENTIAL],
         cli_config=CliConfig(
@@ -294,7 +307,7 @@ def main():
         name="dg_reviewer",
         model=SONNET,
         stateful=True,
-        max_turns=2,
+        max_turns=3,
         max_tokens=60000,
         tools=[
             gather_review_context,
@@ -359,7 +372,7 @@ def main():
         name="fix_qa",
         model=SONNET,
         stateful=True,
-        max_turns=5,
+        max_turns=12,
         max_tokens=16000,
         tools=[
             run_unit_tests, run_command,
