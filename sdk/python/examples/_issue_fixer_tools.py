@@ -34,9 +34,14 @@ def set_working_dir(path: str) -> None:
     Must be called before any agent runs. Typically a temp folder where
     the target repo will be cloned into by the Issue Analyst.
     """
-    global _WORKING_DIR
+    global _WORKING_DIR, _get_coder_context_called
     _WORKING_DIR = str(path)
     os.makedirs(_WORKING_DIR, exist_ok=True)
+    # Reset all dedup caches for the new session
+    _get_coder_context_called = False
+    _file_read_hashes.clear()
+    _grep_cache.clear()
+    _contextbook_content_hashes.clear()
 
 
 def get_working_dir() -> str:
@@ -67,8 +72,12 @@ def _cwd() -> str:
 _MAX_FILE_BYTES = 500_000      # 500 KB
 _MAX_OUTPUT_LINES = 200        # truncate long outputs
 _MAX_COMMAND_OUTPUT = 16_000   # chars for command output
+_MAX_READ_FILES_CHARS = 50_000 # total output cap for read_files (~15K tokens)
 _DEFAULT_TIMEOUT = 120         # seconds for shell commands
 E2E_TOOL_TIMEOUT = 5400        # 90 min — full e2e suite with margin
+
+# Dedup: track file reads to block redundant re-reads
+_file_read_hashes: dict[str, int] = {}  # resolved path -> content hash
 
 # Module detection mapping: directory prefix -> module name
 _MODULE_MAP = {
@@ -97,7 +106,15 @@ def read_file(path: str, start_line: int = 0, end_line: int = 0) -> str:
     if size > _MAX_FILE_BYTES:
         return f"Error: {path!r} is {size:,} bytes (limit {_MAX_FILE_BYTES:,}). Use grep_search to find specific content."
     try:
-        lines = target.read_text(encoding="utf-8", errors="replace").splitlines()
+        content = target.read_text(encoding="utf-8", errors="replace")
+        # Dedup: full-file reads (no line range) are cached by content hash
+        if not start_line and not end_line:
+            content_hash = hash(content)
+            cache_key = str(target.resolve())
+            if _file_read_hashes.get(cache_key) == content_hash:
+                return f"File '{path}' unchanged since last read ({len(content):,} chars, {len(content.splitlines())} lines). Use content from your context window."
+            _file_read_hashes[cache_key] = content_hash
+        lines = content.splitlines()
         if start_line or end_line:
             start = max(0, start_line - 1)
             end = end_line if end_line else len(lines)
@@ -119,6 +136,8 @@ def write_file(path: str, content: str) -> str:
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
+        _grep_cache.clear()  # file changed — invalidate grep cache
+        _file_read_hashes.pop(str(target.resolve()), None)
         return f"Wrote {len(content):,} bytes to {path!r}."
     except Exception as exc:
         return f"Error writing {path!r}: {exc}"
@@ -140,6 +159,8 @@ def edit_file(path: str, old_string: str, new_string: str) -> str:
             return f"Error: old_string found {count} times in {path!r}. Provide more context to make it unique."
         new_content = content.replace(old_string, new_string, 1)
         target.write_text(new_content, encoding="utf-8")
+        _grep_cache.clear()  # file changed — invalidate grep cache
+        _file_read_hashes.pop(str(target.resolve()), None)
         return f"Edited {path!r}: replaced 1 occurrence ({len(old_string)} → {len(new_string)} chars)."
     except Exception as exc:
         return f"Error editing {path!r}: {exc}"
@@ -286,11 +307,26 @@ def glob_find(pattern: str, path: str = ".") -> str:
         return f"Error: {exc}"
 
 
+# Dedup: track recent grep queries to block identical re-runs
+_grep_cache: dict[tuple, str] = {}
+
+
 @tool
 def grep_search(pattern: str, path: str = ".", glob_filter: str = "", max_results: int = 50) -> str:
     """Search file contents with regex pattern. Returns matching lines as file:line: content.
     Uses ripgrep (rg) for speed, falls back to Python regex if rg is not available.
     Paths are relative to the repo working directory."""
+    cache_key = (pattern, path, glob_filter)
+    if cache_key in _grep_cache:
+        return f"Duplicate search — same results as before. Use them from your context window.\n{_grep_cache[cache_key][:500]}"
+    result = _grep_search_impl(pattern, path, glob_filter, max_results)
+    if not result.startswith("Error"):
+        _grep_cache[cache_key] = result
+    return result
+
+
+def _grep_search_impl(pattern: str, path: str, glob_filter: str, max_results: int) -> str:
+    """Core grep implementation."""
     resolved_path = str(_resolve(path))
     rg = shutil.which("rg")
     if rg:
@@ -605,6 +641,9 @@ _VALID_SECTIONS = {
     "change_log", "review_findings", "test_results", "decisions", "status",
 }
 
+# Dedup: track content hashes to block redundant reads
+_contextbook_content_hashes: dict[str, int] = {}
+
 
 def _contextbook_dir() -> Path:
     """Return the contextbook directory, inside the working directory."""
@@ -628,6 +667,15 @@ def contextbook_write(section: str, content: str, append: bool = False) -> str:
             existing = filepath.read_text(encoding="utf-8")
             content = existing.rstrip() + "\n\n" + content
         filepath.write_text(content, encoding="utf-8")
+        # Clear ALL dedup caches — contextbook_write is the natural
+        # pipeline stage boundary (every agent writes before finishing).
+        # Without this, the NEXT agent gets "unchanged" on sections
+        # the previous agent read but a different agent never saw.
+        global _get_coder_context_called
+        _contextbook_content_hashes.clear()
+        _file_read_hashes.clear()
+        _grep_cache.clear()
+        _get_coder_context_called = False
         mode = "appended to" if append else "wrote"
         return f"Contextbook: {mode} '{section}' ({len(content):,} chars)."
     except Exception as exc:
@@ -637,7 +685,8 @@ def contextbook_write(section: str, content: str, append: bool = False) -> str:
 @tool(stateful=True)
 def contextbook_read(section: str = "") -> str:
     """Read from the contextbook. If section is empty, returns table of contents
-    (all section names + first line summary). If section is specified, returns full content."""
+    (all section names + first line summary). If section is specified, returns full content.
+    Returns a short message if the same section was already read and hasn't changed."""
     cb = _contextbook_dir()
     if not cb.exists():
         return "Contextbook is empty. No sections written yet."
@@ -657,7 +706,13 @@ def contextbook_read(section: str = "") -> str:
     filepath = cb / f"{section}.md"
     if not filepath.exists():
         return f"Section '{section}' has not been written yet."
-    return filepath.read_text(encoding="utf-8")
+    content = filepath.read_text(encoding="utf-8")
+    # Dedup: if content unchanged since last read, return short message
+    content_hash = hash(content)
+    if _contextbook_content_hashes.get(section) == content_hash:
+        return f"Section '{section}' unchanged since last read. Use the content already in your context window. Do NOT re-read."
+    _contextbook_content_hashes[section] = content_hash
+    return content
 
 
 @tool(stateful=True)
@@ -758,6 +813,32 @@ def web_fetch(url: str) -> str:
 
 
 # ── Composite Tools (deterministic, reduce LLM turns) ───────
+
+
+_get_coder_context_called = False
+
+
+@tool
+def get_coder_context() -> str:
+    """Read ALL contextbook sections the coder needs in one call:
+    implementation_plan, review_findings, change_log, test_plan, and change_context.
+    Call this ONCE at the start of your work. Do not call it again."""
+    global _get_coder_context_called
+    if _get_coder_context_called:
+        return "Already called — all context is in your conversation. Do NOT call again. Proceed with implementation."
+    _get_coder_context_called = True
+    cb = _contextbook_dir()
+    parts = []
+    for section in ("implementation_plan", "review_findings", "change_log", "test_plan", "change_context"):
+        filepath = cb / f"{section}.md"
+        if filepath.exists():
+            content = filepath.read_text(encoding="utf-8")
+            parts.append(f"=== {section.upper()} ===\n{content}")
+            # Also mark these sections as read for contextbook_read dedup
+            _contextbook_content_hashes[section] = hash(content)
+        else:
+            parts.append(f"=== {section.upper()} ===\n(not yet written)")
+    return "\n\n".join(parts)
 
 
 @tool
@@ -897,3 +978,96 @@ def fetch_pr_context(repo: str, pr_number: int) -> str:
     results["errors"] = errors
     results["working_dir"] = _WORKING_DIR
     return _json.dumps(results, indent=2, default=str)
+
+
+# ── Batch Tools (force parallel operations in a single call) ──
+
+
+@tool
+def read_files(paths: str) -> str:
+    """Read multiple files in one call. Pass comma-separated paths.
+    Example: read_files("src/main.py, src/utils.py, tests/test_main.py")
+    Total output capped at ~50K chars. Large files are truncated with a note
+    to use read_file(path, start_line, end_line) for specific sections."""
+    parts = []
+    total_chars = 0
+    for raw_path in paths.split(","):
+        path = raw_path.strip()
+        if not path:
+            continue
+        target = _resolve(path)
+        if not target.exists():
+            parts.append(f"=== {path} ===\nError: {path!r} does not exist.")
+            continue
+        if target.is_dir():
+            parts.append(f"=== {path} ===\nError: {path!r} is a directory.")
+            continue
+        size = target.stat().st_size
+        if size > _MAX_FILE_BYTES:
+            parts.append(f"=== {path} ===\nError: {path!r} is {size:,} bytes (limit {_MAX_FILE_BYTES:,}).")
+            continue
+        try:
+            content = target.read_text(encoding="utf-8", errors="replace")
+            lines = content.splitlines()
+            numbered = [f"{i + 1:6d}\t{line}" for i, line in enumerate(lines)]
+            file_output = "\n".join(numbered)
+            remaining = _MAX_READ_FILES_CHARS - total_chars
+            if remaining <= 0:
+                parts.append(f"=== {path} ===\nSKIPPED — output budget exhausted. Use read_file('{path}') separately.")
+                continue
+            if len(file_output) > remaining:
+                # Truncate and suggest targeted read
+                file_output = file_output[:remaining]
+                file_output += f"\n... TRUNCATED ({len(lines)} lines total, {len(content):,} chars). Use read_file('{path}', start_line, end_line) for specific sections."
+            total_chars += len(file_output)
+            parts.append(f"=== {path} ===\n{file_output}")
+        except Exception as exc:
+            parts.append(f"=== {path} ===\nError: {exc}")
+    if not parts:
+        return "Error: no valid paths provided."
+    return "\n\n".join(parts)
+
+
+@tool
+def edit_files(edits_json: str) -> str:
+    """Apply multiple edits in one call. Pass a JSON array of edits.
+    Each edit: {"path": "file.py", "old_string": "...", "new_string": "..."}
+    Example: edit_files('[{"path":"a.py","old_string":"foo","new_string":"bar"},{"path":"b.py","old_string":"x","new_string":"y"}]')
+    Much faster than calling edit_file multiple times."""
+    try:
+        edits = json.loads(edits_json)
+    except json.JSONDecodeError as exc:
+        return f"Error: invalid JSON — {exc}"
+    if not isinstance(edits, list):
+        return "Error: expected a JSON array of edits."
+    results = []
+    any_success = False
+    for i, edit in enumerate(edits):
+        path = edit.get("path", "")
+        old_string = edit.get("old_string", "")
+        new_string = edit.get("new_string", "")
+        if not path or not old_string:
+            results.append(f"[{i+1}] Error: missing 'path' or 'old_string'.")
+            continue
+        target = _resolve(path)
+        if not target.exists():
+            results.append(f"[{i+1}] Error: {path!r} does not exist.")
+            continue
+        try:
+            content = target.read_text(encoding="utf-8", errors="replace")
+            count = content.count(old_string)
+            if count == 0:
+                results.append(f"[{i+1}] Error: old_string not found in {path!r}.")
+                continue
+            if count > 1:
+                results.append(f"[{i+1}] Error: old_string found {count} times in {path!r}.")
+                continue
+            new_content = content.replace(old_string, new_string, 1)
+            target.write_text(new_content, encoding="utf-8")
+            results.append(f"[{i+1}] OK: {path!r} edited ({len(old_string)} → {len(new_string)} chars).")
+            any_success = True
+        except Exception as exc:
+            results.append(f"[{i+1}] Error editing {path!r}: {exc}")
+    if any_success:
+        _grep_cache.clear()
+    return "\n".join(results)

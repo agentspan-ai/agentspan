@@ -7,15 +7,15 @@
 A multi-agent coding agent that takes a GitHub issue number, analyzes the
 codebase, implements a fix with tests, and creates a pull request.
 
-Architecture: Deterministic pipeline with sequential review stages
+Architecture: Deterministic sequential pipeline — no SWARM loops
 
-    issue_analyst >> tech_lead >> [impl_loop: (coder >> dg) <-> tl_review]
-                  >> (qa_lead >> test_coder >> qa_reviewer) >> docs_agent >> pr_creator
+    issue_analyst >> tech_lead >> coder >> qa_agent
+                  >> dg_reviewer >> fix_coder >> fix_qa >> pr_creator
 
-Code review is SEQUENTIAL (coder >> dg_reviewer) — DG is GUARANTEED to run
-after every coder execution. No handoff text needed.
-The impl_loop SWARM wraps this with TL review for approval/rework cycles.
-Testing is SEQUENTIAL: QA plans >> coder writes >> QA reviews + runs e2e.
+Single QA agent writes tests + runs them (~6-8 turns).
+DG runs ONCE after implementation + QA is complete.
+If DG finds critical issues, fix_coder addresses them and fix_qa verifies.
+If CODE_APPROVED, fix_coder and fix_qa pass through in 1 turn each.
 
 Usage:
     python 100_issue_fixer_agent.py <issue_number>
@@ -30,23 +30,21 @@ Requirements:
 """
 
 import os
-import sys
 import tempfile
 import uuid
 
-from agentspan.agents import Agent, AgentRuntime, Strategy, skill, agent_tool
+from agentspan.agents import Agent, AgentRuntime, skill, agent_tool
 from agentspan.agents.cli_config import CliConfig
-from agentspan.agents.handoff import OnTextMention
-from agentspan.agents.termination import TextMentionTermination
 
 from _issue_fixer_tools import (
     set_working_dir, get_working_dir,
-    read_file, write_file, edit_file, apply_patch, list_directory, file_outline,
+    read_file, write_file, edit_file, list_directory, file_outline,
     glob_find, grep_search, search_symbols, find_references,
     git_diff, git_log, git_blame,
     lint_and_format, build_check, run_unit_tests, run_e2e_tests,
-    contextbook_write, contextbook_read, contextbook_summary,
+    contextbook_write, contextbook_read,
     run_command, web_fetch, fetch_pr_context, gather_review_context,
+    get_coder_context, read_files, edit_files,
 )
 
 # ── Project-Specific Configuration ────────────────────────────
@@ -73,10 +71,7 @@ QA_EVIDENCE_DIR = "qa-tests"           # QA testing evidence per issue
 SERVER_URL = "http://localhost:6767"
 
 # ── Timeouts & Limits ────────────────────────────────────────
-SWARM_MAX_TURNS = 500
-SWARM_TIMEOUT = 14400          # 4 hours
 E2E_TOOL_TIMEOUT = 5400        # 90 min
-MAX_REVIEW_CYCLES = 3
 MAX_E2E_RETRIES = 3
 
 from _issue_fixer_instructions import (
@@ -84,9 +79,9 @@ from _issue_fixer_instructions import (
     TECH_LEAD_INSTRUCTIONS,
     CODER_INSTRUCTIONS,
     DG_REVIEWER_INSTRUCTIONS,
-    QA_LEAD_INSTRUCTIONS,
-    TL_REVIEW_INSTRUCTIONS,
-    DOCS_AGENT_INSTRUCTIONS,
+    FIX_CODER_INSTRUCTIONS,
+    FIX_QA_INSTRUCTIONS,
+    QA_AGENT_INSTRUCTIONS,
     PR_CREATOR_INSTRUCTIONS,
     PR_FEEDBACK_INSTRUCTIONS,
     PR_UPDATER_INSTRUCTIONS,
@@ -96,7 +91,6 @@ from _issue_fixer_instructions import (
 _fmt = {
     "repo": REPO,
     "branch_prefix": BRANCH_PREFIX,
-    "max_review_cycles": MAX_REVIEW_CYCLES,
     "max_e2e_retries": MAX_E2E_RETRIES,
     "docs_plan_dir": DOCS_PLAN_DIR,
     "docs_design_dir": DOCS_DESIGN_DIR,
@@ -122,6 +116,88 @@ def _feedback_collected(context: dict, **kwargs) -> bool:
     return "## TODO" in result
 
 
+def _review_decided(context: dict, **kwargs) -> bool:
+    """Stop DG Reviewer when a verdict is output."""
+    result = context.get("result", "")
+    return "CODE_APPROVED" in result or "NEEDS_REWORK" in result
+
+
+def _tech_lead_done(context: dict, **kwargs) -> bool:
+    """Stop Tech Lead when handoff text is output or implementation_plan was written."""
+    result = context.get("result", "")
+    if "HANDOFF_TO_CODER" in result:
+        return True
+    for msg in context.get("messages", []):
+        if not isinstance(msg, dict):
+            continue
+        content = msg.get("content", "")
+        if isinstance(content, str) and "wrote 'implementation_plan'" in content:
+            return True
+        if isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and "wrote 'implementation_plan'" in str(part.get("text", "")):
+                    return True
+    return False
+
+
+def _coder_done(context: dict, **kwargs) -> bool:
+    """Stop coder when handoff text is output or change_context was written.
+
+    The coder's final meaningful action is writing change_context to contextbook.
+    After that it should output HANDOFF, but LLMs sometimes loop on contextbook_read
+    instead. Detecting change_context in tool results catches both cases.
+    """
+    result = context.get("result", "")
+    if "HANDOFF_TO_DG" in result or "HANDOFF_TO_QA" in result:
+        return True
+    # Detect post-commit state: change_context was written → coder is done
+    for msg in context.get("messages", []):
+        if not isinstance(msg, dict):
+            continue
+        content = msg.get("content", "")
+        # Tool result messages are strings; assistant tool_use are lists
+        if isinstance(content, str) and "wrote 'change_context'" in content:
+            return True
+        if isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and "wrote 'change_context'" in str(part.get("text", "")):
+                    return True
+    return False
+
+
+def _qa_done(context: dict, **kwargs) -> bool:
+    """Stop QA agent when verdict is output or test_results was written."""
+    result = context.get("result", "")
+    if "TESTS_PASS" in result or "TESTS_FAIL" in result:
+        return True
+    # Detect post-commit state: test_results was written → QA is done
+    for msg in context.get("messages", []):
+        if not isinstance(msg, dict):
+            continue
+        content = msg.get("content", "")
+        if isinstance(content, str) and "wrote 'test_results'" in content:
+            return True
+        if isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and "wrote 'test_results'" in str(part.get("text", "")):
+                    return True
+    return False
+
+
+def _fix_done(context: dict, **kwargs) -> bool:
+    """Stop fix_coder when it outputs a verdict or finishes rework."""
+    result = context.get("result", "")
+    if "NO_REWORK_NEEDED" in result or "REWORK_COMPLETE" in result:
+        return True
+    return _coder_done(context, **kwargs)
+
+
+def _fix_qa_done(context: dict, **kwargs) -> bool:
+    """Stop fix_qa when it outputs a verdict."""
+    result = context.get("result", "")
+    return "NO_REWORK_NEEDED" in result or "TESTS_PASS" in result or "TESTS_FAIL" in result
+
+
 # ═══════════════════════════════════════════════════════════════
 # Stage 1: Issue Analyst (pipeline)
 # ═══════════════════════════════════════════════════════════════
@@ -130,7 +206,7 @@ issue_analyst = Agent(
     name="issue_analyst",
     model=SONNET,
     stateful=True,
-    max_turns=20,
+    max_turns=8,
     max_tokens=8192,
     credentials=[GITHUB_CREDENTIAL],
     cli_config=CliConfig(
@@ -151,28 +227,27 @@ tech_lead = Agent(
     name="tech_lead",
     model=OPUS,
     stateful=True,
-    max_turns=80,
+    max_turns=40,
     max_tokens=60000,
     tools=[
         read_file, grep_search, glob_find, list_directory,
         file_outline, search_symbols, find_references,
         git_log, git_blame, run_command, web_fetch,
-        contextbook_write, contextbook_read, contextbook_summary,
+        contextbook_write, contextbook_read,
     ],
+    stop_when=_tech_lead_done,
     instructions=TECH_LEAD_INSTRUCTIONS.format(**_fmt),
 )
 
 # ═══════════════════════════════════════════════════════════════
-# Stage 3: Implementation Loop
-#   Inner: code_review_loop (coder <-> DG, until DG approves)
-#   Outer: impl_loop (code_review <-> TL review, until TL approves)
+# Stage 3: Coder (implements the fix)
 # ═══════════════════════════════════════════════════════════════
 
 coder = Agent(
     name="coder",
     model=SONNET,
     stateful=True,
-    max_turns=200,
+    max_turns=20,
     max_tokens=60000,
     credentials=[GITHUB_CREDENTIAL],
     cli_config=CliConfig(
@@ -181,17 +256,21 @@ coder = Agent(
         timeout=120,
     ),
     tools=[
-        read_file, write_file, edit_file, apply_patch,
+        read_file, write_file, edit_file,
+        read_files, edit_files,
         grep_search, glob_find, list_directory,
-        file_outline, search_symbols, find_references,
-        git_diff, git_log, run_command, web_fetch,
+        file_outline, git_diff, git_log, run_command,
         lint_and_format, build_check, run_unit_tests,
-        contextbook_write, contextbook_read, contextbook_summary,
+        contextbook_write, contextbook_read, get_coder_context,
     ],
+    stop_when=_coder_done,
     instructions=CODER_INSTRUCTIONS.format(**_fmt),
 )
 
-# DG skill + coordinator wrapper
+# ═══════════════════════════════════════════════════════════════
+# Stage 3b: DG Skill (loaded here, used in Stage 5)
+# ═══════════════════════════════════════════════════════════════
+
 dg_skill = skill(
     DG_SKILL_PATH,
     model=SONNET,
@@ -203,67 +282,27 @@ dg_reviewer = Agent(
     name="dg_reviewer",
     model=SONNET,
     stateful=True,
-    max_turns=3,
+    max_turns=2,
     max_tokens=60000,
     tools=[
         gather_review_context,
-        agent_tool(dg_skill, description="Run adversarial Dinesh vs Gilfoyle code review"),
+        agent_tool(dg_skill, description="Run Dinesh vs Gilfoyle code review. Pass '1' as the request to limit to 1 round."),
         contextbook_write,
     ],
+    stop_when=_review_decided,
     instructions=DG_REVIEWER_INSTRUCTIONS.format(**_fmt),
 )
 
-# Sequential: coder runs THEN DG reviews — deterministic, no handoff text needed.
-# A SWARM relied on the coder LLM to output handoff text, which it never did.
-# Sequential guarantees DG runs after every coder execution.
-code_then_review = coder >> dg_reviewer
-
-# Tech Lead final review
-tl_reviewer = Agent(
-    name="tl_reviewer",
-    model=OPUS,
-    stateful=True,
-    max_turns=30,
-    max_tokens=60000,
-    tools=[
-        read_file, grep_search, glob_find, list_directory,
-        file_outline, search_symbols, find_references,
-        git_diff, git_log, run_command,
-        contextbook_write, contextbook_read, contextbook_summary,
-    ],
-    instructions=TL_REVIEW_INSTRUCTIONS.format(**_fmt),
-)
-
-# Outer loop: (coder >> DG) <-> TL review until TL says IMPL_APPROVED
-# Each iteration: coder implements (sequential), DG reviews (sequential),
-# then TL does final review. If TL says NEEDS_REWORK, back to coder >> DG.
-impl_loop = Agent(
-    name="impl_loop",
-    model=SONNET,
-    stateful=True,
-    strategy=Strategy.SWARM,
-    agents=[code_then_review, tl_reviewer],
-    handoffs=[
-        OnTextMention(text="NEEDS_REWORK", target="coder_dg_reviewer"),
-        OnTextMention(text="IMPL_APPROVED", target="tl_reviewer"),
-    ],
-    termination=TextMentionTermination("IMPL_APPROVED"),
-    max_turns=MAX_REVIEW_CYCLES * 2 + 2,  # bounded: code_review + tl_review per cycle
-    max_tokens=60000,
-    timeout_seconds=SWARM_TIMEOUT,
-    instructions="Start with code_review_loop. After code review, TL reviews. Loop until TL says IMPL_APPROVED.",
-)
 
 # ═══════════════════════════════════════════════════════════════
-# Stage 4: Test Loop (coder <-> QA, until QA says TESTS_PASS)
+# Stage 4: QA Agent (single agent: write tests + run + verify)
 # ═══════════════════════════════════════════════════════════════
 
-# Separate coder instance for test writing (same config, different name)
-test_coder = Agent(
-    name="test_coder",
+qa_agent = Agent(
+    name="qa_agent",
     model=SONNET,
     stateful=True,
-    max_turns=200,
+    max_turns=12,
     max_tokens=60000,
     credentials=[GITHUB_CREDENTIAL],
     cli_config=CliConfig(
@@ -272,80 +311,74 @@ test_coder = Agent(
         timeout=120,
     ),
     tools=[
-        read_file, write_file, edit_file, apply_patch,
+        read_file, write_file, edit_file,
+        read_files, edit_files,
         grep_search, glob_find, list_directory,
-        file_outline, search_symbols, find_references,
-        git_diff, git_log, run_command, web_fetch,
-        lint_and_format, build_check, run_unit_tests,
-        contextbook_write, contextbook_read, contextbook_summary,
-    ],
-    instructions=CODER_INSTRUCTIONS.format(**_fmt),
-)
-
-qa_lead = Agent(
-    name="qa_lead",
-    model=SONNET,
-    stateful=True,
-    max_turns=80,
-    max_tokens=60000,
-    tools=[
-        read_file, write_file, grep_search, glob_find, list_directory,
-        file_outline, git_diff, run_command, web_fetch,
+        file_outline, git_diff, run_command,
         run_unit_tests, run_e2e_tests,
-        contextbook_write, contextbook_read, contextbook_summary,
+        contextbook_write, contextbook_read, get_coder_context,
     ],
-    instructions=QA_LEAD_INSTRUCTIONS.format(**_fmt),
+    stop_when=_qa_done,
+    instructions=QA_AGENT_INSTRUCTIONS.format(**_fmt),
 )
-
-# QA reviewer: runs e2e tests and captures evidence (separate instance for sequential pipeline)
-qa_reviewer = Agent(
-    name="qa_reviewer",
-    model=SONNET,
-    stateful=True,
-    max_turns=80,
-    max_tokens=60000,
-    tools=[
-        read_file, grep_search, glob_find, list_directory,
-        file_outline, git_diff, run_command, web_fetch,
-        write_file,
-        run_unit_tests, run_e2e_tests,
-        contextbook_write, contextbook_read, contextbook_summary,
-    ],
-    instructions=QA_LEAD_INSTRUCTIONS.format(**_fmt),
-)
-
-# Sequential: QA plans → coder writes tests → QA reviews + runs e2e
-# All three steps are deterministic — no handoff text needed.
-test_then_verify = qa_lead >> test_coder >> qa_reviewer
 
 # ═══════════════════════════════════════════════════════════════
-# Stage 5: Documentation Agent (pipeline)
+# Stage 5: DG Code Review (runs ONCE after impl + QA)
 # ═══════════════════════════════════════════════════════════════
 
-docs_agent = Agent(
-    name="docs_agent",
+# dg_reviewer defined above with dg_skill
+
+# ═══════════════════════════════════════════════════════════════
+# Stage 6: Fix Coder + Fix QA (conditional rework from DG feedback)
+# ═══════════════════════════════════════════════════════════════
+
+fix_coder = Agent(
+    name="fix_coder",
     model=SONNET,
     stateful=True,
-    max_turns=40,
+    max_turns=15,
     max_tokens=60000,
+    credentials=[GITHUB_CREDENTIAL],
+    cli_config=CliConfig(
+        allowed_commands=["git"],
+        allow_shell=True,
+        timeout=120,
+    ),
     tools=[
         read_file, write_file, edit_file,
+        read_files, edit_files,
         grep_search, glob_find, list_directory,
-        file_outline, git_diff, run_command, web_fetch,
-        contextbook_read, contextbook_summary,
+        file_outline, git_diff, run_command,
+        lint_and_format, build_check, run_unit_tests,
+        contextbook_write, contextbook_read, get_coder_context,
     ],
-    instructions=DOCS_AGENT_INSTRUCTIONS.format(**_fmt),
+    stop_when=_fix_done,
+    instructions=FIX_CODER_INSTRUCTIONS.format(**_fmt),
+)
+
+fix_qa = Agent(
+    name="fix_qa",
+    model=SONNET,
+    stateful=True,
+    max_turns=5,
+    max_tokens=16000,
+    tools=[
+        run_unit_tests, run_command,
+        contextbook_write, contextbook_read,
+    ],
+    stop_when=_fix_qa_done,
+    instructions=FIX_QA_INSTRUCTIONS.format(**_fmt),
 )
 
 # ═══════════════════════════════════════════════════════════════
-# Stage 6: PR Creator (pipeline)
+# Stage 7: PR Creator (pipeline)
 # ═══════════════════════════════════════════════════════════════
 
 pr_creator = Agent(
     name="pr_creator",
     model=SONNET,
     stateful=True,
-    max_turns=10,
+    max_turns=6,
     max_tokens=8192,
     credentials=[GITHUB_CREDENTIAL],
     cli_config=CliConfig(
@@ -359,7 +392,7 @@ pr_creator = Agent(
 )
 
 # ═══════════════════════════════════════════════════════════════
-# Stage 7: PR Feedback Agent (feedback mode only)
+# Stage 8: PR Feedback Agent (feedback mode only)
 #   Fetches PR comments/reviews, writes them to contextbook
 # ═══════════════════════════════════════════════════════════════
 
@@ -376,7 +409,7 @@ pr_feedback = Agent(
 )
 
 # ═══════════════════════════════════════════════════════════════
-# Stage 8: PR Updater (feedback mode only)
+# Stage 9: PR Updater (feedback mode only)
 #   Pushes changes and updates the existing PR
 # ═══════════════════════════════════════════════════════════════
 
@@ -401,10 +434,11 @@ pr_updater = Agent(
 # ═══════════════════════════════════════════════════════════════
 
 # New issue → full pipeline
-pipeline = issue_analyst >> tech_lead >> impl_loop >> test_then_verify >> docs_agent >> pr_creator
+# coder implements → QA tests → DG reviews → fix if needed → PR
+pipeline = issue_analyst >> tech_lead >> coder >> qa_agent >> dg_reviewer >> fix_coder >> fix_qa >> pr_creator
 
-# PR feedback → address comments, re-review, re-test, update PR
-feedback_pipeline = pr_feedback >> impl_loop >> test_then_verify >> pr_updater
+# PR feedback → address comments, re-test, review, update PR
+feedback_pipeline = pr_feedback >> coder >> qa_agent >> dg_reviewer >> fix_coder >> fix_qa >> pr_updater
 
 
 def main():
@@ -430,7 +464,7 @@ def main():
 
     # Patch cli_config.working_dir on all agents that use CliConfig.
     # Agents are defined at module level but working_dir is only known at runtime.
-    for agent in (issue_analyst, coder, test_coder, pr_creator, pr_feedback, pr_updater):
+    for agent in (issue_analyst, coder, qa_agent, fix_coder, pr_creator, pr_feedback, pr_updater):
         if hasattr(agent, "cli_config") and agent.cli_config:
             agent.cli_config.working_dir = work_dir
 
@@ -465,7 +499,7 @@ def main():
         print(f"Idempotency key: {idempotency_key}")
         print(f"Monitor at: {SERVER_URL}/execution/{handle.execution_id}")
 
-        result = handle.join(timeout=SWARM_TIMEOUT)
+        result = handle.join(timeout=3600)
         result.print_result()
 
 
