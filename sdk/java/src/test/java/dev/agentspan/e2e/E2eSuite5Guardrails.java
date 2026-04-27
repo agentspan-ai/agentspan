@@ -19,6 +19,7 @@ import org.junit.jupiter.api.*;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -282,6 +283,80 @@ class E2eSuite5Guardrails extends E2eBaseTest {
     }
 
     /**
+     * Runtime: a custom OUTPUT guardrail that blocks only when it detects a specific
+     * marker in the tool output. The tool sets a flag and returns the marker; the
+     * guardrail sees the marker in the LLM's final response and blocks.
+     *
+     * <p>This is distinct from Suite 3's {@code test_custom_guardrail_raise_on_output}
+     * (which uses an always-block guardrail with no tool). Here:
+     * <ol>
+     *   <li>The tool body DOES execute (flag = true) — proven by the AtomicBoolean.</li>
+     *   <li>The guardrail fires on the LLM's final answer (which includes the tool result
+     *       "BLOCKED_MARKER") and blocks → agent FAILS/TERMINATED.</li>
+     * </ol>
+     *
+     * <p>COUNTERFACTUAL A: if guardrail doesn't fire → agent completes → assertion 2 fails.<br>
+     * COUNTERFACTUAL B: if tool dispatch is broken → flag stays false → assertion 1 fails.
+     *
+     * <p>Note: the guardrail checks the LLM's final output text. If the LLM includes
+     * "BLOCKED_MARKER" in its reply (repeating the tool result), the guardrail fires.
+     * We use {@code requiredTools} to guarantee the tool is called before any final output.
+     */
+    @Test
+    @Order(3)
+    @Timeout(value = 300, unit = TimeUnit.SECONDS)
+    void test_tool_output_detected_by_guardrail() {
+        sqlToolBodyRan.set(false);
+
+        GuardrailDef markerGuard = GuardrailDef.builder()
+            .name("e2e_marker_output_guard")
+            .position(Position.OUTPUT)
+            .onFail(OnFail.RAISE)
+            .func(content -> content.contains("BLOCKED_MARKER")
+                ? GuardrailResult.fail("blocked: marker detected in output")
+                : GuardrailResult.pass())
+            .guardrailType("custom")
+            .build();
+
+        Agent agent = Agent.builder()
+            .name("e2e_java_marker_guard_agent")
+            .model(MODEL)
+            .instructions("You MUST call the e2e_marker_tool tool with input='test'. "
+                + "Then repeat the tool result verbatim in your response.")
+            .tools(ToolRegistry.fromInstance(new MarkerTools()))
+            .guardrails(List.of(markerGuard))
+            .requiredTools("e2e_marker_tool")
+            .maxTurns(5)
+            .build();
+
+        AgentResult result = runtime.run(agent, "Call e2e_marker_tool with input='test' and repeat the result.");
+
+        // The tool body MUST have executed (requiredTools guarantees it)
+        assertTrue(sqlToolBodyRan.get(),
+            "The 'e2e_marker_tool' body was never called. "
+            + "COUNTERFACTUAL B: if tool registration or dispatch is broken, the tool is never "
+            + "invoked and this flag stays false.");
+
+        // The guardrail must have detected "BLOCKED_MARKER" and blocked the agent
+        assertTrue(
+            result.getStatus() == AgentStatus.FAILED || result.getStatus() == AgentStatus.TERMINATED,
+            "Expected agent to FAIL or TERMINATE when OUTPUT guardrail detects BLOCKED_MARKER. "
+            + "Got status: " + result.getStatus()
+            + ". COUNTERFACTUAL A: if output guardrail doesn't detect the marker, agent completes normally.");
+    }
+
+    /** Side-effect flag for test_tool_output_detected_by_guardrail. */
+    private static final AtomicBoolean sqlToolBodyRan = new AtomicBoolean(false);
+
+    static class MarkerTools {
+        @Tool(name = "e2e_marker_tool", description = "Returns a specific marker string for guardrail testing")
+        public String marker(String input) {
+            sqlToolBodyRan.set(true);
+            return "BLOCKED_MARKER: " + input;
+        }
+    }
+
+    /**
      * Runtime: custom OUTPUT guardrail that always fails with RETRY and maxRetries=1
      * escalates to RAISE and terminates the agent.
      *
@@ -293,7 +368,7 @@ class E2eSuite5Guardrails extends E2eBaseTest {
      * or completes normally → status assertion fails.
      */
     @Test
-    @Order(3)
+    @Order(4)
     @Timeout(value = 300, unit = TimeUnit.SECONDS)
     void test_max_retries_escalation() {
         GuardrailDef alwaysRetryGuard = GuardrailDef.builder()

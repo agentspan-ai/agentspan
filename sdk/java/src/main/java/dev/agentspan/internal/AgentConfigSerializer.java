@@ -150,14 +150,59 @@ public class AgentConfigSerializer {
 
         // Code execution
         if (agent.isLocalCodeExecution()) {
+            List<String> langs = agent.getAllowedLanguages();
+            List<String> effectiveLangs = langs != null && !langs.isEmpty() ? langs : List.of("python");
+            List<String> cmds = agent.getAllowedCommands();
+            int timeout = agent.getCodeExecutionTimeout() > 0 ? agent.getCodeExecutionTimeout() : 30;
+
             Map<String, Object> codeExec = new LinkedHashMap<>();
             codeExec.put("enabled", true);
-            List<String> langs = agent.getAllowedLanguages();
-            codeExec.put("allowedLanguages", langs != null && !langs.isEmpty() ? langs : List.of("python"));
-            List<String> cmds = agent.getAllowedCommands();
+            codeExec.put("allowedLanguages", effectiveLangs);
             codeExec.put("allowedCommands", cmds != null ? cmds : new ArrayList<>());
-            codeExec.put("timeout", agent.getCodeExecutionTimeout() > 0 ? agent.getCodeExecutionTimeout() : 30);
+            codeExec.put("timeout", timeout);
             agentMap.put("codeExecution", codeExec);
+
+            // Inject execute_code worker tool so the LLM sees it as a callable function.
+            // Python SDK does the same in Agent._attach_code_execution_tool().
+            // The tool name is {agent_name}_execute_code to avoid multi-agent collisions.
+            String execToolName = agent.getName() + "_execute_code";
+            Map<String, Object> execTool = new LinkedHashMap<>();
+            execTool.put("name", execToolName);
+            execTool.put("description",
+                "Execute code in the specified language. Supported languages: "
+                + String.join(", ", effectiveLangs)
+                + ". Each execution runs in an isolated environment — no state, variables, "
+                + "or imports persist between calls.");
+            Map<String, Object> inputSchema = new LinkedHashMap<>();
+            inputSchema.put("type", "object");
+            Map<String, Object> properties = new LinkedHashMap<>();
+            Map<String, Object> langProp = new LinkedHashMap<>();
+            langProp.put("type", "string");
+            langProp.put("description", "The programming language to use. One of: "
+                + String.join(", ", effectiveLangs));
+            langProp.put("enum", effectiveLangs);
+            Map<String, Object> codeProp = new LinkedHashMap<>();
+            codeProp.put("type", "string");
+            codeProp.put("description", "The code to execute.");
+            properties.put("language", langProp);
+            properties.put("code", codeProp);
+            inputSchema.put("properties", properties);
+            inputSchema.put("required", List.of("language", "code"));
+            execTool.put("inputSchema", inputSchema);
+            execTool.put("outputSchema",
+                Map.of("type", "object", "additionalProperties", Map.of()));
+            execTool.put("toolType", "worker");
+
+            // Append or create tools list
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> existingTools = (List<Map<String, Object>>) agentMap.get("tools");
+            if (existingTools == null) {
+                List<Map<String, Object>> toolsList = new ArrayList<>();
+                toolsList.add(execTool);
+                agentMap.put("tools", toolsList);
+            } else {
+                existingTools.add(execTool);
+            }
         }
 
         // Include contents (context passed to sub-agent)

@@ -7,6 +7,7 @@ import dev.agentspan.Agent;
 import dev.agentspan.AgentRuntime;
 import dev.agentspan.enums.AgentStatus;
 import dev.agentspan.enums.Strategy;
+import dev.agentspan.handoff.OnTextMention;
 import dev.agentspan.model.AgentResult;
 import org.junit.jupiter.api.*;
 
@@ -321,5 +322,121 @@ class E2eSuite6Handoffs extends E2eBaseTest {
                 + subWorkflowCount
                 + ". COUNTERFACTUAL: if only 1 agent ran, count < 2.");
         }
+    }
+
+    /**
+     * ROUTER strategy: the router LLM routes a math request to the math agent,
+     * producing a SUB_WORKFLOW task whose referenceTaskName contains "math".
+     *
+     * COUNTERFACTUAL: if the router does not route to math_agent, no math sub-workflow
+     * is created and the referenceTaskName assertion fails.
+     */
+    @Test
+    @Order(5)
+    @Timeout(value = 300, unit = TimeUnit.SECONDS)
+    @SuppressWarnings("unchecked")
+    void test_router_selects_correct_agent() {
+        Agent routerLead = Agent.builder()
+            .name("e2e_java_router_lead_agent")
+            .model(MODEL)
+            .instructions("You are a router. Route math requests to e2e_java_math and text requests to e2e_java_text.")
+            .build();
+
+        Agent parent = Agent.builder()
+            .name("e2e_java_router_parent")
+            .model(MODEL)
+            .instructions("Route requests to the appropriate sub-agent using the router.")
+            .agents(mathAgent(), textAgent())
+            .strategy(Strategy.ROUTER)
+            .router(routerLead)
+            .build();
+
+        AgentResult result = runtime.run(parent, "Compute 7 times 8");
+
+        assertEquals(AgentStatus.COMPLETED, result.getStatus(),
+            "ROUTER parent agent should complete. "
+            + "Status: " + result.getStatus()
+            + ". Error: " + result.getError());
+
+        String workflowId = result.getWorkflowId();
+        assertNotNull(workflowId, "workflowId is null");
+
+        Map<String, Object> workflow = getWorkflow(workflowId);
+
+        // Check execution-level tasks for a SUB_WORKFLOW whose referenceTaskName contains "math"
+        List<Map<String, Object>> allExecTasks = (List<Map<String, Object>>) workflow.get("tasks");
+        assertNotNull(allExecTasks, "workflow has no 'tasks' field");
+
+        boolean mathSubWorkflowFound = allExecTasks.stream()
+            .anyMatch(t -> {
+                String taskType = (String) t.getOrDefault("taskType", "");
+                String ref = (String) t.getOrDefault("referenceTaskName", "");
+                return "SUB_WORKFLOW".equals(taskType) && ref.contains("math");
+            });
+
+        assertTrue(mathSubWorkflowFound,
+            "Expected at least one SUB_WORKFLOW task with referenceTaskName containing 'math'. "
+            + "COUNTERFACTUAL: if router doesn't route to math_agent, no math sub-workflow appears. "
+            + "Execution tasks found: " + allExecTasks.stream()
+                .map(t -> t.getOrDefault("taskType", "?") + ":" + t.getOrDefault("referenceTaskName", "?"))
+                .collect(Collectors.toList()));
+    }
+
+    /**
+     * SWARM strategy with OnTextMention handoffs: when the prompt mentions "reverse",
+     * the OnTextMention trigger fires and a SUB_WORKFLOW containing "text" appears.
+     *
+     * COUNTERFACTUAL: if OnTextMention trigger doesn't fire, the text_agent sub-workflow
+     * is never created and the referenceTaskName assertion fails.
+     */
+    @Test
+    @Order(6)
+    @Timeout(value = 300, unit = TimeUnit.SECONDS)
+    @SuppressWarnings("unchecked")
+    void test_swarm_with_text_mention() {
+        Agent parent = Agent.builder()
+            .name("e2e_java_swarm_parent")
+            .model(MODEL)
+            .instructions("You are a coordinator. When asked to reverse text, mention 'reverse' to route to the text agent.")
+            .agents(mathAgent(), textAgent())
+            .strategy(Strategy.SWARM)
+            .maxTurns(5)
+            .handoffs(
+                OnTextMention.of("reverse", "e2e_java_text"),
+                OnTextMention.of("compute", "e2e_java_math")
+            )
+            .build();
+
+        AgentResult result = runtime.run(parent, "Please reverse the word hello");
+
+        // Accept any terminal status — the key assertion is the sub-workflow
+        assertTrue(
+            result.getStatus() == AgentStatus.COMPLETED
+                || result.getStatus() == AgentStatus.FAILED
+                || result.getStatus() == AgentStatus.TERMINATED,
+            "Expected a terminal status (COMPLETED/FAILED/TERMINATED). Got: " + result.getStatus());
+
+        String workflowId = result.getWorkflowId();
+        assertNotNull(workflowId, "workflowId is null");
+
+        Map<String, Object> workflow = getWorkflow(workflowId);
+
+        List<Map<String, Object>> allExecTasks = (List<Map<String, Object>>) workflow.get("tasks");
+        assertNotNull(allExecTasks, "workflow has no 'tasks' field");
+
+        boolean textSubWorkflowFound = allExecTasks.stream()
+            .anyMatch(t -> {
+                String taskType = (String) t.getOrDefault("taskType", "");
+                String ref = (String) t.getOrDefault("referenceTaskName", "");
+                return "SUB_WORKFLOW".equals(taskType) && ref.contains("text");
+            });
+
+        assertTrue(textSubWorkflowFound,
+            "Expected at least one SUB_WORKFLOW task with referenceTaskName containing 'text'. "
+            + "COUNTERFACTUAL: if OnTextMention 'reverse' trigger doesn't fire, "
+            + "the text_agent sub-workflow is never created. "
+            + "Execution tasks found: " + allExecTasks.stream()
+                .map(t -> t.getOrDefault("taskType", "?") + ":" + t.getOrDefault("referenceTaskName", "?"))
+                .collect(Collectors.toList()));
     }
 }
