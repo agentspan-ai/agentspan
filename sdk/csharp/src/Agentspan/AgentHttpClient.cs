@@ -299,12 +299,15 @@ internal sealed class AgentHttpClient : IDisposable
     public async Task<string> StartWorkflowByNameAsync(
         string workflowName, string prompt, string sessionId = "", CancellationToken ct = default)
     {
-        var payload = new
+        var input = new Dictionary<string, object?>
         {
-            name = workflowName,
-            input = new { prompt, media = Array.Empty<string>(), sessionId },
+            ["prompt"]     = prompt,
+            ["media"]      = Array.Empty<string>(),
+            ["session_id"] = sessionId ?? "",
+            ["context"]    = new Dictionary<string, object>(),
         };
-        var json = JsonSerializer.Serialize(payload, AgentspanJson.Options);
+        var payload = new Dictionary<string, object?> { ["name"] = workflowName, ["input"] = input };
+        var json = JsonSerializer.Serialize(payload);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
         using var resp = await _client.PostAsync($"{_baseUrl}/workflow", content, ct);
 
