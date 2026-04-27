@@ -79,23 +79,22 @@ E2E_TOOL_TIMEOUT = 5400        # 90 min — full e2e suite with margin
 # Dedup: track file reads to block redundant re-reads
 _file_read_hashes: dict[str, int] = {}  # resolved path -> content hash
 
-# Module detection mapping: directory prefix -> module name
-_MODULE_MAP = {
-    "sdk/python": "sdk/python",
-    "sdk/typescript": "sdk/typescript",
-    "cli": "cli",
-    "server": "server",
-    "ui": "ui",
-}
+# Auto-discovered at runtime by _discover_repo_conventions()
+_BASE_BRANCH: str = "main"
+_REPO_COMMANDS: dict[str, str] = {}  # keys: lint, build, test
 
 
 # ── File Operations ──────────────────────────────────────────
 
 
+_MIN_READ_LINES = 200  # minimum lines for ranged reads — prevents wasteful tiny chunks
+
+
 @tool
 def read_file(path: str, start_line: int = 0, end_line: int = 0) -> str:
-    """Read a file's contents with optional line range. Returns lines with line numbers.
-    If start_line and end_line are both 0, reads the entire file.
+    """Read a file's contents. Returns lines with line numbers.
+    If start_line/end_line are 0, reads the entire file (preferred).
+    Only use line ranges for very large files (1000+ lines). Minimum range: 200 lines.
     Paths are relative to the repo working directory."""
     target = _resolve(path)
     if not target.exists():
@@ -118,6 +117,9 @@ def read_file(path: str, start_line: int = 0, end_line: int = 0) -> str:
         if start_line or end_line:
             start = max(0, start_line - 1)
             end = end_line if end_line else len(lines)
+            # Enforce minimum range — tiny reads waste turns
+            if 0 < (end - start) < _MIN_READ_LINES:
+                end = min(start + _MIN_READ_LINES, len(lines))
             lines = lines[start:end]
             offset = start
         else:
@@ -462,17 +464,18 @@ def find_references(symbol: str, path: str = ".") -> str:
 
 
 @tool
-def git_diff(base: str = "main", path: str = "") -> str:
+def git_diff(base: str = "", path: str = "") -> str:
     """Show diff of current changes vs a base branch or commit.
     Optionally scoped to a specific file or directory."""
-    cmd = ["git", "diff", base]
+    actual_base = base or _BASE_BRANCH
+    cmd = ["git", "diff", actual_base]
     if path:
         cmd.extend(["--", path])
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30, cwd=_cwd())
         output = proc.stdout.strip()
         if not output:
-            return f"No diff between current state and {base!r}" + (f" for {path!r}" if path else "") + "."
+            return f"No diff between current state and {actual_base!r}" + (f" for {path!r}" if path else "") + "."
         if len(output) > _MAX_COMMAND_OUTPUT:
             output = output[:_MAX_COMMAND_OUTPUT] + f"\n... (truncated, {len(output):,} chars total)"
         return output
@@ -512,95 +515,56 @@ def git_blame(path: str, start_line: int = 0, end_line: int = 0) -> str:
 # ── Build & Test Tools ───────────────────────────────────────
 
 
-def _detect_module(path: str) -> str:
-    """Detect which monorepo module a path belongs to."""
-    for prefix, module in _MODULE_MAP.items():
-        if path.startswith(prefix):
-            return module
-    return ""
-
-
-_LINT_COMMANDS = {
-    "sdk/python":      "cd sdk/python && uv run ruff format . && uv run ruff check --fix .",
-    "sdk/typescript":  "cd sdk/typescript && npx eslint --fix . && npx prettier --write .",
-    "cli":             "cd cli && gofmt -w . && go vet ./...",
-    "server":          "cd server && gradle spotlessApply 2>/dev/null || echo 'spotless not configured'",
-    "ui":              "cd ui && npx eslint --fix . && npx prettier --write .",
-}
-
-
 @tool
-def lint_and_format(module: str = "", path: str = "") -> str:
-    """Run the appropriate linter and formatter for a module.
-    Auto-detects module from path if module is empty."""
-    resolved = module or _detect_module(path)
-    if not resolved:
-        return "Error: cannot detect module. Provide module (sdk/python, sdk/typescript, cli, server, ui) or a path within one."
-    cmd = _LINT_COMMANDS.get(resolved)
+def lint_and_format() -> str:
+    """Run the project's linter and formatter. Commands are auto-detected from repo build files.
+    If no commands were detected, use run_command with the appropriate command from repo_conventions."""
+    cmd = _REPO_COMMANDS.get("lint")
     if not cmd:
-        return f"Error: unknown module {resolved!r}. Known: {', '.join(_LINT_COMMANDS)}."
+        return "No lint command auto-detected. Read repo_conventions from contextbook and use run_command with the appropriate lint/format command."
     try:
         proc = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=_DEFAULT_TIMEOUT, cwd=_cwd())
         output = (proc.stdout + proc.stderr).strip()
         if len(output) > _MAX_COMMAND_OUTPUT:
             output = output[:_MAX_COMMAND_OUTPUT] + "\n... (truncated)"
         status = "OK" if proc.returncode == 0 else f"ISSUES (exit {proc.returncode})"
-        return f"[{resolved}] lint_and_format: {status}\n{output}"
+        return f"lint_and_format: {status}\n{output}"
     except Exception as exc:
         return f"Error: {exc}"
 
 
-_BUILD_COMMANDS = {
-    "sdk/python":      "cd sdk/python && uv run ruff check .",
-    "sdk/typescript":  "cd sdk/typescript && npx tsc --noEmit",
-    "cli":             "cd cli && go build ./...",
-    "server":          "cd server && gradle compileJava -x test",
-    "ui":              "cd ui && pnpm run build",
-}
-
-
 @tool
-def build_check(module: str = "") -> str:
-    """Compile/type-check a module without running tests.
-    module: sdk/python, sdk/typescript, cli, server, or ui."""
-    if not module:
-        return "Error: module is required. Use: sdk/python, sdk/typescript, cli, server, ui."
-    cmd = _BUILD_COMMANDS.get(module)
+def build_check() -> str:
+    """Compile/type-check the project. Commands are auto-detected from repo build files.
+    If no commands were detected, use run_command with the appropriate command from repo_conventions."""
+    cmd = _REPO_COMMANDS.get("build")
     if not cmd:
-        return f"Error: unknown module {module!r}. Known: {', '.join(_BUILD_COMMANDS)}."
+        return "No build command auto-detected. Read repo_conventions from contextbook and use run_command with the appropriate build/compile command."
     try:
         proc = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=_DEFAULT_TIMEOUT, cwd=_cwd())
         output = (proc.stdout + proc.stderr).strip()
         if len(output) > _MAX_COMMAND_OUTPUT:
             output = output[:_MAX_COMMAND_OUTPUT] + "\n... (truncated)"
         status = "PASS" if proc.returncode == 0 else f"FAIL (exit {proc.returncode})"
-        return f"[{module}] build_check: {status}\n{output}"
+        return f"build_check: {status}\n{output}"
     except Exception as exc:
         return f"Error: {exc}"
 
 
-_UNIT_TEST_COMMANDS = {
-    "sdk/python":      "cd sdk/python && uv run pytest tests/ -x -q",
-    "sdk/typescript":  "cd sdk/typescript && npm test",
-    "cli":             "cd cli && go test ./... -race -count=1",
-    "server":          "cd server && gradle test",
-    "ui":              "cd ui && pnpm test",
-}
-
-
 @tool
-def run_unit_tests(module: str, command: str = "") -> str:
-    """Run unit tests for a specific module. If command is provided, uses it instead of the default."""
-    cmd = command or _UNIT_TEST_COMMANDS.get(module)
+def run_unit_tests(command: str = "") -> str:
+    """Run unit tests. Uses auto-detected command or a custom one.
+    If command is provided, uses it instead of the auto-detected one."""
+    cmd = command or _REPO_COMMANDS.get("test")
     if not cmd:
-        return f"Error: unknown module {module!r} and no command provided. Known: {', '.join(_UNIT_TEST_COMMANDS)}."
+        return "No test command auto-detected and none provided. Read repo_conventions from contextbook and use run_command, or pass a command argument."
     try:
         proc = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=600, cwd=_cwd())
         output = (proc.stdout + proc.stderr).strip()
         if len(output) > _MAX_COMMAND_OUTPUT:
             output = output[:_MAX_COMMAND_OUTPUT] + "\n... (truncated)"
         status = "PASS" if proc.returncode == 0 else f"FAIL (exit {proc.returncode})"
-        return f"[{module}] unit_tests: {status}\n{output}"
+        return f"unit_tests: {status}\n{output}"
     except subprocess.TimeoutExpired:
         return "Error: tests timed out after 600s."
     except Exception as exc:
@@ -608,16 +572,14 @@ def run_unit_tests(module: str, command: str = "") -> str:
 
 
 @tool
-def run_e2e_tests(suite: str = "", sdk: str = "both") -> str:
-    """Run the full e2e test suite via e2e/orchestrator.sh (~45 min for full suite).
-    suite: optional suite name filter (e.g. 'suite9').
-    sdk: 'python', 'typescript', or 'both' (default)."""
-    cmd = ["./e2e/orchestrator.sh", "--no-build", "--no-start", "--sdk", sdk]
-    if suite:
-        cmd.extend(["--suite", suite])
+def run_e2e_tests(command: str = "") -> str:
+    """Run end-to-end tests. Provide the command to run.
+    Discover the e2e test runner from the repo's CI config or convention files."""
+    if not command:
+        return "No e2e command provided. Check repo_conventions for the e2e test runner command, then call run_e2e_tests(command='...')."
     try:
         proc = subprocess.run(
-            " ".join(cmd), shell=True,
+            command, shell=True,
             capture_output=True, text=True,
             timeout=E2E_TOOL_TIMEOUT,
             cwd=_cwd(),
@@ -626,9 +588,9 @@ def run_e2e_tests(suite: str = "", sdk: str = "both") -> str:
         if len(output) > _MAX_COMMAND_OUTPUT * 2:
             output = output[:_MAX_COMMAND_OUTPUT * 2] + "\n... (truncated)"
         status = "ALL PASSED" if proc.returncode == 0 else f"FAILURES (exit {proc.returncode})"
-        return f"e2e_tests (sdk={sdk}, suite={suite or 'all'}): {status}\n{output}"
+        return f"e2e_tests: {status}\n{output}"
     except subprocess.TimeoutExpired:
-        return "Error: e2e tests timed out after 90 minutes."
+        return f"Error: e2e tests timed out after {E2E_TOOL_TIMEOUT}s."
     except Exception as exc:
         return f"Error: {exc}"
 
@@ -637,7 +599,7 @@ def run_e2e_tests(suite: str = "", sdk: str = "both") -> str:
 
 
 _VALID_SECTIONS = {
-    "issue_context", "module_map", "implementation_plan", "test_plan", "change_context",
+    "issue_context", "repo_conventions", "implementation_plan", "test_plan", "change_context",
     "change_log", "review_findings", "test_results", "decisions", "status",
 }
 
@@ -654,7 +616,7 @@ def _contextbook_dir() -> Path:
 @tool(stateful=True)
 def contextbook_write(section: str, content: str, append: bool = False) -> str:
     """Write to a named section of the team contextbook.
-    Sections: issue_context, module_map, implementation_plan, test_plan,
+    Sections: issue_context, repo_conventions, implementation_plan, test_plan,
     change_log, review_findings, test_results, decisions, status.
     append=True adds to existing content; append=False replaces the section."""
     if section not in _VALID_SECTIONS:
@@ -856,16 +818,284 @@ def gather_review_context() -> str:
             parts.append(f"=== {section.upper()} ===\n(not yet written)")
     try:
         proc = subprocess.run(
-            ["git", "diff", "main"], capture_output=True, text=True,
+            ["git", "diff", _BASE_BRANCH], capture_output=True, text=True,
             timeout=30, cwd=_cwd(),
         )
         diff = proc.stdout.strip()
         if len(diff) > _MAX_COMMAND_OUTPUT:
             diff = diff[:_MAX_COMMAND_OUTPUT] + f"\n... (truncated, {len(diff):,} chars)"
-        parts.append(f"=== GIT DIFF (vs main) ===\n{diff or '(no changes)'}")
+        parts.append(f"=== GIT DIFF (vs {_BASE_BRANCH}) ===\n{diff or '(no changes)'}")
     except Exception as e:
-        parts.append(f"=== GIT DIFF (vs main) ===\nError: {e}")
+        parts.append(f"=== GIT DIFF (vs {_BASE_BRANCH}) ===\nError: {e}")
     return "\n\n".join(parts)
+
+
+# ── Repo Convention Discovery ───────────────────────────────
+
+
+_CONVENTION_FILES = [
+    "CLAUDE.md", "AGENTS.md", "AGENT.md", "GEMINI.md",
+    ".cursorrules", ".cursor/rules",
+    "CONTRIBUTING.md", "DEVELOPMENT.md", "HACKING.md",
+]
+
+_BUILD_FILES = [
+    "pyproject.toml", "setup.py", "package.json", "tsconfig.json",
+    "go.mod", "Cargo.toml", "build.gradle", "pom.xml",
+    "Makefile", "Justfile", "Taskfile.yml",
+]
+
+_MAX_CONVENTION_CHARS = 5000
+_MAX_BUILD_FILE_CHARS = 3000
+
+
+def _detect_build_commands(base: Path) -> None:
+    """Detect lint/build/test commands from build system files. Populates _REPO_COMMANDS."""
+    global _REPO_COMMANDS
+    _REPO_COMMANDS = {}
+
+    pyproject = base / "pyproject.toml"
+    package_json = base / "package.json"
+    go_mod = base / "go.mod"
+    cargo_toml = base / "Cargo.toml"
+    makefile = base / "Makefile"
+    gradlew = base / "gradlew"
+
+    if pyproject.exists():
+        content = pyproject.read_text(encoding="utf-8", errors="replace")
+        if (base / "uv.lock").exists() or "[tool.uv]" in content:
+            _REPO_COMMANDS["lint"] = "uv run ruff format . && uv run ruff check --fix ."
+            _REPO_COMMANDS["build"] = "uv run ruff check ."
+            _REPO_COMMANDS["test"] = "uv run pytest tests/ -x -q"
+        elif "[tool.poetry]" in content:
+            _REPO_COMMANDS["lint"] = "poetry run ruff format . && poetry run ruff check --fix ."
+            _REPO_COMMANDS["build"] = "poetry run ruff check ."
+            _REPO_COMMANDS["test"] = "poetry run pytest tests/ -x -q"
+        else:
+            _REPO_COMMANDS["lint"] = "ruff format . && ruff check --fix . 2>/dev/null || true"
+            _REPO_COMMANDS["build"] = "python -m py_compile *.py 2>/dev/null || true"
+            _REPO_COMMANDS["test"] = "pytest tests/ -x -q 2>/dev/null || python -m pytest -x -q"
+    elif package_json.exists():
+        try:
+            pkg = json.loads(package_json.read_text(encoding="utf-8", errors="replace"))
+            scripts = pkg.get("scripts", {})
+            if "lint" in scripts:
+                _REPO_COMMANDS["lint"] = "npm run lint"
+            if "build" in scripts:
+                _REPO_COMMANDS["build"] = "npm run build"
+            if "test" in scripts:
+                _REPO_COMMANDS["test"] = "npm test"
+        except Exception:
+            pass
+    elif go_mod.exists():
+        _REPO_COMMANDS["lint"] = "gofmt -w . && go vet ./..."
+        _REPO_COMMANDS["build"] = "go build ./..."
+        _REPO_COMMANDS["test"] = "go test ./... -race -count=1"
+    elif cargo_toml.exists():
+        _REPO_COMMANDS["lint"] = "cargo fmt"
+        _REPO_COMMANDS["build"] = "cargo build"
+        _REPO_COMMANDS["test"] = "cargo test"
+    elif gradlew.exists():
+        _REPO_COMMANDS["lint"] = "./gradlew spotlessApply 2>/dev/null || echo 'no formatter'"
+        _REPO_COMMANDS["build"] = "./gradlew compileJava -x test"
+        _REPO_COMMANDS["test"] = "./gradlew test"
+
+    # Makefile overrides: if Makefile has lint/build/test targets, prefer them
+    if makefile.exists():
+        try:
+            mk = makefile.read_text(encoding="utf-8", errors="replace")
+            if re.search(r"^lint\s*:", mk, re.MULTILINE):
+                _REPO_COMMANDS["lint"] = "make lint"
+            if re.search(r"^build\s*:", mk, re.MULTILINE):
+                _REPO_COMMANDS["build"] = "make build"
+            if re.search(r"^test\s*:", mk, re.MULTILINE):
+                _REPO_COMMANDS["test"] = "make test"
+        except Exception:
+            pass
+
+
+def _discover_repo_conventions() -> str:
+    """Read well-known convention files and detect build commands.
+
+    Called after cloning. Populates _REPO_COMMANDS and _BASE_BRANCH.
+    Returns a text summary for the repo_conventions contextbook section.
+    """
+    global _BASE_BRANCH
+    parts = []
+    base = Path(_WORKING_DIR)
+
+    # 1. Detect default branch
+    try:
+        proc = subprocess.run(
+            ["git", "symbolic-ref", "refs/remotes/origin/HEAD"],
+            capture_output=True, text=True, timeout=10, cwd=_cwd(),
+        )
+        if proc.returncode == 0:
+            _BASE_BRANCH = proc.stdout.strip().split("/")[-1]
+        else:
+            proc2 = subprocess.run(
+                ["git", "remote", "show", "origin"],
+                capture_output=True, text=True, timeout=15, cwd=_cwd(),
+            )
+            m = re.search(r"HEAD branch:\s*(\S+)", proc2.stdout)
+            if m:
+                _BASE_BRANCH = m.group(1)
+    except Exception:
+        pass  # keep default "main"
+
+    parts.append(f"Default branch: {_BASE_BRANCH}")
+
+    # 2. Read convention files
+    for filename in _CONVENTION_FILES:
+        filepath = base / filename
+        if filepath.exists() and filepath.is_file():
+            try:
+                content = filepath.read_text(encoding="utf-8", errors="replace")
+                if len(content) > _MAX_CONVENTION_CHARS:
+                    content = content[:_MAX_CONVENTION_CHARS] + "\n... (truncated)"
+                parts.append(f"--- {filename} ---\n{content}")
+            except Exception:
+                pass
+
+    # 3. Read build files
+    for filename in _BUILD_FILES:
+        filepath = base / filename
+        if filepath.exists() and filepath.is_file():
+            try:
+                content = filepath.read_text(encoding="utf-8", errors="replace")
+                if len(content) > _MAX_BUILD_FILE_CHARS:
+                    content = content[:_MAX_BUILD_FILE_CHARS] + "\n... (truncated)"
+                parts.append(f"--- {filename} ---\n{content}")
+            except Exception:
+                pass
+
+    # 4. Read first 2 CI workflow files
+    ci_dir = base / ".github" / "workflows"
+    if ci_dir.exists():
+        workflows = sorted(ci_dir.glob("*.yml"))[:2]
+        for wf in workflows:
+            try:
+                content = wf.read_text(encoding="utf-8", errors="replace")
+                if len(content) > _MAX_BUILD_FILE_CHARS:
+                    content = content[:_MAX_BUILD_FILE_CHARS] + "\n... (truncated)"
+                parts.append(f"--- .github/workflows/{wf.name} ---\n{content}")
+            except Exception:
+                pass
+
+    # 5. Detect build commands
+    _detect_build_commands(base)
+    if any(_REPO_COMMANDS.values()):
+        cmd_summary = "\n".join(f"  {k}: {v}" for k, v in _REPO_COMMANDS.items() if v)
+        parts.append(f"--- Detected Commands ---\n{cmd_summary}")
+
+    return "\n\n".join(parts)
+
+
+@tool
+def setup_issue_repo(repo: str, issue_number: int, branch_prefix: str = "fix/issue-") -> str:
+    """Fetch a GitHub issue, clone the repo, create a branch, and write issue_context to contextbook.
+
+    Does ALL mechanical setup in one deterministic call:
+    1. Fetches issue JSON via gh CLI
+    2. Clones the repo into the working directory
+    3. Adds .contextbook/ to .gitignore
+    4. Creates and pushes the fix branch
+    5. Writes issue_context to contextbook
+    6. Lists top-level directory
+
+    Returns: issue JSON + directory listing for module identification."""
+    import json as _json
+
+    errors = []
+
+    def _run(cmd: str, timeout: int = 60) -> str:
+        try:
+            proc = subprocess.run(
+                cmd, shell=True, cwd=_cwd(),
+                capture_output=True, text=True, timeout=timeout,
+            )
+            out = (proc.stdout + proc.stderr).strip()
+            if proc.returncode != 0:
+                errors.append(f"[{proc.returncode}] {cmd}: {out[:500]}")
+            return out
+        except Exception as e:
+            errors.append(f"{cmd}: {e}")
+            return ""
+
+    # 1. Fetch issue
+    issue_json_raw = _run(
+        f'gh issue view {issue_number} --repo {repo} '
+        f'--json number,title,body,author,labels,comments,assignees,'
+        f'milestone,state,createdAt,updatedAt,closedAt,reactionGroups'
+    )
+    issue_data = {}
+    try:
+        issue_data = _json.loads(issue_json_raw)
+    except _json.JSONDecodeError:
+        pass
+
+    # 2. Clone repo
+    _run(f'gh repo clone {repo} .', timeout=120)
+
+    # 3. Gitignore contextbook
+    _run("echo '.contextbook/' >> .gitignore && git add .gitignore "
+         "&& git commit -m 'chore: ignore contextbook'")
+
+    # 4. Create branch (handle existing branch gracefully)
+    branch = f"{branch_prefix}{issue_number}"
+    checkout_out = _run(f'git checkout -b {branch}')
+    if "already exists" in checkout_out:
+        _run(f'git checkout {branch}')
+
+    # 5. Push (handle existing remote branch)
+    push_out = _run(f'git push -u origin {branch}')
+    if "error" in push_out.lower() or "rejected" in push_out.lower():
+        _run(f'git push --force-with-lease -u origin {branch}')
+
+    # 6. Write issue_context to contextbook
+    cb = _contextbook_dir()
+    cb.mkdir(parents=True, exist_ok=True)
+    if issue_data:
+        (cb / "issue_context.md").write_text(
+            _json.dumps(issue_data, indent=2, default=str), encoding="utf-8"
+        )
+
+    # 7. Discover repo conventions (reads CLAUDE.md, AGENTS.md, build files, etc.)
+    conventions = _discover_repo_conventions()
+    (cb / "repo_conventions.md").write_text(conventions, encoding="utf-8")
+
+    # 8. List top-level directory
+    dir_listing = _run("ls -1")
+
+    # Build result
+    title = issue_data.get("title", "unknown")
+    author = issue_data.get("author", {}).get("login", "unknown")
+    body = issue_data.get("body", "")
+    labels = [l.get("name", "") for l in issue_data.get("labels", [])]
+
+    result_parts = [
+        f"=== ISSUE #{issue_number} ===",
+        f"Title: {title}",
+        f"Author: {author}",
+        f"Labels: {', '.join(labels) or 'none'}",
+        f"Branch: {branch}",
+        f"Repo: {repo}",
+        f"",
+        f"=== ISSUE BODY ===",
+        body[:5000] if body else "(empty)",
+        f"",
+        f"=== REPO CONVENTIONS (summary) ===",
+        f"Default branch: {_BASE_BRANCH}",
+        f"Detected commands: {', '.join(f'{k}={v}' for k,v in _REPO_COMMANDS.items()) or 'none (agents will discover from convention files)'}",
+        f"",
+        f"=== DIRECTORY LISTING ===",
+        dir_listing,
+    ]
+
+    if errors:
+        result_parts.append(f"\n=== WARNINGS ===\n" + "\n".join(errors))
+
+    return "\n".join(result_parts)
 
 
 @tool
@@ -945,6 +1175,10 @@ def fetch_pr_context(repo: str, pr_number: int) -> str:
         (cb / "issue_context.md").write_text(
             _json.dumps(results["issue"], indent=2, default=str), encoding="utf-8"
         )
+
+    # 5b. Discover repo conventions
+    conventions = _discover_repo_conventions()
+    (cb / "repo_conventions.md").write_text(conventions, encoding="utf-8")
 
     # 6. Structured comments
     comments = []

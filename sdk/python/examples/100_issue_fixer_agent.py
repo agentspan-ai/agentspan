@@ -4,8 +4,11 @@
 
 """Issue Fixer Agent — autonomous GitHub issue to PR pipeline.
 
-A multi-agent coding agent that takes a GitHub issue number, analyzes the
-codebase, implements a fix with tests, and creates a pull request.
+A generic multi-agent coding agent that takes a GitHub repo and issue number,
+analyzes the codebase, implements a fix with tests, and creates a pull request.
+
+Works with any GitHub repo. The agent auto-discovers repo conventions by reading
+well-known files (CLAUDE.md, AGENTS.md, CONTRIBUTING.md, build files, etc.).
 
 Architecture: Deterministic sequential pipeline — no SWARM loops
 
@@ -18,15 +21,14 @@ If DG finds critical issues, fix_coder addresses them and fix_qa verifies.
 If CODE_APPROVED, fix_coder and fix_qa pass through in 1 turn each.
 
 Usage:
-    python 100_issue_fixer_agent.py <issue_number>
-    python 100_issue_fixer_agent.py 42
+    python 100_issue_fixer_agent.py owner/repo 42
+    python 100_issue_fixer_agent.py owner/repo 42 --pr 157
 
 Requirements:
     - Agentspan server running
     - GITHUB_TOKEN: agentspan credentials set GITHUB_TOKEN <your-token>
     - gh CLI installed and authenticated
     - DG skill: git clone https://github.com/v1r3n/dinesh-gilfoyle ~/.claude/skills/dg
-    - Full build toolchain (Go, Java 21, Python 3.10+, Node.js, pnpm, uv)
 """
 
 import os
@@ -43,13 +45,11 @@ from _issue_fixer_tools import (
     git_diff, git_log, git_blame,
     lint_and_format, build_check, run_unit_tests, run_e2e_tests,
     contextbook_write, contextbook_read,
-    run_command, web_fetch, fetch_pr_context, gather_review_context,
+    run_command, web_fetch, setup_issue_repo, fetch_pr_context, gather_review_context,
     get_coder_context, read_files, edit_files,
 )
 
-# ── Project-Specific Configuration ────────────────────────────
-REPO = "agentspan-ai/agentspan"
-REPO_URL = f"https://github.com/{REPO}"
+# ── Configuration ────────────────────────────────────────────
 BRANCH_PREFIX = "fix/issue-"
 
 # ── Models ────────────────────────────────────────────────────
@@ -87,21 +87,14 @@ from _issue_fixer_instructions import (
     PR_UPDATER_INSTRUCTIONS,
 )
 
-# Format instruction templates with project constants
-_fmt = {
-    "repo": REPO,
-    "branch_prefix": BRANCH_PREFIX,
-    "max_e2e_retries": MAX_E2E_RETRIES,
-    "docs_plan_dir": DOCS_PLAN_DIR,
-    "docs_design_dir": DOCS_DESIGN_DIR,
-    "qa_evidence_dir": QA_EVIDENCE_DIR,
-}
+
+# ── Stop-when callbacks (pure functions, no runtime config) ──
 
 
 def _issue_analyzed(context: dict, **kwargs) -> bool:
     """Stop Issue Analyst when structured output is produced."""
     result = context.get("result", "")
-    return all(tag in result for tag in ("REPO:", "BRANCH:", "ISSUE:", "MODULE:"))
+    return all(tag in result for tag in ("REPO:", "BRANCH:", "ISSUE:"))
 
 
 def _pr_created(context: dict, **kwargs) -> bool:
@@ -198,275 +191,240 @@ def _fix_qa_done(context: dict, **kwargs) -> bool:
     return "NO_REWORK_NEEDED" in result or "TESTS_PASS" in result or "TESTS_FAIL" in result
 
 
-# ═══════════════════════════════════════════════════════════════
-# Stage 1: Issue Analyst (pipeline)
-# ═══════════════════════════════════════════════════════════════
-
-issue_analyst = Agent(
-    name="issue_analyst",
-    model=SONNET,
-    stateful=True,
-    max_turns=8,
-    max_tokens=8192,
-    credentials=[GITHUB_CREDENTIAL],
-    cli_config=CliConfig(
-        allowed_commands=["gh", "git", "mktemp", "ls", "find"],
-        allow_shell=True,
-        timeout=60,
-    ),
-    tools=[contextbook_write, contextbook_read],
-    stop_when=_issue_analyzed,
-    instructions=ISSUE_ANALYST_INSTRUCTIONS.format(**_fmt),
-)
-
-# ═══════════════════════════════════════════════════════════════
-# Stage 2: Tech Lead — plan (pipeline)
-# ═══════════════════════════════════════════════════════════════
-
-tech_lead = Agent(
-    name="tech_lead",
-    model=OPUS,
-    stateful=True,
-    max_turns=40,
-    max_tokens=60000,
-    tools=[
-        read_file, grep_search, glob_find, list_directory,
-        file_outline, search_symbols, find_references,
-        git_log, git_blame, run_command, web_fetch,
-        contextbook_write, contextbook_read,
-    ],
-    stop_when=_tech_lead_done,
-    instructions=TECH_LEAD_INSTRUCTIONS.format(**_fmt),
-)
-
-# ═══════════════════════════════════════════════════════════════
-# Stage 3: Coder (implements the fix)
-# ═══════════════════════════════════════════════════════════════
-
-coder = Agent(
-    name="coder",
-    model=SONNET,
-    stateful=True,
-    max_turns=20,
-    max_tokens=60000,
-    credentials=[GITHUB_CREDENTIAL],
-    cli_config=CliConfig(
-        allowed_commands=["git"],
-        allow_shell=True,
-        timeout=120,
-    ),
-    tools=[
-        read_file, write_file, edit_file,
-        read_files, edit_files,
-        grep_search, glob_find, list_directory,
-        file_outline, git_diff, git_log, run_command,
-        lint_and_format, build_check, run_unit_tests,
-        contextbook_write, contextbook_read, get_coder_context,
-    ],
-    stop_when=_coder_done,
-    instructions=CODER_INSTRUCTIONS.format(**_fmt),
-)
-
-# ═══════════════════════════════════════════════════════════════
-# Stage 3b: DG Skill (loaded here, used in Stage 5)
-# ═══════════════════════════════════════════════════════════════
-
-dg_skill = skill(
-    DG_SKILL_PATH,
-    model=SONNET,
-    agent_models={"gilfoyle": OPUS, "dinesh": SONNET},
-    params={"cap": 1},
-)
-
-dg_reviewer = Agent(
-    name="dg_reviewer",
-    model=SONNET,
-    stateful=True,
-    max_turns=2,
-    max_tokens=60000,
-    tools=[
-        gather_review_context,
-        agent_tool(dg_skill, description="Run Dinesh vs Gilfoyle code review. Pass '1' as the request to limit to 1 round."),
-        contextbook_write,
-    ],
-    stop_when=_review_decided,
-    instructions=DG_REVIEWER_INSTRUCTIONS.format(**_fmt),
-)
-
-
-# ═══════════════════════════════════════════════════════════════
-# Stage 4: QA Agent (single agent: write tests + run + verify)
-# ═══════════════════════════════════════════════════════════════
-
-qa_agent = Agent(
-    name="qa_agent",
-    model=SONNET,
-    stateful=True,
-    max_turns=12,
-    max_tokens=60000,
-    credentials=[GITHUB_CREDENTIAL],
-    cli_config=CliConfig(
-        allowed_commands=["git"],
-        allow_shell=True,
-        timeout=120,
-    ),
-    tools=[
-        read_file, write_file, edit_file,
-        read_files, edit_files,
-        grep_search, glob_find, list_directory,
-        file_outline, git_diff, run_command,
-        run_unit_tests, run_e2e_tests,
-        contextbook_write, contextbook_read, get_coder_context,
-    ],
-    stop_when=_qa_done,
-    instructions=QA_AGENT_INSTRUCTIONS.format(**_fmt),
-)
-
-# ═══════════════════════════════════════════════════════════════
-# Stage 5: DG Code Review (runs ONCE after impl + QA)
-# ═══════════════════════════════════════════════════════════════
-
-# dg_reviewer defined above with dg_skill
-
-# ═══════════════════════════════════════════════════════════════
-# Stage 6: Fix Coder + Fix QA (conditional rework from DG feedback)
-# ═══════════════════════════════════════════════════════════════
-
-fix_coder = Agent(
-    name="fix_coder",
-    model=SONNET,
-    stateful=True,
-    max_turns=15,
-    max_tokens=60000,
-    credentials=[GITHUB_CREDENTIAL],
-    cli_config=CliConfig(
-        allowed_commands=["git"],
-        allow_shell=True,
-        timeout=120,
-    ),
-    tools=[
-        read_file, write_file, edit_file,
-        read_files, edit_files,
-        grep_search, glob_find, list_directory,
-        file_outline, git_diff, run_command,
-        lint_and_format, build_check, run_unit_tests,
-        contextbook_write, contextbook_read, get_coder_context,
-    ],
-    stop_when=_fix_done,
-    instructions=FIX_CODER_INSTRUCTIONS.format(**_fmt),
-)
-
-fix_qa = Agent(
-    name="fix_qa",
-    model=SONNET,
-    stateful=True,
-    max_turns=5,
-    max_tokens=16000,
-    tools=[
-        run_unit_tests, run_command,
-        contextbook_write, contextbook_read,
-    ],
-    stop_when=_fix_qa_done,
-    instructions=FIX_QA_INSTRUCTIONS.format(**_fmt),
-)
-
-# ═══════════════════════════════════════════════════════════════
-# Stage 7: PR Creator (pipeline)
-# ═══════════════════════════════════════════════════════════════
-
-pr_creator = Agent(
-    name="pr_creator",
-    model=SONNET,
-    stateful=True,
-    max_turns=6,
-    max_tokens=8192,
-    credentials=[GITHUB_CREDENTIAL],
-    cli_config=CliConfig(
-        allowed_commands=["gh", "git", "find"],
-        allow_shell=True,
-        timeout=60,
-    ),
-    tools=[git_diff, git_log, contextbook_read],
-    stop_when=_pr_created,
-    instructions=PR_CREATOR_INSTRUCTIONS.format(**_fmt),
-)
-
-# ═══════════════════════════════════════════════════════════════
-# Stage 8: PR Feedback Agent (feedback mode only)
-#   Fetches PR comments/reviews, writes them to contextbook
-# ═══════════════════════════════════════════════════════════════
-
-pr_feedback = Agent(
-    name="pr_feedback",
-    model=SONNET,
-    stateful=True,
-    max_turns=3,
-    max_tokens=16000,
-    credentials=[GITHUB_CREDENTIAL],
-    tools=[fetch_pr_context, contextbook_write, web_fetch],
-    stop_when=_feedback_collected,
-    instructions=PR_FEEDBACK_INSTRUCTIONS.format(**_fmt),
-)
-
-# ═══════════════════════════════════════════════════════════════
-# Stage 9: PR Updater (feedback mode only)
-#   Pushes changes and updates the existing PR
-# ═══════════════════════════════════════════════════════════════
-
-pr_updater = Agent(
-    name="pr_updater",
-    model=SONNET,
-    stateful=True,
-    max_turns=10,
-    max_tokens=8192,
-    credentials=[GITHUB_CREDENTIAL],
-    cli_config=CliConfig(
-        allowed_commands=["gh", "git"],
-        allow_shell=True,
-        timeout=60,
-    ),
-    tools=[git_diff, git_log, contextbook_read, run_command],
-    instructions=PR_UPDATER_INSTRUCTIONS.format(**_fmt),
-)
-
-# ═══════════════════════════════════════════════════════════════
-# Pipelines
-# ═══════════════════════════════════════════════════════════════
-
-# New issue → full pipeline
-# coder implements → QA tests → DG reviews → fix if needed → PR
-pipeline = issue_analyst >> tech_lead >> coder >> qa_agent >> dg_reviewer >> fix_coder >> fix_qa >> pr_creator
-
-# PR feedback → address comments, re-test, review, update PR
-feedback_pipeline = pr_feedback >> coder >> qa_agent >> dg_reviewer >> fix_coder >> fix_qa >> pr_updater
-
-
 def main():
     import argparse
 
     parser = argparse.ArgumentParser(
         description="Issue Fixer Agent — autonomous GitHub issue to PR pipeline",
         epilog="Examples:\n"
-               "  python 100_issue_fixer_agent.py 42           # Fix issue #42\n"
-               "  python 100_issue_fixer_agent.py 42 --pr 157  # Address PR #157 feedback\n",
+               "  python 100_issue_fixer_agent.py facebook/react 42\n"
+               "  python 100_issue_fixer_agent.py facebook/react 42 --pr 157\n",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("issue_number", type=int, help="GitHub issue number to fix")
+    parser.add_argument("repo", type=str, help="GitHub repo (owner/name, e.g. 'facebook/react')")
+    parser.add_argument("issue", type=int, help="GitHub issue number to fix")
     parser.add_argument("--pr", type=int, default=None, help="Existing PR number to address feedback on")
     args = parser.parse_args()
 
-    issue_number = args.issue_number
+    repo = args.repo
+    issue_number = args.issue
     pr_number = args.pr
 
+    # Format instruction templates with runtime config
+    _fmt = {
+        "repo": repo,
+        "branch_prefix": BRANCH_PREFIX,
+        "max_e2e_retries": MAX_E2E_RETRIES,
+        "docs_plan_dir": DOCS_PLAN_DIR,
+        "docs_design_dir": DOCS_DESIGN_DIR,
+        "qa_evidence_dir": QA_EVIDENCE_DIR,
+    }
+
     # Create a temp working directory with a random suffix.
-    work_dir = os.path.join(tempfile.gettempdir(), f"agentspan-fix-{uuid.uuid4().hex[:12]}")
+    repo_slug = repo.replace("/", "-")
+    work_dir = os.path.join(tempfile.gettempdir(), f"{repo_slug}-fix-{uuid.uuid4().hex[:12]}")
     set_working_dir(work_dir)
 
-    # Patch cli_config.working_dir on all agents that use CliConfig.
-    # Agents are defined at module level but working_dir is only known at runtime.
-    for agent in (issue_analyst, coder, qa_agent, fix_coder, pr_creator, pr_feedback, pr_updater):
-        if hasattr(agent, "cli_config") and agent.cli_config:
-            agent.cli_config.working_dir = work_dir
+    # ═══════════════════════════════════════════════════════════════
+    # Build agents (instructions formatted with runtime repo value)
+    # ═══════════════════════════════════════════════════════════════
+
+    issue_analyst = Agent(
+        name="issue_analyst",
+        model=SONNET,
+        stateful=True,
+        max_turns=12,
+        max_tokens=8192,
+        credentials=[GITHUB_CREDENTIAL],
+        tools=[setup_issue_repo, contextbook_write],
+        stop_when=_issue_analyzed,
+        instructions=ISSUE_ANALYST_INSTRUCTIONS.format(**_fmt),
+    )
+
+    tech_lead = Agent(
+        name="tech_lead",
+        model=OPUS,
+        stateful=True,
+        max_turns=15,
+        max_tokens=60000,
+        tools=[
+            read_file, read_files, write_file,
+            grep_search, glob_find, list_directory,
+            file_outline, search_symbols, find_references,
+            git_log, run_command,
+            contextbook_write, contextbook_read,
+        ],
+        stop_when=_tech_lead_done,
+        instructions=TECH_LEAD_INSTRUCTIONS.format(**_fmt),
+    )
+
+    coder = Agent(
+        name="coder",
+        model=SONNET,
+        stateful=True,
+        max_turns=20,
+        max_tokens=60000,
+        credentials=[GITHUB_CREDENTIAL],
+        cli_config=CliConfig(
+            allowed_commands=["git"],
+            allow_shell=True,
+            timeout=120,
+            working_dir=work_dir,
+        ),
+        tools=[
+            read_file, write_file, edit_file,
+            read_files, edit_files,
+            grep_search, glob_find, list_directory,
+            file_outline, git_diff, git_log, run_command,
+            lint_and_format, build_check, run_unit_tests,
+            contextbook_write, contextbook_read, get_coder_context,
+        ],
+        stop_when=_coder_done,
+        instructions=CODER_INSTRUCTIONS.format(**_fmt),
+    )
+
+    dg_skill_agent = skill(
+        DG_SKILL_PATH,
+        model=SONNET,
+        agent_models={"gilfoyle": OPUS, "dinesh": SONNET},
+        params={"cap": 1},
+    )
+
+    dg_reviewer = Agent(
+        name="dg_reviewer",
+        model=SONNET,
+        stateful=True,
+        max_turns=2,
+        max_tokens=60000,
+        tools=[
+            gather_review_context,
+            agent_tool(dg_skill_agent, description="Run Dinesh vs Gilfoyle code review. Pass '1' as the request to limit to 1 round."),
+            contextbook_write,
+        ],
+        stop_when=_review_decided,
+        instructions=DG_REVIEWER_INSTRUCTIONS.format(**_fmt),
+    )
+
+    qa_agent = Agent(
+        name="qa_agent",
+        model=SONNET,
+        stateful=True,
+        max_turns=12,
+        max_tokens=60000,
+        credentials=[GITHUB_CREDENTIAL],
+        cli_config=CliConfig(
+            allowed_commands=["git"],
+            allow_shell=True,
+            timeout=120,
+            working_dir=work_dir,
+        ),
+        tools=[
+            read_file, write_file, edit_file,
+            read_files, edit_files,
+            grep_search, glob_find, list_directory,
+            file_outline, git_diff, run_command,
+            run_unit_tests, run_e2e_tests,
+            contextbook_write, contextbook_read, get_coder_context,
+        ],
+        stop_when=_qa_done,
+        instructions=QA_AGENT_INSTRUCTIONS.format(**_fmt),
+    )
+
+    fix_coder = Agent(
+        name="fix_coder",
+        model=SONNET,
+        stateful=True,
+        max_turns=15,
+        max_tokens=60000,
+        credentials=[GITHUB_CREDENTIAL],
+        cli_config=CliConfig(
+            allowed_commands=["git"],
+            allow_shell=True,
+            timeout=120,
+            working_dir=work_dir,
+        ),
+        tools=[
+            read_file, write_file, edit_file,
+            read_files, edit_files,
+            grep_search, glob_find, list_directory,
+            file_outline, git_diff, run_command,
+            lint_and_format, build_check, run_unit_tests,
+            contextbook_write, contextbook_read, get_coder_context,
+        ],
+        stop_when=_fix_done,
+        instructions=FIX_CODER_INSTRUCTIONS.format(**_fmt),
+    )
+
+    fix_qa = Agent(
+        name="fix_qa",
+        model=SONNET,
+        stateful=True,
+        max_turns=5,
+        max_tokens=16000,
+        tools=[
+            run_unit_tests, run_command,
+            contextbook_write, contextbook_read,
+        ],
+        stop_when=_fix_qa_done,
+        instructions=FIX_QA_INSTRUCTIONS.format(**_fmt),
+    )
+
+    pr_creator = Agent(
+        name="pr_creator",
+        model=SONNET,
+        stateful=True,
+        max_turns=12,
+        max_tokens=8192,
+        credentials=[GITHUB_CREDENTIAL],
+        cli_config=CliConfig(
+            allowed_commands=["gh", "git", "find"],
+            allow_shell=True,
+            timeout=60,
+            working_dir=work_dir,
+        ),
+        tools=[git_diff, git_log, contextbook_read],
+        stop_when=_pr_created,
+        instructions=PR_CREATOR_INSTRUCTIONS.format(**_fmt),
+    )
+
+    pr_feedback = Agent(
+        name="pr_feedback",
+        model=SONNET,
+        stateful=True,
+        max_turns=3,
+        max_tokens=16000,
+        credentials=[GITHUB_CREDENTIAL],
+        tools=[fetch_pr_context, contextbook_write, web_fetch],
+        stop_when=_feedback_collected,
+        instructions=PR_FEEDBACK_INSTRUCTIONS.format(**_fmt),
+    )
+
+    pr_updater = Agent(
+        name="pr_updater",
+        model=SONNET,
+        stateful=True,
+        max_turns=10,
+        max_tokens=8192,
+        credentials=[GITHUB_CREDENTIAL],
+        cli_config=CliConfig(
+            allowed_commands=["gh", "git"],
+            allow_shell=True,
+            timeout=60,
+            working_dir=work_dir,
+        ),
+        tools=[git_diff, git_log, contextbook_read, run_command],
+        instructions=PR_UPDATER_INSTRUCTIONS.format(**_fmt),
+    )
+
+    # ═══════════════════════════════════════════════════════════════
+    # Pipelines
+    # ═══════════════════════════════════════════════════════════════
+
+    # New issue → full pipeline
+    pipeline = issue_analyst >> tech_lead >> coder >> qa_agent >> dg_reviewer >> fix_coder >> fix_qa >> pr_creator
+
+    # PR feedback → address comments, re-test, review, update PR
+    feedback_pipeline = pr_feedback >> coder >> qa_agent >> dg_reviewer >> fix_coder >> fix_qa >> pr_updater
 
     print(f"Working directory: {work_dir}")
 
@@ -476,7 +434,7 @@ def main():
         active_pipeline = feedback_pipeline
         prompt = (
             f"Address feedback on PR #{pr_number} for issue #{issue_number} "
-            f"in repo {REPO}. The repo will be cloned into: {work_dir}"
+            f"in repo {repo}. The repo will be cloned into: {work_dir}"
         )
         print(f"Mode: PR feedback (PR #{pr_number})")
     else:
@@ -484,7 +442,7 @@ def main():
         idempotency_key = f"issue-{issue_number}"
         active_pipeline = pipeline
         prompt = (
-            f"Fix issue #{issue_number} from {REPO}. "
+            f"Fix issue #{issue_number} from {repo}. "
             f"The repo will be cloned into the working directory: {work_dir}"
         )
         print(f"Mode: New issue fix")
