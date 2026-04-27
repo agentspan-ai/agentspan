@@ -88,6 +88,10 @@ export interface ToolOptions {
   isolated?: boolean;
   credentials?: (string | CredentialFile)[];
   guardrails?: unknown[];
+  /** Number of retries on failure. Set to 0 to disable retries. Defaults to 2. */
+  retryCount?: number;
+  /** Seconds between retries with linear backoff. Defaults to 2. */
+  retryDelaySeconds?: number;
 }
 
 /**
@@ -123,6 +127,10 @@ export function tool<TInput = unknown, TOutput = unknown>(
       credentials: options.credentials,
     }),
     ...(options.guardrails !== undefined && { guardrails: options.guardrails }),
+    ...(options.retryCount !== undefined && { retryCount: options.retryCount }),
+    ...(options.retryDelaySeconds !== undefined && {
+      retryDelaySeconds: options.retryDelaySeconds,
+    }),
   };
 
   // Create the wrapper function

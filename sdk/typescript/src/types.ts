@@ -265,6 +265,10 @@ export interface ToolDef {
   config?: Record<string, unknown>;
   /** Stateful tool — worker registers under execution's domain for isolation. */
   stateful?: boolean;
+  /** Number of retries on failure. Set to 0 to disable retries. Defaults to 2. */
+  retryCount?: number;
+  /** Seconds between retries with linear backoff. Defaults to 2. */
+  retryDelaySeconds?: number;
 }
 
 // ── Agent result ─────────────────────────────────────────

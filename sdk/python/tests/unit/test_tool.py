@@ -844,3 +844,135 @@ class TestToolCredentialParams:
         assert td.approval_required is True
         assert td.isolated is False
         assert "KEY" in td.credentials
+
+
+class TestToolRetryConfig:
+    """@tool decorator: retry_count and retry_delay_seconds params."""
+
+    def test_retry_count_defaults_to_none(self):
+        @tool
+        def my_tool(x: str) -> str:
+            """A tool."""
+            return x
+
+        assert my_tool._tool_def.retry_count is None
+
+    def test_retry_delay_seconds_defaults_to_none(self):
+        @tool
+        def my_tool(x: str) -> str:
+            """A tool."""
+            return x
+
+        assert my_tool._tool_def.retry_delay_seconds is None
+
+    def test_retry_count_set(self):
+        @tool(retry_count=5)
+        def my_tool(x: str) -> str:
+            """A tool."""
+            return x
+
+        assert my_tool._tool_def.retry_count == 5
+
+    def test_retry_delay_seconds_set(self):
+        @tool(retry_delay_seconds=10)
+        def my_tool(x: str) -> str:
+            """A tool."""
+            return x
+
+        assert my_tool._tool_def.retry_delay_seconds == 10
+
+    def test_retry_count_zero_disables_retries(self):
+        @tool(retry_count=0)
+        def my_tool(x: str) -> str:
+            """A tool."""
+            return x
+
+        assert my_tool._tool_def.retry_count == 0
+
+    def test_retry_count_and_delay_together(self):
+        @tool(retry_count=3, retry_delay_seconds=15)
+        def my_tool(x: str) -> str:
+            """A tool."""
+            return x
+
+        td = my_tool._tool_def
+        assert td.retry_count == 3
+        assert td.retry_delay_seconds == 15
+
+    def test_retry_params_with_other_params(self):
+        @tool(name="custom", approval_required=True, retry_count=4, retry_delay_seconds=8)
+        def my_tool(x: str) -> str:
+            """A tool."""
+            return x
+
+        td = my_tool._tool_def
+        assert td.name == "custom"
+        assert td.approval_required is True
+        assert td.retry_count == 4
+        assert td.retry_delay_seconds == 8
+
+    def test_default_task_def_uses_tool_retry_count(self):
+        """_default_task_def respects custom retry_count."""
+        from agentspan.agents.runtime.runtime import _default_task_def
+
+        td = _default_task_def("my_task", retry_count=5)
+        assert td.retry_count == 5
+
+    def test_default_task_def_uses_tool_retry_delay(self):
+        """_default_task_def respects custom retry_delay_seconds."""
+        from agentspan.agents.runtime.runtime import _default_task_def
+
+        td = _default_task_def("my_task", retry_delay_seconds=30)
+        assert td.retry_delay_seconds == 30
+
+    def test_default_task_def_defaults(self):
+        """_default_task_def uses defaults when no overrides given."""
+        from agentspan.agents.runtime.runtime import _default_task_def
+
+        td = _default_task_def("my_task")
+        assert td.retry_count == 2
+        assert td.retry_delay_seconds == 2
+
+    def test_tool_registry_passes_retry_to_task_def(self):
+        """ToolRegistry passes retry_count/retry_delay_seconds from ToolDef to _default_task_def."""
+        from unittest.mock import MagicMock, patch
+
+        from agentspan.agents.runtime.tool_registry import ToolRegistry
+
+        @tool(retry_count=7, retry_delay_seconds=20)
+        def my_tool(x: str) -> str:
+            """A tool."""
+            return x
+
+        registry = ToolRegistry()
+
+        captured_task_defs = []
+
+        import agentspan.agents.runtime.runtime as _runtime_mod
+
+        original_default_task_def = _runtime_mod._default_task_def
+
+        def capturing_task_def(name, **kwargs):
+            td = original_default_task_def(name, **kwargs)
+            captured_task_defs.append((name, kwargs, td))
+            return td
+
+        mock_worker_task = MagicMock(return_value=lambda fn: fn)
+
+        with (
+            patch.object(_runtime_mod, "_default_task_def", side_effect=capturing_task_def),
+            patch(
+                "conductor.client.worker.worker_task.worker_task",
+                mock_worker_task,
+            ),
+        ):
+            registry.register_tool_workers([my_tool], "test_agent")
+
+        # Find the call for our tool
+        tool_calls = [(n, kw, td) for n, kw, td in captured_task_defs if n == "my_tool"]
+        assert len(tool_calls) == 1
+        _name, kwargs, task_def = tool_calls[0]
+        assert kwargs.get("retry_count") == 7
+        assert kwargs.get("retry_delay_seconds") == 20
+        assert task_def.retry_count == 7
+        assert task_def.retry_delay_seconds == 20
