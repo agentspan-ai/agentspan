@@ -66,9 +66,18 @@ class ToolRegistry:
             if td.func is not None and td.tool_type in ("worker", "cli"):
                 guardrails = td.guardrails if td.guardrails else None
                 wrapper = make_tool_worker(td.func, td.name, guardrails=guardrails, tool_def=td)
+                task_def_kwargs: dict = {}
+                if td.retry_count is not None:
+                    task_def_kwargs["retry_count"] = td.retry_count
+                if td.retry_delay_seconds is not None:
+                    task_def_kwargs["retry_delay_seconds"] = td.retry_delay_seconds
+                if td.retry_logic is not None:
+                    task_def_kwargs["retry_logic"] = td.retry_logic
+                if td.timeout_policy is not None:
+                    task_def_kwargs["timeout_policy"] = td.timeout_policy
                 worker_task(
                     task_definition_name=td.name,
-                    task_def=_default_task_def(td.name),
+                    task_def=_default_task_def(td.name, **task_def_kwargs),
                     register_task_def=True,
                     overwrite_task_def=True,
                     domain=domain if (agent_stateful or td.stateful) else None,

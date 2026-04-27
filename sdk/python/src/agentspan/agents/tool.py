@@ -74,6 +74,10 @@ class ToolDef:
     func: Optional[Callable[..., Any]] = field(default=None, repr=False)
     approval_required: bool = False
     timeout_seconds: Optional[int] = None
+    retry_count: Optional[int] = None
+    retry_delay_seconds: Optional[int] = None
+    retry_logic: Optional[str] = None
+    timeout_policy: Optional[str] = None
     tool_type: str = "worker"
     config: Dict[str, Any] = field(default_factory=dict)
     guardrails: List[Any] = field(default_factory=list)
@@ -96,6 +100,10 @@ def tool(
     external: bool = False,
     approval_required: bool = False,
     timeout_seconds: Optional[int] = None,
+    retry_count: Optional[int] = None,
+    retry_delay_seconds: Optional[int] = None,
+    retry_logic: Optional[str] = None,
+    timeout_policy: Optional[str] = None,
     guardrails: Optional[List[Any]] = None,
     isolated: bool = True,
     credentials: Optional[List[Any]] = None,
@@ -110,6 +118,10 @@ def tool(
     external: bool = False,
     approval_required: bool = False,
     timeout_seconds: Optional[int] = None,
+    retry_count: Optional[int] = None,
+    retry_delay_seconds: Optional[int] = None,
+    retry_logic: Optional[str] = None,
+    timeout_policy: Optional[str] = None,
     guardrails: Optional[List[Any]] = None,
     isolated: bool = True,
     credentials: Optional[List[Any]] = None,
@@ -155,6 +167,10 @@ def tool(
             func=None if external else fn,
             approval_required=approval_required,
             timeout_seconds=timeout_seconds,
+            retry_count=retry_count,
+            retry_delay_seconds=retry_delay_seconds,
+            retry_logic=retry_logic,
+            timeout_policy=timeout_policy,
             tool_type="worker",
             guardrails=list(guardrails) if guardrails else [],
             isolated=isolated,

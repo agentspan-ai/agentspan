@@ -41,7 +41,15 @@ from agentspan.agents.runtime.http_client import AgentHttpClient, SSEUnavailable
 logger = logging.getLogger("agentspan.agents.runtime")
 
 
-def _default_task_def(name: str, *, response_timeout_seconds: int = 10) -> Any:
+def _default_task_def(
+    name: str,
+    *,
+    response_timeout_seconds: int = 10,
+    retry_count: int = 2,
+    retry_delay_seconds: int = 2,
+    retry_logic: str = "LINEAR_BACKOFF",
+    timeout_policy: str = "RETRY",
+) -> Any:
     """Create a TaskDef with standard retry policy for agent worker tasks.
 
     Timeout is 0 (no timeout) — the agent configuration controls execution
@@ -51,16 +59,20 @@ def _default_task_def(name: str, *, response_timeout_seconds: int = 10) -> Any:
     within this time, Conductor marks the task as timed out and retries.
     Kept short to detect dead workers quickly; lease extension heartbeats
     (at 80% of this value) keep long-running tasks alive automatically.
+
+    retry_count, retry_delay_seconds, retry_logic, timeout_policy: override
+    the default retry policy.  Pass values from a ToolDef to honour
+    per-tool retry configuration set via the @tool decorator.
     """
     from conductor.client.http.models.task_def import TaskDef
 
     td = TaskDef(name=name)
-    td.retry_count = 2
-    td.retry_logic = "LINEAR_BACKOFF"
-    td.retry_delay_seconds = 2
+    td.retry_count = retry_count
+    td.retry_logic = retry_logic
+    td.retry_delay_seconds = retry_delay_seconds
     td.timeout_seconds = 0
     td.response_timeout_seconds = response_timeout_seconds
-    td.timeout_policy = "RETRY"
+    td.timeout_policy = timeout_policy
     return td
 
 
