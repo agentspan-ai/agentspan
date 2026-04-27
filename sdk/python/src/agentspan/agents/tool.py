@@ -984,7 +984,7 @@ def wait_for_message_tool(
         )
 
         # From the caller side:
-        runtime.send_message(workflow_id, {"text": "hello"})
+        runtime.send_message(execution_id, {"text": "hello"})
     """
     config = {"batchSize": batch_size}
     if not blocking:

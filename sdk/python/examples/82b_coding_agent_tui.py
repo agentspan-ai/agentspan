@@ -9,15 +9,19 @@ Like 82_coding_agent.py, but with two improvements:
   - prompt_toolkit TUI: scrollable output + always-available input prompt.
 
 Usage:
-    python 82b_coding_agent_tui.py                      # new session in current dir
-    python 82b_coding_agent_tui.py --cwd /path/to/repo  # new session in a specific dir
-    python 82b_coding_agent_tui.py --resume             # resume last session
+    # With uv (from sdk/python) — pulls prompt_toolkit in for this run only, no project change:
+    uv run --with prompt_toolkit examples/82b_coding_agent_tui.py
+    uv run --with prompt_toolkit examples/82b_coding_agent_tui.py --cwd /path/to/repo
+    uv run --with prompt_toolkit examples/82b_coding_agent_tui.py --resume
+
+    # Or with pip + python (install prompt_toolkit first):
+    pip install prompt_toolkit
+    python 82b_coding_agent_tui.py --cwd /path/to/repo
 
 Requirements:
-    - pip install prompt_toolkit
-    - Conductor server (conductor.workflow-message-queue.enabled=true)
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
-    - AGENTSPAN_LLM_MODEL=anthropic/claude-sonnet-4-20250514
+    - AgentSpan server running at http://localhost:6767
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
+    - AGENTSPAN_LLM_MODEL=openai/gpt-4o
 """
 
 import argparse

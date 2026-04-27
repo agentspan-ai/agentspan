@@ -42,6 +42,20 @@ public class AgentCompiler {
     private int contextMaxSizeBytes = 32768;
     private int contextMaxValueSizeBytes = 4096;
 
+    /**
+     * Sanitizes an agent name for use as a Conductor task reference name.
+     *
+     * <p>Conductor DO_WHILE loop conditions evaluate task references as JavaScript
+     * identifiers (e.g. {@code $.myAgent_loop['iteration']}). Hyphens and any other
+     * character outside {@code [a-zA-Z0-9_]} are not valid in JS identifier position,
+     * so they are replaced with underscores here.</p>
+     *
+     * <p>This method is idempotent — already-sanitized names pass through unchanged.</p>
+     */
+    static String toRef(String name) {
+        return name.replaceAll("[^a-zA-Z0-9_]", "_");
+    }
+
     static final class ResolvedInstructions {
         private final List<WorkflowTask> preTasks;
         private final String text;
@@ -139,8 +153,8 @@ public class AgentCompiler {
 
     WorkflowDef compileSimple(AgentConfig config) {
         ParsedModel parsed = ModelParser.parse(config.getModel());
-        String llmRef = config.getName() + "_llm";
-        String instructionsRef = config.getName() + "_instructions";
+        String llmRef = toRef(config.getName()) + "_llm";
+        String instructionsRef = toRef(config.getName()) + "_instructions";
 
         WorkflowDef wf = createWorkflow(config);
         ResolvedInstructions resolvedInstructions = resolveInstructions(config, instructionsRef);
@@ -166,7 +180,7 @@ public class AgentCompiler {
 
         // Guarded path: LLM + guardrails in DoWhile loop
         String contentRef = ref(llmRef + ".output.result");
-        String loopRef = config.getName() + "_loop";
+        String loopRef = toRef(config.getName()) + "_loop";
         int maxTurns = config.getMaxTurns() > 0 ? config.getMaxTurns() : 25;
 
         List<WorkflowTask> loopTasks = new ArrayList<>();
@@ -220,7 +234,7 @@ public class AgentCompiler {
         WorkflowTask loop = buildDoWhile(loopRef, termCondition, loopTasks, loopInputs);
 
         // Post-loop: resolve output (guardrail fix or human edit may override LLM output)
-        String resolveRef = config.getName() + "_resolve_output";
+        String resolveRef = toRef(config.getName()) + "_resolve_output";
         WorkflowTask resolveTask = buildResolveOutputTask(resolveRef, llmRef);
 
         List<WorkflowTask> tasks = new ArrayList<>(resolvedInstructions.getPreTasks());
@@ -240,8 +254,8 @@ public class AgentCompiler {
 
     WorkflowDef compileWithTools(AgentConfig config) {
         ParsedModel parsed = ModelParser.parse(config.getModel());
-        String llmRef = config.getName() + "_llm";
-        String instructionsRef = config.getName() + "_instructions";
+        String llmRef = toRef(config.getName()) + "_llm";
+        String instructionsRef = toRef(config.getName()) + "_instructions";
         List<ToolConfig> tools = config.getTools();
 
         ToolCompiler tc = new ToolCompiler();
@@ -322,7 +336,7 @@ public class AgentCompiler {
         List<WorkflowTask> loopTasks = new ArrayList<>();
 
         // Context injection: prepend _agent_state JSON + signals to user prompt (with size limits)
-        String ctxInjectRef = config.getName() + "_ctx_inject";
+        String ctxInjectRef = toRef(config.getName()) + "_ctx_inject";
         WorkflowTask ctxInject = new WorkflowTask();
         ctxInject.setType("INLINE");
         ctxInject.setTaskReferenceName(ctxInjectRef);
@@ -415,7 +429,7 @@ public class AgentCompiler {
             WorkflowTask stopWhenTask =
                     TerminationCompiler.compileStopWhen(config.getStopWhen().getTaskName(), config.getName(), llmRef);
             loopTasks.add(stopWhenTask);
-            stopWhenRef = config.getName() + "_stop_when";
+            stopWhenRef = toRef(config.getName()) + "_stop_when";
         }
 
         // Optional termination condition
@@ -424,11 +438,11 @@ public class AgentCompiler {
             WorkflowTask termTask =
                     TerminationCompiler.compileTermination(config.getTermination(), config.getName(), llmRef);
             loopTasks.add(termTask);
-            terminationRef = config.getName() + "_termination";
+            terminationRef = toRef(config.getName()) + "_termination";
         }
 
         // DoWhile loop
-        String loopRef = config.getName() + "_loop";
+        String loopRef = toRef(config.getName()) + "_loop";
         int maxTurns = config.getMaxTurns() > 0 ? config.getMaxTurns() : 25;
 
         String hasToolCalls =
@@ -478,7 +492,7 @@ public class AgentCompiler {
         allTasks.addAll(resolvedInstructions.getPreTasks());
 
         // Resolve input context with null fallback (INLINE → SET_VARIABLE pattern)
-        String ctxResolveRef = config.getName() + "_ctx_resolve";
+        String ctxResolveRef = toRef(config.getName()) + "_ctx_resolve";
         WorkflowTask ctxResolve = new WorkflowTask();
         ctxResolve.setType("INLINE");
         ctxResolve.setTaskReferenceName(ctxResolveRef);
@@ -500,13 +514,13 @@ public class AgentCompiler {
         }
         WorkflowTask initState = new WorkflowTask();
         initState.setType("SET_VARIABLE");
-        initState.setTaskReferenceName(config.getName() + "_init_state");
+        initState.setTaskReferenceName(toRef(config.getName()) + "_init_state");
         initState.setInputParameters(initVars);
         allTasks.add(initState);
 
         // Required tools enforcement: wrap loop + check in outer DO_WHILE
         if (config.getRequiredTools() != null && !config.getRequiredTools().isEmpty()) {
-            String checkRef = config.getName() + "_required_tools_check";
+            String checkRef = toRef(config.getName()) + "_required_tools_check";
             WorkflowTask checkTask = new WorkflowTask();
             checkTask.setType("INLINE");
             checkTask.setTaskReferenceName(checkRef);
@@ -515,7 +529,7 @@ public class AgentCompiler {
                     "expression", JavaScriptBuilder.requiredToolsCheckScript(config.getRequiredTools()),
                     "completedTaskNames", ref(loopRef + ".output")));
 
-            String outerLoopRef = config.getName() + "_required_tools_loop";
+            String outerLoopRef = toRef(config.getName()) + "_required_tools_loop";
             String outerCondition = String.format(
                     "if ( $.%s.output.satisfied == false && $.%s['iteration'] < 3 ) { true; } else { false; }",
                     checkRef, outerLoopRef);
@@ -538,7 +552,7 @@ public class AgentCompiler {
         // Post-loop: resolve output (guardrail fix or human edit may override LLM output)
         List<GuardrailConfig> outGuardrails = getOutputGuardrails(config);
         if (!outGuardrails.isEmpty()) {
-            String resolveRef = config.getName() + "_resolve_output";
+            String resolveRef = toRef(config.getName()) + "_resolve_output";
             allTasks.add(buildResolveOutputTask(resolveRef, llmRef));
 
             Map<String, Object> outputParams = new LinkedHashMap<>();
@@ -565,8 +579,8 @@ public class AgentCompiler {
 
     WorkflowDef compileHybrid(AgentConfig config) {
         ParsedModel parsed = ModelParser.parse(config.getModel());
-        String llmRef = config.getName() + "_llm";
-        String instructionsRef = config.getName() + "_instructions";
+        String llmRef = toRef(config.getName()) + "_llm";
+        String instructionsRef = toRef(config.getName()) + "_instructions";
 
         // Build transfer tools for each sub-agent
         List<ToolConfig> allTools = new ArrayList<>(config.getTools());
@@ -578,7 +592,7 @@ public class AgentCompiler {
                                     ? (String) sub.getInstructions()
                                     : "Agent: " + sub.getName());
             ToolConfig transferTool = ToolConfig.builder()
-                    .name(config.getName() + "_transfer_to_" + sub.getName())
+                    .name(toRef(config.getName()) + "_transfer_to_" + toRef(sub.getName()))
                     .description("Transfer the conversation to " + sub.getName() + ". " + subDesc)
                     .inputSchema(Map.of("type", "object", "properties", Map.of(), "required", List.of()))
                     .toolType("worker")
@@ -648,9 +662,9 @@ public class AgentCompiler {
         WorkflowTask toolRouter = toolRoutingResult.getRouterTask();
 
         // Check-transfer worker
-        String checkTransferRef = config.getName() + "_check_transfer";
+        String checkTransferRef = toRef(config.getName()) + "_check_transfer";
         WorkflowTask checkTransferTask = new WorkflowTask();
-        checkTransferTask.setName(config.getName() + "_check_transfer");
+        checkTransferTask.setName(toRef(config.getName()) + "_check_transfer");
         checkTransferTask.setTaskReferenceName(checkTransferRef);
         checkTransferTask.setType("SIMPLE");
         Map<String, Object> ctInputs = new LinkedHashMap<>();
@@ -661,7 +675,7 @@ public class AgentCompiler {
         List<WorkflowTask> loopTasks = new ArrayList<>();
 
         // Context injection for hybrid loop (with size limits + signals)
-        String hybridCtxInjectRef = config.getName() + "_ctx_inject";
+        String hybridCtxInjectRef = toRef(config.getName()) + "_ctx_inject";
         WorkflowTask hybridCtxInject = new WorkflowTask();
         hybridCtxInject.setType("INLINE");
         hybridCtxInject.setTaskReferenceName(hybridCtxInjectRef);
@@ -736,7 +750,7 @@ public class AgentCompiler {
         loopTasks.add(checkTransferTask);
 
         // DoWhile loop
-        String loopRef = config.getName() + "_loop";
+        String loopRef = toRef(config.getName()) + "_loop";
         int maxTurns = config.getMaxTurns() > 0 ? config.getMaxTurns() : 25;
 
         String hasToolCalls =
@@ -766,14 +780,14 @@ public class AgentCompiler {
         // After loop: SwitchTask routing to sub-agents
         WorkflowTask transferSwitch = new WorkflowTask();
         transferSwitch.setType("SWITCH");
-        transferSwitch.setTaskReferenceName(config.getName() + "_transfer_check");
+        transferSwitch.setTaskReferenceName(toRef(config.getName()) + "_transfer_check");
         transferSwitch.setEvaluatorType("value-param");
         transferSwitch.setExpression("switchCaseValue");
         transferSwitch.setInputParameters(Map.of("switchCaseValue", ref(checkTransferRef + ".output.transfer_to")));
 
         Map<String, List<WorkflowTask>> transferCases = new LinkedHashMap<>();
         for (AgentConfig sub : config.getAgents()) {
-            String subTaskRef = config.getName() + "_transfer_" + sub.getName();
+            String subTaskRef = toRef(config.getName()) + "_transfer_" + toRef(sub.getName());
             WorkflowTask subTask = compileSubAgent(
                     sub,
                     subTaskRef,
@@ -785,7 +799,7 @@ public class AgentCompiler {
         transferSwitch.setDecisionCases(transferCases);
 
         // Resolve input context with null fallback (INLINE → SET_VARIABLE pattern)
-        String hybridCtxResolveRef = config.getName() + "_ctx_resolve";
+        String hybridCtxResolveRef = toRef(config.getName()) + "_ctx_resolve";
         WorkflowTask hybridCtxResolve = new WorkflowTask();
         hybridCtxResolve.setType("INLINE");
         hybridCtxResolve.setTaskReferenceName(hybridCtxResolveRef);
@@ -804,7 +818,7 @@ public class AgentCompiler {
         }
         WorkflowTask initStateHybrid = new WorkflowTask();
         initStateHybrid.setType("SET_VARIABLE");
-        initStateHybrid.setTaskReferenceName(config.getName() + "_init_state");
+        initStateHybrid.setTaskReferenceName(toRef(config.getName()) + "_init_state");
         initStateHybrid.setInputParameters(initHybridVars);
 
         if (discoveryResult != null) {
@@ -828,7 +842,9 @@ public class AgentCompiler {
         Map<String, Object> outputRefs = new LinkedHashMap<>();
         outputRefs.put("direct", ref(llmRef + ".output.result"));
         for (AgentConfig sub : config.getAgents()) {
-            outputRefs.put(sub.getName(), ref(config.getName() + "_transfer_" + sub.getName() + ".output.result"));
+            outputRefs.put(
+                    sub.getName(),
+                    ref(toRef(config.getName()) + "_transfer_" + toRef(sub.getName()) + ".output.result"));
         }
         Map<String, Object> hybridOutput = new LinkedHashMap<>();
         hybridOutput.put("result", outputRefs);
@@ -993,7 +1009,7 @@ public class AgentCompiler {
             }
         } else {
             // Inline string instructions
-            String instrText = resolveInstructions(config, config.getName() + "_instructions")
+            String instrText = resolveInstructions(config, toRef(config.getName()) + "_instructions")
                     .getText();
             if (toolSpecs != null && instrText.isEmpty()) {
                 instrText = "You are a helpful assistant.";

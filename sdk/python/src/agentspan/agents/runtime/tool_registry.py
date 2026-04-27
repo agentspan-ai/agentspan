@@ -72,6 +72,7 @@ class ToolRegistry:
                     register_task_def=True,
                     overwrite_task_def=True,
                     domain=domain if (agent_stateful or td.stateful) else None,
+                    lease_extend_enabled=True,
                 )(wrapper)
                 _tool_task_names[td.name] = td.name
                 logger.debug("Registered tool worker '%s'", td.name)

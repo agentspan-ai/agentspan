@@ -129,12 +129,17 @@ class WorkerManager:
         if th is None:
             return
 
-        # Names of workers that already have a running process
-        existing = {w.get_task_definition_name() for w in th.workers}
+        # Track (task_name, domain) pairs that already have a running process.
+        # A worker registered under domain=None and the same worker under a
+        # specific domain are DIFFERENT polling targets and both need processes.
+        existing = {
+            (w.get_task_definition_name(), getattr(w, "domain", None))
+            for w in th.workers
+        }
 
         for (task_def_name, domain), record in list(_decorated_functions.items()):
-            if task_def_name in existing:
-                continue  # already running
+            if (task_def_name, domain) in existing:
+                continue  # already running with same domain
 
             fn = record["func"]
             try:
@@ -165,7 +170,7 @@ class WorkerManager:
                 new_proc.daemon = True
             new_proc.start()
             th.workers.append(worker)
-            existing.add(task_def_name)
+            existing.add((task_def_name, domain))
             # Extend the monitor's per-worker restart tracking arrays so that
             # the monitor can restart this process if it deadlocks after fork().
             if hasattr(th, "_restart_counts"):

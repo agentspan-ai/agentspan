@@ -3,7 +3,6 @@ import {
   CopySimple as CopyIcon,
   Trash as DeleteIcon,
   ArrowClockwise as RefreshIcon,
-  Tag as TagIcon,
 } from "@phosphor-icons/react";
 import { Button, DataTable, IconButton, NavLink, Paper } from "components";
 import { FilterObjectItem } from "components/DataTable/state";
@@ -12,7 +11,6 @@ import Header from "components/Header";
 import NoDataComponent from "components/NoDataComponent";
 import { SnackbarMessage } from "components/SnackbarMessage";
 import ConfirmChoiceDialog from "components/ConfirmChoiceDialog";
-import AddTagDialog, { TagDialogProps } from "components/tags/AddTagDialog";
 import TagList from "components/v1/TagList";
 import PlayIcon from "components/v1/icons/PlayIcon";
 import { MessageContext } from "components/v1/layout/MessageContext";
@@ -20,7 +18,6 @@ import { removeDeletedWorkflow } from "pages/runWorkflow/runWorkflowUtils";
 import { useCallback, useContext, useMemo, useState } from "react";
 import { Helmet } from "react-helmet";
 import { UseQueryResult } from "react-query";
-import { useNavigate } from "react-router";
 import SectionContainer from "shared/SectionContainer";
 import SectionHeader from "shared/SectionHeader";
 import SectionHeaderActions from "shared/SectionHeaderActions";
@@ -42,14 +39,10 @@ import { getUniqueWorkflows } from "utils/workflow";
 import CloneAgentDialog from "./dialog/CloneAgentDialog";
 
 export default function AgentDefinitions() {
-  const navigate = useNavigate();
   const { isTrialExpired } = useAuth();
 
   const { data, isFetching, refetch }: UseQueryResult<WorkflowDef[]> =
     useWorkflowDefs();
-  const [showAddTagDialog, setShowAddTagDialog] = useState(false);
-  const [addTagDialogData, setAddTagDialogData] =
-    useState<TagDialogProps | null>(null);
 
   const [selectedWorkflowWithAction, setSelectedWorkflowWithAction] = useState<{
     selectedWorkflow: WorkflowDef | null;
@@ -242,37 +235,6 @@ export default function AgentDefinitions() {
         renderer: (name: string, workflowRowData: WorkflowDef) => {
           return (
             <Box style={{ display: "flex", justifyContent: "space-evenly" }}>
-              <Tooltip title={"Run agent"}>
-                <IconButton
-                  id={`run-${workflowRowData.name}-btn`}
-                  disabled={isTrialExpired}
-                  onClick={() => {
-                    navigate("/runWorkflow", {
-                      state: {
-                        execution: {
-                          workflowName: workflowRowData.name,
-                          workflowVersion: workflowRowData.version,
-                          input: workflowRowData?.inputParameters
-                            ? Object.fromEntries(
-                                workflowRowData.inputParameters.map((key) => [
-                                  key,
-                                  "",
-                                ]),
-                              )
-                            : {},
-                        },
-                      },
-                    });
-                  }}
-                  size="small"
-                  sx={{
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  <PlayIcon size={22} />
-                </IconButton>
-              </Tooltip>
-
               <Tooltip title={"Clone agent"}>
                 <IconButton
                   onClick={() =>
@@ -288,23 +250,6 @@ export default function AgentDefinitions() {
                   }}
                 >
                   <CopyIcon size={20} />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title={"Add/Edit tags"}>
-                <IconButton
-                  id={`add-tags-${workflowRowData.name}-btn`}
-                  disabled={isTrialExpired}
-                  onClick={() => {
-                    setAddTagDialogData({
-                      tags: workflowRowData.tags || [],
-                      itemName: workflowRowData.name,
-                      itemType: "workflow",
-                    } as TagDialogProps);
-                    setShowAddTagDialog(true);
-                  }}
-                  size="small"
-                >
-                  <TagIcon size={20} />
                 </IconButton>
               </Tooltip>
 
@@ -335,7 +280,7 @@ export default function AgentDefinitions() {
         },
       },
     ],
-    [data, navigate, isTrialExpired],
+    [data, isTrialExpired],
   );
 
   const handleFilterChange = useCallback(
@@ -388,22 +333,6 @@ export default function AgentDefinitions() {
           />
         )}
 
-      <AddTagDialog
-        open={showAddTagDialog && !!addTagDialogData}
-        tags={addTagDialogData?.tags || []}
-        itemType={addTagDialogData?.itemType}
-        itemName={addTagDialogData?.itemName}
-        onClose={() => {
-          setShowAddTagDialog(false);
-          setAddTagDialogData(null);
-        }}
-        onSuccess={() => {
-          setShowAddTagDialog(false);
-          setAddTagDialogData(null);
-          refetch();
-        }}
-      />
-
       {confirmDelete && (
         <ConfirmChoiceDialog
           handleConfirmationValue={(selectedChoice) => {
@@ -411,7 +340,7 @@ export default function AgentDefinitions() {
               // @ts-ignore
               deleteWorkflowVersionAction.mutate({
                 method: "delete",
-                path: `agent/definitions/${encodeURIComponent(
+                path: `/agent/${encodeURIComponent(
                   confirmDelete.workflowName,
                 )}?version=${confirmDelete.workflowVersion}`,
               });
