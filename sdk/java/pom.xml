@@ -26,6 +26,8 @@
         <jackson.version>2.17.1</jackson.version>
         <slf4j.version>2.0.13</slf4j.version>
         <junit.version>5.11.0</junit.version>
+        <!-- Exclude e2e tests by default; override with -Pe2e profile to include them -->
+        <excludeTestGroups>e2e</excludeTestGroups>
     </properties>
 
     <dependencyManagement>
@@ -92,7 +94,21 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.2.5</version>
+                <configuration>
+                    <!-- Exclude e2e tests by default; run with -Pe2e to include them -->
+                    <excludedGroups>${excludeTestGroups}</excludedGroups>
+                </configuration>
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!-- Run with -Pe2e to include e2e tests alongside unit tests -->
+        <profile>
+            <id>e2e</id>
+            <properties>
+                <excludeTestGroups></excludeTestGroups>
+            </properties>
+        </profile>
+    </profiles>
 </project>

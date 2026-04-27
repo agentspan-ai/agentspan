@@ -56,6 +56,22 @@ public class HttpApi {
     }
 
     /**
+     * Compile an agent configuration into a workflow definition.
+     *
+     * <p>Calls {@code POST /api/agent/compile} with {@code {"agentConfig": agentConfig}}
+     * and returns the server response containing {@code workflowDef} and
+     * {@code requiredWorkers}.
+     *
+     * @param agentConfig serialized agent configuration
+     * @return server response containing workflowDef and requiredWorkers
+     */
+    public Map<String, Object> compileAgent(Map<String, Object> agentConfig) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("agentConfig", agentConfig);
+        return post("/api/agent/compile", body);
+    }
+
+    /**
      * Get the current status of an agent workflow.
      *
      * @param workflowId the workflow ID

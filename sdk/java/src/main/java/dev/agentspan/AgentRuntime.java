@@ -72,6 +72,30 @@ public class AgentRuntime implements AutoCloseable {
     // ── Synchronous API ──────────────────────────────────────────────────
 
     /**
+     * Compile an agent into a workflow definition without executing it.
+     *
+     * <p>Serializes the agent and calls {@code POST /api/agent/compile}.
+     * Returns the server response containing {@code workflowDef} and
+     * {@code requiredWorkers}.
+     *
+     * <p>Example:
+     * <pre>{@code
+     * Map<String, Object> plan = runtime.plan(agent);
+     * Map<String, Object> workflowDef = (Map<String, Object>) plan.get("workflowDef");
+     * }</pre>
+     *
+     * @param agent the agent to compile
+     * @return plan result with workflowDef and requiredWorkers
+     */
+    public Map<String, Object> plan(Agent agent) {
+        Map<String, Object> agentConfig = serializer.serialize(agent);
+        logger.debug("Compiling agent '{}'", agent.getName());
+        Map<String, Object> result = httpApi.compileAgent(agentConfig);
+        logger.info("Agent '{}' compiled successfully", agent.getName());
+        return result;
+    }
+
+    /**
      * Execute an agent synchronously and return the result.
      *
      * @param agent  the agent to run
