@@ -844,3 +844,140 @@ class TestToolCredentialParams:
         assert td.approval_required is True
         assert td.isolated is False
         assert "KEY" in td.credentials
+
+
+class TestToolRetryConfig:
+    """Test @tool decorator retry_count and retry_delay_seconds parameters."""
+
+    def test_tool_retry_count_stored_on_tool_def(self):
+        """@tool(retry_count=5) stores retry_count on the ToolDef."""
+
+        @tool(retry_count=5)
+        def my_tool(x: str) -> str:
+            """A tool."""
+            return x
+
+        assert my_tool._tool_def.retry_count == 5
+
+    def test_tool_retry_delay_stored_on_tool_def(self):
+        """@tool(retry_delay_seconds=10) stores retry_delay_seconds on the ToolDef."""
+
+        @tool(retry_delay_seconds=10)
+        def my_tool(x: str) -> str:
+            """A tool."""
+            return x
+
+        assert my_tool._tool_def.retry_delay_seconds == 10
+
+    def test_tool_retry_both_params(self):
+        """@tool(retry_count=0, retry_delay_seconds=0) stores both correctly."""
+
+        @tool(retry_count=0, retry_delay_seconds=0)
+        def my_tool(x: str) -> str:
+            """A tool."""
+            return x
+
+        assert my_tool._tool_def.retry_count == 0
+        assert my_tool._tool_def.retry_delay_seconds == 0
+
+    def test_tool_retry_defaults_to_none(self):
+        """Bare @tool should have retry_count=None and retry_delay_seconds=None."""
+
+        @tool
+        def my_tool(x: str) -> str:
+            """A tool."""
+            return x
+
+        assert my_tool._tool_def.retry_count is None
+        assert my_tool._tool_def.retry_delay_seconds is None
+
+    def test_default_task_def_uses_defaults(self):
+        """_default_task_def with no retry args produces retry_count=2, retry_delay_seconds=2."""
+        from agentspan.agents.runtime.runtime import _default_task_def
+
+        td = _default_task_def("test_task")
+        assert td.retry_count == 2
+        assert td.retry_delay_seconds == 2
+
+    def test_default_task_def_custom_retry(self):
+        """_default_task_def with custom retry args reflects those values."""
+        from agentspan.agents.runtime.runtime import _default_task_def
+
+        td = _default_task_def("test_task", retry_count=5, retry_delay_seconds=10)
+        assert td.retry_count == 5
+        assert td.retry_delay_seconds == 10
+
+    def test_default_task_def_zero_retry(self):
+        """_default_task_def with retry_count=0 disables retries."""
+        from agentspan.agents.runtime.runtime import _default_task_def
+
+        td = _default_task_def("test_task", retry_count=0)
+        assert td.retry_count == 0
+
+    def test_default_task_def_negative_retry_count_raises(self):
+        """_default_task_def raises ValueError for negative retry_count."""
+        from agentspan.agents.runtime.runtime import _default_task_def
+
+        with pytest.raises(ValueError, match="retry_count must be >= 0"):
+            _default_task_def("test_task", retry_count=-1)
+
+    def test_default_task_def_negative_retry_delay_raises(self):
+        """_default_task_def raises ValueError for negative retry_delay_seconds."""
+        from agentspan.agents.runtime.runtime import _default_task_def
+
+        with pytest.raises(ValueError, match="retry_delay_seconds must be >= 0"):
+            _default_task_def("test_task", retry_delay_seconds=-1)
+
+    def test_register_tools_forwards_retry_config(self):
+        """register_tool_workers forwards retry_count and retry_delay_seconds to _default_task_def."""
+        from unittest.mock import MagicMock, call, patch
+
+        from agentspan.agents.runtime.tool_registry import ToolRegistry
+        from agentspan.agents.tool import ToolDef
+
+        def my_func(x: str) -> str:
+            """A tool."""
+            return x
+
+        td = ToolDef(
+            name="retry_tool",
+            description="A tool with retry config",
+            func=my_func,
+            tool_type="worker",
+            retry_count=3,
+            retry_delay_seconds=5,
+        )
+
+        captured_calls = []
+
+        def fake_default_task_def(name, *, response_timeout_seconds=10, retry_count=None, retry_delay_seconds=None):
+            captured_calls.append({
+                "name": name,
+                "retry_count": retry_count,
+                "retry_delay_seconds": retry_delay_seconds,
+            })
+            # Return a minimal mock TaskDef
+            mock_td = MagicMock()
+            mock_td.retry_count = retry_count if retry_count is not None else 2
+            mock_td.retry_delay_seconds = retry_delay_seconds if retry_delay_seconds is not None else 2
+            return mock_td
+
+        mock_worker_task_decorator = MagicMock(return_value=lambda fn: fn)
+        mock_worker_task = MagicMock(return_value=mock_worker_task_decorator)
+
+        # _default_task_def and worker_task are imported inside register_tool_workers,
+        # so we patch them at their source modules.
+        # get_tool_defs is also imported inside the method body, so patch at its source.
+        with (
+            patch("agentspan.agents.runtime.runtime._default_task_def", side_effect=fake_default_task_def),
+            patch("conductor.client.worker.worker_task.worker_task", mock_worker_task),
+            patch("agentspan.agents.tool.get_tool_defs", return_value=[td]),
+            patch("agentspan.agents.runtime.tool_registry.make_tool_worker", return_value=lambda task: None),
+        ):
+            registry = ToolRegistry()
+            registry.register_tool_workers([td], "test_agent")
+
+        assert len(captured_calls) == 1
+        assert captured_calls[0]["name"] == "retry_tool"
+        assert captured_calls[0]["retry_count"] == 3
+        assert captured_calls[0]["retry_delay_seconds"] == 5

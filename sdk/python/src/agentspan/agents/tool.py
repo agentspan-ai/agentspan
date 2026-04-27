@@ -80,6 +80,8 @@ class ToolDef:
     isolated: bool = True
     credentials: List[Any] = field(default_factory=list)
     stateful: bool = False
+    retry_count: Optional[int] = None
+    retry_delay_seconds: Optional[int] = None
 
 
 # ── @tool decorator ─────────────────────────────────────────────────────
@@ -100,6 +102,8 @@ def tool(
     isolated: bool = True,
     credentials: Optional[List[Any]] = None,
     stateful: bool = False,
+    retry_count: Optional[int] = None,
+    retry_delay_seconds: Optional[int] = None,
 ) -> Callable[[F], F]: ...
 
 
@@ -114,6 +118,8 @@ def tool(
     isolated: bool = True,
     credentials: Optional[List[Any]] = None,
     stateful: bool = False,
+    retry_count: Optional[int] = None,
+    retry_delay_seconds: Optional[int] = None,
 ) -> Any:
     """Register a Python function as a Conductor agent tool.
 
@@ -137,6 +143,12 @@ def tool(
         hints) and description (via docstring), but **no local worker is
         started** — Conductor dispatches the task to whatever worker is polling
         for that task definition name.
+
+    Args:
+        retry_count: Number of retries on failure. Defaults to 2 if not
+            specified. Set to ``0`` to disable retries entirely.
+        retry_delay_seconds: Seconds between retries (linear backoff).
+            Defaults to 2 if not specified.
     """
 
     def _wrap(fn: F) -> F:
@@ -160,6 +172,8 @@ def tool(
             isolated=isolated,
             credentials=list(credentials) if credentials else [],
             stateful=stateful,
+            retry_count=retry_count,
+            retry_delay_seconds=retry_delay_seconds,
         )
 
         @functools.wraps(fn)
