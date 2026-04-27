@@ -11,27 +11,34 @@ import dev.agentspan.internal.ToolRegistry;
 import dev.agentspan.model.AgentResult;
 import org.junit.jupiter.api.*;
 
-import java.util.List;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Suite 2: Tool Calling — agent execution with structural validation.
+ * Suite 2: Tool Calling — agent execution with side-effect validation.
  *
- * <p>Tests verify that tools are actually called during execution by inspecting
- * the workflow task data — not by parsing LLM output text.
+ * <p>Tests verify that tools are actually called during execution by checking
+ * a side-effect flag set inside the tool function body — not by parsing
+ * LLM output text or inspecting workflow task names.
  *
  * <p>CLAUDE.md rule: no LLM for validation unless doing evals.
- * Structural assertions only: task status, task presence in workflow.
+ * Side-effect assertion: tool function body must have executed.
+ *
+ * <p>The server names tool-call tasks as {@code call_{llm_call_id}__N}, not
+ * by the tool name, so referenceTaskName-based assertions don't work.
+ * The AtomicBoolean side-effect is the strongest counterfactual: if tool
+ * registration or dispatch is broken the flag stays false.
  */
 @Tag("e2e")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class E2eSuite2ToolCalling extends E2eBaseTest {
 
     private static AgentRuntime runtime;
+
+    /** Set to true inside the add() tool body when the tool is actually invoked. */
+    private static final AtomicBoolean toolWasCalled = new AtomicBoolean(false);
 
     @BeforeAll
     static void setup() {
@@ -50,6 +57,8 @@ class E2eSuite2ToolCalling extends E2eBaseTest {
     static class MathTools {
         @Tool(name = "add", description = "Add two integers and return the result")
         public int add(int a, int b) {
+            // Side-effect: prove the tool function body actually ran.
+            toolWasCalled.set(true);
             return a + b;
         }
     }
@@ -57,19 +66,19 @@ class E2eSuite2ToolCalling extends E2eBaseTest {
     // ── Tests ─────────────────────────────────────────────────────────────
 
     /**
-     * Agent calls the 'add' tool and the tool task completes successfully.
+     * Agent calls the 'add' tool and the tool function body executes.
      *
-     * COUNTERFACTUAL: if tool registration or serialization breaks, the tool task
-     * won't appear in the workflow OR won't have status COMPLETED.
-     *
-     * Structural assertion: find the task whose referenceTaskName contains "add"
-     * and assert its status == "COMPLETED".
+     * COUNTERFACTUAL: if tool registration is broken, the worker is never
+     * invoked, toolWasCalled stays false, and the assertion fails.
+     * If tool deserialization or dispatch breaks, the LLM either won't call
+     * the tool or the worker won't be polled, and the flag stays false.
      */
     @Test
     @Order(1)
     @Timeout(value = 300, unit = TimeUnit.SECONDS)
-    @SuppressWarnings("unchecked")
     void test_agent_calls_worker_tool() {
+        toolWasCalled.set(false); // reset before each run
+
         Agent agent = Agent.builder()
             .name("e2e_java_math_agent")
             .model(MODEL)
@@ -84,46 +93,9 @@ class E2eSuite2ToolCalling extends E2eBaseTest {
             "Agent did not complete. Status: " + result.getStatus()
             + ". Error: " + result.getError());
 
-        String workflowId = result.getWorkflowId();
-        assertNotNull(workflowId, "workflowId is null");
-        assertFalse(workflowId.isEmpty(), "workflowId is empty");
-
-        Map<String, Object> workflow = getWorkflow(workflowId);
-
-        // Find all tasks in the workflow that relate to the 'add' tool
-        List<Map<String, Object>> allWorkflowTasks = (List<Map<String, Object>>) workflow.get("tasks");
-        assertNotNull(allWorkflowTasks, "workflow has no 'tasks' field");
-
-        List<Map<String, Object>> addTasks = allWorkflowTasks.stream()
-            .filter(t -> {
-                String ref = (String) t.get("referenceTaskName");
-                return ref != null && ref.contains("add");
-            })
-            .collect(Collectors.toList());
-
-        assertFalse(addTasks.isEmpty(),
-            "No task with referenceTaskName containing 'add' found in workflow. "
-            + "Task names: " + allWorkflowTasks.stream()
-                .map(t -> (String) t.get("referenceTaskName"))
-                .collect(Collectors.toList())
-            + ". COUNTERFACTUAL: if tool is never called, this task won't appear.");
-
-        // Verify the tool task completed
-        Map<String, Object> addTask = addTasks.get(0);
-        String addTaskStatus = (String) addTask.get("status");
-        assertEquals("COMPLETED", addTaskStatus,
-            "Add tool task status is '" + addTaskStatus + "', expected 'COMPLETED'. "
-            + "COUNTERFACTUAL: if the tool call fails, task won't be COMPLETED.");
-
-        // Structural check: verify output contains the result of 7+8=15
-        Object outputDataObj = addTask.get("outputData");
-        if (outputDataObj instanceof Map) {
-            Map<String, Object> outputData = (Map<String, Object>) outputDataObj;
-            String outputStr = outputData.toString();
-            assertTrue(outputStr.contains("15"),
-                "Add tool output does not contain '15' (expected 7+8=15). "
-                + "Output data: " + outputData
-                + ". COUNTERFACTUAL: if the tool computation is wrong, 15 won't appear.");
-        }
+        assertTrue(toolWasCalled.get(),
+            "The 'add' tool function body was never called. "
+            + "COUNTERFACTUAL: if tool registration or the tool dispatch is broken, "
+            + "the worker is never invoked and this flag stays false.");
     }
 }

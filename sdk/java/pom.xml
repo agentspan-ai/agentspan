@@ -109,6 +109,21 @@
             <properties>
                 <excludeTestGroups></excludeTestGroups>
             </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <!-- Include unit tests and e2e suite classes (not named *Test) -->
+                            <includes>
+                                <include>**/*Test.java</include>
+                                <include>**/E2eSuite*.java</include>
+                            </includes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
     </profiles>
 </project>

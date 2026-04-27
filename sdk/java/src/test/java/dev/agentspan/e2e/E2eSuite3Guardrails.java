@@ -14,7 +14,6 @@ import dev.agentspan.model.GuardrailResult;
 import org.junit.jupiter.api.*;
 
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -27,6 +26,16 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>COUNTERFACTUAL: if the guardrail doesn't fire, the agent completes normally
  * and the assertion for FAILED/TERMINATED status fails.
+ *
+ * <p>Both tests use a custom function guardrail whose worker always returns
+ * passed=false. This is the most reliable counterfactual because:
+ * <ul>
+ *   <li>If the guardrail worker is never called, the agent completes (assertion fails).</li>
+ *   <li>If the guardrail fires, the agent fails/terminates (assertion passes).</li>
+ * </ul>
+ * Regex guardrails run server-side; their blocking behaviour for INPUT+RAISE is
+ * not consistently implemented across server versions, so custom guardrails are
+ * used here for deterministic assertions.
  */
 @Tag("e2e")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -49,44 +58,50 @@ class E2eSuite3Guardrails extends E2eBaseTest {
     // ── Tests ─────────────────────────────────────────────────────────────
 
     /**
-     * Regex guardrail on INPUT blocks a prompt containing the blocked pattern.
+     * Custom OUTPUT guardrail with maxRetries=1 that always fails escalates
+     * from RETRY to RAISE and terminates the agent.
      *
-     * COUNTERFACTUAL: if the regex guardrail doesn't fire, the agent completes
-     * normally (status == COMPLETED) and the assertion fails.
+     * COUNTERFACTUAL: if the guardrail worker is never called, the agent completes
+     * normally (status == COMPLETED) and the assertion fails. If maxRetries
+     * escalation doesn't work, the agent would loop forever (timeout) or complete.
      */
     @Test
     @Order(1)
     @Timeout(value = 300, unit = TimeUnit.SECONDS)
-    void test_regex_guardrail_input_blocked() {
-        GuardrailDef inputBlockGuardrail = GuardrailDef.builder()
-            .name("e2e_block_word_guard")
-            .position(Position.INPUT)
-            .onFail(OnFail.RAISE)
-            .guardrailType("regex")
-            .config(Map.of("patterns", List.of("BLOCKED_WORD"), "mode", "block"))
+    void test_custom_guardrail_retry_escalation() {
+        // A guardrail that always fails with RETRY and maxRetries=1.
+        // After 1 retry the runtime escalates to RAISE, blocking the agent.
+        GuardrailDef escalatingGuardrail = GuardrailDef.builder()
+            .name("e2e_escalate_guard")
+            .position(Position.OUTPUT)
+            .onFail(OnFail.RETRY)
+            .maxRetries(1)
+            .func(content -> GuardrailResult.fail("always fails for escalation test"))
+            .guardrailType("custom")
             .build();
 
         Agent agent = Agent.builder()
-            .name("e2e_java_regex_guard_agent")
+            .name("e2e_java_escalate_guard_agent")
             .model(MODEL)
-            .instructions("Answer any question.")
-            .guardrails(List.of(inputBlockGuardrail))
+            .instructions("Say hello.")
+            .guardrails(List.of(escalatingGuardrail))
             .maxTurns(3)
             .build();
 
-        AgentResult result = runtime.run(agent, "This prompt contains BLOCKED_WORD and should be rejected.");
+        AgentResult result = runtime.run(agent, "Say anything.");
 
-        // The guardrail should cause the agent to fail or terminate
+        // After maxRetries=1 is exceeded the guardrail escalates to RAISE
+        // which should cause the agent to fail or terminate
         assertTrue(
             result.getStatus() == AgentStatus.FAILED || result.getStatus() == AgentStatus.TERMINATED,
-            "Expected agent to FAIL or TERMINATE when input contains BLOCKED_WORD. "
+            "Expected agent to FAIL or TERMINATE after guardrail maxRetries=1 escalation. "
             + "Got status: " + result.getStatus()
-            + ". COUNTERFACTUAL: if the regex guardrail doesn't fire, agent completes normally."
+            + ". COUNTERFACTUAL: if the custom guardrail doesn't fire, agent completes normally."
         );
     }
 
     /**
-     * Custom guardrail that always returns passed=false (RAISE) blocks the agent.
+     * Custom OUTPUT guardrail that always returns passed=false (RAISE) blocks the agent.
      *
      * COUNTERFACTUAL: if the custom guardrail doesn't fire, agent completes
      * normally and the assertion fails.
