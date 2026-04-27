@@ -7,8 +7,9 @@ package dev.agentspan.runtime.util;
 
 import java.util.Optional;
 
-import org.conductoross.conductor.ai.AIModelProvider;
 import org.springframework.stereotype.Component;
+
+import dev.agentspan.runtime.ai.AgentspanAIModelProvider;
 
 import lombok.RequiredArgsConstructor;
 
@@ -16,22 +17,20 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class ProviderValidator {
 
-    private final AIModelProvider aiModelProvider;
+    private final AgentspanAIModelProvider aiModelProvider;
 
     private static final String DOCS_URL = "https://github.com/agentspan-ai/agentspan/blob/main/docs/ai-models.md";
 
     /**
-     * Returns Optional.empty() if the provider is configured,
-     * or Optional.of(errorMessage) if not.
+     * Returns Optional.empty() if the provider is configured (either via startup environment
+     * variables or via a credential added in the UI), or Optional.of(errorMessage) if not.
      */
     public Optional<String> validateProvider(String provider) {
-        String key = provider.toLowerCase();
-        if (aiModelProvider.getProviderToLLM().containsKey(key)) {
+        if (aiModelProvider.isProviderConfigured(provider)) {
             return Optional.empty();
         }
-        return Optional.of(
-                "Model provider '" + provider + "' is not configured on the server. " + "Please configure the '"
-                        + provider + "' provider and restart the server. " + "Docs: "
-                        + DOCS_URL);
+        return Optional.of("Model provider '" + provider + "' is not configured. "
+                + "Add an API key for '" + provider + "' on the Credentials page. "
+                + "Docs: " + DOCS_URL);
     }
 }
