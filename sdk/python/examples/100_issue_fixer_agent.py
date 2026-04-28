@@ -177,7 +177,7 @@ def main():
         name="tech_lead",
         model=OPUS,
         stateful=True,
-        max_turns=20,
+        max_turns=30,
         max_tokens=60000,
         tools=[
             read_file,
