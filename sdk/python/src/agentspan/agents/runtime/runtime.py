@@ -939,8 +939,9 @@ class AgentRuntime:
         ):
             names.add(f"{agent.name}_router_fn")
 
-        # Handoff check (swarm with handoff conditions)
-        if agent.handoffs:
+        # Handoff check — needed for any SWARM parent (server always generates
+        # the task) or any agent with explicit handoff conditions.
+        if agent.handoffs or (agent.strategy == "swarm" and agent.agents):
             names.add(f"{agent.name}_handoff_check")
 
         # Swarm transfer workers — prefixed with SOURCE agent name
@@ -1121,8 +1122,9 @@ class AgentRuntime:
             if _server_needs(task_name):
                 self._register_router_worker(agent, domain=domain)
 
-        # 7. Handoff check (swarm with handoff conditions)
-        if agent.handoffs:
+        # 7. Handoff check — needed for any SWARM parent (server always
+        #    generates the task) or any agent with explicit handoff conditions.
+        if agent.handoffs or (agent.strategy == "swarm" and agent.agents):
             task_name = f"{agent.name}_handoff_check"
             if _server_needs(task_name):
                 self._register_handoff_worker(agent, domain=domain)
