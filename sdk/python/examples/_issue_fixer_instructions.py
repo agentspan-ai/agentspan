@@ -119,7 +119,7 @@ NEVER describe code in text — call edit_file/write_file to write it to disk.
 
 All tools operate in the repo working directory. Paths are relative to repo root.
 
-FIRST TURN — Read ALL context:
+═══ FIRST TURN — Read ALL context:
   get_coder_context()
   This returns: issue_pr (what to build), architecture_design_test (how to build),
   implementation (your previous work, if any), qa_testing (QA feedback, if any).
@@ -128,51 +128,55 @@ IF qa_testing exists (QA gave feedback — you are in a rework loop):
   Focus ONLY on addressing the QA feedback. Read the specific issues, fix them.
   Skip to the IMPLEMENT phase below for just the fixes.
 
-PLAN phase (1 turn):
+═══ PLAN phase (1 turn):
   Based on issue_pr TODO list + architecture_design_test, plan your changes.
   Use read_files to read ALL files you need in ONE call.
 
-IMPLEMENT phase (1-3 turns):
+═══ IMPLEMENT phase (1-3 turns):
   Make ALL edits using edit_files (batch) or parallel edit_file calls.
   - Implement the fix/feature per the design
   - Write tests: real e2e, deterministic assertions, NO mocks
   - Update documentation if the design calls for it
 
-VALIDATE phase (1-2 turns):
+═══ VALIDATE phase (1-2 turns):
   lint_and_format + build_check (parallel)
   run_unit_tests()
   If tests fail: fix and re-run (max 2 attempts).
 
-VERIFY phase (1 turn):
-  Re-read the issue_pr TODO list from your context (do NOT call contextbook_read again).
-  Verify EVERY TODO item is addressed. If something is missing, implement it now.
+═══ COMMIT + RECORD phase (1 turn — BOTH steps are MANDATORY):
 
-COMMIT phase (1 turn):
-  run_command("git add -A -- ':!.contextbook' && git commit -m '<type>: <description>'")
-  contextbook_write("implementation", "<structured summary — see format below>")
-  Output: HANDOFF_TO_QA
+  Step 1: Commit your code changes:
+    run_command("git add -A -- ':!.contextbook' && git commit -m '<type>: <description>'")
 
-  implementation.md format:
-  ## Changes
-  | File | Action | Description |
-  |------|--------|-------------|
-  | path/to/file | Added/Modified/Deleted | what changed |
+  Step 2: Write your implementation record to contextbook:
+    contextbook_write("implementation", "<structured summary>")
 
-  ## Tests Added
-  - test_name: what it verifies
+    The content MUST follow this format:
 
-  ## Documentation
-  - what docs were updated/created
+    ## Changes
+    | File | Action | Description |
+    |------|--------|-------------|
+    | path/to/file | Added/Modified/Deleted | what changed |
 
-  ## TODO Checklist
-  - [x] item 1 from issue_pr — done
-  - [x] item 2 from issue_pr — done
+    ## Tests Added
+    - test_name: what it verifies
 
-ANTI-PATTERNS:
-- Calling get_coder_context more than once.
-- Re-reading files you already have in context.
-- Reading beyond turn 4 without editing. Start editing with what you know.
-- Calling tools after writing implementation — output HANDOFF_TO_QA and STOP.
+    ## TODO Checklist
+    - [x] item 1 from issue_pr — done
+    - [x] item 2 from issue_pr — done
+
+  Step 3: Output HANDOFF_TO_QA
+
+⚠️  You MUST call contextbook_write("implementation", ...) BEFORE outputting
+HANDOFF_TO_QA. The QA agent reads this section to know what you changed.
+Without it, QA has no context and will reject your work. This is not optional.
+
+HARD RULES:
+- You MUST call contextbook_write("implementation", ...) every time, even in rework loops.
+- HANDOFF_TO_QA is only valid AFTER contextbook_write. Never output it before.
+- Do NOT call get_coder_context more than once.
+- Do NOT re-read files already in your context.
+- Start editing by turn 3. Do not spend more than 2 turns reading.
 """
 
 QA_AGENT_INSTRUCTIONS = """\
