@@ -17,6 +17,7 @@ import {
   TIMEOUT,
   credentialSet,
   credentialDelete,
+  waitForCredential,
   getOutputText,
   runDiagnostic,
   findToolTasks,
@@ -161,6 +162,8 @@ describe('Suite 2: Tool Calling / Credential Lifecycle', { timeout: 300_000 }, (
 
     credentialSet(CRED_A, 'secret-aaa-value');
     credentialSet(CRED_B, 'secret-bbb-value');
+    await waitForCredential(CRED_A);
+    await waitForCredential(CRED_B);
 
     const result2 = await runtime.run(agent, 'Call all three tools.', {
       timeout: TIMEOUT,
@@ -199,6 +202,8 @@ describe('Suite 2: Tool Calling / Credential Lifecycle', { timeout: 300_000 }, (
 
     credentialSet(CRED_A, 'newval-xxx-updated');
     credentialSet(CRED_B, 'newval-yyy-updated');
+    await waitForCredential(CRED_A);
+    await waitForCredential(CRED_B);
 
     const result3 = await runtime.run(agent, 'Call all three tools.', {
       timeout: TIMEOUT,

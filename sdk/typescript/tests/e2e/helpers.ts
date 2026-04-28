@@ -69,6 +69,27 @@ export function credentialSet(name: string, value: string): void {
   });
 }
 
+/**
+ * Wait until a credential is visible via the server API.
+ * Guards against intermittent failures where the CLI write succeeds but the
+ * DB read in the resolve endpoint races ahead of the commit becoming visible.
+ */
+export async function waitForCredential(name: string, timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const resp = await fetch(`${BASE_URL}/api/credentials/${encodeURIComponent(name)}`, {
+        signal: AbortSignal.timeout(3_000),
+      });
+      if (resp.ok) return;
+    } catch {
+      // server not yet visible — keep polling
+    }
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  throw new Error(`Credential '${name}' not visible in server after ${timeoutMs}ms`);
+}
+
 export function credentialDelete(name: string): void {
   try {
     execSync(`${CLI_PATH} credentials delete ${name}`, {
