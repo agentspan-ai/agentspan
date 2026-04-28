@@ -1,193 +1,303 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Unit tests for @tool retry_count and retry_delay_seconds parameters (Issue #167 / PR #168)."""
+"""Unit tests for retry_count and retry_delay_seconds on the @tool decorator (issue #167 / PR #168)."""
 
 import pytest
 
-from agentspan.agents.tool import ToolDef, tool
+from agentspan.agents.tool import ToolDef, get_tool_def, tool
 
 
-class TestToolRetryParams:
-    """@tool decorator must accept and store retry_count and retry_delay_seconds."""
+class TestToolRetryDefaults:
+    """ToolDef defaults for retry fields are None (inherits runtime default)."""
 
-    def test_retry_count_accepted_by_decorator(self):
-        """@tool(retry_count=3) must not raise and must store the value."""
+    def test_tooldef_retry_count_default_is_none(self):
+        td = ToolDef(name="my_tool")
+        assert td.retry_count is None
 
+    def test_tooldef_retry_delay_seconds_default_is_none(self):
+        td = ToolDef(name="my_tool")
+        assert td.retry_delay_seconds is None
+
+    def test_bare_tool_decorator_retry_count_is_none(self):
+        @tool
+        def my_tool(x: str) -> str:
+            """A simple tool."""
+            return x
+
+        assert my_tool._tool_def.retry_count is None
+
+    def test_bare_tool_decorator_retry_delay_seconds_is_none(self):
+        @tool
+        def my_tool(x: str) -> str:
+            """A simple tool."""
+            return x
+
+        assert my_tool._tool_def.retry_delay_seconds is None
+
+
+class TestToolRetryCountParam:
+    """@tool(retry_count=N) stores the value on the ToolDef."""
+
+    def test_retry_count_zero(self):
+        @tool(retry_count=0)
+        def no_retry_tool(query: str) -> str:
+            """No retries."""
+            return query
+
+        assert no_retry_tool._tool_def.retry_count == 0
+
+    def test_retry_count_positive(self):
+        @tool(retry_count=5)
+        def five_retry_tool(query: str) -> str:
+            """Five retries."""
+            return query
+
+        assert five_retry_tool._tool_def.retry_count == 5
+
+    def test_retry_count_one(self):
+        @tool(retry_count=1)
+        def one_retry_tool(query: str) -> str:
+            """One retry."""
+            return query
+
+        assert one_retry_tool._tool_def.retry_count == 1
+
+    def test_retry_count_stored_on_raw_fn(self):
+        """retry_count is also accessible on the raw function (for pickling)."""
         @tool(retry_count=3)
         def my_tool(x: str) -> str:
-            """A retryable tool."""
+            """Tool."""
             return x
 
-        td = my_tool._tool_def
-        assert isinstance(td, ToolDef)
-        assert td.retry_count == 3
+        # The raw fn also gets _tool_def attached
+        assert my_tool._tool_def.retry_count == 3
 
-    def test_retry_delay_seconds_accepted_by_decorator(self):
-        """@tool(retry_delay_seconds=1) must not raise and must store the value."""
 
+class TestToolRetryDelaySecondsParam:
+    """@tool(retry_delay_seconds=N) stores the value on the ToolDef."""
+
+    def test_retry_delay_seconds_zero(self):
+        @tool(retry_delay_seconds=0)
+        def instant_retry_tool(query: str) -> str:
+            """Instant retry."""
+            return query
+
+        assert instant_retry_tool._tool_def.retry_delay_seconds == 0
+
+    def test_retry_delay_seconds_positive(self):
+        @tool(retry_delay_seconds=10)
+        def slow_retry_tool(query: str) -> str:
+            """Slow retry."""
+            return query
+
+        assert slow_retry_tool._tool_def.retry_delay_seconds == 10
+
+    def test_retry_delay_seconds_one(self):
         @tool(retry_delay_seconds=1)
-        def my_tool(x: str) -> str:
-            """A retryable tool."""
-            return x
+        def one_second_retry_tool(query: str) -> str:
+            """One second retry."""
+            return query
 
-        td = my_tool._tool_def
-        assert isinstance(td, ToolDef)
-        assert td.retry_delay_seconds == 1
+        assert one_second_retry_tool._tool_def.retry_delay_seconds == 1
 
-    def test_retry_count_and_delay_together(self):
-        """@tool(retry_count=3, retry_delay_seconds=1) must store both values."""
 
-        @tool(retry_count=3, retry_delay_seconds=1)
-        def fetch_exchange_rate(base: str, target: str) -> dict:
-            """Fetch the exchange rate between two currencies."""
-            return {"base": base, "target": target, "rate": 0.92}
+class TestToolRetryBothParams:
+    """@tool(retry_count=N, retry_delay_seconds=M) stores both values."""
 
-        td = fetch_exchange_rate._tool_def
+    def test_both_params_set(self):
+        @tool(retry_count=3, retry_delay_seconds=5)
+        def resilient_tool(query: str) -> str:
+            """A resilient tool."""
+            return query
+
+        td = resilient_tool._tool_def
         assert td.retry_count == 3
-        assert td.retry_delay_seconds == 1
+        assert td.retry_delay_seconds == 5
 
-    def test_retry_count_zero_disables_retries(self):
-        """@tool(retry_count=0) must store 0 (disables retries)."""
-
-        @tool(retry_count=0)
-        def no_retry_tool(x: str) -> str:
-            """No retries."""
-            return x
+    def test_both_params_zero(self):
+        @tool(retry_count=0, retry_delay_seconds=0)
+        def no_retry_tool(query: str) -> str:
+            """No retry tool."""
+            return query
 
         td = no_retry_tool._tool_def
         assert td.retry_count == 0
+        assert td.retry_delay_seconds == 0
 
-    def test_retry_defaults_when_not_specified(self):
-        """When retry_count/retry_delay_seconds are not specified, defaults apply."""
+    def test_retry_count_set_delay_not_set(self):
+        @tool(retry_count=4)
+        def partial_retry_tool(query: str) -> str:
+            """Partial retry config."""
+            return query
 
-        @tool
-        def plain_tool(x: str) -> str:
-            """Plain tool."""
+        td = partial_retry_tool._tool_def
+        assert td.retry_count == 4
+        assert td.retry_delay_seconds is None
+
+    def test_retry_delay_set_count_not_set(self):
+        @tool(retry_delay_seconds=7)
+        def partial_delay_tool(query: str) -> str:
+            """Partial delay config."""
+            return query
+
+        td = partial_delay_tool._tool_def
+        assert td.retry_count is None
+        assert td.retry_delay_seconds == 7
+
+
+class TestToolRetryWithOtherParams:
+    """retry_count and retry_delay_seconds coexist with other @tool params."""
+
+    def test_retry_with_approval_required(self):
+        @tool(retry_count=2, retry_delay_seconds=3, approval_required=True)
+        def approved_tool(x: str) -> str:
+            """Needs approval."""
             return x
 
-        td = plain_tool._tool_def
-        # Defaults should be 2 as documented in README
+        td = approved_tool._tool_def
         assert td.retry_count == 2
-        assert td.retry_delay_seconds == 2
+        assert td.retry_delay_seconds == 3
+        assert td.approval_required is True
 
-    def test_retry_params_with_other_params(self):
-        """retry_count and retry_delay_seconds work alongside other @tool params."""
-
-        @tool(name="custom_name", retry_count=5, retry_delay_seconds=3, timeout_seconds=30)
-        def my_tool(x: str) -> str:
-            """A tool with many params."""
+    def test_retry_with_timeout(self):
+        @tool(retry_count=1, retry_delay_seconds=2, timeout_seconds=30)
+        def timed_tool(x: str) -> str:
+            """Has timeout."""
             return x
 
-        td = my_tool._tool_def
-        assert td.name == "custom_name"
-        assert td.retry_count == 5
-        assert td.retry_delay_seconds == 3
+        td = timed_tool._tool_def
+        assert td.retry_count == 1
+        assert td.retry_delay_seconds == 2
         assert td.timeout_seconds == 30
 
-    def test_retry_tool_still_callable(self):
-        """A @tool with retry params is still directly callable."""
+    def test_retry_with_custom_name(self):
+        @tool(name="custom_name", retry_count=3, retry_delay_seconds=4)
+        def my_func(x: str) -> str:
+            """Custom named tool."""
+            return x
 
-        @tool(retry_count=3, retry_delay_seconds=1)
+        td = my_func._tool_def
+        assert td.name == "custom_name"
+        assert td.retry_count == 3
+        assert td.retry_delay_seconds == 4
+
+    def test_retry_with_stateful(self):
+        @tool(retry_count=2, retry_delay_seconds=1, stateful=True)
+        def stateful_tool(x: str) -> str:
+            """Stateful tool."""
+            return x
+
+        td = stateful_tool._tool_def
+        assert td.retry_count == 2
+        assert td.retry_delay_seconds == 1
+        assert td.stateful is True
+
+    def test_retry_with_isolated_false(self):
+        @tool(retry_count=5, retry_delay_seconds=2, isolated=False)
+        def shared_tool(x: str) -> str:
+            """Shared tool."""
+            return x
+
+        td = shared_tool._tool_def
+        assert td.retry_count == 5
+        assert td.retry_delay_seconds == 2
+        assert td.isolated is False
+
+
+class TestToolRetryGetToolDef:
+    """get_tool_def() correctly extracts retry fields from @tool-decorated functions."""
+
+    def test_get_tool_def_preserves_retry_count(self):
+        @tool(retry_count=6)
+        def my_tool(x: str) -> str:
+            """Tool."""
+            return x
+
+        td = get_tool_def(my_tool)
+        assert isinstance(td, ToolDef)
+        assert td.retry_count == 6
+
+    def test_get_tool_def_preserves_retry_delay_seconds(self):
+        @tool(retry_delay_seconds=8)
+        def my_tool(x: str) -> str:
+            """Tool."""
+            return x
+
+        td = get_tool_def(my_tool)
+        assert isinstance(td, ToolDef)
+        assert td.retry_delay_seconds == 8
+
+    def test_get_tool_def_preserves_both_retry_fields(self):
+        @tool(retry_count=2, retry_delay_seconds=10)
+        def my_tool(x: str) -> str:
+            """Tool."""
+            return x
+
+        td = get_tool_def(my_tool)
+        assert td.retry_count == 2
+        assert td.retry_delay_seconds == 10
+
+    def test_get_tool_def_from_tooldef_instance(self):
+        td_direct = ToolDef(name="direct_tool", retry_count=7, retry_delay_seconds=3)
+        td = get_tool_def(td_direct)
+        assert td is td_direct
+        assert td.retry_count == 7
+        assert td.retry_delay_seconds == 3
+
+
+class TestToolRetryFunctionStillCallable:
+    """@tool with retry params does not break the decorated function's callability."""
+
+    def test_tool_with_retry_is_callable(self):
+        @tool(retry_count=3, retry_delay_seconds=2)
         def add(a: int, b: int) -> int:
             """Add two numbers."""
             return a + b
 
         assert add(2, 3) == 5
 
-    def test_retry_tool_def_has_correct_type(self):
-        """ToolDef created with retry params has tool_type='worker'."""
+    def test_tool_with_retry_preserves_docstring(self):
+        @tool(retry_count=1, retry_delay_seconds=1)
+        def my_tool(x: str) -> str:
+            """My tool docstring."""
+            return x
 
+        assert my_tool.__doc__ == "My tool docstring."
+        assert my_tool._tool_def.description == "My tool docstring."
+
+    def test_tool_with_retry_preserves_name(self):
         @tool(retry_count=2, retry_delay_seconds=2)
-        def worker_tool(q: str) -> str:
-            """A worker."""
-            return q
+        def named_tool(x: str) -> str:
+            """Named tool."""
+            return x
 
-        td = worker_tool._tool_def
-        assert td.tool_type == "worker"
+        assert named_tool.__name__ == "named_tool"
+        assert named_tool._tool_def.name == "named_tool"
 
-    def test_retry_example_agent_pattern(self):
-        """Reproduce the exact pattern from examples/retry_example/python/agent.py."""
-        _call_count = 0
 
-        @tool(retry_count=3, retry_delay_seconds=1)
-        def fetch_exchange_rate(base: str, target: str) -> dict:
-            """Fetch the exchange rate between two currencies."""
-            nonlocal _call_count
-            _call_count += 1
-            if _call_count <= 2:
-                raise ConnectionError(
-                    f"[attempt {_call_count}] Upstream service unavailable — retrying..."
-                )
-            rates = {("USD", "EUR"): 0.92, ("USD", "GBP"): 0.79, ("EUR", "USD"): 1.09}
-            rate = rates.get((base.upper(), target.upper()), 1.0)
-            return {
-                "base": base.upper(),
-                "target": target.upper(),
-                "rate": rate,
-                "attempt": _call_count,
-            }
+class TestToolDefDirectConstruction:
+    """ToolDef can be constructed directly with retry fields."""
 
-        td = fetch_exchange_rate._tool_def
+    def test_tooldef_with_retry_count(self):
+        td = ToolDef(name="t", retry_count=3)
         assert td.retry_count == 3
-        assert td.retry_delay_seconds == 1
-        assert td.name == "fetch_exchange_rate"
-        assert td.description == "Fetch the exchange rate between two currencies."
+        assert td.retry_delay_seconds is None
 
-        # The function itself works on the 3rd call
-        with pytest.raises(ConnectionError):
-            fetch_exchange_rate("USD", "EUR")  # attempt 1 — fails
-        with pytest.raises(ConnectionError):
-            fetch_exchange_rate("USD", "EUR")  # attempt 2 — fails
-        result = fetch_exchange_rate("USD", "EUR")  # attempt 3 — succeeds
-        assert result["rate"] == 0.92
-        assert result["attempt"] == 3
-
-    def test_tooldef_retry_fields_exist(self):
-        """ToolDef dataclass must have retry_count and retry_delay_seconds fields."""
-        td = ToolDef(name="test", description="test", retry_count=4, retry_delay_seconds=5)
-        assert td.retry_count == 4
+    def test_tooldef_with_retry_delay_seconds(self):
+        td = ToolDef(name="t", retry_delay_seconds=5)
+        assert td.retry_count is None
         assert td.retry_delay_seconds == 5
 
-    def test_tooldef_retry_defaults(self):
-        """ToolDef created without retry params uses documented defaults."""
-        td = ToolDef(name="test", description="test")
-        assert td.retry_count == 2
-        assert td.retry_delay_seconds == 2
+    def test_tooldef_with_both_retry_fields(self):
+        td = ToolDef(name="t", retry_count=4, retry_delay_seconds=6)
+        assert td.retry_count == 4
+        assert td.retry_delay_seconds == 6
 
-
-class TestToolRetryCompilerOutput:
-    """Verify retry params are passed through to the compiler/tool_compiler output."""
-
-    def test_retry_params_stored_in_tool_def_config_or_fields(self):
-        """After decoration, retry info is accessible for the compiler to use."""
-
-        @tool(retry_count=3, retry_delay_seconds=1)
-        def flaky_tool(x: str) -> str:
-            """Flaky tool."""
-            return x
-
-        td = flaky_tool._tool_def
-        # Either stored as direct fields or in config — both are acceptable
-        has_fields = hasattr(td, "retry_count") and td.retry_count == 3
-        has_config = td.config.get("retryCount") == 3 or td.config.get("retry_count") == 3
-        assert has_fields or has_config, (
-            "retry_count=3 must be accessible on ToolDef (as field or config key)"
-        )
-
-    def test_retry_delay_stored_in_tool_def_config_or_fields(self):
-        """After decoration, retry_delay_seconds is accessible for the compiler."""
-
-        @tool(retry_count=3, retry_delay_seconds=1)
-        def flaky_tool(x: str) -> str:
-            """Flaky tool."""
-            return x
-
-        td = flaky_tool._tool_def
-        has_fields = hasattr(td, "retry_delay_seconds") and td.retry_delay_seconds == 1
-        has_config = (
-            td.config.get("retryDelaySeconds") == 1 or td.config.get("retry_delay_seconds") == 1
-        )
-        assert has_fields or has_config, (
-            "retry_delay_seconds=1 must be accessible on ToolDef (as field or config key)"
-        )
+    def test_tooldef_retry_fields_are_independent(self):
+        td1 = ToolDef(name="t1", retry_count=1)
+        td2 = ToolDef(name="t2", retry_count=2)
+        assert td1.retry_count == 1
+        assert td2.retry_count == 2
+        # Ensure no shared state
+        assert td1.retry_count != td2.retry_count
