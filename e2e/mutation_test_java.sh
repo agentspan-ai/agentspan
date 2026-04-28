@@ -5,7 +5,7 @@ set -uo pipefail
 # Each mutation is applied, tested, then reverted via file backup.
 #
 # Usage:
-#   ./e2e/mutation_test_java.sh          # run all 10 mutations
+#   ./e2e/mutation_test_java.sh          # run all 16 mutations
 #   ./e2e/mutation_test_java.sh --suite suite1  # only Suite 1 mutations
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -187,6 +187,72 @@ run_mutation \
     "$JAVA_SDK/src/test/java/dev/agentspan/e2e/E2eSuite8LangChain4j.java" \
     "sed -i '' 's/assertTrue(names.contains(\"lc4j_add\")/assertTrue(names.contains(\"WRONG_NAME\")/' '$JAVA_SDK/src/test/java/dev/agentspan/e2e/E2eSuite8LangChain4j.java'" \
     "E2eSuite8LangChain4j#test_tool_extraction" \
+    "test"
+
+# ── Suite 5 — Extended guardrails mutations ───────────────────────
+
+# Mutation 11: Suite5 Test — tool output guardrail AtomicBoolean removed
+# The tool body sets sqlToolBodyRan.set(true). Commenting it out means the assertion
+# assertTrue(sqlToolBodyRan.get()) will fail because the flag stays false.
+run_mutation \
+    "Suite5 Test: sqlToolBodyRan.set(true) removed (AtomicBoolean never set)" \
+    "$JAVA_SDK/src/test/java/dev/agentspan/e2e/E2eSuite5Guardrails.java" \
+    "sed -i '' 's/sqlToolBodyRan.set(true);/\/\/ MUTANT: flag never set/' '$JAVA_SDK/src/test/java/dev/agentspan/e2e/E2eSuite5Guardrails.java'" \
+    "E2eSuite5Guardrails#test_tool_output_detected_by_guardrail" \
+    "test"
+
+# ── Suite 6 — New handoff routing mutations ───────────────────────
+
+# Mutation 12: Suite6 Test — router wrong sub-workflow name
+# The assertion checks ref.contains("math") to verify the router picked the math agent.
+# Changing "math" to "WRONGAGENT" makes the assertion always false.
+run_mutation \
+    "Suite6 Test: router assertion 'math'→'WRONGAGENT'" \
+    "$JAVA_SDK/src/test/java/dev/agentspan/e2e/E2eSuite6Handoffs.java" \
+    "sed -i '' 's/ref.contains(\"math\")/ref.contains(\"WRONGAGENT\")/' '$JAVA_SDK/src/test/java/dev/agentspan/e2e/E2eSuite6Handoffs.java'" \
+    "E2eSuite6Handoffs#test_router_selects_correct_agent" \
+    "test"
+
+# Mutation 13: Suite6 Test — swarm wrong sub-workflow name
+# The assertion checks ref.contains("text") to verify the swarm routed to the text agent.
+# Changing "text" to "WRONGAGENT" makes the assertion always false.
+run_mutation \
+    "Suite6 Test: swarm assertion 'text'→'WRONGAGENT'" \
+    "$JAVA_SDK/src/test/java/dev/agentspan/e2e/E2eSuite6Handoffs.java" \
+    "sed -i '' 's/ref.contains(\"text\")/ref.contains(\"WRONGAGENT\")/' '$JAVA_SDK/src/test/java/dev/agentspan/e2e/E2eSuite6Handoffs.java'" \
+    "E2eSuite6Handoffs#test_swarm_with_text_mention" \
+    "test"
+
+# ── Suite 9 — Code execution mutations ───────────────────────────
+
+# Mutation 14: Suite9 SDK — codeExecution block dropped from serializer
+# Commenting out agentMap.put("codeExecution", codeExec) means the codeExecution
+# key is absent from the agentDef → test_code_execution_compiles fails.
+run_mutation \
+    "Suite9 SDK: agentMap.put('codeExecution', codeExec) dropped (AgentConfigSerializer)" \
+    "$JAVA_SDK/src/main/java/dev/agentspan/internal/AgentConfigSerializer.java" \
+    "sed -i '' 's/agentMap.put(\"codeExecution\", codeExec);/\/\/ MUTANT: codeExecution dropped/' '$JAVA_SDK/src/main/java/dev/agentspan/internal/AgentConfigSerializer.java'" \
+    "E2eSuite9CodeExecution#test_code_execution_compiles" \
+    "source"
+
+# Mutation 15: Suite9 Test — wrong expected Python output (3066→9999)
+# The test checks for "3066" (42 * 73) in the execute_code task output.
+# Changing to "9999" makes the assertion fail because the real output is "3066".
+run_mutation \
+    "Suite9 Test: Python output assertion '3066'→'9999'" \
+    "$JAVA_SDK/src/test/java/dev/agentspan/e2e/E2eSuite9CodeExecution.java" \
+    "sed -i '' 's/taskOutputStr(t).contains(\"3066\")/taskOutputStr(t).contains(\"9999\")/' '$JAVA_SDK/src/test/java/dev/agentspan/e2e/E2eSuite9CodeExecution.java'" \
+    "E2eSuite9CodeExecution#test_local_python_execution" \
+    "test"
+
+# Mutation 16: Suite9 Test — wrong expected bash output (46→99)
+# The test checks for "46" (17 + 29) in the execute_code bash task output.
+# Changing to "99" makes the assertion fail because the real output is "46".
+run_mutation \
+    "Suite9 Test: bash output assertion '46'→'99'" \
+    "$JAVA_SDK/src/test/java/dev/agentspan/e2e/E2eSuite9CodeExecution.java" \
+    "sed -i '' 's/taskOutputStr(t).contains(\"46\")/taskOutputStr(t).contains(\"99\")/' '$JAVA_SDK/src/test/java/dev/agentspan/e2e/E2eSuite9CodeExecution.java'" \
+    "E2eSuite9CodeExecution#test_local_bash_execution" \
     "test"
 
 # ── Summary ──────────────────────────────────────────────────────
