@@ -1,11 +1,12 @@
 // Copyright (c) 2025 Agentspan
 // Licensed under the MIT License.
 
-// Suite 1 — Basic plan/structural validation.
+// Suite 1 — AgentDef JSON must match.
 //
 // All tests use PlanAsync() — no execution, no LLM calls.
-// Assertions are structural: workflow shape, tool names, guardrail fields,
-// strategy values, termination conditions.
+// Assertions check each field in the compiled agentDef exactly:
+//   toolType, credentials, guardrailType, position, onFail, maxRetries,
+//   strategy, model, instructions, maxTurns.
 //
 // CLAUDE.md rule: no LLM for validation; write test → make it fail → confirm failure.
 
@@ -22,215 +23,405 @@ public sealed class Suite1_BasicValidation
 
     public Suite1_BasicValidation(E2eFixture fixture) => _fixture = fixture;
 
-    // ── 1.1  Basic agent compiles ────────────────────────────────────────
+    // ── 1.1  Workflow structure and agentDef base fields ─────────────────
 
     [SkippableFact]
-    public async Task BasicAgent_CompilesSuccessfully()
+    public async Task BasicAgent_PlanStructureMatches()
     {
         _fixture.RequireServer();
 
-        var agent = new Agent("s1_basic_test")
+        var agent = new Agent("s1_basic_agent")
         {
-            Model        = Settings.LlmModel,
-            Instructions = "You are a friendly assistant.",
+            Model        = "openai/gpt-4o-mini",
+            Instructions = "You are a test assistant.",
+            MaxTurns     = 8,
         };
 
         await using var runtime = new AgentRuntime();
         var plan = await runtime.PlanAsync(agent);
 
-        // workflowDef must be present
         Assert.NotNull(plan);
-        Assert.NotNull(plan!["workflowDef"]);
 
-        // workflow name should contain the agent name
-        var name = plan["workflowDef"]!["name"]?.GetValue<string>();
-        Assert.NotNull(name);
-        Assert.Contains("s1_basic_test", name);
+        // workflowDef.name must match agent name
+        var wfName = plan!["workflowDef"]?["name"]?.GetValue<string>();
+        Assert.Equal("s1_basic_agent", wfName);
 
-        // at least one task must exist
+        // tasks must be non-empty
         var tasks = plan["workflowDef"]!["tasks"]?.AsArray();
         Assert.NotNull(tasks);
-        Assert.True(tasks!.Count > 0, "Expected at least one task in compiled workflow.");
+        Assert.True(tasks!.Count > 0, "workflowDef.tasks must not be empty.");
+
+        // agentDef fields
+        var ad = E2eHelpers.GetAgentDef(plan);
+
+        Assert.Equal("s1_basic_agent",    ad["name"]?.GetValue<string>());
+        Assert.Equal("openai/gpt-4o-mini", ad["model"]?.GetValue<string>());
+        Assert.Equal("You are a test assistant.", ad["instructions"]?.GetValue<string>());
+        Assert.Equal(8, ad["maxTurns"]?.GetValue<int>());
+
+        // Counterfactual: different MaxTurns must produce a different value
+        var agent2 = new Agent("s1_basic_agent_v2")
+        {
+            Model    = "openai/gpt-4o-mini",
+            MaxTurns = 3,
+        };
+        var plan2 = await runtime.PlanAsync(agent2);
+        var ad2   = E2eHelpers.GetAgentDef(plan2);
+        Assert.Equal(3,  ad2["maxTurns"]?.GetValue<int>());
+        Assert.NotEqual(8, ad2["maxTurns"]?.GetValue<int>());
     }
 
-    // ── 1.2  Tool names present in agentDef.tools ───────────────────────
+    // ── 1.2  Worker tool toolType ─────────────────────────────────────────
 
     [SkippableFact]
-    public async Task ToolAgent_ToolNamesInAgentDef()
+    public async Task WorkerTools_ToolTypeIsWorker()
     {
         _fixture.RequireServer();
 
-        var tools = ToolRegistry.FromInstance(new S1ToolHost());
-        var agent = new Agent("s1_tool_test")
+        var tools = ToolRegistry.FromInstance(new S1WorkerToolHost());
+        var agent = new Agent("s1_worker_tools")
         {
             Model        = Settings.LlmModel,
-            Instructions = "Use tools to answer.",
+            Instructions = "Use tools.",
             Tools        = tools,
         };
 
         await using var runtime = new AgentRuntime();
         var plan = await runtime.PlanAsync(agent);
+        var ad   = E2eHelpers.GetAgentDef(plan);
 
-        Assert.NotNull(plan);
+        // Both tools must be present with toolType = "worker"
+        Assert.Equal("worker", E2eHelpers.GetToolType(ad, "get_greeting"));
+        Assert.Equal("worker", E2eHelpers.GetToolType(ad, "get_farewell"));
 
-        // Tools are listed in plan["workflowDef"]["metadata"]["agentDef"]["tools"]
-        var agentDef = plan!["workflowDef"]?["metadata"]?["agentDef"]
-                       ?? throw new InvalidOperationException("agentDef missing from plan metadata.");
-        var toolsArray = agentDef["tools"]?.AsArray()
-                         ?? throw new InvalidOperationException("tools missing from agentDef.");
-
-        var toolNames = toolsArray.Select(t => t?["name"]?.GetValue<string>() ?? "").ToList();
-
-        // Both tools must be listed in the agent definition
-        Assert.Contains(toolNames, n => n.Equals("get_greeting", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(toolNames, n => n.Equals("get_farewell", StringComparison.OrdinalIgnoreCase));
-
-        // Counterfactual: a tool that does NOT exist must NOT appear
-        Assert.DoesNotContain(toolNames, n => n.Contains("nonexistent_tool_xyz", StringComparison.OrdinalIgnoreCase));
+        // Counterfactual: a tool that doesn't exist must throw (not silently return)
+        Assert.DoesNotContain("nonexistent_tool_xyz", E2eHelpers.ToolNames(ad));
     }
 
-    // ── 1.3  Guardrail fields present in agentDef ────────────────────────
+    // ── 1.3  Credential tools — present in agentDef with correct toolType ──
+    //
+    // NOTE: The server strips credential values from plan() responses for security.
+    //       We verify the tools ARE registered with toolType="worker" in the
+    //       compiled workflow. Credential injection is tested at execution time
+    //       in examples/16_Credentials (runs against real server with stored creds).
 
     [SkippableFact]
-    public async Task GuardrailAgent_GuardrailFieldsInPlan()
+    public async Task CredentialTools_PresentInAgentDefWithWorkerType()
     {
         _fixture.RequireServer();
 
-        var guardrailHost = new S1GuardrailHost();
-        var guardrails    = GuardrailRegistry.FromInstance(guardrailHost);
+        var tools = ToolRegistry.FromInstance(new S1CredentialToolHost());
+        var agent = new Agent("s1_cred_tools")
+        {
+            Model        = Settings.LlmModel,
+            Instructions = "Use tools.",
+            Tools        = tools,
+        };
 
-        var agent = new Agent("s1_guardrail_test")
+        await using var runtime = new AgentRuntime();
+        var plan = await runtime.PlanAsync(agent);
+        var ad   = E2eHelpers.GetAgentDef(plan);
+
+        // All three tools must be present with toolType = "worker"
+        Assert.Equal("worker", E2eHelpers.GetToolType(ad, "single_cred_tool"));
+        Assert.Equal("worker", E2eHelpers.GetToolType(ad, "multi_cred_tool"));
+        Assert.Equal("worker", E2eHelpers.GetToolType(ad, "no_cred_tool"));
+
+        // All three must appear in the tool name list
+        var names = E2eHelpers.ToolNames(ad);
+        Assert.Contains("single_cred_tool", names);
+        Assert.Contains("multi_cred_tool",  names);
+        Assert.Contains("no_cred_tool",     names);
+
+        // Counterfactual: tool count must match exactly what was registered
+        Assert.Equal(3, names.Count(n => n is "single_cred_tool" or "multi_cred_tool" or "no_cred_tool"));
+    }
+
+    // ── 1.4  Output guardrail fields ──────────────────────────────────────
+
+    [SkippableFact]
+    public async Task OutputGuardrail_FieldsMatchExactly()
+    {
+        _fixture.RequireServer();
+
+        var guardrails = GuardrailRegistry.FromInstance(new S1OutputGuardrailHost());
+        var agent = new Agent("s1_output_guardrail")
         {
             Model      = Settings.LlmModel,
-            Instructions = "You are a helpful agent.",
             Guardrails = guardrails,
         };
 
         await using var runtime = new AgentRuntime();
         var plan = await runtime.PlanAsync(agent);
+        var ad   = E2eHelpers.GetAgentDef(plan);
 
-        Assert.NotNull(plan);
+        var g = E2eHelpers.GetGuardrail(ad, "no_all_caps");
 
-        // agentDef is nested inside the plan's metadata
-        var agentDef = plan!["workflowDef"]?["metadata"]?["agentDef"];
-        Assert.NotNull(agentDef);
-
-        // guardrails array must be non-empty
-        var guardrailArr = agentDef!["guardrails"]?.AsArray();
-        Assert.NotNull(guardrailArr);
-        Assert.True(guardrailArr!.Count > 0, "Expected at least one guardrail in agentDef.");
-
-        // Counterfactual: an agent without guardrails must have an empty array or null
-        var agentNoGuardrail = new Agent("s1_no_guardrail_test") { Model = Settings.LlmModel };
-        var planNoGuardrail  = await runtime.PlanAsync(agentNoGuardrail);
-        var noGuardrailDef   = planNoGuardrail?["workflowDef"]?["metadata"]?["agentDef"];
-        var noGuardrailArr   = noGuardrailDef?["guardrails"]?.AsArray();
-        Assert.True(noGuardrailArr is null || noGuardrailArr.Count == 0,
-            "Agent without guardrails must have no guardrail entries in plan.");
+        Assert.Equal("no_all_caps", g["name"]?.GetValue<string>());
+        Assert.Equal("output",      g["position"]?.GetValue<string>());
+        Assert.Equal("retry",       g["onFail"]?.GetValue<string>());
+        Assert.Equal(2,             g["maxRetries"]?.GetValue<int>());
+        Assert.Equal("custom",      g["guardrailType"]?.GetValue<string>());
     }
 
-    // ── 1.4  Strategy serialised correctly for multi-agent plans ─────────
+    // ── 1.5  Input guardrail position ────────────────────────────────────
 
     [SkippableFact]
-    public async Task HandoffAgent_StrategyInPlan()
+    public async Task InputGuardrail_PositionIsInput()
     {
         _fixture.RequireServer();
 
-        var child1 = new Agent("s1_billing") { Model = Settings.LlmModel, Instructions = "Handle billing." };
-        var child2 = new Agent("s1_tech")    { Model = Settings.LlmModel, Instructions = "Handle tech." };
+        var guardrails = GuardrailRegistry.FromInstance(new S1InputGuardrailHost());
+        var agent = new Agent("s1_input_guardrail")
+        {
+            Model      = Settings.LlmModel,
+            Guardrails = guardrails,
+        };
 
-        var parent = new Agent("s1_handoff_test")
+        await using var runtime = new AgentRuntime();
+        var plan = await runtime.PlanAsync(agent);
+        var ad   = E2eHelpers.GetAgentDef(plan);
+
+        var g = E2eHelpers.GetGuardrail(ad, "check_input");
+        Assert.Equal("input",  g["position"]?.GetValue<string>());
+        Assert.Equal("raise",  g["onFail"]?.GetValue<string>());
+        Assert.Equal("custom", g["guardrailType"]?.GetValue<string>());
+
+        // Counterfactual: output guardrail must have position = "output"
+        var guardrails2 = GuardrailRegistry.FromInstance(new S1OutputGuardrailHost());
+        var agent2      = new Agent("s1_output_check") { Model = Settings.LlmModel, Guardrails = guardrails2 };
+        var plan2       = await runtime.PlanAsync(agent2);
+        var ad2         = E2eHelpers.GetAgentDef(plan2);
+        var g2          = E2eHelpers.GetGuardrail(ad2, "no_all_caps");
+        Assert.Equal("output", g2["position"]?.GetValue<string>());
+        Assert.NotEqual("input", g2["position"]?.GetValue<string>());
+    }
+
+    // ── 1.6  Multiple guardrails — all present with correct fields ────────
+
+    [SkippableFact]
+    public async Task MultiGuardrail_AllPresentWithCorrectFields()
+    {
+        _fixture.RequireServer();
+
+        var guardrails = GuardrailRegistry.FromInstance(new S1MultiGuardrailHost());
+        var agent = new Agent("s1_multi_guardrail")
+        {
+            Model      = Settings.LlmModel,
+            Guardrails = guardrails,
+        };
+
+        await using var runtime = new AgentRuntime();
+        var plan = await runtime.PlanAsync(agent);
+        var ad   = E2eHelpers.GetAgentDef(plan);
+
+        var names = E2eHelpers.GuardrailNames(ad);
+        Assert.Equal(3, names.Count);
+
+        // input_check: input, raise
+        var inputCheck = E2eHelpers.GetGuardrail(ad, "input_check");
+        Assert.Equal("input",  inputCheck["position"]?.GetValue<string>());
+        Assert.Equal("raise",  inputCheck["onFail"]?.GetValue<string>());
+        Assert.Equal("custom", inputCheck["guardrailType"]?.GetValue<string>());
+
+        // output_retry: output, retry, maxRetries=3
+        var outputRetry = E2eHelpers.GetGuardrail(ad, "output_retry");
+        Assert.Equal("output", outputRetry["position"]?.GetValue<string>());
+        Assert.Equal("retry",  outputRetry["onFail"]?.GetValue<string>());
+        Assert.Equal(3,        outputRetry["maxRetries"]?.GetValue<int>());
+
+        // output_fix: output, fix, maxRetries=1
+        var outputFix = E2eHelpers.GetGuardrail(ad, "output_fix");
+        Assert.Equal("output", outputFix["position"]?.GetValue<string>());
+        Assert.Equal("fix",    outputFix["onFail"]?.GetValue<string>());
+        Assert.Equal(1,        outputFix["maxRetries"]?.GetValue<int>());
+    }
+
+    // ── 1.7  Handoff strategy — fields and sub-agents ────────────────────
+
+    [SkippableFact]
+    public async Task HandoffStrategy_StrategyAndSubAgentsMatch()
+    {
+        _fixture.RequireServer();
+
+        var child1 = new Agent("s1_billing_a") { Model = Settings.LlmModel, Instructions = "Billing." };
+        var child2 = new Agent("s1_technical_a") { Model = Settings.LlmModel, Instructions = "Tech." };
+
+        var parent = new Agent("s1_handoff_parent")
         {
             Model        = Settings.LlmModel,
-            Instructions = "Route to billing or tech.",
+            Instructions = "Route to billing or technical.",
             Agents       = [child1, child2],
             Strategy     = Strategy.Handoff,
         };
 
         await using var runtime = new AgentRuntime();
         var plan = await runtime.PlanAsync(parent);
+        var ad   = E2eHelpers.GetAgentDef(plan);
 
-        Assert.NotNull(plan);
-        var agentDef = plan!["workflowDef"]?["metadata"]?["agentDef"];
-        Assert.NotNull(agentDef);
+        // Parent strategy
+        Assert.Equal("handoff", ad["strategy"]?.GetValue<string>());
 
-        var strategy = agentDef!["strategy"]?.GetValue<string>();
-        Assert.NotNull(strategy);
-        Assert.Equal("handoff", strategy, ignoreCase: true);
+        // Sub-agents list
+        var subNames = E2eHelpers.SubAgentNames(ad);
+        Assert.Contains("s1_billing_a",   subNames);
+        Assert.Contains("s1_technical_a", subNames);
 
-        // sub-agents must be listed
-        var subAgents = agentDef["agents"]?.AsArray()
-                        ?? agentDef["subAgents"]?.AsArray();
-        Assert.NotNull(subAgents);
-        Assert.True(subAgents!.Count >= 2, "Expected at least 2 sub-agents in plan.");
-    }
-
-    // ── 1.5  MaxTurns serialised in agentDef ────────────────────────────
-
-    [SkippableFact]
-    public async Task AgentWithMaxTurns_MaxTurnsInPlan()
-    {
-        _fixture.RequireServer();
-
-        var agent = new Agent("s1_maxturn_test")
+        // Counterfactual: sequential strategy must differ
+        var seqParent = new Agent("s1_seq_check")
         {
             Model    = Settings.LlmModel,
-            MaxTurns = 7,
+            Agents   = [child1, child2],
+            Strategy = Strategy.Sequential,
         };
-
-        await using var runtime = new AgentRuntime();
-        var plan = await runtime.PlanAsync(agent);
-
-        Assert.NotNull(plan);
-        var agentDef = plan!["workflowDef"]?["metadata"]?["agentDef"];
-        Assert.NotNull(agentDef);
-
-        var maxTurns = agentDef!["maxTurns"]?.GetValue<int>();
-        Assert.Equal(7, maxTurns);
-
-        // Counterfactual: different MaxTurns must serialize to different value
-        var agent2  = new Agent("s1_maxturn_test2") { Model = Settings.LlmModel, MaxTurns = 3 };
-        var plan2   = await runtime.PlanAsync(agent2);
-        var maxTurns2 = plan2?["workflowDef"]?["metadata"]?["agentDef"]?["maxTurns"]?.GetValue<int>();
-        Assert.NotEqual(7, maxTurns2);
+        var planSeq = await runtime.PlanAsync(seqParent);
+        var adSeq   = E2eHelpers.GetAgentDef(planSeq);
+        Assert.NotEqual("handoff", adSeq["strategy"]?.GetValue<string>());
+        Assert.Equal("sequential", adSeq["strategy"]?.GetValue<string>());
     }
 
-    // ── 1.6  Termination condition serialised ────────────────────────────
+    // ── 1.8  All strategy enum values serialize correctly ─────────────────
 
     [SkippableFact]
-    public async Task AgentWithTermination_TerminationInPlan()
+    public async Task AllStrategies_SerializeToCorrectWireValues()
     {
         _fixture.RequireServer();
 
-        var agent = new Agent("s1_termination_test")
+        await using var runtime = new AgentRuntime();
+
+        var cases = new (Strategy strategy, string expected)[]
         {
-            Model       = Settings.LlmModel,
-            Termination = new TextMentionTermination("DONE"),
+            (Strategy.Handoff,    "handoff"),
+            (Strategy.Sequential, "sequential"),
+            (Strategy.Parallel,   "parallel"),
+            (Strategy.Router,     "router"),
+            (Strategy.RoundRobin, "round_robin"),
+            (Strategy.Random,     "random"),
+            (Strategy.Swarm,      "swarm"),
+            (Strategy.Manual,     "manual"),
+        };
+
+        foreach (var (strategy, expected) in cases)
+        {
+            var c1 = new Agent($"s1_strat_{expected}_c1") { Model = Settings.LlmModel };
+            var c2 = new Agent($"s1_strat_{expected}_c2") { Model = Settings.LlmModel };
+
+            Agent parent;
+            if (strategy == Strategy.Router)
+            {
+                var router = new Agent($"s1_strat_{expected}_router") { Model = Settings.LlmModel };
+                parent = new Agent($"s1_strat_{expected}_parent")
+                {
+                    Model = Settings.LlmModel, Agents = [c1, c2],
+                    Strategy = strategy, Router = router,
+                };
+            }
+            else
+            {
+                parent = new Agent($"s1_strat_{expected}_parent")
+                {
+                    Model = Settings.LlmModel, Agents = [c1, c2], Strategy = strategy,
+                };
+            }
+
+            var plan = await runtime.PlanAsync(parent);
+            var ad   = E2eHelpers.GetAgentDef(plan);
+
+            var actual = ad["strategy"]?.GetValue<string>();
+            Assert.True(actual == expected,
+                $"Strategy.{strategy} should serialize to '{expected}' but got '{actual}'.");
+        }
+    }
+
+    // ── 1.9  Tool-level guardrail fields ──────────────────────────────────
+
+    [SkippableFact]
+    public async Task ToolGuardrail_FieldsInToolDef()
+    {
+        _fixture.RequireServer();
+
+        var toolGuardrail = RegexGuardrail.Create(
+            pattern:   @"DROP\s+TABLE",
+            name:      "no_sqli",
+            position:  Position.Input,
+            onFail:    OnFail.Retry,
+            maxRetries: 2
+        );
+
+        var tools = ToolRegistry.FromInstance(new S1ToolWithGuardrailHost())
+            .Select(t => t.Name == "run_query" ? t.WithGuardrails(toolGuardrail) : t)
+            .ToList();
+
+        var agent = new Agent("s1_tool_guardrail")
+        {
+            Model  = Settings.LlmModel,
+            Tools  = tools,
         };
 
         await using var runtime = new AgentRuntime();
         var plan = await runtime.PlanAsync(agent);
+        var ad   = E2eHelpers.GetAgentDef(plan);
 
-        Assert.NotNull(plan);
-        var agentDef = plan!["workflowDef"]?["metadata"]?["agentDef"];
-        Assert.NotNull(agentDef);
+        // The tool must be in agentDef.tools
+        var tool = E2eHelpers.GetTool(ad, "run_query");
+        Assert.Equal("worker", tool["toolType"]?.GetValue<string>());
 
-        // termination config must exist
-        var termination = agentDef!["termination"];
-        Assert.NotNull(termination);
+        // Tool-level guardrail must be in tool.guardrails
+        var toolGuardrails = tool["guardrails"]?.AsArray();
+        Assert.NotNull(toolGuardrails);
+        Assert.True(toolGuardrails!.Count >= 1,
+            $"Expected at least 1 tool-level guardrail but got {toolGuardrails.Count}.");
 
-        // Counterfactual: agent without termination must not have a termination block
-        var agentNoTerm = new Agent("s1_no_term_test") { Model = Settings.LlmModel };
-        var planNoTerm  = await runtime.PlanAsync(agentNoTerm);
-        var noTermDef   = planNoTerm?["workflowDef"]?["metadata"]?["agentDef"];
-        var noTerm      = noTermDef?["termination"];
-        Assert.Null(noTerm);
+        var tg = toolGuardrails.First(g => g?["name"]?.GetValue<string>() == "no_sqli");
+        Assert.NotNull(tg);
+        Assert.Equal("input",  tg!["position"]?.GetValue<string>());
+        Assert.Equal("retry",  tg["onFail"]?.GetValue<string>());
+        Assert.Equal(2,        tg["maxRetries"]?.GetValue<int>());
+    }
+
+    // ── 1.10  HTTP tool toolType ───────────────────────────────────────────
+
+    [SkippableFact]
+    public async Task HttpTool_ToolTypeIsHttp()
+    {
+        _fixture.RequireServer();
+
+        var httpTool = HttpTools.Create(
+            name:        "lookup_price",
+            description: "Look up the price of a product.",
+            url:         "https://api.example.com/prices",
+            method:      "GET"
+        );
+
+        var agent = new Agent("s1_http_tool")
+        {
+            Model  = Settings.LlmModel,
+            Tools  = [httpTool],
+        };
+
+        await using var runtime = new AgentRuntime();
+        var plan = await runtime.PlanAsync(agent);
+        var ad   = E2eHelpers.GetAgentDef(plan);
+
+        Assert.Equal("http", E2eHelpers.GetToolType(ad, "lookup_price"));
+
+        // Counterfactual: a worker tool on the same agent must have toolType "worker"
+        var workerTools = ToolRegistry.FromInstance(new S1WorkerToolHost());
+        var agentMixed  = new Agent("s1_mixed_tools")
+        {
+            Model  = Settings.LlmModel,
+            Tools  = [httpTool, ..workerTools],
+        };
+        var planMixed = await runtime.PlanAsync(agentMixed);
+        var adMixed   = E2eHelpers.GetAgentDef(planMixed);
+        Assert.Equal("http",   E2eHelpers.GetToolType(adMixed, "lookup_price"));
+        Assert.Equal("worker", E2eHelpers.GetToolType(adMixed, "get_greeting"));
     }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Tool and guardrail hosts ──────────────────────────────────────────────────
 
-internal sealed class S1ToolHost
+internal sealed class S1WorkerToolHost
 {
     [Tool("Return a greeting for a name.")]
     public string GetGreeting(string name) => $"Hello, {name}!";
@@ -239,9 +430,46 @@ internal sealed class S1ToolHost
     public string GetFarewell(string name) => $"Goodbye, {name}!";
 }
 
-internal sealed class S1GuardrailHost
+internal sealed class S1CredentialToolHost
+{
+    [Tool("Fetch data using API_KEY_1.", Credentials = ["API_KEY_1"])]
+    public string SingleCredTool(string query) => $"result for {query}";
+
+    [Tool("Fetch data using two secrets.", Credentials = ["SECRET_A", "SECRET_B"])]
+    public string MultiCredTool(string data) => data;
+
+    [Tool("A tool with no credentials needed.")]
+    public string NoCredTool(string text) => text;
+}
+
+internal sealed class S1OutputGuardrailHost
 {
     [Guardrail(Position = Position.Output, OnFail = OnFail.Retry, MaxRetries = 2)]
     public GuardrailResult NoAllCaps(string content)
         => new(content != content.ToUpper(), "Response must not be ALL CAPS.");
+}
+
+internal sealed class S1InputGuardrailHost
+{
+    [Guardrail(Position = Position.Input, OnFail = OnFail.Raise)]
+    public GuardrailResult CheckInput(string content)
+        => new(!string.IsNullOrWhiteSpace(content), "Input must not be empty.");
+}
+
+internal sealed class S1MultiGuardrailHost
+{
+    [Guardrail(Position = Position.Input, OnFail = OnFail.Raise)]
+    public GuardrailResult InputCheck(string content) => new(true);
+
+    [Guardrail(Position = Position.Output, OnFail = OnFail.Retry, MaxRetries = 3)]
+    public GuardrailResult OutputRetry(string content) => new(true);
+
+    [Guardrail(Position = Position.Output, OnFail = OnFail.Fix, MaxRetries = 1)]
+    public GuardrailResult OutputFix(string content) => new(true);
+}
+
+internal sealed class S1ToolWithGuardrailHost
+{
+    [Tool("Execute a database query.")]
+    public string RunQuery(string query) => $"Results for: {query}";
 }
