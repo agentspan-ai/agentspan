@@ -84,21 +84,23 @@ def _fetcher_done(context: dict, **kwargs) -> bool:
 
 
 def _tech_lead_done(context: dict, **kwargs) -> bool:
-    """Stop Tech Lead when handoff or design was written."""
+    """Stop Tech Lead when handoff text appears OR design was written to contextbook."""
     result = context.get("result", "")
     if "HANDOFF_TO_CODER" in result:
+        return True
+    # Check if contextbook_write for the design section completed (in result or messages)
+    marker = "wrote 'architecture_design_test'"
+    if marker in result:
         return True
     for msg in context.get("messages", []):
         if not isinstance(msg, dict):
             continue
         content = msg.get("content", "")
-        if isinstance(content, str) and "wrote 'architecture_design_test'" in content:
+        if isinstance(content, str) and marker in content:
             return True
         if isinstance(content, list):
             for part in content:
-                if isinstance(part, dict) and "wrote 'architecture_design_test'" in str(
-                    part.get("text", "")
-                ):
+                if isinstance(part, dict) and marker in str(part.get("text", "")):
                     return True
     return False
 
@@ -175,7 +177,7 @@ def main():
         name="tech_lead",
         model=OPUS,
         stateful=True,
-        max_turns=100,
+        max_turns=20,
         max_tokens=60000,
         tools=[
             read_file,
