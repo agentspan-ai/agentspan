@@ -256,6 +256,12 @@ python examples/adk/01_basic_agent.py
 | 72 | [Client Reconnect](72_client_reconnect.py) | Default `runtime.run()` flow plus an advanced reconnect demo that resumes the same execution after client death | `runtime.run()`, `runtime.start()`, `runtime.get_status()`, `runtime.respond()` |
 | 73 | [Worker Restart Recovery](73_worker_restart_recovery.py) | Default `runtime.run()` flow plus an advanced deploy/serve/start recovery demo | `runtime.run()`, `runtime.deploy()`, `runtime.serve()`, `runtime.start()` |
 
+## Tool Retries
+
+| # | Example | What it demonstrates |
+|---|---------|---------------------|
+| 85 | [Tool Retries](85_tool_retries.py) | Automatic tool retries on transient failures — `@tool(retry_count=3, retry_delay_seconds=2)` and `retry_count=0` to disable |
+
 ## Multimodal
 
 | # | Example | What it demonstrates |
@@ -299,7 +305,7 @@ Quick lookup — find the right example for any SDK feature:
 | Feature | Example(s) |
 |---------|-----------|
 | `Agent` | 01 |
-| `@tool` decorator | 02, 02a, 02b |
+| `@tool` decorator | 02, 02a, 02b, 85 |
 | `http_tool()` | 04 |
 | `mcp_tool()` | 04, 04b |
 | `output_type` (Pydantic) | 03 |
