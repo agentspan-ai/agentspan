@@ -317,6 +317,12 @@ class Agent:
         thinking_budget_tokens: Token budget for extended reasoning/thinking
             mode. When set, the LLM spends extra tokens on internal reasoning
             before responding.
+        synthesize: When ``True`` (default), a final LLM synthesis step
+            combines all specialist agent outputs into a single response.
+            Set to ``False`` to pass the last specialist's output through
+            unchanged — useful for ``handoff`` and ``router`` strategies
+            where only one specialist runs and its structured output
+            should not be rewritten.
     """
 
     def __init__(
@@ -362,6 +368,7 @@ class Agent:
         base_url: Optional[str] = None,
         credentials: Optional[List[Any]] = None,
         stateful: bool = False,
+        synthesize: bool = True,
     ) -> None:
         if not name or not isinstance(name, str):
             raise ValueError("Agent name must be a non-empty string")
@@ -437,6 +444,7 @@ class Agent:
         self.introduction = introduction
         self.metadata: Dict[str, Any] = dict(metadata) if metadata else {}
         self.stateful = stateful
+        self.synthesize = synthesize
         self.planner = planner
         self.callbacks: List[Any] = list(callbacks) if callbacks else []
         self.before_agent_callback = before_agent_callback

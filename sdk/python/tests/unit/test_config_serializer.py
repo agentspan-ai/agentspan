@@ -327,3 +327,51 @@ class TestAgentConfigSerializer:
         assert "guardrails" not in config
         assert "termination" not in config
         assert "handoffs" not in config
+
+    def test_synthesize_default_not_serialized(self):
+        """synthesize=True (default) is NOT included in serialized output."""
+        from agentspan.agents.agent import Agent
+
+        sub = Agent(name="specialist", model="openai/gpt-4o")
+        agent = Agent(
+            name="team",
+            model="openai/gpt-4o",
+            agents=[sub],
+            strategy="handoff",
+        )
+        config = self.serializer.serialize(agent)
+
+        assert "synthesize" not in config
+
+    def test_synthesize_false_is_serialized(self):
+        """synthesize=False is included in serialized output as False."""
+        from agentspan.agents.agent import Agent
+
+        sub = Agent(name="specialist", model="openai/gpt-4o")
+        agent = Agent(
+            name="team",
+            model="openai/gpt-4o",
+            agents=[sub],
+            strategy="handoff",
+            synthesize=False,
+        )
+        config = self.serializer.serialize(agent)
+
+        assert config["synthesize"] is False
+
+    def test_synthesize_true_not_serialized(self):
+        """Explicit synthesize=True is also NOT included (only False is sent)."""
+        from agentspan.agents.agent import Agent
+
+        sub = Agent(name="specialist", model="openai/gpt-4o")
+        agent = Agent(
+            name="team",
+            model="openai/gpt-4o",
+            agents=[sub],
+            strategy="router",
+            router=lambda ctx: "specialist",
+            synthesize=True,
+        )
+        config = self.serializer.serialize(agent)
+
+        assert "synthesize" not in config

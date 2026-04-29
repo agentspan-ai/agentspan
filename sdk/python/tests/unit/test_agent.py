@@ -127,6 +127,21 @@ class TestAgentCreation:
         )
         assert agent.allowed_transitions == transitions
 
+    def test_synthesize_defaults_to_true(self):
+        agent = Agent(name="test", model="openai/gpt-4o")
+        assert agent.synthesize is True
+
+    def test_synthesize_false_stored(self):
+        sub = Agent(name="sub", model="openai/gpt-4o")
+        agent = Agent(
+            name="team",
+            model="openai/gpt-4o",
+            agents=[sub],
+            strategy="handoff",
+            synthesize=False,
+        )
+        assert agent.synthesize is False
+
 
 class TestAgentChaining:
     """Test the >> operator for sequential pipelines."""

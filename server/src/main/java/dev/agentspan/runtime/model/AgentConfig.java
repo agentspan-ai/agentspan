@@ -108,4 +108,11 @@ public class AgentConfig {
     /** Whether this is an external agent (no model, references existing workflow). */
     @Builder.Default
     private boolean external = false;
+
+    /**
+     * When {@code false}, the final LLM synthesis step is skipped and the last
+     * specialist agent's output is passed through unchanged.
+     * Defaults to {@code true} (synthesis enabled) when not specified.
+     */
+    private Boolean synthesize;
 }

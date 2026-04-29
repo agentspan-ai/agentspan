@@ -1012,4 +1012,138 @@ class MultiAgentCompilerTest {
         assertThat(continueCase1).hasSize(1);
         assertThat(continueCase1.get(0).getTaskReferenceName()).contains("c");
     }
+
+    // ── synthesize=false tests ───────────────────────────────────────
+
+    @Test
+    void testHandoffSynthesizeFalseSkipsFinalLlm() {
+        AgentConfig config = AgentConfig.builder()
+                .name("team")
+                .model("openai/gpt-4o")
+                .instructions("Route to the best agent.")
+                .strategy("handoff")
+                .synthesize(false)
+                .agents(List.of(
+                        simpleSubAgent("agent_a", "Handle A tasks"), simpleSubAgent("agent_b", "Handle B tasks")))
+                .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        // synthesize=false: ctx_resolve + init + DoWhile only (no final LLM)
+        assertThat(wf.getTasks()).hasSize(3);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("INLINE"); // ctx_resolve
+        assertThat(wf.getTasks().get(1).getType()).isEqualTo("SET_VARIABLE");
+        assertThat(wf.getTasks().get(2).getType()).isEqualTo("DO_WHILE");
+
+        // Output should reference last specialist output, not final LLM
+        String resultRef = wf.getOutputParameters().get("result").toString();
+        assertThat(resultRef).contains("_last_specialist_output");
+        assertThat(resultRef).doesNotContain("_final");
+    }
+
+    @Test
+    void testHandoffSynthesizeTrueIncludesFinalLlm() {
+        AgentConfig config = AgentConfig.builder()
+                .name("team")
+                .model("openai/gpt-4o")
+                .instructions("Route to the best agent.")
+                .strategy("handoff")
+                .synthesize(true)
+                .agents(List.of(
+                        simpleSubAgent("agent_a", "Handle A tasks"), simpleSubAgent("agent_b", "Handle B tasks")))
+                .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        // synthesize=true: ctx_resolve + init + DoWhile + final LLM
+        assertThat(wf.getTasks()).hasSize(4);
+        assertThat(wf.getTasks().get(3).getType()).isEqualTo("LLM_CHAT_COMPLETE");
+        assertThat(wf.getOutputParameters().get("result").toString()).contains("_final.output.result");
+    }
+
+    @Test
+    void testRouterSynthesizeFalseSkipsFinalLlm() {
+        AgentConfig config = AgentConfig.builder()
+                .name("routed")
+                .model("openai/gpt-4o")
+                .strategy("router")
+                .synthesize(false)
+                .router(WorkerRef.builder().taskName("my_router_fn").build())
+                .agents(List.of(simpleSubAgent("agent_a", "A"), simpleSubAgent("agent_b", "B")))
+                .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        // synthesize=false: ctx_resolve + init + DoWhile only (no final LLM)
+        assertThat(wf.getTasks()).hasSize(3);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("INLINE"); // ctx_resolve
+        assertThat(wf.getTasks().get(1).getType()).isEqualTo("SET_VARIABLE");
+        assertThat(wf.getTasks().get(2).getType()).isEqualTo("DO_WHILE");
+
+        // Output should reference last specialist output
+        String resultRef = wf.getOutputParameters().get("result").toString();
+        assertThat(resultRef).contains("_last_specialist_output");
+        assertThat(resultRef).doesNotContain("_final");
+    }
+
+    @Test
+    void testSwarmSynthesizeFalseSkipsFinalLlm() {
+        AgentConfig config = AgentConfig.builder()
+                .name("swarm")
+                .model("openai/gpt-4o")
+                .instructions("Triage requests")
+                .strategy("swarm")
+                .synthesize(false)
+                .handoffs(List.of(HandoffConfig.builder()
+                        .type("on_text_mention")
+                        .target("agent_b")
+                        .text("transfer to b")
+                        .build()))
+                .agents(List.of(simpleSubAgent("agent_a", "Handle A"), simpleSubAgent("agent_b", "Handle B")))
+                .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        // synthesize=false: ctx_resolve + init + DoWhile only (no final LLM)
+        assertThat(wf.getTasks()).hasSize(3);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("INLINE"); // ctx_resolve
+        assertThat(wf.getTasks().get(1).getType()).isEqualTo("SET_VARIABLE");
+        assertThat(wf.getTasks().get(2).getType()).isEqualTo("DO_WHILE");
+
+        // Output should reference last_response (swarm variable), not final LLM
+        String resultRef = wf.getOutputParameters().get("result").toString();
+        assertThat(resultRef).contains("last_response");
+        assertThat(resultRef).doesNotContain("_final");
+    }
+
+    @Test
+    void testHandoffCaseTasksTrackLastSpecialistOutput() {
+        AgentConfig config = AgentConfig.builder()
+                .name("team")
+                .model("openai/gpt-4o")
+                .strategy("handoff")
+                .agents(List.of(simpleSubAgent("specialist", "Specialist")))
+                .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        // Locate the SET_VARIABLE inside the handoff case (inside the loop's switch)
+        WorkflowTask loop = wf.getTasks().stream()
+                .filter(t -> "DO_WHILE".equals(t.getType()))
+                .findFirst()
+                .orElseThrow();
+        WorkflowTask switchTask = loop.getLoopOver().stream()
+                .filter(t -> "SWITCH".equals(t.getType()))
+                .findFirst()
+                .orElseThrow();
+        List<WorkflowTask> caseTasks = switchTask.getDecisionCases().get("specialist");
+        assertThat(caseTasks).isNotNull();
+
+        // The last task in the case should be SET_VARIABLE with _last_specialist_output
+        WorkflowTask setVar = caseTasks.stream()
+                .filter(t -> "SET_VARIABLE".equals(t.getType()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(setVar.getInputParameters()).containsKey("_last_specialist_output");
+    }
 }

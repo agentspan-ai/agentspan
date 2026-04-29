@@ -203,6 +203,10 @@ class AgentConfigSerializer:
         if getattr(agent, "gate", None) is not None:
             config["gate"] = self._serialize_gate(agent)
 
+        # Synthesize flag — only emit when explicitly disabled (default is True)
+        if not getattr(agent, "synthesize", True):
+            config["synthesize"] = False
+
         # Code execution
         if hasattr(agent, "code_execution_config") and agent.code_execution_config:
             cfg = agent.code_execution_config
