@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -391,15 +392,17 @@ func executeScript(scriptPath, language, command string) (interface{}, error) {
 	var cmd *exec.Cmd
 	switch language {
 	case "python":
-		cmd = exec.Command("python3", scriptPath, command)
+		cmd = buildPythonCmd(scriptPath, command)
 	case "node":
 		cmd = exec.Command("node", scriptPath, command)
 	case "ruby":
 		cmd = exec.Command("ruby", scriptPath, command)
 	case "go":
 		cmd = exec.Command("go", "run", scriptPath, command)
-	default: // bash
-		cmd = exec.Command("bash", scriptPath, command)
+	case "batch":
+		cmd = exec.Command("cmd", "/c", scriptPath, command)
+	default: // bash/shell
+		cmd = buildShellCmd(scriptPath, command)
 	}
 
 	out, err := cmd.CombinedOutput()
@@ -407,6 +410,28 @@ func executeScript(scriptPath, language, command string) (interface{}, error) {
 		return string(out), fmt.Errorf("script failed: %w\n%s", err, string(out))
 	}
 	return string(out), nil
+}
+
+// buildPythonCmd returns a command to run a Python script.
+// Tries python3 first, falls back to python (Windows ships python, not python3).
+func buildPythonCmd(scriptPath, command string) *exec.Cmd {
+	py := "python3"
+	if _, err := exec.LookPath("python3"); err != nil {
+		py = "python"
+	}
+	return exec.Command(py, scriptPath, command)
+}
+
+// buildShellCmd returns a command to run a shell/bash script.
+// On Windows, tries bash (Git Bash / WSL) and falls back to cmd /c.
+func buildShellCmd(scriptPath, command string) *exec.Cmd {
+	if runtime.GOOS != "windows" {
+		return exec.Command("bash", scriptPath, command)
+	}
+	if _, err := exec.LookPath("bash"); err == nil {
+		return exec.Command("bash", scriptPath, command)
+	}
+	return exec.Command("cmd", "/c", scriptPath, command)
 }
 
 // ── Skill Directory Reading ─────────────────────────────────────────────────
@@ -607,6 +632,8 @@ func detectScriptLanguage(filename string) string {
 		return "python"
 	case ".sh":
 		return "bash"
+	case ".bat", ".cmd":
+		return "batch"
 	case ".js", ".mjs":
 		return "node"
 	case ".ts":
