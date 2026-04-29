@@ -38,3 +38,9 @@ cli/agentspan
 target/
 sdk/java/examples/target/
 sdk/java/target/
+
+# C# build artifacts
+obj/
+*.user
+*.suo
+.vs/
