@@ -4,8 +4,7 @@ import type { ToolContext } from "./types.js";
 import { TerminalToolError } from "./errors.js";
 import {
   extractExecutionToken,
-  setCredentialContext,
-  clearCredentialContext,
+  runWithCredentialContext,
   resolveCredentials,
   injectCredentials,
 } from "./credentials.js";
@@ -343,60 +342,65 @@ export class WorkerManager {
         cleaned["__workflowInstanceId__"] = task.workflowInstanceId;
         if (toolContext) cleaned["__toolContext__"] = toolContext;
 
-        // Credential setup
         const execToken = extractExecutionToken(inputData);
-        if (execToken) setCredentialContext(mgr.serverUrl, mgr.headers, execToken);
 
-        let cleanupCreds: (() => void) | null = null;
-        if (pw.credentials?.length) {
-          if (!execToken) {
-            throw new NonRetryableException(
-              `Required credentials not found: ${pw.credentials.join(", ")}. ` +
-                `No execution token available.`,
-            );
+        const executeHandler = async (): Promise<Omit<TaskResult, "workflowInstanceId" | "taskId">> => {
+          let cleanupCreds: (() => void) | null = null;
+          if (pw.credentials?.length) {
+            if (!execToken) {
+              throw new NonRetryableException(
+                `Required credentials not found: ${pw.credentials.join(", ")}. ` +
+                  `No execution token available.`,
+              );
+            }
+            try {
+              const resolved = await resolveCredentials(
+                mgr.serverUrl,
+                mgr.headers,
+                execToken,
+                pw.credentials,
+              );
+              cleanupCreds = injectCredentials(mgr.serverUrl, mgr.headers, execToken, resolved);
+            } catch (err) {
+              throw new NonRetryableException(
+                `Credential resolution failed for ${pw.taskName}: ${err instanceof Error ? err.message : String(err)}`,
+              );
+            }
           }
+
           try {
-            const resolved = await resolveCredentials(
-              mgr.serverUrl,
-              mgr.headers,
-              execToken,
-              pw.credentials,
-            );
-            cleanupCreds = injectCredentials(mgr.serverUrl, mgr.headers, execToken, resolved);
-          } catch (err) {
-            throw new NonRetryableException(
-              `Credential resolution failed for ${pw.taskName}: ${err instanceof Error ? err.message : String(err)}`,
-            );
+            let result = await pw.handler(cleaned);
+
+            // State mutation capture
+            if (toolContext) {
+              const updates = captureStateMutations(stateSnapshot, toolContext.state);
+              if (updates) result = appendStateUpdates(result, updates);
+            }
+
+            // Wrap primitives — conductor expects outputData as an object
+            const outputData =
+              result != null && typeof result === "object" && !Array.isArray(result)
+                ? (result as Record<string, unknown>)
+                : { result };
+
+            recordSuccess(pw.taskName);
+            return { status: "COMPLETED", outputData };
+          } catch (error) {
+            recordFailure(pw.taskName);
+            if (error instanceof TerminalToolError) {
+              throw new NonRetryableException(error.message);
+            }
+            throw error;
+          } finally {
+            cleanupCreds?.();
           }
-        }
+        };
 
-        try {
-          let result = await pw.handler(cleaned);
-
-          // State mutation capture
-          if (toolContext) {
-            const updates = captureStateMutations(stateSnapshot, toolContext.state);
-            if (updates) result = appendStateUpdates(result, updates);
-          }
-
-          // Wrap primitives — conductor expects outputData as an object
-          const outputData =
-            result != null && typeof result === "object" && !Array.isArray(result)
-              ? (result as Record<string, unknown>)
-              : { result };
-
-          recordSuccess(pw.taskName);
-          return { status: "COMPLETED", outputData };
-        } catch (error) {
-          recordFailure(pw.taskName);
-          if (error instanceof TerminalToolError) {
-            throw new NonRetryableException(error.message);
-          }
-          throw error;
-        } finally {
-          cleanupCreds?.();
-          if (execToken) clearCredentialContext();
-        }
+        // Each tool execution runs in its own async context so concurrent workers
+        // cannot overwrite each other's credential context (fixes module-singleton race).
+        return execToken
+          ? runWithCredentialContext(mgr.serverUrl, mgr.headers, execToken, executeHandler)
+          : executeHandler();
       },
     };
   }

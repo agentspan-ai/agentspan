@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import {
   CredentialNotFoundError,
   CredentialAuthError,
@@ -5,7 +6,7 @@ import {
   CredentialServiceError,
 } from "./errors.js";
 
-// ── Module-level credential context ──────────────────────
+// ── Credential context ────────────────────────────────────
 
 interface CredentialContext {
   serverUrl: string;
@@ -13,11 +14,30 @@ interface CredentialContext {
   executionToken: string;
 }
 
+// AsyncLocalStorage provides per-execution isolation — concurrent workers in the
+// same Node.js process each see their own context without overwriting each other.
+const _credentialStorage = new AsyncLocalStorage<CredentialContext>();
+
+// Module-level singleton kept for backward compatibility with setCredentialContext()
+// callers (e.g. unit tests). Worker execution should use runWithCredentialContext().
 let _credentialContext: CredentialContext | null = null;
 
 /**
+ * Run fn in an isolated async context with its own credential context.
+ * Preferred over setCredentialContext() for concurrent worker execution.
+ */
+export function runWithCredentialContext<T>(
+  serverUrl: string,
+  headers: Record<string, string>,
+  executionToken: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return _credentialStorage.run({ serverUrl, headers, executionToken }, fn);
+}
+
+/**
  * Set the module-level credential context for getCredential().
- * Called by the worker before tool execution.
+ * @deprecated Prefer runWithCredentialContext() for concurrent-safe execution.
  */
 export function setCredentialContext(
   serverUrl: string,
@@ -29,7 +49,7 @@ export function setCredentialContext(
 
 /**
  * Clear the module-level credential context.
- * Called after tool execution completes.
+ * @deprecated Paired with the deprecated setCredentialContext().
  */
 export function clearCredentialContext(): void {
   _credentialContext = null;
@@ -166,13 +186,16 @@ export async function resolveCredentials(
  * Throws if no context is set (i.e., not called during worker execution).
  */
 export async function getCredential(name: string): Promise<string> {
-  if (!_credentialContext) {
+  // AsyncLocalStorage context takes priority (set via runWithCredentialContext).
+  // Falls back to module-level singleton for backward-compatible callers.
+  const ctx = _credentialStorage.getStore() ?? _credentialContext;
+  if (!ctx) {
     throw new CredentialAuthError(
       "No credential context available. getCredential() must be called during worker execution.",
     );
   }
 
-  const { serverUrl, headers, executionToken } = _credentialContext;
+  const { serverUrl, headers, executionToken } = ctx;
   const resolved = await resolveCredentials(serverUrl, headers, executionToken, [name]);
 
   const value = resolved[name];
