@@ -241,10 +241,35 @@ RULES:
 
 PR_UPDATER_INSTRUCTIONS = """\
 You push code and create/update a pull request. This is a MECHANICAL task.
-Execute these exact tool calls in order. Do NOT improvise. Do NOT read source files.
+You are executing a FIXED PIPELINE — not thinking, not exploring, just running steps.
+
+Here is the pipeline you execute. Follow it EXACTLY like a script:
+
+  FORK_JOIN (8 parallel branches — your FIRST response)
+  ├── contextbook_read("issue_pr")
+  ├── contextbook_read("architecture_design_test")
+  ├── contextbook_read("implementation")
+  ├── contextbook_read("qa_testing")
+  ├── contextbook_read("repo_conventions")
+  ├── run_command("git branch --show-current")
+  ├── run_command("git log --oneline -10")
+  └── git_diff()
+  JOIN — after this you have ALL data. NEVER call contextbook_read or git_diff again.
+      ↓
+  run_command("git add && commit && push") — your SECOND response
+      ↓
+  run_command("gh pr view || echo NO_PR") — check if PR exists (same response)
+      ↓
+  COMPOSE PR BODY — your THIRD response (text composition, then one tool call)
+      ↓
+  SWITCH (PR exists?)
+  ├── NO_PR  → run_command("gh pr create ...")
+  └── exists → run_command("gh pr comment ...")
+      ↓
+  OUTPUT PR URL — your FOURTH response (text only, no tools)
 
 ══════════════════════════════════════════════════════════════
-RESPONSE 1 — Call ALL of these in parallel (one response, many tool calls):
+RESPONSE 1 — FORK_JOIN: call all 8 in parallel
 ══════════════════════════════════════════════════════════════
   contextbook_read("issue_pr")
   contextbook_read("architecture_design_test")
@@ -255,23 +280,22 @@ RESPONSE 1 — Call ALL of these in parallel (one response, many tool calls):
   run_command("git branch --show-current")
   run_command("git log --oneline -10")
 
-That's 8 parallel tool calls. After this you have EVERYTHING. Never read again.
-
 ══════════════════════════════════════════════════════════════
-RESPONSE 2 — Push (call these in parallel):
+RESPONSE 2 — PUSH + CHECK PR: call these in parallel
 ══════════════════════════════════════════════════════════════
   run_command("git add -A -- ':!.contextbook' && (git diff --cached --quiet || git commit -m 'fix: address review feedback') && git push origin HEAD 2>&1 || git push --set-upstream origin $(git branch --show-current) 2>&1")
   run_command("gh pr view --repo {repo} --json number,url 2>/dev/null || echo NO_PR")
 
 ══════════════════════════════════════════════════════════════
-RESPONSE 3 — Create or update the PR:
+RESPONSE 3 — COMPOSE + CREATE/UPDATE PR
 ══════════════════════════════════════════════════════════════
-Extract issue number from issue_pr contextbook (look for "# Issue #<N>").
-Extract branch name from Response 1.
+From Response 1 results, extract:
+  - issue_number: from issue_pr text ("# Issue #<N>")
+  - branch: from git branch output
 
-Build the PR body by concatenating these parts:
+Build the PR body by pasting these sections together:
 
-  Fixes #<N>
+  Fixes #<issue_number>
 
   ## Summary
   <first 15 lines of implementation contextbook>
@@ -281,31 +305,31 @@ Build the PR body by concatenating these parts:
 
   <details><summary>contextbook: issue_pr</summary>
 
-  <FULL issue_pr content from Response 1>
+  <FULL issue_pr content — paste verbatim>
 
   </details>
 
   <details><summary>contextbook: architecture_design_test</summary>
 
-  <FULL architecture_design_test content from Response 1>
+  <FULL content — paste verbatim>
 
   </details>
 
   <details><summary>contextbook: implementation</summary>
 
-  <FULL implementation content from Response 1>
+  <FULL content — paste verbatim>
 
   </details>
 
   <details><summary>contextbook: qa_testing</summary>
 
-  <FULL qa_testing content from Response 1>
+  <FULL content — paste verbatim>
 
   </details>
 
   <details><summary>contextbook: repo_conventions</summary>
 
-  <FULL repo_conventions content from Response 1>
+  <FULL content — paste verbatim>
 
   </details>
 
@@ -317,24 +341,21 @@ Build the PR body by concatenating these parts:
 
   </details>
 
-Now execute ONE of:
-  IF "NO_PR" in Response 2 output:
-    run_command("gh pr create --repo {repo} --title 'fix: <short desc from issue>' --body '...'")
-  ELSE (PR exists):
-    run_command("gh pr comment --repo {repo} <number> --body '...'")
-
-Use heredoc for the body to avoid quoting issues:
-  run_command("gh pr create --repo {repo} --title 'fix: ...' --body \"$(cat <<'PREOF'\\n<body here>\\nPREOF\\n)\"")
+SWITCH — execute exactly ONE:
+  IF "NO_PR" was in Response 2:
+    run_command("gh pr create --repo {repo} --title 'fix: <short desc>' --body \"$(cat <<'PREOF'\\n<body>\\nPREOF\\n)\"")
+  ELSE:
+    run_command("gh pr comment --repo {repo} <number> --body \"$(cat <<'PREOF'\\n<body>\\nPREOF\\n)\"")
 
 ══════════════════════════════════════════════════════════════
-RESPONSE 4 — Output the PR URL and STOP.
+RESPONSE 4 — OUTPUT PR URL
 ══════════════════════════════════════════════════════════════
-Your output text MUST contain: https://github.com/{repo}/pull/<N>
+Your text MUST contain: https://github.com/{repo}/pull/<N>
 
-HARD RULES:
-1. 4 responses. 8 parallel reads → 2 parallel pushes → 1 PR create → URL output.
-2. NEVER go back and read more. You have everything after Response 1.
-3. NEVER read source files. Only contextbook + git/gh commands.
-4. Paste contextbook content VERBATIM — do not summarize or reformat it.
-5. The PR URL in your final output is MANDATORY — pipeline hangs without it.
+RULES:
+- You are a script executor, not a thinker. Follow the pipeline above exactly.
+- 4 responses total. No more. No fewer.
+- NEVER read anything after Response 1. All data is already in your context.
+- Paste contextbook content VERBATIM into the PR body. Do not summarize.
+- The PR URL in Response 4 is MANDATORY — the pipeline detects completion from it.
 """
