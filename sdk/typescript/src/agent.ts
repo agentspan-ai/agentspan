@@ -123,6 +123,8 @@ export interface AgentOptions {
   credentials?: (string | CredentialFile)[];
   /** Stateful execution — each run gets a unique domain UUID for worker isolation. */
   stateful?: boolean;
+  /** Whether a final LLM synthesis step is added after handoff/router/swarm strategies. Default true. */
+  synthesize?: boolean;
 }
 
 // ── Agent class ───────────────────────────────────────────
@@ -165,6 +167,7 @@ export class Agent {
   readonly codeExecutionConfig?: CodeExecutionConfig;
   readonly cliConfig?: CliConfig;
   readonly credentials?: (string | CredentialFile)[];
+  readonly synthesize: boolean;
 
   /** @internal Stored ClaudeCode config when model is ClaudeCode instance. */
   private readonly _claudeCodeConfig?: ClaudeCode;
@@ -217,6 +220,7 @@ export class Agent {
     this.gate = options.gate;
     this.codeExecutionConfig = options.codeExecutionConfig;
     this.credentials = options.credentials;
+    this.synthesize = options.synthesize ?? true;
 
     // ── Duplicate sub-agent name detection ────────────────
     if (this.agents.length > 0) {

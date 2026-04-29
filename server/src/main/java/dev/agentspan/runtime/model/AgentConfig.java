@@ -108,4 +108,10 @@ public class AgentConfig {
     /** Whether this is an external agent (no model, references existing workflow). */
     @Builder.Default
     private boolean external = false;
+
+    /**
+     * Whether a final LLM synthesis step is added after handoff/router/swarm strategies.
+     * Default true (backward compatible). Set to false to return the last specialist's output directly.
+     */
+    private Boolean synthesize;
 }

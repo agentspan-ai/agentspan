@@ -2261,7 +2261,7 @@ eventsource@^3.0.2:
   dependencies:
     eventsource-parser "^3.0.1"
 
-"examples@file:/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/examples":
+"examples@file:/Users/mananbhatt/Orkes/agentspan/sdk/typescript/examples":
   resolved "file:examples"
   dependencies:
     "@agentspan-ai/sdk" "file:.."

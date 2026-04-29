@@ -148,6 +148,11 @@ public class AgentConfigSerializer {
             agentMap.put("planner", true);
         }
 
+        // Synthesize — only emit when explicitly disabled (true is the server default)
+        if (!agent.isSynthesize()) {
+            agentMap.put("synthesize", false);
+        }
+
         // Code execution
         if (agent.isLocalCodeExecution()) {
             List<String> langs = agent.getAllowedLanguages();

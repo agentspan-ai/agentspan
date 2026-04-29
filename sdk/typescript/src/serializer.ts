@@ -216,6 +216,9 @@ export class AgentConfigSerializer {
     // Planner
     if (agent.planner) config.planner = agent.planner;
 
+    // Synthesize — only emit when explicitly disabled (true is the server default)
+    if (!agent.synthesize) config.synthesize = false;
+
     // Callbacks
     if (agent.callbacks.length > 0) {
       config.callbacks = this.serializeCallbacks(agent.callbacks, agent.name);

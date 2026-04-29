@@ -71,6 +71,7 @@ public class Agent {
     private final Map<String, Object> metadata;
     private final List<String> allowedCommands;
     private final String stopWhenTaskName;
+    private final boolean synthesize;
 
     private Agent(Builder builder) {
         this.name = builder.name;
@@ -106,6 +107,7 @@ public class Agent {
         this.metadata = builder.metadata;
         this.allowedCommands = builder.allowedCommands != null ? new ArrayList<>(builder.allowedCommands) : new ArrayList<>();
         this.stopWhenTaskName = builder.stopWhenTaskName;
+        this.synthesize = builder.synthesize;
     }
 
     /**
@@ -179,6 +181,7 @@ public class Agent {
     public Map<String, Object> getMetadata() { return metadata; }
     public List<String> getAllowedCommands() { return allowedCommands; }
     public String getStopWhenTaskName() { return stopWhenTaskName; }
+    public boolean isSynthesize() { return synthesize; }
 
     public static Builder builder() {
         return new Builder();
@@ -234,6 +237,7 @@ public class Agent {
         private Map<String, Object> metadata;
         private List<String> allowedCommands;
         private String stopWhenTaskName;
+        private boolean synthesize = true;
 
         /** Set the agent name (required). Must match {@code ^[a-zA-Z_][a-zA-Z0-9_-]*$}. */
         public Builder name(String name) {
@@ -524,6 +528,15 @@ public class Agent {
          */
         public Builder stopWhen(String taskName) {
             this.stopWhenTaskName = taskName;
+            return this;
+        }
+
+        /**
+         * Whether a final LLM synthesis step is added after handoff/router/swarm strategies.
+         * Default true (backward compatible). Set to false to pass the last specialist's output through directly.
+         */
+        public Builder synthesize(boolean synthesize) {
+            this.synthesize = synthesize;
             return this;
         }
 

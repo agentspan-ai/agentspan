@@ -211,35 +211,41 @@ public class MultiAgentCompiler {
         WorkflowTask loop = agentCompiler.buildDoWhile(
                 loopRef, termCondition, List.of(routerLlm, routeAnnotate, routeAnnotateSet, switchTask), loopInputs);
 
-        // 5. Final answer LLM: synthesize from accumulated conversation
-        WorkflowTask finalLlm = new WorkflowTask();
-        finalLlm.setName("LLM_CHAT_COMPLETE");
-        finalLlm.setTaskReferenceName(toRef(config.getName()) + "_final");
-        finalLlm.setType("LLM_CHAT_COMPLETE");
-        Map<String, Object> finalInputs = new LinkedHashMap<>();
-        finalInputs.put("llmProvider", parsed.getProvider());
-        finalInputs.put("model", parsed.getModel());
-        String finalSystemPrompt = (instructions.isEmpty() ? "" : instructions + "\n\n")
-                + "Based on the work done by the agents above, provide your final response to the user. "
-                + "IMPORTANT: Include ALL details from every agent's response — do NOT summarize or omit "
-                + "code examples, technical specifications, or specific recommendations. "
-                + "Organize the information coherently but preserve completeness.";
-        finalInputs.put(
-                "messages",
-                List.of(
-                        Map.of("role", "system", "message", finalSystemPrompt),
-                        Map.of("role", "user", "message", "${workflow.variables.conversation}")));
-        finalLlm.setInputParameters(finalInputs);
-
         List<WorkflowTask> tasks = new ArrayList<>(instructionsPlan.getPreTasks());
         tasks.add(handoffCtxResolve);
         tasks.add(initVar);
         tasks.add(loop);
-        tasks.add(finalLlm);
+
+        boolean doSynthesize = config.getSynthesize() == null || config.getSynthesize();
+        if (doSynthesize) {
+            // 5. Final answer LLM: synthesize from accumulated conversation
+            WorkflowTask finalLlm = new WorkflowTask();
+            finalLlm.setName("LLM_CHAT_COMPLETE");
+            finalLlm.setTaskReferenceName(toRef(config.getName()) + "_final");
+            finalLlm.setType("LLM_CHAT_COMPLETE");
+            Map<String, Object> finalInputs = new LinkedHashMap<>();
+            finalInputs.put("llmProvider", parsed.getProvider());
+            finalInputs.put("model", parsed.getModel());
+            String finalSystemPrompt = (instructions.isEmpty() ? "" : instructions + "\n\n")
+                    + "Based on the work done by the agents above, provide your final response to the user. "
+                    + "IMPORTANT: Include ALL details from every agent's response — do NOT summarize or omit "
+                    + "code examples, technical specifications, or specific recommendations. "
+                    + "Organize the information coherently but preserve completeness.";
+            finalInputs.put(
+                    "messages",
+                    List.of(
+                            Map.of("role", "system", "message", finalSystemPrompt),
+                            Map.of("role", "user", "message", "${workflow.variables.conversation}")));
+            finalLlm.setInputParameters(finalInputs);
+            tasks.add(finalLlm);
+        }
+
         wf.setTasks(tasks);
         wf.setOutputParameters(Map.of(
                 "result",
-                ref(toRef(config.getName()) + "_final.output.result"),
+                doSynthesize
+                        ? ref(toRef(config.getName()) + "_final.output.result")
+                        : "${workflow.variables.conversation}",
                 "context",
                 "${workflow.variables._agent_state}"));
         agentCompiler.applyTimeout(wf, config);
@@ -797,35 +803,41 @@ public class MultiAgentCompiler {
         WorkflowTask loop = agentCompiler.buildDoWhile(
                 loopRef, termCondition, List.of(routerTask, routeAnnotate, routeAnnotateSet, switchTask), loopInputs);
 
-        // 5. Final answer LLM
-        WorkflowTask finalLlm = new WorkflowTask();
-        finalLlm.setName("LLM_CHAT_COMPLETE");
-        finalLlm.setTaskReferenceName(toRef(config.getName()) + "_final");
-        finalLlm.setType("LLM_CHAT_COMPLETE");
-        Map<String, Object> finalInputs = new LinkedHashMap<>();
-        finalInputs.put("llmProvider", parsed.getProvider());
-        finalInputs.put("model", parsed.getModel());
-        String instructions = parentInstructions.getText();
-        String finalSystemPrompt = (instructions.isEmpty() ? "" : instructions + "\n\n")
-                + "Based on the work done by the agents above, provide your final response to the user. "
-                + "IMPORTANT: Include ALL details from every agent's response — do NOT summarize or omit "
-                + "code examples, technical specifications, or specific recommendations. "
-                + "Organize the information coherently but preserve completeness.";
-        finalInputs.put(
-                "messages",
-                List.of(
-                        Map.of("role", "system", "message", finalSystemPrompt),
-                        Map.of("role", "user", "message", "${workflow.variables.conversation}")));
-        finalLlm.setInputParameters(finalInputs);
-
         preTasks.add(routerCtxResolve);
         preTasks.add(initVar);
         preTasks.add(loop);
-        preTasks.add(finalLlm);
+
+        boolean doSynthesize = config.getSynthesize() == null || config.getSynthesize();
+        if (doSynthesize) {
+            // 5. Final answer LLM
+            WorkflowTask finalLlm = new WorkflowTask();
+            finalLlm.setName("LLM_CHAT_COMPLETE");
+            finalLlm.setTaskReferenceName(toRef(config.getName()) + "_final");
+            finalLlm.setType("LLM_CHAT_COMPLETE");
+            Map<String, Object> finalInputs = new LinkedHashMap<>();
+            finalInputs.put("llmProvider", parsed.getProvider());
+            finalInputs.put("model", parsed.getModel());
+            String instructions = parentInstructions.getText();
+            String finalSystemPrompt = (instructions.isEmpty() ? "" : instructions + "\n\n")
+                    + "Based on the work done by the agents above, provide your final response to the user. "
+                    + "IMPORTANT: Include ALL details from every agent's response — do NOT summarize or omit "
+                    + "code examples, technical specifications, or specific recommendations. "
+                    + "Organize the information coherently but preserve completeness.";
+            finalInputs.put(
+                    "messages",
+                    List.of(
+                            Map.of("role", "system", "message", finalSystemPrompt),
+                            Map.of("role", "user", "message", "${workflow.variables.conversation}")));
+            finalLlm.setInputParameters(finalInputs);
+            preTasks.add(finalLlm);
+        }
+
         wf.setTasks(preTasks);
         wf.setOutputParameters(Map.of(
                 "result",
-                ref(toRef(config.getName()) + "_final.output.result"),
+                doSynthesize
+                        ? ref(toRef(config.getName()) + "_final.output.result")
+                        : "${workflow.variables.conversation}",
                 "context",
                 "${workflow.variables._agent_state}"));
         agentCompiler.applyTimeout(wf, config);
@@ -1080,37 +1092,43 @@ public class MultiAgentCompiler {
 
         WorkflowTask loop = agentCompiler.buildDoWhile(loopRef, termCondition.toString(), loopTasks, loopInputs);
 
-        // 5. Final synthesis LLM: combine all agents' work into a coherent response
-        WorkflowTask finalLlm = new WorkflowTask();
-        finalLlm.setName("LLM_CHAT_COMPLETE");
-        finalLlm.setTaskReferenceName(toRef(config.getName()) + "_final");
-        finalLlm.setType("LLM_CHAT_COMPLETE");
-        Map<String, Object> finalInputs = new LinkedHashMap<>();
-        ParsedModel parsed = ModelParser.parse(config.getModel());
-        finalInputs.put("llmProvider", parsed.getProvider());
-        finalInputs.put("model", parsed.getModel());
-        String instructions = instructionsPlan.getText();
-        String finalSystemPrompt = (instructions.isEmpty() ? "" : instructions + "\n\n")
-                + "Based on the work done by the agents above, provide your final response to the user. "
-                + "IMPORTANT: Include ALL details from every agent's response — do NOT summarize or omit "
-                + "code examples, technical specifications, or specific recommendations. "
-                + "Organize the information coherently but preserve completeness.";
-        finalInputs.put(
-                "messages",
-                List.of(
-                        Map.of("role", "system", "message", finalSystemPrompt),
-                        Map.of("role", "user", "message", "${workflow.variables.conversation}")));
-        finalLlm.setInputParameters(finalInputs);
-
         List<WorkflowTask> tasks = new ArrayList<>(instructionsPlan.getPreTasks());
         tasks.add(swarmCtxResolve);
         tasks.add(initVar);
         tasks.add(loop);
-        tasks.add(finalLlm);
+
+        boolean doSynthesize = config.getSynthesize() == null || config.getSynthesize();
+        if (doSynthesize) {
+            // 5. Final synthesis LLM: combine all agents' work into a coherent response
+            WorkflowTask finalLlm = new WorkflowTask();
+            finalLlm.setName("LLM_CHAT_COMPLETE");
+            finalLlm.setTaskReferenceName(toRef(config.getName()) + "_final");
+            finalLlm.setType("LLM_CHAT_COMPLETE");
+            Map<String, Object> finalInputs = new LinkedHashMap<>();
+            ParsedModel parsed = ModelParser.parse(config.getModel());
+            finalInputs.put("llmProvider", parsed.getProvider());
+            finalInputs.put("model", parsed.getModel());
+            String instructions = instructionsPlan.getText();
+            String finalSystemPrompt = (instructions.isEmpty() ? "" : instructions + "\n\n")
+                    + "Based on the work done by the agents above, provide your final response to the user. "
+                    + "IMPORTANT: Include ALL details from every agent's response — do NOT summarize or omit "
+                    + "code examples, technical specifications, or specific recommendations. "
+                    + "Organize the information coherently but preserve completeness.";
+            finalInputs.put(
+                    "messages",
+                    List.of(
+                            Map.of("role", "system", "message", finalSystemPrompt),
+                            Map.of("role", "user", "message", "${workflow.variables.conversation}")));
+            finalLlm.setInputParameters(finalInputs);
+            tasks.add(finalLlm);
+        }
+
         wf.setTasks(tasks);
         wf.setOutputParameters(Map.of(
                 "result",
-                ref(toRef(config.getName()) + "_final.output.result"),
+                doSynthesize
+                        ? ref(toRef(config.getName()) + "_final.output.result")
+                        : "${workflow.variables.conversation}",
                 "context",
                 "${workflow.variables._agent_state}"));
         agentCompiler.applyTimeout(wf, config);

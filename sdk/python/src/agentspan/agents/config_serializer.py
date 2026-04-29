@@ -163,6 +163,10 @@ class AgentConfigSerializer:
         if getattr(agent, "planner", False):
             config["planner"] = True
 
+        # Synthesize — only emit when explicitly disabled (default true is server default)
+        if not getattr(agent, "synthesize", True):
+            config["synthesize"] = False
+
         # Callbacks — emit for any position that has handlers or legacy callables
         from agentspan.agents.callback import (
             _LEGACY_ATTR_TO_POSITION,
