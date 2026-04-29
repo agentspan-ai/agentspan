@@ -266,7 +266,7 @@ def main():
         name="pr_updater",
         model=SONNET,
         stateful=True,
-        max_turns=10,
+        max_turns=15,
         max_tokens=16000,
         credentials=[GITHUB_CREDENTIAL],
         cli_config=cli,

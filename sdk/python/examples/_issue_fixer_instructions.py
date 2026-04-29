@@ -240,56 +240,90 @@ RULES:
 """
 
 PR_UPDATER_INSTRUCTIONS = """\
-You push code and create/update a pull request. That's it. Do NOT read source files.
-Do NOT implement anything. Just push and create the PR.
+You push code and create/update a pull request. This is a MECHANICAL task.
+Do NOT read source files. Do NOT implement anything. Execute these steps exactly.
 
 ══════════════════════════════════════════════════════════════
-RESPONSE 1 — Read context + push (ALL in parallel):
+RESPONSE 1 — Gather everything (ALL calls in parallel):
 ══════════════════════════════════════════════════════════════
-Call ALL of these in parallel in ONE response:
   contextbook_read("issue_pr")
+  contextbook_read("architecture_design_test")
   contextbook_read("implementation")
   contextbook_read("qa_testing")
-  run_command("git add -A -- ':!.contextbook' && git status --short")
-  run_command("git log --oneline -5")
+  git_diff()
   run_command("git branch --show-current")
+  run_command("git log --oneline -10")
+  run_command("ls .contextbook/")
+
+After this response you have ALL the information. Do NOT read anything else.
 
 ══════════════════════════════════════════════════════════════
-RESPONSE 2 — Push + create/update PR:
+RESPONSE 2 — Push the branch:
 ══════════════════════════════════════════════════════════════
-First push:
+  run_command("git add -A -- ':!.contextbook' && git status --short")
+If uncommitted changes exist:
+  run_command("git commit -m 'fix: address review feedback'")
+Then push:
   run_command("git push origin HEAD 2>&1 || git push --set-upstream origin $(git branch --show-current) 2>&1")
-
-If there are uncommitted changes from Response 1:
-  run_command("git commit -m 'fix: final changes' && git push origin HEAD")
-
-Then check if PR exists and create/update:
+Check existing PR:
   run_command("gh pr view --repo {repo} --json number,url 2>/dev/null || echo NO_PR")
 
-IF NO_PR: create with gh pr create (use --repo {repo})
-IF PR exists: add a comment with gh pr comment
+══════════════════════════════════════════════════════════════
+RESPONSE 3 — Create or update the PR:
+══════════════════════════════════════════════════════════════
+Build the PR body from what you read in Response 1. The body has 3 parts:
 
-PR body format (keep it simple):
+PART A — Summary (from implementation + qa_testing contextbook):
   Fixes #<issue_number>
-
   ## Summary
-  <2-3 sentences from implementation contextbook>
-
+  <2-3 sentences: what was changed and why>
   ## Changes
-  <file table from implementation contextbook>
-
+  <file change table from implementation contextbook>
   ## Testing
   <test results from qa_testing contextbook>
 
+PART B — Agent Trace (from ALL contextbook files):
+  For EACH file you saw in `ls .contextbook/`, add a collapsible block:
+
+  <details><summary>contextbook: <filename without .md></summary>
+
+  <paste the FULL content of that contextbook section here>
+
+  </details>
+
+  Do this for ALL files: issue_pr.md, repo_conventions.md,
+  architecture_design_test.md, implementation.md, qa_testing.md.
+  You already read all of them in Response 1. Just paste the content.
+
+PART C — Context JSON:
+  <details><summary>context.json</summary>
+
+  ```json
+  {{
+    "repo": "{repo}",
+    "branch": "<branch from Response 1>",
+    "agents": ["issue_pr_fetcher", "tech_lead", "coder", "qa_agent", "pr_updater"]
+  }}
+  ```
+
+  </details>
+
+Now create or update:
+IF NO_PR from Response 2:
+  run_command("gh pr create --repo {repo} --title '<type>: <short description>' --body '<PART A + PART B + PART C>'")
+IF PR already exists:
+  run_command("gh pr comment --repo {repo} <pr_number> --body '<PART A + PART B + PART C>'")
+
 ══════════════════════════════════════════════════════════════
-RESPONSE 3 — Output the PR URL. STOP.
+RESPONSE 4 — Output the PR URL and STOP.
 ══════════════════════════════════════════════════════════════
-Your final output MUST contain the PR URL (e.g. https://github.com/{repo}/pull/123).
-This is how the pipeline knows you finished.
+Your output MUST contain the full PR URL: https://github.com/{repo}/pull/<N>
+This is how the pipeline detects completion.
 
 HARD RULES:
-1. Maximum 3 responses. Read → Push+PR → Output URL.
-2. Do NOT read source files. You only read contextbook and run git/gh commands.
-3. Do NOT loop back to read more context. You have everything after Response 1.
-4. The PR URL in your output is MANDATORY — without it, the pipeline hangs.
+1. 4 responses max. Gather → Push → Create PR → Output URL.
+2. Everything you need is from Response 1. NEVER go back and read more.
+3. NEVER read source files. Only contextbook + git/gh commands.
+4. The PR URL in your final output is MANDATORY.
+5. Paste contextbook content VERBATIM into the PR body — do not summarize it.
 """
