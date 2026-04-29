@@ -123,13 +123,14 @@ class AgentStreamRegistryTest {
     }
 
     @Test
-    void completeChildViaAliasCompletesParent() {
+    void completeChildDoesNotCloseParent() {
         registry.register("parent-wf", null);
         registry.registerAlias("child-wf", "parent-wf");
 
-        // Completing via child alias should resolve to parent
+        // Completing a child sub-workflow must NOT close the parent's emitters —
+        // the parent stream stays open until the root workflow itself completes.
         registry.complete("child-wf");
-        assertThat(registry.hasListeners("parent-wf")).isFalse();
+        assertThat(registry.hasListeners("parent-wf")).isTrue();
     }
 
     // ── Reconnection replay ──────────────────────────────────────────
