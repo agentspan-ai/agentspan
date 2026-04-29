@@ -240,94 +240,56 @@ RULES:
 """
 
 PR_UPDATER_INSTRUCTIONS = """\
-You commit, push, and create or update a pull request.
-Changes are already committed by the coder. Complete in 5 turns or fewer.
+You push code and create/update a pull request. That's it. Do NOT read source files.
+Do NOT implement anything. Just push and create the PR.
 
-STEP 1 — Read ALL context (1 turn, parallel):
+══════════════════════════════════════════════════════════════
+RESPONSE 1 — Read context + push (ALL in parallel):
+══════════════════════════════════════════════════════════════
+Call ALL of these in parallel in ONE response:
   contextbook_read("issue_pr")
-  contextbook_read("architecture_design_test")
   contextbook_read("implementation")
   contextbook_read("qa_testing")
-  run_command("git branch --show-current")
-  run_command("git log --oneline -10")
-
-STEP 2 — Push (1 turn):
   run_command("git add -A -- ':!.contextbook' && git status --short")
-  If uncommitted changes: run_command("git commit -m 'fix: final changes'")
-  run_command("git push origin HEAD")
-  If push fails: run_command("git push --set-upstream origin $(git branch --show-current)")
+  run_command("git log --oneline -5")
+  run_command("git branch --show-current")
 
-STEP 3 — Create or update PR (1 turn):
-  Check if a PR already exists: run_command("gh pr view --repo {repo} --json number 2>/dev/null || echo NO_PR")
+══════════════════════════════════════════════════════════════
+RESPONSE 2 — Push + create/update PR:
+══════════════════════════════════════════════════════════════
+First push:
+  run_command("git push origin HEAD 2>&1 || git push --set-upstream origin $(git branch --show-current) 2>&1")
 
-  IF no existing PR: create one with gh pr create
-  IF PR exists: push is enough, add a comment summarizing changes
+If there are uncommitted changes from Response 1:
+  run_command("git commit -m 'fix: final changes' && git push origin HEAD")
 
-  PR body / comment MUST include:
+Then check if PR exists and create/update:
+  run_command("gh pr view --repo {repo} --json number,url 2>/dev/null || echo NO_PR")
 
-  Fixes #<N>
+IF NO_PR: create with gh pr create (use --repo {repo})
+IF PR exists: add a comment with gh pr comment
+
+PR body format (keep it simple):
+  Fixes #<issue_number>
 
   ## Summary
-  <human-readable summary from implementation.md>
+  <2-3 sentences from implementation contextbook>
 
   ## Changes
-  <file list from implementation.md>
+  <file table from implementation contextbook>
 
   ## Testing
-  <from qa_testing.md — test results>
+  <test results from qa_testing contextbook>
 
-  ## Agent Trace
-  Include ALL contextbook sections as collapsible blocks:
+══════════════════════════════════════════════════════════════
+RESPONSE 3 — Output the PR URL. STOP.
+══════════════════════════════════════════════════════════════
+Your final output MUST contain the PR URL (e.g. https://github.com/{repo}/pull/123).
+This is how the pipeline knows you finished.
 
-  <details>
-  <summary>Issue & PR Context</summary>
-
-  <issue_pr content>
-
-  </details>
-
-  <details>
-  <summary>Architecture & Design</summary>
-
-  <architecture_design_test content>
-
-  </details>
-
-  <details>
-  <summary>Implementation Details</summary>
-
-  <implementation content>
-
-  </details>
-
-  <details>
-  <summary>QA Testing</summary>
-
-  <qa_testing content>
-
-  </details>
-
-  <details>
-  <summary>Change Context (JSON)</summary>
-
-  ```json
-  {{
-    "issue_number": <N>,
-    "pr_number": <PR or null>,
-    "repo": "{repo}",
-    "branch": "<branch>",
-    "agents": ["issue_pr_fetcher", "tech_lead", "coder", "qa_agent", "pr_updater"],
-    "timestamp": "<ISO 8601>"
-  }}
-  ```
-
-  </details>
-
-STEP 4 — Output the PR URL. STOP.
-
-RULES:
-- Include ALL contextbook sections in the PR — this is the full agent trace.
-- Skip sections that are empty or not yet written.
-- Extract issue number from issue_pr contextbook, not guessing.
-- Do NOT read source files. Do NOT implement anything.
+HARD RULES:
+1. Maximum 3 responses. Read → Push+PR → Output URL.
+2. Do NOT read source files. You only read contextbook and run git/gh commands.
+3. Do NOT loop back to read more context. You have everything after Response 1.
+4. The PR URL in your output is MANDATORY — without it, the pipeline hangs.
 """
