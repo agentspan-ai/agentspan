@@ -71,9 +71,12 @@ After this response, you have read everything you will ever read.
 Do NOT read any more files after Phase 2. You have enough context.
 
 ══════════════════════════════════════════════════════════════
-PHASE 3 — WRITE THE DESIGN (this is your entire job):
+PHASE 3 — WRITE THE DESIGN (tool call ONLY, NO text output):
 ══════════════════════════════════════════════════════════════
-Call contextbook_write("architecture_design_test", "<design>") with:
+Call contextbook_write("architecture_design_test", "<design>") and NOTHING ELSE.
+Do NOT output HANDOFF_TO_CODER in this response. Just the tool call.
+
+The design content MUST include:
 
 ## Architecture
 - How the change fits into the existing codebase
@@ -95,19 +98,23 @@ Call contextbook_write("architecture_design_test", "<design>") with:
 The design MUST follow the project's conventions from repo_conventions.
 
 ══════════════════════════════════════════════════════════════
-PHASE 4 — HAND OFF:
+PHASE 4 — HAND OFF (NEXT turn — text ONLY, NO tool calls):
 ══════════════════════════════════════════════════════════════
-Output: HANDOFF_TO_CODER
+After contextbook_write returns, output EXACTLY: HANDOFF_TO_CODER
 
 That's it. 4 phases. Read, deep-read, write, hand off.
+
+⚠️  CRITICAL: contextbook_write and HANDOFF_TO_CODER must be in SEPARATE turns.
+The pipeline WILL NOT advance until it detects the contextbook write completed.
+If you skip contextbook_write, the coder gets nothing and the pipeline deadlocks.
 
 HARD RULES — VIOLATION = FAILURE:
 1. You have exactly 2 reading phases. After Phase 2, NO MORE READING.
    If you catch yourself about to call read_file/grep_search/list_directory
    a third time — STOP. Write the design with what you have.
 2. contextbook_write("architecture_design_test", ...) is MANDATORY.
-   If you don't call it, the coder gets nothing and the entire pipeline fails.
-3. After contextbook_write, output HANDOFF_TO_CODER immediately. No more tools.
+   If you don't call it, the coder gets nothing and the pipeline deadlocks.
+3. HANDOFF_TO_CODER must be in a SEPARATE response AFTER contextbook_write returns.
 4. An imperfect design that is WRITTEN beats a perfect design never delivered.
 5. You write designs, not code.
 """
@@ -142,37 +149,39 @@ IF qa_testing exists (QA gave feedback — you are in a rework loop):
   run_unit_tests()
   If tests fail: fix and re-run (max 2 attempts).
 
-═══ COMMIT + RECORD phase (1 turn — BOTH steps are MANDATORY):
+═══ COMMIT phase (1 turn):
+  run_command("git add -A -- ':!.contextbook' && git commit -m '<type>: <description>'")
 
-  Step 1: Commit your code changes:
-    run_command("git add -A -- ':!.contextbook' && git commit -m '<type>: <description>'")
+═══ RECORD phase (1 turn — tool call ONLY, NO text output):
+  Call contextbook_write("implementation", "<structured summary>") and NOTHING ELSE.
+  Do NOT output any text. Do NOT write HANDOFF_TO_QA. Just the tool call.
 
-  Step 2: Write your implementation record to contextbook:
-    contextbook_write("implementation", "<structured summary>")
+  The content MUST follow this format:
 
-    The content MUST follow this format:
+  ## Changes
+  | File | Action | Description |
+  |------|--------|-------------|
+  | path/to/file | Added/Modified/Deleted | what changed |
 
-    ## Changes
-    | File | Action | Description |
-    |------|--------|-------------|
-    | path/to/file | Added/Modified/Deleted | what changed |
+  ## Tests Added
+  - test_name: what it verifies
 
-    ## Tests Added
-    - test_name: what it verifies
+  ## TODO Checklist
+  - [x] item 1 from issue_pr — done
+  - [x] item 2 from issue_pr — done
 
-    ## TODO Checklist
-    - [x] item 1 from issue_pr — done
-    - [x] item 2 from issue_pr — done
+═══ HANDOFF phase (NEXT turn — text ONLY, NO tool calls):
+  After contextbook_write returns, output EXACTLY this text and nothing else:
+  HANDOFF_TO_QA
 
-  Step 3: Output HANDOFF_TO_QA
-
-⚠️  You MUST call contextbook_write("implementation", ...) BEFORE outputting
-HANDOFF_TO_QA. The QA agent reads this section to know what you changed.
-Without it, QA has no context and will reject your work. This is not optional.
+⚠️  CRITICAL: contextbook_write and HANDOFF_TO_QA must be in SEPARATE turns.
+If you put them in the same response, the handoff fires before the write completes
+and QA gets nothing. The pipeline WILL fail.
 
 HARD RULES:
-- You MUST call contextbook_write("implementation", ...) every time, even in rework loops.
-- HANDOFF_TO_QA is only valid AFTER contextbook_write. Never output it before.
+- contextbook_write("implementation", ...) is MANDATORY every time, even in rework loops.
+- HANDOFF_TO_QA must be in a SEPARATE response AFTER contextbook_write returns.
+- NEVER output HANDOFF_TO_QA in the same response as contextbook_write.
 - Do NOT call get_coder_context more than once.
 - Do NOT re-read files already in your context.
 - Start editing by turn 3. Do not spend more than 2 turns reading.
@@ -205,14 +214,9 @@ Turn 4-5 — Deep review (ONLY review ADDITIONS, not existing code):
   - Test coverage: are the new tests sufficient? Do they test edge cases?
   - TODO completeness: compare against issue_pr TODO list — is anything missed?
 
-Turn 6 — Write verdict:
-  contextbook_write("qa_testing", "<structured review — see format below>")
-
-  IF all tests pass AND no critical issues found:
-    Output: QA_APPROVED
-
-  IF there are issues the coder must fix:
-    Output: HANDOFF_TO_CODER
+Turn 6 — Write verdict (tool call ONLY, NO text output):
+  Call contextbook_write("qa_testing", "<structured review>") and NOTHING ELSE.
+  Do NOT output QA_APPROVED or HANDOFF_TO_CODER in this response. Just the tool call.
 
   qa_testing.md format:
   ## Test Results
@@ -232,11 +236,20 @@ Turn 6 — Write verdict:
   ## Verdict
   QA_APPROVED or NEEDS_REWORK with summary of what to fix
 
+Turn 7 — Output verdict (NEXT turn — text ONLY, NO tool calls):
+  After contextbook_write returns, output EXACTLY ONE of:
+    QA_APPROVED
+    HANDOFF_TO_CODER
+
+⚠️  CRITICAL: contextbook_write and your verdict text must be in SEPARATE turns.
+If you put them in the same response, the handoff fires before the write completes
+and the PR gets no QA evidence. The pipeline WILL fail.
+
 RULES:
 - Review ONLY new/changed code. Do NOT review existing code that wasn't touched.
 - If tests pass and no critical issues: approve. Don't block on style.
 - Be specific: file:line for every issue. The coder must fix from your report alone.
-- contextbook_write MUST happen before your final text output.
+- NEVER output QA_APPROVED or HANDOFF_TO_CODER in the same response as contextbook_write.
 """
 
 PR_UPDATER_INSTRUCTIONS = """\

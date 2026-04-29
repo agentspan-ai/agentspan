@@ -77,22 +77,9 @@ MAX_QA_LOOPS = 3  # max coder<>qa iterations
 # ── Stop-when callbacks ──────────────────────────────────────
 
 
-def _fetcher_done(context: dict, **kwargs) -> bool:
-    """Stop fetcher when TODO list is output."""
-    result = context.get("result", "")
-    return "## TODO" in result and "REPO:" in result
-
-
-def _tech_lead_done(context: dict, **kwargs) -> bool:
-    """Stop Tech Lead when handoff text appears OR design was written to contextbook."""
-    result = context.get("result", "")
-    if "HANDOFF_TO_CODER" in result:
-        return True
-    # Check if contextbook_write for the design section completed (in result or messages)
-    marker = "wrote 'architecture_design_test'"
-    if marker in result:
-        return True
-    for msg in context.get("messages", []):
+def _has_contextbook_marker(messages: list, marker: str) -> bool:
+    """Check if a contextbook write marker appears anywhere in message history."""
+    for msg in messages:
         if not isinstance(msg, dict):
             continue
         content = msg.get("content", "")
@@ -105,10 +92,32 @@ def _tech_lead_done(context: dict, **kwargs) -> bool:
     return False
 
 
-def _qa_approved(context: dict, **kwargs) -> bool:
-    """Stop the SWARM loop when QA approves."""
+def _fetcher_done(context: dict, **kwargs) -> bool:
+    """Stop fetcher when TODO list is output."""
     result = context.get("result", "")
-    return "QA_APPROVED" in result
+    return "## TODO" in result and "REPO:" in result
+
+
+def _tech_lead_done(context: dict, **kwargs) -> bool:
+    """Stop Tech Lead only when the design was actually written to contextbook."""
+    result = context.get("result", "")
+    marker = "wrote 'architecture_design_test'"
+    if marker in result:
+        return True
+    return _has_contextbook_marker(context.get("messages", []), marker)
+
+
+def _qa_approved(context: dict, **kwargs) -> bool:
+    """Stop the SWARM loop when QA approves AND both contextbook sections exist."""
+    result = context.get("result", "")
+    if "QA_APPROVED" not in result:
+        return False
+    messages = context.get("messages", [])
+    impl_written = _has_contextbook_marker(messages, "wrote 'implementation'")
+    qa_written = _has_contextbook_marker(messages, "wrote 'qa_testing'")
+    if not impl_written or not qa_written:
+        return False
+    return True
 
 
 def _pr_done(context: dict, **kwargs) -> bool:
