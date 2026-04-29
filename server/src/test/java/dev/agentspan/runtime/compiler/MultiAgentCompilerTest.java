@@ -1036,6 +1036,7 @@ class MultiAgentCompilerTest {
         assertThat(wf.getTasks().get(2).getType()).isEqualTo("DO_WHILE");
 
         // Output should reference last specialist output, not final LLM
+        assertThat(wf.getOutputParameters()).containsKey("result");
         String resultRef = wf.getOutputParameters().get("result").toString();
         assertThat(resultRef).contains("_last_specialist_output");
         assertThat(resultRef).doesNotContain("_final");
@@ -1058,6 +1059,7 @@ class MultiAgentCompilerTest {
         // synthesize=true: ctx_resolve + init + DoWhile + final LLM
         assertThat(wf.getTasks()).hasSize(4);
         assertThat(wf.getTasks().get(3).getType()).isEqualTo("LLM_CHAT_COMPLETE");
+        assertThat(wf.getOutputParameters()).containsKey("result");
         assertThat(wf.getOutputParameters().get("result").toString()).contains("_final.output.result");
     }
 
@@ -1081,6 +1083,7 @@ class MultiAgentCompilerTest {
         assertThat(wf.getTasks().get(2).getType()).isEqualTo("DO_WHILE");
 
         // Output should reference last specialist output
+        assertThat(wf.getOutputParameters()).containsKey("result");
         String resultRef = wf.getOutputParameters().get("result").toString();
         assertThat(resultRef).contains("_last_specialist_output");
         assertThat(resultRef).doesNotContain("_final");
@@ -1111,6 +1114,7 @@ class MultiAgentCompilerTest {
         assertThat(wf.getTasks().get(2).getType()).isEqualTo("DO_WHILE");
 
         // Output should reference last_response (swarm variable), not final LLM
+        assertThat(wf.getOutputParameters()).containsKey("result");
         String resultRef = wf.getOutputParameters().get("result").toString();
         assertThat(resultRef).contains("last_response");
         assertThat(resultRef).doesNotContain("_final");
