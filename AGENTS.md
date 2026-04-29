@@ -36,30 +36,92 @@ When `run(agent, prompt)` is called:
 
 ### Key Source Files
 
+All paths relative to `sdk/python/`.
+
+#### Core
+
 | File | Purpose |
 |---|---|
-| `src/agentspan/agents/agent.py` | `Agent` class — the single orchestration primitive |
-| `src/agentspan/agents/tool.py` | `@tool` decorator, `ToolDef`, `http_tool()`, `mcp_tool()` |
-| `src/agentspan/agents/run.py` | Top-level `run()`, `start()`, `stream()`, `run_async()`, `plan()` with singleton runtime |
-| `src/agentspan/agents/result.py` | `AgentResult`, `AgentHandle`, `AgentStatus`, `AgentEvent`, `EventType` |
-| `src/agentspan/agents/guardrail.py` | `Guardrail`, `GuardrailResult`, `RegexGuardrail`, `LLMGuardrail` |
-| `src/agentspan/agents/memory.py` | `ConversationMemory` — session message history |
-| `src/agentspan/agents/semantic_memory.py` | `SemanticMemory`, `MemoryStore`, `MemoryEntry` — long-term memory |
+| `src/agentspan/agents/__init__.py` | Public API surface — all exports |
+| `src/agentspan/agents/agent.py` | `Agent`, `AgentDef`, `Strategy`, `scatter_gather`, `@agent` decorator |
+| `src/agentspan/agents/tool.py` | `@tool`, `ToolDef`, `ToolContext`, `agent_tool`, `http_tool`, `mcp_tool`, `human_tool`, `api_tool`, `image_tool`, `audio_tool`, `video_tool`, `pdf_tool`, `index_tool`, `search_tool`, `wait_for_message_tool` |
+| `src/agentspan/agents/run.py` | Top-level `run()`, `start()`, `stream()`, `deploy()`, `serve()`, `plan()`, `resume()`, `configure()`, `shutdown()` + async variants |
+| `src/agentspan/agents/result.py` | `AgentResult`, `AgentHandle`, `AgentStream`, `AgentStatus`, `AgentEvent`, `EventType`, `DeploymentInfo`, `FinishReason`, `TokenUsage` |
+| `src/agentspan/agents/skill.py` | `skill()`, `load_skills()` — load agentskills.io skill directories as Agents |
+| `src/agentspan/agents/guardrail.py` | `Guardrail`, `GuardrailDef`, `GuardrailResult`, `RegexGuardrail`, `LLMGuardrail`, `@guardrail` decorator |
 | `src/agentspan/agents/termination.py` | `TerminationCondition` and composable subclasses (`&`, `|` operators) |
 | `src/agentspan/agents/handoff.py` | `HandoffCondition`, `OnToolResult`, `OnTextMention`, `OnCondition` |
+| `src/agentspan/agents/memory.py` | `ConversationMemory` — session message history |
+| `src/agentspan/agents/semantic_memory.py` | `SemanticMemory`, `MemoryStore`, `MemoryEntry` — long-term memory |
+| `src/agentspan/agents/callback.py` | `CallbackHandler` — lifecycle hooks |
+| `src/agentspan/agents/gate.py` | Gate conditions for workflow control |
+| `src/agentspan/agents/exceptions.py` | `AgentspanError`, `AgentAPIError`, `AgentNotFoundError` |
+
+#### Code Execution & CLI
+
+| File | Purpose |
+|---|---|
 | `src/agentspan/agents/code_executor.py` | `CodeExecutor` — Local, Docker, Jupyter, Serverless |
-| `src/agentspan/agents/ext.py` | `UserProxyAgent`, `GPTAssistantAgent` |
-| `src/agentspan/agents/tracing.py` | Optional OpenTelemetry integration |
-| `src/agentspan/agents/__init__.py` | Public API surface — all exports |
-| `src/agentspan/agents/compiler/agent_compiler.py` | Single agent compilation (DoWhile loops, tool dispatch) |
-| `src/agentspan/agents/compiler/multi_agent_compiler.py` | Multi-agent strategies (handoff, sequential, parallel, router) |
-| `src/agentspan/agents/compiler/tool_compiler.py` | `@tool` → TaskDef + ToolSpec + dispatch registration |
-| `src/agentspan/agents/compiler/_dispatch.py` | Universal dispatch worker (fuzzy parsing, circuit breaker) |
+| `src/agentspan/agents/code_execution_config.py` | `CodeExecutionConfig` dataclass |
+| `src/agentspan/agents/cli_config.py` | `CliConfig` — shell command execution config for agents |
+| `src/agentspan/agents/claude_code.py` | `ClaudeCode` — Claude Code integration |
+
+#### Runtime
+
+| File | Purpose |
+|---|---|
 | `src/agentspan/agents/runtime/runtime.py` | `AgentRuntime` — compile + execute + stream |
 | `src/agentspan/agents/runtime/worker_manager.py` | Auto-register `@tool` as Conductor workers |
+| `src/agentspan/agents/runtime/_dispatch.py` | Universal dispatch worker (fuzzy parsing, circuit breaker) |
 | `src/agentspan/agents/runtime/config.py` | `AgentConfig` — environment variable configuration |
+| `src/agentspan/agents/runtime/server.py` | Embedded server management |
+| `src/agentspan/agents/runtime/http_client.py` | HTTP client for server communication |
+| `src/agentspan/agents/runtime/discovery.py` | `discover_agents()` — auto-discover agents in a directory |
+| `src/agentspan/agents/runtime/mcp_discovery.py` | MCP tool discovery and caching |
+| `src/agentspan/agents/runtime/tool_registry.py` | Tool registration and lookup |
+| `src/agentspan/agents/runtime/credentials/` | Credential management (accessor, fetcher, isolator, types) |
+
+#### Framework Integrations
+
+| File | Purpose |
+|---|---|
+| `src/agentspan/agents/frameworks/langchain.py` | LangChain agent integration |
+| `src/agentspan/agents/frameworks/langgraph.py` | LangGraph agent integration |
+| `src/agentspan/agents/frameworks/claude_agent_sdk.py` | Claude Agent SDK integration |
+| `src/agentspan/agents/frameworks/serializer.py` | Framework config serialization |
+| `src/agentspan/agents/openai_compat.py` | `Runner`, `RunResult` — OpenAI Agents SDK compatibility |
+| `src/agentspan/agents/ext.py` | `UserProxyAgent`, `GPTAssistantAgent` |
+
+#### Testing Library
+
+| File | Purpose |
+|---|---|
+| `src/agentspan/agents/testing/assertions.py` | Test assertion helpers |
+| `src/agentspan/agents/testing/expect.py` | Expect-style test assertions |
+| `src/agentspan/agents/testing/mock.py` | Test mocking utilities |
+| `src/agentspan/agents/testing/recording.py` | Test recording/replay |
+| `src/agentspan/agents/testing/eval_runner.py` | Evaluation runner |
+| `src/agentspan/agents/testing/semantic.py` | Semantic comparison utilities |
+| `src/agentspan/agents/testing/strategy_validators.py` | Multi-agent strategy validators |
+| `src/agentspan/agents/testing/pytest_plugin.py` | Pytest plugin integration |
+
+#### Internal
+
+| File | Purpose |
+|---|---|
 | `src/agentspan/agents/_internal/model_parser.py` | Parse `"provider/model"` strings |
 | `src/agentspan/agents/_internal/schema_utils.py` | JSON Schema generation from type hints |
+| `src/agentspan/agents/_internal/provider_registry.py` | LLM provider registry |
+| `src/agentspan/agents/config_serializer.py` | Agent config serialization |
+| `src/agentspan/agents/tracing.py` | Optional OpenTelemetry integration |
+| `src/agentspan/agents/langchain.py` | Legacy LangChain integration (see `frameworks/`) |
+
+#### CLI
+
+| File | Purpose |
+|---|---|
+| `src/agentspan/cli/deploy.py` | Agent deployment CLI |
+| `src/agentspan/cli/discover.py` | Agent discovery CLI |
 
 ### Conductor Primitive Mapping
 
@@ -117,14 +179,24 @@ Valid strategies are defined in `agent.py`:
 ### Running Tests
 
 ```bash
-# Unit tests (no server required)
-python3 -m pytest tests/unit/ -v
+# All commands relative to sdk/python/
 
-# Integration tests (require running Conductor server)
-python3 -m pytest tests/integration/ -v
+# Unit tests (no server required)
+uv run pytest tests/unit/ -v
+
+# Integration tests (require running Agentspan server)
+uv run pytest tests/integration/ -v
+
+# E2E tests (require running server + LLM keys)
+uv run pytest e2e/ -v
+# or via orchestrator:
+./e2e/orchestrator.sh --sdk python
 
 # Lint
-ruff check src/
+uv run ruff check src/
+
+# Format
+uv run ruff format src/
 
 # Type check
 mypy src/agentspan/agents/ --ignore-missing-imports --no-strict-optional
@@ -132,17 +204,77 @@ mypy src/agentspan/agents/ --ignore-missing-imports --no-strict-optional
 
 ### Test Files
 
+All paths relative to `sdk/python/`.
+
+#### Unit Tests (`tests/unit/`)
+
 | File | Scope |
 |---|---|
-| `tests/unit/test_agent.py` | Agent creation, validation, chaining, repr |
-| `tests/unit/test_tool.py` | `@tool`, `http_tool`, `mcp_tool`, `get_tool_def`, `@worker_task` |
-| `tests/unit/test_compiler.py` | Model parser, schema gen, tool compiler, DoWhile structure |
-| `tests/unit/test_dispatch_advanced.py` | Fuzzy parsing, circuit breaker, approval, trimming, ToolContext |
-| `tests/unit/test_multi_agent_compiler.py` | Handoff, sequential, parallel, router, hybrid |
-| `tests/unit/test_result.py` | AgentResult, AgentStatus, AgentEvent, EventType |
-| `tests/unit/test_termination.py` | Termination conditions and composable operators |
-| `tests/integration/test_basic_execution.py` | End-to-end single agent execution |
-| `tests/integration/test_multi_agent.py` | End-to-end multi-agent execution |
+| `test_agent.py` | Agent creation, validation, chaining, repr |
+| `test_agent_decorator.py` | `@agent` decorator |
+| `test_agent_handle_join.py` | `AgentHandle.join()` |
+| `test_tool.py` | `@tool`, `http_tool`, `mcp_tool`, `get_tool_def`, `@worker_task` |
+| `test_compiler.py` | Model parser, schema gen, tool compiler, DoWhile structure |
+| `test_dispatch.py` | Dispatch worker basics |
+| `test_dispatch_advanced.py` | Fuzzy parsing, circuit breaker, approval, trimming, ToolContext |
+| `test_result.py` | AgentResult, AgentStatus, AgentEvent, EventType |
+| `test_termination.py` | Termination conditions and composable operators |
+| `test_skill.py` | `skill()`, `load_skills()`, skill directory loading |
+| `test_cli_config.py` | `CliConfig` shell execution |
+| `test_code_execution.py` | `CodeExecutionConfig` |
+| `test_code_executor.py` | `CodeExecutor` implementations |
+| `test_config_serializer.py` | Config serialization |
+| `test_discovery.py` | `discover_agents()` |
+| `test_deploy_serve.py` | `deploy()`, `serve()` |
+| `test_run.py` | Top-level `run()` API |
+| `test_runtime.py` | `AgentRuntime` lifecycle |
+| `test_runtime_server_compile.py` | Server-side compilation |
+| `test_http_client.py` | HTTP client |
+| `test_mcp_discovery.py` | MCP tool discovery |
+| `test_guardrail.py` | Guardrail execution |
+| `test_memory.py` | ConversationMemory |
+| `test_sse_parsing.py` | SSE parse functions (Tier 1) |
+| `test_sse_client.py` | Mock SSE server (Tier 2) |
+| `test_worker_manager.py` | Worker registration |
+| `test_framework_detection.py` | Framework auto-detection |
+| `test_langchain_worker.py` | LangChain worker |
+| `test_langgraph_worker.py` | LangGraph worker |
+| `test_claude_agent_sdk_worker.py` | Claude Agent SDK worker |
+| `test_testing_*.py` | Testing library (assertions, expect, mock, recording, eval_runner, strategy_validators) |
+| `credentials/test_*.py` | Credential system (accessor, fetcher, isolator, types, dispatch, public API) |
+
+#### Integration Tests (`tests/integration/`)
+
+| File | Scope |
+|---|---|
+| `test_correctness_live.py` | End-to-end correctness (live server) |
+| `test_behavioral_correctness_live.py` | Behavioral correctness (live server) |
+| `test_multi_agent_matrix.py` | Multi-agent strategy matrix |
+| `test_guardrail_matrix.py` | Guardrail combination matrix |
+| `test_e2e_sse.py` | Full SSE streaming (Tier 3) |
+| `test_e2e_streaming.py` | End-to-end streaming |
+| `test_token_usage.py` | Token usage tracking |
+| `test_lease_extension.py` | Worker lease extension |
+
+#### E2E Tests (`e2e/`)
+
+| File | Scope |
+|---|---|
+| `test_suite1_basic_validation.py` | Basic agent validation |
+| `test_suite2_tool_calling.py` | Tool calling |
+| `test_suite3_cli_tools.py` | CLI tools (CliConfig) |
+| `test_suite4_mcp_tools.py` | MCP tools |
+| `test_suite5_http_tools.py` | HTTP tools |
+| `test_suite6_pdf_tools.py` | PDF tools |
+| `test_suite7_media_tools.py` | Media tools (image, audio, video) |
+| `test_suite8_guardrails.py` | Guardrails |
+| `test_suite9_handoffs.py` | Handoff strategies |
+| `test_suite10_code_execution.py` | Code execution |
+| `test_suite11_langgraph.py` | LangGraph integration |
+| `test_suite12_termination_gates.py` | Termination conditions and gates |
+| `test_suite13_callbacks.py` | Callback handlers |
+| `test_suite14_stateful_domain.py` | Stateful domain routing |
+| `test_suite15_skills.py` | Agent Skills |
 
 ### Writing Tests
 
@@ -160,30 +292,34 @@ mypy src/agentspan/agents/ --ignore-missing-imports --no-strict-optional
 
 ## Validation Checklist
 
-Before merging any change:
+Before merging any change (all commands relative to `sdk/python/`):
 
-1. **Unit tests pass:** `python3 -m pytest tests/unit/ -v`
-2. **Lint clean:** `ruff check src/`
+1. **Unit tests pass:** `uv run pytest tests/unit/ -v`
+2. **Lint clean:** `uv run ruff check src/`
 3. **Type check clean:** `mypy src/agentspan/agents/ --ignore-missing-imports --no-strict-optional`
 4. **Public API unchanged** (or intentionally extended): check `__init__.py` `__all__`
 5. **Examples still work** for affected features (run against a live Agentspan server)
+6. **E2E tests pass** for affected suites: `uv run pytest e2e/test_suite<N>_*.py -v`
 
 ## Common Patterns
 
 ### Adding a New Tool Type
 
-1. Add a constructor function in `tool.py` (like `http_tool()`, `mcp_tool()`)
+Existing tool constructors: `@tool`, `agent_tool`, `api_tool`, `http_tool`, `mcp_tool`, `human_tool`, `image_tool`, `audio_tool`, `video_tool`, `pdf_tool`, `index_tool`, `search_tool`, `wait_for_message_tool`
+
+1. Add a constructor function in `tool.py` (follow existing patterns)
 2. Return a `ToolDef` with the appropriate `tool_type`
-3. Handle the new type in `compiler/tool_compiler.py`
-4. Export from `__init__.py`
+3. Handle the new type in `runtime/_dispatch.py` and `runtime/tool_registry.py`
+4. Export from `__init__.py` and add to `__all__`
 5. Add a test in `tests/unit/test_tool.py`
 6. Add an example in `examples/`
+7. Add an e2e test in the appropriate `e2e/test_suite*.py`
 
 ### Adding a New Multi-Agent Strategy
 
 1. Add the strategy name to `_VALID_STRATEGIES` in `agent.py`
-2. Implement the compilation in `compiler/multi_agent_compiler.py`
-3. Add a test in `tests/unit/test_multi_agent_compiler.py`
+2. Implement the compilation in the runtime server (Java-side)
+3. Add a test in `tests/unit/test_agent.py`
 4. Add an example in `examples/`
 
 ### Adding a New Guardrail Type
@@ -198,6 +334,62 @@ Before merging any change:
 2. Implement `should_terminate(self, context) -> TerminationResult`
 3. Export from `__init__.py`
 4. Add a test in `tests/unit/test_termination.py`
+
+## Agent Skills
+
+The `skill()` function loads agentskills.io skill directories as Agentspan Agents. A skill directory contains:
+- `SKILL.md` — skill definition with YAML frontmatter (name, params, description) and markdown body
+- `*-agent.md` — sub-agent definitions
+- `scripts/` — executable scripts (Python, Bash, Node, Ruby)
+- `references/`, `examples/`, `assets/` — resource files
+
+```python
+from agentspan.agents import skill, load_skills, agent_tool
+
+# Load a single skill
+review_agent = skill("~/.claude/skills/dg", model="anthropic/claude-sonnet-4-6", params={"cap": 1})
+
+# Use a skill as a tool within another agent
+agent = Agent(name="coordinator", tools=[agent_tool(review_agent, description="Run code review")])
+
+# Load all skills from a directory
+all_skills = load_skills("~/.agents/skills/", model="openai/gpt-4o")
+```
+
+Key source: `src/agentspan/agents/skill.py`
+
+## Credential Management
+
+The credential system allows agents to securely access secrets (API keys, tokens) at runtime via the Agentspan server.
+
+```python
+from agentspan.agents import Agent, get_credential, resolve_credentials
+
+# Agent declares needed credentials
+agent = Agent(name="github-bot", credentials=["GITHUB_TOKEN", "SLACK_TOKEN"])
+
+# In a tool, get a credential at runtime
+@tool
+def post_to_slack(message: str) -> str:
+    token = get_credential("SLACK_TOKEN")
+    ...
+
+# For external workers, resolve from task input
+creds = resolve_credentials(task_input, ["GITHUB_TOKEN"])
+```
+
+Key sources: `src/agentspan/agents/runtime/credentials/` (accessor, fetcher, isolator, types)
+
+## Framework Integrations
+
+Agentspan supports running agents from other frameworks:
+
+| Framework | File | Description |
+|---|---|---|
+| LangChain | `frameworks/langchain.py` | Run LangChain agents as Agentspan workers |
+| LangGraph | `frameworks/langgraph.py` | Run LangGraph state graphs as Agentspan workers |
+| Claude Agent SDK | `frameworks/claude_agent_sdk.py` | Run Claude Agent SDK agents as Agentspan workers |
+| OpenAI Agents SDK | `openai_compat.py` | `Runner`/`RunResult` compatibility layer |
 
 ## Runtime Server (Java)
 

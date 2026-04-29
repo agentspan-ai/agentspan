@@ -939,8 +939,9 @@ class AgentRuntime:
         ):
             names.add(f"{agent.name}_router_fn")
 
-        # Handoff check (swarm with handoff conditions)
-        if agent.handoffs:
+        # Handoff check — needed for any SWARM parent (server always generates
+        # the task) or any agent with explicit handoff conditions.
+        if agent.handoffs or (agent.strategy == "swarm" and agent.agents):
             names.add(f"{agent.name}_handoff_check")
 
         # Swarm transfer workers — prefixed with SOURCE agent name
@@ -1121,8 +1122,9 @@ class AgentRuntime:
             if _server_needs(task_name):
                 self._register_router_worker(agent, domain=domain)
 
-        # 7. Handoff check (swarm with handoff conditions)
-        if agent.handoffs:
+        # 7. Handoff check — needed for any SWARM parent (server always
+        #    generates the task) or any agent with explicit handoff conditions.
+        if agent.handoffs or (agent.strategy == "swarm" and agent.agents):
             task_name = f"{agent.name}_handoff_check"
             if _server_needs(task_name):
                 self._register_handoff_worker(agent, domain=domain)
@@ -1210,7 +1212,12 @@ class AgentRuntime:
                 self._worker_manager.start()
 
     def _register_skill_workers(self, agent: Agent, domain: "Optional[str]" = None) -> None:
-        """Register skill workers (scripts + read_skill_file) for a skill-based agent."""
+        """Register skill workers (scripts + read_skill_file) for a skill-based agent.
+
+        Registers on BOTH the specified domain AND the default (None) domain.
+        Skill sub-workflows may be scheduled by the server without a domain,
+        so workers must be available on both queues to avoid poll starvation.
+        """
         from conductor.client.worker.worker_task import worker_task
 
         from agentspan.agents.runtime._dispatch import make_tool_worker
@@ -1220,17 +1227,19 @@ class AgentRuntime:
         if not skill_workers:
             return
 
+        domains = [domain, None] if domain else [None]
         for sw in skill_workers:
             wrapper = make_tool_worker(sw.func, sw.name)
-            worker_task(
-                task_definition_name=sw.name,
-                task_def=_default_task_def(sw.name),
-                register_task_def=True,
-                overwrite_task_def=True,
-                domain=domain,
-                lease_extend_enabled=True,
-            )(wrapper)
-            logger.debug("Registered skill worker '%s'", sw.name)
+            for d in domains:
+                worker_task(
+                    task_definition_name=sw.name,
+                    task_def=_default_task_def(sw.name),
+                    register_task_def=True,
+                    overwrite_task_def=True,
+                    domain=d,
+                    lease_extend_enabled=True,
+                )(wrapper)
+            logger.debug("Registered skill worker '%s' (domains=%s)", sw.name, domains)
 
     def _register_guardrail_worker(self, agent_name: str, guardrails: list, domain: "Optional[str]" = None) -> None:
         """Register guardrail workers for custom function guardrails.
