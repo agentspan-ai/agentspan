@@ -243,7 +243,7 @@ See [examples/](examples/) for more samples.
 |----|-------------|
 | macOS | x86_64, ARM64 (Apple Silicon) |
 | Linux | x86_64, ARM64 |
-| Windows | coming soon |
+| Windows | x86_64, ARM64 |
 
 ## Development
 

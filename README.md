@@ -38,9 +38,11 @@
 ```bash
 # macOS / Linux
 curl -fsSL https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.sh | sh
+
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.ps1 | iex
 ```
 
-> **Windows support — coming soon.**
 ## Install SDKs
 ```bash
 # Python
@@ -77,6 +79,9 @@ Open `http://localhost:6767` to see the visual execution UI.
 ```bash
 # npm
 npm install -g @agentspan-ai/agentspan
+
+# Windows — CMD / double-click
+curl -fsSL https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.bat -o install.bat && install.bat
 
 # From source
 cd cli && go build -o agentspan .
