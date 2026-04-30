@@ -146,6 +146,7 @@ export {
   extractExecutionToken,
   resolveCredentials,
   getCredential,
+  runWithCredentialContext,
   setCredentialContext,
   clearCredentialContext,
   injectCredentials,
