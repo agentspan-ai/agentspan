@@ -18,6 +18,12 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 EXAMPLES_DIR="$(cd "$SCRIPT_DIR/../examples" && pwd)"
 TIMEOUT="${EXAMPLE_TIMEOUT:-300}"
 
+# Cross-platform python: honour PYTHON env var, then try python3, then python.
+PYTHON="${PYTHON:-$(command -v python3 2>/dev/null || command -v python 2>/dev/null || echo python3)}"
+
+# Cross-platform temp dir: honour TMPDIR (set on macOS/Linux), fall back to /tmp.
+TMP_BASE="${TMPDIR:-${TEMP:-/tmp}}"
+
 # Examples that require external services not typically available in a
 # standard test environment.
 SKIP_BY_DEFAULT=(
@@ -119,7 +125,7 @@ for example in "${EXAMPLES[@]}"; do
     name="$(basename "$example" .py)"
     printf "%-45s " "$name"
 
-    LOG_FILE=$(mktemp "/tmp/example-${name}-XXXXXX")
+    LOG_FILE=$(mktemp "${TMP_BASE}/example-${name}-XXXXXX")
 
     START_TIME=$(date +%s)
 
@@ -135,9 +141,9 @@ for example in "${EXAMPLES[@]}"; do
     if [[ -n "$STDIN_RESPONSE" ]]; then
         # Use `yes` to provide unlimited identical responses — handles
         # cases where the LLM calls an approval tool multiple times.
-        RUN_CMD="yes '$STDIN_RESPONSE' | timeout $TIMEOUT python3 $example"
+        RUN_CMD="yes '$STDIN_RESPONSE' | timeout $TIMEOUT $PYTHON $example"
     else
-        RUN_CMD="timeout $TIMEOUT python3 $example"
+        RUN_CMD="timeout $TIMEOUT $PYTHON $example"
     fi
 
     if eval "$RUN_CMD" > "$LOG_FILE" 2>&1; then
@@ -210,7 +216,7 @@ if [[ ${#FAILED[@]} -gt 0 ]]; then
             if [[ -n "$WF_ID" && -n "${AGENTSPAN_SERVER_URL:-}" ]]; then
                 echo "  Workflow: $WF_ID"
                 # Use the SDK's own client so auth (key/secret → token) is handled
-                WF_INFO=$(python3 -c "
+                WF_INFO=$($PYTHON -c "
 import os, json
 try:
     from agentspan.agents.runtime.config import AgentConfig
@@ -240,11 +246,11 @@ try:
 except Exception as e:
     print(json.dumps({'error': str(e)}))
 " 2>/dev/null || echo '{"error":"query failed"}')
-                WF_STATUS=$(echo "$WF_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || true)
-                WF_REASON=$(echo "$WF_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('reason',''))" 2>/dev/null || true)
-                WF_FAILED_TASKS=$(echo "$WF_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('failed_tasks',''))" 2>/dev/null || true)
-                WF_TASK_REASON=$(echo "$WF_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('task_reason',''))" 2>/dev/null || true)
-                WF_ERROR=$(echo "$WF_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('error',''))" 2>/dev/null || true)
+                WF_STATUS=$(echo "$WF_INFO" | $PYTHON -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || true)
+                WF_REASON=$(echo "$WF_INFO" | $PYTHON -c "import sys,json; print(json.load(sys.stdin).get('reason',''))" 2>/dev/null || true)
+                WF_FAILED_TASKS=$(echo "$WF_INFO" | $PYTHON -c "import sys,json; print(json.load(sys.stdin).get('failed_tasks',''))" 2>/dev/null || true)
+                WF_TASK_REASON=$(echo "$WF_INFO" | $PYTHON -c "import sys,json; print(json.load(sys.stdin).get('task_reason',''))" 2>/dev/null || true)
+                WF_ERROR=$(echo "$WF_INFO" | $PYTHON -c "import sys,json; print(json.load(sys.stdin).get('error',''))" 2>/dev/null || true)
 
                 if [[ -n "$WF_ERROR" ]]; then
                     echo "  (could not query Conductor: $WF_ERROR)"
@@ -261,7 +267,7 @@ except Exception as e:
         fi
     done
     echo ""
-    echo "Logs preserved in /tmp/example-*"
+    echo "Logs preserved in ${TMP_BASE}/example-*"
     exit 1
 fi
 
