@@ -32,6 +32,18 @@ public class AgentConfigSerializer {
     }
 
     private Map<String, Object> serializeAgent(Agent agent) {
+        // Skill (and other framework) agents — emit the raw framework config so the server
+        // can compile sub-agents and tools from the SKILL.md content.
+        if ("skill".equals(agent.getFramework())) {
+            Map<String, Object> skillMap = new LinkedHashMap<>();
+            skillMap.put("name", agent.getName());
+            skillMap.put("model", agent.getModel() != null ? agent.getModel() : null);
+            skillMap.put("_framework", "skill");
+            Map<String, Object> cfg = agent.getFrameworkConfig();
+            if (cfg != null) skillMap.putAll(cfg);
+            return skillMap;
+        }
+
         Map<String, Object> agentMap = new LinkedHashMap<>();
 
         agentMap.put("name", agent.getName());

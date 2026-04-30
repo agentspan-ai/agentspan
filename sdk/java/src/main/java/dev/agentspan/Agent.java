@@ -77,6 +77,8 @@ public class Agent {
     private final dev.agentspan.gate.TextGate gate;
     private final Function<Map<String, Object>, Map<String, Object>> beforeAgentCallback;
     private final Function<Map<String, Object>, Map<String, Object>> afterAgentCallback;
+    private final String framework;
+    private final Map<String, Object> frameworkConfig;
 
     private Agent(Builder builder) {
         this.name = builder.name;
@@ -118,6 +120,8 @@ public class Agent {
         this.gate = builder.gate;
         this.beforeAgentCallback = builder.beforeAgentCallback;
         this.afterAgentCallback = builder.afterAgentCallback;
+        this.framework = builder.framework;
+        this.frameworkConfig = builder.frameworkConfig;
     }
 
     /**
@@ -197,6 +201,8 @@ public class Agent {
     public dev.agentspan.gate.TextGate getGate() { return gate; }
     public Function<Map<String, Object>, Map<String, Object>> getBeforeAgentCallback() { return beforeAgentCallback; }
     public Function<Map<String, Object>, Map<String, Object>> getAfterAgentCallback() { return afterAgentCallback; }
+    public String getFramework() { return framework; }
+    public Map<String, Object> getFrameworkConfig() { return frameworkConfig; }
 
     public static Builder builder() {
         return new Builder();
@@ -258,6 +264,8 @@ public class Agent {
         private dev.agentspan.gate.TextGate gate;
         private Function<Map<String, Object>, Map<String, Object>> beforeAgentCallback;
         private Function<Map<String, Object>, Map<String, Object>> afterAgentCallback;
+        private String framework;
+        private Map<String, Object> frameworkConfig;
 
         /** Set the agent name (required). Must match {@code ^[a-zA-Z_][a-zA-Z0-9_-]*$}. */
         public Builder name(String name) {
@@ -590,6 +598,18 @@ public class Agent {
         /** Register a callback invoked after this agent's entire execution (after all LLM calls). */
         public Builder afterAgentCallback(Function<Map<String, Object>, Map<String, Object>> afterAgentCallback) {
             this.afterAgentCallback = afterAgentCallback;
+            return this;
+        }
+
+        /** Set the framework type (e.g. {@code "skill"}) for framework-backed agents. */
+        public Builder framework(String framework) {
+            this.framework = framework;
+            return this;
+        }
+
+        /** Set the raw framework configuration map sent verbatim to the server. */
+        public Builder frameworkConfig(Map<String, Object> frameworkConfig) {
+            this.frameworkConfig = frameworkConfig;
             return this;
         }
 
