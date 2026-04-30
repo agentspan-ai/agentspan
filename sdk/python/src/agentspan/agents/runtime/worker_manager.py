@@ -12,10 +12,79 @@ from __future__ import annotations
 
 import atexit
 import logging
+import platform
 import threading
 from typing import TYPE_CHECKING, Any, Optional
 
 logger = logging.getLogger("agentspan.agents.worker_manager")
+
+
+def _patch_conductor_use_threads_on_windows() -> None:
+    """On Windows, replace multiprocessing.Process with threading.Thread for Conductor workers.
+
+    Windows multiprocessing uses 'spawn' which requires all objects passed to
+    child processes to be picklable.  Conductor workers hold threading locks
+    and closures that are not picklable.  Using threads instead of processes
+    sidesteps the entire issue: threads share the parent's memory so no
+    pickling is needed, and tool functions are typically I/O-bound so the GIL
+    is not a bottleneck.
+
+    Also patches the worker target functions to skip signal.signal() calls,
+    which are forbidden in non-main threads.
+    """
+    try:
+        from conductor.client.automator import task_handler as _th_module
+    except ImportError:
+        return
+
+    if getattr(_th_module, "_agentspan_thread_patched", False):
+        return
+
+    # ── Thread shim ──────────────────────────────────────────────────────────
+
+    class _ThreadAsProcess(threading.Thread):
+        """threading.Thread shim that satisfies the multiprocessing.Process interface."""
+
+        def __init__(self, group=None, target=None, name=None, args=(), kwargs=None, *, daemon=None):
+            super().__init__(group=group, target=target, name=name, args=args, kwargs=kwargs or {}, daemon=daemon)
+            self.exitcode: Any = None
+
+        def terminate(self) -> None:
+            pass
+
+        def kill(self) -> None:
+            pass
+
+        @property
+        def pid(self) -> None:
+            return None
+
+    _th_module.Process = _ThreadAsProcess  # type: ignore[attr-defined]
+
+    # ── Patch worker targets to skip signal.signal() in threads ──────────────
+    # The conductor process targets call signal.signal(SIGINT, SIG_IGN) at the
+    # top — valid in a real child process but raises ValueError in a thread.
+
+    import signal as _signal
+
+    # ── Patch signal.signal to be a no-op in non-main threads ────────────────
+    # The conductor worker/logger process targets call signal.signal(SIGINT,
+    # SIG_IGN) at startup — valid in a child process but raises ValueError
+    # when called from a non-main thread.  We monkey-patch signal.signal to
+    # silently skip the call when not in the main thread.
+
+    import signal as _signal_mod
+
+    _orig_signal_fn = _signal_mod.signal
+
+    def _thread_safe_signal(signalnum, handler):
+        if threading.current_thread() is threading.main_thread():
+            return _orig_signal_fn(signalnum, handler)
+        # Non-main thread: skip silently
+
+    _signal_mod.signal = _thread_safe_signal  # type: ignore[attr-defined]
+
+    _th_module._agentspan_thread_patched = True  # type: ignore[attr-defined]
 
 if TYPE_CHECKING:
     from conductor.client.automator.task_handler import TaskHandler
@@ -73,6 +142,9 @@ class WorkerManager:
         the wrong process, leaving some workers unstarted with pollCount=0).
         """
         from conductor.client.automator.task_handler import TaskHandler
+
+        if platform.system() == "Windows":
+            _patch_conductor_use_threads_on_windows()
 
         with self._lock:
             if self._task_handler is None:
