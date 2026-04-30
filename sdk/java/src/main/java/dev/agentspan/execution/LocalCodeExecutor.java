@@ -85,12 +85,12 @@ public class LocalCodeExecutor extends CodeExecutor {
     }
 
     private static String getExtension(String language) {
-        switch (language.toLowerCase()) {
-            case "python": return ".py";
-            case "bash": case "sh": return ".sh";
-            case "node": case "javascript": return ".js";
-            case "ruby": return ".rb";
-            default: return ".tmp";
-        }
+        return switch (language.toLowerCase()) {
+            case "python" -> ".py";
+            case "bash", "sh" -> ".sh";
+            case "node", "javascript" -> ".js";
+            case "ruby" -> ".rb";
+            default -> ".tmp";
+        };
     }
 }

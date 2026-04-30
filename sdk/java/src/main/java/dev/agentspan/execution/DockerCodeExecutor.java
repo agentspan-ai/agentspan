@@ -85,22 +85,22 @@ public class DockerCodeExecutor extends CodeExecutor {
     }
 
     private static String getInterpreter(String language) {
-        switch (language.toLowerCase()) {
-            case "python": return "python3";
-            case "bash": case "sh": return "bash";
-            case "node": case "javascript": return "node";
-            case "ruby": return "ruby";
-            default: return language;
-        }
+        return switch (language.toLowerCase()) {
+            case "python" -> "python3";
+            case "bash", "sh" -> "bash";
+            case "node", "javascript" -> "node";
+            case "ruby" -> "ruby";
+            default -> language;
+        };
     }
 
     private static String getExtension(String language) {
-        switch (language.toLowerCase()) {
-            case "python": return ".py";
-            case "bash": case "sh": return ".sh";
-            case "node": case "javascript": return ".js";
-            case "ruby": return ".rb";
-            default: return ".tmp";
-        }
+        return switch (language.toLowerCase()) {
+            case "python" -> ".py";
+            case "bash", "sh" -> ".sh";
+            case "node", "javascript" -> ".js";
+            case "ruby" -> ".rb";
+            default -> ".tmp";
+        };
     }
 }
