@@ -193,6 +193,90 @@ public class AgentRuntime implements AutoCloseable {
         });
     }
 
+    // ── Deploy / Serve / Resume ───────────────────────────────────────────
+
+    /**
+     * Compile and register agents on the server without executing them.
+     *
+     * <p>This is a CI/CD operation. It pushes the workflow definitions and task
+     * definitions to the server. It does NOT register local workers or start any
+     * processes. Use {@link #serve} separately for the runtime.
+     *
+     * @param agents one or more agents to deploy
+     * @return list of DeploymentInfo, one per deployed agent
+     */
+    public List<dev.agentspan.model.DeploymentInfo> deploy(Agent... agents) {
+        List<dev.agentspan.model.DeploymentInfo> results = new ArrayList<>();
+        for (Agent agent : agents) {
+            Map<String, Object> agentConfig = serializer.serialize(agent);
+            Map<String, Object> payload = new java.util.LinkedHashMap<>();
+            payload.put("agentConfig", agentConfig);
+            Map<String, Object> resp = httpApi.deployAgent(payload);
+            String registeredName = resp.getOrDefault("agentName", agent.getName()).toString();
+            results.add(new dev.agentspan.model.DeploymentInfo(registeredName, agent.getName()));
+            logger.info("Deployed agent '{}' as '{}'", agent.getName(), registeredName);
+        }
+        return results;
+    }
+
+    /**
+     * Async version of {@link #deploy}.
+     *
+     * @param agents one or more agents to deploy
+     * @return CompletableFuture resolving to list of DeploymentInfo
+     */
+    public CompletableFuture<List<dev.agentspan.model.DeploymentInfo>> deployAsync(Agent... agents) {
+        return CompletableFuture.supplyAsync(() -> deploy(agents));
+    }
+
+    /**
+     * Register workers and keep them polling until interrupted.
+     *
+     * <p>This is a runtime operation: it registers the Java tool functions as
+     * Conductor workers and starts polling for tasks.
+     *
+     * @param agents agents whose workers should be served
+     */
+    public void serve(Agent... agents) {
+        for (Agent agent : agents) {
+            prepareWorkers(agent);
+        }
+        workerManager.startAll();
+        logger.info("Serving {} agent(s) — waiting for tasks (Ctrl+C to stop)", agents.length);
+        Runtime.getRuntime().addShutdownHook(new Thread(workerManager::stop, "agentspan-serve-shutdown"));
+        try {
+            Thread.currentThread().join();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * Re-attach to an existing agent execution and re-register workers.
+     *
+     * <p>Fetches the workflow from the server and re-registers tool workers.
+     * Returns an {@link dev.agentspan.model.AgentHandle} for continued interaction.
+     *
+     * @param executionId the execution ID from a previous {@link #start} call
+     * @param agent       the same Agent definition that was originally executed
+     * @return an AgentHandle bound to this runtime
+     */
+    public dev.agentspan.model.AgentHandle resume(String executionId, Agent agent) {
+        prepareWorkers(agent);
+        return new dev.agentspan.model.AgentHandle(executionId, httpApi);
+    }
+
+    /**
+     * Async version of {@link #resume}.
+     *
+     * @param executionId the execution ID
+     * @param agent       the agent definition originally executed
+     * @return CompletableFuture resolving to an AgentHandle
+     */
+    public CompletableFuture<dev.agentspan.model.AgentHandle> resumeAsync(String executionId, Agent agent) {
+        return CompletableFuture.supplyAsync(() -> resume(executionId, agent));
+    }
+
     // ── Lifecycle ────────────────────────────────────────────────────────
 
     /**

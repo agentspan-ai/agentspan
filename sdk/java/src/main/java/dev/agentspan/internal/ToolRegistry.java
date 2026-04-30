@@ -267,7 +267,7 @@ public class ToolRegistry {
                 // Named lookup
                 raw = inputData.get(param.getName());
             }
-            args[i] = coerce(raw, param.getType());
+            args[i] = coerce(raw, param.getType(), param.getParameterizedType());
         }
 
         return args;
@@ -277,7 +277,32 @@ public class ToolRegistry {
      * Coerce a raw value (typically from JSON deserialization) to the target Java type.
      */
     private static Object coerce(Object value, Class<?> targetType) {
+        return coerce(value, targetType, targetType);
+    }
+
+    /**
+     * Coerce a raw value to the target Java type, using full generic type info when available.
+     * This handles e.g. {@code List<Double>} where the raw type is just {@code List.class}.
+     */
+    private static Object coerce(Object value, Class<?> targetType, Type genericType) {
         if (value == null) return defaultFor(targetType);
+
+        // For collections, always go through Jackson with the full parameterized type so that
+        // element types are correctly coerced. Without this, JSON integers arrive as Integer
+        // even when the method signature declares List<Double>.
+        if (List.class.isAssignableFrom(targetType)) {
+            try {
+                com.fasterxml.jackson.databind.type.TypeFactory tf =
+                    JsonMapper.get().getTypeFactory();
+                com.fasterxml.jackson.databind.JavaType jt = (genericType != null)
+                    ? tf.constructType(genericType)
+                    : tf.constructCollectionType(List.class, Object.class);
+                return JsonMapper.get().convertValue(value, jt);
+            } catch (Exception e) {
+                return value;
+            }
+        }
+
         if (targetType.isInstance(value)) return value;
 
         String str = value.toString();
@@ -300,7 +325,10 @@ public class ToolRegistry {
         }
         // Fallback: try Jackson conversion for complex types
         try {
-            return JsonMapper.get().convertValue(value, targetType);
+            com.fasterxml.jackson.databind.JavaType jt = (genericType != null)
+                ? JsonMapper.get().getTypeFactory().constructType(genericType)
+                : JsonMapper.get().getTypeFactory().constructType(targetType);
+            return JsonMapper.get().convertValue(value, jt);
         } catch (Exception e) {
             return value;
         }

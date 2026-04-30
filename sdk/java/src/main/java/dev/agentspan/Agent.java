@@ -71,6 +71,14 @@ public class Agent {
     private final Map<String, Object> metadata;
     private final List<String> allowedCommands;
     private final String stopWhenTaskName;
+    private final boolean synthesize;
+    private final boolean stateful;
+    private final String baseUrl;
+    private final dev.agentspan.gate.TextGate gate;
+    private final Function<Map<String, Object>, Map<String, Object>> beforeAgentCallback;
+    private final Function<Map<String, Object>, Map<String, Object>> afterAgentCallback;
+    private final String framework;
+    private final Map<String, Object> frameworkConfig;
 
     private Agent(Builder builder) {
         this.name = builder.name;
@@ -106,6 +114,14 @@ public class Agent {
         this.metadata = builder.metadata;
         this.allowedCommands = builder.allowedCommands != null ? new ArrayList<>(builder.allowedCommands) : new ArrayList<>();
         this.stopWhenTaskName = builder.stopWhenTaskName;
+        this.synthesize = builder.synthesize;
+        this.stateful = builder.stateful;
+        this.baseUrl = builder.baseUrl;
+        this.gate = builder.gate;
+        this.beforeAgentCallback = builder.beforeAgentCallback;
+        this.afterAgentCallback = builder.afterAgentCallback;
+        this.framework = builder.framework;
+        this.frameworkConfig = builder.frameworkConfig;
     }
 
     /**
@@ -179,6 +195,14 @@ public class Agent {
     public Map<String, Object> getMetadata() { return metadata; }
     public List<String> getAllowedCommands() { return allowedCommands; }
     public String getStopWhenTaskName() { return stopWhenTaskName; }
+    public boolean isSynthesize() { return synthesize; }
+    public boolean isStateful() { return stateful; }
+    public String getBaseUrl() { return baseUrl; }
+    public dev.agentspan.gate.TextGate getGate() { return gate; }
+    public Function<Map<String, Object>, Map<String, Object>> getBeforeAgentCallback() { return beforeAgentCallback; }
+    public Function<Map<String, Object>, Map<String, Object>> getAfterAgentCallback() { return afterAgentCallback; }
+    public String getFramework() { return framework; }
+    public Map<String, Object> getFrameworkConfig() { return frameworkConfig; }
 
     public static Builder builder() {
         return new Builder();
@@ -234,6 +258,14 @@ public class Agent {
         private Map<String, Object> metadata;
         private List<String> allowedCommands;
         private String stopWhenTaskName;
+        private boolean synthesize = true;
+        private boolean stateful = false;
+        private String baseUrl;
+        private dev.agentspan.gate.TextGate gate;
+        private Function<Map<String, Object>, Map<String, Object>> beforeAgentCallback;
+        private Function<Map<String, Object>, Map<String, Object>> afterAgentCallback;
+        private String framework;
+        private Map<String, Object> frameworkConfig;
 
         /** Set the agent name (required). Must match {@code ^[a-zA-Z_][a-zA-Z0-9_-]*$}. */
         public Builder name(String name) {
@@ -524,6 +556,60 @@ public class Agent {
          */
         public Builder stopWhen(String taskName) {
             this.stopWhenTaskName = taskName;
+            return this;
+        }
+
+        /**
+         * Whether a final LLM synthesis step is added after handoff/router/swarm strategies.
+         * Default true (backward compatible). Set to false to pass the last specialist's output through directly.
+         */
+        public Builder synthesize(boolean synthesize) {
+            this.synthesize = synthesize;
+            return this;
+        }
+
+        /** Enable stateful mode — the agent persists conversation history across runs. */
+        public Builder stateful(boolean stateful) {
+            this.stateful = stateful;
+            return this;
+        }
+
+        /** Override the base URL for the LLM provider (e.g. a proxy or local endpoint). */
+        public Builder baseUrl(String baseUrl) {
+            this.baseUrl = baseUrl;
+            return this;
+        }
+
+        /**
+         * Attach a gate to stop a sequential pipeline if this agent's output contains the sentinel text.
+         * Only meaningful when the agent is part of a sequential pipeline ({@code agent.then(next)}).
+         */
+        public Builder gate(dev.agentspan.gate.TextGate gate) {
+            this.gate = gate;
+            return this;
+        }
+
+        /** Register a callback invoked before this agent's entire execution (before any LLM calls). */
+        public Builder beforeAgentCallback(Function<Map<String, Object>, Map<String, Object>> beforeAgentCallback) {
+            this.beforeAgentCallback = beforeAgentCallback;
+            return this;
+        }
+
+        /** Register a callback invoked after this agent's entire execution (after all LLM calls). */
+        public Builder afterAgentCallback(Function<Map<String, Object>, Map<String, Object>> afterAgentCallback) {
+            this.afterAgentCallback = afterAgentCallback;
+            return this;
+        }
+
+        /** Set the framework type (e.g. {@code "skill"}) for framework-backed agents. */
+        public Builder framework(String framework) {
+            this.framework = framework;
+            return this;
+        }
+
+        /** Set the raw framework configuration map sent verbatim to the server. */
+        public Builder frameworkConfig(Map<String, Object> frameworkConfig) {
+            this.frameworkConfig = frameworkConfig;
             return this;
         }
 

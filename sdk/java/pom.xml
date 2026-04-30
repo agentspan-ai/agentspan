@@ -97,7 +97,7 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.13.0</version>
                 <configuration>
-                    <release>11</release>
+                    <release>${maven.compiler.release}</release>
                     <!-- Preserve parameter names at runtime so @Tool methods can
                          match server-side input keys to method parameters by name. -->
                     <compilerArgs>
