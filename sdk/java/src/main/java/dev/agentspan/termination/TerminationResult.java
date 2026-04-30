@@ -17,12 +17,12 @@ public class TerminationResult {
     private final String reason;
 
     public TerminationResult(boolean shouldTerminate) {
-        this(shouldTerminate, "");
+        this(shouldTerminate, null);
     }
 
     public TerminationResult(boolean shouldTerminate, String reason) {
         this.shouldTerminate = shouldTerminate;
-        this.reason = reason != null ? reason : "";
+        this.reason = reason;
     }
 
     public static TerminationResult stop(String reason) {
