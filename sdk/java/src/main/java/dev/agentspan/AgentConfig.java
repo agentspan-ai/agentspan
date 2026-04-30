@@ -11,7 +11,7 @@ package dev.agentspan;
  *
  * <p>Environment variables:
  * <ul>
- *   <li>{@code AGENTSPAN_SERVER_URL} — server URL (default: http://localhost:6767/api)</li>
+ *   <li>{@code AGENTSPAN_SERVER_URL} — server URL (default: http://localhost:6767)</li>
  *   <li>{@code AGENTSPAN_AUTH_KEY} — authentication key</li>
  *   <li>{@code AGENTSPAN_AUTH_SECRET} — authentication secret</li>
  *   <li>{@code AGENTSPAN_WORKER_POLL_INTERVAL} — worker poll interval in ms (default: 100)</li>
@@ -40,7 +40,7 @@ public class AgentConfig {
             String authSecret,
             int workerPollIntervalMs,
             int workerThreadCount) {
-        this.serverUrl = serverUrl != null ? serverUrl : "http://localhost:6767/api";
+        this.serverUrl = normalizeUrl(serverUrl != null ? serverUrl : "http://localhost:6767");
         this.authKey = authKey;
         this.authSecret = authSecret;
         this.workerPollIntervalMs = workerPollIntervalMs > 0 ? workerPollIntervalMs : 100;
@@ -54,7 +54,7 @@ public class AgentConfig {
      */
     public static AgentConfig fromEnv() {
         return new AgentConfig(
-            env("AGENTSPAN_SERVER_URL", "http://localhost:6767/api"),
+            env("AGENTSPAN_SERVER_URL", "http://localhost:6767"),
             env("AGENTSPAN_AUTH_KEY", null),
             env("AGENTSPAN_AUTH_SECRET", null),
             Integer.parseInt(env("AGENTSPAN_WORKER_POLL_INTERVAL", "100")),
@@ -65,6 +65,16 @@ public class AgentConfig {
     private static String env(String key, String defaultValue) {
         String val = System.getenv(key);
         return val != null ? val : defaultValue;
+    }
+
+    /** Strip trailing /api suffix so HttpApi can consistently prepend /api/... paths. */
+    private static String normalizeUrl(String url) {
+        if (url == null) return null;
+        String stripped = url.stripTrailing();
+        while (stripped.endsWith("/")) stripped = stripped.substring(0, stripped.length() - 1);
+        if (stripped.endsWith("/api")) stripped = stripped.substring(0, stripped.length() - 4);
+        while (stripped.endsWith("/")) stripped = stripped.substring(0, stripped.length() - 1);
+        return stripped;
     }
 
     public String getServerUrl() { return serverUrl; }

@@ -699,4 +699,31 @@ class SerializerTest {
         assertEquals("new-secret", filled.getContent());
         assertEquals("MY_KEY", filled.getEnvVar());
     }
+
+    // --- AgentConfig URL normalization ---
+
+    @Test
+    void agentConfig_default_url_has_no_api_suffix() {
+        AgentConfig cfg = AgentConfig.fromEnv();
+        assertFalse(cfg.getServerUrl().endsWith("/api"),
+            "Default URL must not end with /api — HttpApi already prepends /api/ to every path");
+    }
+
+    @Test
+    void agentConfig_strips_trailing_api_from_user_supplied_url() {
+        AgentConfig cfg = new AgentConfig("http://localhost:6767/api", null, null, 100, 1);
+        assertEquals("http://localhost:6767", cfg.getServerUrl());
+    }
+
+    @Test
+    void agentConfig_strips_trailing_slash_and_api() {
+        AgentConfig cfg = new AgentConfig("http://localhost:6767/api/", null, null, 100, 1);
+        assertEquals("http://localhost:6767", cfg.getServerUrl());
+    }
+
+    @Test
+    void agentConfig_plain_url_unchanged() {
+        AgentConfig cfg = new AgentConfig("http://localhost:6767", null, null, 100, 1);
+        assertEquals("http://localhost:6767", cfg.getServerUrl());
+    }
 }
