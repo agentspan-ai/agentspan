@@ -89,8 +89,9 @@ public class AgentConfigSerializer {
         // Tools
         if (agent.getTools() != null && !agent.getTools().isEmpty()) {
             List<Map<String, Object>> toolsList = new ArrayList<>();
+            boolean agentStateful = agent.isStateful();
             for (ToolDef tool : agent.getTools()) {
-                toolsList.add(serializeTool(tool));
+                toolsList.add(serializeTool(tool, agentStateful));
             }
             agentMap.put("tools", toolsList);
         }
@@ -353,10 +354,17 @@ public class AgentConfigSerializer {
     }
 
     private Map<String, Object> serializeTool(ToolDef tool) {
+        return serializeTool(tool, false);
+    }
+
+    private Map<String, Object> serializeTool(ToolDef tool, boolean agentStateful) {
         Map<String, Object> toolMap = new LinkedHashMap<>();
         toolMap.put("name", tool.getName());
         toolMap.put("description", tool.getDescription());
         toolMap.put("inputSchema", tool.getInputSchema());
+        if (agentStateful) {
+            toolMap.put("stateful", true);
+        }
         if ("worker".equals(tool.getToolType())) {
             Map<String, Object> outSchema = tool.getOutputSchema();
             toolMap.put("outputSchema", outSchema != null ? outSchema

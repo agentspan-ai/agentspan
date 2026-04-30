@@ -90,26 +90,44 @@ class E2eSuite11NewParity extends E2eBaseTest {
     // ── Tests ─────────────────────────────────────────────────────────────
 
     /**
-     * stateful=true serializes to agentDef.stateful == true.
+     * stateful=true propagates stateful:true to each tool (mirrors Python SDK behaviour).
      *
-     * COUNTERFACTUAL: if stateful is not serialized, agentDef won't have the field.
+     * COUNTERFACTUAL: if stateful is not propagated, worker domain isolation won't be set up.
      */
     @Test
     @Order(1)
+    @SuppressWarnings("unchecked")
     void test_stateful_field_serialized() {
+        ToolDef workerTool = ToolDef.builder()
+            .name("e2e_java_stateful_tool")
+            .description("A worker tool.")
+            .inputSchema(Map.of("type", "object", "properties", Map.of()))
+            .toolType("worker")
+            .func(input -> input)
+            .build();
+
         Agent agent = Agent.builder()
             .name("e2e_java_stateful")
             .model(MODEL)
             .instructions("A stateful agent.")
             .stateful(true)
+            .tools(List.of(workerTool))
             .build();
 
         Map<String, Object> plan = runtime.plan(agent);
         Map<String, Object> agentDef = getAgentDef(plan);
 
-        assertEquals(Boolean.TRUE, agentDef.get("stateful"),
-            "agentDef.stateful should be true but got: " + agentDef.get("stateful")
-            + ". COUNTERFACTUAL: Agent.stateful(true) must serialize to agentDef.stateful=true.");
+        List<Map<String, Object>> tools = (List<Map<String, Object>>) agentDef.get("tools");
+        assertNotNull(tools, "agentDef.tools is null");
+
+        Map<String, Object> tool = tools.stream()
+            .filter(t -> "e2e_java_stateful_tool".equals(t.get("name")))
+            .findFirst()
+            .orElseGet(() -> { fail("Tool 'e2e_java_stateful_tool' not found"); return null; });
+
+        assertEquals(Boolean.TRUE, tool.get("stateful"),
+            "tool.stateful should be true for a stateful agent but got: " + tool.get("stateful")
+            + ". COUNTERFACTUAL: Agent.stateful(true) must propagate stateful=true to each tool.");
     }
 
     /**
@@ -293,10 +311,9 @@ class E2eSuite11NewParity extends E2eBaseTest {
         assertEquals("output", g.get("position"),
             "guardrail position should be 'output' but got: " + g.get("position"));
 
-        Map<String, Object> config = (Map<String, Object>) g.get("config");
-        assertNotNull(config, "guardrail has no 'config' key. Patterns must be in config.");
-        assertNotNull(config.get("patterns"),
-            "config.patterns is null. COUNTERFACTUAL: RegexGuardrail patterns must serialize.");
+        // patterns and mode are inlined at the top level of the guardrail map (not nested under config)
+        assertNotNull(g.get("patterns"),
+            "guardrail.patterns is null. COUNTERFACTUAL: RegexGuardrail patterns must serialize at top level.");
     }
 
     /**
@@ -331,12 +348,12 @@ class E2eSuite11NewParity extends E2eBaseTest {
             "guardrailType should be 'llm' but got: " + g.get("guardrailType")
             + ". COUNTERFACTUAL: LLMGuardrail.builder().build() must produce guardrailType='llm'.");
 
-        Map<String, Object> config = (Map<String, Object>) g.get("config");
-        assertNotNull(config, "guardrail has no 'config' key. model/policy must be in config.");
-        assertEquals("openai/gpt-4o-mini", config.get("model"),
-            "config.model should be 'openai/gpt-4o-mini' but got: " + config.get("model"));
-        assertEquals("Reject any harmful content.", config.get("policy"),
-            "config.policy mismatch. Got: " + config.get("policy"));
+        // model and policy are inlined at the top level of the guardrail map (not nested under config)
+        assertEquals("openai/gpt-4o-mini", g.get("model"),
+            "guardrail.model should be 'openai/gpt-4o-mini' but got: " + g.get("model")
+            + ". COUNTERFACTUAL: LLMGuardrail model must serialize at top level of guardrail map.");
+        assertEquals("Reject any harmful content.", g.get("policy"),
+            "guardrail.policy mismatch. Got: " + g.get("policy"));
     }
 
     /**
@@ -470,14 +487,14 @@ class E2eSuite11NewParity extends E2eBaseTest {
         Map<String, Object> agentDef = getAgentDef(plan);
 
         Map<String, Object> img = findToolByName(agentDef, "e2e_java_image_tool");
-        assertEquals("image", img.get("toolType"),
-            "imageTool toolType should be 'image' but got: " + img.get("toolType")
-            + ". COUNTERFACTUAL: MediaTools.imageTool() must serialize toolType='image'.");
+        assertEquals("generate_image", img.get("toolType"),
+            "imageTool toolType should be 'generate_image' but got: " + img.get("toolType")
+            + ". COUNTERFACTUAL: MediaTools.imageTool() must serialize toolType='generate_image'.");
 
         Map<String, Object> aud = findToolByName(agentDef, "e2e_java_audio_tool");
-        assertEquals("audio", aud.get("toolType"),
-            "audioTool toolType should be 'audio' but got: " + aud.get("toolType")
-            + ". COUNTERFACTUAL: MediaTools.audioTool() must serialize toolType='audio'.");
+        assertEquals("generate_audio", aud.get("toolType"),
+            "audioTool toolType should be 'generate_audio' but got: " + aud.get("toolType")
+            + ". COUNTERFACTUAL: MediaTools.audioTool() must serialize toolType='generate_audio'.");
     }
 
     /**
