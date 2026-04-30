@@ -1,46 +1,49 @@
 ---
 title: Documentation
-description: Agentspan documentation for building durable AI agents.
+description: Agentspan documentation for building production AI agents.
 ---
 
 # Documentation
 
 **Agentspan is a durable runtime for AI agents. Your code runs in your process. Execution state lives on the server.**
 
-Agentspan keeps agent execution state server-side so crashes, restarts, and deployments do not lose work. You can define agents directly with the Agentspan Python SDK, or wrap existing LangGraph, OpenAI Agents SDK, and Google ADK agents.
+Agentspan is a durable runtime for AI agents. Execution state lives server-side, so crashes, restarts, and deployments do not lose work. Write agents natively or wrap an existing LangGraph, OpenAI Agents SDK, or Google ADK agent in one line.
 
-## Getting started
+## Getting Started
 
-- [Why Agentspan](why-agentspan.md) explains the production failure modes Agentspan is designed around.
-- [Quickstart](quickstart.md) walks through installation, server startup, and a first agent run.
+- [Why Agentspan](why-agentspan.md) - Why agents fail in production, and how Agentspan solves it.
+- [Quickstart](quickstart.md) - Build your first agent in 5 minutes.
 
-## Core concepts
+## Concepts
 
-- [Agents](concepts/agents.md) covers the `Agent` class, runtime execution model, results, and handles.
-- [Tools](concepts/tools.md) covers `@tool`, `http_tool()`, `api_tool()`, `mcp_tool()`, credentials, and code execution.
-- [Multi-Agent Strategies](concepts/multi-agent.md) covers sequential, parallel, handoff, router, and related coordination modes.
-- [Guardrails](concepts/guardrails.md) covers input and output validation.
-- [Memory](concepts/memory.md) covers conversation and semantic memory.
-- [Streaming](concepts/streaming.md) covers runtime events and async execution.
-- [Testing](concepts/testing.md) covers deterministic tests, record/replay, and evaluation helpers.
+- [Agents](concepts/agents.md) - The `Agent` class, parameters, results, and handles.
+- [Tools](concepts/tools.md) - `@tool`, `http_tool()`, `api_tool()`, `mcp_tool()`, credentials, and approval-required tools.
+- [Multi-Agent Strategies](concepts/multi-agent.md) - Sequential, parallel, handoff, router, and nested agent coordination.
+- [Guardrails](concepts/guardrails.md) - Input and output safety, retry, block, and fix behavior.
+- [Memory](concepts/memory.md) - Conversation history and semantic search across sessions.
+- [Streaming](concepts/streaming.md) - Runtime events, async execution, and HITL with streams.
+- [Testing](concepts/testing.md) - `mock_run`, `expect`, record/replay, pytest, and evaluation helpers.
+
+## Deployment
+
+- [Deployment overview](deployment.md) - Local development, Docker, Helm, and Orkes Cloud.
+- [Self-hosting](self-hosting.md) - Run Agentspan in your own environment.
 
 ## Examples
 
-- [Support Ticket Triage](examples/support-triage.md)
-- [Research Pipeline](examples/research-pipeline.md)
-- [Batch Document Processor](examples/document-processor.md)
-- [Crash and Resume](examples/crash-resume.md)
-- [Human in the Loop](examples/human-in-the-loop.md)
-- [LangGraph Code Review Bot](examples/langgraph.md)
-- [OpenAI Agents SDK Customer Support](examples/openai-agents-sdk.md)
-- [Google ADK Research Assistant](examples/google-adk.md)
+- [Support Ticket Triage](examples/support-triage.md) - Classify, route, and resolve support tickets.
+- [Research Pipeline](examples/research-pipeline.md) - Run sequential research, writing, and editing agents.
+- [Batch Document Processor](examples/document-processor.md) - Process multiple documents in parallel.
+- [Crash and Resume](examples/crash-resume.md) - Resume durable executions after worker failure.
+- [Human in the Loop](examples/human-in-the-loop.md) - Pause execution for human approval.
+- [LangGraph Code Review Bot](examples/langgraph.md) - Wrap an existing LangGraph app.
+- [OpenAI Agents SDK Customer Support](examples/openai-agents-sdk.md) - Run an OpenAI Agents SDK app through Agentspan.
+- [Google ADK Research Assistant](examples/google-adk.md) - Run a Google ADK agent through Agentspan.
 
 ## Reference
 
-- [Providers](providers.md)
-- [AI Models](ai-models.md)
-- [CLI](cli.md)
-- [Deployment](deployment.md)
-- [Self-Hosting](self-hosting.md)
-- [Integrations](integrations.md)
-- [Worker Types](worker-types.md)
+- [CLI Reference](cli.md) - Commands with exact syntax.
+- [LLM Providers](providers.md) - Providers, model strings, and API keys.
+- [AI Models](ai-models.md) - Model configuration and supported provider formats.
+- [Integrations](integrations.md) - Framework integrations and compatibility notes.
+- [Worker Types](worker-types.md) - Python and TypeScript worker models.
