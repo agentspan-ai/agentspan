@@ -250,8 +250,40 @@ public class AgentConfigSerializer {
             agentMap.put("stopWhen", stopWhen);
         }
 
+        // Stateful mode
+        if (agent.isStateful()) {
+            agentMap.put("stateful", true);
+        }
+
+        // Base URL override for the LLM provider
+        if (agent.getBaseUrl() != null && !agent.getBaseUrl().isEmpty()) {
+            agentMap.put("baseUrl", agent.getBaseUrl());
+        }
+
+        // Gate (stop sequential pipeline when output contains sentinel text)
+        if (agent.getGate() != null) {
+            dev.agentspan.gate.TextGate g = agent.getGate();
+            Map<String, Object> gateMap = new LinkedHashMap<>();
+            gateMap.put("type", "text_contains");
+            gateMap.put("text", g.getText());
+            gateMap.put("caseSensitive", g.isCaseSensitive());
+            agentMap.put("gate", gateMap);
+        }
+
         // Callbacks (before/after model hooks — legacy single-function style)
         List<Map<String, Object>> callbacks = new ArrayList<>();
+        if (agent.getBeforeAgentCallback() != null) {
+            Map<String, Object> cb = new LinkedHashMap<>();
+            cb.put("position", "before_agent");
+            cb.put("taskName", agent.getName() + "_before_agent");
+            callbacks.add(cb);
+        }
+        if (agent.getAfterAgentCallback() != null) {
+            Map<String, Object> cb = new LinkedHashMap<>();
+            cb.put("position", "after_agent");
+            cb.put("taskName", agent.getName() + "_after_agent");
+            callbacks.add(cb);
+        }
         if (agent.getBeforeModelCallback() != null) {
             Map<String, Object> cb = new LinkedHashMap<>();
             cb.put("position", "before_model");
