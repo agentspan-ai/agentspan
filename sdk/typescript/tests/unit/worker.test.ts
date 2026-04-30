@@ -599,6 +599,82 @@ describe("WorkerManager", () => {
       await expect(getCredential("ANY")).rejects.toThrow("No credential context available");
     });
 
+    it("isolates credential context across concurrent worker executions (regression: race in test_suite2)", async () => {
+      // Reproduces the test_suite2_tool_calling flake deterministically:
+      // The LLM emits parallel tool calls, so multiple worker.execute()
+      // run concurrently. Pre-fix, all share a single module-level
+      // credential context. Worker B's `finally`-block clear races with
+      // worker A's getCredential() call, throwing
+      // "No credential context available".
+      //
+      // We force the race by gating each handler on a barrier so all
+      // handlers are mid-flight at the same time, then have each call
+      // getCredential() and verify each got *its own* execution token's
+      // resolved value back.
+      const serverUrl = "http://cred-race";
+      const manager = new WorkerManager(serverUrl, {}, 100);
+
+      const NUM = 5;
+      const barrier = new Promise<void>((resolve) => {
+        let arrived = 0;
+        manager.addWorker(
+          "race_task",
+          async () => {
+            arrived++;
+            // Wait until all handlers are running concurrently.
+            if (arrived === NUM) resolve();
+            await barrierGate;
+            const { getCredential } = await import("../../src/credentials.js");
+            return { value: await getCredential("MY_CRED") };
+          },
+          undefined,
+        );
+        // Build the gate via a sentinel resolved after all arrive.
+        // The actual barrier the handlers await:
+      });
+      // Bridge: when `barrier` (all-arrived) resolves, open the gate.
+      let openGate!: () => void;
+      const barrierGate = new Promise<void>((res) => {
+        openGate = res;
+      });
+      void barrier.then(() => openGate());
+
+      // Echo the token back as the resolved value so we can detect crosstalk.
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+          if (typeof url === "string" && url.includes("/credentials/resolve")) {
+            const body = JSON.parse(String(init?.body));
+            return {
+              ok: true,
+              status: 200,
+              json: async () => ({ MY_CRED: `${body.token}:resolved` }),
+            };
+          }
+          return { ok: true, status: 200, text: async () => "" };
+        }),
+      );
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const wrapped = (manager as any)._wrapWorker((manager as any).pendingWorkers[0]);
+
+      const tasks = Array.from({ length: NUM }, (_, i) => ({
+        taskId: `task-${i}`,
+        workflowInstanceId: "wf-1",
+        inputData: {
+          __agentspan_ctx__: { executionToken: `tok-${i}` },
+        },
+      }));
+
+      const results = await Promise.all(tasks.map((t) => wrapped.execute(t)));
+
+      // Each handler must see its own execution token, end to end —
+      // no nulls, no crosstalk between concurrent calls.
+      for (let i = 0; i < NUM; i++) {
+        expect(results[i].outputData).toEqual({ value: `tok-${i}:resolved` });
+      }
+    });
+
     it("does not set credential context when no execution token", async () => {
       const manager = new WorkerManager("http://test", {}, 100);
 

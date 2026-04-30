@@ -147,6 +147,7 @@ export {
   resolveCredentials,
   getCredential,
   setCredentialContext,
+  runWithCredentialContext,
   clearCredentialContext,
   injectCredentials,
 } from "./credentials.js";
