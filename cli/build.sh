@@ -28,7 +28,8 @@ echo "  Built: windows/amd64"
 GOOS=windows GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/agentspan_windows_arm64.exe .
 echo "  Built: windows/arm64"
 
-chmod +x dist/agentspan_*
+# Make Unix binaries executable (Windows .exe files are already executable).
+find dist/ -type f ! -name "*.exe" -exec chmod +x {} +
 
 echo ""
 echo "Build complete! Binaries in dist/"

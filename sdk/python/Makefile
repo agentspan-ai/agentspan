@@ -1,15 +1,18 @@
 .PHONY: test test-unit test-integration examples examples-all lint typecheck format all validate validate-slow validate-judge validate-all
 
+# Use python3 when available, fall back to python (Windows).
+PYTHON ?= $(shell python3 --version >/dev/null 2>&1 && echo python3 || echo python)
+
 all: lint typecheck test
 
 test:
-	python3 -m pytest tests/unit/ -v --cov --cov-report=term-missing
+	$(PYTHON) -m pytest tests/unit/ -v --cov --cov-report=term-missing
 
 test-unit:
-	python3 -m pytest tests/unit/ -v
+	$(PYTHON) -m pytest tests/unit/ -v
 
 test-integration:
-	python3 -m pytest tests/integration/ -v
+	$(PYTHON) -m pytest tests/integration/ -v
 
 examples:
 	@./scripts/run_examples.sh
@@ -27,9 +30,9 @@ format:
 	ruff format src/ tests/
 
 validate:
-	python3 -m validation.scripts.run_examples
+	$(PYTHON) -m validation.scripts.run_examples
 
 validate-judge:
-	python3 -m validation.scripts.judge_results
+	$(PYTHON) -m validation.scripts.judge_results
 
 validate-all: validate validate-judge
