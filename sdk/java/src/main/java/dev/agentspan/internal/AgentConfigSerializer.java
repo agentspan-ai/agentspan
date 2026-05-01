@@ -4,6 +4,7 @@
 package dev.agentspan.internal;
 
 import dev.agentspan.Agent;
+import dev.agentspan.execution.CliConfig;
 import dev.agentspan.model.GuardrailDef;
 import dev.agentspan.model.PromptTemplate;
 import dev.agentspan.model.ToolDef;
@@ -221,6 +222,18 @@ public class AgentConfigSerializer {
             } else {
                 existingTools.add(execTool);
             }
+        }
+
+        // CLI config
+        CliConfig cliConfig = agent.getCliConfig();
+        if (cliConfig != null) {
+            Map<String, Object> cliMap = new LinkedHashMap<>();
+            cliMap.put("enabled", cliConfig.isEnabled());
+            cliMap.put("allowedCommands", cliConfig.getAllowedCommands());
+            cliMap.put("timeout", cliConfig.getTimeout());
+            cliMap.put("allowShell", cliConfig.isAllowShell());
+            if (cliConfig.getWorkingDir() != null) cliMap.put("workingDir", cliConfig.getWorkingDir());
+            agentMap.put("cliConfig", cliMap);
         }
 
         // Include contents (context passed to sub-agent)

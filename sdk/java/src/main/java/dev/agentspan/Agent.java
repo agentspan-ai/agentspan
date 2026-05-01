@@ -4,6 +4,7 @@
 package dev.agentspan;
 
 import dev.agentspan.enums.Strategy;
+import dev.agentspan.execution.CliConfig;
 import dev.agentspan.handoff.Handoff;
 import dev.agentspan.model.GuardrailDef;
 import dev.agentspan.model.PromptTemplate;
@@ -79,6 +80,7 @@ public class Agent {
     private final Function<Map<String, Object>, Map<String, Object>> afterAgentCallback;
     private final String framework;
     private final Map<String, Object> frameworkConfig;
+    private final CliConfig cliConfig;
 
     private Agent(Builder builder) {
         this.name = builder.name;
@@ -122,6 +124,7 @@ public class Agent {
         this.afterAgentCallback = builder.afterAgentCallback;
         this.framework = builder.framework;
         this.frameworkConfig = builder.frameworkConfig;
+        this.cliConfig = builder.cliConfig;
     }
 
     /**
@@ -203,6 +206,7 @@ public class Agent {
     public Function<Map<String, Object>, Map<String, Object>> getAfterAgentCallback() { return afterAgentCallback; }
     public String getFramework() { return framework; }
     public Map<String, Object> getFrameworkConfig() { return frameworkConfig; }
+    public CliConfig getCliConfig() { return cliConfig; }
 
     public static Builder builder() {
         return new Builder();
@@ -266,6 +270,7 @@ public class Agent {
         private Function<Map<String, Object>, Map<String, Object>> afterAgentCallback;
         private String framework;
         private Map<String, Object> frameworkConfig;
+        private CliConfig cliConfig;
 
         /** Set the agent name (required). Must match {@code ^[a-zA-Z_][a-zA-Z0-9_-]*$}. */
         public Builder name(String name) {
@@ -610,6 +615,12 @@ public class Agent {
         /** Set the raw framework configuration map sent verbatim to the server. */
         public Builder frameworkConfig(Map<String, Object> frameworkConfig) {
             this.frameworkConfig = frameworkConfig;
+            return this;
+        }
+
+        /** Configure CLI command execution for this agent. */
+        public Builder cliConfig(CliConfig cliConfig) {
+            this.cliConfig = cliConfig;
             return this;
         }
 

@@ -6,9 +6,12 @@ package dev.agentspan;
 import dev.agentspan.enums.OnFail;
 import dev.agentspan.enums.Position;
 import dev.agentspan.enums.Strategy;
+import dev.agentspan.execution.CliConfig;
 import dev.agentspan.gate.TextGate;
+import dev.agentspan.guardrail.Guardrail;
 import dev.agentspan.guardrail.LLMGuardrail;
 import dev.agentspan.guardrail.RegexGuardrail;
+import dev.agentspan.model.GuardrailResult;
 import dev.agentspan.handoff.OnCondition;
 import dev.agentspan.internal.AgentConfigSerializer;
 import dev.agentspan.model.CredentialFile;
@@ -725,5 +728,67 @@ class SerializerTest {
     void agentConfig_plain_url_unchanged() {
         AgentConfig cfg = new AgentConfig("http://localhost:6767", null, null, 100, 1);
         assertEquals("http://localhost:6767", cfg.getServerUrl());
+    }
+
+    // --- CliConfig serialization ---
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void cliConfig_serialized_as_cliConfig_block() {
+        Agent agent = Agent.builder()
+                .name("ops")
+                .model("openai/gpt-4o")
+                .cliConfig(CliConfig.builder()
+                        .allowedCommands(List.of("git", "gh"))
+                        .timeout(60)
+                        .allowShell(false)
+                        .build())
+                .build();
+        Map<String, Object> out = ser.serialize(agent);
+        Map<String, Object> cli = (Map<String, Object>) out.get("cliConfig");
+        assertNotNull(cli, "cliConfig block must be present");
+        assertEquals(true, cli.get("enabled"));
+        assertEquals(List.of("git", "gh"), cli.get("allowedCommands"));
+        assertEquals(60, cli.get("timeout"));
+        assertEquals(false, cli.get("allowShell"));
+        assertNull(out.get("codeExecution"), "cliConfig must not bleed into codeExecution");
+    }
+
+    @Test
+    void cliConfig_absent_when_not_set() {
+        Agent agent = Agent.builder().name("a").model("openai/gpt-4o").build();
+        Map<String, Object> out = ser.serialize(agent);
+        assertNull(out.get("cliConfig"));
+    }
+
+    // --- Guardrail (custom / external) ---
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void guardrail_custom_serialized_as_custom_type() {
+        GuardrailDef g = Guardrail.of("no_bad_words", content ->
+                GuardrailResult.pass()).build();
+        Agent agent = Agent.builder()
+                .name("a").model("openai/gpt-4o")
+                .guardrails(List.of(g))
+                .build();
+        Map<String, Object> out = ser.serialize(agent);
+        Map<String, Object> gMap = guardrail(out, "no_bad_words");
+        assertEquals("custom", gMap.get("guardrailType"));
+        assertEquals("output", gMap.get("position"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void guardrail_external_serialized_as_external_type() {
+        GuardrailDef g = Guardrail.external("corporate_safety").position(Position.INPUT).build();
+        Agent agent = Agent.builder()
+                .name("a").model("openai/gpt-4o")
+                .guardrails(List.of(g))
+                .build();
+        Map<String, Object> out = ser.serialize(agent);
+        Map<String, Object> gMap = guardrail(out, "corporate_safety");
+        assertEquals("external", gMap.get("guardrailType"));
+        assertEquals("input", gMap.get("position"));
     }
 }
