@@ -44,11 +44,14 @@ async function main() {
     result.printResult();
 
     // The output conforms to the ArticleAnalysis schema
+    // result.output is the full server envelope { result: {...}, finishReason, context }.
+    // The structured data lives under result.output.result.
+    const structured = result.output['result'] as Record<string, unknown>;
     console.log('\nStructured output:');
-    console.log('  Title:', result.output['title']);
-    console.log('  Category:', result.output['category']);
-    console.log('  Sentiment:', result.output['sentiment']);
-    console.log('  Key Topics:', result.output['keyTopics']);
+    console.log('  Title:', structured?.['title']);
+    console.log('  Category:', structured?.['category']);
+    console.log('  Sentiment:', structured?.['sentiment']);
+    console.log('  Key Topics:', structured?.['keyTopics']);
 
     // Production pattern:
     // 1. Deploy once during CI/CD:
