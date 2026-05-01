@@ -27,7 +27,7 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         return cls(
-            llm_model=os.environ.get("AGENTSPAN_LLM_MODEL", "openai/gpt-5.4"),
+            llm_model=os.environ.get("AGENTSPAN_LLM_MODEL", "openai/gpt-4o-mini"),
             secondary_llm_model=os.environ.get("AGENTSPAN_SECONDARY_LLM_MODEL", "openai/gpt-4o"),
         )
 
