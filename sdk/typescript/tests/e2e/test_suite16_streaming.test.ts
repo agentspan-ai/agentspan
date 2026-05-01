@@ -263,9 +263,8 @@ describe('Suite 16: Streaming — HITL', { timeout: TIMEOUT }, () => {
     if (preTypes.includes('waiting')) {
       // Approve the pending action
       await stream.approve();
-      // Stream is exhausted after the first for-await loop — poll status directly.
-      // Use 300s: CI runners under load can be slow to resume after HITL approval.
-      const deadline = Date.now() + 300_000;
+      // Stream is exhausted after the first for-await loop — poll status directly
+      const deadline = Date.now() + 120_000;
       let status = await runtime.getStatus(stream.executionId);
       while (!status.isComplete && Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 1000));
@@ -300,9 +299,8 @@ describe('Suite 16: Streaming — HITL', { timeout: TIMEOUT }, () => {
     if (preTypes.includes('waiting')) {
       // Reject the pending action
       await stream.reject('Does not meet editorial standards');
-      // Stream is exhausted — poll status directly for terminal state.
-      // Use 300s: CI runners under load can be slow to resume after HITL rejection.
-      const deadline = Date.now() + 300_000;
+      // Stream is exhausted — poll status directly for terminal state
+      const deadline = Date.now() + 120_000;
       let status = await runtime.getStatus(stream.executionId);
       while (!status.isComplete && Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 1000));

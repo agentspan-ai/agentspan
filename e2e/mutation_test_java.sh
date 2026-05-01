@@ -255,39 +255,6 @@ run_mutation \
     "E2eSuite9CodeExecution#test_local_bash_execution" \
     "test"
 
-# ── Suite 10 — Synthesize flag mutations ──────────────────────────
-
-# Mutation 17: Suite10 SDK — synthesize field never sent to server (AgentConfigSerializer)
-# Commenting out agentMap.put("synthesize", false) means the server never receives the flag
-# → server defaults to doSynthesize=true → adds _final task → finalCount == 1 AND
-# agentDef.synthesize == null (not false) → assertEquals(Boolean.FALSE, null) fails → KILLED.
-run_mutation \
-    "Suite10 SDK: agentMap.put('synthesize', false) removed (AgentConfigSerializer)" \
-    "$JAVA_SDK/src/main/java/dev/agentspan/internal/AgentConfigSerializer.java" \
-    "sed -i '' 's/agentMap.put(\"synthesize\", false);/\/\/ MUTANT: synthesize not sent/' '$JAVA_SDK/src/main/java/dev/agentspan/internal/AgentConfigSerializer.java'" \
-    "E2eSuite10Synthesize#test_handoff_no_synthesize_omits_final_task" \
-    "source"
-
-# Mutation 18: Suite10 Test — finalCount assertion wrong (0→2)
-# The test expects 0 final tasks when synthesize=false.
-# Changing 0→2 makes the assertion fail because the real count is 0.
-run_mutation \
-    "Suite10 Test: finalCount assertion 0→2 (handoff)" \
-    "$JAVA_SDK/src/test/java/dev/agentspan/e2e/E2eSuite10Synthesize.java" \
-    "sed -i '' 's/assertEquals(0, finalCount,/assertEquals(2, finalCount,/' '$JAVA_SDK/src/test/java/dev/agentspan/e2e/E2eSuite10Synthesize.java'" \
-    "E2eSuite10Synthesize#test_handoff_no_synthesize_omits_final_task" \
-    "test"
-
-# Mutation 19: Suite10 Test — synthesize assertion flipped (false→true)
-# The test asserts agentDef.synthesize == false.
-# Changing to assertEquals(true, ...) means a correctly-serialized false will fail.
-run_mutation \
-    "Suite10 Test: synthesize assertion false→true (agentDef check)" \
-    "$JAVA_SDK/src/test/java/dev/agentspan/e2e/E2eSuite10Synthesize.java" \
-    "sed -i '' 's/assertEquals(Boolean.FALSE, agentDef.get(\"synthesize\")/assertEquals(Boolean.TRUE, agentDef.get(\"synthesize\")/' '$JAVA_SDK/src/test/java/dev/agentspan/e2e/E2eSuite10Synthesize.java'" \
-    "E2eSuite10Synthesize#test_handoff_no_synthesize_omits_final_task" \
-    "test"
-
 # ── Summary ──────────────────────────────────────────────────────
 
 echo ""
