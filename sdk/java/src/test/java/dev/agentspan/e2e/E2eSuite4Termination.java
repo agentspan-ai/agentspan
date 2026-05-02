@@ -103,13 +103,36 @@ class E2eSuite4Termination extends E2eBaseTest {
     }
 
     /**
+     * Agent with a nonexistent model must end in FAILED or TERMINATED — never COMPLETED.
+     *
+     * COUNTERFACTUAL: if model validation is ignored, status is COMPLETED → fails.
+     */
+    @Test
+    @Order(2)
+    @Timeout(value = 120, unit = TimeUnit.SECONDS)
+    void test_invalid_model_fails() {
+        Agent agent = Agent.builder()
+            .name("e2e_java_bad_model")
+            .model("nonexistent/xyz-model-does-not-exist")
+            .instructions("This agent should never execute successfully.")
+            .build();
+
+        AgentResult result = runtime.run(agent, "Hello.");
+
+        assertNotEquals(AgentStatus.COMPLETED, result.getStatus(),
+            "[invalid model] Expected FAILED or TERMINATED for nonexistent model, "
+            + "got COMPLETED. The server should reject unknown models. "
+            + "COUNTERFACTUAL: if model validation is broken, this returns COMPLETED.");
+    }
+
+    /**
      * TextMentionTermination stops agent when it produces the trigger text.
      *
      * COUNTERFACTUAL: if TextMentionTermination doesn't work, agent ignores the
      * trigger text and runs all 25 turns.
      */
     @Test
-    @Order(2)
+    @Order(3)
     @Timeout(value = 300, unit = TimeUnit.SECONDS)
     @SuppressWarnings("unchecked")
     void test_text_mention_termination() {

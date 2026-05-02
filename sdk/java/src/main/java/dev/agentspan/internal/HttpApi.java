@@ -198,6 +198,26 @@ public class HttpApi {
         post("/api/metadata/taskdefs", List.of(taskDef));
     }
 
+    /**
+     * Deploy an agent to the server without executing it (CI/CD operation).
+     *
+     * @param payload the deploy payload containing agentConfig or framework config
+     * @return server response containing agentName
+     */
+    public Map<String, Object> deployAgent(Map<String, Object> payload) {
+        return post("/api/agent/deploy", payload);
+    }
+
+    /**
+     * Get the workflow status for resume (extracts domain/run_id).
+     *
+     * @param workflowId the workflow ID
+     * @return workflow data map
+     */
+    public Map<String, Object> getWorkflow(String workflowId) {
+        return get("/api/workflow/" + workflowId);
+    }
+
     // ── Internal helpers ─────────────────────────────────────────────────
 
     @SuppressWarnings("unchecked")
