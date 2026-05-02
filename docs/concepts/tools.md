@@ -42,7 +42,7 @@ The JSON schema for the LLM is auto-generated from type hints and the docstring.
 ### Options
 
 ```python
-@tool(name="custom_name", approval_required=True, timeout_seconds=60)
+@tool(name="custom_name", approval_required=True, timeout_seconds=60, retry_count=5, retry_delay_seconds=10)
 def dangerous_action(target: str) -> dict:
     """Do something that requires human approval."""
     return {"done": True}
@@ -52,7 +52,9 @@ def dangerous_action(target: str) -> dict:
 |---|---|---|
 | `name` | function name | Override the tool name |
 | `approval_required` | `False` | Insert a wait task for human approval before execution |
-| `timeout_seconds` | `None` | Maximum execution time |
+| `timeout_seconds` | `None` | Maximum execution time in seconds |
+| `retry_count` | `None` (server default) | Number of times Conductor retries the task on failure |
+| `retry_delay_seconds` | `None` (server default) | Seconds to wait between retries |
 
 ### ToolContext — shared state and dependencies
 

@@ -77,6 +77,42 @@ class TestAgentConfigSerializer:
         assert config["tools"][0]["toolType"] == "worker"
         assert "inputSchema" in config["tools"][0]
 
+    def test_serialize_tools_worker_with_retry(self):
+        """Worker tools with retry params serialize retryCount and retryDelaySeconds."""
+        from agentspan.agents.agent import Agent
+        from agentspan.agents.tool import tool
+
+        @tool(retry_count=5, retry_delay_seconds=10)
+        def fetch_price(symbol: str) -> dict:
+            """Fetch stock price"""
+            return {"symbol": symbol}
+
+        agent = Agent(name="test", model="openai/gpt-4o", tools=[fetch_price])
+        config = self.serializer.serialize(agent)
+
+        assert len(config["tools"]) == 1
+        tool_config = config["tools"][0]
+        assert tool_config["retryCount"] == 5
+        assert tool_config["retryDelaySeconds"] == 10
+
+    def test_serialize_tools_worker_no_retry(self):
+        """Worker tools without retry params omit retryCount and retryDelaySeconds."""
+        from agentspan.agents.agent import Agent
+        from agentspan.agents.tool import tool
+
+        @tool
+        def simple_tool(x: str) -> str:
+            """Simple tool"""
+            return x
+
+        agent = Agent(name="test", model="openai/gpt-4o", tools=[simple_tool])
+        config = self.serializer.serialize(agent)
+
+        assert len(config["tools"]) == 1
+        tool_config = config["tools"][0]
+        assert "retryCount" not in tool_config
+        assert "retryDelaySeconds" not in tool_config
+
     def test_serialize_guardrails_regex(self):
         """RegexGuardrail serializes with patterns and mode."""
         from agentspan.agents.agent import Agent

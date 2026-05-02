@@ -7,6 +7,7 @@ Demonstrates:
     - Multiple @tool functions
     - Approval-required tools (human-in-the-loop)
     - How tools become Conductor task definitions
+    - Retry configuration (retry_count, retry_delay_seconds)
 
 Requirements:
     - Conductor server with LLM support
@@ -52,10 +53,16 @@ def send_email(to: str, subject: str, body: str) -> dict:
     return {"status": "sent", "to": to, "subject": subject}
 
 
+@tool(retry_count=5, retry_delay_seconds=10)
+def fetch_stock_price(symbol: str) -> dict:
+    """Fetch current stock price — retries up to 5 times on failure."""
+    return {"symbol": symbol, "price": 142.50, "currency": "USD"}
+
+
 agent = Agent(
     name="tool_demo_agent",
     model=settings.llm_model,
-    tools=[get_weather, calculate, send_email],
+    tools=[get_weather, calculate, send_email, fetch_stock_price],
     instructions="You are a helpful assistant with access to weather, calculator, and email tools.",
 )
 
