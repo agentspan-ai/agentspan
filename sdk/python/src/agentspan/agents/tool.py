@@ -63,6 +63,10 @@ class ToolDef:
         func: The Python callable (``None`` for server-side-only tools).
         approval_required: If ``True``, a ``WaitTask`` is inserted before execution.
         timeout_seconds: Max seconds the tool may run before timing out.
+        retry_count: Number of times Conductor will retry the task on failure.
+            Overrides the default of 2 set in the task definition.
+        retry_delay_seconds: Seconds to wait between retries.
+            Overrides the default of 2 set in the task definition.
         tool_type: ``"worker"`` (Python function), ``"http"``, or ``"mcp"``.
         config: Extra configuration (URL, method, headers, etc.).
     """
@@ -74,6 +78,8 @@ class ToolDef:
     func: Optional[Callable[..., Any]] = field(default=None, repr=False)
     approval_required: bool = False
     timeout_seconds: Optional[int] = None
+    retry_count: Optional[int] = None
+    retry_delay_seconds: Optional[int] = None
     tool_type: str = "worker"
     config: Dict[str, Any] = field(default_factory=dict)
     guardrails: List[Any] = field(default_factory=list)
@@ -96,6 +102,8 @@ def tool(
     external: bool = False,
     approval_required: bool = False,
     timeout_seconds: Optional[int] = None,
+    retry_count: Optional[int] = None,
+    retry_delay_seconds: Optional[int] = None,
     guardrails: Optional[List[Any]] = None,
     isolated: bool = True,
     credentials: Optional[List[Any]] = None,
@@ -110,6 +118,8 @@ def tool(
     external: bool = False,
     approval_required: bool = False,
     timeout_seconds: Optional[int] = None,
+    retry_count: Optional[int] = None,
+    retry_delay_seconds: Optional[int] = None,
     guardrails: Optional[List[Any]] = None,
     isolated: bool = True,
     credentials: Optional[List[Any]] = None,
@@ -155,6 +165,8 @@ def tool(
             func=None if external else fn,
             approval_required=approval_required,
             timeout_seconds=timeout_seconds,
+            retry_count=retry_count,
+            retry_delay_seconds=retry_delay_seconds,
             tool_type="worker",
             guardrails=list(guardrails) if guardrails else [],
             isolated=isolated,
