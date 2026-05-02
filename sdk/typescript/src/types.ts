@@ -263,6 +263,8 @@ export interface ToolDef {
   credentials?: (string | CredentialFile)[];
   guardrails?: unknown[];
   config?: Record<string, unknown>;
+  /** Stateful tool — worker registers under execution's domain for isolation. */
+  stateful?: boolean;
 }
 
 // ── Agent result ─────────────────────────────────────────

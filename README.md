@@ -27,6 +27,10 @@
 
 ---
 
+> ⭐ If you find Agentspan useful, [give us a star](https://github.com/agentspan-ai/agentspan) — it helps others find the project!
+
+---
+
 **Agentspan** is a distributed, durable runtime for AI agents that survive crashes, scale across machines, and pause for human approval for days — not minutes.
 
 ## Quickstart (60 seconds)
@@ -38,6 +42,7 @@ curl -fsSL https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/ins
 # Windows (PowerShell)
 irm https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.ps1 | iex
 ```
+
 ## Install SDKs
 ```bash
 # Python

@@ -101,6 +101,19 @@ export class AgentConfigSerializer {
    * All keys are camelCase. Null/undefined values are omitted.
    */
   serializeAgent(agent: Agent): Record<string, unknown> {
+    // Skill agents — emit the raw skill config so the server's
+    // SkillNormalizer can compile sub-agents and tools into the workflow.
+    const agentAny = agent as unknown as Record<string, unknown>;
+    if (agentAny._framework === "skill") {
+      const rawConfig = (agentAny._framework_config ?? {}) as Record<string, unknown>;
+      return {
+        name: agent.name,
+        model: agent.model || undefined,
+        _framework: "skill",
+        ...rawConfig,
+      };
+    }
+
     // Claude-code agents emit a passthrough stub — all config is consumed
     // by the worker closure, not sent to the server.
     if (agent.isClaudeCode) {
@@ -135,7 +148,7 @@ export class AgentConfigSerializer {
 
     // Tools
     if (agent.tools.length > 0) {
-      config.tools = agent.tools.map((t) => this.serializeTool(normalizeToolInput(t)));
+      config.tools = agent.tools.map((t) => this.serializeTool(normalizeToolInput(t), agent.stateful));
     }
 
     // Sub-agents (recursive)
@@ -172,6 +185,7 @@ export class AgentConfigSerializer {
     if (agent.temperature !== undefined) config.temperature = agent.temperature;
     config.timeoutSeconds = agent.timeoutSeconds;
     config.external = agent.external;
+    if (agent.stateful) config.stateful = true;
 
     // stopWhen
     if (agent.stopWhen) {
@@ -249,7 +263,7 @@ export class AgentConfigSerializer {
   /**
    * Serialize a ToolDef to ToolConfig JSON.
    */
-  serializeTool(toolDef: ToolDef): Record<string, unknown> {
+  serializeTool(toolDef: ToolDef, agentStateful?: boolean): Record<string, unknown> {
     const config: Record<string, unknown> = {
       name: toolDef.name,
       description: toolDef.description,
@@ -264,6 +278,7 @@ export class AgentConfigSerializer {
     if (toolDef.timeoutSeconds !== undefined) {
       config.timeoutSeconds = toolDef.timeoutSeconds;
     }
+    if (agentStateful || toolDef.stateful) config.stateful = true;
 
     // Handle guardrails
     if (toolDef.guardrails && toolDef.guardrails.length > 0) {

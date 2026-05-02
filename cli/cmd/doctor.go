@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -206,7 +207,11 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	// JAVA_HOME check
 	javaHome := os.Getenv("JAVA_HOME")
 	if javaHome != "" {
-		if _, err := os.Stat(filepath.Join(javaHome, "bin", "java")); err != nil {
+		javaBin := "java"
+		if runtime.GOOS == "windows" {
+			javaBin = "java.exe"
+		}
+		if _, err := os.Stat(filepath.Join(javaHome, "bin", javaBin)); err != nil {
 			yellow.Println("  ⚠ JAVA_HOME is set but java binary not found there")
 			fmt.Printf("    JAVA_HOME=%s\n", javaHome)
 			issues++
