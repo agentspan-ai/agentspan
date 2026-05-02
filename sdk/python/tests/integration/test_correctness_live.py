@@ -103,10 +103,10 @@ class TestSingleAgentTools:
         agent = Agent(
             name="weather_bot",
             model="openai/gpt-4o-mini",
-            instructions="You are a weather assistant. Always use the get_weather tool to answer weather questions.",
+            instructions="You MUST call the get_weather tool for ANY weather question. NEVER answer weather questions from memory. Always call the tool first, then use its result in your response.",
             tools=[get_weather],
         )
-        result = _run_with_events(runtime, agent, "What's the weather in NYC?")
+        result = _run_with_events(runtime, agent, "What's the weather in NYC? You must use the get_weather tool.")
 
         print(f"\nOutput: {result.output}")
         print(f"Tool calls: {result.tool_calls}")

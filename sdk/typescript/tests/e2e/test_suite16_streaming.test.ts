@@ -187,10 +187,10 @@ describe('Suite 16: Streaming — Tool Agent', { timeout: TIMEOUT }, () => {
     const agent = new Agent({
       name: uniqueName('s16_tools'),
       model: MODEL,
-      instructions: 'Use the get_weather tool to find weather in London, then respond.',
+      instructions: 'You MUST call the get_weather tool for ANY weather question. NEVER answer weather questions from memory. Always call the tool first, then use its result in your response.',
       tools: [getWeather],
     });
-    const stream = await runtime.stream(agent, 'What is the weather in London?');
+    const stream = await runtime.stream(agent, 'What is the weather in London? You must use the get_weather tool.');
     const events = await collectAllEvents(stream);
 
     const types = eventTypes(events);
