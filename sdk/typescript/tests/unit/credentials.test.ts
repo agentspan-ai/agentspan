@@ -5,6 +5,7 @@ import {
   getCredential,
   setCredentialContext,
   clearCredentialContext,
+  runWithCredentialContext,
   injectCredentials,
 } from "../../src/credentials.js";
 import {
@@ -367,6 +368,55 @@ describe("injectCredentials", () => {
 
     vi.restoreAllMocks();
   });
+
+  it.each([1, 2, 3])(
+    "runWithCredentialContext isolates concurrent executions (run %i)",
+    async () => {
+      // Reproduce the worker race that breaks test_suite2_tool_calling:
+      //   1. Worker A enters context, starts handler.
+      //   2. Worker B enters context, finishes, exits.
+      //   3. Worker A's handler later calls getCredential — without per-async
+      //      isolation, B's exit nulled A's context and getCredential throws.
+      // Test re-runs (1-3) to surface scheduling-dependent regressions.
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockImplementation(async (_url, init: RequestInit) => {
+          const body = JSON.parse(String(init.body));
+          // Echo the token back in the resolved value so we can verify isolation.
+          const result: Record<string, string> = {};
+          for (const n of body.names) result[n] = `${body.token}:${n}`;
+          return { ok: true, json: async () => result };
+        }),
+      );
+
+      async function workerHandler(execToken: string, delayMs: number) {
+        return runWithCredentialContext(serverUrl, headers, execToken, async () => {
+          await new Promise((r) => setTimeout(r, delayMs));
+          return getCredential("MY_KEY");
+        });
+      }
+
+      // 5 overlapping workers — each must resolve with its own token even though
+      // siblings enter/exit their contexts during this one's handler.
+      const results = await Promise.all([
+        workerHandler("tok-A", 30),
+        workerHandler("tok-B", 5),
+        workerHandler("tok-C", 20),
+        workerHandler("tok-D", 10),
+        workerHandler("tok-E", 15),
+      ]);
+
+      expect(results).toEqual([
+        "tok-A:MY_KEY",
+        "tok-B:MY_KEY",
+        "tok-C:MY_KEY",
+        "tok-D:MY_KEY",
+        "tok-E:MY_KEY",
+      ]);
+
+      vi.restoreAllMocks();
+    },
+  );
 
   it("isolated mode explicitly set to true works same as default", () => {
     const creds = { TEST_CRED_A: "val-a" };

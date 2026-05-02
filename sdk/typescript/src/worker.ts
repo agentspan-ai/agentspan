@@ -4,10 +4,9 @@ import type { ToolContext } from "./types.js";
 import { TerminalToolError } from "./errors.js";
 import {
   extractExecutionToken,
-  setCredentialContext,
-  clearCredentialContext,
   resolveCredentials,
   injectCredentials,
+  runWithCredentialContext,
 } from "./credentials.js";
 
 // ── Type coercion (base spec §14.1) ─────────────────────
@@ -345,7 +344,6 @@ export class WorkerManager {
 
         // Credential setup
         const execToken = extractExecutionToken(inputData);
-        if (execToken) setCredentialContext(mgr.serverUrl, mgr.headers, execToken);
 
         let cleanupCreds: (() => void) | null = null;
         if (pw.credentials?.length) {
@@ -370,33 +368,44 @@ export class WorkerManager {
           }
         }
 
-        try {
-          let result = await pw.handler(cleaned);
+        const runHandler = async (): Promise<
+          Omit<TaskResult, "workflowInstanceId" | "taskId">
+        > => {
+          try {
+            let result = await pw.handler(cleaned);
 
-          // State mutation capture
-          if (toolContext) {
-            const updates = captureStateMutations(stateSnapshot, toolContext.state);
-            if (updates) result = appendStateUpdates(result, updates);
+            // State mutation capture
+            if (toolContext) {
+              const updates = captureStateMutations(stateSnapshot, toolContext.state);
+              if (updates) result = appendStateUpdates(result, updates);
+            }
+
+            // Wrap primitives — conductor expects outputData as an object
+            const outputData =
+              result != null && typeof result === "object" && !Array.isArray(result)
+                ? (result as Record<string, unknown>)
+                : { result };
+
+            recordSuccess(pw.taskName);
+            return { status: "COMPLETED", outputData };
+          } catch (error) {
+            recordFailure(pw.taskName);
+            if (error instanceof TerminalToolError) {
+              throw new NonRetryableException(error.message);
+            }
+            throw error;
+          } finally {
+            cleanupCreds?.();
           }
+        };
 
-          // Wrap primitives — conductor expects outputData as an object
-          const outputData =
-            result != null && typeof result === "object" && !Array.isArray(result)
-              ? (result as Record<string, unknown>)
-              : { result };
-
-          recordSuccess(pw.taskName);
-          return { status: "COMPLETED", outputData };
-        } catch (error) {
-          recordFailure(pw.taskName);
-          if (error instanceof TerminalToolError) {
-            throw new NonRetryableException(error.message);
-          }
-          throw error;
-        } finally {
-          cleanupCreds?.();
-          if (execToken) clearCredentialContext();
+        // Scope credential context per-async-call so concurrent workers do not
+        // share (and clobber) module-level state. Runs even without an exec
+        // token so handlers see a consistent context shape.
+        if (execToken) {
+          return runWithCredentialContext(mgr.serverUrl, mgr.headers, execToken, runHandler);
         }
+        return runHandler();
       },
     };
   }

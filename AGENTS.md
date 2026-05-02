@@ -290,6 +290,13 @@ All paths relative to `sdk/python/`.
 - If the feature requires multiple examples, then write multiple examples to demonstrate how to use that feature
 - Examples MUST be very clear and to the point.  Do not overload them with many features - one feature one examples.  Ofcourse you can use other features as required, but that is not a substitute for not writing examples for those features.
 
+### Docs
+- Public docs live in `docs/` and are built with MkDocs.
+- If a change modifies public SDK behavior, CLI behavior, server API behavior, integrations, examples, supported configuration, or deployment behavior, update the relevant docs in `docs/` in the same PR or explicitly state why no docs update is needed.
+- Run `mkdocs build --strict` before merging docs changes.
+- Use `./serve-docs.sh` to preview docs locally.
+- Keep `mkdocs.yml` navigation curated. Do not add every Markdown file automatically; only user-facing docs should appear in the public site navigation.
+
 ## Validation Checklist
 
 Before merging any change (all commands relative to `sdk/python/`):
@@ -299,7 +306,7 @@ Before merging any change (all commands relative to `sdk/python/`):
 3. **Type check clean:** `mypy src/agentspan/agents/ --ignore-missing-imports --no-strict-optional`
 4. **Public API unchanged** (or intentionally extended): check `__init__.py` `__all__`
 5. **Examples still work** for affected features (run against a live Agentspan server)
-6. **E2E tests pass** for affected suites: `uv run pytest e2e/test_suite<N>_*.py -v`
+6. **Docs updated when needed:** `mkdocs build --strict`
 
 ## Common Patterns
 
