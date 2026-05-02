@@ -5,7 +5,7 @@
 """Deep Research Agent — multi-agent competitive intelligence pipeline.
 
 Takes a research brief (competitors, industry topics, data points to collect)
-and produces a verified, source-cited research report or CSV.
+and produces a verified, source-cited research report.
 
 Architecture:
     planner >> scatter_gather(researcher) >> reviewer >> synthesizer
@@ -13,38 +13,20 @@ Architecture:
     - Planner: discovers and validates sources, creates research plan
     - Researchers: parallel deep search with cross-referencing (N instances)
     - Reviewer: validates findings, dispatches follow-ups for gaps
-    - Synthesizer: formats verified data into report or CSV
+    - Synthesizer: formats verified data into a markdown report
 
 The planner iterates on source validation before dispatching researchers.
-Each researcher iterates internally: search → extract → cross-reference → fill gaps.
+Each researcher iterates internally: search → cross-reference → fill gaps.
 The reviewer can dispatch additional researchers for missing data.
 
-API Keys Required:
-    PERPLEXITY_API_KEY  — Perplexity Sonar Pro (deep web search)
-    TAVILY_API_KEY      — Tavily (URL/page discovery)
+LLM Models Used:
+    perplexity/sonar-pro — Planner + Researchers (native real-time web search)
+    anthropic/claude-opus — Reviewer (deep reasoning, cross-referencing)
+    anthropic/claude-sonnet — Coordinator + Synthesizer
 
-Google Docs Setup:
-    For end users (one-time):
-        python 102_deep_research_agent.py --google-auth
-        → Opens browser → sign in with Google → done
-        → Docs are created in the user's own Google Drive
-
-    The deployer/admin sets GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET
-    env vars (from Google Cloud Console OAuth client, type: Desktop).
-    End users never need Google Cloud access.
-
-    For developers:
-        Use --google-client-secret client_secret.json, or
-        gcloud auth application-default login --scopes=...
-
-    For automation (service account):
-        export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
-
-    Python deps:
-        pip install google-auth google-auth-oauthlib google-api-python-client
+    Configure Perplexity API key in your LiteLLM / Agentspan server config.
 
 Usage:
-    python 102_deep_research_agent.py --google-auth              # one-time OAuth setup
     python 102_deep_research_agent.py                            # run with sample brief
     python 102_deep_research_agent.py --brief "Research X, Y..."
     python 102_deep_research_agent.py --config research_brief.txt
@@ -68,12 +50,7 @@ from _deep_research_instructions import (
 from _deep_research_tools import (
     contextbook_read,
     contextbook_write,
-    create_google_doc,
-    google_oauth_setup,
-    scrape_page,
     set_working_dir,
-    sonar_search,
-    web_search,
 )
 
 from agentspan.agents import Agent, AgentRuntime, agent_tool, scatter_gather
@@ -82,6 +59,7 @@ from settings import settings
 # ── Configuration ────────────────────────────────────────────
 SONNET = "anthropic/claude-sonnet-4-20250514"
 OPUS = "anthropic/claude-opus-4-6"
+SONAR = "perplexity/sonar-pro"  # every LLM call = real-time web search
 SERVER_URL = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:6767/api")
 
 
@@ -127,22 +105,25 @@ def _reviewer_done(context: dict, **kwargs) -> bool:
 
 # ── Planner: discovers sources, validates them, creates research plan ──
 
+TAVILY_CRED = "TAVILY_API_KEY"
+
 planner = Agent(
     name="research_planner",
-    model=SONNET,
-    tools=[sonar_search, contextbook_write],
+    model=SONAR,  # native web search — every response is grounded in live data
+    tools=[],     # no tools — Sonar doesn't support tool schemas; plan flows via text
     max_turns=10,
     max_tokens=16000,
-    stop_when=_planner_done,
     instructions=PLANNER_INSTRUCTIONS,
 )
 
 # ── Researcher: deep iterative search on one focused task ──
+# Model = Sonar (native web search). No tools needed — Sonar reads,
+# synthesizes, and cites web pages natively. Every response IS a search.
 
 researcher = Agent(
     name="deep_researcher",
-    model=SONNET,
-    tools=[sonar_search, web_search, scrape_page],
+    model=SONAR,
+    tools=[],
     max_turns=20,
     max_tokens=32000,
     instructions=RESEARCHER_INSTRUCTIONS,
@@ -164,22 +145,20 @@ coordinator = scatter_gather(
 
 reviewer = Agent(
     name="research_reviewer",
-    model=OPUS,  # Use Opus for better reasoning on cross-referencing
-    tools=[sonar_search, agent_tool(researcher), contextbook_write, contextbook_read],
+    model=OPUS,  # Claude for reasoning — dispatches Sonar-powered researchers for follow-ups
+    tools=[agent_tool(researcher), contextbook_write, contextbook_read],
     max_turns=15,
     max_tokens=60000,
     stop_when=_reviewer_done,
     instructions=REVIEWER_INSTRUCTIONS,
 )
 
-# ── Synthesizer: formats final output, creates Google Doc ──
-# Credentials are resolved by _get_google_creds() inside the tool.
-# List both so the credential system makes either available if set.
+# ── Synthesizer: formats final output as markdown report ──
 
 synthesizer = Agent(
     name="report_synthesizer",
     model=SONNET,
-    tools=[contextbook_read, create_google_doc],
+    tools=[contextbook_read],
     max_turns=5,
     max_tokens=16000,
     instructions=SYNTHESIZER_INSTRUCTIONS,
@@ -240,23 +219,7 @@ def main():
         default=None,
         help="Path to a text file containing the research brief",
     )
-    parser.add_argument(
-        "--google-auth",
-        action="store_true",
-        help="Run one-time Google OAuth setup (opens browser for login)",
-    )
-    parser.add_argument(
-        "--google-client-secret",
-        type=str,
-        default="",
-        help="Path to OAuth client_secret.json (for --google-auth)",
-    )
     args = parser.parse_args()
-
-    # Google OAuth setup (interactive, then exit)
-    if args.google_auth:
-        google_oauth_setup(client_secrets=args.google_client_secret)
-        return
 
     # Determine research brief
     if args.config:

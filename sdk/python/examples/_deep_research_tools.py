@@ -1,15 +1,15 @@
 """Reusable @tool functions for the Deep Research Agent.
 
-Provides 5 tools organized into 3 categories:
+Tools used in the pipeline:
+- Shared state: contextbook_write, contextbook_read
+- Output: create_google_doc (Google Docs with OAuth)
+
+Standalone tools (available for reuse, not wired into the default pipeline):
 - Search: sonar_search (Perplexity), web_search (Tavily)
 - Extraction: scrape_page (Jina Reader)
-- Shared state: contextbook_write, contextbook_read
 
-API keys required (set as environment variables):
-    PERPLEXITY_API_KEY — for sonar_search (Perplexity Sonar Pro)
-    TAVILY_API_KEY     — for web_search (Tavily Search)
-
-No API key needed for scrape_page (uses Jina Reader free tier).
+The default pipeline uses Perplexity Sonar as a native model (not a tool)
+for all web search — every LLM call is automatically a real-time web search.
 """
 
 import json
@@ -72,7 +72,7 @@ def contextbook_read(key: str) -> str:
 # ── Search tools ─────────────────────────────────────────────
 
 
-@tool
+@tool(credentials=["PERPLEXITY_API_KEY"])
 def sonar_search(query: str) -> dict:
     """Deep web search via Perplexity Sonar Pro.
 
@@ -119,7 +119,7 @@ def sonar_search(query: str) -> dict:
         return {"query": query, "error": str(exc), "answer": "", "citations": []}
 
 
-@tool
+@tool(credentials=["TAVILY_API_KEY"])
 def web_search(query: str, max_results: int = 10) -> dict:
     """Search the web for specific pages and URLs.
 
@@ -230,17 +230,18 @@ def _get_google_creds():
     2. Application Default Credentials (gcloud auth) — for developers
     3. Service account (GOOGLE_APPLICATION_CREDENTIALS) — for automation
 
-    Returns google.auth.credentials.Credentials or None.
+    Returns (credentials, None) on success, or (None, error_message) on failure.
     """
     try:
         from google.auth.transport.requests import Request
     except ImportError:
-        return None
+        return None, "google-auth not installed. Run: pip install google-auth google-auth-oauthlib google-api-python-client"
+
+    errors = []
 
     # 1. OAuth token file — saved from google_oauth_setup()
     token_path = os.environ.get("GOOGLE_OAUTH_TOKEN", "")
     if not token_path:
-        # Check default location from google_oauth_setup()
         default = _default_token_path()
         if os.path.exists(default):
             token_path = default
@@ -254,9 +255,12 @@ def _get_google_creds():
                 with open(token_path, "w") as f:
                     f.write(creds.to_json())
             if creds and creds.valid:
-                return creds
-        except Exception:
-            pass
+                return creds, None
+            errors.append(f"OAuth token at {token_path} is invalid or expired (no refresh token)")
+        except Exception as exc:
+            errors.append(f"OAuth token at {token_path}: {exc}")
+    else:
+        errors.append(f"No OAuth token file found (checked GOOGLE_OAUTH_TOKEN env and {_default_token_path()})")
 
     # 2. Application Default Credentials (gcloud auth application-default login)
     try:
@@ -266,9 +270,10 @@ def _get_google_creds():
         if hasattr(creds, "expired") and creds.expired and hasattr(creds, "refresh"):
             creds.refresh(Request())
         if creds and creds.valid:
-            return creds
-    except Exception:
-        pass
+            return creds, None
+        errors.append("Application Default Credentials found but not valid after refresh")
+    except Exception as exc:
+        errors.append(f"Application Default Credentials: {exc}")
 
     # 3. Service account (explicit path)
     sa_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
@@ -276,13 +281,16 @@ def _get_google_creds():
         try:
             from google.oauth2 import service_account
 
-            return service_account.Credentials.from_service_account_file(
+            creds = service_account.Credentials.from_service_account_file(
                 sa_path, scopes=GOOGLE_SCOPES
             )
-        except Exception:
-            pass
+            return creds, None
+        except Exception as exc:
+            errors.append(f"Service account at {sa_path}: {exc}")
+    elif sa_path:
+        errors.append(f"GOOGLE_APPLICATION_CREDENTIALS={sa_path} but file not found")
 
-    return None
+    return None, "No valid Google credentials found. Tried: " + "; ".join(errors)
 
 
 def _default_token_path() -> str:
@@ -502,10 +510,10 @@ def create_google_doc(title: str, content: str, share_with: str = "") -> dict:
             "error": "Missing dependencies. Run: pip install google-auth google-auth-oauthlib google-api-python-client",
         }
 
-    creds = _get_google_creds()
+    creds, creds_error = _get_google_creds()
     if not creds:
         return {
-            "error": "No Google credentials found. Run: python 102_deep_research_agent.py --google-auth",
+            "error": f"Google credentials failed: {creds_error}. Run: python 102_deep_research_agent.py --google-auth",
         }
 
     try:
