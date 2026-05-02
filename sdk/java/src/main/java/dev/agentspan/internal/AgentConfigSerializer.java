@@ -4,6 +4,7 @@
 package dev.agentspan.internal;
 
 import dev.agentspan.Agent;
+import dev.agentspan.execution.CliConfig;
 import dev.agentspan.model.GuardrailDef;
 import dev.agentspan.model.PromptTemplate;
 import dev.agentspan.model.ToolDef;
@@ -32,6 +33,18 @@ public class AgentConfigSerializer {
     }
 
     private Map<String, Object> serializeAgent(Agent agent) {
+        // Skill (and other framework) agents — emit the raw framework config so the server
+        // can compile sub-agents and tools from the SKILL.md content.
+        if ("skill".equals(agent.getFramework())) {
+            Map<String, Object> skillMap = new LinkedHashMap<>();
+            skillMap.put("name", agent.getName());
+            skillMap.put("model", agent.getModel() != null ? agent.getModel() : null);
+            skillMap.put("_framework", "skill");
+            Map<String, Object> cfg = agent.getFrameworkConfig();
+            if (cfg != null) skillMap.putAll(cfg);
+            return skillMap;
+        }
+
         Map<String, Object> agentMap = new LinkedHashMap<>();
 
         agentMap.put("name", agent.getName());
@@ -77,8 +90,9 @@ public class AgentConfigSerializer {
         // Tools
         if (agent.getTools() != null && !agent.getTools().isEmpty()) {
             List<Map<String, Object>> toolsList = new ArrayList<>();
+            boolean agentStateful = agent.isStateful();
             for (ToolDef tool : agent.getTools()) {
-                toolsList.add(serializeTool(tool));
+                toolsList.add(serializeTool(tool, agentStateful));
             }
             agentMap.put("tools", toolsList);
         }
@@ -148,6 +162,11 @@ public class AgentConfigSerializer {
             agentMap.put("planner", true);
         }
 
+        // Synthesize — only emit when explicitly disabled (true is the server default)
+        if (!agent.isSynthesize()) {
+            agentMap.put("synthesize", false);
+        }
+
         // Code execution
         if (agent.isLocalCodeExecution()) {
             List<String> langs = agent.getAllowedLanguages();
@@ -205,6 +224,18 @@ public class AgentConfigSerializer {
             }
         }
 
+        // CLI config
+        CliConfig cliConfig = agent.getCliConfig();
+        if (cliConfig != null) {
+            Map<String, Object> cliMap = new LinkedHashMap<>();
+            cliMap.put("enabled", cliConfig.isEnabled());
+            cliMap.put("allowedCommands", cliConfig.getAllowedCommands());
+            cliMap.put("timeout", cliConfig.getTimeout());
+            cliMap.put("allowShell", cliConfig.isAllowShell());
+            if (cliConfig.getWorkingDir() != null) cliMap.put("workingDir", cliConfig.getWorkingDir());
+            agentMap.put("cliConfig", cliMap);
+        }
+
         // Include contents (context passed to sub-agent)
         if (agent.getIncludeContents() != null && !agent.getIncludeContents().isEmpty()) {
             agentMap.put("includeContents", agent.getIncludeContents());
@@ -245,8 +276,40 @@ public class AgentConfigSerializer {
             agentMap.put("stopWhen", stopWhen);
         }
 
+        // Stateful mode
+        if (agent.isStateful()) {
+            agentMap.put("stateful", true);
+        }
+
+        // Base URL override for the LLM provider
+        if (agent.getBaseUrl() != null && !agent.getBaseUrl().isEmpty()) {
+            agentMap.put("baseUrl", agent.getBaseUrl());
+        }
+
+        // Gate (stop sequential pipeline when output contains sentinel text)
+        if (agent.getGate() != null) {
+            dev.agentspan.gate.TextGate g = agent.getGate();
+            Map<String, Object> gateMap = new LinkedHashMap<>();
+            gateMap.put("type", "text_contains");
+            gateMap.put("text", g.getText());
+            gateMap.put("caseSensitive", g.isCaseSensitive());
+            agentMap.put("gate", gateMap);
+        }
+
         // Callbacks (before/after model hooks — legacy single-function style)
         List<Map<String, Object>> callbacks = new ArrayList<>();
+        if (agent.getBeforeAgentCallback() != null) {
+            Map<String, Object> cb = new LinkedHashMap<>();
+            cb.put("position", "before_agent");
+            cb.put("taskName", agent.getName() + "_before_agent");
+            callbacks.add(cb);
+        }
+        if (agent.getAfterAgentCallback() != null) {
+            Map<String, Object> cb = new LinkedHashMap<>();
+            cb.put("position", "after_agent");
+            cb.put("taskName", agent.getName() + "_after_agent");
+            callbacks.add(cb);
+        }
         if (agent.getBeforeModelCallback() != null) {
             Map<String, Object> cb = new LinkedHashMap<>();
             cb.put("position", "before_model");
@@ -304,10 +367,17 @@ public class AgentConfigSerializer {
     }
 
     private Map<String, Object> serializeTool(ToolDef tool) {
+        return serializeTool(tool, false);
+    }
+
+    private Map<String, Object> serializeTool(ToolDef tool, boolean agentStateful) {
         Map<String, Object> toolMap = new LinkedHashMap<>();
         toolMap.put("name", tool.getName());
         toolMap.put("description", tool.getDescription());
         toolMap.put("inputSchema", tool.getInputSchema());
+        if (agentStateful) {
+            toolMap.put("stateful", true);
+        }
         if ("worker".equals(tool.getToolType())) {
             Map<String, Object> outSchema = tool.getOutputSchema();
             toolMap.put("outputSchema", outSchema != null ? outSchema

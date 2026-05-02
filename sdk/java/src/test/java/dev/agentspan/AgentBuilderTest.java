@@ -267,7 +267,7 @@ class AgentBuilderTest {
             10
         );
 
-        assertEquals("http://myserver:8080/api", config.getServerUrl());
+        assertEquals("http://myserver:8080", config.getServerUrl());
         assertEquals("my-key", config.getAuthKey());
         assertEquals("my-secret", config.getAuthSecret());
         assertEquals(200, config.getWorkerPollIntervalMs());

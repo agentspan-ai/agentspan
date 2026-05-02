@@ -6,9 +6,13 @@ package dev.agentspan;
 import dev.agentspan.model.AgentHandle;
 import dev.agentspan.model.AgentResult;
 import dev.agentspan.model.AgentStream;
+import dev.agentspan.model.AsyncAgentStream;
+import dev.agentspan.model.DeploymentInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -99,6 +103,89 @@ public final class Agentspan {
      */
     public static AgentStream stream(Agent agent, String prompt) {
         return getOrCreateRuntime().stream(agent, prompt);
+    }
+
+    /**
+     * Start an agent asynchronously and return a CompletableFuture for the handle.
+     *
+     * @param agent  the agent to start
+     * @param prompt the user's input message
+     * @return a CompletableFuture that resolves to an AgentHandle
+     */
+    public static CompletableFuture<AgentHandle> startAsync(Agent agent, String prompt) {
+        return getOrCreateRuntime().startAsync(agent, prompt);
+    }
+
+    /**
+     * Stream agent events asynchronously.
+     *
+     * @param agent  the agent to run
+     * @param prompt the user's input message
+     * @return a CompletableFuture resolving to an AgentStream
+     */
+    public static CompletableFuture<AgentStream> streamAsync(Agent agent, String prompt) {
+        return getOrCreateRuntime().streamAsync(agent, prompt);
+    }
+
+    /**
+     * Compile an agent and return the server's plan without executing it.
+     *
+     * @param agent the agent to plan
+     * @return the plan response map from the server
+     */
+    public static Map<String, Object> plan(Agent agent) {
+        return getOrCreateRuntime().plan(agent);
+    }
+
+    /**
+     * Deploy agents to the server without executing them (CI/CD operation).
+     *
+     * @param agents one or more agents to deploy
+     * @return list of DeploymentInfo, one per deployed agent
+     */
+    public static List<DeploymentInfo> deploy(Agent... agents) {
+        return getOrCreateRuntime().deploy(agents);
+    }
+
+    /**
+     * Deploy agents to the server asynchronously.
+     *
+     * @param agents one or more agents to deploy
+     * @return CompletableFuture resolving to list of DeploymentInfo
+     */
+    public static CompletableFuture<List<DeploymentInfo>> deployAsync(Agent... agents) {
+        return getOrCreateRuntime().deployAsync(agents);
+    }
+
+    /**
+     * Re-attach to an existing agent execution and re-register workers.
+     *
+     * @param executionId the execution ID from a previous start() call
+     * @param agent       the same Agent definition originally executed
+     * @return an AgentHandle for continued interaction
+     */
+    public static AgentHandle resume(String executionId, Agent agent) {
+        return getOrCreateRuntime().resume(executionId, agent);
+    }
+
+    /**
+     * Async version of {@link #resume}.
+     *
+     * @param executionId the execution ID
+     * @param agent       the agent definition originally executed
+     * @return CompletableFuture resolving to an AgentHandle
+     */
+    public static CompletableFuture<AgentHandle> resumeAsync(String executionId, Agent agent) {
+        return getOrCreateRuntime().resumeAsync(executionId, agent);
+    }
+
+    /**
+     * Register workers and keep them polling until interrupted (blocking).
+     *
+     * @param agents agents whose workers should be served
+     */
+    public static void serve(Agent... agents) {
+        getOrCreateRuntime().serve(agents);
     }
 
     /**
