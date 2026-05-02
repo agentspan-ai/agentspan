@@ -131,7 +131,7 @@ def format_prompt_with_params(prompt: str, params: Dict[str, Any]) -> str:
         params: Skill parameters to inject.
 
     Returns:
-        The prompt with a ``[Skill Parameters]`` prefix followed by
+        The prompt with a mandatory parameter overrides prefix followed by
         ``[User Request]``, or the original prompt when *params* is empty.
     """
     prefix = format_skill_params(params)
