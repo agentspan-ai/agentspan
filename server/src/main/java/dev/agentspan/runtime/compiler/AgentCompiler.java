@@ -474,12 +474,14 @@ public class AgentCompiler {
         termCondition.append(String.format(
                 "if ( $.%s['iteration'] < %d && $._stop_requested != true && ($.%s['finishReason'] == 'LENGTH' || $.%s['finishReason'] == 'MAX_TOKENS' || %s)",
                 loopRef, maxTurns, llmRef, llmRef, loopReason));
-        // Skip stop_when/termination on tool-call turns — the agent still has work to do.
-        // Only evaluate when the LLM produced text output (finishReason != TOOL_CALLS).
+        // stop_when: always evaluate — user callbacks check external state (e.g.
+        // file existence) that must be respected even on tool-call turns.
         if (stopWhenRef != null) {
             termCondition.append(String.format(
-                    " && ($.%s['finishReason'] == 'TOOL_CALLS' || $.%s.should_continue == true)", llmRef, stopWhenRef));
+                    " && $.%s.should_continue == true", stopWhenRef));
         }
+        // termination: skip on tool-call turns — text_mention/text_contains
+        // conditions can't meaningfully evaluate when the LLM produced no text.
         if (terminationRef != null) {
             termCondition.append(String.format(
                     " && ($.%s['finishReason'] == 'TOOL_CALLS' || $.%s.should_continue == true)", llmRef, terminationRef));

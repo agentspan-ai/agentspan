@@ -236,8 +236,14 @@ def main():
         name="coder_planner",
         model=OPUS,
         stateful=True,
-        max_turns=100,
+        max_turns=30,
         max_tokens=60000,
+        prefill_tools=[
+            contextbook_read.call(section="issue_pr"),
+            contextbook_read.call(section="architecture_design_test"),
+            contextbook_read.call(section="implementation_report"),
+            contextbook_read.call(section="qa_testing"),
+        ],
         tools=[
             read_file,
             read_symbol,
@@ -247,7 +253,6 @@ def main():
             file_outline,
             search_symbols,
             find_references,
-            _limited(contextbook_read, 4),
             write_coder_plan,
         ],
         stop_when=_planner_done,

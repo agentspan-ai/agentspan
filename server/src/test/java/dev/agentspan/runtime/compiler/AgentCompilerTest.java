@@ -171,6 +171,111 @@ class AgentCompilerTest {
     }
 
     @Test
+    void testStopWhenFiresEvenOnToolCallTurns() {
+        // stop_when must NOT be bypassed when finishReason == TOOL_CALLS.
+        // The loop condition for stop_when must be unconditional:
+        //   && $.stop_ref.should_continue == true
+        // NOT:
+        //   && ($.llmRef['finishReason'] == 'TOOL_CALLS' || $.stop_ref.should_continue == true)
+        ToolConfig tool = ToolConfig.builder()
+                .name("search")
+                .description("Search")
+                .inputSchema(Map.of("type", "object"))
+                .toolType("worker")
+                .build();
+
+        AgentConfig config = AgentConfig.builder()
+                .name("stop_test")
+                .model("openai/gpt-4o")
+                .tools(List.of(tool))
+                .stopWhen(WorkerRef.builder().taskName("stop_test_stop_when").build())
+                .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        WorkflowTask loop = wf.getTasks().get(2);
+        String cond = loop.getLoopCondition();
+
+        // Must contain the stop_when check
+        assertThat(cond).contains("stop_test_stop_when.should_continue == true");
+
+        // Must NOT contain the TOOL_CALLS bypass for stop_when
+        // (i.e., no "finishReason == 'TOOL_CALLS' || ...stop_when.should_continue")
+        assertThat(cond)
+                .as("stop_when must fire on tool-call turns — no TOOL_CALLS bypass")
+                .doesNotContain("'TOOL_CALLS' || $.stop_test_stop_when.should_continue");
+    }
+
+    @Test
+    void testTerminationStillBypassedOnToolCallTurns() {
+        // termination (text_mention) SHOULD still be bypassed on tool-call turns
+        // because it checks LLM text output which doesn't exist on TOOL_CALLS turns.
+        ToolConfig tool = ToolConfig.builder()
+                .name("calc")
+                .description("Calculator")
+                .inputSchema(Map.of("type", "object"))
+                .toolType("worker")
+                .build();
+
+        TerminationConfig term = TerminationConfig.builder()
+                .type("text_mention")
+                .text("DONE")
+                .caseSensitive(false)
+                .build();
+
+        AgentConfig config = AgentConfig.builder()
+                .name("term_test")
+                .model("openai/gpt-4o")
+                .tools(List.of(tool))
+                .termination(term)
+                .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        WorkflowTask loop = wf.getTasks().get(2);
+        String cond = loop.getLoopCondition();
+
+        // Termination SHOULD have the TOOL_CALLS bypass (unlike stop_when)
+        assertThat(cond).contains("'TOOL_CALLS' || $.term_test_termination.should_continue");
+    }
+
+    @Test
+    void testStopWhenAndTerminationTreatedDifferently() {
+        // When both stop_when and termination are present, only termination
+        // gets the TOOL_CALLS bypass. stop_when fires unconditionally.
+        ToolConfig tool = ToolConfig.builder()
+                .name("search")
+                .description("Search")
+                .inputSchema(Map.of("type", "object"))
+                .toolType("worker")
+                .build();
+
+        AgentConfig config = AgentConfig.builder()
+                .name("both_agent")
+                .model("openai/gpt-4o")
+                .tools(List.of(tool))
+                .stopWhen(WorkerRef.builder().taskName("both_agent_stop_when").build())
+                .termination(TerminationConfig.builder()
+                        .type("text_mention")
+                        .text("FINISHED")
+                        .build())
+                .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        WorkflowTask loop = wf.getTasks().get(2);
+        String cond = loop.getLoopCondition();
+
+        // stop_when: NO TOOL_CALLS bypass
+        assertThat(cond).contains("both_agent_stop_when.should_continue == true");
+        assertThat(cond)
+                .doesNotContain("'TOOL_CALLS' || $.both_agent_stop_when.should_continue");
+
+        // termination: HAS TOOL_CALLS bypass
+        assertThat(cond).contains("'TOOL_CALLS' || $.both_agent_termination.should_continue");
+    }
+
+    @Test
     void testCompileHybrid() {
         ToolConfig tool = ToolConfig.builder()
                 .name("search")
