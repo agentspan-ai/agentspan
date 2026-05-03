@@ -1149,15 +1149,17 @@ public class AgentCompiler {
             messages.addAll(config.getMemory().getMessages());
         }
 
-        // Prefill tool call results: inject as tool_call + tool response before user message
+        // Prefill tool call results: inject as tool_call + tool response before user message.
+        // Field names must match ChatMessage/ToolCall Java models exactly (camelCase):
+        //   ChatMessage.toolCalls (not tool_calls), ToolCall.inputParameters (not input).
         if (prefillRefs != null && !prefillRefs.isEmpty()) {
             for (PrefillRef pr : prefillRefs) {
                 messages.add(Map.of(
                         "role", "tool_call",
-                        "tool_calls", List.of(Map.of(
+                        "toolCalls", List.of(Map.of(
                                 "name", pr.toolName(),
                                 "taskReferenceName", pr.refName(),
-                                "input", pr.arguments()))));
+                                "inputParameters", pr.arguments()))));
                 messages.add(Map.of(
                         "role", "tool",
                         "message", "${" + pr.refName() + ".output.result}",

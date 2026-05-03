@@ -1112,10 +1112,11 @@ class AgentCompilerTest {
         assertThat(toolCallMsg).isNotNull();
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> toolCalls =
-                (List<Map<String, Object>>) toolCallMsg.get("tool_calls");
+                (List<Map<String, Object>>) toolCallMsg.get("toolCalls");
         assertThat(toolCalls).hasSize(1);
         assertThat(toolCalls.get(0).get("name")).isEqualTo("contextbook_read");
         assertThat(toolCalls.get(0).get("taskReferenceName")).isEqualTo("prefill_agent_prefill_0");
+        assertThat(toolCalls.get(0).get("inputParameters")).isEqualTo(Map.of("section", "coder_plan"));
 
         Map<String, Object> toolResultMsg = messages.stream()
                 .filter(m -> "tool".equals(m.get("role")))
@@ -1194,6 +1195,56 @@ class AgentCompilerTest {
                 .filter(m -> "tool".equals(m.get("role"))).count();
         assertThat(toolCallCount).isEqualTo(2);
         assertThat(toolResultCount).isEqualTo(2);
+    }
+
+    @Test
+    void testPrefillMessageFieldNamesMatchChatMessageModel() {
+        // Prefill tool_call messages MUST use camelCase field names to match
+        // ChatMessage.toolCalls and ToolCall.inputParameters — snake_case keys
+        // are silently dropped during Jackson deserialization.
+        ToolConfig tool = ToolConfig.builder()
+                .name("my_tool")
+                .description("A tool")
+                .inputSchema(Map.of("type", "object"))
+                .toolType("worker")
+                .build();
+
+        AgentConfig config = AgentConfig.builder()
+                .name("field_test")
+                .model("openai/gpt-4o")
+                .tools(List.of(tool))
+                .prefillTools(List.of(PrefillToolCallConfig.builder()
+                        .toolName("my_tool")
+                        .arguments(Map.of("key", "val"))
+                        .build()))
+                .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        WorkflowTask loop = wf.getTasks().get(3); // after ctx_resolve, init_state, prefill task
+        WorkflowTask llmTask = loop.getLoopOver().stream()
+                .filter(t -> "LLM_CHAT_COMPLETE".equals(t.getType()))
+                .findFirst().orElseThrow();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> messages =
+                (List<Map<String, Object>>) llmTask.getInputParameters().get("messages");
+
+        Map<String, Object> toolCallMsg = messages.stream()
+                .filter(m -> "tool_call".equals(m.get("role")))
+                .findFirst().orElseThrow();
+
+        // Must use "toolCalls" (camelCase), NOT "tool_calls" (snake_case)
+        assertThat(toolCallMsg).containsKey("toolCalls");
+        assertThat(toolCallMsg).doesNotContainKey("tool_calls");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> tcs = (List<Map<String, Object>>) toolCallMsg.get("toolCalls");
+        Map<String, Object> tc = tcs.get(0);
+
+        // Must use "inputParameters" (matching ToolCall model), NOT "input"
+        assertThat(tc).containsKey("inputParameters");
+        assertThat(tc).doesNotContainKey("input");
+        assertThat(tc.get("inputParameters")).isEqualTo(Map.of("key", "val"));
     }
 
     @Test
