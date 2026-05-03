@@ -5,12 +5,16 @@ All tools operate relative to a shared working directory set via
 ``set_working_dir(path)`` before any agent runs. This is typically a
 temp folder where the target repo is cloned.
 
-Provides 21 tools organized into 5 categories:
-- File operations (read, write, edit, patch, list, outline)
+Provides tools organized into 5 categories:
+- File operations (read_file bounded, read_symbol, write, edit, patch, list, outline)
 - Search & navigation (glob, grep, symbols, references)
 - Git (diff, log, blame)
 - Build & test (lint, build, unit tests, e2e)
 - Contextbook (write, read, summary)
+
+Design: search-first discovery, bounded reads, per-tool output budgets.
+Agents use search tools to find what they need, then read_symbol or
+read_file(path, start, end) for targeted code reading. No full-file dumps.
 """
 
 import json
@@ -55,6 +59,8 @@ def _ensure_agent_boundary(context: ToolContext | None) -> None:
         _last_execution_id = eid
         _file_read_hashes.clear()
         _grep_cache.clear()
+        _symbol_read_hashes.clear()
+        _read_file_cache.clear()
 
 
 # ── Working directory ──────────────────────────────────────────
@@ -74,6 +80,8 @@ def set_working_dir(path: str) -> None:
     _last_execution_id = ""
     _file_read_hashes.clear()
     _grep_cache.clear()
+    _symbol_read_hashes.clear()
+    _read_file_cache.clear()
 
 
 def get_working_dir() -> str:
@@ -104,12 +112,21 @@ def _cwd() -> str:
 _MAX_FILE_BYTES = 500_000  # 500 KB
 _MAX_OUTPUT_LINES = 200  # truncate long outputs
 _MAX_COMMAND_OUTPUT = 16_000  # chars for command output
-_MAX_READ_FILES_CHARS = 50_000  # total output cap for read_files (~15K tokens)
 _DEFAULT_TIMEOUT = 120  # seconds for shell commands
 E2E_TOOL_TIMEOUT = 5400  # 90 min — full e2e suite with margin
 
+# Per-tool output budgets (harness design: every tool has maxResultSizeChars)
+_MAX_READ_FILE_CHARS = 60_000  # read_file bounded range output
+_MAX_READ_SYMBOL_CHARS = 15_000  # read_symbol output
+_MAX_GREP_CHARS = 20_000  # grep_search output
+_MAX_SEARCH_SYMBOLS_CHARS = 20_000  # search_symbols output
+_MAX_OUTLINE_CHARS = 10_000  # file_outline output
+_MAX_LIST_DIR_CHARS = 10_000  # list_directory output
+
 # Dedup: track file reads to block redundant re-reads
 _file_read_hashes: dict[str, int] = {}  # resolved path -> content hash
+_symbol_read_hashes: dict[str, int] = {}  # "resolved_path:symbol" -> content hash
+_read_file_cache: dict[str, tuple[int, int]] = {}  # resolved path -> (size_bytes, line_count)
 
 # Auto-discovered at runtime by _discover_repo_conventions()
 _BASE_BRANCH: str = "main"
@@ -119,16 +136,10 @@ _REPO_COMMANDS: dict[str, str] = {}  # keys: lint, build, test
 # ── File Operations ──────────────────────────────────────────
 
 
-_MIN_READ_LINES = 200  # minimum lines for ranged reads — prevents wasteful tiny chunks
-
-
 @tool
-def read_file(
-    path: str, start_line: int = 0, end_line: int = 0, context: ToolContext = None
-) -> str:
-    """Read a file's contents. Returns lines with line numbers.
-    If start_line/end_line are 0, reads the entire file (preferred).
-    Only use line ranges for very large files (1000+ lines). Minimum range: 200 lines.
+def read_file(path: str, context: ToolContext = None) -> str:
+    """Read a file. Always returns the FULL file content with line numbers.
+    For targeted code reading, use read_symbol() instead.
     Paths are relative to the repo working directory."""
     _ensure_agent_boundary(context)
     target = _resolve(path)
@@ -139,28 +150,24 @@ def read_file(
     size = target.stat().st_size
     if size > _MAX_FILE_BYTES:
         return f"Error: {path!r} is {size:,} bytes (limit {_MAX_FILE_BYTES:,}). Use grep_search to find specific content."
+    abs_path = str(target.resolve())
+    if abs_path in _read_file_cache:
+        cached_size, cached_lines = _read_file_cache[abs_path]
+        return (
+            f"Already returned on a previous call ({cached_size:,} bytes, {cached_lines:,} lines). "
+            f"Content is in your conversation history — use it directly. "
+            f"Do NOT call read_file on this path again."
+        )
     try:
         content = target.read_text(encoding="utf-8", errors="replace")
-        # Dedup: full-file reads (no line range) are cached by content hash
-        if not start_line and not end_line:
-            content_hash = hash(content)
-            cache_key = str(target.resolve())
-            if _file_read_hashes.get(cache_key) == content_hash:
-                return f"File '{path}' unchanged since last read ({len(content):,} chars, {len(content.splitlines())} lines). Use content from your context window."
-            _file_read_hashes[cache_key] = content_hash
         lines = content.splitlines()
-        if start_line or end_line:
-            start = max(0, start_line - 1)
-            end = end_line if end_line else len(lines)
-            # Enforce minimum range — tiny reads waste turns
-            if 0 < (end - start) < _MIN_READ_LINES:
-                end = min(start + _MIN_READ_LINES, len(lines))
-            lines = lines[start:end]
-            offset = start
-        else:
-            offset = 0
-        numbered = [f"{i + offset + 1:6d}\t{line}" for i, line in enumerate(lines)]
-        return "\n".join(numbered)
+        _read_file_cache[abs_path] = (size, len(lines))
+        numbered = [f"{i + 1:6d}\t{line}" for i, line in enumerate(lines)]
+        result = "\n".join(numbered)
+        if len(result) > _MAX_READ_FILE_CHARS:
+            result = result[:_MAX_READ_FILE_CHARS]
+            result += f"\n... TRUNCATED at {_MAX_READ_FILE_CHARS:,} chars. Use read_symbol() for targeted reading."
+        return result
     except Exception as exc:
         return f"Error reading {path!r}: {exc}"
 
@@ -175,6 +182,7 @@ def write_file(path: str, content: str) -> str:
         target.write_text(content, encoding="utf-8")
         _grep_cache.clear()  # file changed — invalidate grep cache
         _file_read_hashes.pop(str(target.resolve()), None)
+        _read_file_cache.pop(str(target.resolve()), None)
         return f"Wrote {len(content):,} bytes to {path!r}."
     except Exception as exc:
         return f"Error writing {path!r}: {exc}"
@@ -198,6 +206,7 @@ def edit_file(path: str, old_string: str, new_string: str) -> str:
         target.write_text(new_content, encoding="utf-8")
         _grep_cache.clear()  # file changed — invalidate grep cache
         _file_read_hashes.pop(str(target.resolve()), None)
+        _read_file_cache.pop(str(target.resolve()), None)
         return (
             f"Edited {path!r}: replaced 1 occurrence ({len(old_string)} → {len(new_string)} chars)."
         )
@@ -228,6 +237,8 @@ def apply_patch(patch: str) -> str:
             timeout=30,
         )
         if proc.returncode == 0:
+            _read_file_cache.clear()
+            _grep_cache.clear()
             return "Patch applied successfully."
         return f"Error applying patch:\n{proc.stderr.strip()}"
     except Exception as exc:
@@ -274,7 +285,10 @@ def list_directory(path: str = ".", max_depth: int = 2) -> str:
     if len(lines) > _MAX_OUTPUT_LINES:
         lines = lines[:_MAX_OUTPUT_LINES]
         lines.append(f"... (truncated at {_MAX_OUTPUT_LINES} entries)")
-    return "\n".join(lines)
+    result = "\n".join(lines)
+    if len(result) > _MAX_LIST_DIR_CHARS:
+        result = result[:_MAX_LIST_DIR_CHARS] + "\n... TRUNCATED. Use a deeper path or glob_find."
+    return result
 
 
 # Language-specific regex patterns for definition extraction
@@ -308,20 +322,14 @@ _OUTLINE_PATTERNS = {
 }
 
 
-@tool
-def file_outline(path: str) -> str:
-    """Show the structure of a file: classes, functions, methods, interfaces.
-    Works across Python, Go, Java, TypeScript, and React.
-    Paths are relative to the repo working directory."""
-    target = _resolve(path)
-    if not target.exists():
-        return f"Error: {path!r} does not exist."
+def _file_outline_impl(target: Path) -> str:
+    """Extract file outline (classes, functions, methods) — shared implementation."""
     ext = target.suffix
     patterns = _OUTLINE_PATTERNS.get(ext)
     if patterns is None and ext in (".tsx", ".jsx"):
         patterns = _OUTLINE_PATTERNS[".ts"]
     if not patterns:
-        return f"Error: unsupported file type {ext!r}. Supported: .py, .go, .java, .ts, .tsx, .jsx"
+        return ""
     try:
         lines = target.read_text(encoding="utf-8", errors="replace").splitlines()
         results = []
@@ -331,11 +339,142 @@ def file_outline(path: str) -> str:
                 if m:
                     results.append(f"{lineno:6d} | {kind:10s} | {m.group(1).strip()}")
                     break
-        if not results:
-            return f"No definitions found in {path!r}."
-        return "\n".join(results)
+        return "\n".join(results) if results else ""
+    except Exception:
+        return ""
+
+
+@tool
+def file_outline(path: str) -> str:
+    """Show the structure of a file: classes, functions, methods, interfaces.
+    Works across Python, Go, Java, TypeScript, and React.
+    Paths are relative to the repo working directory."""
+    target = _resolve(path)
+    if not target.exists():
+        return f"Error: {path!r} does not exist."
+    result = _file_outline_impl(target)
+    if not result:
+        ext = target.suffix
+        supported = ".py, .go, .java, .ts, .tsx, .jsx"
+        if ext not in _OUTLINE_PATTERNS and ext not in (".tsx", ".jsx"):
+            return f"Error: unsupported file type {ext!r}. Supported: {supported}"
+        return f"No definitions found in {path!r}."
+    if len(result) > _MAX_OUTLINE_CHARS:
+        result = result[:_MAX_OUTLINE_CHARS] + "\n... TRUNCATED. Use grep_search for specific symbols."
+    return result
+
+
+def _find_symbol_range(lines: list[str], name: str, ext: str) -> tuple[int, int] | None:
+    """Find the line range of a symbol (function/class/method) in a file.
+
+    Returns (start_line, end_line) as 1-indexed inclusive, or None if not found.
+    Uses indentation-based boundary detection for Python, brace-counting for others.
+    """
+    patterns = _OUTLINE_PATTERNS.get(ext)
+    if patterns is None and ext in (".tsx", ".jsx"):
+        patterns = _OUTLINE_PATTERNS[".ts"]
+    if not patterns:
+        return None
+
+    # Find the definition line
+    start_idx = None
+    for i, line in enumerate(lines):
+        for pattern, _ in patterns:
+            m = re.match(pattern, line)
+            if m and name in m.group(1):
+                start_idx = i
+                break
+        if start_idx is not None:
+            break
+
+    if start_idx is None:
+        return None
+
+    # Find the end of the symbol body
+    if ext == ".py":
+        # Python: indentation-based — find next line at same or lesser indent
+        def_indent = len(lines[start_idx]) - len(lines[start_idx].lstrip())
+        end_idx = start_idx + 1
+        while end_idx < len(lines):
+            line = lines[end_idx]
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#") and not stripped.startswith("\"\"\""):
+                line_indent = len(line) - len(line.lstrip())
+                if line_indent <= def_indent:
+                    break
+            end_idx += 1
+        # Back up past trailing blank lines
+        while end_idx > start_idx + 1 and not lines[end_idx - 1].strip():
+            end_idx -= 1
+    else:
+        # Brace-counting for Go, Java, TS
+        brace_count = 0
+        found_open = False
+        end_idx = start_idx
+        for i in range(start_idx, len(lines)):
+            for ch in lines[i]:
+                if ch == "{":
+                    brace_count += 1
+                    found_open = True
+                elif ch == "}":
+                    brace_count -= 1
+            if found_open and brace_count <= 0:
+                end_idx = i + 1
+                break
+        else:
+            end_idx = min(start_idx + 50, len(lines))  # fallback
+
+    return (start_idx + 1, end_idx)  # 1-indexed
+
+
+@tool
+def read_symbol(path: str, name: str, context: ToolContext = None) -> str:
+    """Read a specific function, class, or method from a file by name.
+    Returns the complete symbol body with line numbers.
+    Use file_outline(path) or search_symbols(name) to discover symbol names first.
+    Paths are relative to the repo working directory."""
+    _ensure_agent_boundary(context)
+    target = _resolve(path)
+    if not target.exists():
+        return f"Error: {path!r} does not exist."
+    if target.is_dir():
+        return f"Error: {path!r} is a directory."
+    try:
+        content = target.read_text(encoding="utf-8", errors="replace")
+        # Dedup: skip if content unchanged since last read of this symbol
+        cache_key = f"{target.resolve()}:{name}"
+        content_hash = hash(content)
+        if _symbol_read_hashes.get(cache_key) == content_hash:
+            return f"Symbol '{name}' in '{path}' unchanged since last read. Use content from your context window."
+        lines = content.splitlines()
+        rng = _find_symbol_range(lines, name, target.suffix)
+        if rng is None:
+            # Fallback: grep for the name and return context around first match
+            for i, line in enumerate(lines):
+                if name in line:
+                    start = max(0, i - 5)
+                    end = min(len(lines), i + 50)
+                    numbered = [f"{j + 1:6d}\t{lines[j]}" for j in range(start, end)]
+                    result = f"Symbol '{name}' not found as a definition. Showing context around first mention:\n"
+                    result += "\n".join(numbered)
+                    return result
+            return f"Error: '{name}' not found in {path!r}. Use file_outline('{path}') to see available symbols."
+
+        start, end = rng
+        # Add a few lines of context above (imports, decorators, comments)
+        ctx_start = max(0, start - 6)
+        symbol_lines = lines[ctx_start:end]
+        offset = ctx_start
+        numbered = [f"{i + offset + 1:6d}\t{line}" for i, line in enumerate(symbol_lines)]
+        result = "\n".join(numbered)
+        # Enforce output budget
+        if len(result) > _MAX_READ_SYMBOL_CHARS:
+            result = result[:_MAX_READ_SYMBOL_CHARS]
+            result += f"\n... TRUNCATED. Symbol is large ({end - start + 1} lines). Use read_file('{path}', {start}, {end}) for the full range."
+        _symbol_read_hashes[cache_key] = content_hash
+        return result
     except Exception as exc:
-        return f"Error: {exc}"
+        return f"Error reading symbol '{name}' from {path!r}: {exc}"
 
 
 # ── Search & Navigation ─────────────────────────────────────
@@ -381,6 +520,9 @@ def grep_search(
         return f"Duplicate search — same results as before. Use them from your context window.\n{_grep_cache[cache_key][:500]}"
     result = _grep_search_impl(pattern, path, glob_filter, max_results)
     if not result.startswith("Error"):
+        # Enforce output budget
+        if len(result) > _MAX_GREP_CHARS:
+            result = result[:_MAX_GREP_CHARS] + "\n... TRUNCATED. Narrow your search pattern."
         _grep_cache[cache_key] = result
     return result
 
@@ -489,7 +631,10 @@ def search_symbols(name: str, kind: str = "", path: str = ".") -> str:
                     continue
     if not results:
         return f"No definitions found for {name!r} in {path!r}."
-    return "\n".join(results)
+    result = "\n".join(results)
+    if len(result) > _MAX_SEARCH_SYMBOLS_CHARS:
+        result = result[:_MAX_SEARCH_SYMBOLS_CHARS] + "\n... TRUNCATED. Narrow your search."
+    return result
 
 
 @tool
@@ -1082,6 +1227,14 @@ def setup_repo(
     Returns structured text with issue details, PR comments (if any), and repo info."""
     import json as _json
 
+    # Idempotent: if issue_pr already written, return cached result
+    cb = _contextbook_dir()
+    issue_pr_file = cb / "issue_pr.md"
+    if issue_pr_file.exists():
+        cached = issue_pr_file.read_text(encoding="utf-8")
+        if cached.strip():
+            return f"(setup_repo already completed — returning cached result)\n\n{cached}"
+
     # Normalize repo to owner/name format (strip URLs, .git suffix)
     repo = re.sub(r"^https?://", "", repo)
     repo = re.sub(r"^github\.com/", "", repo)
@@ -1108,11 +1261,12 @@ def setup_repo(
             errors.append(f"{cmd}: {e}")
             return ""
 
-    # 1. Fetch issue
+    # 1. Fetch issue (with ALL comments, no pagination limit)
     issue_json_raw = _run(
         f"gh issue view {issue_number} --repo {repo} "
         f"--json number,title,body,author,labels,comments,assignees,"
-        f"milestone,state,createdAt,updatedAt,closedAt,reactionGroups"
+        f"milestone,state,createdAt,updatedAt,closedAt,reactionGroups",
+        timeout=120,
     )
     issue_data = {}
     try:
@@ -1120,8 +1274,11 @@ def setup_repo(
     except _json.JSONDecodeError:
         pass
 
-    # 2. Clone repo
-    _run(f"gh repo clone {repo} .", timeout=120)
+    # 2. Clone repo (or fetch if already cloned — supports restarts)
+    if (Path(_cwd()) / ".git").exists():
+        _run("git fetch origin", timeout=120)
+    else:
+        _run(f"gh repo clone {repo} .", timeout=120)
 
     # 3. Gitignore contextbook
     _run(
@@ -1170,7 +1327,7 @@ def setup_repo(
         f"Branch: {branch}",
         "",
         "## Issue Body",
-        issue_data.get("body", "(empty)")[:8000],
+        issue_data.get("body", "(empty)"),
     ]
 
     # Issue comments
@@ -1188,7 +1345,7 @@ def setup_repo(
         issue_pr_parts.append(f"State: {pr_data.get('state', '')}")
         pr_body = pr_data.get("body", "")
         if pr_body:
-            issue_pr_parts.append(f"\n### PR Body\n{pr_body[:5000]}")
+            issue_pr_parts.append(f"\n### PR Body\n{pr_body}")
 
         pr_comments = pr_data.get("comments", [])
         if pr_comments:
@@ -1207,19 +1364,45 @@ def setup_repo(
                 body = r.get("body", "")
                 issue_pr_parts.append(f"\n**@{author}** ({state}):\n{body}")
 
+        # Fetch ALL inline/review comments (includes review threads and replies)
         inline_raw = _run(
             f"gh api repos/{repo}/pulls/{pr_number}/comments "
-            f"--jq '[.[] | {{path:.path,line:.line,body:.body,author:.user.login}}]'"
+            f"--paginate "
+            f"--jq '[.[] | {{path:.path,line:.line,original_line:.original_line,diff_hunk:.diff_hunk,body:.body,author:.user.login,in_reply_to_id:.in_reply_to_id,created_at:.created_at}}]'",
+            timeout=120,
         )
         try:
             inline_comments = _json.loads(inline_raw) if inline_raw.strip() else []
         except _json.JSONDecodeError:
             inline_comments = []
         if inline_comments:
-            issue_pr_parts.append("\n### Inline Comments")
+            issue_pr_parts.append("\n### Inline Review Comments")
             for ic in inline_comments:
+                line_ref = ic.get("line") or ic.get("original_line") or "?"
+                reply_note = " (reply)" if ic.get("in_reply_to_id") else ""
                 issue_pr_parts.append(
-                    f"\n**@{ic.get('author', '?')}** at `{ic.get('path', '?')}:{ic.get('line', '?')}`:\n{ic.get('body', '')}"
+                    f"\n**@{ic.get('author', '?')}**{reply_note} at `{ic.get('path', '?')}:{line_ref}`:\n{ic.get('body', '')}"
+                )
+
+        # Fetch issue timeline comments (linked issues, cross-references)
+        issue_comments_raw = _run(
+            f"gh api repos/{repo}/issues/{issue_number}/comments "
+            f"--paginate "
+            f"--jq '[.[] | {{body:.body,author:.user.login,created_at:.created_at}}]'",
+            timeout=120,
+        )
+        try:
+            api_issue_comments = _json.loads(issue_comments_raw) if issue_comments_raw.strip() else []
+        except _json.JSONDecodeError:
+            api_issue_comments = []
+        # Merge with gh-cli comments (API returns all, gh-cli may paginate differently)
+        existing_bodies = {c.get("body", "")[:100] for c in issue_comments}
+        extra_comments = [c for c in api_issue_comments if c.get("body", "")[:100] not in existing_bodies]
+        if extra_comments:
+            issue_pr_parts.append("\n### Additional Issue Comments")
+            for c in extra_comments:
+                issue_pr_parts.append(
+                    f"\n**@{c.get('author', '?')}:**\n{c.get('body', '')}"
                 )
 
     issue_pr_content = "\n".join(issue_pr_parts)
@@ -1245,55 +1428,6 @@ def setup_repo(
 
 
 # ── Batch Tools (force parallel operations in a single call) ──
-
-
-@tool
-def read_files(paths: str) -> str:
-    """Read multiple files in one call. Pass comma-separated paths.
-    Example: read_files("src/main.py, src/utils.py, tests/test_main.py")
-    Total output capped at ~50K chars. Large files are truncated with a note
-    to use read_file(path, start_line, end_line) for specific sections."""
-    parts = []
-    total_chars = 0
-    for raw_path in paths.split(","):
-        path = raw_path.strip()
-        if not path:
-            continue
-        target = _resolve(path)
-        if not target.exists():
-            parts.append(f"=== {path} ===\nError: {path!r} does not exist.")
-            continue
-        if target.is_dir():
-            parts.append(f"=== {path} ===\nError: {path!r} is a directory.")
-            continue
-        size = target.stat().st_size
-        if size > _MAX_FILE_BYTES:
-            parts.append(
-                f"=== {path} ===\nError: {path!r} is {size:,} bytes (limit {_MAX_FILE_BYTES:,})."
-            )
-            continue
-        try:
-            content = target.read_text(encoding="utf-8", errors="replace")
-            lines = content.splitlines()
-            numbered = [f"{i + 1:6d}\t{line}" for i, line in enumerate(lines)]
-            file_output = "\n".join(numbered)
-            remaining = _MAX_READ_FILES_CHARS - total_chars
-            if remaining <= 0:
-                parts.append(
-                    f"=== {path} ===\nSKIPPED — output budget exhausted. Use read_file('{path}') separately."
-                )
-                continue
-            if len(file_output) > remaining:
-                # Truncate and suggest targeted read
-                file_output = file_output[:remaining]
-                file_output += f"\n... TRUNCATED ({len(lines)} lines total, {len(content):,} chars). Use read_file('{path}', start_line, end_line) for specific sections."
-            total_chars += len(file_output)
-            parts.append(f"=== {path} ===\n{file_output}")
-        except Exception as exc:
-            parts.append(f"=== {path} ===\nError: {exc}")
-    if not parts:
-        return "Error: no valid paths provided."
-    return "\n\n".join(parts)
 
 
 @tool
@@ -1332,6 +1466,8 @@ def edit_files(edits_json: str) -> str:
                 continue
             new_content = content.replace(old_string, new_string, 1)
             target.write_text(new_content, encoding="utf-8")
+            _file_read_hashes.pop(str(target.resolve()), None)
+            _read_file_cache.pop(str(target.resolve()), None)
             results.append(
                 f"[{i + 1}] OK: {path!r} edited ({len(old_string)} → {len(new_string)} chars)."
             )

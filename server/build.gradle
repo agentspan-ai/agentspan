@@ -30,7 +30,7 @@ def pnpmCommand = { String args ->
 
 // ── Version catalog ──────────────────────────────────────────────
 ext {
-    conductorVersion   = '3.30.0.rc3'
+    conductorVersion   = '3.30.0.rc7'
     lombokVersion      = '1.18.42'
     log4jVersion       = '2.24.3'  // managed by Spring BOM, explicit for clarity
     sqliteJdbcVersion  = '3.47.0.0'

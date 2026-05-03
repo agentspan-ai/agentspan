@@ -219,6 +219,7 @@ public class MultiAgentCompiler {
         Map<String, Object> finalInputs = new LinkedHashMap<>();
         finalInputs.put("llmProvider", parsed.getProvider());
         finalInputs.put("model", parsed.getModel());
+        finalInputs.put("maxTokens", config.getMaxTokens() != null ? config.getMaxTokens() : 16384);
         String finalSystemPrompt = (instructions.isEmpty() ? "" : instructions + "\n\n")
                 + "Based on the work done by the agents above, provide your final response to the user. "
                 + "IMPORTANT: Include ALL details from every agent's response — do NOT summarize or omit "
@@ -805,6 +806,7 @@ public class MultiAgentCompiler {
         Map<String, Object> finalInputs = new LinkedHashMap<>();
         finalInputs.put("llmProvider", parsed.getProvider());
         finalInputs.put("model", parsed.getModel());
+        finalInputs.put("maxTokens", config.getMaxTokens() != null ? config.getMaxTokens() : 16384);
         String instructions = parentInstructions.getText();
         String finalSystemPrompt = (instructions.isEmpty() ? "" : instructions + "\n\n")
                 + "Based on the work done by the agents above, provide your final response to the user. "
@@ -1089,6 +1091,7 @@ public class MultiAgentCompiler {
         ParsedModel parsed = ModelParser.parse(config.getModel());
         finalInputs.put("llmProvider", parsed.getProvider());
         finalInputs.put("model", parsed.getModel());
+        finalInputs.put("maxTokens", config.getMaxTokens() != null ? config.getMaxTokens() : 16384);
         String instructions = instructionsPlan.getText();
         String finalSystemPrompt = (instructions.isEmpty() ? "" : instructions + "\n\n")
                 + "Based on the work done by the agents above, provide your final response to the user. "
@@ -1206,7 +1209,7 @@ public class MultiAgentCompiler {
 
         // DoWhile loop: continue while tool calls present and no transfer
         String loopRef = agent.getName() + "_loop";
-        int maxTurns = 25;
+        int maxTurns = agent.getMaxTurns() > 0 ? agent.getMaxTurns() : 100;
         String hasToolCalls =
                 String.format("($.%s['toolCalls'] != null && $.%s['toolCalls'].length > 0)", llmRef, llmRef);
         String notTransfer = String.format("($.%s.is_transfer != true)", checkTransferRef);
@@ -1279,6 +1282,7 @@ public class MultiAgentCompiler {
         Map<String, Object> llmInputs = new LinkedHashMap<>();
         llmInputs.put("llmProvider", parsed.getProvider());
         llmInputs.put("model", parsed.getModel());
+        llmInputs.put("maxTokens", agent.getMaxTokens() != null ? agent.getMaxTokens() : 16384);
         String transferPrompt = "You have just completed your task. Your result is shown above.\n\n"
                 + "If another agent should handle a different part of the request, call the appropriate "
                 + "transfer tool. Otherwise, do NOT call any tool — just respond with a brief acknowledgment.";
@@ -1644,6 +1648,7 @@ public class MultiAgentCompiler {
         Map<String, Object> inputs = new LinkedHashMap<>();
         inputs.put("llmProvider", parsed.getProvider());
         inputs.put("model", parsed.getModel());
+        inputs.put("maxTokens", 4096);
         inputs.put(
                 "messages",
                 List.of(
@@ -1714,6 +1719,7 @@ public class MultiAgentCompiler {
         Map<String, Object> llmInputs = new LinkedHashMap<>();
         llmInputs.put("llmProvider", parsed.getProvider());
         llmInputs.put("model", parsed.getModel());
+        llmInputs.put("maxTokens", 4096);
         llmInputs.put(
                 "messages",
                 List.of(

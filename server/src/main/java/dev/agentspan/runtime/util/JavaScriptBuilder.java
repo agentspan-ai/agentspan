@@ -1155,12 +1155,19 @@ public class JavaScriptBuilder {
     }
 
     /**
-     * Context injection script: prepends context JSON block to user prompt.
-     * If context is empty, returns the prompt unchanged.
-     * Enforces size limits: per-value truncation and total size budget.
-     * Input: {@code state} → the _agent_state dict, {@code prompt} → original prompt,
-     *        {@code maxSize} → max total context bytes, {@code maxValueSize} → max per-value bytes.
-     * Output: the prompt string with context prepended.
+     * Context injection script: builds the state/signals prefix for the user prompt.
+     *
+     * <p>Returns ONLY the context prefix (state JSON + signals). The base prompt is
+     * NOT included in the output — the caller concatenates the prefix with the prompt
+     * via Conductor template resolution (e.g. {@code ${ctx_inject.output.result}\n\n${workflow.input.prompt}}).
+     * This avoids storing the full prompt (which never changes) in every iteration's
+     * task output, reducing workflow payload by ~N × prompt_size.</p>
+     *
+     * <p>Input: {@code state} → the _agent_state dict,
+     *        {@code signals} → signal injection string,
+     *        {@code maxSize} → max total context bytes,
+     *        {@code maxValueSize} → max per-value bytes.</p>
+     * <p>Output: the context prefix string (empty string if no state/signals).</p>
      */
     public static String contextInjectionScript() {
         return iife(
@@ -1171,9 +1178,8 @@ public class JavaScriptBuilder {
                 // properties, not map entries. Use state.get(k) for value access
                 // since bracket notation may not work for Java Maps.
                 "var rawState = $.state;"
-                        + "var prompt = $.prompt || '';"
                         + "var signals = $.signals || '';"
-                        + "if (!rawState && !signals) return prompt;"
+                        + "if (!rawState && !signals) return '';"
                         + "var maxSize = $.maxSize || 32768;"
                         + "var maxValueSize = $.maxValueSize || 4096;"
                         // Collect map entries via for-in (works on Java Maps in GraalJS)
@@ -1200,13 +1206,12 @@ public class JavaScriptBuilder {
                         + "  delete truncated[tKeys.shift()];"
                         + "  json = JSON.stringify(truncated);"
                         + "}"
-                        // Build result: signals (if any) + context (if any) + prompt
+                        // Build prefix: signals (if any) + context (if any)
                         + "var parts = [];"
                         + "if (signals) { parts.push('[SIGNALS]\\n' + signals + '\\n[/SIGNALS]'); }"
                         + "if (Object.keys(truncated).length > 0) {"
                         + "  parts.push('Context:\\n```json\\n' + JSON.stringify(truncated, null, 2) + '\\n```');"
                         + "}"
-                        + "parts.push(prompt);"
                         + "return parts.join('\\n\\n');");
     }
 

@@ -387,13 +387,34 @@ class AgentHandle:
                 result = handle.join(timeout=120)
                 print(result.output)
         """
+        import logging
         import time
 
+        logger = logging.getLogger("agentspan.agents.result")
         poll_interval = 1
         elapsed: float = 0.0
+        consecutive_errors = 0
 
         while True:
-            status = self._runtime.get_status(self.execution_id)
+            try:
+                status = self._runtime.get_status(self.execution_id)
+                consecutive_errors = 0
+            except Exception as exc:
+                consecutive_errors += 1
+                if consecutive_errors >= 30:
+                    raise RuntimeError(
+                        f"Lost contact with server after 30 consecutive errors "
+                        f"while polling execution {self.execution_id!r}: {exc}"
+                    ) from exc
+                logger.warning(
+                    "get_status failed (attempt %d/30, will retry): %s",
+                    consecutive_errors,
+                    exc,
+                )
+                time.sleep(poll_interval)
+                elapsed += poll_interval
+                continue
+
             if status.is_complete:
                 break
             if timeout is not None and elapsed >= timeout:
@@ -434,12 +455,33 @@ class AgentHandle:
                 print(result.output)
         """
         import asyncio
+        import logging
 
+        logger = logging.getLogger("agentspan.agents.result")
         poll_interval = 1
         elapsed: float = 0.0
+        consecutive_errors = 0
 
         while True:
-            status = await self._runtime.get_status_async(self.execution_id)
+            try:
+                status = await self._runtime.get_status_async(self.execution_id)
+                consecutive_errors = 0
+            except Exception as exc:
+                consecutive_errors += 1
+                if consecutive_errors >= 30:
+                    raise RuntimeError(
+                        f"Lost contact with server after 30 consecutive errors "
+                        f"while polling execution {self.execution_id!r}: {exc}"
+                    ) from exc
+                logger.warning(
+                    "get_status_async failed (attempt %d/30, will retry): %s",
+                    consecutive_errors,
+                    exc,
+                )
+                await asyncio.sleep(poll_interval)
+                elapsed += poll_interval
+                continue
+
             if status.is_complete:
                 break
             if timeout is not None and elapsed >= timeout:

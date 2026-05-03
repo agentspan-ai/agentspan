@@ -57,7 +57,7 @@ public class AgentConfig {
     private MemoryConfig memory;
 
     @Builder.Default
-    private int maxTurns = 25;
+    private int maxTurns = 100;
 
     private Integer maxTokens;
 

@@ -539,6 +539,7 @@ public class ToolCompiler {
         Map<String, Object> filterLlmInput = new LinkedHashMap<>();
         filterLlmInput.put("llmProvider", provider);
         filterLlmInput.put("model", model);
+        filterLlmInput.put("maxTokens", 4096);
         filterLlmInput.put("messages", messages);
         filterLlmInput.put("temperature", 0);
         filterLlmInput.put("jsonOutput", true);
@@ -1185,6 +1186,7 @@ public class ToolCompiler {
                 + "TOOL CATALOG:\n${" + catalogRef + ".output.result.catalog}\n\n"
                 + "Respond with ONLY a JSON object: {\"selected_tools\": [\"tool_name_1\", \"tool_name_2\", ...]}";
 
+        filterLlmInputs.put("maxTokens", 4096);
         filterLlmInputs.put(
                 "messages",
                 List.of(
@@ -1251,6 +1253,7 @@ public class ToolCompiler {
                 + "TOOL CATALOG:\n${" + catalogRef + ".output.result.catalog}\n\n"
                 + "Respond with ONLY a JSON object: {\"selected_tools\": [\"tool_name_1\", \"tool_name_2\", ...]}";
 
+        filterLlmInputs.put("maxTokens", 4096);
         filterLlmInputs.put(
                 "messages",
                 List.of(

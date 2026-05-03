@@ -18,13 +18,16 @@ import org.springframework.boot.autoconfigure.data.mongo.MongoDataAutoConfigurat
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration;
 import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.FilterType;
 import org.springframework.core.env.Environment;
 import org.springframework.scheduling.annotation.EnableScheduling;
+
+import com.netflix.conductor.core.execution.tasks.Join;
 
 import lombok.RequiredArgsConstructor;
 
 @SpringBootApplication(
-        exclude = {DataSourceAutoConfiguration.class, MongoAutoConfiguration.class, MongoDataAutoConfiguration.class})
+        exclude = {DataSourceAutoConfiguration.class, MongoAutoConfiguration.class, MongoDataAutoConfiguration.class })
 @EnableScheduling
 @ComponentScan(
         basePackages = {
@@ -32,7 +35,9 @@ import lombok.RequiredArgsConstructor;
             "io.orkes.conductor",
             "org.conductoross.conductor",
             "dev.agentspan.runtime"
-        })
+        },
+        excludeFilters =
+                @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = Join.class))
 @RequiredArgsConstructor
 public class AgentRuntime implements ApplicationRunner {
 

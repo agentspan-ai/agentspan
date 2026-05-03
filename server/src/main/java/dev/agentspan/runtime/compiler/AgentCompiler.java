@@ -335,7 +335,7 @@ public class AgentCompiler {
         // Build loop body
         List<WorkflowTask> loopTasks = new ArrayList<>();
 
-        // Context injection: prepend _agent_state JSON + signals to user prompt (with size limits)
+        // Context injection: compute state/signals prefix (prompt is appended via template)
         String ctxInjectRef = toRef(config.getName()) + "_ctx_inject";
         WorkflowTask ctxInject = new WorkflowTask();
         ctxInject.setType("INLINE");
@@ -344,21 +344,23 @@ public class AgentCompiler {
         ctxInjectInputs.put("evaluatorType", "graaljs");
         ctxInjectInputs.put("state", "${workflow.variables._agent_state}");
         ctxInjectInputs.put("signals", "${workflow.variables._signal_injection}");
-        ctxInjectInputs.put("prompt", "${workflow.input.prompt}");
         ctxInjectInputs.put("maxSize", contextMaxSizeBytes);
         ctxInjectInputs.put("maxValueSize", contextMaxValueSizeBytes);
         ctxInjectInputs.put("expression", JavaScriptBuilder.contextInjectionScript());
         ctxInject.setInputParameters(ctxInjectInputs);
         loopTasks.add(ctxInject);
 
-        // Replace user message prompt with context-injected version
+        // Replace user message prompt with context prefix + base prompt.
+        // ctx_inject outputs only the state/signals prefix (small, changes per turn).
+        // The base prompt is referenced once via ${workflow.input.prompt} — Conductor
+        // resolves both ${} references but only the prefix is stored per-turn.
         @SuppressWarnings("unchecked")
         List<Object> llmMessages = (List<Object>) llmTask.getInputParameters().get("messages");
         for (int mi = 0; mi < llmMessages.size(); mi++) {
             if (llmMessages.get(mi) instanceof Map<?, ?> msg && "user".equals(msg.get("role"))) {
                 Map<String, Object> injectedMsg = new LinkedHashMap<>();
                 injectedMsg.put("role", "user");
-                injectedMsg.put("message", "${" + ctxInjectRef + ".output.result}");
+                injectedMsg.put("message", "${" + ctxInjectRef + ".output.result}\n\n${workflow.input.prompt}");
                 injectedMsg.put("media", "${workflow.input.media}");
                 llmMessages.set(mi, injectedMsg);
                 break;
@@ -674,7 +676,7 @@ public class AgentCompiler {
         // Build loop body
         List<WorkflowTask> loopTasks = new ArrayList<>();
 
-        // Context injection for hybrid loop (with size limits + signals)
+        // Context injection for hybrid loop (state/signals prefix only)
         String hybridCtxInjectRef = toRef(config.getName()) + "_ctx_inject";
         WorkflowTask hybridCtxInject = new WorkflowTask();
         hybridCtxInject.setType("INLINE");
@@ -683,14 +685,13 @@ public class AgentCompiler {
         hybridCtxInjectInputs.put("evaluatorType", "graaljs");
         hybridCtxInjectInputs.put("state", "${workflow.variables._agent_state}");
         hybridCtxInjectInputs.put("signals", "${workflow.variables._signal_injection}");
-        hybridCtxInjectInputs.put("prompt", "${workflow.input.prompt}");
         hybridCtxInjectInputs.put("maxSize", contextMaxSizeBytes);
         hybridCtxInjectInputs.put("maxValueSize", contextMaxValueSizeBytes);
         hybridCtxInjectInputs.put("expression", JavaScriptBuilder.contextInjectionScript());
         hybridCtxInject.setInputParameters(hybridCtxInjectInputs);
         loopTasks.add(hybridCtxInject);
 
-        // Replace user message with context-injected version
+        // Replace user message with context prefix + base prompt
         @SuppressWarnings("unchecked")
         List<Object> hybridLlmMessages =
                 (List<Object>) llmTask.getInputParameters().get("messages");
@@ -698,7 +699,7 @@ public class AgentCompiler {
             if (hybridLlmMessages.get(mi) instanceof Map<?, ?> msg && "user".equals(msg.get("role"))) {
                 Map<String, Object> injectedMsg = new LinkedHashMap<>();
                 injectedMsg.put("role", "user");
-                injectedMsg.put("message", "${" + hybridCtxInjectRef + ".output.result}");
+                injectedMsg.put("message", "${" + hybridCtxInjectRef + ".output.result}\n\n${workflow.input.prompt}");
                 injectedMsg.put("media", "${workflow.input.media}");
                 hybridLlmMessages.set(mi, injectedMsg);
                 break;
@@ -1657,6 +1658,7 @@ public class AgentCompiler {
         Map<String, Object> llmInputs = new LinkedHashMap<>();
         llmInputs.put("llmProvider", parsed.getProvider());
         llmInputs.put("model", parsed.getModel());
+        llmInputs.put("maxTokens", config.getMaxTokens() != null ? config.getMaxTokens() : 16384);
         llmInputs.put("messages", "${" + prepRef + ".output.messages}");
         llmTask.setInputParameters(llmInputs);
 

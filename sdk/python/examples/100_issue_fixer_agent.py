@@ -27,10 +27,10 @@ Requirements:
 
 import os
 import tempfile
-import uuid
 
 from _issue_fixer_instructions import (
-    CODER_INSTRUCTIONS,
+    CODER_IMPLEMENTER_INSTRUCTIONS,
+    CODER_PLANNER_INSTRUCTIONS,
     ISSUE_PR_FETCHER_INSTRUCTIONS,
     PR_UPDATER_INSTRUCTIONS,
     QA_AGENT_INSTRUCTIONS,
@@ -44,7 +44,6 @@ from _issue_fixer_tools import (
     edit_files,
     file_outline,
     find_references,
-    get_coder_context,
     git_diff,
     git_log,
     glob_find,
@@ -52,7 +51,7 @@ from _issue_fixer_tools import (
     lint_and_format,
     list_directory,
     read_file,
-    read_files,
+    read_symbol,
     run_command,
     run_unit_tests,
     search_symbols,
@@ -71,31 +70,55 @@ OPUS = "anthropic/claude-opus-4-6"
 SONNET = "anthropic/claude-sonnet-4-6"
 GITHUB_CREDENTIAL = "GITHUB_TOKEN"
 SERVER_URL = "http://localhost:6767"
-MAX_QA_LOOPS = 3  # max coder<>qa iterations
+MAX_QA_LOOPS = 10  # max coder<>qa iterations
 
 
 # ── Stop-when callbacks ──────────────────────────────────────
 
 
-def _has_contextbook_marker(messages: list, marker: str) -> bool:
-    """Check if a contextbook write marker appears anywhere in message history."""
+def _has_text_in_messages(messages: list, marker: str) -> bool:
+    """Check if text appears anywhere in message history.
+
+    Server messages may use either "content" or "message" as the text key,
+    and content may be a string or a list of {text: ...} parts.
+    """
     for msg in messages:
         if not isinstance(msg, dict):
             continue
-        content = msg.get("content", "")
-        if isinstance(content, str) and marker in content:
-            return True
-        if isinstance(content, list):
-            for part in content:
-                if isinstance(part, dict) and marker in str(part.get("text", "")):
-                    return True
+        for key in ("content", "message"):
+            val = msg.get(key)
+            if val is None:
+                continue
+            if isinstance(val, str) and marker in val:
+                return True
+            if isinstance(val, list):
+                for part in val:
+                    if isinstance(part, dict) and marker in str(part.get("text", "")):
+                        return True
     return False
 
 
 def _fetcher_done(context: dict, **kwargs) -> bool:
-    """Stop fetcher when TODO list is output."""
+    """Stop fetcher when TODO list appears in the LLM's text output.
+
+    Only checks `result` (not messages) because the instruction template
+    itself contains '## TODO' and 'REPO:' as format examples — checking
+    messages would match the system prompt and stop on turn 1.
+    """
     result = context.get("result", "")
-    return "## TODO" in result and "REPO:" in result
+    if isinstance(result, str) and "## TODO" in result and "REPO:" in result:
+        return True
+    # On tool-call turns result is [] — check only assistant messages
+    for msg in context.get("messages", []):
+        if not isinstance(msg, dict):
+            continue
+        if msg.get("role") not in ("assistant",):
+            continue
+        for key in ("content", "message"):
+            val = msg.get(key)
+            if isinstance(val, str) and "## TODO" in val and "REPO:" in val:
+                return True
+    return False
 
 
 def _tech_lead_done(context: dict, **kwargs) -> bool:
@@ -104,26 +127,63 @@ def _tech_lead_done(context: dict, **kwargs) -> bool:
     marker = "wrote 'architecture_design_test'"
     if marker in result:
         return True
-    return _has_contextbook_marker(context.get("messages", []), marker)
+    return _has_text_in_messages(context.get("messages", []), marker)
+
+
+def _planner_done(context: dict, **kwargs) -> bool:
+    """Stop planner when the change map was written to contextbook."""
+    result = context.get("result", "")
+    marker = "wrote 'coder_plan'"
+    if marker in result:
+        return True
+    return _has_text_in_messages(context.get("messages", []), marker)
+
+
+def _implementer_done(context: dict, **kwargs) -> bool:
+    """Stop implementer when implementation was written to contextbook."""
+    result = context.get("result", "")
+    marker = "wrote 'implementation'"
+    if marker in result:
+        return True
+    return _has_text_in_messages(context.get("messages", []), marker)
 
 
 def _qa_approved(context: dict, **kwargs) -> bool:
-    """Stop the SWARM loop when QA approves AND both contextbook sections exist."""
+    """Stop the SWARM loop when QA approves AND both contextbook sections exist.
+
+    QA instructions contain 'QA_APPROVED' as a format example, so we only
+    check assistant messages (not system/user) to avoid matching the template.
+    """
     result = context.get("result", "")
-    if "QA_APPROVED" not in result:
-        return False
     messages = context.get("messages", [])
-    impl_written = _has_contextbook_marker(messages, "wrote 'implementation'")
-    qa_written = _has_contextbook_marker(messages, "wrote 'qa_testing'")
-    if not impl_written or not qa_written:
+    assistant_msgs = [m for m in messages if isinstance(m, dict) and m.get("role") == "assistant"]
+    has_approval = (isinstance(result, str) and "QA_APPROVED" in result) or _has_text_in_messages(
+        assistant_msgs, "QA_APPROVED"
+    )
+    if not has_approval:
         return False
-    return True
+    # "wrote 'implementation'" and "wrote 'qa_testing'" come from tool results,
+    # not from instructions — safe to check all messages
+    return _has_text_in_messages(messages, "wrote 'implementation'") and _has_text_in_messages(
+        messages, "wrote 'qa_testing'"
+    )
 
 
 def _pr_done(context: dict, **kwargs) -> bool:
-    """Stop PR updater when a PR URL is output."""
+    """Stop PR updater when a PR URL is output.
+
+    PR instructions contain '/pull/' as a format example, so we only
+    check assistant messages (not system/user) to avoid matching the template.
+    """
     result = context.get("result", "")
-    return "github.com" in result and "/pull/" in result
+    if isinstance(result, str) and "github.com" in result and "/pull/" in result:
+        return True
+    assistant_msgs = [
+        m for m in context.get("messages", []) if isinstance(m, dict) and m.get("role") == "assistant"
+    ]
+    return _has_text_in_messages(assistant_msgs, "/pull/") and _has_text_in_messages(
+        assistant_msgs, "github.com"
+    )
 
 
 def main():
@@ -154,9 +214,10 @@ def main():
 
     _fmt = {"repo": repo, "branch_prefix": BRANCH_PREFIX}
 
-    # Working directory
+    # Working directory — deterministic so restarts reuse existing repo clone + contextbook
     repo_slug = repo.replace("/", "-")
-    work_dir = os.path.join(tempfile.gettempdir(), f"{repo_slug}-fix-{uuid.uuid4().hex[:12]}")
+    issue_slug = f"pr-{pr_number}" if pr_number else f"issue-{issue_number}"
+    work_dir = os.path.join(tempfile.gettempdir(), f"{repo_slug}-fix-{issue_slug}")
     set_working_dir(work_dir)
 
     cli = CliConfig(
@@ -174,7 +235,7 @@ def main():
         name="issue_pr_fetcher",
         model=SONNET,
         stateful=True,
-        max_turns=5,
+        max_turns=25,
         max_tokens=16000,
         credentials=[GITHUB_CREDENTIAL],
         tools=[setup_repo, contextbook_write],
@@ -186,11 +247,11 @@ def main():
         name="tech_lead",
         model=OPUS,
         stateful=True,
-        max_turns=30,
+        max_turns=100,
         max_tokens=60000,
         tools=[
             read_file,
-            read_files,
+            read_symbol,
             grep_search,
             glob_find,
             list_directory,
@@ -206,11 +267,37 @@ def main():
         instructions=TECH_LEAD_INSTRUCTIONS.format(**_fmt),
     )
 
-    coder = Agent(
-        name="coder",
+    # Coder is split into planner >> implementer (sequential).
+    # Planner reads all context + explores codebase → writes change map.
+    # Implementer reads ONLY the change map → writes code, tests, commits.
+
+    coder_planner = Agent(
+        name="coder_planner",
+        model=OPUS,
+        stateful=True,
+        max_turns=100,
+        max_tokens=60000,
+        tools=[
+            read_file,
+            read_symbol,
+            grep_search,
+            glob_find,
+            list_directory,
+            file_outline,
+            search_symbols,
+            find_references,
+            contextbook_read,
+            contextbook_write,
+        ],
+        stop_when=_planner_done,
+        instructions=CODER_PLANNER_INSTRUCTIONS.format(**_fmt),
+    )
+
+    coder_implementer = Agent(
+        name="coder_implementer",
         model=SONNET,
         stateful=True,
-        max_turns=20,
+        max_turns=100,
         max_tokens=60000,
         credentials=[GITHUB_CREDENTIAL],
         cli_config=cli,
@@ -218,37 +305,37 @@ def main():
             read_file,
             write_file,
             edit_file,
-            read_files,
             edit_files,
-            grep_search,
-            glob_find,
-            list_directory,
-            file_outline,
-            git_diff,
-            git_log,
             run_command,
             lint_and_format,
             build_check,
             run_unit_tests,
-            contextbook_write,
             contextbook_read,
-            get_coder_context,
+            contextbook_write,
         ],
-        handoffs=[OnTextMention(text="HANDOFF_TO_QA", target="qa_agent")],
-        instructions=CODER_INSTRUCTIONS.format(**_fmt),
+        stop_when=_implementer_done,
+        instructions=CODER_IMPLEMENTER_INSTRUCTIONS.format(**_fmt),
+    )
+
+    coder = Agent(
+        name="coder",
+        model=SONNET,
+        agents=[coder_planner, coder_implementer],
+        strategy=Strategy.SEQUENTIAL,
+        max_turns=200,
+        max_tokens=16000,
     )
 
     qa_agent = Agent(
         name="qa_agent",
         model=SONNET,
         stateful=True,
-        max_turns=10,
+        max_turns=100,
         max_tokens=60000,
         credentials=[GITHUB_CREDENTIAL],
         cli_config=cli,
         tools=[
-            read_file,
-            read_files,
+            read_symbol,
             grep_search,
             glob_find,
             git_diff,
@@ -268,6 +355,7 @@ def main():
         agents=[coder, qa_agent],
         strategy=Strategy.SWARM,
         max_turns=MAX_QA_LOOPS * 30,  # budget for N full coder+qa cycles
+        max_tokens=16000,
         stop_when=_qa_approved,
     )
 
