@@ -1232,4 +1232,361 @@ public class JavaScriptBuilder {
                 + "}"
                 + "return merged;");
     }
+
+    /**
+     * Extract a JSON plan from the planner's output.
+     *
+     * <p>Handles two cases:
+     * <ol>
+     *   <li>The LLM returned a JSON object directly (no markdown) — detected by checking
+     *       if {@code $.rawResult} is an object with a {@code steps} key.</li>
+     *   <li>The LLM returned Markdown with an embedded {@code ```json} fence — extracted
+     *       via regex from {@code $.coercedResult} (the stringified version).</li>
+     * </ol>
+     *
+     * <p>Input: {@code $.rawResult} — the raw sub-workflow result (may be Java Map),
+     *         {@code $.coercedResult} — the stringified version.
+     * <p>Output: {@code {plan_json: "<JSON string>", markdown_plan: "<full text>"}}
+     * Returns {@code plan_json: null} when no valid plan is found.
+     */
+    public static String extractJsonFenceScript() {
+        return iife(
+                // Helper: convert a Java Map / JS object to a proper JS object
+                // GraalJS Java Maps don't serialize with JSON.stringify, so we
+                // manually copy entries into a plain JS object.
+                "function toJS(obj) {"
+                + "  if (obj == null) return null;"
+                + "  if (typeof obj !== 'object') return obj;"
+                + "  if (Array.isArray(obj)) {"
+                + "    var arr = []; for (var i = 0; i < obj.length; i++) arr.push(toJS(obj[i])); return arr;"
+                + "  }"
+                + "  var out = {};"
+                + "  var keys = obj.keySet ? obj.keySet().toArray() : Object.keys(obj);"
+                + "  for (var i = 0; i < keys.length; i++) {"
+                + "    var k = keys[i]; var v = obj.get ? obj.get(k) : obj[k];"
+                + "    out[k] = toJS(v);"
+                + "  }"
+                + "  return out;"
+                + "}"
+
+                // Case 1: rawResult is already a plan object (has "steps" key)
+                + "var raw = $.rawResult;"
+                + "if (raw != null && typeof raw === 'object') {"
+                + "  var hasSteps = false;"
+                + "  try { hasSteps = raw.steps != null || (raw.get && raw.get('steps') != null); } catch(e) {}"
+                + "  if (hasSteps) {"
+                + "    var plan = toJS(raw);"
+                + "    return {plan_json: JSON.stringify(plan), markdown_plan: JSON.stringify(plan, null, 2)};"
+                + "  }"
+                + "}"
+
+                // Case 2: coercedResult is a JSON string (the LLM output was pure JSON text)
+                + "var coerced = $.coercedResult || '';"
+                + "if (typeof coerced === 'string' && coerced.length > 2) {"
+                + "  try {"
+                + "    var parsed = JSON.parse(coerced);"
+                + "    if (parsed && parsed.steps) {"
+                + "      return {plan_json: JSON.stringify(parsed), markdown_plan: coerced};"
+                + "    }"
+                + "  } catch(e) {}"
+                + "}"
+
+                // Case 3: coercedResult is Markdown with a ```json fence
+                + "var text = String(coerced);"
+                + "var match = text.match(/```json\\s*\\n([\\s\\S]*?)\\n\\s*```/);"
+                + "if (match) {"
+                + "  var jsonStr = match[1].trim();"
+                + "  try {"
+                + "    var fenced = JSON.parse(jsonStr);"
+                + "    return {plan_json: JSON.stringify(fenced), markdown_plan: text};"
+                + "  } catch(e) {}"
+                + "}"
+
+                // Nothing found
+                + "return {plan_json: null, markdown_plan: text};");
+    }
+
+    /**
+     * Compile a JSON plan into a Conductor WorkflowDef.
+     *
+     * <p>Input:
+     * <ul>
+     *   <li>{@code $.planJson} — JSON string of the plan (steps, validation, on_success, on_failure)</li>
+     *   <li>{@code $.parentName} — parent workflow name (used to derive unique workflow name)</li>
+     *   <li>{@code $.model} — LLM model string in provider/model format (e.g. "openai/gpt-4o-mini")</li>
+     * </ul>
+     *
+     * <p>Output: {@code {workflow_def: <WorkflowDef JSON>, workflow_name: "<name>"}}
+     *
+     * <p>The plan schema supports:
+     * <ul>
+     *   <li><b>Static operations</b> ({@code args}): compiled to SIMPLE tasks (no LLM)</li>
+     *   <li><b>Generated operations</b> ({@code generate}): compiled to LLM_CHAT_COMPLETE → INLINE(parse) → SIMPLE</li>
+     *   <li><b>Parallel steps</b>: wrapped in FORK_JOIN + JOIN</li>
+     *   <li><b>Validation</b>: SIMPLE tasks with aggregate pass/fail check</li>
+     *   <li><b>on_success / on_failure</b>: post-hooks as SIMPLE tasks</li>
+     * </ul>
+     */
+    public static String compilePlanToWorkflowScript() {
+        return iife(
+                // ref() builds Conductor expression strings like ${foo.bar} without
+                // the literal '${' appearing in this script source — Conductor would
+                // resolve it before GraalJS runs if we used a literal.
+                "function ref(s) { return String.fromCharCode(36) + '{' + s + '}'; }"
+
+                // Parse inputs
+                + "var plan; try { plan = typeof $.planJson === 'string' ? JSON.parse($.planJson) : $.planJson; }"
+                + " catch(e) { return {workflow_def: null, workflow_name: null, error: 'Invalid plan JSON: ' + e.message}; }"
+                + "var parentName = $.parentName || 'plan';"
+                + "var model = $.model || 'openai/gpt-4o-mini';"
+                // Name must match MultiAgentCompiler.planWorkflowName() exactly
+                + "var wfName = 'pe_' + parentName.replace(/[^a-zA-Z0-9_]/g, '_') + '_plan';"
+
+                // Parse model into provider/model
+                + "var mParts = model.split('/');"
+                + "var defaultProvider = mParts.length > 1 ? mParts[0] : 'openai';"
+                + "var defaultModel = mParts.length > 1 ? mParts.slice(1).join('/') : model;"
+
+                + "var tasks = [];"
+                + "var counter = 0;"
+                + "function uid(base) { return base + '_' + (counter++); }"
+                + "var lastAggRef = null;"
+
+                // Topological sort steps by depends_on
+                + "var steps = plan.steps || [];"
+                + "var sorted = [];"
+                + "var visited = {};"
+                + "var visiting = {};"
+                + "function topoSort(s) {"
+                + "  if (visited[s.id]) return;"
+                + "  if (visiting[s.id]) return;" // break cycles silently
+                + "  visiting[s.id] = true;"
+                + "  var deps = s.depends_on || [];"
+                + "  for (var d = 0; d < deps.length; d++) {"
+                + "    for (var j = 0; j < steps.length; j++) {"
+                + "      if (steps[j].id === deps[d]) { topoSort(steps[j]); break; }"
+                + "    }"
+                + "  }"
+                + "  delete visiting[s.id];"
+                + "  visited[s.id] = true;"
+                + "  sorted.push(s);"
+                + "}"
+                + "for (var i = 0; i < steps.length; i++) topoSort(steps[i]);"
+
+                // Build tasks for each step
+                + "for (var si = 0; si < sorted.length; si++) {"
+                + "  var step = sorted[si];"
+                + "  var ops = step.operations || [];"
+                + "  var branches = [];" // each branch is an array of tasks
+
+                + "  for (var oi = 0; oi < ops.length; oi++) {"
+                + "    var op = ops[oi];"
+                + "    var chain = [];"
+
+                // Static operation: direct SIMPLE task
+                + "    if (op.args) {"
+                + "      var sArgs = {};"
+                + "      for (var ak in op.args) sArgs[ak] = op.args[ak];"
+                + "      sArgs.__agentspan_ctx__ = ref('workflow.input.__agentspan_ctx__');"
+                + "      sArgs.session_id = ref('workflow.input.session_id');"
+                + "      chain.push({"
+                + "        name: op.tool, taskReferenceName: uid('s_' + step.id),"
+                + "        type: 'SIMPLE', inputParameters: sArgs,"
+                + "        optional: true, retryCount: 1, retryLogic: 'FIXED', retryDelaySeconds: 2"
+                + "      });"
+                + "    }"
+
+                // Generated operation: LLM → parse → tool
+                + "    else if (op.generate) {"
+                + "      var gen = op.generate;"
+                + "      var om = gen.model || model;"
+                + "      var oP = om.split('/');"
+                + "      var prov = oP.length > 1 ? oP[0] : defaultProvider;"
+                + "      var mdl = oP.length > 1 ? oP.slice(1).join('/') : om;"
+
+                // LLM_CHAT_COMPLETE task
+                + "      var llmRef = uid('llm_' + step.id);"
+                + "      var sysMsg = 'Output ONLY valid JSON matching this schema: ' + gen.output_schema"
+                + "        + '. No markdown fences, no explanation, just the JSON object.';"
+                + "      var userMsg = gen.instructions || '';"
+                + "      if (gen.context) userMsg += '\\n\\nContext:\\n' + gen.context;"
+                + "      userMsg += '\\n\\nRespond with valid JSON only.';"
+                + "      chain.push({"
+                + "        name: 'llm_chat_complete', taskReferenceName: llmRef,"
+                + "        type: 'LLM_CHAT_COMPLETE',"
+                + "        inputParameters: {"
+                + "          llmProvider: prov, model: mdl,"
+                + "          messages: [{role: 'system', message: sysMsg}, {role: 'user', message: userMsg}],"
+                + "          maxTokens: 4096, temperature: 0, jsonOutput: true,"
+                + "          __agentspan_ctx__: ref('workflow.input.__agentspan_ctx__')"
+                + "        }"
+                + "      });"
+
+                // INLINE parse task: extract tool args from LLM JSON
+                + "      var parseRef = uid('p_' + step.id);"
+                + "      chain.push({"
+                + "        name: 'INLINE_TASK', taskReferenceName: parseRef,"
+                + "        type: 'INLINE',"
+                + "        inputParameters: {"
+                + "          evaluatorType: 'graaljs',"
+                + "          llmOut: ref(llmRef + '.output.result'),"
+                + "          expression: \"(function(){ var r = $.llmOut; try { return typeof r === 'string' ? JSON.parse(r) : r; } catch(e) { return {}; } })()\""
+                + "        }"
+                + "      });"
+
+                // SIMPLE tool task: reference parsed fields by name from output_schema
+                + "      var toolRef = uid('t_' + step.id);"
+                + "      var toolInputs = {"
+                + "        __agentspan_ctx__: ref('workflow.input.__agentspan_ctx__'),"
+                + "        session_id: ref('workflow.input.session_id')"
+                + "      };"
+                + "      try {"
+                + "        var schema = JSON.parse(gen.output_schema);"
+                + "        var sKeys = Object.keys(schema);"
+                + "        for (var sk = 0; sk < sKeys.length; sk++) {"
+                + "          toolInputs[sKeys[sk]] = ref(parseRef + '.output.result.' + sKeys[sk]);"
+                + "        }"
+                + "      } catch(e) {"
+                // fallback: pass entire parsed result as _args
+                + "        toolInputs._args = ref(parseRef + '.output.result');"
+                + "      }"
+                + "      chain.push({"
+                + "        name: op.tool, taskReferenceName: toolRef,"
+                + "        type: 'SIMPLE', inputParameters: toolInputs,"
+                + "        optional: true, retryCount: 1, retryLogic: 'FIXED', retryDelaySeconds: 2"
+                + "      });"
+                + "    }"
+
+                + "    if (chain.length > 0) branches.push(chain);"
+                + "  }" // end operations loop
+
+                // Wrap in FORK_JOIN if parallel, else flatten sequentially
+                + "  if (step.parallel && branches.length > 1) {"
+                + "    var forkRef = uid('fork_' + step.id);"
+                + "    var joinRef = uid('join_' + step.id);"
+                + "    var joinOn = [];"
+                + "    for (var b = 0; b < branches.length; b++) {"
+                + "      joinOn.push(branches[b][branches[b].length - 1].taskReferenceName);"
+                + "    }"
+                + "    tasks.push({"
+                + "      name: 'fork_join', taskReferenceName: forkRef,"
+                + "      type: 'FORK_JOIN', forkTasks: branches"
+                + "    });"
+                + "    tasks.push({"
+                + "      name: 'join', taskReferenceName: joinRef,"
+                + "      type: 'JOIN', joinOn: joinOn"
+                + "    });"
+                + "  } else {"
+                + "    for (var b2 = 0; b2 < branches.length; b2++) {"
+                + "      for (var t = 0; t < branches[b2].length; t++) {"
+                + "        tasks.push(branches[b2][t]);"
+                + "      }"
+                + "    }"
+                + "  }"
+                + "}" // end steps loop
+
+                // Validation tasks
+                + "var vals = plan.validation || [];"
+                + "var valRefs = [];"
+                + "for (var vi = 0; vi < vals.length; vi++) {"
+                + "  var v = vals[vi];"
+                + "  var vRef = uid('val');"
+                + "  var vArgs = {};"
+                + "  if (v.args) { for (var vk in v.args) vArgs[vk] = v.args[vk]; }"
+                + "  vArgs.__agentspan_ctx__ = ref('workflow.input.__agentspan_ctx__');"
+                + "  vArgs.session_id = ref('workflow.input.session_id');"
+                + "  tasks.push({"
+                + "    name: v.tool, taskReferenceName: vRef,"
+                + "    type: 'SIMPLE', inputParameters: vArgs,"
+                + "    optional: true"
+                + "  });"
+                + "  valRefs.push(vRef);"
+                + "}"
+
+                // Aggregate validation results
+                + "if (valRefs.length > 0) {"
+                + "  var aggRef = uid('val_agg');"
+                + "  lastAggRef = aggRef;"
+                + "  var aggInputs = {evaluatorType: 'graaljs', count: valRefs.length};"
+                + "  for (var ai = 0; ai < valRefs.length; ai++) {"
+                + "    aggInputs['v' + ai] = ref(valRefs[ai] + '.output.result');"
+                + "  }"
+                + "  aggInputs.expression = \"(function(){ \""
+                + "    + \"var all = true; \""
+                + "    + \"for (var i = 0; i < $.count; i++) { \""
+                + "    + \"  var r = $['v' + i]; \""
+                + "    + \"  if (r == null) { all = false; continue; } \""
+                + "    + \"  var d; try { d = typeof r === 'string' ? JSON.parse(r) : r; } catch(e) { d = r; } \""
+                + "    + \"  if (typeof d === 'object' && d.passed === false) all = false; \""
+                + "    + \"  else if (typeof d === 'string' && d.indexOf('ERROR') >= 0) all = false; \""
+                + "    + \"} \""
+                + "    + \"return all ? 'passed' : 'failed'; \""
+                + "    + \"})()\";"
+                + "  tasks.push({"
+                + "    name: 'INLINE_TASK', taskReferenceName: aggRef,"
+                + "    type: 'INLINE', inputParameters: aggInputs"
+                + "  });"
+
+                // SWITCH on validation: passed → on_success, failed → on_failure + TERMINATE
+                + "  var onSuccess = [];"
+                + "  var sa = plan.on_success || [];"
+                + "  for (var si2 = 0; si2 < sa.length; si2++) {"
+                + "    var sAct = sa[si2];"
+                + "    var sActArgs = {};"
+                + "    if (sAct.args) { for (var sk2 in sAct.args) sActArgs[sk2] = sAct.args[sk2]; }"
+                + "    sActArgs.__agentspan_ctx__ = ref('workflow.input.__agentspan_ctx__');"
+                + "    sActArgs.session_id = ref('workflow.input.session_id');"
+                + "    onSuccess.push({"
+                + "      name: sAct.tool, taskReferenceName: uid('ok'),"
+                + "      type: 'SIMPLE', inputParameters: sActArgs, optional: true"
+                + "    });"
+                + "  }"
+                + "  var onFailure = [];"
+                + "  var fa = plan.on_failure || [];"
+                + "  for (var fi = 0; fi < fa.length; fi++) {"
+                + "    var fAct = fa[fi];"
+                + "    var fActArgs = {};"
+                + "    if (fAct.args) { for (var fk in fAct.args) fActArgs[fk] = fAct.args[fk]; }"
+                + "    fActArgs.__agentspan_ctx__ = ref('workflow.input.__agentspan_ctx__');"
+                + "    fActArgs.session_id = ref('workflow.input.session_id');"
+                + "    onFailure.push({"
+                + "      name: fAct.tool, taskReferenceName: uid('fail'),"
+                + "      type: 'SIMPLE', inputParameters: fActArgs, optional: true"
+                + "    });"
+                + "  }"
+                + "  onFailure.push({"
+                + "    name: 'TERMINATE_TASK', taskReferenceName: uid('term'),"
+                + "    type: 'TERMINATE',"
+                + "    inputParameters: {terminationStatus: 'FAILED', terminationReason: 'Plan validation failed'}"
+                + "  });"
+                // Route: 'failed' → failure actions + TERMINATE, default → success actions (or done)
+                // Using 'failed' as the named case and success as default avoids the issue
+                // where Conductor falls through to defaultCase when the matched case has 0 tasks.
+                + "  tasks.push({"
+                + "    name: 'switch', taskReferenceName: uid('vsw'),"
+                + "    type: 'SWITCH', evaluatorType: 'value-param',"
+                + "    expression: 'switchCaseValue',"
+                + "    inputParameters: {switchCaseValue: ref(aggRef + '.output.result')},"
+                + "    decisionCases: {failed: onFailure},"
+                + "    defaultCase: onSuccess"
+                + "  });"
+                + "}" // end if validations
+
+                // Build WorkflowDef
+                + "var wfDef = {"
+                + "  name: wfName, version: 1, tasks: tasks,"
+                + "  outputParameters: {"
+                + "    result: lastAggRef ? ref(lastAggRef + '.output.result') : 'completed',"
+                + "    status: lastAggRef ? ref(lastAggRef + '.output.result') : 'completed'"
+                + "  },"
+                + "  timeoutPolicy: 'TIME_OUT_WF', timeoutSeconds: 600, schemaVersion: 2"
+                + "};"
+                // Return workflow_def as a JSON STRING so that ${...} expressions
+                // inside the workflow def survive Conductor's expression resolution
+                // in the parent workflow. If returned as a nested object, Conductor
+                // resolves ${taskRef.output.result} to null (the tasks don't exist in
+                // the parent). As a string, the expressions are opaque text.
+                // Conductor PUT /api/metadata/workflow expects an array of WorkflowDef.
+                + "return {workflow_def: JSON.stringify([wfDef]), workflow_name: wfName};");
+    }
 }

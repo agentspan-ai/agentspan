@@ -41,6 +41,7 @@ import com.netflix.conductor.service.WorkflowService;
 import dev.agentspan.runtime.auth.RequestContextHolder;
 import dev.agentspan.runtime.auth.User;
 import dev.agentspan.runtime.compiler.AgentCompiler;
+import dev.agentspan.runtime.compiler.MultiAgentCompiler;
 import dev.agentspan.runtime.credentials.ExecutionTokenService;
 import dev.agentspan.runtime.model.*;
 import dev.agentspan.runtime.normalizer.NormalizerRegistry;
@@ -68,6 +69,9 @@ public class AgentService {
 
     @Autowired(required = false)
     private ExecutionTokenService executionTokenService;
+
+    @Autowired
+    private org.springframework.core.env.Environment environment;
 
     /** Package-private constructor for testing with ExecutionTokenService */
     AgentService(
@@ -136,6 +140,7 @@ public class AgentService {
 
         // 0. Pre-register child workflows for agent_tool types
         registerAgentToolWorkflows(config);
+        registerPlanExecutePlaceholders(config);
 
         // 1. Compile
         WorkflowDef def = agentCompiler.compile(config);
@@ -184,6 +189,7 @@ public class AgentService {
 
         // 0. Pre-register child workflows for agent_tool types
         registerAgentToolWorkflows(config);
+        registerPlanExecutePlaceholders(config);
 
         // 1. Compile
         WorkflowDef def = agentCompiler.compile(config);
@@ -223,6 +229,11 @@ public class AgentService {
         }
         input.put("cwd", cwd);
 
+        // Build __agentspan_ctx__: server URL + optional execution token
+        Map<String, Object> agentCtx = new LinkedHashMap<>();
+        String port = environment.getProperty("server.port", "6767");
+        agentCtx.put("serverUrl", "http://localhost:" + port);
+
         // Mint execution token and embed in workflow variables for worker credential resolution
         if (executionTokenService != null) {
             try {
@@ -243,14 +254,13 @@ public class AgentService {
                 if (currentUser != null) {
                     String token = executionTokenService.mint(
                             currentUser.getId(), null /* executionId not known yet */, declaredNames, timeoutSeconds);
-                    Map<String, Object> agentCtx = new LinkedHashMap<>();
                     agentCtx.put("execution_token", token);
-                    input.put("__agentspan_ctx__", agentCtx);
                 }
             } catch (Exception e) {
                 log.warn("Failed to mint execution token: {}", e.getMessage());
             }
         }
+        input.put("__agentspan_ctx__", agentCtx);
 
         startReq.setInput(input);
 
@@ -970,6 +980,38 @@ public class AgentService {
                 if (!sub.isExternal()) {
                     registerAgentToolWorkflows(sub);
                 }
+            }
+        }
+    }
+
+    /**
+     * Pre-register placeholder workflows for PLAN_EXECUTE strategy agents.
+     * Conductor validates SUB_WORKFLOW references at registration time, so the
+     * dynamic plan workflow must exist (even as a stub) before the parent workflow
+     * is registered. At runtime the INLINE compile task overwrites the stub.
+     */
+    private void registerPlanExecutePlaceholders(AgentConfig config) {
+        if ("plan_execute".equals(config.getStrategy())) {
+            String planWfName = MultiAgentCompiler.planWorkflowName(config.getName());
+            WorkflowDef stub = new WorkflowDef();
+            stub.setName(planWfName);
+            stub.setVersion(1);
+            stub.setSchemaVersion(2);
+            stub.setDescription("Placeholder — overwritten at runtime by plan compiler");
+            WorkflowTask terminate = new WorkflowTask();
+            terminate.setType("TERMINATE");
+            terminate.setTaskReferenceName("placeholder_terminate");
+            terminate.setInputParameters(Map.of(
+                    "terminationStatus", "FAILED",
+                    "terminationReason", "Placeholder not overwritten — plan compilation may have failed"));
+            stub.setTasks(List.of(terminate));
+            metadataDAO.updateWorkflowDef(stub);
+            log.info("Registered plan-execute placeholder workflow: {}", planWfName);
+        }
+        // Recurse into sub-agents
+        if (config.getAgents() != null) {
+            for (AgentConfig sub : config.getAgents()) {
+                registerPlanExecutePlaceholders(sub);
             }
         }
     }

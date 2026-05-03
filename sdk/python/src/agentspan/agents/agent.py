@@ -41,6 +41,7 @@ class Strategy(str, Enum):
     RANDOM = "random"
     SWARM = "swarm"
     MANUAL = "manual"
+    PLAN_EXECUTE = "plan_execute"
 
 
 @dataclass(frozen=True)
@@ -370,6 +371,7 @@ class Agent:
         stateful: bool = False,
         context_window_budget: Optional[int] = None,
         prefill_tools: Optional[List[Any]] = None,
+        fallback_max_turns: Optional[int] = None,
     ) -> None:
         if not name or not isinstance(name, str):
             raise ValueError("Agent name must be a non-empty string")
@@ -436,6 +438,7 @@ class Agent:
         self.max_tokens = max_tokens
         self.context_window_budget = context_window_budget
         self.prefill_tools: List[Any] = list(prefill_tools) if prefill_tools else []
+        self.fallback_max_turns = fallback_max_turns
         self.timeout_seconds = timeout_seconds
         self.temperature = temperature
         self.stop_when = stop_when
