@@ -1342,6 +1342,37 @@ public class JavaScriptBuilder {
                 // Name must match MultiAgentCompiler.planWorkflowName() exactly
                 + "var wfName = 'pe_' + parentName.replace(/[^a-zA-Z0-9_]/g, '_') + '_plan';"
 
+                // ── Plan schema validation ──────────────────────────────────
+                + "var errors = [];"
+                + "if (!plan || !plan.steps || !Array.isArray(plan.steps) || plan.steps.length === 0) {"
+                + "  return {workflow_def: null, workflow_name: null, error: 'Plan must have a non-empty steps array'};"
+                + "}"
+                + "var stepIds = {};"
+                + "for (var vi = 0; vi < plan.steps.length; vi++) {"
+                + "  var vs = plan.steps[vi];"
+                + "  if (!vs.id) errors.push('Step ' + vi + ' missing id');"
+                + "  else if (stepIds[vs.id]) errors.push('Duplicate step id: ' + vs.id);"
+                + "  else stepIds[vs.id] = true;"
+                + "  if (!vs.operations || !Array.isArray(vs.operations) || vs.operations.length === 0)"
+                + "    errors.push('Step ' + (vs.id || vi) + ' has no operations');"
+                + "  else {"
+                + "    for (var voi = 0; voi < vs.operations.length; voi++) {"
+                + "      var vop = vs.operations[voi];"
+                + "      if (!vop.tool) errors.push('Step ' + vs.id + ' op ' + voi + ' missing tool');"
+                + "      if (!vop.args && !vop.generate)"
+                + "        errors.push('Step ' + vs.id + ' op ' + voi + ' needs args or generate');"
+                + "    }"
+                + "  }"
+                + "  var deps = vs.depends_on || [];"
+                + "  for (var vdi = 0; vdi < deps.length; vdi++) {"
+                + "    if (!plan.steps.some(function(x){return x.id === deps[vdi];}))"
+                + "      errors.push('Step ' + vs.id + ' depends on unknown step: ' + deps[vdi]);"
+                + "  }"
+                + "}"
+                + "if (errors.length > 0) {"
+                + "  return {workflow_def: null, workflow_name: null, error: 'Plan validation: ' + errors.join('; ')};"
+                + "}"
+
                 // Parse model into provider/model
                 + "var mParts = model.split('/');"
                 + "var defaultProvider = mParts.length > 1 ? mParts[0] : 'openai';"
@@ -1419,18 +1450,22 @@ public class JavaScriptBuilder {
                 + "          messages: [{role: 'system', message: sysMsg}, {role: 'user', message: userMsg}],"
                 + "          maxTokens: 4096, temperature: 0, jsonOutput: true,"
                 + "          __agentspan_ctx__: ref('workflow.input.__agentspan_ctx__')"
-                + "        }"
+                + "        },"
+                + "        optional: true, retryCount: 1, retryLogic: 'FIXED', retryDelaySeconds: 1"
                 + "      });"
 
-                // INLINE parse task: extract tool args from LLM JSON
+                // INLINE parse task: extract tool args from LLM JSON.
+                // If parsing fails, returns {__parse_error: true} so downstream
+                // tasks can detect it. The LLM task has retryCount:1 above.
                 + "      var parseRef = uid('p_' + step.id);"
                 + "      chain.push({"
                 + "        name: 'INLINE_TASK', taskReferenceName: parseRef,"
                 + "        type: 'INLINE',"
+                + "        optional: true,"
                 + "        inputParameters: {"
                 + "          evaluatorType: 'graaljs',"
                 + "          llmOut: ref(llmRef + '.output.result'),"
-                + "          expression: \"(function(){ var r = $.llmOut; try { return typeof r === 'string' ? JSON.parse(r) : r; } catch(e) { return {}; } })()\""
+                + "          expression: \"(function(){ var r = $.llmOut; if (r == null || r === '') return {__parse_error: true, reason: 'empty LLM output'}; try { var p = typeof r === 'string' ? JSON.parse(r) : r; if (!p || typeof p !== 'object' || Object.keys(p).length === 0) return {__parse_error: true, reason: 'empty JSON object'}; return p; } catch(e) { return {__parse_error: true, reason: 'JSON parse: ' + e.message}; } })()\""
                 + "        }"
                 + "      });"
 
