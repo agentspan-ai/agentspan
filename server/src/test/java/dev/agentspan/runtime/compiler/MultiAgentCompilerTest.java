@@ -695,12 +695,13 @@ class MultiAgentCompilerTest {
         assertThat(engSubWf.getType()).isEqualTo("SUB_WORKFLOW");
 
         // The inline workflow should use the hierarchical path:
-        // inner SUB_WORKFLOW (handoff strategy) + transfer LLM + check_transfer
+        // inner SUB_WORKFLOW (handoff strategy) + coerce result + transfer LLM + check_transfer
         WorkflowDef engInlineWf = engSubWf.getSubWorkflowParam().getWorkflowDef();
-        assertThat(engInlineWf.getTasks()).hasSize(3);
+        assertThat(engInlineWf.getTasks()).hasSize(4);
         assertThat(engInlineWf.getTasks().get(0).getType()).isEqualTo("SUB_WORKFLOW"); // inner handoff
-        assertThat(engInlineWf.getTasks().get(1).getType()).isEqualTo("LLM_CHAT_COMPLETE"); // transfer decision
-        assertThat(engInlineWf.getTasks().get(2).getType()).isEqualTo("SIMPLE"); // check_transfer
+        assertThat(engInlineWf.getTasks().get(1).getType()).isEqualTo("INLINE"); // coerce result to string
+        assertThat(engInlineWf.getTasks().get(2).getType()).isEqualTo("LLM_CHAT_COMPLETE"); // transfer decision
+        assertThat(engInlineWf.getTasks().get(3).getType()).isEqualTo("SIMPLE"); // check_transfer
 
         // The inner SUB_WORKFLOW should contain the handoff strategy (ctx_resolve + init + loop + final)
         WorkflowDef innerHandoff =

@@ -1124,6 +1124,16 @@ class AgentCompilerTest {
         assertThat(toolResultMsg).isNotNull();
         assertThat(toolResultMsg.get("message")).isEqualTo("${prefill_agent_prefill_0.output.result}");
 
+        // Tool result must have toolCalls for Anthropic adapter to build tool_result blocks
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> resultToolCalls =
+                (List<Map<String, Object>>) toolResultMsg.get("toolCalls");
+        assertThat(resultToolCalls).hasSize(1);
+        assertThat(resultToolCalls.get(0).get("taskReferenceName")).isEqualTo("prefill_agent_prefill_0");
+        assertThat(resultToolCalls.get(0).get("name")).isEqualTo("contextbook_read");
+        assertThat(resultToolCalls.get(0).get("output"))
+                .isEqualTo(Map.of("result", "${prefill_agent_prefill_0.output.result}"));
+
         // tool_call + tool must come before user message
         int toolCallIdx = messages.indexOf(toolCallMsg);
         int userIdx = -1;
@@ -1245,6 +1255,22 @@ class AgentCompilerTest {
         assertThat(tc).containsKey("inputParameters");
         assertThat(tc).doesNotContainKey("input");
         assertThat(tc.get("inputParameters")).isEqualTo(Map.of("key", "val"));
+
+        // Tool result message must have "toolCalls" field for Anthropic adapter
+        // to create proper tool_result content blocks (not empty user messages).
+        Map<String, Object> toolResultMsg = messages.stream()
+                .filter(m -> "tool".equals(m.get("role")))
+                .findFirst().orElseThrow();
+        assertThat(toolResultMsg).containsKey("toolCalls");
+        assertThat(toolResultMsg).doesNotContainKey("toolCallId");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> resultTcs =
+                (List<Map<String, Object>>) toolResultMsg.get("toolCalls");
+        Map<String, Object> resultTc = resultTcs.get(0);
+        assertThat(resultTc).containsKey("taskReferenceName");
+        assertThat(resultTc).containsKey("name");
+        assertThat(resultTc).containsKey("output");
     }
 
     @Test

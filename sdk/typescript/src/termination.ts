@@ -125,10 +125,13 @@ export class MaxMessage extends TerminationCondition {
 
   shouldTerminate(context: TerminationContext): TerminationResult {
     const messages = Array.isArray(context.messages) ? context.messages : [];
-    if (messages.length >= this.maxMessages) {
+    // Fall back to iteration count when messages list is not populated
+    // (e.g., in Conductor workflow context where iteration tracks LLM turns).
+    const count = messages.length > 0 ? messages.length : (context.iteration ?? 0);
+    if (count >= this.maxMessages) {
       return {
         shouldTerminate: true,
-        reason: `Message count (${messages.length}) >= limit (${this.maxMessages})`,
+        reason: `Message count (${count}) >= limit (${this.maxMessages})`,
       };
     }
     return { shouldTerminate: false, reason: "" };

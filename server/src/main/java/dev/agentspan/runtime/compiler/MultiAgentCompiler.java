@@ -1271,7 +1271,13 @@ public class MultiAgentCompiler {
         innerInputs.put("session_id", "${workflow.input.session_id}");
         innerTask.setInputParameters(innerInputs);
 
-        // 2. LLM step with transfer tools to decide whether to transfer to a peer
+        // 2. Coerce inner result to string (may be array/null when last turn was tool calls)
+        String coerceRef = agent.getName() + "_coerce_result";
+        WorkflowTask coerceTask = AgentCompiler.createCoerceTask(
+                ref(innerRef + ".output.result"), coerceRef);
+        String coercedResultRef = AgentCompiler.coercedRef(coerceRef);
+
+        // 3. LLM step with transfer tools to decide whether to transfer to a peer
         ToolCompiler tc = new ToolCompiler();
         List<Map<String, Object>> transferToolSpecs = tc.compileToolSpecs(transferTools);
 
@@ -1291,13 +1297,13 @@ public class MultiAgentCompiler {
                 List.of(
                         Map.of("role", "system", "message", transferPrompt),
                         Map.of("role", "user", "message", "${workflow.input.prompt}"),
-                        Map.of("role", "assistant", "message", ref(innerRef + ".output.result"))));
+                        Map.of("role", "assistant", "message", coercedResultRef)));
         if (!transferToolSpecs.isEmpty()) {
             llmInputs.put("tools", transferToolSpecs);
         }
         transferLlm.setInputParameters(llmInputs);
 
-        // 3. Check-transfer worker
+        // 4. Check-transfer worker
         WorkflowTask checkTransferTask = new WorkflowTask();
         checkTransferTask.setName(agent.getName() + "_check_transfer");
         checkTransferTask.setTaskReferenceName(checkTransferRef);
@@ -1310,7 +1316,7 @@ public class MultiAgentCompiler {
         WorkflowDef subWf = agentCompiler.createWorkflow(agent);
         subWf.setName(agent.getName() + "_swarm_wf");
         subWf.setDescription("Swarm hierarchical agent: " + agent.getName());
-        subWf.setTasks(List.of(innerTask, transferLlm, checkTransferTask));
+        subWf.setTasks(List.of(innerTask, coerceTask, transferLlm, checkTransferTask));
         subWf.setOutputParameters(Map.of(
                 "result", ref(innerRef + ".output.result"),
                 "finishReason", "stop",

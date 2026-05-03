@@ -843,7 +843,9 @@ _VALID_SECTIONS = {
     "issue_pr",
     "repo_conventions",
     "architecture_design_test",
+    "coder_plan",
     "implementation",
+    "implementation_report",
     "qa_testing",
 }
 
@@ -873,6 +875,29 @@ def contextbook_write(section: str, content: str, append: bool = False) -> str:
         return f"Contextbook: {mode} '{section}' ({len(content):,} chars)."
     except Exception as exc:
         return f"Error writing contextbook section {section!r}: {exc}"
+
+
+def _make_contextbook_writer(tool_name: str, fixed_section: str, max_calls: int = 2):
+    """Create a contextbook_write tool locked to a specific section."""
+
+    def _fn(content: str, append: bool = False) -> str:
+        return contextbook_write(fixed_section, content, append)
+
+    _fn.__name__ = tool_name
+    _fn.__qualname__ = tool_name
+    _fn.__doc__ = (
+        f"Write to the '{fixed_section}' contextbook section.\n"
+        f"append=True adds to existing content; append=False replaces."
+    )
+    # Apply @tool decorator with explicit name AFTER setting __name__
+    return tool(name=tool_name, stateful=True, max_calls=max_calls)(_fn)
+
+
+# Per-agent contextbook writers — section name is baked in, LLM can't pick wrong one
+write_architecture = _make_contextbook_writer("write_architecture", "architecture_design_test", max_calls=2)
+write_coder_plan = _make_contextbook_writer("write_coder_plan", "coder_plan", max_calls=2)
+write_implementation_report = _make_contextbook_writer("write_implementation_report", "implementation_report", max_calls=1)
+write_qa_testing = _make_contextbook_writer("write_qa_testing", "qa_testing", max_calls=2)
 
 
 @tool(stateful=True)
@@ -1214,7 +1239,7 @@ def _discover_repo_conventions() -> str:
     return "\n\n".join(parts)
 
 
-@tool
+@tool(max_calls=1)
 def setup_repo(
     repo: str, issue_number: int, pr_number: int = 0, branch_prefix: str = "fix/issue-"
 ) -> str:
@@ -1226,14 +1251,6 @@ def setup_repo(
 
     Returns structured text with issue details, PR comments (if any), and repo info."""
     import json as _json
-
-    # Idempotent: if issue_pr already written, return cached result
-    cb = _contextbook_dir()
-    issue_pr_file = cb / "issue_pr.md"
-    if issue_pr_file.exists():
-        cached = issue_pr_file.read_text(encoding="utf-8")
-        if cached.strip():
-            return f"(setup_repo already completed — returning cached result)\n\n{cached}"
 
     # Normalize repo to owner/name format (strip URLs, .git suffix)
     repo = re.sub(r"^https?://", "", repo)
@@ -1409,7 +1426,8 @@ def setup_repo(
     (cb / "issue_pr.md").write_text(issue_pr_content, encoding="utf-8")
     (cb / "repo_conventions.md").write_text(conventions, encoding="utf-8")
 
-    # 7. Build return value
+    # 7. Build return value — include full issue_pr content so the LLM
+    # has all comments without needing to call contextbook_read.
     result_parts = [
         f"REPO: {repo}",
         f"BRANCH: {branch}",
@@ -1423,6 +1441,8 @@ def setup_repo(
 
     if errors:
         result_parts.append("\nWARNINGS:\n" + "\n".join(errors))
+
+    result_parts.append(f"\n---\n\n{issue_pr_content}")
 
     return "\n".join(result_parts)
 

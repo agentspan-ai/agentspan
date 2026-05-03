@@ -50,7 +50,6 @@ public class TerminationCompiler {
         Map<String, Object> inputs = new LinkedHashMap<>();
         inputs.put("result", resultRef);
         inputs.put("iteration", iterationRef);
-        inputs.put("messages", "${" + llmRef + ".input.messages}");
         task.setInputParameters(inputs);
 
         return task;
@@ -79,6 +78,8 @@ public class TerminationCompiler {
         Map<String, Object> inputs = new LinkedHashMap<>();
         inputs.put("result", resultRef);
         inputs.put("iteration", iterationRef);
+        // stop_when functions are user-defined and may need to inspect conversation
+        // history (e.g., tool results) to detect completion signals.
         inputs.put("messages", "${" + llmRef + ".input.messages}");
         task.setInputParameters(inputs);
 

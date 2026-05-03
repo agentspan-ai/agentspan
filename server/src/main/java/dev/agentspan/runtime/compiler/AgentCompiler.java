@@ -1163,8 +1163,10 @@ public class AgentCompiler {
                 messages.add(Map.of(
                         "role", "tool",
                         "message", "${" + pr.refName() + ".output.result}",
-                        "toolCallId", pr.refName(),
-                        "taskReferenceName", pr.refName()));
+                        "toolCalls", List.of(Map.of(
+                                "taskReferenceName", pr.refName(),
+                                "name", pr.toolName(),
+                                "output", Map.of("result", "${" + pr.refName() + ".output.result}")))));
             }
         }
 

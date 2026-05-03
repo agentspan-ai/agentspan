@@ -131,6 +131,9 @@ public class ToolCompiler {
             if (tool.getOutputSchema() != null) {
                 spec.put("outputSchema", tool.getOutputSchema());
             }
+            if (tool.getMaxCalls() != null) {
+                spec.put("maxCalls", tool.getMaxCalls());
+            }
 
             // MCP tools need configParams with server info
             if ("mcp".equals(toolType) && tool.getConfig() != null) {
@@ -530,7 +533,7 @@ public class ToolCompiler {
 
         Map<String, Object> userMsg = new LinkedHashMap<>();
         userMsg.put("role", "user");
-        userMsg.put("message", "${workflow.input.prompt}");
+        userMsg.put("message", "${workflow.input.prompt}\n\nRespond in json format.");
 
         List<Map<String, Object>> messages = new ArrayList<>();
         messages.add(systemMsg);
@@ -1191,7 +1194,7 @@ public class ToolCompiler {
                 "messages",
                 List.of(
                         Map.of("role", "system", "message", systemPrompt),
-                        Map.of("role", "user", "message", "${workflow.input.prompt}")));
+                        Map.of("role", "user", "message", "${workflow.input.prompt}\n\nRespond in json format.")));
         filterLlmInputs.put("temperature", 0);
         filterLlmInputs.put("jsonOutput", true);
         filterLlm.setInputParameters(filterLlmInputs);
@@ -1258,7 +1261,7 @@ public class ToolCompiler {
                 "messages",
                 List.of(
                         Map.of("role", "system", "message", systemPrompt),
-                        Map.of("role", "user", "message", "${workflow.input.prompt}")));
+                        Map.of("role", "user", "message", "${workflow.input.prompt}\n\nRespond in json format.")));
         filterLlmInputs.put("temperature", 0);
         filterLlmInputs.put("jsonOutput", true);
         filterLlm.setInputParameters(filterLlmInputs);

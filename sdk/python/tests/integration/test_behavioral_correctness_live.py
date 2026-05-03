@@ -445,12 +445,23 @@ class TestParallelBehavioral:
         assert_handoff_to(result, "technical_reviewer")
         assert_handoff_to(result, "financial_reviewer")
 
-        # Output should be a dict with both agent keys
+        # Output may be a dict with per-agent keys or a combined result string
+        # tagged with [agent_name]: prefixes. Both formats are valid.
         assert isinstance(result.output, dict)
 
-        # Verify distinct contributions exist (not just copied content)
-        tech_content = str(result.output.get("technical_reviewer", ""))
-        fin_content = str(result.output.get("financial_reviewer", ""))
+        if "technical_reviewer" in result.output and "financial_reviewer" in result.output:
+            tech_content = str(result.output["technical_reviewer"])
+            fin_content = str(result.output["financial_reviewer"])
+        else:
+            # Combined format: {'result': '[technical_reviewer]: ...\n\n[financial_reviewer]: ...'}
+            combined = str(result.output.get("result", ""))
+            assert "[technical_reviewer]" in combined, "Technical reviewer output not found in result"
+            assert "[financial_reviewer]" in combined, "Financial reviewer output not found in result"
+            # Split on the second agent tag to get distinct sections
+            parts = combined.split("[financial_reviewer]")
+            tech_content = parts[0]
+            fin_content = parts[1] if len(parts) > 1 else ""
+
         assert tech_content, "Technical reviewer produced no output"
         assert fin_content, "Financial reviewer produced no output"
         assert tech_content != fin_content, "Both reviewers produced identical output"
@@ -982,8 +993,8 @@ class TestCrossStrategyBehavioral:
         # Each agent must have run and produced tool-specific data
         # weather: "72F and sunny"
         assert "72" in out, f"Missing weather data (72). Output: {out[:300]}"
-        # calculate: 365*24 = 8760
-        assert "8760" in out, f"Missing calc result (8760). Output: {out[:300]}"
+        # calculate: 365*24 = 8760 (LLM may format as "8,760" or "8760")
+        assert "8760" in out or "8,760" in out, f"Missing calc result (8760). Output: {out[:300]}"
         # inventory: quantity 142
         assert "142" in out, f"Missing inventory data (142). Output: {out[:300]}"
 

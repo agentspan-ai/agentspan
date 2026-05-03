@@ -44,7 +44,10 @@ def isolated_workdir(tmp_path):
 class TestSectionValidation:
     """Contextbook enforces a fixed set of section names."""
 
-    VALID = {"issue_pr", "repo_conventions", "architecture_design_test", "implementation", "qa_testing"}
+    VALID = {
+        "issue_pr", "repo_conventions", "architecture_design_test",
+        "coder_plan", "implementation", "implementation_report", "qa_testing",
+    }
 
     def test_valid_sections_match(self):
         assert tools._VALID_SECTIONS == self.VALID
@@ -300,7 +303,13 @@ class TestFullPipelineFlow:
         result5 = tools.contextbook_write("qa_testing", qa_testing_content)
         assert "wrote" in result5
 
-        # ── Agent 5: pr_updater reads ALL 5 sections ──
+        # Write the two additional sections added for coder pipeline
+        result6 = tools.contextbook_write("coder_plan", "## Coder Plan\n- Fix login handler")
+        assert "wrote" in result6
+        result7 = tools.contextbook_write("implementation_report", "## Report\nAll changes applied")
+        assert "wrote" in result7
+
+        # ── Agent 5: pr_updater reads ALL sections ──
         pr_issue = tools.contextbook_read("issue_pr")
         assert "Fix authentication bypass" in pr_issue
 
