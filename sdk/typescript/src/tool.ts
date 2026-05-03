@@ -84,6 +84,9 @@ export interface ToolOptions {
   outputSchema?: unknown;
   approvalRequired?: boolean;
   timeoutSeconds?: number;
+  retryCount?: number;
+  retryDelaySeconds?: number;
+  retryLogic?: "FIXED" | "LINEAR_BACKOFF" | "EXPONENTIAL_BACKOFF";
   external?: boolean;
   isolated?: boolean;
   credentials?: (string | CredentialFile)[];
@@ -117,6 +120,11 @@ export function tool<TInput = unknown, TOutput = unknown>(
     ...(options.timeoutSeconds !== undefined && {
       timeoutSeconds: options.timeoutSeconds,
     }),
+    ...(options.retryCount !== undefined && { retryCount: options.retryCount }),
+    ...(options.retryDelaySeconds !== undefined && {
+      retryDelaySeconds: options.retryDelaySeconds,
+    }),
+    ...(options.retryLogic !== undefined && { retryLogic: options.retryLogic }),
     ...(options.external !== undefined && { external: options.external }),
     ...(options.isolated !== undefined && { isolated: options.isolated }),
     ...(options.credentials !== undefined && {
@@ -394,6 +402,7 @@ export interface AgentToolOptions {
   description?: string;
   retryCount?: number;
   retryDelaySeconds?: number;
+  retryLogic?: "FIXED" | "LINEAR_BACKOFF" | "EXPONENTIAL_BACKOFF";
   optional?: boolean;
 }
 
@@ -426,6 +435,7 @@ export function agentTool(agent: unknown, opts?: AgentToolOptions): ToolDef {
   };
   if (opts?.retryCount !== undefined) config.retryCount = opts.retryCount;
   if (opts?.retryDelaySeconds !== undefined) config.retryDelaySeconds = opts.retryDelaySeconds;
+  if (opts?.retryLogic !== undefined) config.retryLogic = opts.retryLogic;
   if (opts?.optional !== undefined) config.optional = opts.optional;
 
   return serverTool("agent_tool", name, description, inputSchema, config);

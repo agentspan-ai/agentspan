@@ -80,6 +80,7 @@ class ToolDef:
     timeout_seconds: Optional[int] = None
     retry_count: Optional[int] = None
     retry_delay_seconds: Optional[int] = None
+    retry_logic: Optional[str] = None
     tool_type: str = "worker"
     config: Dict[str, Any] = field(default_factory=dict)
     guardrails: List[Any] = field(default_factory=list)
@@ -104,6 +105,7 @@ def tool(
     timeout_seconds: Optional[int] = None,
     retry_count: Optional[int] = None,
     retry_delay_seconds: Optional[int] = None,
+    retry_logic: Optional[str] = None,
     guardrails: Optional[List[Any]] = None,
     isolated: bool = True,
     credentials: Optional[List[Any]] = None,
@@ -120,6 +122,7 @@ def tool(
     timeout_seconds: Optional[int] = None,
     retry_count: Optional[int] = None,
     retry_delay_seconds: Optional[int] = None,
+    retry_logic: Optional[str] = None,
     guardrails: Optional[List[Any]] = None,
     isolated: bool = True,
     credentials: Optional[List[Any]] = None,
@@ -149,6 +152,13 @@ def tool(
         for that task definition name.
     """
 
+    _VALID_RETRY_LOGIC = ("FIXED", "LINEAR_BACKOFF", "EXPONENTIAL_BACKOFF")
+    if retry_logic is not None and retry_logic not in _VALID_RETRY_LOGIC:
+        raise ValueError(
+            f"Invalid retry_logic: {retry_logic!r}. Must be one of "
+            f"'FIXED', 'LINEAR_BACKOFF', 'EXPONENTIAL_BACKOFF'."
+        )
+
     def _wrap(fn: F) -> F:
         tool_name = name or fn.__name__
         description = inspect.getdoc(fn) or ""
@@ -167,6 +177,7 @@ def tool(
             timeout_seconds=timeout_seconds,
             retry_count=retry_count,
             retry_delay_seconds=retry_delay_seconds,
+            retry_logic=retry_logic,
             tool_type="worker",
             guardrails=list(guardrails) if guardrails else [],
             isolated=isolated,

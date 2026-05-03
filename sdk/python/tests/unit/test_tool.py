@@ -906,3 +906,57 @@ class TestToolCredentialParams:
         assert td.approval_required is True
         assert td.isolated is False
         assert "KEY" in td.credentials
+
+
+class TestRetryLogic:
+    """Tests for retry_logic parameter on @tool decorator."""
+
+    def test_retry_logic_stored_on_tool_def(self):
+        @tool(retry_logic="EXPONENTIAL_BACKOFF")
+        def fn(x: int) -> int:
+            """test"""
+            return x
+
+        assert get_tool_def(fn).retry_logic == "EXPONENTIAL_BACKOFF"
+
+    def test_retry_logic_default_is_none(self):
+        @tool
+        def fn(x: int) -> int:
+            """test"""
+            return x
+
+        assert get_tool_def(fn).retry_logic is None
+
+    def test_invalid_retry_logic_raises(self):
+        with pytest.raises(ValueError, match="Invalid retry_logic"):
+            @tool(retry_logic="invalid")
+            def fn(x: int) -> int:
+                """test"""
+                return x
+
+    def test_all_retry_params_together(self):
+        @tool(retry_count=5, retry_delay_seconds=3, retry_logic="FIXED")
+        def fn(x: int) -> int:
+            """test"""
+            return x
+
+        td = get_tool_def(fn)
+        assert td.retry_count == 5
+        assert td.retry_delay_seconds == 3
+        assert td.retry_logic == "FIXED"
+
+    def test_retry_logic_linear_backoff(self):
+        @tool(retry_logic="LINEAR_BACKOFF")
+        def fn(x: int) -> int:
+            """test"""
+            return x
+
+        assert get_tool_def(fn).retry_logic == "LINEAR_BACKOFF"
+
+    def test_retry_logic_fixed(self):
+        @tool(retry_logic="FIXED")
+        def fn(x: int) -> int:
+            """test"""
+            return x
+
+        assert get_tool_def(fn).retry_logic == "FIXED"

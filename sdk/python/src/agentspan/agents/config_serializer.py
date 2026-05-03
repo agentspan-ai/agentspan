@@ -264,6 +264,9 @@ class AgentConfigSerializer:
         if td.retry_delay_seconds is not None:
             result["retryDelaySeconds"] = td.retry_delay_seconds
 
+        if td.retry_logic is not None:
+            result["retryLogic"] = td.retry_logic
+
         if td.config:
             if td.tool_type == "agent_tool" and "agent" in td.config:
                 serialized_config = dict(td.config)

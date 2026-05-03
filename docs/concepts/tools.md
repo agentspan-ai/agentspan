@@ -42,7 +42,7 @@ The JSON schema for the LLM is auto-generated from type hints and the docstring.
 ### Options
 
 ```python
-@tool(name="custom_name", approval_required=True, timeout_seconds=60, retry_count=5, retry_delay_seconds=10)
+@tool(name="custom_name", approval_required=True, timeout_seconds=60, retry_count=5, retry_delay_seconds=10, retry_logic="LINEAR_BACKOFF")
 def dangerous_action(target: str) -> dict:
     """Do something that requires human approval."""
     return {"done": True}
@@ -55,6 +55,49 @@ def dangerous_action(target: str) -> dict:
 | `timeout_seconds` | `None` | Maximum execution time in seconds |
 | `retry_count` | `None` (server default) | Number of times Conductor retries the task on failure |
 | `retry_delay_seconds` | `None` (server default) | Seconds to wait between retries |
+| `retry_logic` | `None` (server default) | Retry strategy: `FIXED`, `LINEAR_BACKOFF`, or `EXPONENTIAL_BACKOFF` |
+
+### Retry Configuration
+
+Control how Conductor retries failed tool executions:
+
+| Strategy | Description |
+|---|---|
+| `FIXED` | Constant delay between retries (default if not specified) |
+| `LINEAR_BACKOFF` | Delay increases linearly: `delay × attempt_number` |
+| `EXPONENTIAL_BACKOFF` | Delay increases exponentially: `delay × 2^attempt_number` |
+
+**Python:**
+```python
+@tool(retry_count=5, retry_delay_seconds=2, retry_logic="EXPONENTIAL_BACKOFF")
+def call_api(endpoint: str) -> str:
+    ...
+```
+
+**TypeScript:**
+```typescript
+tool(async (args) => { ... }, {
+  name: "call_api",
+  description: "Call external API",
+  inputSchema: z.object({ endpoint: z.string() }),
+  retryCount: 5,
+  retryDelaySeconds: 2,
+  retryLogic: "EXPONENTIAL_BACKOFF",
+});
+```
+
+**Java:**
+```java
+ToolDef.builder()
+    .name("call_api")
+    .description("Call external API")
+    .retryCount(5)
+    .retryDelaySeconds(2)
+    .retryLogic("EXPONENTIAL_BACKOFF")
+    .build();
+```
+
+Set `retry_count=0` to disable retries entirely (fail immediately on first error).
 
 ### ToolContext — shared state and dependencies
 

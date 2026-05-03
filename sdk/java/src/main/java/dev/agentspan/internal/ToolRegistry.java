@@ -95,6 +95,9 @@ public class ToolRegistry {
                 .func(func)
                 .approvalRequired(ann.approvalRequired())
                 .timeoutSeconds(ann.timeoutSeconds())
+                .retryCount(ann.retryCount())
+                .retryDelaySeconds(ann.retryDelaySeconds())
+                .retryLogic(ann.retryLogic())
                 .toolType("worker")
                 .credentials(credentials)
                 .build());

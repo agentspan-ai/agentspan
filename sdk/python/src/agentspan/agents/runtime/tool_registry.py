@@ -71,6 +71,8 @@ class ToolRegistry:
                     task_def.retry_count = td.retry_count
                 if td.retry_delay_seconds is not None:
                     task_def.retry_delay_seconds = td.retry_delay_seconds
+                if td.retry_logic is not None:
+                    task_def.retry_logic = td.retry_logic
                 worker_task(
                     task_definition_name=td.name,
                     task_def=task_def,
