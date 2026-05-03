@@ -27,7 +27,7 @@ import com.netflix.conductor.core.execution.tasks.Join;
 import lombok.RequiredArgsConstructor;
 
 @SpringBootApplication(
-        exclude = {DataSourceAutoConfiguration.class, MongoAutoConfiguration.class, MongoDataAutoConfiguration.class })
+        exclude = {DataSourceAutoConfiguration.class, MongoAutoConfiguration.class, MongoDataAutoConfiguration.class})
 @EnableScheduling
 @ComponentScan(
         basePackages = {
@@ -36,8 +36,7 @@ import lombok.RequiredArgsConstructor;
             "org.conductoross.conductor",
             "dev.agentspan.runtime"
         },
-        excludeFilters =
-                @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = Join.class))
+        excludeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = Join.class))
 @RequiredArgsConstructor
 public class AgentRuntime implements ApplicationRunner {
 

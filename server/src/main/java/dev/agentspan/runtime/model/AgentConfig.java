@@ -61,6 +61,11 @@ public class AgentConfig {
 
     private Integer maxTokens;
 
+    /** Token budget for context condensation. When the estimated prompt token count
+     *  exceeds this value, condensation fires proactively — even if well below
+     *  the model's actual context window. */
+    private Integer contextWindowBudget;
+
     @Builder.Default
     private int timeoutSeconds = 0;
 

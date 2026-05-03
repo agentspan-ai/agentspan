@@ -50,21 +50,18 @@ public class Join extends WorkflowSystemTask {
 
     @Override
     @SuppressWarnings("unchecked")
-    public boolean execute(
-        WorkflowModel workflow, TaskModel task, WorkflowExecutor workflowExecutor) {
+    public boolean execute(WorkflowModel workflow, TaskModel task, WorkflowExecutor workflowExecutor) {
         StringBuilder failureReason = new StringBuilder();
         StringBuilder optionalTaskFailures = new StringBuilder();
         List<String> joinOn = (List<String>) task.getInputData().get("joinOn");
         if (task.isLoopOverTask()) {
             // If join is part of loop over task, wait for specific iteration to get complete
-            joinOn =
-                joinOn.stream()
+            joinOn = joinOn.stream()
                     .map(name -> TaskUtils.appendIteration(name, task.getIteration()))
                     .toList();
         }
 
-        boolean allTasksTerminal =
-            joinOn.stream()
+        boolean allTasksTerminal = joinOn.stream()
                 .map(workflow::getTaskByRefName)
                 .allMatch(t -> t != null && t.getStatus().isTerminal());
 
@@ -80,13 +77,11 @@ public class Join extends WorkflowSystemTask {
             // Determine if the join task fails immediately due to a non-optional, non-permissive
             // task failure,
             // or waits for all tasks to be terminal if the failed task is permissive.
-            var isJoinFailure =
-                !taskStatus.isSuccessful()
+            var isJoinFailure = !taskStatus.isSuccessful()
                     && !forkedTask.getWorkflowTask().isOptional()
                     && (!forkedTask.getWorkflowTask().isPermissive() || allTasksTerminal);
             if (isJoinFailure) {
-                final String failureReasons =
-                    joinOn.stream()
+                final String failureReasons = joinOn.stream()
                         .map(workflow::getTaskByRefName)
                         .filter(Objects::nonNull)
                         .filter(t -> !t.getStatus().isSuccessful())
@@ -99,14 +94,10 @@ public class Join extends WorkflowSystemTask {
             }
 
             // check for optional task failures
-            if (forkedTask.getWorkflowTask().isOptional()
-                && taskStatus == TaskModel.Status.COMPLETED_WITH_ERRORS) {
+            if (forkedTask.getWorkflowTask().isOptional() && taskStatus == TaskModel.Status.COMPLETED_WITH_ERRORS) {
                 optionalTaskFailures
-                    .append(
-                        String.format(
-                            "%s/%s",
-                            forkedTask.getTaskDefName(), forkedTask.getTaskId()))
-                    .append(" ");
+                        .append(String.format("%s/%s", forkedTask.getTaskDefName(), forkedTask.getTaskId()))
+                        .append(" ");
             }
         }
 
