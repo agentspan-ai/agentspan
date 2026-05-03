@@ -80,6 +80,24 @@ class ToolDef:
     isolated: bool = True
     credentials: List[Any] = field(default_factory=list)
     stateful: bool = False
+    max_calls: Optional[int] = None
+
+    def call(self, **kwargs: Any) -> "PrefillToolCall":
+        """Create a pre-declared tool call for use with ``Agent(prefill_tools=[...])``."""
+        return PrefillToolCall(tool_name=self.name, arguments=kwargs)
+
+
+@dataclass(frozen=True)
+class PrefillToolCall:
+    """A tool call to execute before the LLM runs.
+
+    Created via ``tool_def.call(arg=val)`` or ``my_tool.call(arg=val)``.
+    Passed to ``Agent(prefill_tools=[...])`` so the server executes these
+    tools before the first LLM turn and injects results into context.
+    """
+
+    tool_name: str
+    arguments: Dict[str, Any]
 
 
 # ── @tool decorator ─────────────────────────────────────────────────────
@@ -100,6 +118,7 @@ def tool(
     isolated: bool = True,
     credentials: Optional[List[Any]] = None,
     stateful: bool = False,
+    max_calls: Optional[int] = None,
 ) -> Callable[[F], F]: ...
 
 
@@ -114,6 +133,7 @@ def tool(
     isolated: bool = True,
     credentials: Optional[List[Any]] = None,
     stateful: bool = False,
+    max_calls: Optional[int] = None,
 ) -> Any:
     """Register a Python function as a Conductor agent tool.
 
@@ -160,6 +180,7 @@ def tool(
             isolated=isolated,
             credentials=list(credentials) if credentials else [],
             stateful=stateful,
+            max_calls=max_calls,
         )
 
         @functools.wraps(fn)
@@ -168,6 +189,7 @@ def tool(
 
         wrapper._tool_def = tool_def  # type: ignore[attr-defined]
         fn._tool_def = tool_def  # type: ignore[attr-defined]  # Also on raw fn for pickling
+        wrapper.call = tool_def.call  # type: ignore[attr-defined]
         return wrapper  # type: ignore[return-value]
 
     if func is not None:

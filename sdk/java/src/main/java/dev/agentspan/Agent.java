@@ -6,6 +6,7 @@ package dev.agentspan;
 import dev.agentspan.enums.Strategy;
 import dev.agentspan.handoff.Handoff;
 import dev.agentspan.model.GuardrailDef;
+import dev.agentspan.model.PrefillToolCall;
 import dev.agentspan.model.PromptTemplate;
 import dev.agentspan.model.ToolDef;
 import dev.agentspan.termination.TerminationCondition;
@@ -67,6 +68,7 @@ public class Agent {
     private final Function<Map<String, Object>, Map<String, Object>> afterModelCallback;
     private final List<CallbackHandler> callbacks;
     private final List<String> requiredTools;
+    private final List<PrefillToolCall> prefillTools;
     private final List<String> credentials;
     private final Map<String, Object> metadata;
     private final List<String> allowedCommands;
@@ -102,6 +104,7 @@ public class Agent {
         this.afterModelCallback = builder.afterModelCallback;
         this.callbacks = builder.callbacks != null ? new ArrayList<>(builder.callbacks) : new ArrayList<>();
         this.requiredTools = builder.requiredTools != null ? new ArrayList<>(builder.requiredTools) : new ArrayList<>();
+        this.prefillTools = builder.prefillTools != null ? new ArrayList<>(builder.prefillTools) : new ArrayList<>();
         this.credentials = builder.credentials != null ? new ArrayList<>(builder.credentials) : new ArrayList<>();
         this.metadata = builder.metadata;
         this.allowedCommands = builder.allowedCommands != null ? new ArrayList<>(builder.allowedCommands) : new ArrayList<>();
@@ -175,6 +178,7 @@ public class Agent {
     public Function<Map<String, Object>, Map<String, Object>> getAfterModelCallback() { return afterModelCallback; }
     public List<CallbackHandler> getCallbacks() { return callbacks; }
     public List<String> getRequiredTools() { return requiredTools; }
+    public List<PrefillToolCall> getPrefillTools() { return prefillTools; }
     public List<String> getCredentials() { return credentials; }
     public Map<String, Object> getMetadata() { return metadata; }
     public List<String> getAllowedCommands() { return allowedCommands; }
@@ -230,6 +234,7 @@ public class Agent {
         private Function<Map<String, Object>, Map<String, Object>> afterModelCallback;
         private List<CallbackHandler> callbacks;
         private List<String> requiredTools;
+        private List<PrefillToolCall> prefillTools;
         private List<String> credentials;
         private Map<String, Object> metadata;
         private List<String> allowedCommands;
@@ -478,6 +483,12 @@ public class Agent {
         /** Varargs convenience for requiredTools. */
         public Builder requiredTools(String... requiredTools) {
             this.requiredTools = Arrays.asList(requiredTools);
+            return this;
+        }
+
+        /** Tool calls to execute before the first LLM turn. Results are injected into context. */
+        public Builder prefillTools(List<PrefillToolCall> prefillTools) {
+            this.prefillTools = prefillTools;
             return this;
         }
 

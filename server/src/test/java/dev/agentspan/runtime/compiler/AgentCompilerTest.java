@@ -954,4 +954,175 @@ class AgentCompilerTest {
                     .doesNotContain("-");
         }
     }
+
+    // ── Prefill tools tests ─────────────────────────────────────────
+
+    @Test
+    void testCompileWithSinglePrefillTool() {
+        ToolConfig tool = ToolConfig.builder()
+                .name("contextbook_read")
+                .description("Read contextbook")
+                .inputSchema(Map.of("type", "object",
+                        "properties", Map.of("section", Map.of("type", "string"))))
+                .toolType("worker")
+                .build();
+
+        AgentConfig config = AgentConfig.builder()
+                .name("prefill_agent")
+                .model("openai/gpt-4o")
+                .instructions("You implement code.")
+                .tools(List.of(tool))
+                .prefillTools(List.of(PrefillToolCallConfig.builder()
+                        .toolName("contextbook_read")
+                        .arguments(Map.of("section", "coder_plan"))
+                        .build()))
+                .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        // Should have: ctx_resolve + init_state + prefill SIMPLE + DoWhile
+        assertThat(wf.getTasks()).hasSize(4);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("INLINE"); // ctx_resolve
+        assertThat(wf.getTasks().get(1).getType()).isEqualTo("SET_VARIABLE"); // init_state
+        WorkflowTask prefillTask = wf.getTasks().get(2);
+        assertThat(prefillTask.getType()).isEqualTo("SIMPLE");
+        assertThat(prefillTask.getName()).isEqualTo("contextbook_read");
+        assertThat(prefillTask.getTaskReferenceName()).isEqualTo("prefill_agent_prefill_0");
+        assertThat(prefillTask.getInputParameters().get("section")).isEqualTo("coder_plan");
+        assertThat(wf.getTasks().get(3).getType()).isEqualTo("DO_WHILE"); // loop
+
+        // LLM messages should contain tool_call + tool response before user message
+        WorkflowTask loop = wf.getTasks().get(3);
+        WorkflowTask llmTask = loop.getLoopOver().stream()
+                .filter(t -> "LLM_CHAT_COMPLETE".equals(t.getType()))
+                .findFirst().orElseThrow();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> messages =
+                (List<Map<String, Object>>) llmTask.getInputParameters().get("messages");
+
+        // Find tool_call and tool messages
+        Map<String, Object> toolCallMsg = messages.stream()
+                .filter(m -> "tool_call".equals(m.get("role")))
+                .findFirst().orElse(null);
+        assertThat(toolCallMsg).isNotNull();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> toolCalls =
+                (List<Map<String, Object>>) toolCallMsg.get("tool_calls");
+        assertThat(toolCalls).hasSize(1);
+        assertThat(toolCalls.get(0).get("name")).isEqualTo("contextbook_read");
+        assertThat(toolCalls.get(0).get("taskReferenceName")).isEqualTo("prefill_agent_prefill_0");
+
+        Map<String, Object> toolResultMsg = messages.stream()
+                .filter(m -> "tool".equals(m.get("role")))
+                .findFirst().orElse(null);
+        assertThat(toolResultMsg).isNotNull();
+        assertThat(toolResultMsg.get("message")).isEqualTo("${prefill_agent_prefill_0.output.result}");
+
+        // tool_call + tool must come before user message
+        int toolCallIdx = messages.indexOf(toolCallMsg);
+        int userIdx = -1;
+        for (int i = 0; i < messages.size(); i++) {
+            if (messages.get(i) instanceof Map<?, ?> m && "user".equals(m.get("role"))) {
+                userIdx = i;
+                break;
+            }
+        }
+        assertThat(toolCallIdx).isLessThan(userIdx);
+    }
+
+    @Test
+    void testCompileWithMultiplePrefillToolsForkJoin() {
+        ToolConfig tool1 = ToolConfig.builder()
+                .name("contextbook_read")
+                .description("Read contextbook")
+                .inputSchema(Map.of("type", "object"))
+                .toolType("worker")
+                .build();
+        ToolConfig tool2 = ToolConfig.builder()
+                .name("git_diff")
+                .description("Git diff")
+                .inputSchema(Map.of("type", "object"))
+                .toolType("worker")
+                .build();
+
+        AgentConfig config = AgentConfig.builder()
+                .name("multi_prefill")
+                .model("openai/gpt-4o")
+                .instructions("You review code.")
+                .tools(List.of(tool1, tool2))
+                .prefillTools(List.of(
+                        PrefillToolCallConfig.builder()
+                                .toolName("contextbook_read")
+                                .arguments(Map.of("section", "impl_report"))
+                                .build(),
+                        PrefillToolCallConfig.builder()
+                                .toolName("git_diff")
+                                .arguments(Map.of())
+                                .build()))
+                .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        // Should have: ctx_resolve + init_state + FORK_JOIN + JOIN + DoWhile
+        assertThat(wf.getTasks()).hasSize(5);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("INLINE"); // ctx_resolve
+        assertThat(wf.getTasks().get(1).getType()).isEqualTo("SET_VARIABLE"); // init_state
+        WorkflowTask fork = wf.getTasks().get(2);
+        assertThat(fork.getType()).isEqualTo("FORK_JOIN");
+        assertThat(fork.getForkTasks()).hasSize(2);
+        WorkflowTask join = wf.getTasks().get(3);
+        assertThat(join.getType()).isEqualTo("JOIN");
+        assertThat(wf.getTasks().get(4).getType()).isEqualTo("DO_WHILE");
+
+        // LLM messages should have 2 tool_call + 2 tool messages
+        WorkflowTask loop = wf.getTasks().get(4);
+        WorkflowTask llmTask = loop.getLoopOver().stream()
+                .filter(t -> "LLM_CHAT_COMPLETE".equals(t.getType()))
+                .findFirst().orElseThrow();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> messages =
+                (List<Map<String, Object>>) llmTask.getInputParameters().get("messages");
+
+        long toolCallCount = messages.stream()
+                .filter(m -> "tool_call".equals(m.get("role"))).count();
+        long toolResultCount = messages.stream()
+                .filter(m -> "tool".equals(m.get("role"))).count();
+        assertThat(toolCallCount).isEqualTo(2);
+        assertThat(toolResultCount).isEqualTo(2);
+    }
+
+    @Test
+    void testCompileWithNoPrefillToolsUnchanged() {
+        ToolConfig tool = ToolConfig.builder()
+                .name("search")
+                .description("Search")
+                .inputSchema(Map.of("type", "object"))
+                .toolType("worker")
+                .build();
+
+        AgentConfig config = AgentConfig.builder()
+                .name("no_prefill")
+                .model("openai/gpt-4o")
+                .tools(List.of(tool))
+                .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        // No prefill → same as before: ctx_resolve + init_state + DoWhile
+        assertThat(wf.getTasks()).hasSize(3);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("INLINE");
+        assertThat(wf.getTasks().get(1).getType()).isEqualTo("SET_VARIABLE");
+        assertThat(wf.getTasks().get(2).getType()).isEqualTo("DO_WHILE");
+
+        // LLM messages should NOT have tool_call or tool messages
+        WorkflowTask loop = wf.getTasks().get(2);
+        WorkflowTask llmTask = loop.getLoopOver().stream()
+                .filter(t -> "LLM_CHAT_COMPLETE".equals(t.getType()))
+                .findFirst().orElseThrow();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> messages =
+                (List<Map<String, Object>>) llmTask.getInputParameters().get("messages");
+        assertThat(messages.stream().noneMatch(m -> "tool_call".equals(m.get("role")))).isTrue();
+        assertThat(messages.stream().noneMatch(m -> "tool".equals(m.get("role")))).isTrue();
+    }
 }

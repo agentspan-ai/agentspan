@@ -37,9 +37,9 @@ from _issue_fixer_instructions import (
     TECH_LEAD_INSTRUCTIONS,
 )
 from _issue_fixer_tools import (
+    _contextbook_dir,
     build_check,
     contextbook_read,
-    contextbook_write,
     edit_file,
     edit_files,
     file_outline,
@@ -57,12 +57,19 @@ from _issue_fixer_tools import (
     search_symbols,
     set_working_dir,
     setup_repo,
+    write_architecture,
+    write_coder_plan,
     write_file,
+    write_implementation_report,
+    write_qa_testing,
 )
+
+import dataclasses
 
 from agentspan.agents import Agent, AgentRuntime, Strategy
 from agentspan.agents.cli_config import CliConfig
 from agentspan.agents.handoff import OnTextMention
+from agentspan.agents.tool import get_tool_def
 
 # ── Configuration ────────────────────────────────────────────
 BRANCH_PREFIX = "fix/issue-"
@@ -73,117 +80,72 @@ SERVER_URL = "http://localhost:6767"
 MAX_QA_LOOPS = 10  # max coder<>qa iterations
 
 
+def _limited(fn, max_calls: int):
+    """Return a ToolDef copy with a per-agent max_calls limit."""
+    return dataclasses.replace(get_tool_def(fn), max_calls=max_calls)
+
+
 # ── Stop-when callbacks ──────────────────────────────────────
+# File-based checks: deterministic, no LLM text parsing.
+# The server skips stop_when evaluation on TOOL_CALLS turns, so these
+# only run when the LLM produced text — no need to check finishReason here.
+
+import time as _time
+
+_EXECUTION_START = _time.time()
 
 
-def _has_text_in_messages(messages: list, marker: str) -> bool:
-    """Check if text appears anywhere in message history.
-
-    Server messages may use either "content" or "message" as the text key,
-    and content may be a string or a list of {text: ...} parts.
-    """
-    for msg in messages:
-        if not isinstance(msg, dict):
-            continue
-        for key in ("content", "message"):
-            val = msg.get(key)
-            if val is None:
-                continue
-            if isinstance(val, str) and marker in val:
-                return True
-            if isinstance(val, list):
-                for part in val:
-                    if isinstance(part, dict) and marker in str(part.get("text", "")):
-                        return True
-    return False
+def _contextbook_written(section: str) -> bool:
+    """Check if a contextbook section file was written during THIS execution."""
+    path = _contextbook_dir() / f"{section}.md"
+    if not path.exists() or path.stat().st_size == 0:
+        return False
+    return path.stat().st_mtime >= _EXECUTION_START
 
 
-def _fetcher_done(context: dict, **kwargs) -> bool:
-    """Stop fetcher when TODO list appears in the LLM's text output.
-
-    Only checks `result` (not messages) because the instruction template
-    itself contains '## TODO' and 'REPO:' as format examples — checking
-    messages would match the system prompt and stop on turn 1.
-    """
+def _has_text_in_context(context: dict, *targets: str) -> bool:
+    """Check if ALL target strings appear in the result or tool-result messages."""
     result = context.get("result", "")
-    if isinstance(result, str) and "## TODO" in result and "REPO:" in result:
+    result_str = str(result) if result else ""
+    if result_str and all(t in result_str for t in targets):
         return True
-    # On tool-call turns result is [] — check only assistant messages
-    for msg in context.get("messages", []):
-        if not isinstance(msg, dict):
-            continue
-        if msg.get("role") not in ("assistant",):
-            continue
-        for key in ("content", "message"):
-            val = msg.get(key)
-            if isinstance(val, str) and "## TODO" in val and "REPO:" in val:
+    messages = context.get("messages", [])
+    if isinstance(messages, list):
+        for msg in messages:
+            if not isinstance(msg, dict):
+                continue
+            role = msg.get("role", "")
+            if role in ("system", "user"):
+                continue
+            content = str(msg.get("message", "") or msg.get("content", ""))
+            if content and all(t in content for t in targets):
                 return True
     return False
 
 
 def _tech_lead_done(context: dict, **kwargs) -> bool:
-    """Stop Tech Lead only when the design was actually written to contextbook."""
-    result = context.get("result", "")
-    marker = "wrote 'architecture_design_test'"
-    if marker in result:
-        return True
-    return _has_text_in_messages(context.get("messages", []), marker)
+    """Stop when architecture_design_test contextbook file exists."""
+    return _contextbook_written("architecture_design_test")
 
 
 def _planner_done(context: dict, **kwargs) -> bool:
-    """Stop planner when the change map was written to contextbook."""
-    result = context.get("result", "")
-    marker = "wrote 'coder_plan'"
-    if marker in result:
-        return True
-    return _has_text_in_messages(context.get("messages", []), marker)
+    """Stop when change map exists — accepts either section name."""
+    return _contextbook_written("coder_plan") or _contextbook_written("implementation")
 
 
 def _implementer_done(context: dict, **kwargs) -> bool:
-    """Stop implementer when implementation was written to contextbook."""
-    result = context.get("result", "")
-    marker = "wrote 'implementation'"
-    if marker in result:
-        return True
-    return _has_text_in_messages(context.get("messages", []), marker)
+    """Stop when implementation_report contextbook file exists."""
+    return _contextbook_written("implementation_report")
 
 
 def _qa_approved(context: dict, **kwargs) -> bool:
-    """Stop the SWARM loop when QA approves AND both contextbook sections exist.
-
-    QA instructions contain 'QA_APPROVED' as a format example, so we only
-    check assistant messages (not system/user) to avoid matching the template.
-    """
-    result = context.get("result", "")
-    messages = context.get("messages", [])
-    assistant_msgs = [m for m in messages if isinstance(m, dict) and m.get("role") == "assistant"]
-    has_approval = (isinstance(result, str) and "QA_APPROVED" in result) or _has_text_in_messages(
-        assistant_msgs, "QA_APPROVED"
-    )
-    if not has_approval:
-        return False
-    # "wrote 'implementation'" and "wrote 'qa_testing'" come from tool results,
-    # not from instructions — safe to check all messages
-    return _has_text_in_messages(messages, "wrote 'implementation'") and _has_text_in_messages(
-        messages, "wrote 'qa_testing'"
-    )
+    """Stop the SWARM loop when QA approves (text-based — no file equivalent)."""
+    return _has_text_in_context(context, "QA_APPROVED")
 
 
 def _pr_done(context: dict, **kwargs) -> bool:
-    """Stop PR updater when a PR URL is output.
-
-    PR instructions contain '/pull/' as a format example, so we only
-    check assistant messages (not system/user) to avoid matching the template.
-    """
-    result = context.get("result", "")
-    if isinstance(result, str) and "github.com" in result and "/pull/" in result:
-        return True
-    assistant_msgs = [
-        m for m in context.get("messages", []) if isinstance(m, dict) and m.get("role") == "assistant"
-    ]
-    return _has_text_in_messages(assistant_msgs, "/pull/") and _has_text_in_messages(
-        assistant_msgs, "github.com"
-    )
+    """Stop PR updater when a PR URL is output (text-based — no file equivalent)."""
+    return _has_text_in_context(context, "github.com", "/pull/")
 
 
 def main():
@@ -235,11 +197,10 @@ def main():
         name="issue_pr_fetcher",
         model=SONNET,
         stateful=True,
-        max_turns=25,
+        max_turns=3,
         max_tokens=16000,
         credentials=[GITHUB_CREDENTIAL],
-        tools=[setup_repo, contextbook_write],
-        stop_when=_fetcher_done,
+        tools=[setup_repo],
         instructions=ISSUE_PR_FETCHER_INSTRUCTIONS.format(**_fmt),
     )
 
@@ -260,8 +221,8 @@ def main():
             find_references,
             git_log,
             run_command,
-            contextbook_write,
-            contextbook_read,
+            write_architecture,
+            _limited(contextbook_read, 3),
         ],
         stop_when=_tech_lead_done,
         instructions=TECH_LEAD_INSTRUCTIONS.format(**_fmt),
@@ -286,8 +247,8 @@ def main():
             file_outline,
             search_symbols,
             find_references,
-            contextbook_read,
-            contextbook_write,
+            _limited(contextbook_read, 4),
+            write_coder_plan,
         ],
         stop_when=_planner_done,
         instructions=CODER_PLANNER_INSTRUCTIONS.format(**_fmt),
@@ -297,10 +258,11 @@ def main():
         name="coder_implementer",
         model=SONNET,
         stateful=True,
-        max_turns=100,
+        max_turns=30,
         max_tokens=60000,
         credentials=[GITHUB_CREDENTIAL],
         cli_config=cli,
+        prefill_tools=[contextbook_read.call(section="coder_plan")],
         tools=[
             read_file,
             write_file,
@@ -310,8 +272,7 @@ def main():
             lint_and_format,
             build_check,
             run_unit_tests,
-            contextbook_read,
-            contextbook_write,
+            write_implementation_report,
         ],
         stop_when=_implementer_done,
         instructions=CODER_IMPLEMENTER_INSTRUCTIONS.format(**_fmt),
@@ -341,8 +302,8 @@ def main():
             git_diff,
             run_command,
             run_unit_tests,
-            contextbook_write,
-            contextbook_read,
+            write_qa_testing,
+            _limited(contextbook_read, 5),
         ],
         handoffs=[OnTextMention(text="HANDOFF_TO_CODER", target="coder")],
         instructions=QA_AGENT_INSTRUCTIONS.format(**_fmt),
@@ -367,7 +328,7 @@ def main():
         max_tokens=16000,
         credentials=[GITHUB_CREDENTIAL],
         cli_config=cli,
-        tools=[git_diff, git_log, contextbook_read, run_command],
+        tools=[git_diff, git_log, _limited(contextbook_read, 8), run_command],
         stop_when=_pr_done,
         instructions=PR_UPDATER_INSTRUCTIONS.format(**_fmt),
     )

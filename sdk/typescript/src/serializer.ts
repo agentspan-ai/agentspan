@@ -237,6 +237,11 @@ export class AgentConfigSerializer {
       config.requiredTools = agent.requiredTools;
     }
 
+    // prefillTools
+    if (agent.prefillTools && agent.prefillTools.length > 0) {
+      config.prefillTools = agent.prefillTools;
+    }
+
     // Gate
     if (agent.gate) {
       config.gate = this.serializeGate(agent.gate, agent.name);
@@ -279,6 +284,7 @@ export class AgentConfigSerializer {
       config.timeoutSeconds = toolDef.timeoutSeconds;
     }
     if (agentStateful || toolDef.stateful) config.stateful = true;
+    if (toolDef.maxCalls !== undefined) config.maxCalls = toolDef.maxCalls;
 
     // Handle guardrails
     if (toolDef.guardrails && toolDef.guardrails.length > 0) {

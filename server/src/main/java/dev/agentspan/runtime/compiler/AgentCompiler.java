@@ -56,6 +56,15 @@ public class AgentCompiler {
         return name.replaceAll("[^a-zA-Z0-9_]", "_");
     }
 
+    /** Reference to a single prefill tool call result for message injection. */
+    record PrefillRef(String toolName, String refName, Map<String, Object> arguments) {}
+
+    /** Result of compiling prefill tool calls: tasks to add pre-loop + refs for message injection. */
+    record PrefillCompilationResult(List<WorkflowTask> tasks, List<PrefillRef> refs) {
+        static final PrefillCompilationResult EMPTY = new PrefillCompilationResult(List.of(), List.of());
+        boolean hasRefs() { return !refs.isEmpty(); }
+    }
+
     static final class ResolvedInstructions {
         private final List<WorkflowTask> preTasks;
         private final String text;
@@ -293,14 +302,17 @@ public class AgentCompiler {
             toolSpecs = tc.compileToolSpecs(tools);
         }
 
+        // Compile prefill tool calls (pre-loop tasks + message refs)
+        PrefillCompilationResult prefill = compilePrefillTasks(config);
+
         // Build LLM task
         WorkflowTask llmTask;
         if (discoveryResult != null) {
             // LLM task with null toolSpecs; wire dynamic tools ref after
-            llmTask = buildLlmTask(config, parsed, llmRef, null);
+            llmTask = buildLlmTask(config, parsed, llmRef, null, prefill.refs());
             llmTask.getInputParameters().put("tools", discoveryResult.getToolsRef());
         } else {
-            llmTask = buildLlmTask(config, parsed, llmRef, toolSpecs);
+            llmTask = buildLlmTask(config, parsed, llmRef, toolSpecs, prefill.refs());
         }
 
         // Inject human feedback context for agents with approval-required tools.
@@ -462,11 +474,15 @@ public class AgentCompiler {
         termCondition.append(String.format(
                 "if ( $.%s['iteration'] < %d && $._stop_requested != true && ($.%s['finishReason'] == 'LENGTH' || $.%s['finishReason'] == 'MAX_TOKENS' || %s)",
                 loopRef, maxTurns, llmRef, llmRef, loopReason));
+        // Skip stop_when/termination on tool-call turns — the agent still has work to do.
+        // Only evaluate when the LLM produced text output (finishReason != TOOL_CALLS).
         if (stopWhenRef != null) {
-            termCondition.append(String.format(" && $.%s.should_continue == true", stopWhenRef));
+            termCondition.append(String.format(
+                    " && ($.%s['finishReason'] == 'TOOL_CALLS' || $.%s.should_continue == true)", llmRef, stopWhenRef));
         }
         if (terminationRef != null) {
-            termCondition.append(String.format(" && $.%s.should_continue == true", terminationRef));
+            termCondition.append(String.format(
+                    " && ($.%s['finishReason'] == 'TOOL_CALLS' || $.%s.should_continue == true)", llmRef, terminationRef));
         }
         termCondition.append(" ) { true; } else { false; }");
 
@@ -519,6 +535,9 @@ public class AgentCompiler {
         initState.setTaskReferenceName(toRef(config.getName()) + "_init_state");
         initState.setInputParameters(initVars);
         allTasks.add(initState);
+
+        // Prefill tool calls: execute before the loop so results are in LLM context
+        allTasks.addAll(prefill.tasks());
 
         // Required tools enforcement: wrap loop + check in outer DO_WHILE
         if (config.getRequiredTools() != null && !config.getRequiredTools().isEmpty()) {
@@ -637,13 +656,16 @@ public class AgentCompiler {
             toolSpecs = tc.compileToolSpecs(allTools);
         }
 
+        // Compile prefill tool calls (pre-loop tasks + message refs)
+        PrefillCompilationResult hybridPrefill = compilePrefillTasks(config);
+
         // Build LLM task
         WorkflowTask llmTask;
         if (discoveryResult != null) {
-            llmTask = buildLlmTask(config, parsed, llmRef, null);
+            llmTask = buildLlmTask(config, parsed, llmRef, null, hybridPrefill.refs());
             llmTask.getInputParameters().put("tools", discoveryResult.getToolsRef());
         } else {
-            llmTask = buildLlmTask(config, parsed, llmRef, toolSpecs);
+            llmTask = buildLlmTask(config, parsed, llmRef, toolSpecs, hybridPrefill.refs());
         }
 
         // Tool call routing (with tool-level guardrail metadata)
@@ -827,6 +849,7 @@ public class AgentCompiler {
             allTasks.addAll(resolvedInstructions.getPreTasks());
             allTasks.add(hybridCtxResolve);
             allTasks.add(initStateHybrid);
+            allTasks.addAll(hybridPrefill.tasks());
             allTasks.add(loop);
             allTasks.add(transferSwitch);
             wf.setTasks(allTasks);
@@ -834,6 +857,7 @@ public class AgentCompiler {
             List<WorkflowTask> allTasks = new ArrayList<>(resolvedInstructions.getPreTasks());
             allTasks.add(hybridCtxResolve);
             allTasks.add(initStateHybrid);
+            allTasks.addAll(hybridPrefill.tasks());
             allTasks.add(loop);
             allTasks.add(transferSwitch);
             wf.setTasks(allTasks);
@@ -972,8 +996,68 @@ public class AgentCompiler {
         return wf;
     }
 
+    /**
+     * Compile prefill tool calls into pre-loop workflow tasks.
+     * Returns tasks to execute before the DoWhile and refs for message injection.
+     */
+    PrefillCompilationResult compilePrefillTasks(AgentConfig config) {
+        List<PrefillToolCallConfig> prefills = config.getPrefillTools();
+        if (prefills == null || prefills.isEmpty()) return PrefillCompilationResult.EMPTY;
+
+        // Map tool name -> ToolConfig for type lookup
+        Map<String, ToolConfig> toolMap = new HashMap<>();
+        if (config.getTools() != null) {
+            for (ToolConfig tc : config.getTools()) toolMap.put(tc.getName(), tc);
+        }
+
+        List<WorkflowTask> tasks = new ArrayList<>();
+        List<PrefillRef> refs = new ArrayList<>();
+
+        for (int i = 0; i < prefills.size(); i++) {
+            PrefillToolCallConfig ptc = prefills.get(i);
+            String refName = toRef(config.getName()) + "_prefill_" + i;
+
+            WorkflowTask task = new WorkflowTask();
+            task.setName(ptc.getToolName());
+            task.setTaskReferenceName(refName);
+            task.setType("SIMPLE");
+
+            Map<String, Object> inputs = new LinkedHashMap<>(ptc.getArguments());
+            inputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
+            task.setInputParameters(inputs);
+
+            tasks.add(task);
+            refs.add(new PrefillRef(ptc.getToolName(), refName, ptc.getArguments()));
+        }
+
+        // Multiple prefill tools → static FORK_JOIN for parallel execution
+        if (tasks.size() > 1) {
+            List<List<WorkflowTask>> branches = tasks.stream()
+                    .map(List::of).toList();
+            WorkflowTask fork = new WorkflowTask();
+            fork.setType("FORK_JOIN");
+            fork.setTaskReferenceName(toRef(config.getName()) + "_prefill_fork");
+            fork.setForkTasks(branches);
+
+            WorkflowTask join = new WorkflowTask();
+            join.setType("JOIN");
+            join.setTaskReferenceName(toRef(config.getName()) + "_prefill_join");
+            join.setJoinOn(tasks.stream()
+                    .map(WorkflowTask::getTaskReferenceName).toList());
+
+            return new PrefillCompilationResult(List.of(fork, join), refs);
+        }
+        return new PrefillCompilationResult(tasks, refs);
+    }
+
     WorkflowTask buildLlmTask(
             AgentConfig config, ParsedModel parsed, String llmRef, List<Map<String, Object>> toolSpecs) {
+        return buildLlmTask(config, parsed, llmRef, toolSpecs, List.of());
+    }
+
+    WorkflowTask buildLlmTask(
+            AgentConfig config, ParsedModel parsed, String llmRef,
+            List<Map<String, Object>> toolSpecs, List<PrefillRef> prefillRefs) {
         WorkflowTask llm = new WorkflowTask();
         llm.setName("LLM_CHAT_COMPLETE");
         llm.setTaskReferenceName(llmRef);
@@ -1063,6 +1147,23 @@ public class AgentCompiler {
             messages.addAll(config.getMemory().getMessages());
         }
 
+        // Prefill tool call results: inject as tool_call + tool response before user message
+        if (prefillRefs != null && !prefillRefs.isEmpty()) {
+            for (PrefillRef pr : prefillRefs) {
+                messages.add(Map.of(
+                        "role", "tool_call",
+                        "tool_calls", List.of(Map.of(
+                                "name", pr.toolName(),
+                                "taskReferenceName", pr.refName(),
+                                "input", pr.arguments()))));
+                messages.add(Map.of(
+                        "role", "tool",
+                        "message", "${" + pr.refName() + ".output.result}",
+                        "toolCallId", pr.refName(),
+                        "taskReferenceName", pr.refName()));
+            }
+        }
+
         // User message
         messages.add(USER_MESSAGE);
 
@@ -1076,6 +1177,11 @@ public class AgentCompiler {
         // Without this, Spring AI defaults to 500 which is too low for agents
         // that need to generate tool calls with complex arguments.
         inputs.put("maxTokens", config.getMaxTokens() != null ? config.getMaxTokens() : 16384);
+
+        // Context window budget for proactive condensation
+        if (config.getContextWindowBudget() != null) {
+            inputs.put("contextWindowBudget", config.getContextWindowBudget());
+        }
 
         // Temperature: default 0 for tool agents, null otherwise
         if (config.getTemperature() != null) {

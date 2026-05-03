@@ -101,6 +101,9 @@ public class AgentConfig {
     /** Tools that must be called before the agent can complete. */
     private List<String> requiredTools;
 
+    /** Tool calls to execute before the first LLM turn. Results are injected into context. */
+    private List<PrefillToolCallConfig> prefillTools;
+
     /**
      * Gate condition for conditional sequential pipelines.
      * Can be a Map (declarative, e.g. text_contains) or a WorkerRef (callable).

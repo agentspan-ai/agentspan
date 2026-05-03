@@ -184,6 +184,7 @@ from agentspan.agents.openai_compat import RunResult, Runner
 
 # Tool decorator and constructors
 from agentspan.agents.tool import (
+    PrefillToolCall,
     ToolContext,
     ToolDef,
     agent_tool,

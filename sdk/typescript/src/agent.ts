@@ -1,4 +1,4 @@
-import type { Strategy, CredentialFile, CodeExecutionConfig, CliConfig } from "./types.js";
+import type { Strategy, CredentialFile, CodeExecutionConfig, CliConfig, PrefillToolCall } from "./types.js";
 import { agentTool } from "./tool.js";
 import { ConfigurationError } from "./errors.js";
 import { ClaudeCode } from "./claude-code.js";
@@ -113,6 +113,8 @@ export interface AgentOptions {
   includeContents?: "default" | "none";
   thinkingBudgetTokens?: number;
   requiredTools?: string[];
+  /** Tool calls to execute before the first LLM turn. Results are injected into context. */
+  prefillTools?: PrefillToolCall[];
   gate?: GateCondition;
   codeExecutionConfig?: CodeExecutionConfig;
   cliConfig?: CliConfig | CliConfigOptions;
@@ -161,6 +163,7 @@ export class Agent {
   readonly includeContents?: "default" | "none";
   readonly thinkingBudgetTokens?: number;
   readonly requiredTools?: string[];
+  readonly prefillTools?: PrefillToolCall[];
   readonly gate?: GateCondition;
   readonly codeExecutionConfig?: CodeExecutionConfig;
   readonly cliConfig?: CliConfig;
@@ -214,6 +217,7 @@ export class Agent {
     this.includeContents = options.includeContents;
     this.thinkingBudgetTokens = options.thinkingBudgetTokens;
     this.requiredTools = options.requiredTools;
+    this.prefillTools = options.prefillTools;
     this.gate = options.gate;
     this.codeExecutionConfig = options.codeExecutionConfig;
     this.credentials = options.credentials;
