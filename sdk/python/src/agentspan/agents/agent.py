@@ -406,6 +406,13 @@ class Agent:
                     )
 
         self.agents: List[Agent] = [_resolve_agent(a, self.model) for a in agents] if agents else []
+
+        # PARALLEL agents need a model for server compilation. Auto-inherit from
+        # first child that has one so users don't have to repeat it.
+        if strategy == Strategy.PARALLEL and not self.model and self.agents:
+            inherited = next((a.model for a in self.agents if a.model), "")
+            if inherited:
+                self.model = inherited
         # Validate sub-agent name uniqueness
         if self.agents:
             seen: Dict[str, int] = {}
