@@ -2541,6 +2541,7 @@ class AgentRuntime:
         tool_calls: List[Dict[str, Any]] = []
         messages: List[Dict[str, Any]] = []
         token_usage: Optional[TokenUsage] = None
+        task_failure_reason: Optional[str] = None
         try:
             wf = self._workflow_client.get_workflow(
                 execution_id,
@@ -2549,8 +2550,16 @@ class AgentRuntime:
             tool_calls = self._extract_tool_calls(wf)
             messages = self._extract_messages(wf)
             token_usage = self._extract_token_usage(execution_id)
+            if raw_status == "FAILED":
+                task_failure_reason = self._extract_failed_task_reason(wf)
         except Exception as exc:
             logger.debug("Could not fetch execution details for %s: %s", execution_id, exc)
+
+        # Build the richest error message available: prefer task-level reason
+        # (includes which task failed and why) over the workflow-level reason.
+        error_reason: Optional[str] = None
+        if raw_status in ("FAILED", "TERMINATED"):
+            error_reason = task_failure_reason or status.reason
 
         logger.info("Agent '%s' completed (execution_id=%s)", agent.name, execution_id)
         return AgentResult(
@@ -2559,7 +2568,7 @@ class AgentRuntime:
             correlation_id=correlation_id,
             status=raw_status,
             finish_reason=self._derive_finish_reason(raw_status, status.output),
-            error=status.reason if raw_status in ("FAILED", "TERMINATED") else None,
+            error=error_reason,
             tool_calls=tool_calls,
             messages=messages,
             token_usage=token_usage,
@@ -2624,13 +2633,20 @@ class AgentRuntime:
         tool_calls: List[Dict[str, Any]] = []
         messages: List[Dict[str, Any]] = []
         token_usage: Optional[TokenUsage] = None
+        task_failure_reason: Optional[str] = None
         try:
             wf = self._workflow_client.get_workflow(execution_id, include_tasks=True)
             tool_calls = self._extract_tool_calls(wf)
             messages = self._extract_messages(wf)
             token_usage = self._extract_token_usage(execution_id)
+            if status.status == "FAILED":
+                task_failure_reason = self._extract_failed_task_reason(wf)
         except Exception as exc:
             logger.debug("Could not fetch execution details: %s", exc)
+
+        error_reason: Optional[str] = None
+        if status.status in ("FAILED", "TERMINATED"):
+            error_reason = task_failure_reason or status.reason
 
         return AgentResult(
             output=output,
@@ -2638,7 +2654,7 @@ class AgentRuntime:
             correlation_id=correlation_id,
             status=status.status,
             finish_reason=self._derive_finish_reason(status.status, status.output),
-            error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
+            error=error_reason,
             tool_calls=tool_calls,
             messages=messages,
             token_usage=token_usage,
@@ -5038,6 +5054,26 @@ class AgentRuntime:
         if output is None:
             return {"result": None}
         return {"result": output}
+
+    @staticmethod
+    def _extract_failed_task_reason(wf: Any) -> Optional[str]:
+        """Return a descriptive error from the first FAILED task in a workflow.
+
+        Combines the task reference name with its reasonForIncompletion so
+        callers can diagnose intermittent failures without manual inspection
+        of the execution history UI.
+        """
+        if not hasattr(wf, "tasks") or not wf.tasks:
+            return None
+        for task in wf.tasks:
+            status = str(getattr(task, "status", "")).upper()
+            if status == "FAILED":
+                ref = getattr(task, "reference_task_name", None) or getattr(task, "task_type", "unknown")
+                reason = getattr(task, "reason_for_incompletion", None)
+                if reason:
+                    return f"Task '{ref}' failed: {reason}"
+                return f"Task '{ref}' failed"
+        return None
 
     @staticmethod
     def _extract_sub_results(output: Dict[str, Any]) -> Dict[str, Any]:
