@@ -77,6 +77,42 @@ class TestAgentConfigSerializer:
         assert config["tools"][0]["toolType"] == "worker"
         assert "inputSchema" in config["tools"][0]
 
+    def test_serialize_tools_worker_with_retry(self):
+        """Worker tools with retry params serialize retryCount and retryDelaySeconds."""
+        from agentspan.agents.agent import Agent
+        from agentspan.agents.tool import tool
+
+        @tool(retry_count=5, retry_delay_seconds=10)
+        def fetch_price(symbol: str) -> dict:
+            """Fetch stock price"""
+            return {"symbol": symbol}
+
+        agent = Agent(name="test", model="openai/gpt-4o", tools=[fetch_price])
+        config = self.serializer.serialize(agent)
+
+        assert len(config["tools"]) == 1
+        tool_config = config["tools"][0]
+        assert tool_config["retryCount"] == 5
+        assert tool_config["retryDelaySeconds"] == 10
+
+    def test_serialize_tools_worker_no_retry(self):
+        """Worker tools without retry params omit retryCount and retryDelaySeconds."""
+        from agentspan.agents.agent import Agent
+        from agentspan.agents.tool import tool
+
+        @tool
+        def simple_tool(x: str) -> str:
+            """Simple tool"""
+            return x
+
+        agent = Agent(name="test", model="openai/gpt-4o", tools=[simple_tool])
+        config = self.serializer.serialize(agent)
+
+        assert len(config["tools"]) == 1
+        tool_config = config["tools"][0]
+        assert "retryCount" not in tool_config
+        assert "retryDelaySeconds" not in tool_config
+
     def test_serialize_guardrails_regex(self):
         """RegexGuardrail serializes with patterns and mode."""
         from agentspan.agents.agent import Agent
@@ -327,3 +363,69 @@ class TestAgentConfigSerializer:
         assert "guardrails" not in config
         assert "termination" not in config
         assert "handoffs" not in config
+
+    def test_serialize_tool_with_retry_logic(self):
+        """Tool with retry_logic serializes retryLogic."""
+        from agentspan.agents.agent import Agent
+        from agentspan.agents.tool import tool
+
+        @tool(retry_logic="EXPONENTIAL_BACKOFF")
+        def fetch_data(url: str) -> dict:
+            """Fetch data"""
+            return {}
+
+        agent = Agent(name="test", model="openai/gpt-4o", tools=[fetch_data])
+        config = self.serializer.serialize(agent)
+
+        tool_config = config["tools"][0]
+        assert tool_config["retryLogic"] == "EXPONENTIAL_BACKOFF"
+
+    def test_serialize_tool_without_retry_logic(self):
+        """Tool without retry_logic omits retryLogic key."""
+        from agentspan.agents.agent import Agent
+        from agentspan.agents.tool import tool
+
+        @tool
+        def simple_tool(x: str) -> str:
+            """Simple tool"""
+            return x
+
+        agent = Agent(name="test", model="openai/gpt-4o", tools=[simple_tool])
+        config = self.serializer.serialize(agent)
+
+        tool_config = config["tools"][0]
+        assert "retryLogic" not in tool_config
+
+    def test_serialize_tool_with_all_retry_params(self):
+        """Tool with all retry params serializes all three keys."""
+        from agentspan.agents.agent import Agent
+        from agentspan.agents.tool import tool
+
+        @tool(retry_count=5, retry_delay_seconds=3, retry_logic="FIXED")
+        def my_tool(x: str) -> str:
+            """My tool"""
+            return x
+
+        agent = Agent(name="test", model="openai/gpt-4o", tools=[my_tool])
+        config = self.serializer.serialize(agent)
+
+        tool_config = config["tools"][0]
+        assert tool_config["retryCount"] == 5
+        assert tool_config["retryDelaySeconds"] == 3
+        assert tool_config["retryLogic"] == "FIXED"
+
+    def test_serialize_tool_retry_logic_linear_backoff(self):
+        """retry_logic='LINEAR_BACKOFF' serializes correctly."""
+        from agentspan.agents.agent import Agent
+        from agentspan.agents.tool import tool
+
+        @tool(retry_logic="LINEAR_BACKOFF")
+        def my_tool(x: str) -> str:
+            """My tool"""
+            return x
+
+        agent = Agent(name="test", model="openai/gpt-4o", tools=[my_tool])
+        config = self.serializer.serialize(agent)
+
+        tool_config = config["tools"][0]
+        assert tool_config["retryLogic"] == "LINEAR_BACKOFF"

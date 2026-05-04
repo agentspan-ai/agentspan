@@ -278,6 +278,15 @@ export class AgentConfigSerializer {
     if (toolDef.timeoutSeconds !== undefined) {
       config.timeoutSeconds = toolDef.timeoutSeconds;
     }
+    if (toolDef.retryCount !== undefined) {
+      config.retryCount = toolDef.retryCount;
+    }
+    if (toolDef.retryDelaySeconds !== undefined) {
+      config.retryDelaySeconds = toolDef.retryDelaySeconds;
+    }
+    if (toolDef.retryLogic !== undefined) {
+      config.retryLogic = toolDef.retryLogic;
+    }
     if (agentStateful || toolDef.stateful) config.stateful = true;
 
     // Handle guardrails

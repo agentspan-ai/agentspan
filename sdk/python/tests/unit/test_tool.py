@@ -49,6 +49,68 @@ class TestToolDecorator:
         assert td.approval_required is True
         assert td.timeout_seconds == 30
 
+    def test_retry_params_stored_on_tool_def(self):
+        @tool(retry_count=5, retry_delay_seconds=10)
+        def my_func(x: str) -> str:
+            """Retry tool."""
+            return x
+
+        td = my_func._tool_def
+        assert td.retry_count == 5
+        assert td.retry_delay_seconds == 10
+
+    def test_retry_defaults_are_none(self):
+        @tool
+        def my_func(x: str) -> str:
+            """Default tool."""
+            return x
+
+        td = my_func._tool_def
+        assert td.retry_count is None
+        assert td.retry_delay_seconds is None
+
+    def test_retry_count_only(self):
+        @tool(retry_count=3)
+        def my_func(x: str) -> str:
+            """Retry count only."""
+            return x
+
+        td = my_func._tool_def
+        assert td.retry_count == 3
+        assert td.retry_delay_seconds is None
+
+    def test_retry_delay_only(self):
+        @tool(retry_delay_seconds=5)
+        def my_func(x: str) -> str:
+            """Retry delay only."""
+            return x
+
+        td = my_func._tool_def
+        assert td.retry_count is None
+        assert td.retry_delay_seconds == 5
+
+    def test_retry_count_zero(self):
+        @tool(retry_count=0)
+        def my_func(x: str) -> str:
+            """Retry count zero."""
+            return x
+
+        td = my_func._tool_def
+        assert td.retry_count == 0
+
+    def test_retry_with_other_params(self):
+        @tool(name="custom", approval_required=True, timeout_seconds=30, retry_count=10, retry_delay_seconds=5)
+        def my_func(x: str) -> str:
+            """All params."""
+            return x
+
+        td = my_func._tool_def
+        assert td.name == "custom"
+        assert td.approval_required is True
+        assert td.timeout_seconds == 30
+        assert td.retry_count == 10
+        assert td.retry_delay_seconds == 5
+
     def test_function_still_callable(self):
         @tool
         def add(a: int, b: int) -> int:
@@ -844,3 +906,57 @@ class TestToolCredentialParams:
         assert td.approval_required is True
         assert td.isolated is False
         assert "KEY" in td.credentials
+
+
+class TestRetryLogic:
+    """Tests for retry_logic parameter on @tool decorator."""
+
+    def test_retry_logic_stored_on_tool_def(self):
+        @tool(retry_logic="EXPONENTIAL_BACKOFF")
+        def fn(x: int) -> int:
+            """test"""
+            return x
+
+        assert get_tool_def(fn).retry_logic == "EXPONENTIAL_BACKOFF"
+
+    def test_retry_logic_default_is_none(self):
+        @tool
+        def fn(x: int) -> int:
+            """test"""
+            return x
+
+        assert get_tool_def(fn).retry_logic is None
+
+    def test_invalid_retry_logic_raises(self):
+        with pytest.raises(ValueError, match="Invalid retry_logic"):
+            @tool(retry_logic="invalid")
+            def fn(x: int) -> int:
+                """test"""
+                return x
+
+    def test_all_retry_params_together(self):
+        @tool(retry_count=5, retry_delay_seconds=3, retry_logic="FIXED")
+        def fn(x: int) -> int:
+            """test"""
+            return x
+
+        td = get_tool_def(fn)
+        assert td.retry_count == 5
+        assert td.retry_delay_seconds == 3
+        assert td.retry_logic == "FIXED"
+
+    def test_retry_logic_linear_backoff(self):
+        @tool(retry_logic="LINEAR_BACKOFF")
+        def fn(x: int) -> int:
+            """test"""
+            return x
+
+        assert get_tool_def(fn).retry_logic == "LINEAR_BACKOFF"
+
+    def test_retry_logic_fixed(self):
+        @tool(retry_logic="FIXED")
+        def fn(x: int) -> int:
+            """test"""
+            return x
+
+        assert get_tool_def(fn).retry_logic == "FIXED"

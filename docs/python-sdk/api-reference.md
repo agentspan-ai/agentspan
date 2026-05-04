@@ -174,7 +174,7 @@ def get_weather(city: str) -> dict:
 With options:
 
 ```python
-@tool(name="custom_name", approval_required=True, timeout_seconds=60)
+@tool(name="custom_name", approval_required=True, timeout_seconds=60, retry_count=5, retry_delay_seconds=10, retry_logic="LINEAR_BACKOFF")
 def dangerous_action(target: str) -> dict:
     """Do something that needs human approval."""
     return {"done": True}
@@ -184,6 +184,9 @@ def dangerous_action(target: str) -> dict:
 - `name` — Override the tool name (default: function name)
 - `approval_required` — Insert a `WaitTask` before execution for human approval
 - `timeout_seconds` — Maximum execution time
+- `retry_count` — Number of times Conductor retries the task on failure (default: server default, typically 2)
+- `retry_delay_seconds` — Seconds to wait between retries (default: server default, typically 2)
+- `retry_logic` — Retry strategy: `"FIXED"`, `"LINEAR_BACKOFF"`, or `"EXPONENTIAL_BACKOFF"` (default: server default, typically FIXED)
 
 **How it works:**
 1. JSON Schema is generated from the function's type hints and docstring
@@ -216,6 +219,9 @@ ToolDef(
     func: Optional[Callable] = None,     # Python function (None for server-side)
     approval_required: bool = False,     # Requires human approval
     timeout_seconds: Optional[int] = None,
+    retry_count: Optional[int] = None,          # Retries on failure
+    retry_delay_seconds: Optional[int] = None,   # Delay between retries
+    retry_logic: Optional[str] = None,           # Retry strategy (FIXED, LINEAR_BACKOFF, EXPONENTIAL_BACKOFF)
     tool_type: str = "worker",           # "worker", "http", or "mcp"
     config: Dict = {},                   # Extra config (URL, headers, etc.)
 )

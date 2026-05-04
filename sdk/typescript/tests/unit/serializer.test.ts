@@ -248,6 +248,54 @@ describe("serializeAgent() — tools", () => {
     expect(toolConfig.approvalRequired).toBe(true);
     expect(toolConfig.timeoutSeconds).toBe(120);
   });
+
+  it("serializes retryLogic when set on tool", () => {
+    const t = tool(async () => ({}), {
+      name: "retry_tool",
+      description: "test",
+      inputSchema: z.object({ x: z.string() }),
+      retryLogic: "EXPONENTIAL_BACKOFF",
+    });
+    const a = new Agent({ name: "test", tools: [t] });
+    const config = serializer.serializeAgent(a);
+
+    const toolConfig = (config.tools as Record<string, unknown>[])[0];
+    const tc = toolConfig as Record<string, unknown>;
+    expect(tc.retryLogic).toBe("EXPONENTIAL_BACKOFF");
+  });
+
+  it("omits retryLogic when not set on tool", () => {
+    const t = tool(async () => ({}), {
+      name: "no_retry_tool",
+      description: "test",
+      inputSchema: z.object({ x: z.string() }),
+    });
+    const a = new Agent({ name: "test", tools: [t] });
+    const config = serializer.serializeAgent(a);
+
+    const toolConfig = (config.tools as Record<string, unknown>[])[0];
+    const tc = toolConfig as Record<string, unknown>;
+    expect(tc).not.toHaveProperty("retryLogic");
+  });
+
+  it("serializes all three retry params together", () => {
+    const t = tool(async () => ({}), {
+      name: "full_retry_tool",
+      description: "test",
+      inputSchema: z.object({ x: z.string() }),
+      retryCount: 5,
+      retryDelaySeconds: 3,
+      retryLogic: "LINEAR_BACKOFF",
+    });
+    const a = new Agent({ name: "test", tools: [t] });
+    const config = serializer.serializeAgent(a);
+
+    const toolConfig = (config.tools as Record<string, unknown>[])[0];
+    const tc = toolConfig as Record<string, unknown>;
+    expect(tc.retryCount).toBe(5);
+    expect(tc.retryDelaySeconds).toBe(3);
+    expect(tc.retryLogic).toBe("LINEAR_BACKOFF");
+  });
 });
 
 // ── agent_tool serialization ───────────────────────────────

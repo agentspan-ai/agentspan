@@ -43,6 +43,15 @@ public @interface Tool {
     /** Maximum execution time in seconds. 0 means no explicit timeout (server default applies). */
     int timeoutSeconds() default 0;
 
+    /** Number of retry attempts. -1 means use server default. 0 means no retries. */
+    int retryCount() default -1;
+
+    /** Seconds between retries. -1 means use server default. */
+    int retryDelaySeconds() default -1;
+
+    /** Retry strategy: "FIXED", "LINEAR_BACKOFF", or "EXPONENTIAL_BACKOFF". Empty means server default. */
+    String retryLogic() default "";
+
     /** Credential environment variable names required by this tool. */
     String[] credentials() default {};
 }

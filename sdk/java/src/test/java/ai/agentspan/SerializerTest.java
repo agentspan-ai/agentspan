@@ -761,6 +761,151 @@ class SerializerTest {
         assertNull(out.get("cliConfig"));
     }
 
+    // ── Retry configuration ───────────────────────────────────────────────
+
+    @Test
+    void testSerializeToolWithRetryCount() {
+        ToolDef tool = ToolDef.builder()
+            .name("retry_tool")
+            .description("A tool with retry count")
+            .inputSchema(Map.of("type", "object", "properties", Map.of()))
+            .toolType("worker")
+            .func(input -> input)
+            .retryCount(5)
+            .build();
+
+        Agent agent = Agent.builder()
+            .name("retry_agent")
+            .model("openai/gpt-4o-mini")
+            .instructions("test")
+            .tools(List.of(tool))
+            .build();
+
+        Map<String, Object> out = ser.serialize(agent);
+        Map<String, Object> t = tool(out, "retry_tool");
+        assertEquals(5, t.get("retryCount"), "retryCount should be 5");
+    }
+
+    @Test
+    void testSerializeToolWithRetryDelaySeconds() {
+        ToolDef tool = ToolDef.builder()
+            .name("delay_tool")
+            .description("A tool with retry delay")
+            .inputSchema(Map.of("type", "object", "properties", Map.of()))
+            .toolType("worker")
+            .func(input -> input)
+            .retryDelaySeconds(10)
+            .build();
+
+        Agent agent = Agent.builder()
+            .name("delay_agent")
+            .model("openai/gpt-4o-mini")
+            .instructions("test")
+            .tools(List.of(tool))
+            .build();
+
+        Map<String, Object> out = ser.serialize(agent);
+        Map<String, Object> t = tool(out, "delay_tool");
+        assertEquals(10, t.get("retryDelaySeconds"), "retryDelaySeconds should be 10");
+    }
+
+    @Test
+    void testSerializeToolWithRetryLogic() {
+        ToolDef tool = ToolDef.builder()
+            .name("logic_tool")
+            .description("A tool with retry logic")
+            .inputSchema(Map.of("type", "object", "properties", Map.of()))
+            .toolType("worker")
+            .func(input -> input)
+            .retryLogic("EXPONENTIAL_BACKOFF")
+            .build();
+
+        Agent agent = Agent.builder()
+            .name("logic_agent")
+            .model("openai/gpt-4o-mini")
+            .instructions("test")
+            .tools(List.of(tool))
+            .build();
+
+        Map<String, Object> out = ser.serialize(agent);
+        Map<String, Object> t = tool(out, "logic_tool");
+        assertEquals("EXPONENTIAL_BACKOFF", t.get("retryLogic"), "retryLogic should be EXPONENTIAL_BACKOFF");
+    }
+
+    @Test
+    void testSerializeToolWithAllRetryParams() {
+        ToolDef tool = ToolDef.builder()
+            .name("all_retry_tool")
+            .description("A tool with all retry params")
+            .inputSchema(Map.of("type", "object", "properties", Map.of()))
+            .toolType("worker")
+            .func(input -> input)
+            .retryCount(3)
+            .retryDelaySeconds(5)
+            .retryLogic("LINEAR_BACKOFF")
+            .build();
+
+        Agent agent = Agent.builder()
+            .name("all_retry_agent")
+            .model("openai/gpt-4o-mini")
+            .instructions("test")
+            .tools(List.of(tool))
+            .build();
+
+        Map<String, Object> out = ser.serialize(agent);
+        Map<String, Object> t = tool(out, "all_retry_tool");
+        assertEquals(3, t.get("retryCount"), "retryCount should be 3");
+        assertEquals(5, t.get("retryDelaySeconds"), "retryDelaySeconds should be 5");
+        assertEquals("LINEAR_BACKOFF", t.get("retryLogic"), "retryLogic should be LINEAR_BACKOFF");
+    }
+
+    @Test
+    void testSerializeToolWithRetryCountZero() {
+        ToolDef tool = ToolDef.builder()
+            .name("no_retry_tool")
+            .description("A tool with no retries")
+            .inputSchema(Map.of("type", "object", "properties", Map.of()))
+            .toolType("worker")
+            .func(input -> input)
+            .retryCount(0)
+            .build();
+
+        Agent agent = Agent.builder()
+            .name("no_retry_agent")
+            .model("openai/gpt-4o-mini")
+            .instructions("test")
+            .tools(List.of(tool))
+            .build();
+
+        Map<String, Object> out = ser.serialize(agent);
+        Map<String, Object> t = tool(out, "no_retry_tool");
+        assertEquals(0, t.get("retryCount"), "retryCount=0 should be present (fail-immediately)");
+    }
+
+    @Test
+    void testSerializeToolWithDefaultRetry() {
+        ToolDef tool = ToolDef.builder()
+            .name("default_retry_tool")
+            .description("A tool with default retry settings")
+            .inputSchema(Map.of("type", "object", "properties", Map.of()))
+            .toolType("worker")
+            .func(input -> input)
+            .build();
+
+        Agent agent = Agent.builder()
+            .name("default_retry_agent")
+            .model("openai/gpt-4o-mini")
+            .instructions("test")
+            .tools(List.of(tool))
+            .build();
+
+        Map<String, Object> out = ser.serialize(agent);
+        Map<String, Object> t = tool(out, "default_retry_tool");
+        assertNull(t.get("retryCount"), "retryCount should be absent when not set");
+        assertNull(t.get("retryDelaySeconds"), "retryDelaySeconds should be absent when not set");
+        assertNull(t.get("retryLogic"), "retryLogic should be absent when not set");
+    }
+
     // --- Guardrail (custom / external) ---
 
     @Test

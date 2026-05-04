@@ -258,6 +258,12 @@ export interface ToolDef {
   func?: Function | null;
   approvalRequired?: boolean;
   timeoutSeconds?: number;
+  /** Number of retry attempts. 0 means no retries. */
+  retryCount?: number;
+  /** Seconds between retries. */
+  retryDelaySeconds?: number;
+  /** Retry strategy: "FIXED", "LINEAR_BACKOFF", or "EXPONENTIAL_BACKOFF". */
+  retryLogic?: "FIXED" | "LINEAR_BACKOFF" | "EXPONENTIAL_BACKOFF";
   external?: boolean;
   isolated?: boolean;
   credentials?: (string | CredentialFile)[];

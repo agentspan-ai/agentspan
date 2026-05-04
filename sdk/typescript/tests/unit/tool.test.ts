@@ -341,6 +341,66 @@ describe("agentTool", () => {
   });
 });
 
+describe("tool() retry options", () => {
+  it("retryLogic EXPONENTIAL_BACKOFF is stored on tool config", () => {
+    const t = tool(async () => "ok", {
+      name: "t",
+      description: "test",
+      inputSchema: z.object({ x: z.string() }),
+      retryLogic: "EXPONENTIAL_BACKOFF",
+    });
+    const def = getToolDef(t);
+    expect(def.retryLogic).toBe("EXPONENTIAL_BACKOFF");
+  });
+
+  it("retryLogic defaults to undefined when not set", () => {
+    const t = tool(async () => "ok", {
+      name: "t",
+      description: "test",
+      inputSchema: z.object({ x: z.string() }),
+    });
+    const def = getToolDef(t);
+    expect(def.retryLogic).toBeUndefined();
+  });
+
+  it("retryLogic LINEAR_BACKOFF is stored", () => {
+    const t = tool(async () => "ok", {
+      name: "t",
+      description: "test",
+      inputSchema: z.object({ x: z.string() }),
+      retryLogic: "LINEAR_BACKOFF",
+    });
+    const def = getToolDef(t);
+    expect(def.retryLogic).toBe("LINEAR_BACKOFF");
+  });
+
+  it("retryLogic FIXED is stored", () => {
+    const t = tool(async () => "ok", {
+      name: "t",
+      description: "test",
+      inputSchema: z.object({ x: z.string() }),
+      retryLogic: "FIXED",
+    });
+    const def = getToolDef(t);
+    expect(def.retryLogic).toBe("FIXED");
+  });
+
+  it("all retry options are stored together", () => {
+    const t = tool(async () => "ok", {
+      name: "t",
+      description: "test",
+      inputSchema: z.object({ x: z.string() }),
+      retryCount: 5,
+      retryDelaySeconds: 3,
+      retryLogic: "LINEAR_BACKOFF",
+    });
+    const def = getToolDef(t);
+    expect(def.retryCount).toBe(5);
+    expect(def.retryDelaySeconds).toBe(3);
+    expect(def.retryLogic).toBe("LINEAR_BACKOFF");
+  });
+});
+
 describe("humanTool", () => {
   it("creates human tool", () => {
     const t = humanTool({
