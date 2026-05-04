@@ -152,6 +152,57 @@ class TestExtractMessages:
         extracted = runtime._extract_messages(wf_run)
         assert extracted == []
 
+    def test_extracts_from_llm_task_input(self, runtime):
+        """Messages come from the last LLM_CHAT_COMPLETE task's input_data."""
+        from unittest.mock import MagicMock
+
+        msgs = [{"role": "user", "message": "Hi"}, {"role": "assistant", "message": "Hello!"}]
+        task = MagicMock()
+        task.task_type = "LLM_CHAT_COMPLETE"
+        task.input_data = {"messages": msgs, "model": "gpt-4o"}
+
+        wf_run = MockWorkflowRun(variables={}, tasks=[task])
+        extracted = runtime._extract_messages(wf_run)
+        assert extracted == msgs
+
+    def test_returns_last_llm_task_messages(self, runtime):
+        """Returns the LAST LLM task's messages (most complete history)."""
+        from unittest.mock import MagicMock
+
+        first_msgs = [{"role": "user", "message": "Hi"}]
+        last_msgs = [
+            {"role": "user", "message": "Hi"},
+            {"role": "assistant", "message": "Hello!"},
+            {"role": "user", "message": "Thanks"},
+        ]
+
+        task1 = MagicMock()
+        task1.task_type = "LLM_CHAT_COMPLETE"
+        task1.input_data = {"messages": first_msgs}
+
+        task2 = MagicMock()
+        task2.task_type = "LLM_CHAT_COMPLETE"
+        task2.input_data = {"messages": last_msgs}
+
+        wf_run = MockWorkflowRun(variables={}, tasks=[task1, task2])
+        extracted = runtime._extract_messages(wf_run)
+        assert extracted == last_msgs
+
+    def test_variables_takes_precedence_over_tasks(self, runtime):
+        """If variables.messages is set, prefer it over task input_data."""
+        from unittest.mock import MagicMock
+
+        var_msgs = [{"role": "user", "message": "From variables"}]
+        task_msgs = [{"role": "user", "message": "From task"}]
+
+        task = MagicMock()
+        task.task_type = "LLM_CHAT_COMPLETE"
+        task.input_data = {"messages": task_msgs}
+
+        wf_run = MockWorkflowRun(variables={"messages": var_msgs}, tasks=[task])
+        extracted = runtime._extract_messages(wf_run)
+        assert extracted == var_msgs
+
 
 class TestSingletonRuntime:
     """Test that run.py uses a singleton runtime."""

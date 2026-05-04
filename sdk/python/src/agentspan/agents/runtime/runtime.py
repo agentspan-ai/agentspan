@@ -4980,11 +4980,10 @@ class AgentRuntime:
                 exec_id = execution.get("executionId")
                 if not exec_id:
                     continue
-                wf = self._workflow_client.get_workflow(exec_id, include_tasks=False)
-                if hasattr(wf, "variables") and wf.variables:
-                    messages = wf.variables.get("messages", [])
-                    if messages:
-                        return messages
+                wf = self._workflow_client.get_workflow(exec_id, include_tasks=True)
+                messages = self._extract_messages(wf)
+                if messages:
+                    return messages
             return []
         except Exception as e:
             logger.debug("Could not fetch session history for %s: %s", session_id, e)
@@ -5137,10 +5136,31 @@ class AgentRuntime:
         return non_null
 
     def _extract_messages(self, workflow_run: Any) -> List[Dict[str, Any]]:
-        """Extract conversation messages from execution variables."""
+        """Extract conversation messages from the last LLM task in the execution.
+
+        Messages are stored in LLM_CHAT_COMPLETE task input_data, not in
+        workflow variables. We take the last LLM task to get the full
+        accumulated conversation (user + assistant + tool-call turns).
+        """
+        # Backwards-compat: check variables first (populated by some paths)
         if hasattr(workflow_run, "variables") and workflow_run.variables:
-            return workflow_run.variables.get("messages", [])
-        return []
+            msgs = workflow_run.variables.get("messages")
+            if msgs:
+                return msgs
+
+        # Extract from the last LLM_CHAT_COMPLETE task's input messages
+        if not (hasattr(workflow_run, "tasks") and workflow_run.tasks):
+            return []
+
+        last_llm_msgs: List[Dict[str, Any]] = []
+        for task in workflow_run.tasks:
+            task_type = str(getattr(task, "task_type", "")).upper()
+            if task_type == "LLM_CHAT_COMPLETE":
+                input_data = getattr(task, "input_data", None) or {}
+                msgs = input_data.get("messages") if isinstance(input_data, dict) else None
+                if msgs and isinstance(msgs, list):
+                    last_llm_msgs = msgs
+        return last_llm_msgs
 
     # System task types that are never user-defined tool calls
     _SYSTEM_TASK_TYPES = frozenset(

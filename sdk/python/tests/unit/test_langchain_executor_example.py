@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 @pytest.fixture
 def agent_executor():
     """Build a minimal AgentExecutor-like object (mock with real type name)."""
-    pytest.importorskip("langchain")
+    pytest.importorskip("langchain_core", reason="langchain_core not installed")
 
     # Build a MagicMock whose type name is "AgentExecutor" so that
     # detect_framework() recognises it as a LangChain executor.

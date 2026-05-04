@@ -1784,11 +1784,29 @@ function _extractOutput(execution: Record<string, unknown>): unknown {
  * Mirrors Python's _extract_messages: wf.variables.messages
  */
 function _extractMessages(execution: Record<string, unknown>): unknown[] {
+  // Backwards-compat: check variables first (populated by some paths)
   const variables = execution.variables as Record<string, unknown> | undefined;
-  if (variables && Array.isArray(variables.messages)) {
+  if (variables && Array.isArray(variables.messages) && variables.messages.length > 0) {
     return variables.messages;
   }
-  return [];
+
+  // Extract from the last LLM_CHAT_COMPLETE task's input messages.
+  // The full conversation history is accumulated in the last LLM task's input.
+  const tasks = execution.tasks as Array<Record<string, unknown>> | undefined;
+  if (!Array.isArray(tasks)) return [];
+
+  let lastLlmMsgs: unknown[] = [];
+  for (const task of tasks) {
+    const taskType = String(task.taskType ?? task.task_type ?? "").toUpperCase();
+    if (taskType === "LLM_CHAT_COMPLETE") {
+      const inputData = (task.inputData ?? task.input_data ?? {}) as Record<string, unknown>;
+      const msgs = inputData.messages;
+      if (Array.isArray(msgs) && msgs.length > 0) {
+        lastLlmMsgs = msgs;
+      }
+    }
+  }
+  return lastLlmMsgs;
 }
 
 /**

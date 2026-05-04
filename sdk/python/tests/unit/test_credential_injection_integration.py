@@ -6,6 +6,9 @@ invocation.  Only the external credential server HTTP call is stubbed.
 Everything else — serialize_agent, make_tool_worker, Conductor Task,
 os.environ injection — is real.
 """
+import pytest
+
+pytest.importorskip("langchain_core", reason="langchain_core not installed")
 import os
 from unittest.mock import MagicMock, patch
 

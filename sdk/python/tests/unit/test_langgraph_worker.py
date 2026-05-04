@@ -3,6 +3,8 @@
 import pytest
 from unittest.mock import MagicMock, patch, call
 
+pytest.importorskip("langchain_core", reason="langchain_core not installed")
+
 
 def _make_fake_graph(stream_chunks=None, input_schema=None):
     """Create a mock CompiledStateGraph."""
