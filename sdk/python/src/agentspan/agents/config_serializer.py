@@ -41,6 +41,18 @@ class AgentConfigSerializer:
     def _serialize_agent(self, agent: "Agent") -> dict:
         from agentspan.agents.agent import PromptTemplate
 
+        # Skill agents — emit the raw skill config so the server's
+        # SkillNormalizer can compile sub-agents (e.g. gilfoyle, dinesh)
+        # and tools (scripts, read_skill_file) into the workflow.
+        if getattr(agent, "_framework", None) == "skill":
+            raw_config = getattr(agent, "_framework_config", {})
+            return {
+                "name": agent.name,
+                "model": agent.model or None,
+                "_framework": "skill",
+                **raw_config,
+            }
+
         # Claude-code agents emit a passthrough stub — all config is consumed
         # by the worker closure, not sent to the server.
         if getattr(agent, "is_claude_code", False):

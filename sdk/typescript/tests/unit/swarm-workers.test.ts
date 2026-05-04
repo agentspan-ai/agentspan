@@ -7,12 +7,12 @@ import type { HandoffContext } from "../../src/handoff.js";
 // ── Helpers ─────────────────────────────────────────────
 
 /**
- * Access the private workerManager's workers array via any cast.
+ * Access the private workerManager's pending workers array via any cast.
  */
 function getRegisteredWorkers(
   runtime: AgentRuntime,
 ): Array<{ taskName: string; handler: Function }> {
-  return (runtime as any).workerManager.workers;
+  return (runtime as any).workerManager.pendingWorkers;
 }
 
 /**

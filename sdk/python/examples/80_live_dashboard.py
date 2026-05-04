@@ -38,8 +38,8 @@ How this differs from 79_agent_message_bus:
     content pipeline.
 
 Requirements:
-    - Conductor server with WMQ support (conductor.workflow-message-queue.enabled=true)
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AgentSpan server running at http://localhost:6767
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=anthropic/claude-sonnet-4-20250514 as environment variable
 """
 

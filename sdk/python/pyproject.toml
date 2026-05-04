@@ -10,9 +10,11 @@ readme = "README.md"
 license = {text = "MIT License"}
 requires-python = ">=3.10"
 dependencies = [
-    "conductor-python>=1.3.10",
+    "conductor-python>=1.3.11",
     "httpx>=0.24",
     "cloudpickle>=2.0",
+    "google-adk>=1.27.1",
+    "openai-agents>=0.12.2",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",

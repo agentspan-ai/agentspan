@@ -318,7 +318,7 @@ class TestCorrelationId:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value=("wf-123", None))
+        runtime._start_via_server = MagicMock(return_value=("wf-123", None, []))
         runtime._poll_status_until_complete = MagicMock(
             return_value=AgentStatus(
                 execution_id="wf-123",
@@ -340,7 +340,7 @@ class TestCorrelationId:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value=("wf-456", None))
+        runtime._start_via_server = MagicMock(return_value=("wf-456", None, []))
 
         handle = runtime.start(agent, "Hello")
 
@@ -403,7 +403,7 @@ class TestMediaParameter:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value=("wf-media", None))
+        runtime._start_via_server = MagicMock(return_value=("wf-media", None, []))
         runtime._poll_status_until_complete = MagicMock(
             return_value=AgentStatus(
                 execution_id="wf-media",
@@ -429,7 +429,7 @@ class TestMediaParameter:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value=("wf-nomedia", None))
+        runtime._start_via_server = MagicMock(return_value=("wf-nomedia", None, []))
         runtime._poll_status_until_complete = MagicMock(
             return_value=AgentStatus(
                 execution_id="wf-nomedia",
@@ -449,7 +449,7 @@ class TestMediaParameter:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value=("wf-media-start", None))
+        runtime._start_via_server = MagicMock(return_value=("wf-media-start", None, []))
 
         handle = runtime.start(
             agent,
@@ -922,7 +922,7 @@ class TestRuntimeRunGuardrails:
 
     def _setup_run(self, runtime, output="Hello", status="COMPLETED"):
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value=("wf-guard", None))
+        runtime._start_via_server = MagicMock(return_value=("wf-guard", None, []))
         runtime._poll_status_until_complete = MagicMock(
             return_value=AgentStatus(
                 execution_id="wf-guard",
@@ -1122,7 +1122,7 @@ class TestRuntimeRunGuardrails:
         agent = Agent(name="test", model="openai/gpt-4o", guardrails=[guard])
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value=("wf-123", None))
+        runtime._start_via_server = MagicMock(return_value=("wf-123", None, []))
 
         with pytest.raises(ValueError, match="Input guardrail"):
             runtime.start(agent, "bad prompt")
@@ -1153,7 +1153,7 @@ class TestExecutionInputValidation:
     def test_start_allows_blank_prompt_with_context(self, runtime):
         agent = Agent(name="test", model="openai/gpt-4o")
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value=("wf-ctx", None))
+        runtime._start_via_server = MagicMock(return_value=("wf-ctx", None, []))
 
         handle = runtime.start(agent, "   ", context={"repo": "acme"})
 
@@ -1164,7 +1164,7 @@ class TestExecutionInputValidation:
     def test_start_allows_blank_prompt_with_media(self, runtime):
         agent = Agent(name="test", model="openai/gpt-4o")
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value=("wf-media", None))
+        runtime._start_via_server = MagicMock(return_value=("wf-media", None, []))
 
         handle = runtime.start(agent, "   ", media=["https://example.com/cat.png"])
 
@@ -1191,7 +1191,7 @@ class TestRunPopulatesToolCalls:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value=("wf-tools", None))
+        runtime._start_via_server = MagicMock(return_value=("wf-tools", None, []))
         runtime._poll_status_until_complete = MagicMock(
             return_value=AgentStatus(
                 execution_id="wf-tools",
@@ -1238,7 +1238,7 @@ class TestRunPopulatesToolCalls:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value=("wf-notool", None))
+        runtime._start_via_server = MagicMock(return_value=("wf-notool", None, []))
         runtime._poll_status_until_complete = MagicMock(
             return_value=AgentStatus(
                 execution_id="wf-notool",
@@ -1267,7 +1267,7 @@ class TestRunPopulatesToolCalls:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server_async = AsyncMock(return_value=("wf-async-tools", None))
+        runtime._start_via_server_async = AsyncMock(return_value=("wf-async-tools", None, []))
         runtime._poll_status_until_complete_async = AsyncMock(
             return_value=AgentStatus(
                 execution_id="wf-async-tools",
@@ -1409,7 +1409,7 @@ class TestRuntimeStream:
 
         # Mock start() internals
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value=("wf-stream-1", None))
+        runtime._start_via_server = MagicMock(return_value=("wf-stream-1", None, []))
 
         # Mock get_workflow to return completed on first poll
         completed_wf = MagicMock()
@@ -1430,7 +1430,7 @@ class TestRuntimeStream:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value=("wf-stream-2", None))
+        runtime._start_via_server = MagicMock(return_value=("wf-stream-2", None, []))
 
         # First poll: LLM task running
         running_wf = MagicMock()
@@ -1461,7 +1461,7 @@ class TestRuntimeStream:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value=("wf-stream-err", None))
+        runtime._start_via_server = MagicMock(return_value=("wf-stream-err", None, []))
 
         failed_wf = MagicMock()
         failed_wf.status = "FAILED"
@@ -1478,7 +1478,7 @@ class TestRuntimeStream:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value=("wf-stream-wait", None))
+        runtime._start_via_server = MagicMock(return_value=("wf-stream-wait", None, []))
 
         # First poll: paused
         paused_wf = MagicMock()
@@ -1503,7 +1503,7 @@ class TestRuntimeStream:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value=("wf-stream-exc", None))
+        runtime._start_via_server = MagicMock(return_value=("wf-stream-exc", None, []))
 
         runtime._workflow_client.get_workflow = MagicMock(
             side_effect=RuntimeError("connection lost")
@@ -1518,7 +1518,7 @@ class TestRuntimeStream:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value=("wf-stream-tool", None))
+        runtime._start_via_server = MagicMock(return_value=("wf-stream-tool", None, []))
 
         # Create a dispatch task with function field
         dispatch_task = MagicMock()
@@ -1550,7 +1550,7 @@ class TestRuntimeStream:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value=("wf-stream-handoff", None))
+        runtime._start_via_server = MagicMock(return_value=("wf-stream-handoff", None, []))
 
         sub_task = MagicMock()
         sub_task.task_id = "t-sub"
@@ -1759,7 +1759,7 @@ class TestStartViaServer:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         with patch("requests.post", _mock_requests_post({"executionId": "wf-server-1"})):
-            exec_id, required_workers = runtime._start_via_server(agent, "hello")
+            exec_id, required_workers, _ = runtime._start_via_server(agent, "hello")
 
         assert exec_id == "wf-server-1"
         assert required_workers is None
@@ -1770,7 +1770,7 @@ class TestStartViaServer:
 
         resp = {"executionId": "wf-server-2", "requiredWorkers": ["agent_termination", "my_tool"]}
         with patch("requests.post", _mock_requests_post(resp)):
-            exec_id, required_workers = runtime._start_via_server(agent, "hello")
+            exec_id, required_workers, _ = runtime._start_via_server(agent, "hello")
 
         assert exec_id == "wf-server-2"
         assert required_workers == {"agent_termination", "my_tool"}
@@ -2576,7 +2576,7 @@ class TestUnrecognizedKwargs:
         # Patch the framework detection to return None (native agent)
         with patch("agentspan.agents.frameworks.serializer.detect_framework", return_value=None):
             with patch.object(runtime, "_prepare_workers"):
-                with patch.object(runtime, "_start_via_server", return_value=("wf-1", None)):
+                with patch.object(runtime, "_start_via_server", return_value=("wf-1", None, [])):
                     with patch.object(runtime, "_poll_status_until_complete") as mock_poll:
                         mock_poll.return_value = AgentStatus(
                             execution_id="wf-1",

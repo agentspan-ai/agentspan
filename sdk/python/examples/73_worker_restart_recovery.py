@@ -185,7 +185,7 @@ def start_workflow(workflow_file: Path, timeout_seconds: int) -> None:
         handle = runtime.start(WORKFLOW_NAME, "Validate change CHG-901 for production release.")
         save_text(workflow_file, handle.execution_id)
 
-        print(f"Workflow ID: {handle.execution_id}")
+        print(f"Execution ID: {handle.execution_id}")
         print(f"Saved workflow ID to: {workflow_file}")
         print(f"Attempt state file: {DEFAULT_ATTEMPT_FILE}")
         print("Polling workflow status...")
@@ -258,7 +258,7 @@ def parse_args() -> argparse.Namespace:
     )
 
     status = sub.add_parser("status", help="Poll workflow status and show attempt history.")
-    status.add_argument("--workflow-id", default="", help="Workflow ID (overrides --file).")
+    status.add_argument("--execution-id", default="", help="Execution ID (overrides --file).")
     status.add_argument(
         "--file",
         type=Path,

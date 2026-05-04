@@ -43,6 +43,7 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
+    "@io-orkes/conductor-javascript": "^3.0.3",
     "dotenv": "^16.0.0"
   },
   "peerDependencies": {

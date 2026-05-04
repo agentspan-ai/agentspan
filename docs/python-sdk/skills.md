@@ -15,7 +15,7 @@ dg = skill("~/.claude/skills/dg", model="openai/gpt-4o")
 # Run it like any other agent
 with AgentRuntime() as rt:
     result = rt.run(dg, "Review this code for security issues:\n\ndef login(user, pw):\n    return db.execute(f\"SELECT * FROM users WHERE name='{user}'\")")
-    print(f"Workflow ID: {result.workflow_id}")
+    print(f"Execution ID: {result.execution_id}")
     print(f"Status: {result.status}")
     print(f"Tokens: {result.token_usage}")
     result.print_result()

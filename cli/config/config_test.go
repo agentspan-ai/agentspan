@@ -39,7 +39,8 @@ func TestIsLocalhost(t *testing.T) {
 
 func TestAPIKeyRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HOME", dir)
+	t.Setenv("HOME", dir)        // Unix
+	t.Setenv("USERPROFILE", dir) // Windows
 	t.Setenv("AGENTSPAN_API_KEY", "")
 
 	cfg := config.DefaultConfig()
@@ -69,7 +70,8 @@ func TestAPIKeyRoundTrip(t *testing.T) {
 
 func TestAPIKeyClearedOnLogout(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HOME", dir)
+	t.Setenv("HOME", dir)        // Unix
+	t.Setenv("USERPROFILE", dir) // Windows
 	t.Setenv("AGENTSPAN_API_KEY", "")
 
 	cfg := config.DefaultConfig()
