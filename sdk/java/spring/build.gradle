@@ -1,6 +1,6 @@
 plugins {
     id 'java-library'
-    id 'com.vanniktech.maven.publish' version '0.30.0'
+    id 'com.vanniktech.maven.publish' version '0.34.0'
 }
 
 group = 'ai.agentspan'
@@ -46,7 +46,7 @@ tasks.withType(Javadoc).configureEach {
 }
 
 mavenPublishing {
-    publishToMavenCentral(com.vanniktech.maven.publish.SonatypeHost.CENTRAL_PORTAL, true)
+    publishToMavenCentral(true)
     if (project.findProperty('signingInMemoryKey') != null) {
         signAllPublications()
     }
