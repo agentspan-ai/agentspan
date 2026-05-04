@@ -11,7 +11,13 @@ import (
 )
 
 func sysProcAttr() *syscall.SysProcAttr {
-	return &syscall.SysProcAttr{}
+	// CREATE_NEW_PROCESS_GROUP prevents Ctrl+C / console-close events from the
+	// parent terminal propagating to the server child process, so the server
+	// stays alive after the CLI exits or the launch terminal is closed.
+	const createNewProcessGroup = 0x00000200
+	return &syscall.SysProcAttr{
+		CreationFlags: createNewProcessGroup,
+	}
 }
 
 func killProcess(process *os.Process) error {
