@@ -235,11 +235,15 @@ public class MultiAgentCompiler {
         tasks.add(handoffCtxResolve);
         tasks.add(initVar);
         tasks.add(loop);
-        tasks.add(finalLlm);
+        if (config.isSynthesize()) {
+            tasks.add(finalLlm);
+        }
         wf.setTasks(tasks);
         wf.setOutputParameters(Map.of(
                 "result",
-                ref(toRef(config.getName()) + "_final.output.result"),
+                config.isSynthesize()
+                    ? ref(toRef(config.getName()) + "_final.output.result")
+                    : "${workflow.variables.conversation}",
                 "context",
                 "${workflow.variables._agent_state}"));
         agentCompiler.applyTimeout(wf, config);
@@ -821,11 +825,15 @@ public class MultiAgentCompiler {
         preTasks.add(routerCtxResolve);
         preTasks.add(initVar);
         preTasks.add(loop);
-        preTasks.add(finalLlm);
+        if (config.isSynthesize()) {
+            preTasks.add(finalLlm);
+        }
         wf.setTasks(preTasks);
         wf.setOutputParameters(Map.of(
                 "result",
-                ref(toRef(config.getName()) + "_final.output.result"),
+                config.isSynthesize()
+                    ? ref(toRef(config.getName()) + "_final.output.result")
+                    : "${workflow.variables.conversation}",
                 "context",
                 "${workflow.variables._agent_state}"));
         agentCompiler.applyTimeout(wf, config);
@@ -1106,11 +1114,15 @@ public class MultiAgentCompiler {
         tasks.add(swarmCtxResolve);
         tasks.add(initVar);
         tasks.add(loop);
-        tasks.add(finalLlm);
+        if (config.isSynthesize()) {
+            tasks.add(finalLlm);
+        }
         wf.setTasks(tasks);
         wf.setOutputParameters(Map.of(
                 "result",
-                ref(toRef(config.getName()) + "_final.output.result"),
+                config.isSynthesize()
+                    ? ref(toRef(config.getName()) + "_final.output.result")
+                    : "${workflow.variables.conversation}",
                 "context",
                 "${workflow.variables._agent_state}"));
         agentCompiler.applyTimeout(wf, config);
