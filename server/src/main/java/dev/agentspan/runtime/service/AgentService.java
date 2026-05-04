@@ -7,6 +7,8 @@ package dev.agentspan.runtime.service;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -473,6 +475,71 @@ public class AgentService {
     /** Cancel a running agent execution. */
     public void cancelAgent(String executionId, String reason) {
         workflowService.terminateWorkflow(executionId, reason != null ? reason : "Cancelled by user");
+    }
+
+    /**
+     * Permanently delete an execution record from the database.
+     *
+     * <p>Wraps Conductor's {@code ExecutionService.removeWorkflow} to hard-delete
+     * completed execution records.  Running executions should be terminated first.
+     *
+     * @param executionId  the execution to remove
+     * @param archiveTasks if true, archive task records instead of deleting them
+     */
+    public void deleteExecutionRecord(String executionId, boolean archiveTasks) {
+        executionService.removeWorkflow(executionId, archiveTasks);
+    }
+
+    /**
+     * Bulk-delete completed execution records older than {@code olderThanDays} days.
+     *
+     * <p>Searches for COMPLETED, FAILED, TERMINATED, and TIMED_OUT executions whose
+     * end time is before the cutoff, then removes them from the DB in batches.
+     *
+     * @param olderThanDays minimum age in days for executions to be pruned
+     * @param archiveTasks  if true, archive task records instead of deleting
+     * @return number of executions deleted
+     */
+    public int pruneExecutions(int olderThanDays, boolean archiveTasks) {
+        long cutoffEpochMs = Instant.now().minus(olderThanDays, ChronoUnit.DAYS).toEpochMilli();
+        String[] terminalStatuses = {"COMPLETED", "FAILED", "TERMINATED", "TIMED_OUT"};
+
+        List<String> workflowNames =
+                listAgents().stream().map(AgentSummary::getName).collect(Collectors.toList());
+        if (workflowNames.isEmpty()) {
+            return 0;
+        }
+
+        String nameList = workflowNames.stream().map(n -> "'" + n + "'").collect(Collectors.joining(","));
+        int deleted = 0;
+        int batchSize = 100;
+
+        for (String status : terminalStatuses) {
+            String query =
+                    "workflowType IN (" + nameList + ") AND status = '" + status + "' AND endTime < " + cutoffEpochMs;
+            int start = 0;
+            while (true) {
+                SearchResult<WorkflowSummary> page =
+                        workflowService.searchWorkflows(start, batchSize, "endTime:ASC", "*", query);
+                List<WorkflowSummary> results = page.getResults();
+                if (results == null || results.isEmpty()) {
+                    break;
+                }
+                for (WorkflowSummary ws : results) {
+                    try {
+                        executionService.removeWorkflow(ws.getWorkflowId(), archiveTasks);
+                        deleted++;
+                    } catch (Exception e) {
+                        log.warn("Could not delete execution {}: {}", ws.getWorkflowId(), e.getMessage());
+                    }
+                }
+                if (results.size() < batchSize) {
+                    break;
+                }
+                // After deletion, restart from 0 since the result set shifts
+            }
+        }
+        return deleted;
     }
 
     /**
