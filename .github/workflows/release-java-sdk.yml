@@ -1,0 +1,48 @@
+name: Publish Java SDK to Maven Central
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (e.g. 0.2.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish-maven-central:
+    runs-on: ubuntu-latest
+    environment: maven-central
+    defaults:
+      run:
+        working-directory: sdk/java
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Zulu JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: "zulu"
+          java-version: "21"
+
+      - name: Determine version
+        id: version
+        run: |
+          VERSION="${{ inputs.version }}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Publishing version: ${VERSION}"
+
+      - name: Publish to Maven Central
+        run: |
+          ./gradlew :publish :spring:publish \
+            -Pversion=${{ steps.version.outputs.version }} \
+            -PmavenCentral=true \
+            -Pusername=${{ secrets.SONATYPE_USERNAME }} \
+            -Ppassword=${{ secrets.SONATYPE_PASSWORD }}
+        env:
+          ORG_GRADLE_PROJECT_signingKeyId: ${{ secrets.SIGNING_KEY_ID }}
+          ORG_GRADLE_PROJECT_signingKey: ${{ secrets.SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.SIGNING_PASSWORD }}
