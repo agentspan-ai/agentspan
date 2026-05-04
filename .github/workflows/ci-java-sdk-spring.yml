@@ -1,4 +1,4 @@
-name: CI Java SDK
+name: CI Java SDK Spring
 
 on:
   pull_request:
@@ -28,4 +28,4 @@ jobs:
           cache: gradle
 
       - name: Build and run tests
-        run: ./gradlew test
+        run: ./gradlew :spring:test
