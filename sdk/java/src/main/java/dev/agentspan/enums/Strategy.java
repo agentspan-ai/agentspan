@@ -31,7 +31,10 @@ public enum Strategy {
     SWARM,
 
     @JsonProperty("manual")
-    MANUAL;
+    MANUAL,
+
+    @JsonProperty("plan_execute")
+    PLAN_EXECUTE;
 
     public String toJsonValue() {
         try {

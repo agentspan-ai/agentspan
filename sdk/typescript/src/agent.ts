@@ -125,6 +125,8 @@ export interface AgentOptions {
   credentials?: (string | CredentialFile)[];
   /** Stateful execution — each run gets a unique domain UUID for worker isolation. */
   stateful?: boolean;
+  /** Max LLM turns for the fallback agent in PLAN_EXECUTE strategy. */
+  fallbackMaxTurns?: number;
 }
 
 // ── Agent class ───────────────────────────────────────────
@@ -168,6 +170,7 @@ export class Agent {
   readonly codeExecutionConfig?: CodeExecutionConfig;
   readonly cliConfig?: CliConfig;
   readonly credentials?: (string | CredentialFile)[];
+  readonly fallbackMaxTurns?: number;
 
   /** @internal Stored ClaudeCode config when model is ClaudeCode instance. */
   private readonly _claudeCodeConfig?: ClaudeCode;
@@ -221,6 +224,7 @@ export class Agent {
     this.gate = options.gate;
     this.codeExecutionConfig = options.codeExecutionConfig;
     this.credentials = options.credentials;
+    this.fallbackMaxTurns = options.fallbackMaxTurns;
 
     // ── Duplicate sub-agent name detection ────────────────
     if (this.agents.length > 0) {

@@ -257,6 +257,11 @@ public class AgentConfigSerializer {
             agentMap.put("stopWhen", stopWhen);
         }
 
+        // Fallback max turns (PLAN_EXECUTE strategy)
+        if (agent.getFallbackMaxTurns() != null) {
+            agentMap.put("fallbackMaxTurns", agent.getFallbackMaxTurns());
+        }
+
         // Callbacks (before/after model hooks — legacy single-function style)
         List<Map<String, Object>> callbacks = new ArrayList<>();
         if (agent.getBeforeModelCallback() != null) {

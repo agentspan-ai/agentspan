@@ -73,6 +73,7 @@ public class Agent {
     private final Map<String, Object> metadata;
     private final List<String> allowedCommands;
     private final String stopWhenTaskName;
+    private final Integer fallbackMaxTurns;
 
     private Agent(Builder builder) {
         this.name = builder.name;
@@ -109,6 +110,7 @@ public class Agent {
         this.metadata = builder.metadata;
         this.allowedCommands = builder.allowedCommands != null ? new ArrayList<>(builder.allowedCommands) : new ArrayList<>();
         this.stopWhenTaskName = builder.stopWhenTaskName;
+        this.fallbackMaxTurns = builder.fallbackMaxTurns;
     }
 
     /**
@@ -183,6 +185,7 @@ public class Agent {
     public Map<String, Object> getMetadata() { return metadata; }
     public List<String> getAllowedCommands() { return allowedCommands; }
     public String getStopWhenTaskName() { return stopWhenTaskName; }
+    public Integer getFallbackMaxTurns() { return fallbackMaxTurns; }
 
     public static Builder builder() {
         return new Builder();
@@ -239,6 +242,7 @@ public class Agent {
         private Map<String, Object> metadata;
         private List<String> allowedCommands;
         private String stopWhenTaskName;
+        private Integer fallbackMaxTurns;
 
         /** Set the agent name (required). Must match {@code ^[a-zA-Z_][a-zA-Z0-9_-]*$}. */
         public Builder name(String name) {
@@ -535,6 +539,12 @@ public class Agent {
          */
         public Builder stopWhen(String taskName) {
             this.stopWhenTaskName = taskName;
+            return this;
+        }
+
+        /** Max LLM turns for the fallback agent in PLAN_EXECUTE strategy. */
+        public Builder fallbackMaxTurns(int fallbackMaxTurns) {
+            this.fallbackMaxTurns = fallbackMaxTurns;
             return this;
         }
 

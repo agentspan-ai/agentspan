@@ -262,6 +262,11 @@ export class AgentConfigSerializer {
       config.credentials = agent.credentials;
     }
 
+    // Fallback max turns (PLAN_EXECUTE strategy)
+    if (agent.fallbackMaxTurns !== undefined) {
+      config.fallbackMaxTurns = agent.fallbackMaxTurns;
+    }
+
     return config;
   }
 

@@ -11,7 +11,8 @@ export type Strategy =
   | "round_robin"
   | "random"
   | "swarm"
-  | "manual";
+  | "manual"
+  | "plan_execute";
 
 /**
  * Agent event types emitted during execution.
