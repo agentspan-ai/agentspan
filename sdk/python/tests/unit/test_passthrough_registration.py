@@ -1,6 +1,7 @@
 # sdk/python/tests/unit/test_passthrough_registration.py
 """Tests for passthrough worker registration path in runtime.py."""
 import os
+import pytest
 from unittest.mock import MagicMock, patch, call  # noqa: F401
 
 
@@ -23,6 +24,7 @@ class TestSerializeAgentDispatching:
             mock_serialize.assert_called_once_with(graph)
 
     def test_langchain_dispatches_to_serialize_langchain(self):
+        pytest.importorskip("langchain_core", reason="langchain_core not installed")
         from agentspan.agents.frameworks.serializer import serialize_agent
 
         executor = MagicMock()
@@ -176,6 +178,11 @@ def _make_fake_task(workflow_instance_id="wf-123", prompt="test prompt"):
 
 class TestLangchainWorkerCredentialInjection:
     """Verify that make_langchain_worker actually injects credentials into os.environ."""
+
+    pytestmark = pytest.mark.skipif(
+        not __import__("importlib").util.find_spec("langchain_core"),
+        reason="langchain_core not installed",
+    )
 
     # _get_credential_fetcher is imported from _dispatch inside the closure,
     # so we patch it at the source module.
