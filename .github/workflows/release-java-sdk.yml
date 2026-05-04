@@ -37,7 +37,7 @@ jobs:
 
       - name: Publish to Maven Central
         run: |
-          ./gradlew :publish :spring:publish \
+          ./gradlew :publish :spring:publish promoteToMavenCentral \
             -Pversion=${{ steps.version.outputs.version }} \
             -PmavenCentral=true \
             -Pusername=${{ secrets.SONATYPE_USERNAME }} \
