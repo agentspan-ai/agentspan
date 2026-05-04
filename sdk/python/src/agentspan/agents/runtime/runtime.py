@@ -1840,11 +1840,11 @@ class AgentRuntime:
         seen: set = set()
 
         def _collect(a: Agent) -> None:
-            if isinstance(a.instructions, PromptTemplate) and a.model:
+            if hasattr(a, "instructions") and hasattr(a, "model") and isinstance(a.instructions, PromptTemplate) and a.model:
                 key = (a.instructions.name, a.model)
                 if key not in seen:
                     seen.add(key)
-            for sub in a.agents:
+            for sub in getattr(a, "agents", []):
                 _collect(sub)
 
         _collect(agent)
@@ -2008,9 +2008,9 @@ class AgentRuntime:
         seen: set = set()
 
         def _collect(a: Agent) -> None:
-            if a.model and a.model not in seen:
+            if hasattr(a, "model") and a.model and a.model not in seen:
                 seen.add(a.model)
-            for sub in a.agents:
+            for sub in getattr(a, "agents", []):
                 _collect(sub)
 
         _collect(agent)
