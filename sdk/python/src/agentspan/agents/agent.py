@@ -362,6 +362,7 @@ class Agent:
         base_url: Optional[str] = None,
         credentials: Optional[List[Any]] = None,
         stateful: bool = False,
+        masked_fields: Optional[List[str]] = None,
     ) -> None:
         if not name or not isinstance(name, str):
             raise ValueError("Agent name must be a non-empty string")
@@ -499,6 +500,9 @@ class Agent:
             self.credentials: List[Any] = list(credentials)
         else:
             self.credentials = []
+
+        # Fields whose values are redacted in execution history and UI.
+        self.masked_fields: List[str] = list(masked_fields) if masked_fields else []
 
         # Propagate agent-level credentials to CLI/code tools so the
         # dispatch layer can resolve them per-tool (the dispatch only

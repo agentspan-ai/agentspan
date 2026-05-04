@@ -105,6 +105,12 @@ public class AgentConfig {
     /** Agent-level credential names (e.g. ["GH_TOKEN", "AWS_ACCESS_KEY_ID"]). */
     private List<String> credentials;
 
+    /**
+     * Input/output field names whose values should be redacted in the execution
+     * history and UI.  Maps directly to Conductor's {@code WorkflowDef.maskedFields}.
+     */
+    private List<String> maskedFields;
+
     /** Whether this is an external agent (no model, references existing workflow). */
     @Builder.Default
     private boolean external = false;

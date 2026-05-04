@@ -535,3 +535,38 @@ class TestAgentCredentials:
         # Only explicit credentials, no auto-mapped ones added on top
         assert a.credentials == ["MY_CUSTOM_TOKEN"]
         assert "GITHUB_TOKEN" not in a.credentials
+
+
+class TestMaskedFields:
+    """Tests for masked_fields data masking feature (#181)."""
+
+    def test_masked_fields_default_empty(self):
+        agent = Agent(name="a", model="openai/gpt-4o")
+        assert agent.masked_fields == []
+
+    def test_masked_fields_stored(self):
+        agent = Agent(
+            name="a",
+            model="openai/gpt-4o",
+            masked_fields=["ssn", "api_key", "password"],
+        )
+        assert agent.masked_fields == ["ssn", "api_key", "password"]
+
+    def test_masked_fields_serialized(self):
+        from agentspan.agents.config_serializer import AgentConfigSerializer
+
+        agent = Agent(
+            name="pii_agent",
+            model="openai/gpt-4o",
+            instructions="Help the user.",
+            masked_fields=["ssn", "credit_card"],
+        )
+        config = AgentConfigSerializer().serialize(agent)
+        assert config["maskedFields"] == ["ssn", "credit_card"]
+
+    def test_no_masked_fields_omitted_from_serialization(self):
+        from agentspan.agents.config_serializer import AgentConfigSerializer
+
+        agent = Agent(name="b", model="openai/gpt-4o")
+        config = AgentConfigSerializer().serialize(agent)
+        assert "maskedFields" not in config
