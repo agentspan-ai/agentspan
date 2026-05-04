@@ -1839,7 +1839,11 @@ class AgentRuntime:
 
         seen: set = set()
 
+        from agentspan.agents.agent import Agent as _Agent
+
         def _collect(a: Agent) -> None:
+            if not isinstance(a, _Agent):
+                return
             if isinstance(a.instructions, PromptTemplate) and a.model:
                 key = (a.instructions.name, a.model)
                 if key not in seen:
@@ -2008,6 +2012,8 @@ class AgentRuntime:
         seen: set = set()
 
         def _collect(a: Agent) -> None:
+            if not isinstance(a, Agent):
+                return
             if a.model and a.model not in seen:
                 seen.add(a.model)
             for sub in a.agents:

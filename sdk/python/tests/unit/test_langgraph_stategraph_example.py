@@ -4,7 +4,7 @@ Example 2: LangGraph custom StateGraph with non-messages state.
 Verifies auto-detection of non-messages input/output schemas.
 """
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, PropertyMock
 
 
 @pytest.fixture
@@ -59,6 +59,31 @@ class TestCustomStateGraph:
         # Output should be JSON of the state since there are no messages
         output = json.loads(result.output_data["result"])
         assert output["answer"] == "Answer to: hello"
+
+    def test_associate_templates_does_not_crash_with_graph_sub_agent(self, custom_graph):
+        """_associate_templates_with_models must not crash when agent.agents contains
+        a CompiledStateGraph (no .instructions/.model attributes).
+
+        This is the regression from issue #39.  Without the isinstance(a, Agent)
+        guard, the inner _collect() raises AttributeError on a.instructions.
+        """
+        from agentspan.agents.agent import Agent
+        from agentspan.agents.runtime.runtime import AgentRuntime
+        from agentspan.agents.runtime.config import AgentConfig
+
+        # Build a native Agent whose sub-agents list contains a CompiledStateGraph
+        wrapper = Agent(name="wrapper", instructions="test", model="openai/gpt-4o-mini")
+        # Directly inject the graph as a sub-agent (bypassing type checks)
+        wrapper.agents = [custom_graph]
+
+        config = AgentConfig(server_url="http://localhost:6767")
+        runtime = AgentRuntime.__new__(AgentRuntime)
+        runtime._config = config
+        runtime._prompt_client_instance = MagicMock()
+        runtime._prompt_client_instance.get_prompt.return_value = None
+
+        # This must not raise AttributeError: 'CompiledStateGraph' has no attribute 'instructions'
+        runtime._associate_templates_with_models(wrapper)
 
     def test_worker_uses_first_required_string_property_as_input_key(self, custom_graph):
         """Non-messages graph: input key = first required string property."""
