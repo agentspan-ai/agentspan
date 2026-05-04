@@ -24,6 +24,8 @@ sdk/python/validation/output/
 **/runs.toml
 node_modules/
 .worktrees
+/site/
+/.venv-docs/
 /ui/dist
 /ui/dist
 /ui/e2e-results
@@ -33,3 +35,13 @@ node_modules/
 /*.ts
 /tsconfig.json
 cli/agentspan
+# Java build artifacts
+*.class
+target/
+sdk/java/examples/target/
+sdk/java/target/
+
+# Superpowers skill docs (local only, not checked in)
+docs/superpowers/
+.contextbook/
+sdk/python/agentspan

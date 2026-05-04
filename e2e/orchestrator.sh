@@ -8,6 +8,8 @@ set -euo pipefail
 #   ./e2e/orchestrator.sh                          # Python tests (default)
 #   ./e2e/orchestrator.sh --sdk typescript         # TypeScript tests
 #   ./e2e/orchestrator.sh --sdk both               # Both SDKs
+#   ./e2e/orchestrator.sh --sdk java               # Java tests
+#   ./e2e/orchestrator.sh --sdk all                # All SDKs
 #   ./e2e/orchestrator.sh --sdk typescript --suite suite1
 #   ./e2e/orchestrator.sh -j 4                     # 4 parallel workers (Python)
 #   ./e2e/orchestrator.sh --no-build --no-start
@@ -39,8 +41,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "$SDK" != "python" && "$SDK" != "typescript" && "$SDK" != "both" ]]; then
-  echo "ERROR: --sdk must be python, typescript, or both (got: $SDK)"
+if [[ "$SDK" != "python" && "$SDK" != "typescript" && "$SDK" != "java" && "$SDK" != "both" && "$SDK" != "all" ]]; then
+  echo "ERROR: --sdk must be python, typescript, java, both, or all (got: $SDK)"
   exit 1
 fi
 
@@ -100,6 +102,13 @@ if $DO_BUILD; then
     echo "=== Installing mcp-testkit ==="
     uv pip install mcp-testkit -q 2>/dev/null || pip install mcp-testkit -q
     echo "mcp-testkit installed."
+  fi
+
+  if [[ "$SDK" == "java" || "$SDK" == "all" ]]; then
+    echo "=== Building Java SDK ==="
+    cd "$REPO_ROOT/sdk/java"
+    mvn compile test-compile -q
+    echo "Java SDK compiled."
   fi
 fi
 
@@ -206,6 +215,26 @@ if [[ "$SDK" == "typescript" || "$SDK" == "both" ]]; then
     "$RESULTS_DIR/junit-ts.xml" "$RESULTS_DIR/report-ts.html"
 fi
 
+# ── Java tests ───────────────────────────────────────────────────────────
+
+if [[ "$SDK" == "java" || "$SDK" == "all" ]]; then
+  echo "=== Running Java E2E tests ==="
+
+  MVN_ARGS=(
+    "-f" "$REPO_ROOT/sdk/java/pom.xml"
+    "test"
+    "-Pe2e"
+    "-DAGENTSPAN_SERVER_URL=$AGENTSPAN_SERVER_URL"
+    "-DAGENTSPAN_LLM_MODEL=${AGENTSPAN_LLM_MODEL:-openai/gpt-4o-mini}"
+  )
+
+  if [[ -n "$SUITE_FILTER" ]]; then
+    MVN_ARGS+=("-Dtest=$SUITE_FILTER")
+  fi
+
+  mvn "${MVN_ARGS[@]}" || { rc=$?; TEST_EXIT=$((TEST_EXIT > rc ? TEST_EXIT : rc)); }
+fi
+
 # ── Summary ──────────────────────────────────────────────────────────────
 
 echo ""
@@ -215,6 +244,9 @@ if [[ "$SDK" == "python" || "$SDK" == "both" ]]; then
 fi
 if [[ "$SDK" == "typescript" || "$SDK" == "both" ]]; then
   echo "  TypeScript: $RESULTS_DIR/report-ts.html"
+fi
+if [[ "$SDK" == "java" || "$SDK" == "all" ]]; then
+  echo "  Java:    see Maven Surefire report in sdk/java/target/surefire-reports/"
 fi
 echo "=============================="
 

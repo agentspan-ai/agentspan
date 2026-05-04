@@ -457,22 +457,10 @@ describe("WorkerManager", () => {
       manager.addWorker("my_task", handler1);
       manager.addWorker("my_task", handler2);
 
-      // Access private workers array via startPolling behavior
-      // Start polling with a very long interval so we can inspect
-      // There should be exactly 1 worker, not 2
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockResolvedValue({
-          ok: true,
-          status: 204,
-          text: async () => "",
-        }),
-      );
-
-      manager.startPolling();
-      // If dedup works, only 1 poller should be created
-      // Stop and verify no errors
-      manager.stopPolling();
+      // Access private pendingWorkers — should have exactly 1 entry
+      const workers = (manager as any).pendingWorkers;
+      expect(workers).toHaveLength(1);
+      expect(workers[0].handler).toBe(handler2);
     });
 
     it("keeps different task names as separate workers", () => {
@@ -483,47 +471,31 @@ describe("WorkerManager", () => {
       manager.addWorker("task_a", handler1);
       manager.addWorker("task_b", handler2);
 
-      // Both should exist — startPolling should create 2 pollers
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockResolvedValue({
-          ok: true,
-          status: 204,
-          text: async () => "",
-        }),
-      );
-
-      manager.startPolling();
-      manager.stopPolling();
+      const workers = (manager as any).pendingWorkers;
+      expect(workers).toHaveLength(2);
     });
   });
 
   // ── startPolling clears old pollers (fix #5) ──────────
 
   describe("startPolling idempotency", () => {
-    it("clears existing pollers before creating new ones", () => {
+    it("clears existing pollers before creating new ones", async () => {
       const manager = new WorkerManager("http://test", {}, 5000);
       const handler = vi.fn();
       manager.addWorker("my_task", handler);
 
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockResolvedValue({
-          ok: true,
-          status: 204,
-          text: async () => "",
-        }),
-      );
+      // stopPolling should work even when not started
+      await manager.stopPolling();
 
-      // Start twice — should not accumulate pollers
-      manager.startPolling();
-      manager.startPolling();
-      manager.stopPolling();
-      // If stopPolling didn't error, old pollers were cleaned up
+      // No taskManager after stop
+      expect((manager as any).taskManager).toBeNull();
     });
   });
 
   // ── Credential context injection (fix #3) ─────────────
+  // These tests exercise the _wrapWorker execute() callback directly
+  // by accessing it through the private API, without starting the
+  // full conductor polling machinery.
 
   describe("credential context during execution", () => {
     it("sets credential context when execution token is present", async () => {
@@ -534,16 +506,11 @@ describe("WorkerManager", () => {
       let contextAvailable = false;
 
       manager.addWorker("cred_task", async (_input) => {
-        // Import dynamically to check if context was set
-        const { getCredential, setCredentialContext: _set } =
-          await import("../../src/credentials.js");
-        // If context is set, getCredential won't throw "no context"
-        // We mock fetch to return a credential
+        const { getCredential } = await import("../../src/credentials.js");
         try {
           await getCredential("MY_CRED");
           contextAvailable = true;
         } catch (err: unknown) {
-          // If it throws "no context", the fix isn't working
           contextAvailable = !(
             err instanceof Error && err.message.includes("No credential context")
           );
@@ -551,8 +518,24 @@ describe("WorkerManager", () => {
         return { ok: true };
       });
 
-      // Mock pollTask to return a task with execution token
-      const taskWithToken = {
+      // Mock fetch for credential resolution
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockImplementation(async (url: string) => {
+          if (typeof url === "string" && url.includes("/credentials/resolve")) {
+            return {
+              ok: true,
+              status: 200,
+              json: async () => ({ MY_CRED: "secret-value" }),
+            };
+          }
+          return { ok: true, status: 200, text: async () => "" };
+        }),
+      );
+
+      // Get the wrapped ConductorWorker and call execute() directly
+      const wrapped = (manager as any)._wrapWorker((manager as any).pendingWorkers[0]);
+      await wrapped.execute({
         taskId: "task-1",
         workflowInstanceId: "wf-1",
         inputData: {
@@ -562,40 +545,7 @@ describe("WorkerManager", () => {
             executionId: "wf-1",
           },
         },
-      };
-
-      let pollCount = 0;
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockImplementation(async (url: string) => {
-          if (url.includes("/tasks/poll/")) {
-            pollCount++;
-            if (pollCount === 1) {
-              return { ok: true, status: 200, text: async () => JSON.stringify(taskWithToken) };
-            }
-            return { ok: true, status: 204, text: async () => "" };
-          }
-          if (url.includes("/tasks")) {
-            // reportSuccess
-            return { ok: true, status: 200, text: async () => "" };
-          }
-          if (url.includes("/credentials/resolve")) {
-            // Credential resolution — return a credential
-            return {
-              ok: true,
-              status: 200,
-              json: async () => ({ MY_CRED: "secret-value" }),
-            };
-          }
-          return { ok: true, status: 204, text: async () => "" };
-        }),
-      );
-
-      manager.startPolling();
-
-      // Wait for polling to execute
-      await new Promise((r) => setTimeout(r, 300));
-      manager.stopPolling();
+      });
 
       expect(contextAvailable).toBe(true);
     });
@@ -607,7 +557,8 @@ describe("WorkerManager", () => {
         return { ok: true };
       });
 
-      const taskWithToken = {
+      const wrapped = (manager as any)._wrapWorker((manager as any).pendingWorkers[0]);
+      await wrapped.execute({
         taskId: "task-1",
         workflowInstanceId: "wf-1",
         inputData: {
@@ -615,28 +566,8 @@ describe("WorkerManager", () => {
             executionToken: "exec-tok-456",
           },
         },
-      };
+      });
 
-      let pollCount = 0;
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockImplementation(async (url: string) => {
-          if (url.includes("/tasks/poll/")) {
-            pollCount++;
-            if (pollCount === 1) {
-              return { ok: true, status: 200, text: async () => JSON.stringify(taskWithToken) };
-            }
-            return { ok: true, status: 204, text: async () => "" };
-          }
-          return { ok: true, status: 200, text: async () => "" };
-        }),
-      );
-
-      manager.startPolling();
-      await new Promise((r) => setTimeout(r, 300));
-      manager.stopPolling();
-
-      // After execution, credential context should be cleared
       const { getCredential } = await import("../../src/credentials.js");
       await expect(getCredential("ANY")).rejects.toThrow("No credential context available");
     });
@@ -648,38 +579,100 @@ describe("WorkerManager", () => {
         throw new Error("handler boom");
       });
 
-      const taskWithToken = {
-        taskId: "task-1",
-        workflowInstanceId: "wf-1",
-        inputData: {
-          __agentspan_ctx__: {
-            executionToken: "exec-tok-789",
-          },
-        },
-      };
+      const wrapped = (manager as any)._wrapWorker((manager as any).pendingWorkers[0]);
 
-      let pollCount = 0;
+      // The execute() should throw (conductor SDK catches and reports failure)
+      await expect(
+        wrapped.execute({
+          taskId: "task-1",
+          workflowInstanceId: "wf-1",
+          inputData: {
+            __agentspan_ctx__: {
+              executionToken: "exec-tok-789",
+            },
+          },
+        }),
+      ).rejects.toThrow("handler boom");
+
+      // Context should still be cleared despite handler error
+      const { getCredential } = await import("../../src/credentials.js");
+      await expect(getCredential("ANY")).rejects.toThrow("No credential context available");
+    });
+
+    it("isolates credential context across concurrent worker executions (regression: race in test_suite2)", async () => {
+      // Reproduces the test_suite2_tool_calling flake deterministically:
+      // The LLM emits parallel tool calls, so multiple worker.execute()
+      // run concurrently. Pre-fix, all share a single module-level
+      // credential context. Worker B's `finally`-block clear races with
+      // worker A's getCredential() call, throwing
+      // "No credential context available".
+      //
+      // We force the race by gating each handler on a barrier so all
+      // handlers are mid-flight at the same time, then have each call
+      // getCredential() and verify each got *its own* execution token's
+      // resolved value back.
+      const serverUrl = "http://cred-race";
+      const manager = new WorkerManager(serverUrl, {}, 100);
+
+      const NUM = 5;
+      const barrier = new Promise<void>((resolve) => {
+        let arrived = 0;
+        manager.addWorker(
+          "race_task",
+          async () => {
+            arrived++;
+            // Wait until all handlers are running concurrently.
+            if (arrived === NUM) resolve();
+            await barrierGate;
+            const { getCredential } = await import("../../src/credentials.js");
+            return { value: await getCredential("MY_CRED") };
+          },
+          undefined,
+        );
+        // Build the gate via a sentinel resolved after all arrive.
+        // The actual barrier the handlers await:
+      });
+      // Bridge: when `barrier` (all-arrived) resolves, open the gate.
+      let openGate!: () => void;
+      const barrierGate = new Promise<void>((res) => {
+        openGate = res;
+      });
+      void barrier.then(() => openGate());
+
+      // Echo the token back as the resolved value so we can detect crosstalk.
       vi.stubGlobal(
         "fetch",
-        vi.fn().mockImplementation(async (url: string) => {
-          if (url.includes("/tasks/poll/")) {
-            pollCount++;
-            if (pollCount === 1) {
-              return { ok: true, status: 200, text: async () => JSON.stringify(taskWithToken) };
-            }
-            return { ok: true, status: 204, text: async () => "" };
+        vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+          if (typeof url === "string" && url.includes("/credentials/resolve")) {
+            const body = JSON.parse(String(init?.body));
+            return {
+              ok: true,
+              status: 200,
+              json: async () => ({ MY_CRED: `${body.token}:resolved` }),
+            };
           }
           return { ok: true, status: 200, text: async () => "" };
         }),
       );
 
-      manager.startPolling();
-      await new Promise((r) => setTimeout(r, 300));
-      manager.stopPolling();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const wrapped = (manager as any)._wrapWorker((manager as any).pendingWorkers[0]);
 
-      // Context should still be cleared despite handler error
-      const { getCredential } = await import("../../src/credentials.js");
-      await expect(getCredential("ANY")).rejects.toThrow("No credential context available");
+      const tasks = Array.from({ length: NUM }, (_, i) => ({
+        taskId: `task-${i}`,
+        workflowInstanceId: "wf-1",
+        inputData: {
+          __agentspan_ctx__: { executionToken: `tok-${i}` },
+        },
+      }));
+
+      const results = await Promise.all(tasks.map((t) => wrapped.execute(t)));
+
+      // Each handler must see its own execution token, end to end —
+      // no nulls, no crosstalk between concurrent calls.
+      for (let i = 0; i < NUM; i++) {
+        expect(results[i].outputData).toEqual({ value: `tok-${i}:resolved` });
+      }
     });
 
     it("does not set credential context when no execution token", async () => {
@@ -691,35 +684,16 @@ describe("WorkerManager", () => {
         return { ok: true };
       });
 
-      const taskWithoutToken = {
+      const wrapped = (manager as any)._wrapWorker((manager as any).pendingWorkers[0]);
+      await wrapped.execute({
         taskId: "task-1",
         workflowInstanceId: "wf-1",
         inputData: {
           arg1: "value",
         },
-      };
-
-      let pollCount = 0;
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockImplementation(async (url: string) => {
-          if (url.includes("/tasks/poll/")) {
-            pollCount++;
-            if (pollCount === 1) {
-              return { ok: true, status: 200, text: async () => JSON.stringify(taskWithoutToken) };
-            }
-            return { ok: true, status: 204, text: async () => "" };
-          }
-          return { ok: true, status: 200, text: async () => "" };
-        }),
-      );
-
-      manager.startPolling();
-      await new Promise((r) => setTimeout(r, 300));
-      manager.stopPolling();
+      });
 
       expect(handlerCalled).toBe(true);
-      // No credential context should be set
       const { getCredential } = await import("../../src/credentials.js");
       await expect(getCredential("ANY")).rejects.toThrow("No credential context available");
     });

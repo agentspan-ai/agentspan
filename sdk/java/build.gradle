@@ -1,0 +1,120 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id 'signing'
+}
+
+group = 'ai.agentspan'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    withSourcesJar()
+    withJavadocJar()
+}
+
+repositories {
+    mavenCentral()
+}
+
+ext {
+    jacksonVersion  = '2.17.1'
+    slf4jVersion    = '2.0.13'
+    junitVersion    = '5.11.0'
+    langchain4jVersion = '1.0.0'
+}
+
+dependencies {
+    api platform("com.fasterxml.jackson:jackson-bom:${jacksonVersion}")
+    api 'com.fasterxml.jackson.core:jackson-databind'
+    api 'com.fasterxml.jackson.core:jackson-annotations'
+
+    implementation "org.slf4j:slf4j-api:${slf4jVersion}"
+
+    compileOnly "dev.langchain4j:langchain4j:${langchain4jVersion}"
+
+    testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
+    testImplementation "dev.langchain4j:langchain4j:${langchain4jVersion}"
+    testImplementation "dev.langchain4j:langchain4j-open-ai:${langchain4jVersion}"
+    testRuntimeOnly "org.slf4j:slf4j-simple:${slf4jVersion}"
+}
+
+compileJava.options.compilerArgs << '-parameters'
+compileTestJava.options.compilerArgs << '-parameters'
+
+test {
+    useJUnitPlatform {
+        // Exclude e2e tests by default; run with -Pe2e to include them
+        if (!project.hasProperty('e2e')) {
+            excludeTags 'e2e'
+        }
+    }
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+            groupId = 'ai.agentspan'
+            artifactId = 'java-sdk'
+            version = project.version
+
+            pom {
+                name = 'Agentspan Java SDK'
+                description = 'Java SDK for the Agentspan agent orchestration platform'
+                url = 'https://github.com/agentspan-ai/agentspan'
+                licenses {
+                    license {
+                        name = 'MIT License'
+                        url = 'https://opensource.org/licenses/MIT'
+                    }
+                }
+                developers {
+                    developer {
+                        organization = 'Agentspan'
+                        organizationUrl = 'https://agentspan.ai'
+                        name = 'Agentspan Development Team'
+                        email = 'developers@orkes.io'
+                    }
+                }
+                scm {
+                    connection = 'scm:git:git://github.com/agentspan-ai/agentspan.git'
+                    developerConnection = 'scm:git:ssh://github.com/agentspan-ai/agentspan.git'
+                    url = 'https://github.com/agentspan-ai/agentspan'
+                }
+            }
+        }
+    }
+    repositories {
+        if (project.hasProperty('mavenCentral')) {
+            maven {
+                name = 'mavenCentral'
+                url = project.version.toString().endsWith('-SNAPSHOT')
+                    ? 'https://ossrh-staging-api.central.sonatype.com/content/repositories/snapshots/'
+                    : 'https://ossrh-staging-api.central.sonatype.com/service/local/staging/deploy/maven2/'
+                credentials {
+                    username = project.findProperty('username')
+                    password = project.findProperty('password')
+                }
+            }
+        } else {
+            mavenLocal()
+        }
+    }
+}
+
+signing {
+    required = { project.hasProperty('mavenCentral') }
+    def signingKeyId = project.findProperty('signingKeyId')
+    def signingKey = project.findProperty('signingKey')
+    def signingPassword = project.findProperty('signingPassword')
+    if (signingKeyId && signingKey && signingPassword) {
+        useInMemoryPgpKeys(signingKeyId, signingKey, signingPassword)
+    }
+    sign publishing.publications.mavenJava
+}
+
+tasks.withType(Javadoc).configureEach {
+    options.addStringOption('Xdoclint:none', '-quiet')
+}

@@ -34,6 +34,7 @@ public class TerminationCompiler {
      * @return a fully configured WorkflowTask
      */
     public static WorkflowTask compileTermination(TerminationConfig config, String agentName, String llmRef) {
+        agentName = AgentCompiler.toRef(agentName);
         String taskName = agentName + "_termination";
         String refName = agentName + "_termination";
         String resultRef = "${" + llmRef + ".output.result}";
@@ -65,6 +66,7 @@ public class TerminationCompiler {
      * @return a fully configured WorkflowTask of type SIMPLE
      */
     public static WorkflowTask compileStopWhen(String taskName, String agentName, String llmRef) {
+        agentName = AgentCompiler.toRef(agentName);
         String refName = agentName + "_stop_when";
         String resultRef = "${" + llmRef + ".output.result}";
         String iterationRef = "${" + agentName + "_loop.iteration}";
@@ -94,6 +96,7 @@ public class TerminationCompiler {
      * @return a fully configured WorkflowTask of type SIMPLE
      */
     public static WorkflowTask compileStopWhenForConversation(String taskName, String agentName, String loopRef) {
+        agentName = AgentCompiler.toRef(agentName);
         String refName = agentName + "_stop_when";
 
         WorkflowTask task = new WorkflowTask();
@@ -120,6 +123,7 @@ public class TerminationCompiler {
      */
     public static WorkflowTask compileTerminationForConversation(
             TerminationConfig config, String agentName, String loopRef) {
+        agentName = AgentCompiler.toRef(agentName);
         String taskName = agentName + "_termination";
         String refName = agentName + "_termination";
 

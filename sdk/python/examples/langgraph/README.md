@@ -1,6 +1,6 @@
 # LangGraph Examples
 
-40 examples demonstrating LangGraph integration with Agentspan, from hello-world to advanced multi-agent systems.
+46 examples demonstrating LangGraph integration with Agentspan, from hello-world to advanced multi-agent systems.
 
 ## Prerequisites
 
@@ -108,6 +108,17 @@ uv run python examples/langgraph/01_hello_world.py
 | 39 | `39_tool_call_chain.py` | Chaining sequential tool calls (ToolNode loop) |
 | 40 | `40_agent_as_tool.py` | Compiled graph wrapped as `@tool` for orchestrators |
 
+### ReAct Variants & Production (41–46)
+
+| # | File | Topic |
+|---|------|-------|
+| 41 | `41_react_agent_basic.py` | Basic ReAct pattern |
+| 42 | `42_react_agent_system_prompt.py` | ReAct with system prompt |
+| 43 | `43_react_agent_multi_model.py` | Multi-model ReAct (OpenAI + Anthropic) |
+| 44 | `44_context_condensation.py` | Orchestrator + sub-agent stress test |
+| 45 | `45_advanced_orchestration.py` | Complex orchestration patterns |
+| 46 | `46_crash_and_resume.py` | Crash recovery: resume execution after process restart |
+
 ## Common Patterns
 
 ### Basic `create_agent` (detected as `langgraph`)
@@ -154,6 +165,20 @@ graph = builder.compile(name="my_graph")
 ```python
 with AgentRuntime() as runtime:
     result = runtime.run(graph, "prompt", session_id="user-123")
+```
+
+### Crash & Resume
+```python
+# Deploy once (CI/CD):
+with AgentRuntime() as runtime:
+    runtime.deploy(graph)
+
+# Long-running worker process (restart on crash):
+with AgentRuntime() as runtime:
+    runtime.serve(graph)  # blocks, polls for tasks
+
+# After a crash, just restart serve() — workers reconnect,
+# stalled tasks resume automatically. No special logic needed.
 ```
 
 ## Requirements

@@ -12,10 +12,79 @@ from __future__ import annotations
 
 import atexit
 import logging
+import platform
 import threading
 from typing import TYPE_CHECKING, Any, Optional
 
 logger = logging.getLogger("agentspan.agents.worker_manager")
+
+
+def _patch_conductor_use_threads_on_windows() -> None:
+    """On Windows, replace multiprocessing.Process with threading.Thread for Conductor workers.
+
+    Windows multiprocessing uses 'spawn' which requires all objects passed to
+    child processes to be picklable.  Conductor workers hold threading locks
+    and closures that are not picklable.  Using threads instead of processes
+    sidesteps the entire issue: threads share the parent's memory so no
+    pickling is needed, and tool functions are typically I/O-bound so the GIL
+    is not a bottleneck.
+
+    Also patches the worker target functions to skip signal.signal() calls,
+    which are forbidden in non-main threads.
+    """
+    try:
+        from conductor.client.automator import task_handler as _th_module
+    except ImportError:
+        return
+
+    if getattr(_th_module, "_agentspan_thread_patched", False):
+        return
+
+    # ── Thread shim ──────────────────────────────────────────────────────────
+
+    class _ThreadAsProcess(threading.Thread):
+        """threading.Thread shim that satisfies the multiprocessing.Process interface."""
+
+        def __init__(self, group=None, target=None, name=None, args=(), kwargs=None, *, daemon=None):
+            super().__init__(group=group, target=target, name=name, args=args, kwargs=kwargs or {}, daemon=daemon)
+            self.exitcode: Any = None
+
+        def terminate(self) -> None:
+            pass
+
+        def kill(self) -> None:
+            pass
+
+        @property
+        def pid(self) -> None:
+            return None
+
+    _th_module.Process = _ThreadAsProcess  # type: ignore[attr-defined]
+
+    # ── Patch worker targets to skip signal.signal() in threads ──────────────
+    # The conductor process targets call signal.signal(SIGINT, SIG_IGN) at the
+    # top — valid in a real child process but raises ValueError in a thread.
+
+    import signal as _signal
+
+    # ── Patch signal.signal to be a no-op in non-main threads ────────────────
+    # The conductor worker/logger process targets call signal.signal(SIGINT,
+    # SIG_IGN) at startup — valid in a child process but raises ValueError
+    # when called from a non-main thread.  We monkey-patch signal.signal to
+    # silently skip the call when not in the main thread.
+
+    import signal as _signal_mod
+
+    _orig_signal_fn = _signal_mod.signal
+
+    def _thread_safe_signal(signalnum, handler):
+        if threading.current_thread() is threading.main_thread():
+            return _orig_signal_fn(signalnum, handler)
+        # Non-main thread: skip silently
+
+    _signal_mod.signal = _thread_safe_signal  # type: ignore[attr-defined]
+
+    _th_module._agentspan_thread_patched = True  # type: ignore[attr-defined]
 
 if TYPE_CHECKING:
     from conductor.client.automator.task_handler import TaskHandler
@@ -74,6 +143,9 @@ class WorkerManager:
         """
         from conductor.client.automator.task_handler import TaskHandler
 
+        if platform.system() == "Windows":
+            _patch_conductor_use_threads_on_windows()
+
         with self._lock:
             if self._task_handler is None:
                 logger.info(
@@ -129,12 +201,17 @@ class WorkerManager:
         if th is None:
             return
 
-        # Names of workers that already have a running process
-        existing = {w.get_task_definition_name() for w in th.workers}
+        # Track (task_name, domain) pairs that already have a running process.
+        # A worker registered under domain=None and the same worker under a
+        # specific domain are DIFFERENT polling targets and both need processes.
+        existing = {
+            (w.get_task_definition_name(), getattr(w, "domain", None))
+            for w in th.workers
+        }
 
         for (task_def_name, domain), record in list(_decorated_functions.items()):
-            if task_def_name in existing:
-                continue  # already running
+            if (task_def_name, domain) in existing:
+                continue  # already running with same domain
 
             fn = record["func"]
             try:
@@ -165,7 +242,7 @@ class WorkerManager:
                 new_proc.daemon = True
             new_proc.start()
             th.workers.append(worker)
-            existing.add(task_def_name)
+            existing.add((task_def_name, domain))
             # Extend the monitor's per-worker restart tracking arrays so that
             # the monitor can restart this process if it deadlocks after fork().
             if hasattr(th, "_restart_counts"):

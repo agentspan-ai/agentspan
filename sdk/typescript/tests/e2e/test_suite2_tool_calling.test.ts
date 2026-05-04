@@ -154,6 +154,11 @@ describe('Suite 2: Tool Calling / Credential Lifecycle', { timeout: 300_000 }, (
     }
 
     // ── Step 4: Add credentials ──────────────────────────────────
+    // Fresh runtime so workers get execution tokens with the new credentials
+    await runtime.shutdown();
+    await new Promise((r) => setTimeout(r, 2000)); // drain old workers
+    runtime = new AgentRuntime();
+
     credentialSet(CRED_A, 'secret-aaa-value');
     credentialSet(CRED_B, 'secret-bbb-value');
 
@@ -163,12 +168,35 @@ describe('Suite 2: Tool Calling / Credential Lifecycle', { timeout: 300_000 }, (
     const diag2 = runDiagnostic(result2 as unknown as Record<string, unknown>);
     expect(result2.status, `[With creds] ${diag2}`).toBe('COMPLETED');
 
-    const output2 = getOutputText(result2 as unknown as { output: unknown });
-    expect(output2, `[With creds] output=${output2.slice(0, 300)}`).toContain('free');
-    // "sec" = first 3 chars of "secret-aaa-value"
-    expect(output2, `[With creds] output=${output2.slice(0, 300)}`).toContain('sec');
+    // Check tool task outputs directly — LLM prose is non-deterministic
+    const { results: tasks2 } = await findToolTasks(result2.executionId!, [
+      'free_tool', 'paid_tool_a', 'paid_tool_b',
+    ]);
+    expect(tasks2['free_tool'], '[With creds] free_tool task not found').toBeTruthy();
+    expect(tasks2['free_tool'].status, '[With creds] free_tool should be COMPLETED').toBe('COMPLETED');
+    // Tool returns "paid_a:sec" / "paid_b:sec" (first 3 chars of "secret-*-value")
+    for (const paid of ['paid_tool_a', 'paid_tool_b'] as const) {
+      const t = tasks2[paid];
+      expect(t, `[With creds] ${paid} task not found`).toBeTruthy();
+      expect(t.status, `[With creds] ${paid} should be COMPLETED`).toBe('COMPLETED');
+      expect(
+        JSON.stringify(t.output),
+        `[With creds] ${paid} output should contain 'sec'`,
+      ).toContain('sec');
+    }
 
     // ── Step 5: Update credentials ───────────────────────────────
+    // Shutdown and recreate runtime so workers pick up fresh execution tokens
+    // with the updated credentials. Reusing stale workers causes them to resolve
+    // credentials with the old execution's token (race condition).
+    await runtime.shutdown();
+    // Drain delay: stopPolling() signals the conductor poll loop to stop but
+    // in-flight task handlers may still complete asynchronously. Without this,
+    // the new runtime's workers can overlap with ghost handlers from the old
+    // runtime, causing credential resolution to fail.
+    await new Promise((r) => setTimeout(r, 2000));
+    runtime = new AgentRuntime();
+
     credentialSet(CRED_A, 'newval-xxx-updated');
     credentialSet(CRED_B, 'newval-yyy-updated');
 
@@ -178,8 +206,19 @@ describe('Suite 2: Tool Calling / Credential Lifecycle', { timeout: 300_000 }, (
     const diag3 = runDiagnostic(result3 as unknown as Record<string, unknown>);
     expect(result3.status, `[Updated] ${diag3}`).toBe('COMPLETED');
 
-    const output3 = getOutputText(result3 as unknown as { output: unknown });
-    // "new" = first 3 chars of "newval-xxx-updated"
-    expect(output3, `[Updated] output=${output3.slice(0, 300)}`).toContain('new');
+    // Check tool task outputs directly — LLM prose is non-deterministic
+    const { results: tasks3 } = await findToolTasks(result3.executionId!, [
+      'paid_tool_a', 'paid_tool_b',
+    ]);
+    // Tool returns "paid_a:new" / "paid_b:new" (first 3 chars of "newval-*-updated")
+    for (const paid of ['paid_tool_a', 'paid_tool_b'] as const) {
+      const t = tasks3[paid];
+      expect(t, `[Updated] ${paid} task not found`).toBeTruthy();
+      expect(t.status, `[Updated] ${paid} should be COMPLETED`).toBe('COMPLETED');
+      expect(
+        JSON.stringify(t.output),
+        `[Updated] ${paid} output should contain 'new'`,
+      ).toContain('new');
+    }
   });
 });

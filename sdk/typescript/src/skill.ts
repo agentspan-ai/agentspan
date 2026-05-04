@@ -405,7 +405,7 @@ export function skill(skillPath: string, options?: SkillOptions): Agent {
   if (!fs.existsSync(skillMdPath)) {
     throw new SkillLoadError(`Directory ${resolvedPath} is not a valid skill: SKILL.md not found`);
   }
-  const skillMd = fs.readFileSync(skillMdPath, "utf-8");
+  let skillMd = fs.readFileSync(skillMdPath, "utf-8");
   const frontmatter = parseFrontmatter(skillMd);
   const name = frontmatter.name as string;
 
@@ -484,6 +484,13 @@ export function skill(skillPath: string, options?: SkillOptions): Agent {
     }
   }
 
+  // 5c. Inject runtime params into SKILL.md so the server's orchestrator
+  // sees them in the system prompt (same as Python SDK fix).
+  if (Object.keys(mergedParams).length > 0) {
+    const paramBlock = formatSkillParams(mergedParams);
+    skillMd = skillMd + "\n\n" + paramBlock + "\n";
+  }
+
   // 6. Build raw config
   const rawConfig: Record<string, unknown> = {
     model: model ? String(model) : "",
@@ -496,6 +503,7 @@ export function skill(skillPath: string, options?: SkillOptions): Agent {
     resourceFiles,
     crossSkillRefs: crossRefs,
     defaultParams,
+    params: mergedParams,
   };
 
   // 7. Return Agent with framework marker

@@ -92,7 +92,7 @@ if __name__ == "__main__":
         result.print_result()
         print(f"\n{'=' * 60}")
         print(f"Status: {result.status}")
-        print(f"Workflow ID: {result.execution_id}")
+        print(f"Execution ID: {result.execution_id}")
         print(f"{'=' * 60}")
 
         # Production pattern:
