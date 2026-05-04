@@ -1,0 +1,71 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+group = 'ai.agentspan'
+version = '0.1.0'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    withSourcesJar()
+    withJavadocJar()
+}
+
+repositories {
+    mavenCentral()
+}
+
+ext {
+    springBootVersion = '3.3.5'
+}
+
+dependencies {
+    api project(':')
+
+    compileOnly "org.springframework.boot:spring-boot-autoconfigure:${springBootVersion}"
+    compileOnly "org.springframework.boot:spring-boot:${springBootVersion}"
+
+    annotationProcessor "org.springframework.boot:spring-boot-configuration-processor:${springBootVersion}"
+
+    testImplementation "org.springframework.boot:spring-boot-test:${springBootVersion}"
+    testImplementation "org.springframework.boot:spring-boot-autoconfigure:${springBootVersion}"
+    testImplementation "org.springframework:spring-test:6.1.14"
+    testImplementation "org.junit.jupiter:junit-jupiter:5.11.0"
+    testImplementation "org.assertj:assertj-core:3.26.3"
+    testRuntimeOnly "org.slf4j:slf4j-simple:2.0.13"
+}
+
+compileJava.options.compilerArgs << '-parameters'
+
+test {
+    useJUnitPlatform()
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+            groupId = 'ai.agentspan'
+            artifactId = 'java-sdk-spring'
+            version = project.version
+
+            pom {
+                name = 'Agentspan Java SDK Spring Boot Starter'
+                description = 'Spring Boot auto-configuration for the Agentspan Java SDK'
+                url = 'https://github.com/agentspan-ai/agentspan'
+                licenses {
+                    license {
+                        name = 'MIT License'
+                        url = 'https://opensource.org/licenses/MIT'
+                    }
+                }
+            }
+        }
+    }
+    repositories {
+        mavenLocal()
+    }
+}
