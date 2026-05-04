@@ -20,7 +20,8 @@ import {
   MockScenarioKey,
 } from "./mockData";
 import { AgentRunData, AgentStatus } from "./types";
-import { WorkflowExecution } from "types/Execution";
+import { WorkflowExecution, WorkflowExecutionStatus } from "types/Execution";
+import { HumanInputPanel } from "./HumanInputPanel";
 
 interface AgentExecutionTabProps {
   execution?: WorkflowExecution;
@@ -102,6 +103,17 @@ export function AgentExecutionTab({ execution }: AgentExecutionTabProps) {
 
   const metrics = computeMetrics(rootRun);
   const isUsingMockData = !execution?.workflowId;
+  const isPaused = execution?.status === WorkflowExecutionStatus.PAUSED;
+
+  // Collect sub-agent names for MANUAL strategy selection
+  const subAgentNames = useMemo<string[]>(() => {
+    const agentDef = rootRun.agentDef as Record<string, unknown> | undefined;
+    const agents = agentDef?.agents as Array<{ name?: string }> | undefined;
+    if (Array.isArray(agents)) {
+      return agents.map((a) => a.name ?? "").filter(Boolean);
+    }
+    return rootRun.turns.flatMap((t) => t.subAgents.map((s) => s.agentName));
+  }, [rootRun]);
 
   const handleScenarioChange = (event: SelectChangeEvent<MockScenarioKey>) => {
     setScenario(event.target.value as MockScenarioKey);
@@ -117,6 +129,15 @@ export function AgentExecutionTab({ execution }: AgentExecutionTabProps) {
           </Box>
         </Alert>
       )}
+
+      {/* Human-in-the-loop input panel (only when execution is paused) */}
+      {isPaused && execution?.workflowId && (
+        <HumanInputPanel
+          executionId={execution.workflowId}
+          subAgentNames={subAgentNames}
+        />
+      )}
+
       {/* Header row: metrics + scenario selector (mock only) */}
       <Box sx={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
