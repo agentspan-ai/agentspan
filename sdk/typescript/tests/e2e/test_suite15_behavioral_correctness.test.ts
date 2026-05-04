@@ -26,6 +26,7 @@ import {
   TIMEOUT,
   getOutputText,
   runDiagnostic,
+  findToolTasksDeep,
 } from './helpers';
 
 let runtime: AgentRuntime;
@@ -767,30 +768,19 @@ describe('Suite 15: Behavioral Correctness', { timeout: 1_800_000 }, () => {
       const orderStage = new Agent({
         name: 'order_stage',
         model: MODEL,
-        instructions:
-          "Your ONLY job: call lookup_order with order_id='ORD-123'. " +
-          'Do this immediately. Output format:\n' +
-          'ORDER: status=<status>, total=<total>',
+        instructions: "Your ONLY job: call lookup_order with order_id='ORD-123'. Do this immediately.",
         tools: [lookupOrder],
       });
       const inventoryStage = new Agent({
         name: 'inventory_stage',
         model: MODEL,
-        instructions:
-          "Your ONLY job: call check_inventory with product='laptops'. " +
-          'Do this immediately. Then output ALL of the following:\n' +
-          '1. Copy the ENTIRE input you received (ORDER line) verbatim\n' +
-          '2. Add: INVENTORY: quantity=<quantity>',
+        instructions: "Your ONLY job: call check_inventory with product='laptops'. Do this immediately.",
         tools: [checkInventory],
       });
       const shippingStage = new Agent({
         name: 'shipping_stage',
         model: MODEL,
-        instructions:
-          "Your ONLY job: call get_shipping_rate with destination='Tokyo'. " +
-          'Do this immediately. Then output ALL of the following:\n' +
-          '1. Copy the ENTIRE input you received (ORDER + INVENTORY lines) verbatim\n' +
-          '2. Add: SHIPPING: rate=<rate>, days=<days>',
+        instructions: "Your ONLY job: call get_shipping_rate with destination='Tokyo'. Do this immediately.",
         tools: [getShippingRate],
       });
 
@@ -805,22 +795,38 @@ describe('Suite 15: Behavioral Correctness', { timeout: 1_800_000 }, () => {
       const diag = runDiagnostic(result as unknown as Record<string, unknown>);
       expect(result.status, `[MultiTopic/Sequential] ${diag}`).toBe('COMPLETED');
 
-      const output = fullOutputText(result as unknown as Record<string, unknown>);
-      // lookup_order: {"status": "shipped", "total": 49.99}
+      // Structural validation: verify each tool was called and returned expected data.
+      // Pipeline stages run in sub-workflows, so use the deep recursive finder.
+      const { results: tasks, allTasks } = await findToolTasksDeep(result.executionId!, [
+        'lookup_order',
+        'check_inventory',
+        'get_shipping_rate',
+      ]);
+      const taskDiag = `allTasks=${JSON.stringify(allTasks)}`;
+
+      const orderTask = tasks['lookup_order'];
+      expect(orderTask, `[Sequential] lookup_order task not found. ${taskDiag}`).toBeTruthy();
+      expect(orderTask.status, `[Sequential] lookup_order not COMPLETED`).toBe('COMPLETED');
       expect(
-        output.toLowerCase().includes('shipped') || output.includes('49.99'),
-        `Output missing order data (shipped/49.99). Output: ${output.slice(0, 300)}`,
-      ).toBe(true);
-      // check_inventory: {"quantity": 142}
+        JSON.stringify(orderTask.output),
+        '[Sequential] lookup_order output missing shipped/49.99',
+      ).toMatch(/shipped|49\.99/);
+
+      const inventoryTask = tasks['check_inventory'];
+      expect(inventoryTask, `[Sequential] check_inventory task not found. ${taskDiag}`).toBeTruthy();
+      expect(inventoryTask.status, `[Sequential] check_inventory not COMPLETED`).toBe('COMPLETED');
       expect(
-        output.includes('142'),
-        `Output missing inventory quantity (142). Output: ${output.slice(0, 300)}`,
-      ).toBe(true);
-      // get_shipping_rate: {"rate_usd": 12.50}
+        JSON.stringify(inventoryTask.output),
+        '[Sequential] check_inventory output missing 142',
+      ).toContain('142');
+
+      const shippingTask = tasks['get_shipping_rate'];
+      expect(shippingTask, `[Sequential] get_shipping_rate task not found. ${taskDiag}`).toBeTruthy();
+      expect(shippingTask.status, `[Sequential] get_shipping_rate not COMPLETED`).toBe('COMPLETED');
       expect(
-        output.includes('12.5') || output.includes('12.50'),
-        `Output missing shipping rate (12.50). Output: ${output.slice(0, 300)}`,
-      ).toBe(true);
+        JSON.stringify(shippingTask.output),
+        '[Sequential] get_shipping_rate output missing 12.5',
+      ).toMatch(/12\.5/);
     });
 
     it('test_parallel_all_specialists_contribute', async () => {
