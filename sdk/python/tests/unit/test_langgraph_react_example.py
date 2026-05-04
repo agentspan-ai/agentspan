@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 @pytest.fixture
 def react_graph():
     """Build a real create_react_agent graph with a mocked LLM."""
-    pytest.importorskip("langgraph")
+    pytest.importorskip("langgraph.prebuilt", reason="langgraph.prebuilt not installed")
     from langgraph.prebuilt import create_react_agent
     from langchain_core.messages import AIMessage
 

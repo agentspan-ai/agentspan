@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 @pytest.fixture
 def custom_graph():
     """Build a simple StateGraph with a custom state schema (no messages)."""
-    pytest.importorskip("langgraph")
+    pytest.importorskip("langgraph.graph", reason="langgraph.graph not installed")
     from typing import TypedDict
     from langgraph.graph import StateGraph, END
 

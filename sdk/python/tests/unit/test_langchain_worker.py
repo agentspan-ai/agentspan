@@ -1,6 +1,9 @@
 # sdk/python/tests/unit/test_langchain_worker.py
 """Unit tests for the LangChain passthrough worker."""
+import pytest
 from unittest.mock import MagicMock, patch
+
+pytest.importorskip("langchain_core", reason="langchain_core not installed")
 
 
 def _make_executor(output="answer"):
