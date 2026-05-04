@@ -1,7 +1,6 @@
 plugins {
     id 'java-library'
-    id 'maven-publish'
-    id 'signing'
+    id 'com.vanniktech.maven.publish' version '0.30.0'
 }
 
 group = 'ai.agentspan'
@@ -10,8 +9,6 @@ java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
     }
-    withSourcesJar()
-    withJavadocJar()
 }
 
 repositories {
@@ -52,69 +49,40 @@ test {
     }
 }
 
-publishing {
-    publications {
-        mavenJava(MavenPublication) {
-            from components.java
-            groupId = 'ai.agentspan'
-            artifactId = 'java-sdk'
-            version = project.version
-
-            pom {
-                name = 'Agentspan Java SDK'
-                description = 'Java SDK for the Agentspan agent orchestration platform'
-                url = 'https://github.com/agentspan-ai/agentspan'
-                licenses {
-                    license {
-                        name = 'MIT License'
-                        url = 'https://opensource.org/licenses/MIT'
-                    }
-                }
-                developers {
-                    developer {
-                        organization = 'Agentspan'
-                        organizationUrl = 'https://agentspan.ai'
-                        name = 'Agentspan Development Team'
-                        email = 'developers@orkes.io'
-                    }
-                }
-                scm {
-                    connection = 'scm:git:git://github.com/agentspan-ai/agentspan.git'
-                    developerConnection = 'scm:git:ssh://github.com/agentspan-ai/agentspan.git'
-                    url = 'https://github.com/agentspan-ai/agentspan'
-                }
-            }
-        }
-    }
-    repositories {
-        if (project.hasProperty('mavenCentral')) {
-            maven {
-                name = 'mavenCentral'
-                url = project.version.toString().endsWith('-SNAPSHOT')
-                    ? 'https://ossrh-staging-api.central.sonatype.com/content/repositories/snapshots/'
-                    : 'https://ossrh-staging-api.central.sonatype.com/service/local/staging/deploy/maven2/'
-                credentials {
-                    username = project.findProperty('username')
-                    password = project.findProperty('password')
-                }
-            }
-        } else {
-            mavenLocal()
-        }
-    }
-}
-
-signing {
-    required = { project.hasProperty('mavenCentral') }
-    def signingKeyId = project.findProperty('signingKeyId')
-    def signingKey = project.findProperty('signingKey')
-    def signingPassword = project.findProperty('signingPassword')
-    if (signingKeyId && signingKey && signingPassword) {
-        useInMemoryPgpKeys(signingKeyId, signingKey, signingPassword)
-    }
-    sign publishing.publications.mavenJava
-}
-
 tasks.withType(Javadoc).configureEach {
     options.addStringOption('Xdoclint:none', '-quiet')
+}
+
+mavenPublishing {
+    publishToMavenCentral(com.vanniktech.maven.publish.SonatypeHost.CENTRAL_PORTAL, true)
+    if (project.findProperty('signingInMemoryKey') != null) {
+        signAllPublications()
+    }
+
+    coordinates('ai.agentspan', 'java-sdk', project.version.toString())
+
+    pom {
+        name = 'Agentspan Java SDK'
+        description = 'Java SDK for the Agentspan agent orchestration platform'
+        url = 'https://github.com/agentspan-ai/agentspan'
+        licenses {
+            license {
+                name = 'MIT License'
+                url = 'https://opensource.org/licenses/MIT'
+            }
+        }
+        developers {
+            developer {
+                organization = 'Agentspan'
+                organizationUrl = 'https://agentspan.ai'
+                name = 'Agentspan Development Team'
+                email = 'developers@orkes.io'
+            }
+        }
+        scm {
+            connection = 'scm:git:git://github.com/agentspan-ai/agentspan.git'
+            developerConnection = 'scm:git:ssh://github.com/agentspan-ai/agentspan.git'
+            url = 'https://github.com/agentspan-ai/agentspan'
+        }
+    }
 }
