@@ -28,6 +28,23 @@ Requirements:
     - mcp-testkit running on http://localhost:3001 (see setup above)
     - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
+
+Docker gotcha:
+    When the AgentSpan server runs in Docker (e.g. `agentspan server start`),
+    the *server* makes the MCP calls — not your local process.  The server
+    resolves `localhost` to its own container loopback, not your host machine.
+
+    Fix: use `host.docker.internal` so the container can reach your host:
+
+        weather = mcp_tool(server_url="http://host.docker.internal:3001/mcp", ...)
+
+    DNS rebinding protection: mcp-testkit rejects unknown Host headers with
+    HTTP 421. If you hit this, patch the validation in the venv that the
+    mcp-testkit process uses:
+
+        sed -i '' \
+          's/return Response("Invalid Host header", status_code=421)/return None/' \
+          $(python -c "import mcp.server.transport_security as m; print(m.__file__)")
 """
 
 from agentspan.agents import Agent, AgentRuntime, mcp_tool
