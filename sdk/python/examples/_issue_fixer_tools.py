@@ -877,7 +877,7 @@ def contextbook_write(section: str, content: str, append: bool = False) -> str:
         return f"Error writing contextbook section {section!r}: {exc}"
 
 
-def _make_contextbook_writer(tool_name: str, fixed_section: str, max_calls: int = 2):
+def _make_contextbook_writer(tool_name: str, fixed_section: str, max_calls: int = 2, doc: str = ""):
     """Create a contextbook_write tool locked to a specific section."""
 
     def _fn(content: str, append: bool = False) -> str:
@@ -885,7 +885,7 @@ def _make_contextbook_writer(tool_name: str, fixed_section: str, max_calls: int 
 
     _fn.__name__ = tool_name
     _fn.__qualname__ = tool_name
-    _fn.__doc__ = (
+    _fn.__doc__ = doc or (
         f"Write to the '{fixed_section}' contextbook section.\n"
         f"append=True adds to existing content; append=False replaces."
     )
@@ -895,7 +895,53 @@ def _make_contextbook_writer(tool_name: str, fixed_section: str, max_calls: int 
 
 # Per-agent contextbook writers — section name is baked in, LLM can't pick wrong one
 write_architecture = _make_contextbook_writer("write_architecture", "architecture_design_test", max_calls=2)
-write_coder_plan = _make_contextbook_writer("write_coder_plan", "coder_plan", max_calls=2)
+write_coder_plan = _make_contextbook_writer(
+    "write_coder_plan", "coder_plan", max_calls=2,
+    doc="""\
+Write the coder plan to the 'coder_plan' contextbook section.
+append=True adds to existing content; append=False replaces.
+
+The content MUST contain TWO parts:
+
+PART 1 — Markdown Change Map:
+
+## Change Map
+### File: <path>
+Action: CREATE | MODIFY | DELETE
+Instructions: ...
+Current code reference: (paste code snippet for MODIFY)
+
+## TODO Checklist
+- [ ] item — addressed in <file>
+
+PART 2 — JSON execution plan (```json fence after the Change Map):
+
+The JSON is compiled into a deterministic Conductor workflow.
+
+Operation mapping:
+- CREATE → {"tool": "write_file", "generate": {"instructions": "...", "context": "reference patterns", "output_schema": "{\\"path\\": \\"..\\", \\"content\\": \\"..\\"}", "max_tokens": 8192}}
+- MODIFY → {"tool": "edit_file", "generate": {"instructions": "...", "context": "Current file:\\n<FULL file content>", "output_schema": "{\\"path\\": \\"..\\", \\"old_string\\": \\"..\\", \\"new_string\\": \\"..\\"}", "max_tokens": 4096}}
+- DELETE → {"tool": "run_command", "args": {"command": "rm <path>"}}
+
+Steps (omit empty steps):
+1. "create_files" — parallel: true — all CREATE operations
+2. "modify_files" — depends_on: ["create_files"], parallel: true — all MODIFY and DELETE operations
+
+Top-level fields:
+- "validation": run AFTER all steps; each entry uses success_condition (JS expression, $ = tool output string):
+    {"tool": "lint_and_format", "success_condition": "$.indexOf('OK') >= 0"},
+    {"tool": "build_check", "success_condition": "$.indexOf('PASS') >= 0"},
+    {"tool": "run_unit_tests", "success_condition": "$.indexOf('PASS') >= 0"}
+  Multiple validations run in parallel (FORK_JOIN). Omit any that don't apply to this repo.
+- "on_success": actions on validation pass — git commit then write report:
+    {"tool": "run_command", "args": {"command": "git add -A -- ':!.contextbook' && git commit -m '<type>: <message>'"}},
+    {"tool": "write_implementation_report", "args": {"content": "<markdown report>"}}
+- "on_failure": leave empty [] — fallback agent handles failures.
+
+CRITICAL: For MODIFY ops, generate.context MUST contain the FULL file content (or relevant section if >200 lines).
+CRITICAL: success_condition uses $.indexOf() because tools return plain-text strings, not JSON.
+""",
+)
 write_implementation_report = _make_contextbook_writer("write_implementation_report", "implementation_report", max_calls=1)
 write_qa_testing = _make_contextbook_writer("write_qa_testing", "qa_testing", max_calls=2)
 
