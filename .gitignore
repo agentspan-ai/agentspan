@@ -45,3 +45,9 @@ sdk/java/target/
 docs/superpowers/
 .contextbook/
 sdk/python/agentspan
+
+# C# build artifacts
+obj/
+*.user
+*.suo
+.vs/
