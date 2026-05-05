@@ -210,4 +210,47 @@ class PlanCompilerScriptTest {
         boolean hasForkJoin = topTasks.stream().anyMatch(t -> "FORK_JOIN".equals(t.get("type")));
         assertThat(hasForkJoin).as("Single validation should NOT use FORK_JOIN").isFalse();
     }
+
+    @Test
+    void testSuccessConditionWorksWithPlainTextOutput() throws Exception {
+        // success_condition receives plain-text tool output (not JSON) — e.g., pytest output
+        // The condition uses $.indexOf(...) — requires $ to be the raw string, not {}
+        String planJson = """
+                {
+                  "steps": [{"id": "s1", "parallel": false, "operations": [
+                    {"tool": "noop", "args": {}}
+                  ]}],
+                  "validation": [{"tool": "run_tests", "success_condition": "$.indexOf('passed') >= 0"}]
+                }""";
+
+        Map<String, Object> wf = compilePlan(planJson);
+        List<Map<String, Object>> tasks = allTasks(wf);
+
+        // Find the INLINE eval task
+        @SuppressWarnings("unchecked")
+        Map<String, Object> evalTask = tasks.stream()
+                .filter(t -> "INLINE".equals(t.get("type")))
+                .filter(t -> {
+                    var inp = (Map<String, Object>) t.get("inputParameters");
+                    if (inp == null) return false;
+                    return String.valueOf(inp.getOrDefault("expression", "")).contains("indexOf");
+                })
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("No INLINE eval task with indexOf condition found"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> evalInputs = (Map<String, Object>) evalTask.get("inputParameters");
+        String evalExpr = (String) evalInputs.get("expression");
+
+        // Simulate executing the eval expression with plain-text tool output "1 passed in 0.3s"
+        // The expression references $.toolOut — we inject it directly
+        String testScript = "var $ = {toolOut: '1 passed in 0.3s'}; var __evalResult = " + evalExpr + ";";
+        graalCtx.eval("js", testScript);
+        Value result = graalCtx.eval("js", "__evalResult");
+
+        // Must return {passed: true} — not {passed: false} due to JSON.parse failure
+        assertThat(result.getMember("passed").asBoolean())
+                .as("success_condition with $.indexOf on plain-text output must return passed=true")
+                .isTrue();
+    }
 }

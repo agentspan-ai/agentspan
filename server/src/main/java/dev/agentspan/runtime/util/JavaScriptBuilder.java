@@ -1620,7 +1620,7 @@ public class JavaScriptBuilder {
                         + "    var cond = v.success_condition;"
                         + "    evalExpr = \"(function(){\""
                         + "      + \"  var raw = $.toolOut;\""
-                        + "      + \"  var out; try { out = typeof raw === 'string' ? JSON.parse(raw) : (raw || {}); } catch(e) { out = {}; }\""
+                        + "      + \"  var out; try { out = typeof raw === 'string' ? JSON.parse(raw) : (raw || {}); } catch(e) { out = raw; }\""
                         + "      + \"  try { var ok = (function($){ return (\" + cond + \"); })(out);\""
                         + "      + \"  return {passed: !!ok}; } catch(e) { return {passed: false, reason: 'condition error: ' + e.message}; }\""
                         + "      + \"})()\";"
