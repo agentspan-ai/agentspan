@@ -29,13 +29,13 @@
   <video src="assets/agentspan-readme-demo.mp4" controls muted playsinline width="100%"></video>
 </p>
 
-https://github.com/user-attachments/assets/845c7af4-f2e6-49f6-95c7-1d1b2c53d126
-
 ---
 
 > ⭐ If you find Agentspan useful, [give us a star](https://github.com/agentspan-ai/agentspan) — it helps others find the project!
 
 ---
+
+https://github.com/user-attachments/assets/845c7af4-f2e6-49f6-95c7-1d1b2c53d126
 
 **Agentspan** is a distributed, durable runtime for AI agents that survive crashes, scale across machines, and pause for human approval for days — not minutes.
 
