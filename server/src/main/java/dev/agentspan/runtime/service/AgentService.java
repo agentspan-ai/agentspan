@@ -14,6 +14,7 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -71,7 +72,7 @@ public class AgentService {
     private ExecutionTokenService executionTokenService;
 
     @Autowired
-    private org.springframework.core.env.Environment environment;
+    private Environment environment;
 
     /** Package-private constructor for testing with ExecutionTokenService */
     AgentService(
@@ -85,6 +86,33 @@ public class AgentService {
             ExecutionService executionService,
             ProviderValidator providerValidator,
             ExecutionTokenService executionTokenService) {
+        this(
+                agentCompiler,
+                normalizerRegistry,
+                executionDAO,
+                metadataDAO,
+                workflowExecutor,
+                workflowService,
+                streamRegistry,
+                executionService,
+                providerValidator,
+                executionTokenService,
+                null);
+    }
+
+    /** Package-private constructor for testing with ExecutionTokenService and Environment */
+    AgentService(
+            AgentCompiler agentCompiler,
+            NormalizerRegistry normalizerRegistry,
+            ExecutionDAO executionDAO,
+            MetadataDAO metadataDAO,
+            WorkflowExecutor workflowExecutor,
+            WorkflowService workflowService,
+            AgentStreamRegistry streamRegistry,
+            ExecutionService executionService,
+            ProviderValidator providerValidator,
+            ExecutionTokenService executionTokenService,
+            Environment environment) {
         this.agentCompiler = agentCompiler;
         this.normalizerRegistry = normalizerRegistry;
         this.executionDAO = executionDAO;
@@ -95,6 +123,7 @@ public class AgentService {
         this.executionService = executionService;
         this.providerValidator = providerValidator;
         this.executionTokenService = executionTokenService;
+        this.environment = environment;
     }
 
     /**
@@ -231,7 +260,7 @@ public class AgentService {
 
         // Build __agentspan_ctx__: server URL + optional execution token
         Map<String, Object> agentCtx = new LinkedHashMap<>();
-        String port = environment.getProperty("server.port", "6767");
+        String port = environment != null ? environment.getProperty("server.port", "6767") : "6767";
         agentCtx.put("serverUrl", "http://localhost:" + port);
 
         // Mint execution token and embed in workflow variables for worker credential resolution
@@ -1325,10 +1354,12 @@ public class AgentService {
                     collectSimpleTaskNamesFromTasks(branch, names);
                 }
             }
-            // Inline sub-workflows
-            if (task.getSubWorkflowParam() != null && task.getSubWorkflowParam().getWorkflowDef() != null) {
-                collectSimpleTaskNamesFromTasks(
-                        task.getSubWorkflowParam().getWorkflowDef().getTasks(), names);
+            // Inline sub-workflows — skip if workflowDefinition is a runtime expression String
+            // (e.g. "${parse_wf.output.result}") used by plan-execute inline sub-workflows.
+            if (task.getSubWorkflowParam() != null
+                    && task.getSubWorkflowParam().getWorkflowDefinition()
+                            instanceof WorkflowDef wfDef) {
+                collectSimpleTaskNamesFromTasks(wfDef.getTasks(), names);
             }
         }
     }
