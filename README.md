@@ -25,6 +25,10 @@
   <a href="docs/python-sdk/api-reference.md">API Reference</a>
 </p>
 
+<p align="center">
+  <video src="assets/agentspan-readme-demo.mp4" controls muted playsinline width="100%"></video>
+</p>
+
 ---
 
 > ⭐ If you find Agentspan useful, [give us a star](https://github.com/agentspan-ai/agentspan) — it helps others find the project!
