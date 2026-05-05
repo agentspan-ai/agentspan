@@ -35,7 +35,7 @@
 
 ---
 
-https://github.com/user-attachments/assets/845c7af4-f2e6-49f6-95c7-1d1b2c53d126
+https://github.com/user-attachments/assets/646c32ca-6e00-4257-b36d-1bdf00b8b4eb
 
 **Agentspan** is a distributed, durable runtime for AI agents that survive crashes, scale across machines, and pause for human approval for days — not minutes.
 
