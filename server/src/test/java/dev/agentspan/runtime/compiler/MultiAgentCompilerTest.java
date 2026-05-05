@@ -969,6 +969,106 @@ class MultiAgentCompilerTest {
         assertThat(wf.getTasks().get(8).getType()).isEqualTo("INLINE"); // output_selector
     }
 
+    // ── Plan-Execute tests ──────────────────────────────────────────
+
+    @Test
+    void testPlanExecuteWithFallback() {
+        AgentConfig planner = simpleSubAgent("planner", "Write a plan");
+        AgentConfig fallback = simpleSubAgent("fallback", "Fix errors");
+        AgentConfig harness = AgentConfig.builder()
+                .name("harness")
+                .model("openai/gpt-4o-mini")
+                .strategy("plan_execute")
+                .agents(List.of(planner, fallback))
+                .build();
+
+        WorkflowDef wf = new MultiAgentCompiler(compiler).compile(harness);
+        assertThat(wf.getName()).isEqualTo("harness");
+
+        boolean hasPlanRouteSwitch = wf.getTasks().stream()
+                .anyMatch(t -> "SWITCH".equals(t.getType())
+                        && t.getTaskReferenceName().contains("plan_route"));
+        assertThat(hasPlanRouteSwitch).isTrue();
+
+        // has_plan branch 'failed' path must route to a fallback SUB_WORKFLOW (not TERMINATE)
+        WorkflowTask routeSwitch2 = wf.getTasks().stream()
+                .filter(t -> "SWITCH".equals(t.getType()) && t.getTaskReferenceName().contains("plan_route"))
+                .findFirst().orElseThrow();
+        List<WorkflowTask> hasPlanBranch2 = routeSwitch2.getDecisionCases().get("has_plan");
+        assertThat(hasPlanBranch2).isNotNull();
+        WorkflowTask execRouteSwitch2 = hasPlanBranch2.stream()
+                .filter(t -> "SWITCH".equals(t.getType()) && t.getTaskReferenceName().contains("exec_route"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected exec_route SWITCH in has_plan branch"));
+        List<WorkflowTask> execFailedBranch2 = execRouteSwitch2.getDecisionCases().get("failed");
+        assertThat(execFailedBranch2).isNotEmpty();
+        // With a fallback agent, the last task in the failed branch must be a SUB_WORKFLOW (fallback agent)
+        // Not a TERMINATE — that would mean the fallback was silently dropped
+        boolean hasFallbackSubWorkflow = execFailedBranch2.stream()
+                .anyMatch(t -> "SUB_WORKFLOW".equals(t.getType()));
+        assertThat(hasFallbackSubWorkflow)
+                .as("Expected fallback SUB_WORKFLOW in the failed branch when fallbackConfig is provided")
+                .isTrue();
+    }
+
+    @Test
+    void testPlanExecuteWithoutFallback_singleAgent() {
+        AgentConfig planner = simpleSubAgent("planner", "Write a plan");
+        AgentConfig harness = AgentConfig.builder()
+                .name("coder")
+                .model("openai/gpt-4o-mini")
+                .strategy("plan_execute")
+                .agents(List.of(planner))
+                .build();
+
+        WorkflowDef wf = new MultiAgentCompiler(compiler).compile(harness);
+        assertThat(wf.getName()).isEqualTo("coder");
+
+        boolean hasPlanRouteSwitch = wf.getTasks().stream()
+                .anyMatch(t -> "SWITCH".equals(t.getType())
+                        && t.getTaskReferenceName().contains("plan_route"));
+        assertThat(hasPlanRouteSwitch).isTrue();
+
+        // Find the plan_route SWITCH
+        WorkflowTask routeSwitch = wf.getTasks().stream()
+                .filter(t -> "SWITCH".equals(t.getType()) && t.getTaskReferenceName().contains("plan_route"))
+                .findFirst().orElseThrow();
+
+        // no-plan branch (defaultCase) must terminate with FAILED — no fallback sub-workflow
+        List<WorkflowTask> noPlanBranch = routeSwitch.getDefaultCase();
+        assertThat(noPlanBranch).isNotEmpty();
+        WorkflowTask noPlanLastTask = noPlanBranch.get(noPlanBranch.size() - 1);
+        assertThat(noPlanLastTask.getType()).isEqualTo("TERMINATE");
+        assertThat(noPlanLastTask.getInputParameters().get("terminationStatus")).isEqualTo("FAILED");
+
+        // has_plan branch must contain an exec_route SWITCH whose 'failed' case also TERMINATEs
+        List<WorkflowTask> hasPlanBranch = routeSwitch.getDecisionCases().get("has_plan");
+        assertThat(hasPlanBranch).isNotNull();
+        WorkflowTask execRouteSwitch = hasPlanBranch.stream()
+                .filter(t -> "SWITCH".equals(t.getType()) && t.getTaskReferenceName().contains("exec_route"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected exec_route SWITCH in has_plan branch"));
+        List<WorkflowTask> execFailedBranch = execRouteSwitch.getDecisionCases().get("failed");
+        assertThat(execFailedBranch).isNotEmpty();
+        WorkflowTask execFailedLast = execFailedBranch.get(execFailedBranch.size() - 1);
+        assertThat(execFailedLast.getType()).isEqualTo("TERMINATE");
+        assertThat(execFailedLast.getInputParameters().get("terminationStatus")).isEqualTo("FAILED");
+    }
+
+    @Test
+    void testPlanExecuteRequiresAtLeastOneAgent() {
+        AgentConfig harness = AgentConfig.builder()
+                .name("bad")
+                .model("openai/gpt-4o-mini")
+                .strategy("plan_execute")
+                .agents(List.of())
+                .build();
+
+        assertThatThrownBy(() -> new MultiAgentCompiler(compiler).compile(harness))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("at least 1");
+    }
+
     @Test
     void testSequentialWithMultipleGates() {
         // Two gates: stage 0 and stage 1 both have gates, stage 2 has none

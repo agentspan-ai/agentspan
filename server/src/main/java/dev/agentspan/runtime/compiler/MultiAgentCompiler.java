@@ -1278,12 +1278,12 @@ public class MultiAgentCompiler {
         innerInputs.put("prompt", "${workflow.input.prompt}");
         innerInputs.put("media", "${workflow.input.media}");
         innerInputs.put("session_id", "${workflow.input.session_id}");
+        innerInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
         innerTask.setInputParameters(innerInputs);
 
         // 2. Coerce inner result to string (may be array/null when last turn was tool calls)
         String coerceRef = agent.getName() + "_coerce_result";
-        WorkflowTask coerceTask = AgentCompiler.createCoerceTask(
-                ref(innerRef + ".output.result"), coerceRef);
+        WorkflowTask coerceTask = AgentCompiler.createCoerceTask(ref(innerRef + ".output.result"), coerceRef);
         String coercedResultRef = AgentCompiler.coercedRef(coerceRef);
 
         // 3. LLM step with transfer tools to decide whether to transfer to a peer
@@ -1487,6 +1487,7 @@ public class MultiAgentCompiler {
         subInputs.put("prompt", "${workflow.input.prompt}");
         subInputs.put("media", "${workflow.input.media}");
         subInputs.put("session_id", "${workflow.input.session_id}");
+        subInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
         subTask.setInputParameters(subInputs);
 
         String contentRef = ref(subRef + ".output.result");
@@ -1605,6 +1606,7 @@ public class MultiAgentCompiler {
         subInputs.put("prompt", "${workflow.variables.conversation}");
         subInputs.put("media", "${workflow.input.media}");
         subInputs.put("session_id", "${workflow.input.session_id}");
+        subInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
         subInputs.put("context", "${workflow.variables._agent_state}");
         task.setInputParameters(subInputs);
         caseTasks.add(task);
@@ -1844,13 +1846,12 @@ public class MultiAgentCompiler {
 
     private WorkflowDef compilePlanExecute(AgentConfig config) {
         List<AgentConfig> agents = config.getAgents();
-        if (agents == null || agents.size() < 2) {
+        if (agents == null || agents.isEmpty()) {
             throw new IllegalArgumentException(
-                    "PLAN_EXECUTE strategy requires at least 2 sub-agents (planner + fallback), got "
-                            + (agents == null ? 0 : agents.size()));
+                    "PLAN_EXECUTE strategy requires at least 1 sub-agent (planner), got 0");
         }
         AgentConfig plannerConfig = agents.get(0);
-        AgentConfig fallbackConfig = agents.get(1);
+        AgentConfig fallbackConfig = agents.size() >= 2 ? agents.get(1) : null;
 
         WorkflowDef wf = agentCompiler.createWorkflow(config);
         wf.setDescription("Plan-Execute harness: " + config.getName());
@@ -1878,8 +1879,10 @@ public class MultiAgentCompiler {
         // ── 2. Run planner (agentic sub-workflow) ────────────────────
         String plannerRef = prefix + "_planner";
         WorkflowTask plannerTask = agentCompiler.compileSubAgent(
-                plannerConfig, plannerRef,
-                "${workflow.input.prompt}", "${workflow.input.media}",
+                plannerConfig,
+                plannerRef,
+                "${workflow.input.prompt}",
+                "${workflow.input.media}",
                 "${workflow.variables.context}");
         tasks.add(plannerTask);
 
@@ -1889,10 +1892,14 @@ public class MultiAgentCompiler {
         plannerMerge.setType("INLINE");
         plannerMerge.setTaskReferenceName(plannerMergeRef);
         plannerMerge.setInputParameters(Map.of(
-                "evaluatorType", "graaljs",
-                "parent", "${workflow.variables.context}",
-                "child", "${" + plannerRef + ".output.context}",
-                "expression", JavaScriptBuilder.flatMergeContextScript()));
+                "evaluatorType",
+                "graaljs",
+                "parent",
+                "${workflow.variables.context}",
+                "child",
+                "${" + plannerRef + ".output.context}",
+                "expression",
+                JavaScriptBuilder.flatMergeContextScript()));
         tasks.add(plannerMerge);
 
         WorkflowTask plannerCtxSet = new WorkflowTask();
@@ -1907,20 +1914,50 @@ public class MultiAgentCompiler {
         tasks.add(AgentCompiler.createCoerceTask(plannerResultRaw, plannerCoerceRef));
         String plannerResult = AgentCompiler.coercedRef(plannerCoerceRef);
 
+        // ── 2b. Optional plan_source: deterministic tool call to read plan ──
+        // If planSource is configured, call the specified tool (e.g. contextbook_read)
+        // to retrieve the plan from an external source. This provides a deterministic
+        // fallback: even if the planner's text output fails extraction, the plan can
+        // be read directly from where the explorer wrote it.
+        String planReaderRef = null;
+        if (config.getPlanSource() != null) {
+            Map<String, Object> planSource = config.getPlanSource();
+            String toolName = (String) planSource.get("tool");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> toolArgs = (Map<String, Object>) planSource.getOrDefault("args", Map.of());
+
+            planReaderRef = prefix + "_plan_reader";
+            WorkflowTask planReaderTask = new WorkflowTask();
+            planReaderTask.setName(toolName);
+            planReaderTask.setTaskReferenceName(planReaderRef);
+            planReaderTask.setType("SIMPLE");
+
+            Map<String, Object> readerInputs = new LinkedHashMap<>(toolArgs);
+            readerInputs.put("session_id", "${workflow.input.session_id}");
+            readerInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
+            planReaderTask.setInputParameters(readerInputs);
+            planReaderTask.setOptional(true);
+            tasks.add(planReaderTask);
+        }
+
         // ── 3. Extract JSON plan from planner output ─────────────────
         // Pass BOTH the raw result (Java Map if LLM returned JSON) and the
         // coerced string (for markdown-with-fence case).  The extract script
         // tries the raw object first (checking for a `steps` key), then falls
         // back to regex-extracting a ```json fence from the coerced string.
+        // If planSource is configured, planReaderContent provides a deterministic
+        // fallback source — the script tries it after the planner text fails.
         String extractRef = prefix + "_extract_json";
         WorkflowTask extractTask = new WorkflowTask();
         extractTask.setType("INLINE");
         extractTask.setTaskReferenceName(extractRef);
-        extractTask.setInputParameters(Map.of(
-                "evaluatorType", "graaljs",
-                "rawResult", AgentCompiler.subAgentResultRef(plannerConfig, plannerRef),
-                "coercedResult", plannerResult,
-                "expression", JavaScriptBuilder.extractJsonFenceScript()));
+        Map<String, Object> extractInputs = new LinkedHashMap<>();
+        extractInputs.put("evaluatorType", "graaljs");
+        extractInputs.put("rawResult", AgentCompiler.subAgentResultRef(plannerConfig, plannerRef));
+        extractInputs.put("coercedResult", plannerResult);
+        extractInputs.put("planReaderContent", planReaderRef != null ? "${" + planReaderRef + ".output.result}" : "");
+        extractInputs.put("expression", JavaScriptBuilder.extractJsonFenceScript());
+        extractTask.setInputParameters(extractInputs);
         tasks.add(extractTask);
 
         // ── 4. SWITCH: if JSON plan found → compile & execute, else → fallback ──
@@ -1935,8 +1972,8 @@ public class MultiAgentCompiler {
         tasks.add(hasJsonCheck);
 
         // Build the two branches
-        List<WorkflowTask> hasPlanTasks = buildPlanExecutionBranch(config, plannerConfig, fallbackConfig, prefix,
-                extractRef, plannerResult);
+        List<WorkflowTask> hasPlanTasks =
+                buildPlanExecutionBranch(config, plannerConfig, fallbackConfig, prefix, extractRef, plannerResult);
         List<WorkflowTask> noPlanTasks = buildFallbackOnlyBranch(config, fallbackConfig, prefix, plannerResult);
 
         WorkflowTask routeSwitch = new WorkflowTask();
@@ -1960,16 +1997,16 @@ public class MultiAgentCompiler {
                 "planResult", "${" + prefix + "_plan_exec.output.result}",
                 "fallbackResult", "${" + prefix + "_fallback.output.result}",
                 "noPlanResult", "${" + prefix + "_noplan_fallback.output.result}",
-                "expression", "(function(){ "
-                        + "var r = $.planResult || $.fallbackResult || $.noPlanResult || ''; "
-                        + "return (typeof r === 'object') ? JSON.stringify(r) : String(r); })()"));
+                "expression",
+                        "(function(){ "
+                                + "var r = $.planResult || $.fallbackResult || $.noPlanResult || ''; "
+                                + "return (typeof r === 'object') ? JSON.stringify(r) : String(r); })()"));
         outputSelect.setOptional(true);
         tasks.add(outputSelect);
 
         wf.setTasks(tasks);
-        wf.setOutputParameters(Map.of(
-                "result", "${" + outputRef + ".output.result}",
-                "context", "${workflow.variables.context}"));
+        wf.setOutputParameters(
+                Map.of("result", "${" + outputRef + ".output.result}", "context", "${workflow.variables.context}"));
         agentCompiler.applyTimeout(wf, config);
         return wf;
     }
@@ -1979,8 +2016,12 @@ public class MultiAgentCompiler {
      * register it, execute as SUB_WORKFLOW, then SWITCH on success/failure.
      */
     private List<WorkflowTask> buildPlanExecutionBranch(
-            AgentConfig config, AgentConfig plannerConfig, AgentConfig fallbackConfig,
-            String prefix, String extractRef, String plannerResult) {
+            AgentConfig config,
+            AgentConfig plannerConfig,
+            AgentConfig fallbackConfig,
+            String prefix,
+            String extractRef,
+            String plannerResult) {
 
         List<WorkflowTask> tasks = new ArrayList<>();
 
@@ -1990,36 +2031,41 @@ public class MultiAgentCompiler {
         compileTask.setType("INLINE");
         compileTask.setTaskReferenceName(compileRef);
         compileTask.setInputParameters(Map.of(
-                "evaluatorType", "graaljs",
-                "planJson", "${" + extractRef + ".output.result.plan_json}",
-                "parentName", config.getName(),
-                "model", config.getModel() != null ? config.getModel() : "openai/gpt-4o-mini",
-                "expression", JavaScriptBuilder.compilePlanToWorkflowScript()));
+                "evaluatorType",
+                "graaljs",
+                "planJson",
+                "${" + extractRef + ".output.result.plan_json}",
+                "parentName",
+                config.getName(),
+                "model",
+                config.getModel() != null ? config.getModel() : "openai/gpt-4o-mini",
+                "expression",
+                JavaScriptBuilder.compilePlanToWorkflowScript()));
         tasks.add(compileTask);
 
-        // ── 6. Register the dynamic workflow via HTTP ────────────────
-        String registerRef = prefix + "_register_wf";
-        WorkflowTask registerTask = new WorkflowTask();
-        registerTask.setType("HTTP");
-        registerTask.setTaskReferenceName(registerRef);
-        Map<String, Object> httpReq = new LinkedHashMap<>();
-        httpReq.put("uri", "${workflow.input.__agentspan_ctx__.serverUrl}/api/metadata/workflow");
-        httpReq.put("method", "PUT");
-        httpReq.put("body", "${" + compileRef + ".output.result.workflow_def}");
-        httpReq.put("contentType", "application/json");
-        httpReq.put("accept", "application/json");
-        httpReq.put("connectionTimeOut", 10000);
-        httpReq.put("readTimeOut", 10000);
-        registerTask.setInputParameters(Map.of("http_request", httpReq));
-        tasks.add(registerTask);
+        // ── 6. Parse the workflow_def JSON string into an object ─────
+        // compile_plan returns workflow_def as a JSON string to protect ${...}
+        // expressions inside the workflow from Conductor's expression resolver.
+        // We parse it here so SubWorkflow.start() can convertValue() it.
+        String parseRef = prefix + "_parse_wf";
+        WorkflowTask parseTask = new WorkflowTask();
+        parseTask.setType("INLINE");
+        parseTask.setTaskReferenceName(parseRef);
+        parseTask.setInputParameters(Map.of(
+                "evaluatorType", "graaljs",
+                "wfDefJson", "${" + compileRef + ".output.result.workflow_def}",
+                "expression",
+                        "(function(){ "
+                                + "if (!$.wfDefJson) return null; "
+                                + "var arr = JSON.parse($.wfDefJson); "
+                                + "return (arr && arr.length) ? arr[0] : null; })()"));
+        tasks.add(parseTask);
 
-        // ── 7. Execute the dynamic workflow as SUB_WORKFLOW ──────────
-        // The placeholder workflow is pre-registered by
-        // AgentService.registerPlanExecutePlaceholders() to satisfy Conductor's
-        // MetadataMapper validation at compile time. At runtime, the HTTP PUT
-        // (register_wf step) overwrites it with the real compiled plan workflow.
-        // We must NOT set an inline workflowDef — that would make Conductor use
-        // the inline definition instead of the registered one.
+        // ── 7. Execute the dynamic workflow as inline SUB_WORKFLOW ──
+        // SubWorkflow.start() reads "subWorkflowDefinition" from inputData and converts it
+        // to a WorkflowDef via ObjectMapper. Conductor 3.3+ SubWorkflowTaskMapper resolves
+        // String expressions in subWorkflowParams.workflowDefinition via getTaskInputV2 before
+        // injecting them as subWorkflowDefinition, so the concrete Map lands in inputData.
         String planWfName = planWorkflowName(config.getName());
         String execRef = prefix + "_plan_exec";
         WorkflowTask execTask = new WorkflowTask();
@@ -2029,6 +2075,7 @@ public class MultiAgentCompiler {
         SubWorkflowParams subParams = new SubWorkflowParams();
         subParams.setName(planWfName);
         subParams.setVersion(1);
+        subParams.setWorkflowDefinition("${" + parseRef + ".output.result}");
         execTask.setSubWorkflowParam(subParams);
         Map<String, Object> execInputs = new LinkedHashMap<>();
         execInputs.put("prompt", "${workflow.input.prompt}");
@@ -2047,9 +2094,10 @@ public class MultiAgentCompiler {
         statusCheck.setInputParameters(Map.of(
                 "evaluatorType", "graaljs",
                 "taskStatus", "${" + execRef + ".status}",
-                "expression", "(function(){ "
-                        + "var s = String($.taskStatus || ''); "
-                        + "return (s === 'COMPLETED') ? 'success' : 'failed'; })()"));
+                "expression",
+                        "(function(){ "
+                                + "var s = String($.taskStatus || ''); "
+                                + "return (s === 'COMPLETED') ? 'success' : 'failed'; })()"));
         tasks.add(statusCheck);
 
         // Build fallback branch
@@ -2070,10 +2118,20 @@ public class MultiAgentCompiler {
 
     /**
      * Build the fallback branch: run the fallback agent with plan + errors.
+     * When fallbackConfig is null, returns a TERMINATE task with FAILED status.
      */
     private List<WorkflowTask> buildFallbackBranch(
-            AgentConfig config, AgentConfig fallbackConfig,
-            String prefix, String plannerResult, String execRef) {
+            AgentConfig config, AgentConfig fallbackConfig, String prefix, String plannerResult, String execRef) {
+
+        if (fallbackConfig == null) {
+            WorkflowTask terminate = new WorkflowTask();
+            terminate.setType("TERMINATE");
+            terminate.setTaskReferenceName(prefix + "_no_fallback_term");
+            terminate.setInputParameters(Map.of(
+                    "terminationStatus", "FAILED",
+                    "terminationReason", "Plan execution failed and no fallback agent configured"));
+            return List.of(terminate);
+        }
 
         List<WorkflowTask> tasks = new ArrayList<>();
 
@@ -2082,15 +2140,21 @@ public class MultiAgentCompiler {
         WorkflowTask fbPrompt = new WorkflowTask();
         fbPrompt.setType("INLINE");
         fbPrompt.setTaskReferenceName(fbPromptRef);
-        fbPrompt.setInputParameters(Map.of(
-                "evaluatorType", "graaljs",
-                "plan", plannerResult,
-                "execOutput", "${" + execRef + ".output}",
-                "originalPrompt", "${workflow.input.prompt}",
-                "expression", "(function(){ "
-                        + "var errors = ''; "
-                        + "try { errors = JSON.stringify($.execOutput || {}, null, 2); } catch(e) { errors = String($.execOutput); } "
-                        + "return $.originalPrompt + '\\n\\nPlan:\\n' + $.plan + '\\n\\nExecution errors:\\n' + errors; })()"));
+        fbPrompt.setInputParameters(
+                Map.of(
+                        "evaluatorType",
+                        "graaljs",
+                        "plan",
+                        plannerResult,
+                        "execOutput",
+                        "${" + execRef + ".output}",
+                        "originalPrompt",
+                        "${workflow.input.prompt}",
+                        "expression",
+                        "(function(){ "
+                                + "var errors = ''; "
+                                + "try { errors = JSON.stringify($.execOutput || {}, null, 2); } catch(e) { errors = String($.execOutput); } "
+                                + "return $.originalPrompt + '\\n\\nPlan:\\n' + $.plan + '\\n\\nExecution errors:\\n' + errors; })()"));
         tasks.add(fbPrompt);
 
         // Apply fallbackMaxTurns if set
@@ -2112,7 +2176,8 @@ public class MultiAgentCompiler {
 
         String fallbackRef = prefix + "_fallback";
         WorkflowTask fallbackTask = agentCompiler.compileSubAgent(
-                fallbackConfig, fallbackRef,
+                fallbackConfig,
+                fallbackRef,
                 "${" + fbPromptRef + ".output.result}",
                 "${workflow.input.media}",
                 "${workflow.variables.context}");
@@ -2124,14 +2189,25 @@ public class MultiAgentCompiler {
     /**
      * Build the "no_plan" branch: when JSON fence extraction fails,
      * degrade to running the fallback agent with just the planner output.
+     * When fallbackConfig is null, returns a TERMINATE task with FAILED status.
      */
     private List<WorkflowTask> buildFallbackOnlyBranch(
-            AgentConfig config, AgentConfig fallbackConfig,
-            String prefix, String plannerResult) {
+            AgentConfig config, AgentConfig fallbackConfig, String prefix, String plannerResult) {
+
+        if (fallbackConfig == null) {
+            WorkflowTask terminate = new WorkflowTask();
+            terminate.setType("TERMINATE");
+            terminate.setTaskReferenceName(prefix + "_noplan_term");
+            terminate.setInputParameters(Map.of(
+                    "terminationStatus", "FAILED",
+                    "terminationReason", "No JSON plan found and no fallback agent configured"));
+            return List.of(terminate);
+        }
 
         List<WorkflowTask> tasks = new ArrayList<>();
 
-        log.warn("PLAN_EXECUTE '{}': no JSON fence found in planner output — degrading to fallback agent",
+        log.warn(
+                "PLAN_EXECUTE '{}': no JSON fence found in planner output — degrading to fallback agent",
                 config.getName());
 
         // Compose prompt: original + planner output (no errors since plan execution didn't happen)
@@ -2140,16 +2216,20 @@ public class MultiAgentCompiler {
         npPrompt.setType("INLINE");
         npPrompt.setTaskReferenceName(npPromptRef);
         npPrompt.setInputParameters(Map.of(
-                "evaluatorType", "graaljs",
-                "plan", plannerResult,
-                "originalPrompt", "${workflow.input.prompt}",
-                "expression", "(function(){ "
-                        + "return $.originalPrompt + '\\n\\nPlanner output:\\n' + $.plan; })()"));
+                "evaluatorType",
+                "graaljs",
+                "plan",
+                plannerResult,
+                "originalPrompt",
+                "${workflow.input.prompt}",
+                "expression",
+                "(function(){ " + "return $.originalPrompt + '\\n\\nPlanner output:\\n' + $.plan; })()"));
         tasks.add(npPrompt);
 
         String noPlanFallbackRef = prefix + "_noplan_fallback";
         WorkflowTask fallbackTask = agentCompiler.compileSubAgent(
-                fallbackConfig, noPlanFallbackRef,
+                fallbackConfig,
+                noPlanFallbackRef,
                 "${" + npPromptRef + ".output.result}",
                 "${workflow.input.media}",
                 "${workflow.variables.context}");
