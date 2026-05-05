@@ -29,7 +29,7 @@
   <video src="assets/agentspan-readme-demo.mp4" controls muted playsinline width="100%"></video>
 </p>
 
-https://github.com/user-attachments/assets/15ab6810-bcca-4b3e-8317-073e664a99d4
+https://github.com/user-attachments/assets/845c7af4-f2e6-49f6-95c7-1d1b2c53d126
 
 ---
 
