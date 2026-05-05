@@ -46,9 +46,13 @@ irm https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.ps
 ## Install SDKs
 ```bash
 # Python
-pip install agentspan   # Python
-# Typescript
-npm install @agentspan-ai/sdk            # TypeScript
+pip install agentspan
+
+# TypeScript / JavaScript
+npm install @agentspan-ai/sdk
+
+# C# / .NET
+dotnet add package Agentspan
 ```
 
 ```bash
