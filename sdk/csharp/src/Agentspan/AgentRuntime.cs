@@ -2,6 +2,8 @@
 // Licensed under the MIT License.
 
 using System.Text.Json.Nodes;
+using Conductor.Client;
+using Conductor.Client.Authentication;
 
 namespace Agentspan;
 
@@ -18,6 +20,7 @@ namespace Agentspan;
 public sealed class AgentRuntime : IAsyncDisposable, IDisposable
 {
     private readonly AgentHttpClient _http;
+    private readonly Configuration _conductorConfig;
     private WorkerManager? _workers;
 
     public AgentRuntime(AgentRuntimeOptions? options = null)
@@ -29,6 +32,14 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
         var authSecret = options?.AuthSecret ?? Environment.GetEnvironmentVariable("AGENTSPAN_AUTH_SECRET");
 
         _http = new AgentHttpClient(serverUrl, authKey, authSecret);
+
+        // Build conductor-csharp Configuration for worker polling.
+        // AuthenticationSettings is left null for OSS Conductor (no token exchange needed).
+        // For Orkes Cloud, set AGENTSPAN_AUTH_KEY + AGENTSPAN_AUTH_SECRET and the SDK will
+        // use OrkesAuthenticationSettings to obtain a JWT automatically.
+        _conductorConfig = new Configuration { BasePath = serverUrl };
+        if (!string.IsNullOrEmpty(authKey) && !string.IsNullOrEmpty(authSecret))
+            _conductorConfig.AuthenticationSettings = new OrkesAuthenticationSettings(authKey, authSecret);
     }
 
     // ── Deploy / Serve ────────────────────────────────────────
@@ -68,7 +79,7 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
     /// </summary>
     public async Task ServeAsync(CancellationToken ct = default, params Agent[] agents)
     {
-        _workers ??= new WorkerManager(_http);
+        _workers ??= new WorkerManager(_http, _conductorConfig);
         foreach (var agent in agents)
             _workers.RegisterAgentTools(agent);
         _workers.Start();
@@ -184,7 +195,7 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
     {
         var domain = await ExtractDomainAsync(executionId, ct);
 
-        _workers ??= new WorkerManager(_http);
+        _workers ??= new WorkerManager(_http, _conductorConfig);
         _workers.RegisterAgentTools(agent, domain);
         _workers.Start();
 
@@ -273,7 +284,7 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
         IEnumerable<string>? media, CancellationToken ct)
     {
         // Fresh worker manager per run
-        _workers ??= new WorkerManager(_http);
+        _workers ??= new WorkerManager(_http, _conductorConfig);
         _workers.RegisterAgentTools(agent);
         _workers.Start();
 

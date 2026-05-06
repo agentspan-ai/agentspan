@@ -14,6 +14,8 @@
 
   <ItemGroup>
     <!-- System.Text.Json and System.Threading.Channels are in-box on .NET 10 -->
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
+    <!-- conductor-csharp brings Newtonsoft.Json + Microsoft.Extensions.Logging.Abstractions transitively -->
+    <PackageReference Include="conductor-csharp" Version="1.1.4" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 </Project>
