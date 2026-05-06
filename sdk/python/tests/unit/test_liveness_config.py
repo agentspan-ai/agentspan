@@ -1,6 +1,7 @@
-"""Unit tests for liveness config fields."""
+# Copyright (c) 2025 Agentspan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
 
-import os
+"""Unit tests for liveness config fields."""
 
 from agentspan.agents.runtime.config import AgentConfig
 
@@ -34,4 +35,10 @@ def test_liveness_from_env_overrides(monkeypatch):
 def test_liveness_invalid_policy_falls_back_to_default(monkeypatch):
     monkeypatch.setenv("AGENTSPAN_LIVENESS_STALL_POLICY", "wat")
     cfg = AgentConfig.from_env()
+    assert cfg.liveness_stall_policy == "restart_worker"
+
+
+def test_liveness_invalid_policy_direct_construction():
+    """__post_init__ validator runs for direct construction too."""
+    cfg = AgentConfig(liveness_stall_policy="wat")
     assert cfg.liveness_stall_policy == "restart_worker"

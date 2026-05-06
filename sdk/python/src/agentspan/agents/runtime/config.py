@@ -106,7 +106,7 @@ class AgentConfig:
     liveness_startup_timeout_seconds: float = 2.0
     liveness_stall_seconds: float = 30.0
     liveness_check_interval_seconds: float = 10.0
-    liveness_stall_policy: str = "restart_worker"  # "restart_worker" | "raise" | "warn"
+    liveness_stall_policy: str = "restart_worker"
     liveness_stall_max_restarts: int = 1
     log_level: str = "INFO"
 
