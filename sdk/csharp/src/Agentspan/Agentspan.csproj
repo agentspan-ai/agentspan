@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Agentspan</RootNamespace>
+    <AssemblyName>Agentspan</AssemblyName>
+    <PackageId>Agentspan</PackageId>
+    <Version>0.1.0</Version>
+    <Description>Agentspan .NET SDK — durable, scalable, observable AI agents</Description>
+    <Authors>Agentspan</Authors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- System.Text.Json and System.Threading.Channels are in-box on .NET 10 -->
+    <!-- conductor-csharp brings Newtonsoft.Json + Microsoft.Extensions.Logging.Abstractions transitively -->
+    <PackageReference Include="conductor-csharp" Version="1.1.4" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+</Project>
