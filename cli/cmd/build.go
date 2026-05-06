@@ -31,15 +31,17 @@ type lastBuildState struct {
 }
 
 var buildCmd = &cobra.Command{
-	Use:   "build [dir]",
-	Short: "Build an agent bundle and upload it to the Control Plane",
-	Long: `Package the agent source directory into a deployable bundle and upload
-it to the Control Plane via a Conductor build workflow.
+	Use:   "build",
+	Short: "Build an agent bundle from the current directory",
+	Long: `Package the current directory into a deployable bundle and upload it to
+the Control Plane via a Conductor build workflow.
 
-If no directory is given the current working directory is used.
+Run from the project directory containing agentspan.yaml — the same way
+you would run 'firebase deploy' from your Firebase project root.
+
 The resulting artifact ID is saved to ~/.agentspan/last-build.json so that
 'agentspan deploy' can pick it up without requiring --artifact.`,
-	Args: cobra.MaximumNArgs(1),
+	Args: cobra.NoArgs,
 	RunE: runBuildCmd,
 }
 
@@ -48,17 +50,12 @@ func init() {
 }
 
 func runBuildCmd(cmd *cobra.Command, args []string) error {
-	sourceDir := "."
-	if len(args) > 0 {
-		sourceDir = args[0]
-	}
-
-	abs, err := filepath.Abs(sourceDir)
+	abs, err := filepath.Abs(".")
 	if err != nil {
-		return fmt.Errorf("resolve source dir: %w", err)
+		return fmt.Errorf("resolve current dir: %w", err)
 	}
-	if _, err := os.Stat(abs); err != nil {
-		return fmt.Errorf("source dir not found: %s", abs)
+	if _, err := os.Stat(filepath.Join(abs, "agentspan.yaml")); err != nil {
+		return fmt.Errorf("agentspan.yaml not found in %s — run this command from your project directory", abs)
 	}
 
 	cfg := getConfig()

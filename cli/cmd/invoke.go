@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/fatih/color"
@@ -20,6 +21,7 @@ const (
 	defaultDevSHEnvVar   = "AGENTSPAN_DEV_SH"
 	defaultStagingEnvVar = "STAGING_DIR"
 	defaultEntrypoint    = "hello.py"
+	bundleManifestFile   = "bundle-manifest.json"
 )
 
 type lastDeployState struct {
@@ -29,14 +31,22 @@ type lastDeployState struct {
 	DeployedAt time.Time `json:"deployed_at"`
 }
 
+type bundleManifest struct {
+	Name       string `json:"name"`
+	Entrypoint string `json:"entrypoint"`
+	Runtime    string `json:"runtime"`
+}
+
 var invokeCmd = &cobra.Command{
 	Use:   "invoke [entrypoint]",
-	Short: "Invoke an agent in its Firecracker microVM",
-	Long: `Run the staged agent script inside a Firecracker microVM via dev.sh.
+	Short: "Invoke an agent in its execution environment",
+	Long: `Run the staged agent.
 
-The entrypoint defaults to the value of AGENTSPAN_ENTRYPOINT (or hello.py).
-The staging directory is read from STAGING_DIR or ~/.agentspan/last-deploy.json.
-The path to dev.sh is read from AGENTSPAN_DEV_SH.`,
+For project bundles (with bundle-manifest.json): runs locally using the
+bundled dependencies and the entrypoint declared in agentspan.yaml.
+
+For plain script bundles: runs the script inside a Firecracker microVM via
+dev.sh (AGENTSPAN_DEV_SH must be set).`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runInvokeCmd,
 }
@@ -46,16 +56,6 @@ func init() {
 }
 
 func runInvokeCmd(cmd *cobra.Command, args []string) error {
-	// Resolve entrypoint
-	entrypoint := os.Getenv("AGENTSPAN_ENTRYPOINT")
-	if entrypoint == "" {
-		entrypoint = defaultEntrypoint
-	}
-	if len(args) > 0 {
-		entrypoint = args[0]
-	}
-
-	// Resolve staging dir
 	stagingDir := os.Getenv(defaultStagingEnvVar)
 	if stagingDir == "" {
 		state, err := loadLastDeploy()
@@ -65,7 +65,65 @@ func runInvokeCmd(cmd *cobra.Command, args []string) error {
 		stagingDir = state.StagingDir
 	}
 
-	// Resolve dev.sh
+	// Project bundle — local execution path
+	manifestPath := filepath.Join(stagingDir, bundleManifestFile)
+	if _, err := os.Stat(manifestPath); err == nil {
+		return runLocalInvoke(stagingDir, manifestPath)
+	}
+
+	// Plain script — Firecracker path via dev.sh
+	return runFirecrackerInvoke(stagingDir, args)
+}
+
+// runLocalInvoke runs a project bundle locally using the bundled lib/ dependencies.
+func runLocalInvoke(stagingDir, manifestPath string) error {
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return fmt.Errorf("read bundle manifest: %w", err)
+	}
+	var manifest bundleManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return fmt.Errorf("parse bundle manifest: %w", err)
+	}
+
+	python := findPythonBinary(stagingDir)
+	if python == "" {
+		return fmt.Errorf("no Python interpreter found; install Python or set the PYTHON environment variable")
+	}
+
+	bold := color.New(color.Bold)
+	bold.Printf("Invoking %s (%s)\n", manifest.Name, manifest.Entrypoint)
+	fmt.Printf("  Staging : %s\n\n", stagingDir)
+
+	libDir := filepath.Join(stagingDir, "lib")
+	pythonPath := libDir + string(os.PathListSeparator) + stagingDir
+	if existing := os.Getenv("PYTHONPATH"); existing != "" {
+		pythonPath += string(os.PathListSeparator) + existing
+	}
+
+	env := setPythonPath(os.Environ(), pythonPath)
+
+	c := exec.Command(python, "-m", manifest.Entrypoint)
+	c.Env = env
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+
+	if err := c.Run(); err != nil {
+		return fmt.Errorf("agent exited with error: %w", err)
+	}
+	return nil
+}
+
+// runFirecrackerInvoke runs a plain script inside a Firecracker microVM via dev.sh.
+func runFirecrackerInvoke(stagingDir string, args []string) error {
+	entrypoint := os.Getenv("AGENTSPAN_ENTRYPOINT")
+	if entrypoint == "" {
+		entrypoint = defaultEntrypoint
+	}
+	if len(args) > 0 {
+		entrypoint = args[0]
+	}
+
 	devSH := os.Getenv(defaultDevSHEnvVar)
 	if devSH == "" {
 		return fmt.Errorf("AGENTSPAN_DEV_SH is not set — point it to the firecracker/dev.sh script")
@@ -89,6 +147,17 @@ func runInvokeCmd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("dev.sh run failed: %w", err)
 	}
 	return nil
+}
+
+// setPythonPath replaces or prepends PYTHONPATH in an env slice.
+func setPythonPath(env []string, pythonPath string) []string {
+	out := make([]string, 0, len(env)+1)
+	for _, e := range env {
+		if !strings.HasPrefix(e, "PYTHONPATH=") {
+			out = append(out, e)
+		}
+	}
+	return append(out, "PYTHONPATH="+pythonPath)
 }
 
 func saveLastDeploy(state lastDeployState) error {
