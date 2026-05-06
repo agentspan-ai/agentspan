@@ -20,7 +20,7 @@ import re
 import threading
 import time
 import uuid
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from agentspan.agents.agent import Agent
 from agentspan.agents.exceptions import _raise_api_error
@@ -957,6 +957,49 @@ class AgentRuntime:
             names.add(f"{agent.name}_process_selection")
 
         return names
+
+    def _collect_registered_pairs(
+        self, agent: Agent, domain: Optional[str]
+    ) -> List[Tuple[str, Optional[str]]]:
+        """Return ``(task_name, registered_domain)`` pairs for user-tool workers.
+
+        Mirrors the per-tool domain decision in
+        ``ToolRegistry.register_tool_workers``: a tool's worker uses the
+        passed-in ``domain`` only when its owning agent is stateful (or the
+        tool itself is). Everything else is registered with ``domain=None``.
+
+        Used by ``LocalLivenessCheck.verify`` to confirm each registered
+        worker subprocess is alive.
+        """
+        from agentspan.agents.tool import get_tool_def
+
+        pairs: List[Tuple[str, Optional[str]]] = []
+        agent_stateful = bool(getattr(agent, "stateful", False))
+        for t in getattr(agent, "tools", []) or []:
+            try:
+                td = get_tool_def(t)
+            except TypeError:
+                continue
+            if td.tool_type not in ("worker", "cli"):
+                continue
+            if td.func is None:
+                continue
+            tool_domain = domain if (agent_stateful or td.stateful) else None
+            pairs.append((td.name, tool_domain))
+
+        for sub in getattr(agent, "agents", []) or []:
+            if getattr(sub, "external", False):
+                continue
+            pairs.extend(self._collect_registered_pairs(sub, domain))
+
+        # Dedupe while preserving order
+        seen: set = set()
+        unique: List[Tuple[str, Optional[str]]] = []
+        for p in pairs:
+            if p not in seen:
+                seen.add(p)
+                unique.append(p)
+        return unique
 
     def _register_workers(
         self, agent: Agent, *, required_workers: Optional[set] = None, domain: Optional[str] = None
