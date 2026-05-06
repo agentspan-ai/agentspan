@@ -253,6 +253,7 @@ class AgentHandle:
         self.is_resumed = is_resumed
         self._stall_error: Optional["BaseException"] = None
         self._liveness_monitor: Optional[Any] = None
+        self._stall_restart_count = 0
 
     # ── Status ──────────────────────────────────────────────────────
 
@@ -382,19 +383,16 @@ class AgentHandle:
         Raises:
             TimeoutError: If ``timeout`` is set and the agent execution has not
                 reached a terminal state before the deadline.
+            WorkerStallError: If the liveness monitor detects a SCHEDULED task
+                in our domain that has been queued past
+                ``liveness_stall_seconds`` with no polls, and the configured
+                stall policy is ``"raise"`` (or restarts have been exhausted).
 
         Warning:
             The :class:`AgentRuntime` that created this handle **must remain
             open** (i.e. its ``with`` block must still be active) while
             ``join()`` runs.  Closing the runtime cancels Conductor workers,
             which may stall the execution.
-
-        Example::
-
-            with AgentRuntime() as runtime:
-                handle = runtime.start(agent, "Hello")
-                result = handle.join(timeout=120)
-                print(result.output)
         """
         import logging
         import time
@@ -404,35 +402,43 @@ class AgentHandle:
         elapsed: float = 0.0
         consecutive_errors = 0
 
-        while True:
-            try:
-                status = self._runtime.get_status(self.execution_id)
-                consecutive_errors = 0
-            except Exception as exc:
-                consecutive_errors += 1
-                if consecutive_errors >= 30:
-                    raise RuntimeError(
-                        f"Lost contact with server after 30 consecutive errors "
-                        f"while polling execution {self.execution_id!r}: {exc}"
-                    ) from exc
-                logger.warning(
-                    "get_status failed (attempt %d/30, will retry): %s",
-                    consecutive_errors,
-                    exc,
-                )
+        self._maybe_start_liveness_monitor()
+
+        try:
+            while True:
+                if self._stall_error is not None:
+                    raise self._stall_error
+
+                try:
+                    status = self._runtime.get_status(self.execution_id)
+                    consecutive_errors = 0
+                except Exception as exc:
+                    consecutive_errors += 1
+                    if consecutive_errors >= 30:
+                        raise RuntimeError(
+                            f"Lost contact with server after 30 consecutive errors "
+                            f"while polling execution {self.execution_id!r}: {exc}"
+                        ) from exc
+                    logger.warning(
+                        "get_status failed (attempt %d/30, will retry): %s",
+                        consecutive_errors,
+                        exc,
+                    )
+                    time.sleep(poll_interval)
+                    elapsed += poll_interval
+                    continue
+
+                if status.is_complete:
+                    break
+                if timeout is not None and elapsed >= timeout:
+                    raise TimeoutError(
+                        f"Agent execution {self.execution_id!r} did not complete "
+                        f"within {timeout}s."
+                    )
                 time.sleep(poll_interval)
                 elapsed += poll_interval
-                continue
-
-            if status.is_complete:
-                break
-            if timeout is not None and elapsed >= timeout:
-                raise TimeoutError(
-                    f"Agent execution {self.execution_id!r} did not complete "
-                    f"within {timeout}s."
-                )
-            time.sleep(poll_interval)
-            elapsed += poll_interval
+        finally:
+            self._stop_liveness_monitor()
 
         return self._build_result(status)
 
@@ -451,6 +457,10 @@ class AgentHandle:
         Raises:
             TimeoutError: If ``timeout`` is set and the deadline is reached
                 before the agent execution completes.
+            WorkerStallError: If the liveness monitor detects a SCHEDULED task
+                in our domain that has been queued past
+                ``liveness_stall_seconds`` with no polls, and the configured
+                stall policy is ``"raise"`` (or restarts have been exhausted).
 
         Warning:
             The :class:`AgentRuntime` must remain open while this coroutine
@@ -471,35 +481,43 @@ class AgentHandle:
         elapsed: float = 0.0
         consecutive_errors = 0
 
-        while True:
-            try:
-                status = await self._runtime.get_status_async(self.execution_id)
-                consecutive_errors = 0
-            except Exception as exc:
-                consecutive_errors += 1
-                if consecutive_errors >= 30:
-                    raise RuntimeError(
-                        f"Lost contact with server after 30 consecutive errors "
-                        f"while polling execution {self.execution_id!r}: {exc}"
-                    ) from exc
-                logger.warning(
-                    "get_status_async failed (attempt %d/30, will retry): %s",
-                    consecutive_errors,
-                    exc,
-                )
+        self._maybe_start_liveness_monitor()
+
+        try:
+            while True:
+                if self._stall_error is not None:
+                    raise self._stall_error
+
+                try:
+                    status = await self._runtime.get_status_async(self.execution_id)
+                    consecutive_errors = 0
+                except Exception as exc:
+                    consecutive_errors += 1
+                    if consecutive_errors >= 30:
+                        raise RuntimeError(
+                            f"Lost contact with server after 30 consecutive errors "
+                            f"while polling execution {self.execution_id!r}: {exc}"
+                        ) from exc
+                    logger.warning(
+                        "get_status_async failed (attempt %d/30, will retry): %s",
+                        consecutive_errors,
+                        exc,
+                    )
+                    await asyncio.sleep(poll_interval)
+                    elapsed += poll_interval
+                    continue
+
+                if status.is_complete:
+                    break
+                if timeout is not None and elapsed >= timeout:
+                    raise TimeoutError(
+                        f"Agent execution {self.execution_id!r} did not complete "
+                        f"within {timeout}s."
+                    )
                 await asyncio.sleep(poll_interval)
                 elapsed += poll_interval
-                continue
-
-            if status.is_complete:
-                break
-            if timeout is not None and elapsed >= timeout:
-                raise TimeoutError(
-                    f"Agent execution {self.execution_id!r} did not complete "
-                    f"within {timeout}s."
-                )
-            await asyncio.sleep(poll_interval)
-            elapsed += poll_interval
+        finally:
+            self._stop_liveness_monitor()
 
         return self._build_result(status)
 
@@ -519,6 +537,79 @@ class AgentHandle:
             error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
             token_usage=token_usage,
         )
+
+    def _maybe_start_liveness_monitor(self) -> None:
+        """Start a ``ServerLivenessMonitor`` if one isn't already running."""
+        if self._liveness_monitor is not None:
+            return
+        cfg = getattr(self._runtime, "_config", None)
+        if cfg is None or not getattr(cfg, "liveness_enabled", True):
+            return
+        if self.run_id is None:
+            return  # stateless — nothing routed via domain
+        from agentspan.agents.runtime._liveness import ServerLivenessMonitor
+
+        self._liveness_monitor = ServerLivenessMonitor(
+            workflow_client=self._runtime._workflow_client,
+            execution_id=self.execution_id,
+            domain=self.run_id,
+            stall_seconds=cfg.liveness_stall_seconds,
+            check_interval=cfg.liveness_check_interval_seconds,
+            on_stall=self._handle_stall,
+        )
+        self._liveness_monitor.start()
+
+    def _stop_liveness_monitor(self) -> None:
+        """Stop the monitor if it was started."""
+        if self._liveness_monitor is not None:
+            self._liveness_monitor.stop()
+            self._liveness_monitor = None
+
+    def _handle_stall(self, err) -> None:
+        """Apply the configured stall policy to a detected stall.
+
+        - ``"restart_worker"`` (default): SIGKILL the stuck subprocess(es) so
+          Conductor's TaskHandler monitor respawns them. After
+          ``liveness_stall_max_restarts`` cumulative restarts, fall through
+          to ``"raise"``.
+        - ``"raise"``: store the error so the next ``join()`` poll raises.
+        - ``"warn"``: log only.
+        """
+        import logging as _logging
+
+        log = _logging.getLogger("agentspan.agents.result")
+        cfg = getattr(self._runtime, "_config", None)
+        policy = getattr(cfg, "liveness_stall_policy", "restart_worker")
+        max_restarts = getattr(cfg, "liveness_stall_max_restarts", 1)
+
+        stalled_names = sorted({t.task_def_name for t in err.stalled_tasks})
+
+        if policy == "warn":
+            log.warning(
+                "Worker stall detected on execution %s for tasks=%s "
+                "(policy=warn); not raising. %s",
+                err.execution_id, stalled_names, err.remediation,
+            )
+            return
+
+        if policy == "restart_worker" and self._stall_restart_count < max_restarts:
+            from agentspan.agents.runtime._liveness import WorkerRestarter
+
+            wm = getattr(self._runtime, "_worker_manager", None)
+            if wm is not None:
+                killed = WorkerRestarter.restart_for_tasks(wm, stalled_names)
+                self._stall_restart_count += 1
+                log.warning(
+                    "Worker stall detected on %s for tasks=%s (attempt "
+                    "%d/%d) — killed pid(s)=%s; TaskHandler monitor will "
+                    "respawn.",
+                    err.execution_id, stalled_names,
+                    self._stall_restart_count, max_restarts, killed,
+                )
+                return
+
+        # policy="raise" OR restart attempts exhausted
+        self._stall_error = err
 
     def __repr__(self) -> str:
         """Return a developer-friendly string representation.
