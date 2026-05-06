@@ -417,6 +417,20 @@ class AgentRuntime:
         with _workflow_credentials_lock:
             _workflow_credentials.pop(execution_id, None)
 
+    def _resolve_worker_domain(self, execution_id: str, run_id: Optional[str]) -> Optional[str]:
+        """Return the domain workers should poll for this execution.
+
+        A fresh stateful start uses ``run_id`` as the task domain.  If the
+        server returns an existing execution for an idempotency key, that
+        execution already has its original ``taskToDomain`` mapping, so the
+        freshly generated ``run_id`` would be wrong.  Prefer the server's
+        recorded domain and fall back to the generated one for brand-new runs
+        or older servers.
+        """
+        if not run_id:
+            return None
+        return self._extract_domain(execution_id) or run_id
+
     def _pre_deploy_nested_skills(self, agent: Agent) -> list:
         """Pre-deploy any skill agents nested inside agent_tool wrappers.
 
@@ -2559,13 +2573,15 @@ class AgentRuntime:
             run_id=run_id,
         )
 
-        self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
-        self._register_and_start_skill_workers(pre_deployed_skills, domain=run_id)
+        worker_domain = self._resolve_worker_domain(execution_id, run_id)
+
+        self._prepare_workers(agent, required_workers=required_workers, domain=worker_domain)
+        self._register_and_start_skill_workers(pre_deployed_skills, domain=worker_domain)
 
         if self._config.liveness_enabled:
             from agentspan.agents.runtime._liveness import LocalLivenessCheck
 
-            expected_pairs = self._collect_registered_pairs(agent, run_id)
+            expected_pairs = self._collect_registered_pairs(agent, worker_domain)
             LocalLivenessCheck.verify(
                 self._worker_manager,
                 expected_pairs,
@@ -3683,13 +3699,15 @@ class AgentRuntime:
             run_id=run_id,
         )
 
-        self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
-        self._register_and_start_skill_workers(pre_deployed_skills, domain=run_id)
+        worker_domain = self._resolve_worker_domain(execution_id, run_id)
+
+        self._prepare_workers(agent, required_workers=required_workers, domain=worker_domain)
+        self._register_and_start_skill_workers(pre_deployed_skills, domain=worker_domain)
 
         if self._config.liveness_enabled:
             from agentspan.agents.runtime._liveness import LocalLivenessCheck
 
-            expected_pairs = self._collect_registered_pairs(agent, run_id)
+            expected_pairs = self._collect_registered_pairs(agent, worker_domain)
             LocalLivenessCheck.verify(
                 self._worker_manager,
                 expected_pairs,
@@ -4088,13 +4106,15 @@ class AgentRuntime:
             run_id=run_id,
         )
 
-        self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
-        self._register_and_start_skill_workers(pre_deployed_skills, domain=run_id)
+        worker_domain = self._resolve_worker_domain(execution_id, run_id)
+
+        self._prepare_workers(agent, required_workers=required_workers, domain=worker_domain)
+        self._register_and_start_skill_workers(pre_deployed_skills, domain=worker_domain)
 
         if self._config.liveness_enabled:
             from agentspan.agents.runtime._liveness import LocalLivenessCheck
 
-            expected_pairs = self._collect_registered_pairs(agent, run_id)
+            expected_pairs = self._collect_registered_pairs(agent, worker_domain)
             LocalLivenessCheck.verify(
                 self._worker_manager,
                 expected_pairs,
@@ -4235,13 +4255,15 @@ class AgentRuntime:
             run_id=run_id,
         )
 
-        self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
-        self._register_and_start_skill_workers(pre_deployed_skills, domain=run_id)
+        worker_domain = self._resolve_worker_domain(execution_id, run_id)
+
+        self._prepare_workers(agent, required_workers=required_workers, domain=worker_domain)
+        self._register_and_start_skill_workers(pre_deployed_skills, domain=worker_domain)
 
         if self._config.liveness_enabled:
             from agentspan.agents.runtime._liveness import LocalLivenessCheck
 
-            expected_pairs = self._collect_registered_pairs(agent, run_id)
+            expected_pairs = self._collect_registered_pairs(agent, worker_domain)
             LocalLivenessCheck.verify(
                 self._worker_manager,
                 expected_pairs,
