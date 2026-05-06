@@ -29,7 +29,7 @@ import os
 import tempfile
 
 from _issue_fixer_instructions import (
-    CODER_IMPLEMENTER_INSTRUCTIONS,
+    CODER_EXPLORER_INSTRUCTIONS,
     CODER_PLANNER_INSTRUCTIONS,
     ISSUE_PR_FETCHER_INSTRUCTIONS,
     PR_UPDATER_INSTRUCTIONS,
@@ -128,9 +128,9 @@ def _tech_lead_done(context: dict, **kwargs) -> bool:
     return _contextbook_written("architecture_design_test")
 
 
-def _planner_done(context: dict, **kwargs) -> bool:
-    """Stop when change map exists — accepts either section name."""
-    return _contextbook_written("coder_plan") or _contextbook_written("implementation")
+def _explorer_done(context: dict, **kwargs) -> bool:
+    """Stop when coder_plan contextbook file exists."""
+    return _contextbook_written("coder_plan")
 
 
 def _implementer_done(context: dict, **kwargs) -> bool:
@@ -232,11 +232,12 @@ def main():
     # Planner reads all context + explores codebase → writes change map.
     # Implementer reads ONLY the change map → writes code, tests, commits.
 
-    coder_planner = Agent(
-        name="coder_planner",
+    # Explorer: has tools, explores codebase, writes change map to contextbook
+    coder_explorer = Agent(
+        name="coder_explorer",
         model=OPUS,
         stateful=True,
-        max_turns=100,
+        max_turns=15,
         max_tokens=60000,
         prefill_tools=[
             contextbook_read.call(section="issue_pr"),
@@ -255,19 +256,48 @@ def main():
             find_references,
             write_coder_plan,
         ],
-        stop_when=_planner_done,
+        stop_when=_explorer_done,
+        instructions=CODER_EXPLORER_INSTRUCTIONS.format(**_fmt),
+    )
+
+    # Planner: ZERO tools, reads contextbook via prefill, outputs text with JSON fence.
+    # Zero tools guarantees finishReason=END_TURN → result contains the plan text
+    # that PLAN_EXECUTE's extract_json can parse.
+    # Uses SONNET (not Opus) — this is a simple copy task, Sonnet is more
+    # instruction-following and won't add unnecessary commentary.
+    coder_planner = Agent(
+        name="coder_planner",
+        model=SONNET,
+        stateful=True,
+        max_turns=3,
+        max_tokens=16000,
+        prefill_tools=[
+            contextbook_read.call(section="coder_plan"),
+            contextbook_read.call(section="architecture_design_test"),
+        ],
+        tools=[],
         instructions=CODER_PLANNER_INSTRUCTIONS.format(**_fmt),
     )
 
-    coder_implementer = Agent(
-        name="coder_implementer",
+    # Sequential: explorer first (writes to contextbook), then planner (outputs text)
+    coder_exploration = Agent(
+        name="coder_exploration",
         model=SONNET,
-        stateful=True,
-        max_turns=1000,
-        max_tokens=60000,
-        credentials=[GITHUB_CREDENTIAL],
-        cli_config=cli,
-        prefill_tools=[contextbook_read.call(section="coder_plan")],
+        agents=[coder_explorer, coder_planner],
+        strategy=Strategy.SEQUENTIAL,
+        max_turns=2000,
+        max_tokens=16000,
+    )
+
+    # Tools the compiled plan invokes as deterministic SIMPLE tasks.
+    # Declared here so the runtime registers them as Conductor workers.
+    coder = Agent(
+        name="coder",
+        model=SONNET,
+        agents=[coder_exploration],
+        strategy=Strategy.PLAN_EXECUTE,
+        max_tokens=16000,
+        plan_source={"tool": "contextbook_read", "args": {"section": "coder_plan"}},
         tools=[
             read_file,
             write_file,
@@ -278,18 +308,8 @@ def main():
             build_check,
             run_unit_tests,
             write_implementation_report,
+            contextbook_read,
         ],
-        stop_when=_implementer_done,
-        instructions=CODER_IMPLEMENTER_INSTRUCTIONS.format(**_fmt),
-    )
-
-    coder = Agent(
-        name="coder",
-        model=SONNET,
-        agents=[coder_planner, coder_implementer],
-        strategy=Strategy.SEQUENTIAL,
-        max_turns=2000,
-        max_tokens=16000,
     )
 
     qa_agent = Agent(
