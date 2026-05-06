@@ -59,7 +59,13 @@ func init() {
 
 func runDeployCmd(cmd *cobra.Command, args []string) error {
 	// If --artifact is set, use the Conductor/Firecracker deploy path.
+	// If not set but last-build.json exists, use it automatically.
 	artifactID, _ := cmd.Flags().GetString("artifact")
+	if artifactID == "" {
+		if state, err := loadLastBuild(); err == nil && state.FileHandleID != "" {
+			artifactID = state.FileHandleID
+		}
+	}
 	if artifactID != "" {
 		return runRemoteDeployCmd(cmd, artifactID)
 	}

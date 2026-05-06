@@ -1,3 +1,4 @@
 *.py
 agentspan
 cli
+bin/
