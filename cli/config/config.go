@@ -29,7 +29,7 @@ func (c *Config) IsLocalhost() bool {
 
 const (
 	DefaultServerURL    = "http://localhost:6767"
-	DefaultConductorURL = "http://localhost:8080"
+	DefaultConductorURL = "http://localhost:8080/api"
 )
 
 func DefaultConfig() *Config {

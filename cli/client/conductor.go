@@ -54,7 +54,7 @@ func (c *ConductorClient) StartWorkflow(ctx context.Context, name string, versio
 		return "", fmt.Errorf("marshal workflow start request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/workflow", bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/workflow", bytes.NewReader(data))
 	if err != nil {
 		return "", fmt.Errorf("build start workflow request: %w", err)
 	}
@@ -82,7 +82,7 @@ func (c *ConductorClient) StartWorkflow(ctx context.Context, name string, versio
 
 // GetWorkflow fetches the current state of a workflow.
 func (c *ConductorClient) GetWorkflow(ctx context.Context, workflowID string) (*WorkflowStatus, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/workflow/"+workflowID, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/workflow/"+workflowID, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build get workflow request: %w", err)
 	}
