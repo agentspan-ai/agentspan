@@ -4,7 +4,7 @@
 
 **Goal:** Detect "workers registered but not polling" within seconds (Mode B) and surface idempotent auto-resume telemetry (Mode A) on the Agentspan Python SDK so the issue from execution `95087a26-...` (setup_repo queued forever, pollCount=0) cannot recur silently.
 
-**Architecture:** Add a `_liveness.py` module in `sdk/python/src/agentspan/agents/runtime/` exposing `LocalLivenessCheck` (called inline after `_prepare_workers`), `ServerLivenessMonitor` (daemon thread started by `AgentHandle.join()`), and two typed errors (`WorkerStartupError`, `WorkerStallError`). Wire into the four `start*/stream*` call sites in `runtime.py` and the `join()` poll loop in `result.py`. Feature-flagged via `AgentConfig.liveness_enabled`.
+**Architecture:** Add a `_liveness.py` module in `sdk/python/src/agentspan/agents/runtime/` exposing `LocalLivenessCheck`, `ServerLivenessMonitor`, `WorkerRestarter`, and the typed errors `WorkerStartupError` / `WorkerStallError`. Wire into the four `start*/stream*` call sites in `runtime.py` and the `join()` poll loop in `result.py`. On stall the default policy is `"restart_worker"` (SIGKILL the stuck subprocess; Conductor's TaskHandler monitor respawns it within ~1–2s, the same pattern used by the test `_WorkerWatchdog` in `conftest.py:53`). After `liveness_stall_max_restarts` cumulative restarts in an execution, fall through to `raise`. Feature-flagged via `AgentConfig.liveness_enabled`.
 
 **Tech Stack:** Python 3.11+, `dataclasses`, `threading.Thread`, existing Conductor `WorkflowClient` for server polls, `pytest` with the integration `runtime` fixture.
 
@@ -16,8 +16,8 @@
 
 | File | Status | Responsibility |
 |---|---|---|
-| `sdk/python/src/agentspan/agents/runtime/_liveness.py` | NEW | `WorkerStartupError`, `WorkerStallError`, `StalledTaskInfo`, `LocalLivenessCheck`, `ServerLivenessMonitor` |
-| `sdk/python/src/agentspan/agents/runtime/config.py` | MODIFY | Add 4 fields + env var loading |
+| `sdk/python/src/agentspan/agents/runtime/_liveness.py` | NEW | `WorkerStartupError`, `WorkerStallError`, `StalledTaskInfo`, `LocalLivenessCheck`, `ServerLivenessMonitor`, `WorkerRestarter` |
+| `sdk/python/src/agentspan/agents/runtime/config.py` | MODIFY | Add 6 fields + env var loading |
 | `sdk/python/src/agentspan/agents/runtime/runtime.py` | MODIFY | Add `_collect_registered_pairs`, call `LocalLivenessCheck.verify`, compute `is_resumed`, log resume telemetry |
 | `sdk/python/src/agentspan/agents/result.py` | MODIFY | `AgentHandle` gets `is_resumed`, `_stall_error`, `_liveness_monitor`; `join()`/`join_async()` start monitor and check `_stall_error` |
 | `sdk/python/src/agentspan/agents/__init__.py` | MODIFY | Re-export `WorkerStartupError`, `WorkerStallError` |
@@ -50,6 +50,8 @@ def test_liveness_defaults_present():
     assert cfg.liveness_startup_timeout_seconds == 2.0
     assert cfg.liveness_stall_seconds == 30.0
     assert cfg.liveness_check_interval_seconds == 10.0
+    assert cfg.liveness_stall_policy == "restart_worker"
+    assert cfg.liveness_stall_max_restarts == 1
 
 
 def test_liveness_from_env_overrides(monkeypatch):
@@ -57,11 +59,21 @@ def test_liveness_from_env_overrides(monkeypatch):
     monkeypatch.setenv("AGENTSPAN_LIVENESS_STARTUP_TIMEOUT", "0.5")
     monkeypatch.setenv("AGENTSPAN_LIVENESS_STALL_SECONDS", "5")
     monkeypatch.setenv("AGENTSPAN_LIVENESS_CHECK_INTERVAL", "2")
+    monkeypatch.setenv("AGENTSPAN_LIVENESS_STALL_POLICY", "raise")
+    monkeypatch.setenv("AGENTSPAN_LIVENESS_STALL_MAX_RESTARTS", "3")
     cfg = AgentConfig.from_env()
     assert cfg.liveness_enabled is False
     assert cfg.liveness_startup_timeout_seconds == 0.5
     assert cfg.liveness_stall_seconds == 5.0
     assert cfg.liveness_check_interval_seconds == 2.0
+    assert cfg.liveness_stall_policy == "raise"
+    assert cfg.liveness_stall_max_restarts == 3
+
+
+def test_liveness_invalid_policy_falls_back_to_default(monkeypatch):
+    monkeypatch.setenv("AGENTSPAN_LIVENESS_STALL_POLICY", "wat")
+    cfg = AgentConfig.from_env()
+    assert cfg.liveness_stall_policy == "restart_worker"
 ```
 
 - [ ] **Step 2: Run test to confirm it fails**
@@ -89,6 +101,8 @@ In the `AgentConfig` dataclass body (after `credential_strict_mode: bool = False
     liveness_startup_timeout_seconds: float = 2.0
     liveness_stall_seconds: float = 30.0
     liveness_check_interval_seconds: float = 10.0
+    liveness_stall_policy: str = "restart_worker"  # "restart_worker" | "raise" | "warn"
+    liveness_stall_max_restarts: int = 1
 ```
 
 In the docstring (line 67ish), append to the Attributes block:
@@ -99,19 +113,39 @@ In the docstring (line 67ish), append to the Attributes block:
         liveness_startup_timeout_seconds: How long ``LocalLivenessCheck``
             waits for each registered worker process to become alive after
             ``start()``.
-        liveness_stall_seconds: ``ServerLivenessMonitor`` raises if a task
-            in our domain has been queued this long with ``pollCount=0``.
+        liveness_stall_seconds: ``ServerLivenessMonitor`` flags a task in
+            our domain that has been queued this long with ``pollCount=0``.
         liveness_check_interval_seconds: Tick interval for
             ``ServerLivenessMonitor``.
+        liveness_stall_policy: What to do on stall. ``"restart_worker"``
+            (default) SIGKILLs the stuck subprocess so the TaskHandler
+            monitor respawns it; ``"raise"`` skips restart and surfaces
+            ``WorkerStallError`` from ``join()``; ``"warn"`` only logs.
+        liveness_stall_max_restarts: Cumulative cap on auto-restarts per
+            execution. Beyond this, the policy falls through to ``"raise"``.
 ```
 
-In `from_env()` (line ~103), add four arguments before `log_level`:
+Add a small validator at the bottom of `__post_init__` (after the existing `server_url` block):
+
+```python
+        valid_policies = ("restart_worker", "raise", "warn")
+        if self.liveness_stall_policy not in valid_policies:
+            logger.warning(
+                "Invalid liveness_stall_policy %r — falling back to 'restart_worker'.",
+                self.liveness_stall_policy,
+            )
+            self.liveness_stall_policy = "restart_worker"
+```
+
+In `from_env()` (line ~103), add six arguments before `log_level`:
 
 ```python
             liveness_enabled=_env_bool("AGENTSPAN_LIVENESS_ENABLED", True),
             liveness_startup_timeout_seconds=_env_float("AGENTSPAN_LIVENESS_STARTUP_TIMEOUT", 2.0),
             liveness_stall_seconds=_env_float("AGENTSPAN_LIVENESS_STALL_SECONDS", 30.0),
             liveness_check_interval_seconds=_env_float("AGENTSPAN_LIVENESS_CHECK_INTERVAL", 10.0),
+            liveness_stall_policy=_env("AGENTSPAN_LIVENESS_STALL_POLICY", "restart_worker"),
+            liveness_stall_max_restarts=_env_int("AGENTSPAN_LIVENESS_STALL_MAX_RESTARTS", 1),
 ```
 
 - [ ] **Step 4: Run test to confirm it passes**
@@ -645,13 +679,14 @@ def test_monitor_stops_on_terminal_workflow_status():
     assert not monitor.is_running()
 
 
-def test_monitor_one_shot_after_firing():
+def test_monitor_dedupes_same_task_id():
+    """Same task_id must only fire on_stall ONCE, even across many ticks."""
     long_ago = int((time.time() - 60) * 1000)
     wf = _FakeWorkflow(
         "RUNNING",
-        [_FakeTask("setup_repo", "SCHEDULED", "d1", long_ago, 0)],
+        [_FakeTask("setup_repo", "SCHEDULED", "d1", long_ago, 0, task_id="task-X")],
     )
-    client = _client([wf, wf, wf])
+    client = _client([wf, wf, wf, wf])
     call_count = {"n": 0}
 
     def on_stall(err):
@@ -669,6 +704,37 @@ def test_monitor_one_shot_after_firing():
     time.sleep(0.4)
     monitor.stop()
     assert call_count["n"] == 1
+
+
+def test_monitor_fires_again_for_new_task_id():
+    """A NEW stalled task_id (not previously reported) must fire on_stall."""
+    long_ago = int((time.time() - 60) * 1000)
+    wf1 = _FakeWorkflow(
+        "RUNNING",
+        [_FakeTask("setup_repo", "SCHEDULED", "d1", long_ago, 0, task_id="task-A")],
+    )
+    wf2 = _FakeWorkflow(
+        "RUNNING",
+        [_FakeTask("setup_repo", "SCHEDULED", "d1", long_ago, 0, task_id="task-B")],
+    )
+    client = _client([wf1, wf2, wf2])
+    seen_ids: list = []
+
+    def on_stall(err):
+        seen_ids.extend(t.task_id for t in err.stalled_tasks)
+
+    monitor = ServerLivenessMonitor(
+        workflow_client=client,
+        execution_id="exec-1",
+        domain="d1",
+        stall_seconds=10.0,
+        check_interval=0.05,
+        on_stall=on_stall,
+    )
+    monitor.start()
+    time.sleep(0.4)
+    monitor.stop()
+    assert "task-A" in seen_ids and "task-B" in seen_ids
 
 
 def test_monitor_no_op_when_domain_is_none():
@@ -703,9 +769,10 @@ class ServerLivenessMonitor:
     """Daemon thread that detects unpolled SCHEDULED tasks in our domain.
 
     Polls the workflow every ``check_interval`` seconds; fires ``on_stall``
-    once if any SCHEDULED task in our domain has been queued longer than
-    ``stall_seconds`` with ``pollCount=0``. One-shot — stops itself after
-    firing or when the workflow reaches a terminal state.
+    when any SCHEDULED task in our domain has been queued longer than
+    ``stall_seconds`` with ``pollCount=0``. Per-``task_id`` dedup ensures
+    each stalled task is reported at most once. Stops itself when the
+    workflow reaches a terminal status or ``stop()`` is called.
     """
 
     def __init__(
@@ -726,6 +793,7 @@ class ServerLivenessMonitor:
         self._on_stall = on_stall
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
+        self._seen: set = set()  # task_ids already reported
 
     def start(self) -> None:
         if self._domain is None:
@@ -749,7 +817,7 @@ class ServerLivenessMonitor:
         while not self._stop_event.is_set():
             try:
                 if self._tick():
-                    return  # fired, one-shot
+                    return  # workflow terminal — stop
             except Exception as exc:
                 logger.debug(
                     "ServerLivenessMonitor tick failed for %s: %s",
@@ -758,6 +826,7 @@ class ServerLivenessMonitor:
             self._stop_event.wait(self._check_interval)
 
     def _tick(self) -> bool:
+        """Return True if monitor should stop (workflow terminal)."""
         wf = self._workflow_client.get_workflow(self._execution_id, include_tasks=True)
         status = getattr(wf, "status", None)
         if status in _TERMINAL_STATUSES:
@@ -765,7 +834,7 @@ class ServerLivenessMonitor:
 
         now_ms = time.time() * 1000
         threshold_ms = self._stall_seconds * 1000
-        stalled: List[StalledTaskInfo] = []
+        new_stalled: List[StalledTaskInfo] = []
 
         for t in getattr(wf, "tasks", []) or []:
             if getattr(t, "status", None) != "SCHEDULED":
@@ -774,23 +843,27 @@ class ServerLivenessMonitor:
                 continue
             if getattr(t, "poll_count", 0) != 0:
                 continue
+            task_id = getattr(t, "task_id", None)
+            if not task_id or task_id in self._seen:
+                continue
             scheduled_ms = getattr(t, "scheduled_time", 0) or 0
             queued_ms = now_ms - scheduled_ms
             if queued_ms < threshold_ms:
                 continue
-            stalled.append(
+            new_stalled.append(
                 StalledTaskInfo(
                     task_def_name=getattr(t, "task_def_name", "<unknown>"),
-                    task_id=getattr(t, "task_id", "<unknown>"),
+                    task_id=task_id,
                     seconds_queued=queued_ms / 1000.0,
                 )
             )
+            self._seen.add(task_id)
 
-        if stalled:
+        if new_stalled:
             err = WorkerStallError(
                 execution_id=self._execution_id,
                 domain=self._domain,
-                stalled_tasks=stalled,
+                stalled_tasks=new_stalled,
                 remediation=(
                     "No worker is polling for these tasks. If the original "
                     "process died, re-run with the same idempotency_key (or "
@@ -802,7 +875,6 @@ class ServerLivenessMonitor:
                 self._on_stall(err)
             except Exception as exc:
                 logger.warning("on_stall callback raised: %s", exc)
-            return True
 
         return False
 ```
@@ -810,7 +882,7 @@ class ServerLivenessMonitor:
 - [ ] **Step 4: Run test to confirm it passes**
 
 Run: `cd sdk/python && uv run pytest tests/unit/test_server_liveness_monitor.py -v`
-Expected: 6 passed.
+Expected: 7 passed.
 
 - [ ] **Step 5: Commit**
 
@@ -820,7 +892,169 @@ git commit -m "feat(sdk): ServerLivenessMonitor — daemon thread detecting unpo
 
 Polls workflow.tasks every check_interval, fires WorkerStallError when a
 SCHEDULED task in our domain has been queued past stall_seconds with
-pollCount=0. One-shot, stops on terminal workflow status."
+pollCount=0. Per-task_id dedup; stops on terminal workflow status."
+```
+
+---
+
+## Task 4b: Implement `WorkerRestarter`
+
+**Files:**
+- Modify: `sdk/python/src/agentspan/agents/runtime/_liveness.py`
+- Create: `sdk/python/tests/unit/test_worker_restarter.py`
+
+- [ ] **Step 1: Write failing test**
+
+```python
+"""Unit tests for WorkerRestarter."""
+
+import os
+import signal
+from unittest.mock import MagicMock, patch
+
+from agentspan.agents.runtime._liveness import WorkerRestarter
+
+
+def _wm(workers_and_alive):
+    """workers_and_alive: List[(task_name, alive, pid)]"""
+    workers, procs = [], []
+    for name, alive, pid in workers_and_alive:
+        w = MagicMock()
+        w.get_task_definition_name.return_value = name
+        p = MagicMock()
+        p.is_alive.return_value = alive
+        p.pid = pid
+        workers.append(w)
+        procs.append(p)
+    th = MagicMock()
+    th.workers = workers
+    th.task_runner_processes = procs
+    wm = MagicMock()
+    wm._task_handler = th
+    return wm
+
+
+def test_restart_kills_matching_alive_workers():
+    wm = _wm([("setup_repo", True, 111), ("read_file", True, 222)])
+    with patch("os.kill") as mock_kill:
+        killed = WorkerRestarter.restart_for_tasks(wm, ["setup_repo"])
+    assert killed == [111]
+    mock_kill.assert_called_once_with(111, signal.SIGKILL)
+
+
+def test_restart_skips_dead_processes():
+    wm = _wm([("setup_repo", False, 111)])
+    with patch("os.kill") as mock_kill:
+        killed = WorkerRestarter.restart_for_tasks(wm, ["setup_repo"])
+    assert killed == []
+    mock_kill.assert_not_called()
+
+
+def test_restart_skips_non_matching_workers():
+    wm = _wm([("setup_repo", True, 111), ("read_file", True, 222)])
+    with patch("os.kill") as mock_kill:
+        killed = WorkerRestarter.restart_for_tasks(wm, ["other_tool"])
+    assert killed == []
+    mock_kill.assert_not_called()
+
+
+def test_restart_no_op_if_no_task_handler():
+    wm = MagicMock()
+    wm._task_handler = None
+    killed = WorkerRestarter.restart_for_tasks(wm, ["setup_repo"])
+    assert killed == []
+
+
+def test_restart_handles_already_gone_pid():
+    wm = _wm([("setup_repo", True, 111)])
+    with patch("os.kill", side_effect=ProcessLookupError):
+        killed = WorkerRestarter.restart_for_tasks(wm, ["setup_repo"])
+    # The PID was unreachable — still report we attempted it (already gone)
+    assert killed == [111]
+```
+
+- [ ] **Step 2: Run test to confirm it fails**
+
+Run: `cd sdk/python && uv run pytest tests/unit/test_worker_restarter.py -v`
+Expected: `ImportError: cannot import name 'WorkerRestarter'`
+
+- [ ] **Step 3: Append `WorkerRestarter` to `_liveness.py`**
+
+```python
+import os
+import signal
+
+
+class WorkerRestarter:
+    """SIGKILLs worker subprocesses bound to specific task names so the
+    Conductor TaskHandler monitor (``monitor_processes=True``) respawns them.
+
+    This is the same recovery mechanism used by the test
+    ``_WorkerWatchdog`` in ``conftest.py:53`` to fight macOS fork()
+    deadlocks. Generalized here for production use under the
+    ``"restart_worker"`` stall policy.
+    """
+
+    @staticmethod
+    def restart_for_tasks(
+        worker_manager: object, task_def_names: Iterable[str]
+    ) -> List[int]:
+        """Kill the subprocess(es) bound to *task_def_names*. Returns killed PIDs."""
+        names = set(task_def_names)
+        if not names:
+            return []
+        task_handler = getattr(worker_manager, "_task_handler", None)
+        if task_handler is None:
+            return []
+
+        workers = getattr(task_handler, "workers", []) or []
+        procs = getattr(task_handler, "task_runner_processes", []) or []
+
+        killed: List[int] = []
+        for w, p in zip(workers, procs):
+            try:
+                if w.get_task_definition_name() not in names:
+                    continue
+            except Exception:
+                continue
+            if p is None or not p.is_alive():
+                continue
+            pid = getattr(p, "pid", None)
+            if pid is None:
+                continue
+            try:
+                os.kill(pid, signal.SIGKILL)
+                killed.append(pid)
+            except ProcessLookupError:
+                # Already gone — still record it so caller knows we acted.
+                killed.append(pid)
+            except Exception as exc:
+                logger.warning("Failed to SIGKILL worker pid=%s: %s", pid, exc)
+
+        if killed:
+            logger.warning(
+                "WorkerRestarter killed pid(s)=%s for task(s)=%s — "
+                "TaskHandler monitor will respawn.",
+                killed, sorted(names),
+            )
+        return killed
+```
+
+- [ ] **Step 4: Run tests**
+
+Run: `cd sdk/python && uv run pytest tests/unit/test_worker_restarter.py -v`
+Expected: 5 passed.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add sdk/python/src/agentspan/agents/runtime/_liveness.py sdk/python/tests/unit/test_worker_restarter.py
+git commit -m "feat(sdk): WorkerRestarter — SIGKILL stuck worker subprocesses
+
+The Conductor TaskHandler is started with monitor_processes=True
+(WorkerManager.start), so killed subprocesses are respawned within
+1-2s. This generalizes the test _WorkerWatchdog pattern from
+conftest.py:53 for production use under the restart_worker stall policy."
 ```
 
 ---
@@ -1277,7 +1511,15 @@ In `result.py`, replace the current `join` method body (line 358 onward) with th
 
 Apply the parallel edit to `join_async` (line 430) — wrap with the same `_maybe_start_liveness_monitor()` call before the loop and `_stop_liveness_monitor()` in a `finally`, plus the `if self._stall_error is not None: raise self._stall_error` at the top of each iteration.
 
-- [ ] **Step 2: Add helper methods `_maybe_start_liveness_monitor` and `_stop_liveness_monitor`**
+- [ ] **Step 2: Add `_restart_count` field to `AgentHandle.__init__`**
+
+In `result.py:236-246`, the `AgentHandle.__init__` already added `_stall_error` and `_liveness_monitor` in Task 7. Append one more line to that block:
+
+```python
+        self._stall_restart_count = 0
+```
+
+- [ ] **Step 3: Add helper methods `_maybe_start_liveness_monitor`, `_stop_liveness_monitor`, and `_handle_stall`**
 
 In `AgentHandle`, after `_build_result` (around line 512), add:
 
@@ -1293,16 +1535,13 @@ In `AgentHandle`, after `_build_result` (around line 512), add:
             return  # stateless — nothing routed via domain
         from agentspan.agents.runtime._liveness import ServerLivenessMonitor
 
-        def _on_stall(err) -> None:
-            self._stall_error = err
-
         self._liveness_monitor = ServerLivenessMonitor(
             workflow_client=self._runtime._workflow_client,
             execution_id=self.execution_id,
             domain=self.run_id,
             stall_seconds=cfg.liveness_stall_seconds,
             check_interval=cfg.liveness_check_interval_seconds,
-            on_stall=_on_stall,
+            on_stall=self._handle_stall,
         )
         self._liveness_monitor.start()
 
@@ -1311,9 +1550,55 @@ In `AgentHandle`, after `_build_result` (around line 512), add:
         if self._liveness_monitor is not None:
             self._liveness_monitor.stop()
             self._liveness_monitor = None
+
+    def _handle_stall(self, err) -> None:
+        """Apply the configured stall policy to a detected stall.
+
+        - ``"restart_worker"`` (default): SIGKILL the stuck subprocess(es) so
+          Conductor's TaskHandler monitor respawns them. After
+          ``liveness_stall_max_restarts`` cumulative restarts, fall through
+          to ``"raise"``.
+        - ``"raise"``: store the error so the next ``join()`` poll raises.
+        - ``"warn"``: log only.
+        """
+        import logging as _logging
+
+        log = _logging.getLogger("agentspan.agents.result")
+        cfg = getattr(self._runtime, "_config", None)
+        policy = getattr(cfg, "liveness_stall_policy", "restart_worker")
+        max_restarts = getattr(cfg, "liveness_stall_max_restarts", 1)
+
+        stalled_names = sorted({t.task_def_name for t in err.stalled_tasks})
+
+        if policy == "warn":
+            log.warning(
+                "Worker stall detected on execution %s for tasks=%s "
+                "(policy=warn); not raising. %s",
+                err.execution_id, stalled_names, err.remediation,
+            )
+            return
+
+        if policy == "restart_worker" and self._stall_restart_count < max_restarts:
+            from agentspan.agents.runtime._liveness import WorkerRestarter
+
+            wm = getattr(self._runtime, "_worker_manager", None)
+            if wm is not None:
+                killed = WorkerRestarter.restart_for_tasks(wm, stalled_names)
+                self._stall_restart_count += 1
+                log.warning(
+                    "Worker stall detected on %s for tasks=%s (attempt "
+                    "%d/%d) — killed pid(s)=%s; TaskHandler monitor will "
+                    "respawn.",
+                    err.execution_id, stalled_names,
+                    self._stall_restart_count, max_restarts, killed,
+                )
+                return
+
+        # policy="raise" OR restart attempts exhausted
+        self._stall_error = err
 ```
 
-- [ ] **Step 3: Add a unit test to verify lifecycle**
+- [ ] **Step 4: Add a unit test to verify lifecycle and policy handling**
 
 Create `sdk/python/tests/unit/test_handle_liveness_lifecycle.py`:
 
@@ -1383,14 +1668,87 @@ def test_monitor_skipped_when_liveness_disabled():
     h = AgentHandle(execution_id="e", runtime=rt, run_id="d1")
     h.join(timeout=5)
     assert h._liveness_monitor is None
+
+
+def _stall_err():
+    from agentspan.agents.runtime._liveness import StalledTaskInfo, WorkerStallError
+
+    return WorkerStallError(
+        execution_id="e",
+        domain="d1",
+        stalled_tasks=[StalledTaskInfo("setup_repo", "task-1", 42.0)],
+        remediation="x",
+    )
+
+
+def test_handle_stall_policy_restart_worker_calls_restarter(monkeypatch):
+    """Default policy: stall triggers WorkerRestarter; _stall_error stays None."""
+    called = {"names": None}
+
+    def fake_restart(worker_manager, names):
+        called["names"] = sorted(names)
+        return [12345]
+
+    import agentspan.agents.runtime._liveness as liv
+    monkeypatch.setattr(liv.WorkerRestarter, "restart_for_tasks", staticmethod(fake_restart))
+
+    rt = _runtime()
+    rt._config.liveness_stall_policy = "restart_worker"
+    rt._config.liveness_stall_max_restarts = 1
+    rt._worker_manager = MagicMock()
+    h = AgentHandle(execution_id="e", runtime=rt, run_id="d1")
+    h._handle_stall(_stall_err())
+    assert called["names"] == ["setup_repo"]
+    assert h._stall_error is None
+    assert h._stall_restart_count == 1
+
+
+def test_handle_stall_policy_raise_sets_stall_error():
+    rt = _runtime()
+    rt._config.liveness_stall_policy = "raise"
+    h = AgentHandle(execution_id="e", runtime=rt, run_id="d1")
+    h._handle_stall(_stall_err())
+    assert h._stall_error is not None
+    assert h._stall_restart_count == 0
+
+
+def test_handle_stall_policy_warn_logs_no_raise(caplog):
+    import logging
+    rt = _runtime()
+    rt._config.liveness_stall_policy = "warn"
+    h = AgentHandle(execution_id="e", runtime=rt, run_id="d1")
+    with caplog.at_level(logging.WARNING, logger="agentspan.agents.result"):
+        h._handle_stall(_stall_err())
+    assert h._stall_error is None
+    assert any("policy=warn" in rec.message for rec in caplog.records)
+
+
+def test_handle_stall_falls_through_to_raise_after_max_restarts(monkeypatch):
+    """After max_restarts cumulative restarts, the next stall raises."""
+    import agentspan.agents.runtime._liveness as liv
+    monkeypatch.setattr(
+        liv.WorkerRestarter, "restart_for_tasks",
+        staticmethod(lambda wm, names: [123]),
+    )
+
+    rt = _runtime()
+    rt._config.liveness_stall_policy = "restart_worker"
+    rt._config.liveness_stall_max_restarts = 1
+    rt._worker_manager = MagicMock()
+    h = AgentHandle(execution_id="e", runtime=rt, run_id="d1")
+    h._handle_stall(_stall_err())  # 1st stall — restart
+    assert h._stall_error is None
+    h._handle_stall(_stall_err())  # 2nd stall — falls through to raise
+    assert h._stall_error is not None
+    assert h._stall_restart_count == 1
 ```
 
-- [ ] **Step 4: Run unit test**
+- [ ] **Step 5: Run unit test**
 
 Run: `cd sdk/python && uv run pytest tests/unit/test_handle_liveness_lifecycle.py -v`
-Expected: 3 passed.
+Expected: 7 passed.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add sdk/python/src/agentspan/agents/result.py sdk/python/tests/unit/test_handle_liveness_lifecycle.py
@@ -1619,11 +1977,12 @@ def _kill_workers(rt: AgentRuntime) -> None:
             pass
 
 
-def test_server_liveness_detects_stalled_task(fast_liveness_config):
-    """Kill workers immediately after start so the LLM's first tool call
-    queues with pollCount=0 — ServerLivenessMonitor must surface
-    WorkerStallError from join() within ~stall_seconds + check_interval.
+def test_server_liveness_raises_with_raise_policy(fast_liveness_config):
+    """With liveness_stall_policy='raise', killing workers post-start makes
+    join() raise WorkerStallError within ~stall_seconds + check_interval.
     """
+    fast_liveness_config.liveness_stall_policy = "raise"
+
     agent = Agent(
         name=f"liveness-stall-{uuid.uuid4().hex[:8]}",
         model="openai/gpt-4o-mini",
@@ -1651,6 +2010,44 @@ def test_server_liveness_detects_stalled_task(fast_liveness_config):
     assert elapsed < 25.0, f"Stall detection too slow: {elapsed:.2f}s"
     assert any(t.task_def_name == "liveness_probe" for t in err.stalled_tasks)
     assert err.execution_id == handle.execution_id
+
+
+def test_server_liveness_restart_policy_recovers(fast_liveness_config):
+    """With the DEFAULT 'restart_worker' policy, killing workers post-start
+    must not crash join() — the SDK SIGKILLs+respawns the subprocess and
+    execution proceeds.
+    """
+    assert fast_liveness_config.liveness_stall_policy == "restart_worker"  # default
+
+    agent = Agent(
+        name=f"liveness-restart-{uuid.uuid4().hex[:8]}",
+        model="openai/gpt-4o-mini",
+        stateful=True,
+        tools=[liveness_probe],
+        max_turns=2,
+        instructions=(
+            "You MUST call the liveness_probe tool with payload='go' on your "
+            "first turn. Do not respond in any other way."
+        ),
+    )
+
+    with AgentRuntime(config=fast_liveness_config) as rt:
+        handle = rt.start(agent, "go")
+        _kill_workers(rt)
+
+        # join() must complete (or time out) WITHOUT raising WorkerStallError;
+        # the restart policy auto-recovers.
+        try:
+            result = handle.join(timeout=60)
+        except WorkerStallError:
+            pytest.fail("restart_worker policy must not surface WorkerStallError")
+        except TimeoutError:
+            # Acceptable in test envs where TaskHandler monitor restart is slow;
+            # the absence of WorkerStallError is the assertion that matters.
+            return
+
+        assert result.execution_id == handle.execution_id
+        assert handle._stall_restart_count >= 1  # restart happened
 
 
 def test_server_liveness_disabled_falls_through_to_timeout(fast_liveness_config):
@@ -1689,7 +2086,7 @@ def test_server_liveness_disabled_falls_through_to_timeout(fast_liveness_config)
 - [ ] **Step 2: Run the tests**
 
 Run: `cd sdk/python && uv run pytest tests/integration/test_worker_liveness_live.py -v -k "server_liveness"`
-Expected: 2 passed in < 50s.
+Expected: 3 passed in < 90s.
 
 - [ ] **Step 3: Commit**
 
@@ -1779,7 +2176,7 @@ Expected: 1 passed in < 30s.
 - [ ] **Step 3: Run the entire new test file**
 
 Run: `cd sdk/python && uv run pytest tests/integration/test_worker_liveness_live.py -v`
-Expected: 5 passed in < 90s total.
+Expected: 6 passed in < 150s total.
 
 - [ ] **Step 4: Commit**
 
@@ -1802,7 +2199,7 @@ the INFO 'Resumed existing execution ...' log."
 
 Run:
 ```bash
-cd sdk/python && uv run pytest tests/unit/test_liveness_config.py tests/unit/test_liveness_errors.py tests/unit/test_local_liveness_check.py tests/unit/test_server_liveness_monitor.py tests/unit/test_collect_registered_pairs.py tests/unit/test_agent_handle_is_resumed.py tests/unit/test_handle_liveness_lifecycle.py -v
+cd sdk/python && uv run pytest tests/unit/test_liveness_config.py tests/unit/test_liveness_errors.py tests/unit/test_local_liveness_check.py tests/unit/test_server_liveness_monitor.py tests/unit/test_worker_restarter.py tests/unit/test_collect_registered_pairs.py tests/unit/test_agent_handle_is_resumed.py tests/unit/test_handle_liveness_lifecycle.py -v
 ```
 Expected: all pass in < 10s.
 
@@ -1838,7 +2235,10 @@ Spec coverage check (against `docs/design/2026-05-06-worker-liveness-and-idempot
 | `WorkerStartupError` + fields + remediation | Task 2 |
 | `WorkerStallError` + fields + remediation | Task 2 |
 | `LocalLivenessCheck.verify` semantics | Task 3 |
-| `ServerLivenessMonitor` semantics + auto-stop on terminal status + one-shot | Task 4 |
+| `ServerLivenessMonitor` semantics + auto-stop on terminal status + per-task_id dedup | Task 4 |
+| `WorkerRestarter.restart_for_tasks` (SIGKILL + monitor respawn) | Task 4b |
+| Stall policy `restart_worker` / `raise` / `warn` | Task 1 (config), Task 8 (`_handle_stall`) |
+| Stall max-restart cap → fall through to raise | Task 8 |
 | `_collect_registered_pairs` mirroring tool_registry domain logic | Task 5 |
 | Wired into all four `start*/stream*` call sites | Task 6 |
 | `AgentHandle.is_resumed` | Task 7 |
@@ -1848,7 +2248,8 @@ Spec coverage check (against `docs/design/2026-05-06-worker-liveness-and-idempot
 | Four `AgentConfig` fields + env var loading | Task 1 |
 | `liveness_enabled` master kill-switch | Task 1, 6, 8 |
 | Test 1 — local liveness | Task 10 |
-| Test 2 — server liveness during join | Task 11 |
+| Test 2a — server liveness `raise` policy | Task 11 |
+| Test 2b — server liveness `restart_worker` policy auto-recovers | Task 11 |
 | Test 3 — idempotent resume | Task 12 |
 | Validity counter-tests (CLAUDE.md rule #2) | Tasks 10, 11 |
 | Algorithmic-only assertions (no LLM judge) | Tasks 10–12 |

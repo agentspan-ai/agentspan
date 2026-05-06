@@ -123,9 +123,15 @@ class ServerLivenessMonitor:
 
 - Runs a daemon thread that calls `workflow_client.get_workflow(execution_id, include_tasks=True)` every `check_interval` seconds.
 - Filters tasks where `domain == self.domain` (the SDK-registered domain) and `status == "SCHEDULED"`.
-- If `now - scheduledTime > stall_seconds and pollCount == 0`, packages a `WorkerStallError` and invokes `on_stall(err)`. The monitor does not raise from its own thread; the handle's poll loop is responsible for surfacing the error.
+- If `now - scheduledTime > stall_seconds and pollCount == 0`, packages a `WorkerStallError` and invokes `on_stall(err)`. The monitor does not raise from its own thread; the handle's poll loop and the stall-policy callback are responsible for any side effects.
 - Auto-stops when the workflow status is terminal (`COMPLETED`/`FAILED`/`TERMINATED`/`PAUSED`/`TIMED_OUT`) or when `stop()` is called.
-- One-shot: once `on_stall` has fired, the monitor stops itself. We don't want to re-raise repeatedly.
+- Per-`task_id` deduplication: once a `task_id` has been reported, it is added to a `_seen` set and not reported again. This lets the policy callback react idempotently and lets the monitor keep watching for *new* stalls without spamming.
+
+#### `WorkerRestarter.restart_for_tasks(worker_manager, task_def_names) -> List[int]`
+
+Helper used by the `"restart_worker"` policy. Walks `WorkerManager._task_handler.workers / task_runner_processes`, and for any worker whose `get_task_definition_name()` is in `task_def_names` and whose subprocess `is_alive()`, sends `SIGKILL` to its PID. Returns the list of killed PIDs (for logging).
+
+The `TaskHandler` `monitor_processes=True` flag (set in `WorkerManager.start()`) causes Conductor to spawn a fresh subprocess for each killed worker within ~1–2 seconds. This is the same mechanism already exercised in CI by `tests/integration/conftest.py:_WorkerWatchdog`.
 
 ### `sdk/python/src/agentspan/agents/runtime/runtime.py` (modify)
 
@@ -166,16 +172,28 @@ Start the monitor lazily on first `join()` call (not in `__init__`) so handles c
 
 ### `sdk/python/src/agentspan/agents/runtime/config.py` (modify)
 
-Add four `AgentRuntimeConfig` fields, all with safe defaults:
+Add six `AgentRuntimeConfig` fields, all with safe defaults:
 
 | Field | Default | Purpose |
 |---|---|---|
+| `liveness_enabled` | `True` | Master kill-switch — set `False` to disable both checks |
 | `liveness_startup_timeout_seconds` | `2.0` | LocalLivenessCheck timeout |
 | `liveness_stall_seconds` | `30.0` | ServerLivenessMonitor: queued-with-zero-polls threshold |
 | `liveness_check_interval_seconds` | `10.0` | ServerLivenessMonitor: tick interval |
-| `liveness_enabled` | `True` | Master kill-switch — set `False` to disable both checks |
+| `liveness_stall_policy` | `"restart_worker"` | What to do on stall: `"restart_worker"`, `"raise"`, or `"warn"` |
+| `liveness_stall_max_restarts` | `1` | Cumulative cap on auto-restarts per execution before falling through to raise |
 
 Plumb via env vars in `AgentRuntimeConfig.from_env()` using existing patterns (`AGENTSPAN_LIVENESS_*`).
+
+### Stall handling policy
+
+When `ServerLivenessMonitor` detects a stalled task, the action depends on `liveness_stall_policy`:
+
+- **`"restart_worker"`** *(default)*: SIGKILL the worker subprocess(es) bound to the stalled task name(s). The Conductor `TaskHandler` was started with `monitor_processes=True` (`worker_manager.py:89`), so the monitor spawns a replacement automatically. The replacement polls the stalled task and execution continues. Each restart is logged as `WARN`. After `liveness_stall_max_restarts` cumulative restarts in this execution, fall through to `"raise"`. This is the same self-healing pattern already used by the test `_WorkerWatchdog` (`tests/integration/conftest.py:53`) for the macOS fork() deadlock.
+- **`"raise"`**: Skip the restart step. Set `WorkerStallError` on the handle; `join()`'s next iteration raises.
+- **`"warn"`**: Log a `WARN` only. Never raise. Escape hatch for forgiving deployments where the user has external monitoring.
+
+Per-task-id deduplication ensures the same stalled task is not handled twice. A new stall fires only when a *different* `task_id` matches the criteria (which is naturally the case once Conductor moves a task out of `SCHEDULED`).
 
 ## Error flow
 
@@ -183,10 +201,11 @@ Plumb via env vars in `AgentRuntimeConfig.from_env()` using existing patterns (`
 |---|---|---|---|
 | Worker process never forked (e.g., `_decorated_functions` empty) | `LocalLivenessCheck` | `WorkerStartupError` from `start()` | ≤ 2s |
 | Worker process forked then died immediately | `LocalLivenessCheck` retry loop | `WorkerStartupError` from `start()` | ≤ 2s |
-| Process alive but polling thread wedged | `ServerLivenessMonitor` | `WorkerStallError` raised inside `handle.join()` | ~30–40s after task scheduled |
+| Process alive but polling thread wedged (macOS fork() deadlock) | `ServerLivenessMonitor` → `restart_worker` policy | `WARN` log + auto-restart; `join()` continues | ~30–40s after task scheduled, recovers within ~1–2s |
+| Process alive but polling thread wedged, restart fails again | `ServerLivenessMonitor` (after `max_restarts`) | `WorkerStallError` raised inside `handle.join()` | ~60–80s |
 | User Ctrl-C'd previous run, re-runs with same idempotency_key | `_extract_domain` (existing) + new INFO log | `is_resumed=True`, INFO log; workers re-poll | immediate at `start()` |
 | Process killed mid-run by external SIGKILL, no re-run | not detected by SDK (no live process) | n/a — user must `runtime.resume(execution_id, agent)` from a new process | n/a |
-| Re-run from a new process; workers attach but slow first poll | `ServerLivenessMonitor` (suppressed) | Nothing — first poll arrives within 30s grace | n/a |
+| Re-run from a new process; workers attach but slow first poll | `ServerLivenessMonitor` (suppressed) | Nothing — first poll arrives within `stall_seconds` grace | n/a |
 
 All exceptions carry `execution_id`, `domain`, the offending workers, and a one-line `remediation` string.
 
