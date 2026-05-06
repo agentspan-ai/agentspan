@@ -18,6 +18,8 @@ See ``docs/design/2026-05-06-worker-liveness-and-idempotent-resume.md``.
 from __future__ import annotations
 
 import logging
+import os
+import signal
 import threading
 import time
 from dataclasses import dataclass
@@ -273,3 +275,58 @@ class ServerLivenessMonitor:
                 logger.warning("on_stall callback raised: %s", exc)
 
         return False
+
+
+class WorkerRestarter:
+    """SIGKILLs worker subprocesses bound to specific task names so the
+    Conductor TaskHandler monitor (``monitor_processes=True``) respawns them.
+
+    This is the same recovery mechanism used by the test
+    ``_WorkerWatchdog`` in ``conftest.py:53`` to fight macOS fork()
+    deadlocks. Generalized here for production use under the
+    ``"restart_worker"`` stall policy.
+    """
+
+    @staticmethod
+    def restart_for_tasks(
+        worker_manager: object, task_def_names: Iterable[str]
+    ) -> List[int]:
+        """Kill the subprocess(es) bound to *task_def_names*. Returns killed PIDs."""
+        names = set(task_def_names)
+        if not names:
+            return []
+        task_handler = getattr(worker_manager, "_task_handler", None)
+        if task_handler is None:
+            return []
+
+        workers = getattr(task_handler, "workers", []) or []
+        procs = getattr(task_handler, "task_runner_processes", []) or []
+
+        killed: List[int] = []
+        for w, p in zip(workers, procs):
+            try:
+                if w.get_task_definition_name() not in names:
+                    continue
+            except Exception:
+                continue
+            if p is None or not p.is_alive():
+                continue
+            pid = getattr(p, "pid", None)
+            if pid is None:
+                continue
+            try:
+                os.kill(pid, signal.SIGKILL)
+                killed.append(pid)
+            except ProcessLookupError:
+                # Already gone — still record it so caller knows we acted.
+                killed.append(pid)
+            except Exception as exc:
+                logger.warning("Failed to SIGKILL worker pid=%s: %s", pid, exc)
+
+        if killed:
+            logger.warning(
+                "WorkerRestarter killed pid(s)=%s for task(s)=%s — "
+                "TaskHandler monitor will respawn.",
+                killed, sorted(names),
+            )
+        return killed
