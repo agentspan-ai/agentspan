@@ -54,6 +54,7 @@ from agentspan.agents.code_executor import (
 
 # Exceptions
 from agentspan.agents.exceptions import AgentAPIError, AgentNotFoundError, AgentspanError
+from agentspan.agents.runtime._liveness import WorkerStallError, WorkerStartupError
 
 # Skills
 from agentspan.agents.skill import (
@@ -312,6 +313,8 @@ __all__ = [
     "AgentspanError",
     "AgentAPIError",
     "AgentNotFoundError",
+    "WorkerStallError",
+    "WorkerStartupError",
     # Agent discovery
     "discover_agents",
     # Tracing

@@ -43,3 +43,10 @@ def test_worker_stall_error_carries_context():
 def test_errors_are_runtime_errors():
     assert issubclass(WorkerStartupError, RuntimeError)
     assert issubclass(WorkerStallError, RuntimeError)
+
+
+def test_errors_exported_from_top_level():
+    from agentspan.agents import WorkerStallError, WorkerStartupError
+
+    assert issubclass(WorkerStartupError, RuntimeError)
+    assert issubclass(WorkerStallError, RuntimeError)
