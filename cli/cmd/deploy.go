@@ -43,7 +43,7 @@ var deployCmd = &cobra.Command{
 
 const (
 	deployWorkflowName    = "agentspan_deploy"
-	deployWorkflowVersion = 1
+	deployWorkflowVersion = 2
 )
 
 func init() {
@@ -614,6 +614,11 @@ func runRemoteDeployCmd(cmd *cobra.Command, artifactID string) error {
 	if stagingDir == "" {
 		return fmt.Errorf("STAGING_DIR is not set — set it to the directory where bundles should be extracted")
 	}
+	absStagingDir, err := filepath.Abs(stagingDir)
+	if err != nil {
+		return fmt.Errorf("resolve staging dir: %w", err)
+	}
+	stagingDir = absStagingDir
 
 	cfg := getConfig()
 	cc := client.NewConductorClient(cfg.ConductorURL)
@@ -628,6 +633,7 @@ func runRemoteDeployCmd(cmd *cobra.Command, artifactID string) error {
 		"file_handle_id": artifactID,
 		"workflow_id":    workflowID,
 		"bundle_name":    bundleName,
+		"staging_dir":    stagingDir,
 	})
 	if err != nil {
 		return fmt.Errorf("start deploy workflow: %w", err)
