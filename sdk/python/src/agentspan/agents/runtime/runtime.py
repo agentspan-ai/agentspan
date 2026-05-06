@@ -2588,6 +2588,14 @@ class AgentRuntime:
                 timeout=self._config.liveness_startup_timeout_seconds,
             )
 
+        recorded_domain = self._extract_domain(execution_id)
+        if run_id and recorded_domain and recorded_domain != run_id:
+            logger.info(
+                "Resumed existing execution %s under domain %s "
+                "(triggered by idempotency_key=%s); re-attached workers.",
+                execution_id, recorded_domain, idempotency_key,
+            )
+
         self._register_workflow_credentials(execution_id, credentials)
 
         # Poll until complete
@@ -3714,8 +3722,22 @@ class AgentRuntime:
                 timeout=self._config.liveness_startup_timeout_seconds,
             )
 
+        recorded_domain = self._extract_domain(execution_id)
+        is_resumed = bool(
+            run_id and recorded_domain and recorded_domain != run_id
+        )
+        if is_resumed:
+            logger.info(
+                "Resumed existing execution %s under domain %s "
+                "(triggered by idempotency_key=%s); re-attached workers.",
+                execution_id, recorded_domain, idempotency_key,
+            )
         return AgentHandle(
-            execution_id=execution_id, runtime=self, correlation_id=correlation_id, run_id=run_id
+            execution_id=execution_id,
+            runtime=self,
+            correlation_id=correlation_id,
+            run_id=worker_domain,
+            is_resumed=is_resumed,
         )
 
     # ── Streaming execution ─────────────────────────────────────────
@@ -4121,6 +4143,14 @@ class AgentRuntime:
                 timeout=self._config.liveness_startup_timeout_seconds,
             )
 
+        recorded_domain = self._extract_domain(execution_id)
+        if run_id and recorded_domain and recorded_domain != run_id:
+            logger.info(
+                "Resumed existing execution %s under domain %s "
+                "(triggered by idempotency_key=%s); re-attached workers.",
+                execution_id, recorded_domain, idempotency_key,
+            )
+
         self._register_workflow_credentials(execution_id, credentials)
 
         effective_timeout = timeout or (
@@ -4270,8 +4300,22 @@ class AgentRuntime:
                 timeout=self._config.liveness_startup_timeout_seconds,
             )
 
+        recorded_domain = self._extract_domain(execution_id)
+        is_resumed = bool(
+            run_id and recorded_domain and recorded_domain != run_id
+        )
+        if is_resumed:
+            logger.info(
+                "Resumed existing execution %s under domain %s "
+                "(triggered by idempotency_key=%s); re-attached workers.",
+                execution_id, recorded_domain, idempotency_key,
+            )
         return AgentHandle(
-            execution_id=execution_id, runtime=self, correlation_id=correlation_id, run_id=run_id
+            execution_id=execution_id,
+            runtime=self,
+            correlation_id=correlation_id,
+            run_id=worker_domain,
+            is_resumed=is_resumed,
         )
 
     async def stream_async(

@@ -231,6 +231,11 @@ class AgentHandle:
     Args:
         execution_id: The Conductor execution ID.
         runtime: The :class:`AgentRuntime` that launched this workflow.
+        correlation_id: Optional correlation ID for tracing.
+        run_id: Domain UUID for stateful agents; None for stateless.
+        is_resumed: True when the server matched an existing execution
+            via idempotency_key replay. Workers were re-attached to the
+            existing domain rather than registered for a fresh run.
     """
 
     def __init__(
@@ -239,11 +244,15 @@ class AgentHandle:
         runtime: Any,
         correlation_id: Optional[str] = None,
         run_id: Optional[str] = None,
+        is_resumed: bool = False,
     ) -> None:
         self.execution_id = execution_id
         self.correlation_id = correlation_id
         self._runtime = runtime
         self.run_id = run_id  # domain UUID for stateful agents; None for stateless
+        self.is_resumed = is_resumed
+        self._stall_error: Optional["BaseException"] = None
+        self._liveness_monitor: Optional[Any] = None
 
     # ── Status ──────────────────────────────────────────────────────
 
