@@ -1143,7 +1143,7 @@ func (m AgentsModel) startSSE() (AgentsModel, tea.Cmd) {
 	}
 	m.sseCh = ch
 	executionID := m.executionID
-	go m.client.Stream(executionID, "", ch.events, ch.done)
+	go m.client.Stream(context.Background(), executionID, "", ch.events, ch.done)
 	return m, nextSSEEvent(ch)
 }
 

@@ -22,7 +22,7 @@ var streamCmd = &cobra.Command{
 		executionID := args[0]
 		fmt.Printf("Streaming events for %s...\n\n", executionID)
 
-		return streamExecution(c, executionID, streamLastEventID)
+		return streamExecution(cmd.Context(), c, executionID, streamLastEventID)
 	},
 }
 

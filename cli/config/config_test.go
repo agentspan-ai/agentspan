@@ -28,7 +28,7 @@ func TestIsLocalhost(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := &config.Config{ServerURL: tt.url}
+			cfg := &config.Config{AgentspanURL: tt.url}
 			got := cfg.IsLocalhost()
 			if got != tt.expected {
 				t.Errorf("IsLocalhost(%q) = %v, want %v", tt.url, got, tt.expected)

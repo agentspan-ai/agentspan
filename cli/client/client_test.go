@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,7 +19,7 @@ func newTestServer(t *testing.T, handler http.Handler) (*httptest.Server, *Clien
 	t.Helper()
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	c := New(&config.Config{ServerURL: srv.URL})
+	c := New(&config.Config{AgentspanURL: srv.URL + "/api"})
 	return srv, c
 }
 
@@ -143,7 +144,7 @@ func TestStream_ParsesSingleLineEvents(t *testing.T) {
 
 	events := make(chan SSEEvent, 10)
 	done := make(chan error, 1)
-	c.Stream("test-id", "", events, done)
+	c.Stream(context.Background(), "test-id", "", events, done)
 
 	var got []SSEEvent
 	timeout := time.After(5 * time.Second)
@@ -186,7 +187,7 @@ func TestStream_MultilineDataJoinedWithNewline(t *testing.T) {
 
 	events := make(chan SSEEvent, 10)
 	done := make(chan error, 1)
-	c.Stream("test-id", "", events, done)
+	c.Stream(context.Background(), "test-id", "", events, done)
 
 	var got SSEEvent
 	select {
@@ -218,7 +219,7 @@ func TestStream_SingleLeadingSpaceStripped(t *testing.T) {
 
 	events := make(chan SSEEvent, 10)
 	done := make(chan error, 1)
-	c.Stream("test-id", "", events, done)
+	c.Stream(context.Background(), "test-id", "", events, done)
 
 	var got SSEEvent
 	select {
@@ -256,7 +257,7 @@ func TestStream_SendsLastEventIDHeader(t *testing.T) {
 
 	events := make(chan SSEEvent, 10)
 	done := make(chan error, 1)
-	c.Stream("test-id", "evt-42", events, done)
+	c.Stream(context.Background(), "test-id", "evt-42", events, done)
 
 	// drain
 	for range events {
@@ -280,7 +281,7 @@ func TestStream_SkipsCommentLines(t *testing.T) {
 
 	events := make(chan SSEEvent, 10)
 	done := make(chan error, 1)
-	c.Stream("test-id", "", events, done)
+	c.Stream(context.Background(), "test-id", "", events, done)
 
 	var got []SSEEvent
 	for evt := range events {
@@ -303,7 +304,7 @@ func TestStream_HTTP4xxReturnsError(t *testing.T) {
 
 	events := make(chan SSEEvent, 10)
 	done := make(chan error, 1)
-	c.Stream("bad-id", "", events, done)
+	c.Stream(context.Background(), "bad-id", "", events, done)
 
 	// drain events
 	for range events {
@@ -332,7 +333,7 @@ func TestStream_PathEscapesExecutionID(t *testing.T) {
 
 	events := make(chan SSEEvent, 10)
 	done := make(chan error, 1)
-	c.Stream("id/slash", "", events, done)
+	c.Stream(context.Background(), "id/slash", "", events, done)
 	for range events {
 	}
 	<-done
@@ -354,7 +355,7 @@ func TestDoRequest_SendsBearerToken(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	c := New(&config.Config{ServerURL: srv.URL, APIKey: "my-jwt"})
+	c := New(&config.Config{AgentspanURL: srv.URL + "/api", APIKey: "my-jwt"})
 	resp, err := c.doRequest("GET", "/health", nil)
 	if err != nil {
 		t.Fatalf("doRequest: %v", err)
@@ -384,7 +385,7 @@ func TestStream_SendsBearerToken(t *testing.T) {
 	c.apiKey = "stream-token"
 	events := make(chan SSEEvent, 10)
 	done := make(chan error, 1)
-	c.Stream("test-id", "", events, done)
+	c.Stream(context.Background(), "test-id", "", events, done)
 
 	for range events {
 	}

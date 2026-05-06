@@ -28,7 +28,7 @@ type ConfigureModel struct {
 
 func NewConfigure(cfg *config.Config) ConfigureModel {
 	m := ConfigureModel{
-		serverURL: cfg.ServerURL,
+		serverURL: cfg.AgentspanURL,
 	}
 	m.form = m.buildForm()
 	return m
@@ -69,7 +69,7 @@ func (m ConfigureModel) Update(msg tea.Msg) (ConfigureModel, tea.Cmd) {
 		if f, ok := form.(*huh.Form); ok {
 			m.form = f
 			if m.form.State == huh.StateCompleted {
-				m.serverURL = m.form.GetString("server_url")
+				m.serverURL = m.form.GetString("agentspan_url")
 				return m, m.saveConfig()
 			}
 		}
@@ -116,10 +116,10 @@ func (m *ConfigureModel) buildForm() *huh.Form {
 	return huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().
-				Key("server_url").
-				Title("Server URL").
-				Description("AgentSpan runtime server URL").
-				Placeholder("http://localhost:6767").
+				Key("agentspan_url").
+				Title("Agentspan URL").
+				Description("AgentSpan runtime API URL").
+				Placeholder("http://localhost:6767/api").
 				Value(&m.serverURL),
 		),
 	).WithTheme(huh.ThemeFunc(agentspanHuhTheme))
@@ -128,11 +128,11 @@ func (m *ConfigureModel) buildForm() *huh.Form {
 func (m ConfigureModel) saveConfig() tea.Cmd {
 	serverURL := m.serverURL
 	if m.form != nil {
-		serverURL = m.form.GetString("server_url")
+		serverURL = m.form.GetString("agentspan_url")
 	}
 	return func() tea.Msg {
 		cfg := config.Load()
-		cfg.ServerURL = serverURL
+		cfg.AgentspanURL = serverURL
 		saveErr := config.Save(cfg)
 		return ConfigSavedMsg{Err: saveErr}
 	}

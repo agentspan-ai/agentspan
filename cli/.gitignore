@@ -1,1 +1,4 @@
 *.py
+agentspan
+cli
+bin/

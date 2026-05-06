@@ -76,8 +76,8 @@ func TestRespondCmd_ApproveSendsCorrectPayload(t *testing.T) {
 	if gotMethod != http.MethodPost {
 		t.Errorf("method = %q, want POST", gotMethod)
 	}
-	if gotPath != "/api/agent/exec-456/respond" {
-		t.Errorf("path = %q, want /api/agent/exec-456/respond", gotPath)
+	if gotPath != "/agent/exec-456/respond" {
+		t.Errorf("path = %q, want /agent/exec-456/respond", gotPath)
 	}
 	if gotBody["approved"] != true {
 		t.Errorf("approved = %v, want true", gotBody["approved"])

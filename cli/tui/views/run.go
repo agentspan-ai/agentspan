@@ -1,6 +1,7 @@
 package views
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -477,7 +478,7 @@ func (m RunModel) startSSE() (RunModel, tea.Cmd) {
 	m.sseCh = ch
 	executionID := m.executionID
 	// Start background reader
-	go m.client.Stream(executionID, "", ch.events, ch.done)
+	go m.client.Stream(context.Background(), executionID, "", ch.events, ch.done)
 	return m, nextSSEEvent(ch)
 }
 

@@ -1,104 +1,95 @@
 package cmd
 
 import (
-	"strings"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/agentspan-ai/agentspan/cli/config"
 )
 
-func TestPromptServerURL(t *testing.T) {
-	// Enter accepts the current default.
-	if got := promptServerURL(strings.NewReader("\n"), "http://localhost:6767"); got != "" {
-		t.Errorf("enter should keep current, got %q", got)
-	}
-	// Full URL passes through (trailing slash trimmed).
-	if got := promptServerURL(strings.NewReader("https://my.orkes.io/\n"), "x"); got != "https://my.orkes.io" {
-		t.Errorf("got %q", got)
-	}
-	// Missing scheme defaults to http:// (local instances).
-	if got := promptServerURL(strings.NewReader("localhost:8080\n"), "x"); got != "http://localhost:8080" {
-		t.Errorf("got %q", got)
-	}
-}
-
-func TestGetConfigPersistsExplicitServer(t *testing.T) {
+func TestLogoutClearsAPIKey(t *testing.T) {
 	newTempHome(t)
-	old := serverURL
-	defer func() { serverURL = old }()
 
-	serverURL = "http://localhost:8080"
-	cfg := getConfig()
-	if cfg.ServerURL != "http://localhost:8080" {
-		t.Fatalf("effective server = %q", cfg.ServerURL)
-	}
-	// The explicit --server must now be the persisted default.
-	if got := config.FileServerURL(); got != "http://localhost:8080" {
-		t.Errorf("persisted default = %q, want http://localhost:8080", got)
-	}
-	// And a flag-less invocation picks it up.
-	serverURL = ""
-	if cfg2 := getConfig(); cfg2.ServerURL != "http://localhost:8080" {
-		t.Errorf("flag-less server = %q, want persisted default", cfg2.ServerURL)
-	}
-}
-
-func TestSaveDefaultServerPreservesAPIKey(t *testing.T) {
-	newTempHome(t)
-	if err := config.Save(&config.Config{ServerURL: "http://a", APIKey: "keep-me"}); err != nil {
+	cfg := config.DefaultConfig()
+	cfg.APIKey = "existing-token"
+	if err := config.Save(cfg); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	if err := config.SaveDefaultServer("http://b"); err != nil {
-		t.Fatalf("SaveDefaultServer: %v", err)
+
+	cfg.APIKey = ""
+	if err := config.Save(cfg); err != nil {
+		t.Fatalf("save cleared: %v", err)
 	}
-	cfg := config.Load()
-	if cfg.ServerURL != "http://b" || cfg.APIKey != "keep-me" {
-		t.Errorf("got %+v, want server http://b with api key preserved", cfg)
+
+	loaded := config.Load()
+	if loaded.APIKey != "" {
+		t.Errorf("APIKey after logout = %q, want empty", loaded.APIKey)
 	}
 }
 
-func TestLogoutClearsToken(t *testing.T) {
+func TestLoginStoresToken(t *testing.T) {
 	newTempHome(t)
 
-	if err := config.SaveToken(&config.TokenInfo{
-		AccessToken: "jwt-abc",
-		ExpiresAt:   time.Now().Add(time.Hour).Unix(),
-	}); err != nil {
-		t.Fatalf("save token: %v", err)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/auth/login" {
+			http.NotFound(w, r)
+			return
+		}
+		var body map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "bad body", http.StatusBadRequest)
+			return
+		}
+		if body["username"] != "alice" || body["password"] != "secret" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"token": "jwt-abc123"})
+	}))
+	defer srv.Close()
+
+	cfg := saveTestConfig(t, srv.URL)
+
+	if err := doLogin(cfg, "alice", "secret"); err != nil {
+		t.Fatalf("doLogin: %v", err)
 	}
 
-	if err := config.ClearToken(); err != nil {
-		t.Fatalf("clear token: %v", err)
-	}
-
-	tok, err := config.LoadToken()
-	if err != nil {
-		t.Fatalf("load token: %v", err)
-	}
-	if tok != nil {
-		t.Errorf("token after logout = %+v, want nil", tok)
+	loaded := config.Load()
+	if loaded.APIKey != "jwt-abc123" {
+		t.Errorf("APIKey = %q, want jwt-abc123", loaded.APIKey)
 	}
 }
 
-func TestTokenHeaderSelection(t *testing.T) {
-	access := &config.TokenInfo{AccessToken: "acc", IDToken: "id", UseIDToken: false}
-	if got := access.Header(); got != "acc" {
-		t.Errorf("default header = %q, want access token", got)
-	}
-	idtok := &config.TokenInfo{AccessToken: "acc", IDToken: "id", UseIDToken: true}
-	if got := idtok.Header(); got != "id" {
-		t.Errorf("useIdToken header = %q, want id token", got)
+func TestLoginServerError(t *testing.T) {
+	newTempHome(t)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	cfg := saveTestConfig(t, srv.URL)
+
+	if err := doLogin(cfg, "bad", "creds"); err == nil {
+		t.Fatal("expected error from doLogin on 401, got nil")
 	}
 }
 
-func TestTokenExpired(t *testing.T) {
-	expired := &config.TokenInfo{ExpiresAt: time.Now().Add(-time.Minute).Unix()}
-	if !expired.Expired() {
-		t.Error("expected expired token to report Expired()=true")
-	}
-	fresh := &config.TokenInfo{ExpiresAt: time.Now().Add(time.Hour).Unix()}
-	if fresh.Expired() {
-		t.Error("expected fresh token to report Expired()=false")
+func TestLoginEmptyTokenError(t *testing.T) {
+	newTempHome(t)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"token": ""})
+	}))
+	defer srv.Close()
+
+	cfg := saveTestConfig(t, srv.URL)
+
+	if err := doLogin(cfg, "user", "pass"); err == nil {
+		t.Fatal("expected error for empty token, got nil")
 	}
 }

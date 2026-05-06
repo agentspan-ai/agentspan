@@ -6,77 +6,36 @@ package client
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
-	"github.com/agentspan-ai/agentspan/cli/auth"
 	"github.com/agentspan-ai/agentspan/cli/config"
 )
 
 type Client struct {
-	baseURL    string
+	baseURL    string // = AgentspanURL, e.g. http://localhost:6767/api
+	rootURL    string // server root without /api suffix, for /health
 	httpClient *http.Client
 	apiKey     string
-	authToken  string // Auth0 JWT sent as X-Authorization (from ~/.agentspan/token)
 }
 
 func New(cfg *config.Config) *Client {
-	c := &Client{
-		baseURL:    strings.TrimRight(cfg.ServerURL, "/"),
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+	apiURL := strings.TrimRight(cfg.AgentspanURL, "/")
+	rootURL := apiURL
+	if strings.HasSuffix(apiURL, "/api") {
+		rootURL = strings.TrimSuffix(apiURL, "/api")
+	}
+	return &Client{
+		baseURL:    apiURL,
+		rootURL:    rootURL,
+		httpClient: &http.Client{Timeout: 120 * time.Second},
 		apiKey:     cfg.APIKey,
-	}
-	c.authToken = resolveAuthToken()
-	return c
-}
-
-// resolveAuthToken loads the stored login token, refreshing it via Auth0 if expired,
-// and returns the JWT to send as X-Authorization. Empty when not logged in.
-func resolveAuthToken() string {
-	t, err := config.LoadToken()
-	if err != nil || t == nil {
-		return ""
-	}
-	if t.Expired() {
-		switch {
-		case t.RefreshToken != "" && t.Auth0Domain != "" && t.ClientID != "":
-			// Auth0 device-flow token: refresh with the refresh token.
-			if nt, rerr := auth.Refresh(t.Auth0Domain, t.ClientID, t.RefreshToken); rerr == nil {
-				t.AccessToken = nt.AccessToken
-				if nt.IDToken != "" {
-					t.IDToken = nt.IDToken
-				}
-				if nt.RefreshToken != "" {
-					t.RefreshToken = nt.RefreshToken
-				}
-				t.ExpiresAt = time.Now().Add(time.Duration(nt.ExpiresIn) * time.Second).Unix()
-				_ = config.SaveToken(t)
-			}
-		case t.KeyID != "" && t.KeySecret != "" && t.ServerURL != "":
-			// orkes access-key token: re-mint via POST /api/token.
-			if tok, exp, merr := auth.MintOrkesToken(t.ServerURL, t.KeyID, t.KeySecret); merr == nil {
-				t.AccessToken = tok
-				t.ExpiresAt = exp
-				_ = config.SaveToken(t)
-			}
-		}
-	}
-	return t.Header()
-}
-
-// applyAuth attaches the auth header: X-Authorization (Auth0 JWT) when logged in,
-// else a legacy Authorization: Bearer from a configured API key. orkes accepts both.
-func (c *Client) applyAuth(req *http.Request) {
-	if c.authToken != "" {
-		req.Header.Set("X-Authorization", c.authToken)
-	} else if c.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	}
 }
 
@@ -97,49 +56,9 @@ func (c *Client) doRequest(method, path string, body interface{}) (*http.Respons
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	c.applyAuth(req)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	}
-	if resp.StatusCode >= 400 {
-		defer resp.Body.Close()
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(bodyBytes))
-	}
-	return resp, nil
-}
-
-func (c *Client) doMultipartRequest(path string, manifest []byte, packageBytes []byte) (*http.Response, error) {
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
-
-	manifestPart, err := writer.CreateFormField("manifest")
-	if err != nil {
-		return nil, fmt.Errorf("create manifest field: %w", err)
-	}
-	if _, err := manifestPart.Write(manifest); err != nil {
-		return nil, fmt.Errorf("write manifest field: %w", err)
-	}
-
-	packagePart, err := writer.CreateFormFile("package", "skill.zip")
-	if err != nil {
-		return nil, fmt.Errorf("create package field: %w", err)
-	}
-	if _, err := packagePart.Write(packageBytes); err != nil {
-		return nil, fmt.Errorf("write package field: %w", err)
-	}
-	if err := writer.Close(); err != nil {
-		return nil, fmt.Errorf("close multipart body: %w", err)
-	}
-
-	req, err := http.NewRequest("POST", c.baseURL+path, &body)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	c.applyAuth(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -155,9 +74,13 @@ func (c *Client) doMultipartRequest(path string, manifest []byte, packageBytes [
 
 // HealthCheck pings the server
 func (c *Client) HealthCheck() error {
-	resp, err := c.doRequest("GET", "/health", nil)
+	req, err := http.NewRequest("GET", c.rootURL+"/health", nil)
 	if err != nil {
 		return err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
 	}
 	resp.Body.Close()
 	return nil
@@ -172,14 +95,13 @@ type StartRequest struct {
 
 // StartResponse from the runtime
 type StartResponse struct {
-	ExecutionID     string   `json:"executionId,omitempty"`
-	AgentName       string   `json:"agentName,omitempty"`
-	RequiredWorkers []string `json:"requiredWorkers,omitempty"`
+	ExecutionID string `json:"executionId"`
+	AgentName   string `json:"agentName"`
 }
 
 // Start compiles, registers, and starts an agent execution
 func (c *Client) Start(req *StartRequest) (*StartResponse, error) {
-	resp, err := c.doRequest("POST", "/api/agent/start", req)
+	resp, err := c.doRequest("POST", "/agent/start", req)
 	if err != nil {
 		return nil, err
 	}
@@ -194,35 +116,7 @@ func (c *Client) Start(req *StartRequest) (*StartResponse, error) {
 // StartFramework starts a framework agent (skill, openai, etc.) with a raw payload.
 // Framework agents use top-level "framework" + "rawConfig" instead of "agentConfig".
 func (c *Client) StartFramework(payload map[string]interface{}) (*StartResponse, error) {
-	resp, err := c.doRequest("POST", "/api/agent/start", payload)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	var result StartResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
-	}
-	return &result, nil
-}
-
-// CompileFramework compiles a framework agent with a top-level framework payload.
-func (c *Client) CompileFramework(payload map[string]interface{}) (map[string]interface{}, error) {
-	resp, err := c.doRequest("POST", "/api/agent/compile", payload)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
-	}
-	return result, nil
-}
-
-// DeployFramework compiles and registers a framework agent with a top-level framework payload.
-func (c *Client) DeployFramework(payload map[string]interface{}) (*StartResponse, error) {
-	resp, err := c.doRequest("POST", "/api/agent/deploy", payload)
+	resp, err := c.doRequest("POST", "/agent/start", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -236,23 +130,13 @@ func (c *Client) DeployFramework(payload map[string]interface{}) (*StartResponse
 
 // PollTask polls for a task of the given type. Returns nil if no task available.
 func (c *Client) PollTask(taskType string) (map[string]interface{}, error) {
-	req, err := http.NewRequest("GET", c.baseURL+"/api/tasks/poll/"+url.PathEscape(taskType), nil)
+	resp, err := c.doRequest("GET", "/tasks/poll/"+url.PathEscape(taskType), nil)
 	if err != nil {
 		return nil, err
-	}
-	c.applyAuth(req)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusNotFound {
 		return nil, nil // no task available
-	}
-	if resp.StatusCode >= 400 {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 	var task map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&task); err != nil {
@@ -263,18 +147,18 @@ func (c *Client) PollTask(taskType string) (map[string]interface{}, error) {
 
 // UpdateTask reports the result of a completed task.
 func (c *Client) UpdateTask(result map[string]interface{}) error {
-	resp, err := c.doRequest("POST", "/api/tasks", result)
+	resp, err := c.doRequest("POST", "/tasks", result)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	resp.Body.Close()
 	return nil
 }
 
 // Compile compiles an agent config to an execution plan
 func (c *Client) Compile(agentConfig map[string]interface{}) (map[string]interface{}, error) {
 	body := map[string]interface{}{"agentConfig": agentConfig}
-	resp, err := c.doRequest("POST", "/api/agent/compile", body)
+	resp, err := c.doRequest("POST", "/agent/compile", body)
 	if err != nil {
 		return nil, err
 	}
@@ -300,7 +184,7 @@ type AgentSummary struct {
 
 // ListAgents returns all registered agents
 func (c *Client) ListAgents() ([]AgentSummary, error) {
-	resp, err := c.doRequest("GET", "/api/agent/list", nil)
+	resp, err := c.doRequest("GET", "/agent/list", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -314,7 +198,7 @@ func (c *Client) ListAgents() ([]AgentSummary, error) {
 
 // GetAgent returns the definition for a named agent
 func (c *Client) GetAgent(name string, version *int) (map[string]interface{}, error) {
-	path := "/api/agent/" + url.PathEscape(name)
+	path := "/agent/" + url.PathEscape(name)
 	if version != nil {
 		path += fmt.Sprintf("?version=%d", *version)
 	}
@@ -332,152 +216,10 @@ func (c *Client) GetAgent(name string, version *int) (map[string]interface{}, er
 
 // DeleteAgent removes an agent definition
 func (c *Client) DeleteAgent(name string, version *int) error {
-	path := "/api/agent/" + url.PathEscape(name)
+	path := "/agent/" + url.PathEscape(name)
 	if version != nil {
 		path += fmt.Sprintf("?version=%d", *version)
 	}
-	resp, err := c.doRequest("DELETE", path, nil)
-	if err != nil {
-		return err
-	}
-	resp.Body.Close()
-	return nil
-}
-
-// SkillFileEntry describes a file inside a registered skill package.
-type SkillFileEntry struct {
-	Path        string `json:"path"`
-	Size        int64  `json:"size"`
-	SHA256      string `json:"sha256"`
-	ContentType string `json:"contentType"`
-}
-
-// SkillDetail is the full server-side skill package record.
-type SkillDetail struct {
-	Name                string                 `json:"name"`
-	Version             string                 `json:"version"`
-	Description         string                 `json:"description"`
-	Checksum            string                 `json:"checksum"`
-	PackageFileHandleID string                 `json:"packageFileHandleId"`
-	StorageType         string                 `json:"storageType"`
-	Status              string                 `json:"status"`
-	OwnerID             string                 `json:"ownerId"`
-	CreatedAt           *int64                 `json:"createdAt"`
-	UpdatedAt           *int64                 `json:"updatedAt"`
-	PackageSize         int64                  `json:"packageSize"`
-	FileCount           int                    `json:"fileCount"`
-	Files               []SkillFileEntry       `json:"files"`
-	Metadata            map[string]interface{} `json:"metadata"`
-	RawConfig           map[string]interface{} `json:"rawConfig"`
-}
-
-// SkillSummary is the list-view for registered skills.
-type SkillSummary struct {
-	Name          string `json:"name"`
-	Version       string `json:"version"`
-	Description   string `json:"description"`
-	Checksum      string `json:"checksum"`
-	Status        string `json:"status"`
-	OwnerID       string `json:"ownerId"`
-	PackageSize   int64  `json:"packageSize"`
-	FileCount     int    `json:"fileCount"`
-	ScriptCount   int    `json:"scriptCount"`
-	SubAgentCount int    `json:"subAgentCount"`
-	ResourceCount int    `json:"resourceCount"`
-}
-
-// RegisterSkill uploads and registers a skill package.
-func (c *Client) RegisterSkill(manifest map[string]interface{}, packageBytes []byte) (*SkillDetail, error) {
-	manifestBytes, err := json.Marshal(manifest)
-	if err != nil {
-		return nil, fmt.Errorf("marshal skill manifest: %w", err)
-	}
-	resp, err := c.doMultipartRequest("/api/skills/register", manifestBytes, packageBytes)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	var result SkillDetail
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
-	}
-	return &result, nil
-}
-
-// ListSkills returns server-registered skills.
-func (c *Client) ListSkills(allVersions bool) ([]SkillSummary, error) {
-	path := "/api/skills"
-	if allVersions {
-		path += "?allVersions=true"
-	}
-	resp, err := c.doRequest("GET", path, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	var result []SkillSummary
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
-	}
-	return result, nil
-}
-
-// GetSkill returns a registered skill detail. Empty version means latest.
-func (c *Client) GetSkill(name string, version string) (*SkillDetail, error) {
-	path := "/api/skills/" + url.PathEscape(name)
-	if version != "" {
-		path += "/versions/" + url.PathEscape(version)
-	}
-	resp, err := c.doRequest("GET", path, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	var result SkillDetail
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
-	}
-	return &result, nil
-}
-
-// DownloadSkillPackage returns the zipped package bytes for a registered skill.
-func (c *Client) DownloadSkillPackage(name string, version string) ([]byte, error) {
-	if version == "" {
-		version = "latest"
-	}
-	path := "/api/skills/" + url.PathEscape(name) + "/versions/" + url.PathEscape(version) + "/package"
-	resp, err := c.doRequest("GET", path, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	return io.ReadAll(resp.Body)
-}
-
-// DeploySkill deploys a registered skill as an agent definition.
-func (c *Client) DeploySkill(name string, version string, body map[string]interface{}) (*StartResponse, error) {
-	if version == "" {
-		version = "latest"
-	}
-	path := "/api/skills/" + url.PathEscape(name) + "/versions/" + url.PathEscape(version) + "/deploy"
-	resp, err := c.doRequest("POST", path, body)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	var result StartResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
-	}
-	return &result, nil
-}
-
-// DeleteSkill removes a registered skill version.
-func (c *Client) DeleteSkill(name string, version string) error {
-	if version == "" {
-		version = "latest"
-	}
-	path := "/api/skills/" + url.PathEscape(name) + "/versions/" + url.PathEscape(version)
 	resp, err := c.doRequest("DELETE", path, nil)
 	if err != nil {
 		return err
@@ -522,7 +264,7 @@ func (c *Client) SearchExecutions(start, size int, agentName, status, freeText s
 	if freeText != "" {
 		params.Set("freeText", freeText)
 	}
-	resp, err := c.doRequest("GET", "/api/agent/executions?"+params.Encode(), nil)
+	resp, err := c.doRequest("GET", "/agent/executions?"+params.Encode(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -555,7 +297,7 @@ type CurrentTask struct {
 
 // GetExecutionDetail returns detailed status for an execution
 func (c *Client) GetExecutionDetail(executionId string) (*ExecutionDetail, error) {
-	resp, err := c.doRequest("GET", "/api/agent/executions/"+url.PathEscape(executionId), nil)
+	resp, err := c.doRequest("GET", "/agent/executions/"+url.PathEscape(executionId), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -569,7 +311,7 @@ func (c *Client) GetExecutionDetail(executionId string) (*ExecutionDetail, error
 
 // Status gets the execution status
 func (c *Client) Status(executionID string) (map[string]interface{}, error) {
-	resp, err := c.doRequest("GET", "/api/agent/"+url.PathEscape(executionID)+"/status", nil)
+	resp, err := c.doRequest("GET", "/agent/"+url.PathEscape(executionID)+"/status", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -588,7 +330,7 @@ func (c *Client) Respond(executionID string, approved bool, reason, message stri
 		"reason":   reason,
 		"message":  message,
 	}
-	resp, err := c.doRequest("POST", "/api/agent/"+url.PathEscape(executionID)+"/respond", body)
+	resp, err := c.doRequest("POST", "/agent/"+url.PathEscape(executionID)+"/respond", body)
 	if err != nil {
 		return err
 	}
@@ -603,15 +345,16 @@ type SSEEvent struct {
 	Data  string
 }
 
-// Stream opens an SSE connection and sends events to the channel
-func (c *Client) Stream(executionID string, lastEventID string, events chan<- SSEEvent, done chan<- error) {
+// Stream opens an SSE connection and sends events to the channel.
+// Cancelling ctx closes the connection and sends the context error to done.
+func (c *Client) Stream(ctx context.Context, executionID string, lastEventID string, events chan<- SSEEvent, done chan<- error) {
 	go func() {
 		defer close(events)
 		defer close(done)
 
-		streamClient := &http.Client{Timeout: 0} // no timeout for SSE
+		streamClient := &http.Client{Timeout: 0} // no timeout for SSE — cancelled via ctx
 
-		req, err := http.NewRequest("GET", c.baseURL+"/api/agent/stream/"+url.PathEscape(executionID), nil)
+		req, err := http.NewRequestWithContext(ctx, "GET", c.baseURL+"/agent/stream/"+url.PathEscape(executionID), nil)
 		if err != nil {
 			done <- err
 			return
@@ -620,7 +363,9 @@ func (c *Client) Stream(executionID string, lastEventID string, events chan<- SS
 		if lastEventID != "" {
 			req.Header.Set("Last-Event-ID", lastEventID)
 		}
-		c.applyAuth(req)
+		if c.apiKey != "" {
+			req.Header.Set("Authorization", "Bearer "+c.apiKey)
+		}
 
 		resp, err := streamClient.Do(req)
 		if err != nil {
@@ -685,18 +430,63 @@ func sseFieldValue(line, prefix string) string {
 
 // ─── Auth API ─────────────────────────────────────────────────────────────────
 
-// ─── Credentials management API ───────────────────────────────────────────────────
+// LoginRequest is the payload for POST /api/auth/login
+type LoginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
 
-// CredentialMeta is the list-view for a stored credential (from GET /api/secrets/v2).
+// LoginResponse carries the JWT returned by the server
+type LoginResponse struct {
+	Token string `json:"token"`
+}
+
+// Login authenticates with the server and returns a JWT.
+func (c *Client) Login(username, password string) (*LoginResponse, error) {
+	resp, err := c.doRequest("POST", "/auth/login", &LoginRequest{
+		Username: username,
+		Password: password,
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var result LoginResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode login response: %w", err)
+	}
+	return &result, nil
+}
+
+// ─── Credential management API ────────────────────────────────────────────────
+
+// CredentialMeta is the list-view for a stored credential.
 type CredentialMeta struct {
 	Name      string `json:"name"`
 	Partial   string `json:"partial"`
 	UpdatedAt string `json:"updated_at"`
 }
 
-// ListCredentials returns all stored credential metadata (uses /api/secrets/v2 for richer payload).
+// CredentialSetRequest is the body for POST /api/credentials.
+type CredentialSetRequest struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// BindingMeta represents one logical key → store name binding.
+type BindingMeta struct {
+	LogicalKey string `json:"logical_key"`
+	StoreName  string `json:"store_name"`
+}
+
+// BindingSetRequest is the body for PUT /api/credentials/bindings/{key}.
+type BindingSetRequest struct {
+	StoreName string `json:"store_name"`
+}
+
+// ListCredentials returns all stored credential metadata.
 func (c *Client) ListCredentials() ([]CredentialMeta, error) {
-	resp, err := c.doRequest("GET", "/api/secrets/v2", nil)
+	resp, err := c.doRequest("GET", "/credentials", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -708,32 +498,12 @@ func (c *Client) ListCredentials() ([]CredentialMeta, error) {
 	return result, nil
 }
 
-// SetCredential stores (upserts) a credential value via PUT /api/secrets/{key}.
-// Body is the raw plaintext value (Conductor parity).
+// SetCredential stores a credential value on the server.
 func (c *Client) SetCredential(name, value string) error {
-	req, err := http.NewRequest("PUT",
-		c.baseURL+"/api/secrets/"+url.PathEscape(name),
-		strings.NewReader(value))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "text/plain")
-	c.applyAuth(req)
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(bodyBytes))
-	}
-	return nil
-}
-
-// DeleteCredential removes a stored credential by name.
-func (c *Client) DeleteCredential(name string) error {
-	resp, err := c.doRequest("DELETE", "/api/secrets/"+url.PathEscape(name), nil)
+	resp, err := c.doRequest("POST", "/credentials", &CredentialSetRequest{
+		Name:  name,
+		Value: value,
+	})
 	if err != nil {
 		return err
 	}
@@ -741,31 +511,37 @@ func (c *Client) DeleteCredential(name string) error {
 	return nil
 }
 
-// PruneExecutions deletes terminal execution records older than olderThanDays days.
-// Returns the number of records deleted.
-func (c *Client) PruneExecutions(olderThanDays int, archiveTasks bool) (int, error) {
-	params := url.Values{}
-	params.Set("olderThanDays", fmt.Sprintf("%d", olderThanDays))
-	if archiveTasks {
-		params.Set("archiveTasks", "true")
-	}
-	resp, err := c.doRequest("POST", "/api/agent/executions/prune?"+params.Encode(), nil)
+// DeleteCredential removes a stored credential by name.
+func (c *Client) DeleteCredential(name string) error {
+	resp, err := c.doRequest("DELETE", "/credentials/"+url.PathEscape(name), nil)
 	if err != nil {
-		return 0, err
+		return err
+	}
+	resp.Body.Close()
+	return nil
+}
+
+// ListBindings returns all logical key → store name bindings.
+func (c *Client) ListBindings() ([]BindingMeta, error) {
+	resp, err := c.doRequest("GET", "/credentials/bindings", nil)
+	if err != nil {
+		return nil, err
 	}
 	defer resp.Body.Close()
-	var result map[string]interface{}
+	var result []BindingMeta
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return 0, fmt.Errorf("decode response: %w", err)
+		return nil, fmt.Errorf("decode bindings: %w", err)
 	}
-	deleted := 0
-	if v, ok := result["deleted"]; ok {
-		switch n := v.(type) {
-		case float64:
-			deleted = int(n)
-		case int:
-			deleted = n
-		}
+	return result, nil
+}
+
+// SetBinding sets (or updates) a logical key → store name binding.
+func (c *Client) SetBinding(logicalKey, storeName string) error {
+	resp, err := c.doRequest("PUT", "/credentials/bindings/"+url.PathEscape(logicalKey),
+		&BindingSetRequest{StoreName: storeName})
+	if err != nil {
+		return err
 	}
-	return deleted, nil
+	resp.Body.Close()
+	return nil
 }

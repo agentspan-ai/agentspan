@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -26,7 +27,7 @@ func TestStreamExecution_DrainsEventsBeforeError(t *testing.T) {
 	c := client.New(newTestConfig(t, srv.URL))
 
 	// streamExecution should return nil (no scanner error on clean EOF)
-	err := streamExecution(c, "test-exec-id", "")
+	err := streamExecution(context.Background(), c, "test-exec-id", "")
 	if err != nil {
 		t.Errorf("streamExecution returned error on clean stream: %v", err)
 	}
@@ -40,7 +41,7 @@ func TestStreamExecution_ReturnsHTTPError(t *testing.T) {
 
 	c := client.New(newTestConfig(t, srv.URL))
 
-	err := streamExecution(c, "bad-id", "")
+	err := streamExecution(context.Background(), c, "bad-id", "")
 	if err == nil {
 		t.Fatal("expected error for 410 response, got nil")
 	}
@@ -61,7 +62,7 @@ func TestStreamExecution_PassesLastEventID(t *testing.T) {
 
 	c := client.New(newTestConfig(t, srv.URL))
 
-	streamExecution(c, "exec-1", "evt-99")
+	streamExecution(context.Background(), c, "exec-1", "evt-99")
 
 	if gotLastID != "evt-99" {
 		t.Errorf("Last-Event-ID = %q, want evt-99", gotLastID)

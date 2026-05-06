@@ -1,0 +1,17 @@
+metadata:
+  customer:   dev
+  cluster:    local
+  namespace:  default
+  name:       {{name}}
+
+spec:
+  runtime:    python
+  entrypoint: python3 main.py
+  env:
+    - AGENTSPAN_SERVER_URL
+    - AGENTSPAN_LLM_MODEL
+  resources:
+    cpu:      "0.5"
+    cpu_time: "5m"
+    memory:   "256mb"
+    storage:  "512mb"

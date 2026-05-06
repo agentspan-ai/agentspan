@@ -279,7 +279,7 @@ func runSkillRun(cmd *cobra.Command, args []string) error {
 	var runErr error
 	if skillStream {
 		fmt.Println()
-		runErr = streamExecution(c, resp.ExecutionID, "")
+		runErr = streamExecution(cmd.Context(), c, resp.ExecutionID, "")
 	} else {
 		runErr = pollExecution(c, resp.ExecutionID, time.Duration(skillTimeout)*time.Second)
 	}

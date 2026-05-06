@@ -4,80 +4,86 @@
 package cmd
 
 import (
-	"encoding/json"
+	_ "embed"
 	"fmt"
 	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 )
 
+//go:embed templates/agentspan.yaml
+var agentspanYAMLTemplate string
+
 var (
-	initModel    string
-	initStrategy string
-	initFormat   string
+	initForce   bool
+	agentNameRe = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 )
 
 var initCmd = &cobra.Command{
-	Use:   "init <agent-name>",
-	Short: "Create a new agent config file",
-	Long:  "Generate a starter agent config YAML/JSON file with sensible defaults.",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		name := args[0]
-		model := initModel
-		if model == "" {
-			model = "openai/gpt-4o"
-		}
+	Use:   "init <name>",
+	Short: "Create a starter agentspan.yaml for a new agent project",
+	Long: `Write agentspan.yaml into ./<name>/ (or the current directory when passed '.').
 
-		agentConfig := map[string]interface{}{
-			"name":         name,
-			"description":  fmt.Sprintf("%s agent", name),
-			"model":        model,
-			"instructions": fmt.Sprintf("You are %s, a helpful AI assistant.", name),
-			"maxTurns":     25,
-			"tools":        []interface{}{},
-		}
-
-		if initStrategy != "" {
-			agentConfig["strategy"] = initStrategy
-		}
-
-		var data []byte
-		var ext string
-		var err error
-
-		if initFormat == "json" {
-			ext = "json"
-			data, err = marshalJSON(agentConfig)
-		} else {
-			ext = "yaml"
-			data, err = yaml.Marshal(agentConfig)
-		}
-		if err != nil {
-			return err
-		}
-
-		filename := fmt.Sprintf("%s.%s", name, ext)
-		if err := os.WriteFile(filename, data, 0o644); err != nil {
-			return fmt.Errorf("write file: %w", err)
-		}
-
-		color.Green("Created %s", filename)
-		fmt.Println("\nEdit the file to add tools, instructions, and other settings.")
-		fmt.Printf("Run with: agentspan agent run --config %s.%s \"your prompt here\"\n", name, ext)
-		return nil
-	},
-}
-
-func marshalJSON(v interface{}) ([]byte, error) {
-	return json.MarshalIndent(v, "", "  ")
+Pass '.' to scaffold into the current directory; uses the directory basename as the agent name.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runInitCmd,
 }
 
 func init() {
-	initCmd.Flags().StringVarP(&initModel, "model", "m", "", "LLM model (default: openai/gpt-4o)")
-	initCmd.Flags().StringVarP(&initStrategy, "strategy", "s", "", "Multi-agent strategy (handoff, sequential, parallel, etc.)")
-	initCmd.Flags().StringVarP(&initFormat, "format", "f", "yaml", "Output format: yaml or json")
+	initCmd.Flags().BoolVar(&initForce, "force", false, "Overwrite if target directory already exists")
 	agentCmd.AddCommand(initCmd)
+}
+
+func runInitCmd(_ *cobra.Command, args []string) error {
+	arg := args[0]
+
+	var projectDir, agentName string
+	if arg == "." {
+		abs, err := filepath.Abs(".")
+		if err != nil {
+			return err
+		}
+		projectDir = abs
+		agentName = filepath.Base(abs)
+	} else {
+		agentName = arg
+		projectDir = filepath.Join(".", agentName)
+	}
+
+	if !agentNameRe.MatchString(agentName) {
+		return fmt.Errorf("name %q is invalid — must match ^[a-z][a-z0-9-]*$ (lowercase, digits, hyphens; must start with a letter)", agentName)
+	}
+
+	if arg != "." {
+		if info, err := os.Stat(projectDir); err == nil && info.IsDir() {
+			if !initForce {
+				return fmt.Errorf("directory %q already exists — pass --force to overwrite", projectDir)
+			}
+		} else if err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("stat %s: %w", projectDir, err)
+		}
+		if err := os.MkdirAll(projectDir, 0o755); err != nil {
+			return fmt.Errorf("create directory: %w", err)
+		}
+	}
+
+	content := strings.ReplaceAll(agentspanYAMLTemplate, "{{name}}", agentName)
+	path := filepath.Join(projectDir, "agentspan.yaml")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		return fmt.Errorf("write agentspan.yaml: %w", err)
+	}
+
+	color.New(color.FgGreen).Printf("  created  %s\n", filepath.Join(arg, "agentspan.yaml"))
+	fmt.Println()
+	if arg == "." {
+		fmt.Println("Next:")
+		fmt.Println("  agentspan agent build")
+	} else {
+		fmt.Printf("Next:\n  cd %s\n  agentspan agent build\n", agentName)
+	}
+	return nil
 }

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agentspan-ai/agentspan/cli/client"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
@@ -347,12 +348,11 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 
 	cfg := getConfig()
-	serverAddr := cfg.ServerURL
-	serverOk := checkServer(serverAddr)
+	serverOk := client.New(cfg).HealthCheck() == nil
 	if serverOk {
-		green.Printf("  ✓ Server reachable at %s\n", serverAddr)
+		green.Printf("  ✓ Server reachable at %s\n", cfg.AgentspanURL)
 	} else {
-		dim.Printf("  - Server not running at %s\n", serverAddr)
+		dim.Printf("  - Server not running at %s\n", cfg.AgentspanURL)
 		dim.Println("    Start with: agentspan server start")
 	}
 
@@ -483,16 +483,6 @@ func isPortAvailable(port string) bool {
 func checkOllama(baseURL string) bool {
 	client := &http.Client{Timeout: 3 * time.Second}
 	resp, err := client.Get(baseURL)
-	if err != nil {
-		return false
-	}
-	resp.Body.Close()
-	return resp.StatusCode == http.StatusOK
-}
-
-func checkServer(baseURL string) bool {
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get(baseURL + "/health")
 	if err != nil {
 		return false
 	}

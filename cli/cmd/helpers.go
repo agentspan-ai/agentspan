@@ -4,28 +4,35 @@
 package cmd
 
 import (
-	"fmt"
-	"os"
+	"context"
+	"time"
 
 	"github.com/agentspan-ai/agentspan/cli/client"
 	"github.com/agentspan-ai/agentspan/cli/config"
+	"github.com/spf13/cobra"
 )
 
 func getConfig() *config.Config {
 	cfg := config.Load()
-	if serverURL != "" {
-		cfg.ServerURL = serverURL
-		// An explicitly passed --server becomes the default for subsequent commands.
-		// Notice goes to stderr so piped stdout (JSON output etc.) stays clean.
-		if config.FileServerURL() != serverURL {
-			if err := config.SaveDefaultServer(serverURL); err == nil {
-				fmt.Fprintf(os.Stderr, "Default server set to %s (%s)\n", serverURL, config.ConfigDir())
-			}
-		}
+	if agentspanURL != "" {
+		cfg.AgentspanURL = agentspanURL
+	}
+	if conductorURL != "" {
+		cfg.ConductorURL = conductorURL
 	}
 	return cfg
 }
 
 func newClient(cfg *config.Config) *client.Client {
 	return client.New(cfg)
+}
+
+// cmdContext returns cmd.Context() wrapped with the --timeout flag value (default 300s).
+// The caller must call cancel when the operation completes.
+func cmdContext(cmd *cobra.Command) (context.Context, context.CancelFunc) {
+	secs, err := cmd.Flags().GetInt("timeout")
+	if err != nil || secs <= 0 {
+		secs = 300
+	}
+	return context.WithTimeout(cmd.Context(), time.Duration(secs)*time.Second)
 }

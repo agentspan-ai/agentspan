@@ -858,7 +858,7 @@ func TestSkillRun_Integration(t *testing.T) {
 	// Mock server: accept POST /api/agent/start, return execution ID
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == "POST" && r.URL.Path == "/api/agent/start":
+		case r.Method == "POST" && r.URL.Path == "/agent/start":
 			var req map[string]interface{}
 			json.NewDecoder(r.Body).Decode(&req)
 
@@ -877,7 +877,7 @@ func TestSkillRun_Integration(t *testing.T) {
 				"agentName":   "simple-skill",
 			})
 
-		case r.Method == "GET" && r.URL.Path == "/api/agent/exec-123/status":
+		case r.Method == "GET" && r.URL.Path == "/agent/exec-123/status":
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"status": "COMPLETED",
 				"output": map[string]string{"result": "done"},
@@ -890,21 +890,21 @@ func TestSkillRun_Integration(t *testing.T) {
 	defer srv.Close()
 
 	// Set up globals for the test
+	newTempHome(t)
+	saveTestConfig(t, srv.URL)
+
 	oldModel := skillModel
 	oldStream := skillStream
 	oldTimeout := skillTimeout
-	oldServerURL := serverURL
 	defer func() {
 		skillModel = oldModel
 		skillStream = oldStream
 		skillTimeout = oldTimeout
-		serverURL = oldServerURL
 	}()
 
 	skillModel = "openai/gpt-4o"
 	skillStream = false
 	skillTimeout = 10
-	serverURL = srv.URL
 
 	err := runSkillRun(nil, []string{dir, "test prompt"})
 	if err != nil {
@@ -1263,7 +1263,7 @@ func TestSkillLoad_Integration(t *testing.T) {
 	createSimpleSkill(t, dir)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "POST" && r.URL.Path == "/api/agent/deploy" {
+		if r.Method == "POST" && r.URL.Path == "/agent/compile" {
 			var req map[string]interface{}
 			json.NewDecoder(r.Body).Decode(&req)
 
@@ -1285,15 +1285,13 @@ func TestSkillLoad_Integration(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	newTempHome(t)
+	saveTestConfig(t, srv.URL)
+
 	oldModel := skillModel
-	oldServerURL := serverURL
-	defer func() {
-		skillModel = oldModel
-		serverURL = oldServerURL
-	}()
+	defer func() { skillModel = oldModel }()
 
 	skillModel = "openai/gpt-4o"
-	serverURL = srv.URL
 
 	err := runSkillLoad(nil, []string{dir})
 	if err != nil {

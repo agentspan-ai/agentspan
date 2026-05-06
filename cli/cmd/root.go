@@ -14,10 +14,11 @@ import (
 )
 
 var (
-	serverURL string
-	Version   = "dev"
-	Commit    = "none"
-	Date      = "unknown"
+	agentspanURL string
+	conductorURL string
+	Version      = "dev"
+	Commit       = "none"
+	Date         = "unknown"
 )
 
 var (
@@ -58,7 +59,8 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&serverURL, "server", "", "Runtime server URL; once passed it is saved as the default for subsequent commands (initial default: http://localhost:6767)")
+	rootCmd.PersistentFlags().StringVar(&agentspanURL, "agentspan-url", "", "Agentspan API URL (overrides config and env)")
+	rootCmd.PersistentFlags().StringVar(&conductorURL, "conductor-url", "", "Conductor API URL (overrides config and env)")
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(tuiCmd)
 }

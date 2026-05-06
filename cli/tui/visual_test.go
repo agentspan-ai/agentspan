@@ -147,6 +147,10 @@ func renderApp(t *testing.T, viewID ViewID) (string, []string) {
 // ─── Visual Snapshot Tests ────────────────────────────────────────────────────
 
 func TestVisualSnapshots(t *testing.T) {
+	// Isolate from real ~/.agentspan/config.json so snapshots always show defaults.
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AGENTSPAN_SERVER_URL", "")
+
 	if err := os.MkdirAll(snapshotDir, 0o755); err != nil {
 		t.Fatalf("create snapshot dir: %v", err)
 	}
