@@ -19,12 +19,15 @@ from __future__ import annotations
 
 import logging
 import threading  # noqa: F401 — used in subsequent tasks
-import time  # noqa: F401 — used in subsequent tasks
+import time
 from dataclasses import dataclass, field  # noqa: F401 — field used in subsequent tasks
-from typing import List, Optional, Tuple
-
-# isort: split
-from typing import Callable, Iterable  # noqa: F401 — used in subsequent tasks
+from typing import (  # noqa: F401 — Callable unused until next task
+    Callable,
+    Iterable,
+    List,
+    Optional,
+    Tuple,
+)
 
 logger = logging.getLogger("agentspan.agents.runtime.liveness")
 
@@ -90,3 +93,66 @@ class WorkerStallError(RuntimeError):
             f"[{pretty}]. {remediation}"
         )
         super().__init__(msg)
+
+
+class LocalLivenessCheck:
+    """Verifies that every registered ``(task_name, domain)`` pair has a live process.
+
+    Pure local check — no network calls. Polls
+    ``WorkerManager._task_handler.task_runner_processes`` until each
+    expected pair maps to a process whose ``is_alive()`` is True, or the
+    timeout elapses.
+    """
+
+    @staticmethod
+    def verify(
+        worker_manager: object,
+        expected: Iterable[Tuple[str, Optional[str]]],
+        *,
+        timeout: float = 2.0,
+        poll_interval: float = 0.05,
+    ) -> None:
+        expected_set = set(expected)
+        if not expected_set:
+            return
+
+        task_handler = getattr(worker_manager, "_task_handler", None)
+        if task_handler is None:
+            # auto_start_workers=False or pre-init — nothing to verify.
+            return
+
+        deadline = time.monotonic() + timeout
+        missing: set = set(expected_set)
+        domain_for_error: Optional[str] = next(iter(expected_set))[1]
+
+        while True:
+            workers = getattr(task_handler, "workers", []) or []
+            procs = getattr(task_handler, "task_runner_processes", []) or []
+
+            alive_pairs: set = set()
+            for w, p in zip(workers, procs):
+                try:
+                    name = w.get_task_definition_name()
+                except Exception:
+                    continue
+                domain = getattr(w, "domain", None)
+                if (name, domain) in expected_set and p is not None and p.is_alive():
+                    alive_pairs.add((name, domain))
+
+            missing = expected_set - alive_pairs
+            if not missing:
+                return
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(poll_interval)
+
+        raise WorkerStartupError(
+            missing=sorted(missing),
+            domain=domain_for_error,
+            remediation=(
+                "The worker subprocess(es) are not running. This usually means "
+                "fork() failed or an exception was swallowed during "
+                "WorkerManager.start(). Check process logs and retry start(). "
+                "Set AGENTSPAN_LIVENESS_ENABLED=false to disable this check."
+            ),
+        )
