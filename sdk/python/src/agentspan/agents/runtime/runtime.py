@@ -2562,6 +2562,16 @@ class AgentRuntime:
         self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
         self._register_and_start_skill_workers(pre_deployed_skills, domain=run_id)
 
+        if self._config.liveness_enabled:
+            from agentspan.agents.runtime._liveness import LocalLivenessCheck
+
+            expected_pairs = self._collect_registered_pairs(agent, run_id)
+            LocalLivenessCheck.verify(
+                self._worker_manager,
+                expected_pairs,
+                timeout=self._config.liveness_startup_timeout_seconds,
+            )
+
         self._register_workflow_credentials(execution_id, credentials)
 
         # Poll until complete
@@ -3676,6 +3686,16 @@ class AgentRuntime:
         self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
         self._register_and_start_skill_workers(pre_deployed_skills, domain=run_id)
 
+        if self._config.liveness_enabled:
+            from agentspan.agents.runtime._liveness import LocalLivenessCheck
+
+            expected_pairs = self._collect_registered_pairs(agent, run_id)
+            LocalLivenessCheck.verify(
+                self._worker_manager,
+                expected_pairs,
+                timeout=self._config.liveness_startup_timeout_seconds,
+            )
+
         return AgentHandle(
             execution_id=execution_id, runtime=self, correlation_id=correlation_id, run_id=run_id
         )
@@ -4070,6 +4090,17 @@ class AgentRuntime:
 
         self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
         self._register_and_start_skill_workers(pre_deployed_skills, domain=run_id)
+
+        if self._config.liveness_enabled:
+            from agentspan.agents.runtime._liveness import LocalLivenessCheck
+
+            expected_pairs = self._collect_registered_pairs(agent, run_id)
+            LocalLivenessCheck.verify(
+                self._worker_manager,
+                expected_pairs,
+                timeout=self._config.liveness_startup_timeout_seconds,
+            )
+
         self._register_workflow_credentials(execution_id, credentials)
 
         effective_timeout = timeout or (
@@ -4206,6 +4237,16 @@ class AgentRuntime:
 
         self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
         self._register_and_start_skill_workers(pre_deployed_skills, domain=run_id)
+
+        if self._config.liveness_enabled:
+            from agentspan.agents.runtime._liveness import LocalLivenessCheck
+
+            expected_pairs = self._collect_registered_pairs(agent, run_id)
+            LocalLivenessCheck.verify(
+                self._worker_manager,
+                expected_pairs,
+                timeout=self._config.liveness_startup_timeout_seconds,
+            )
 
         return AgentHandle(
             execution_id=execution_id, runtime=self, correlation_id=correlation_id, run_id=run_id
