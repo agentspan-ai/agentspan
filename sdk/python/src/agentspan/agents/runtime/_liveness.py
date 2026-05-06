@@ -21,13 +21,10 @@ import logging
 import threading  # noqa: F401 — used in subsequent tasks
 import time  # noqa: F401 — used in subsequent tasks
 from dataclasses import dataclass, field  # noqa: F401 — field used in subsequent tasks
-from typing import (  # noqa: F401 — used in subsequent tasks
-    Callable,
-    Iterable,
-    List,
-    Optional,
-    Tuple,
-)
+from typing import List, Optional, Tuple
+
+# isort: split
+from typing import Callable, Iterable  # noqa: F401 — used in subsequent tasks
 
 logger = logging.getLogger("agentspan.agents.runtime.liveness")
 

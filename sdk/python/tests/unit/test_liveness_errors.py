@@ -36,6 +36,8 @@ def test_worker_stall_error_carries_context():
     assert "exec-1" in str(err)
     assert "setup_repo" in str(err)
     assert "Re-run" in str(err)
+    assert err.domain == "abc123"
+    assert "42s" in str(err)
 
 
 def test_errors_are_runtime_errors():
