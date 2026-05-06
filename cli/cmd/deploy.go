@@ -15,6 +15,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/agentspan-ai/agentspan/cli/client"
 	"github.com/agentspan-ai/agentspan/cli/config"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -40,16 +41,29 @@ var deployCmd = &cobra.Command{
 	RunE:  runDeployCmd,
 }
 
+const (
+	deployWorkflowName    = "agentspan_deploy"
+	deployWorkflowVersion = 1
+)
+
 func init() {
 	deployCmd.Flags().StringSliceP("agents", "a", nil, "Comma-separated list of agent names to deploy (default: all)")
 	deployCmd.Flags().StringP("language", "l", "", "Project language: python or typescript")
 	deployCmd.Flags().StringP("package", "p", "", "Package/path to scan for agents")
 	deployCmd.Flags().BoolP("yes", "y", false, "Skip confirmation prompt")
 	deployCmd.Flags().Bool("json", false, "Output results as JSON")
+	deployCmd.Flags().String("artifact", "", "Artifact ID from 'agentspan build' to deploy to Firecracker (skips EP discovery)")
+	deployCmd.Flags().String("workflow-id", "", "Workflow ID of the build (optional; read from last-build.json if absent)")
 	rootCmd.AddCommand(deployCmd)
 }
 
 func runDeployCmd(cmd *cobra.Command, args []string) error {
+	// If --artifact is set, use the Conductor/Firecracker deploy path.
+	artifactID, _ := cmd.Flags().GetString("artifact")
+	if artifactID != "" {
+		return runRemoteDeployCmd(cmd, artifactID)
+	}
+
 	// 1. Get working directory
 	wd, err := os.Getwd()
 	if err != nil {
@@ -573,6 +587,72 @@ func formatDiscoveryTable(agents []discoveredAgent, pkg string) string {
 	w.Flush()
 
 	return buf.String()
+}
+
+// runRemoteDeployCmd deploys an artifact to the Firecracker Execution Plane
+// via the Conductor deploy workflow. Called when --artifact is provided.
+func runRemoteDeployCmd(cmd *cobra.Command, artifactID string) error {
+	// Resolve workflow ID — prefer flag, fall back to last-build state.
+	workflowID, _ := cmd.Flags().GetString("workflow-id")
+	bundleName := ""
+	if workflowID == "" {
+		state, err := loadLastBuild()
+		if err != nil {
+			return fmt.Errorf("--workflow-id not set and no last build state found: %w", err)
+		}
+		workflowID = state.WorkflowID
+		bundleName = state.BundleName
+	}
+
+	stagingDir := os.Getenv("STAGING_DIR")
+	if stagingDir == "" {
+		return fmt.Errorf("STAGING_DIR is not set — set it to the directory where bundles should be extracted")
+	}
+
+	cfg := getConfig()
+	cc := client.NewConductorClient(cfg.ConductorURL)
+	ctx := context.Background()
+
+	bold := color.New(color.Bold)
+	bold.Println("Deploying agent to Execution Plane")
+	fmt.Printf("  Artifact : %s\n", artifactID)
+	fmt.Printf("  Staging  : %s\n\n", stagingDir)
+
+	deployWorkflowID, err := cc.StartWorkflow(ctx, deployWorkflowName, deployWorkflowVersion, map[string]any{
+		"file_handle_id": artifactID,
+		"workflow_id":    workflowID,
+		"bundle_name":    bundleName,
+	})
+	if err != nil {
+		return fmt.Errorf("start deploy workflow: %w", err)
+	}
+
+	fmt.Printf("  Workflow: %s\n", deployWorkflowID)
+	fmt.Print("  Deploying")
+
+	_, err = cc.WaitForWorkflow(ctx, deployWorkflowID, func(s string) {
+		fmt.Print(".")
+	})
+	fmt.Println()
+	if err != nil {
+		return err
+	}
+
+	// Persist deploy state for invoke step.
+	if err := saveLastDeploy(lastDeployState{
+		WorkflowID: deployWorkflowID,
+		StagingDir: stagingDir,
+		BundleName: bundleName,
+		DeployedAt: time.Now(),
+	}); err != nil {
+		color.New(color.FgYellow).Printf("  warning: could not save deploy state: %v\n", err)
+	}
+
+	fmt.Println()
+	color.New(color.FgGreen, color.Bold).Println("  Deploy complete.")
+	fmt.Printf("  Bundle extracted to: %s\n\n", stagingDir)
+	fmt.Println("Next: agentspan agent invoke")
+	return nil
 }
 
 // formatDeployOutput formats deploy results as a colored summary.

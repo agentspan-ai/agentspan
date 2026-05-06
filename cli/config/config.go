@@ -11,8 +11,9 @@ import (
 )
 
 type Config struct {
-	ServerURL string `json:"server_url"`
-	APIKey    string `json:"api_key,omitempty"`
+	ServerURL    string `json:"server_url"`
+	APIKey       string `json:"api_key,omitempty"`
+	ConductorURL string `json:"conductor_url,omitempty"`
 }
 
 // IsLocalhost returns true when the server URL points to a loopback address
@@ -26,9 +27,15 @@ func (c *Config) IsLocalhost() bool {
 	return host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]"
 }
 
+const (
+	DefaultServerURL    = "http://localhost:6767"
+	DefaultConductorURL = "http://localhost:8080"
+)
+
 func DefaultConfig() *Config {
 	return &Config{
-		ServerURL: "http://localhost:6767",
+		ServerURL:    DefaultServerURL,
+		ConductorURL: DefaultConductorURL,
 	}
 }
 
@@ -52,6 +59,9 @@ func Load() *Config {
 	}
 	if apiKey := os.Getenv("AGENTSPAN_API_KEY"); apiKey != "" {
 		cfg.APIKey = apiKey
+	}
+	if url := os.Getenv("CONDUCTOR_URL"); url != "" {
+		cfg.ConductorURL = url
 	}
 
 	// File overrides (env vars take precedence)
