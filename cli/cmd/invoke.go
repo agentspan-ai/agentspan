@@ -19,7 +19,6 @@ import (
 )
 
 const (
-	lastDeployStateFile  = "last-deploy.json"
 	defaultDevSHEnvVar   = "AGENTSPAN_DEV_SH"
 	defaultStagingEnvVar = "STAGING_DIR"
 	defaultEntrypoint    = "hello.py"
@@ -60,9 +59,20 @@ func init() {
 }
 
 func runInvokeCmd(cmd *cobra.Command, args []string) error {
-	state, _ := loadLastDeploy()
+	cwd, _ := os.Getwd()
+	_, inAgentspanProject := os.Stat(filepath.Join(cwd, "agentspan.yaml"))
 
-	// Lima Firecracker path — bundle staged on Lima VM
+	// Lima Firecracker path — project-local deploy state
+	if inAgentspanProject == nil {
+		state, err := loadLastDeploy()
+		if err != nil {
+			return fmt.Errorf("not deployed — run 'agentspan deploy' first")
+		}
+		return runLimaInvoke(state)
+	}
+
+	// Legacy paths for non-agentspan.yaml projects
+	state, _ := loadLastDeploy()
 	if state != nil && state.RemoteBundlePath != "" {
 		return runLimaInvoke(state)
 	}
@@ -160,7 +170,7 @@ func runLimaInvoke(state *lastDeployState) error {
 	runCmd.Stdout = os.Stdout
 	runCmd.Stderr = os.Stderr
 	if err := runCmd.Run(); err != nil {
-		return fmt.Errorf("run-agent.sh failed: %w", err)
+		return fmt.Errorf("run-agent failed: %w", err)
 	}
 	return nil
 }
@@ -250,25 +260,16 @@ func setPythonPath(env []string, pythonPath string) []string {
 	return append(out, "PYTHONPATH="+pythonPath)
 }
 
-func saveLastDeploy(state lastDeployState) error {
-	if err := os.MkdirAll(agentspanConfigDir(), 0o700); err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(state, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(filepath.Join(agentspanConfigDir(), lastDeployStateFile), data, 0o600)
+func saveLastDeploy(deploy lastDeployState) error {
+	state := readProjectState()
+	state.Deploy = &deploy
+	return writeProjectState(state)
 }
 
 func loadLastDeploy() (*lastDeployState, error) {
-	data, err := os.ReadFile(filepath.Join(agentspanConfigDir(), lastDeployStateFile))
-	if err != nil {
-		return nil, fmt.Errorf("no previous deploy found")
+	state := readProjectState()
+	if state.Deploy == nil {
+		return nil, fmt.Errorf("not deployed — run 'agentspan deploy' first")
 	}
-	var state lastDeployState
-	if err := json.Unmarshal(data, &state); err != nil {
-		return nil, fmt.Errorf("parse last deploy state: %w", err)
-	}
-	return &state, nil
+	return state.Deploy, nil
 }

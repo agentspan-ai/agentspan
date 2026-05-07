@@ -19,7 +19,7 @@ import (
 const (
 	buildWorkflowName    = "agentspan_build"
 	buildWorkflowVersion = 2
-	lastBuildStateFile   = "last-build.json"
+	projectStateFile     = "state.json"
 )
 
 type lastBuildState struct {
@@ -28,6 +28,12 @@ type lastBuildState struct {
 	BundleName   string    `json:"bundle_name"`
 	SourceDir    string    `json:"source_dir"`
 	BuiltAt      time.Time `json:"built_at"`
+}
+
+// projectState is the combined per-project state file (.agentspan/state.json).
+type projectState struct {
+	Build  *lastBuildState  `json:"build,omitempty"`
+	Deploy *lastDeployState `json:"deploy,omitempty"`
 }
 
 var buildCmd = &cobra.Command{
@@ -39,7 +45,7 @@ the Control Plane via a Conductor build workflow.
 Run from the project directory containing agentspan.yaml — the same way
 you would run 'firebase deploy' from your Firebase project root.
 
-The resulting artifact ID is saved to ~/.agentspan/last-build.json so that
+The resulting artifact ID is saved to .agentspan/state.json so that
 'agentspan deploy' can pick it up without requiring --artifact.`,
 	Args: cobra.NoArgs,
 	RunE: runBuildCmd,
@@ -110,30 +116,48 @@ func runBuildCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func saveLastBuild(state lastBuildState) error {
-	if err := os.MkdirAll(agentspanConfigDir(), 0o700); err != nil {
+// agentspanConfigDir returns the per-project state directory (.agentspan/ in cwd).
+func agentspanConfigDir() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, ".agentspan")
+	}
+	return filepath.Join(cwd, ".agentspan")
+}
+
+func readProjectState() projectState {
+	var state projectState
+	data, err := os.ReadFile(filepath.Join(agentspanConfigDir(), projectStateFile))
+	if err != nil {
+		return state
+	}
+	_ = json.Unmarshal(data, &state)
+	return state
+}
+
+func writeProjectState(state projectState) error {
+	dir := agentspanConfigDir()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(agentspanConfigDir(), lastBuildStateFile), data, 0o600)
+	return os.WriteFile(filepath.Join(dir, projectStateFile), data, 0o600)
+}
+
+func saveLastBuild(build lastBuildState) error {
+	state := readProjectState()
+	state.Build = &build
+	return writeProjectState(state)
 }
 
 func loadLastBuild() (*lastBuildState, error) {
-	data, err := os.ReadFile(filepath.Join(agentspanConfigDir(), lastBuildStateFile))
-	if err != nil {
+	state := readProjectState()
+	if state.Build == nil {
 		return nil, fmt.Errorf("no previous build found — run 'agentspan build' first")
 	}
-	var state lastBuildState
-	if err := json.Unmarshal(data, &state); err != nil {
-		return nil, fmt.Errorf("parse last build state: %w", err)
-	}
-	return &state, nil
-}
-
-func agentspanConfigDir() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".agentspan")
+	return state.Build, nil
 }
