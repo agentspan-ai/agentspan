@@ -2588,13 +2588,19 @@ class AgentRuntime:
                 timeout=self._config.liveness_startup_timeout_seconds,
             )
 
-        recorded_domain = self._extract_domain(execution_id)
-        if run_id and recorded_domain and recorded_domain != run_id:
-            logger.info(
-                "Resumed existing execution %s under domain %s "
-                "(triggered by idempotency_key=%s); re-attached workers.",
-                execution_id, recorded_domain, idempotency_key,
-            )
+        # Resume telemetry only matters when the caller passed an
+        # ``idempotency_key`` — that's the only path where ``_start_via_server``
+        # can return an existing execution under a previously-recorded domain.
+        # Skipping the ``_extract_domain`` HTTP roundtrip on fresh starts
+        # avoids a hot-path GET ``get_workflow`` call on every run.
+        if idempotency_key:
+            recorded_domain = self._extract_domain(execution_id)
+            if run_id and recorded_domain and recorded_domain != run_id:
+                logger.info(
+                    "Resumed existing execution %s under domain %s "
+                    "(triggered by idempotency_key=%s); re-attached workers.",
+                    execution_id, recorded_domain, idempotency_key,
+                )
 
         self._register_workflow_credentials(execution_id, credentials)
 
@@ -3722,16 +3728,22 @@ class AgentRuntime:
                 timeout=self._config.liveness_startup_timeout_seconds,
             )
 
-        recorded_domain = self._extract_domain(execution_id)
-        is_resumed = bool(
-            run_id and recorded_domain and recorded_domain != run_id
-        )
-        if is_resumed:
-            logger.info(
-                "Resumed existing execution %s under domain %s "
-                "(triggered by idempotency_key=%s); re-attached workers.",
-                execution_id, recorded_domain, idempotency_key,
+        # ``is_resumed`` can only be True when the caller passed an
+        # ``idempotency_key`` — without one, the server never matches an
+        # existing execution. Skip the ``_extract_domain`` HTTP call on
+        # the fresh-start hot path.
+        is_resumed = False
+        if idempotency_key:
+            recorded_domain = self._extract_domain(execution_id)
+            is_resumed = bool(
+                run_id and recorded_domain and recorded_domain != run_id
             )
+            if is_resumed:
+                logger.info(
+                    "Resumed existing execution %s under domain %s "
+                    "(triggered by idempotency_key=%s); re-attached workers.",
+                    execution_id, recorded_domain, idempotency_key,
+                )
         return AgentHandle(
             execution_id=execution_id,
             runtime=self,
@@ -4143,13 +4155,15 @@ class AgentRuntime:
                 timeout=self._config.liveness_startup_timeout_seconds,
             )
 
-        recorded_domain = self._extract_domain(execution_id)
-        if run_id and recorded_domain and recorded_domain != run_id:
-            logger.info(
-                "Resumed existing execution %s under domain %s "
-                "(triggered by idempotency_key=%s); re-attached workers.",
-                execution_id, recorded_domain, idempotency_key,
-            )
+        # See sync ``run`` site above — only check on idempotent replay.
+        if idempotency_key:
+            recorded_domain = self._extract_domain(execution_id)
+            if run_id and recorded_domain and recorded_domain != run_id:
+                logger.info(
+                    "Resumed existing execution %s under domain %s "
+                    "(triggered by idempotency_key=%s); re-attached workers.",
+                    execution_id, recorded_domain, idempotency_key,
+                )
 
         self._register_workflow_credentials(execution_id, credentials)
 
@@ -4300,16 +4314,19 @@ class AgentRuntime:
                 timeout=self._config.liveness_startup_timeout_seconds,
             )
 
-        recorded_domain = self._extract_domain(execution_id)
-        is_resumed = bool(
-            run_id and recorded_domain and recorded_domain != run_id
-        )
-        if is_resumed:
-            logger.info(
-                "Resumed existing execution %s under domain %s "
-                "(triggered by idempotency_key=%s); re-attached workers.",
-                execution_id, recorded_domain, idempotency_key,
+        # See sync ``start`` site above — only check on idempotent replay.
+        is_resumed = False
+        if idempotency_key:
+            recorded_domain = self._extract_domain(execution_id)
+            is_resumed = bool(
+                run_id and recorded_domain and recorded_domain != run_id
             )
+            if is_resumed:
+                logger.info(
+                    "Resumed existing execution %s under domain %s "
+                    "(triggered by idempotency_key=%s); re-attached workers.",
+                    execution_id, recorded_domain, idempotency_key,
+                )
         return AgentHandle(
             execution_id=execution_id,
             runtime=self,
