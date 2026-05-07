@@ -1430,12 +1430,31 @@ public class JavaScriptBuilder {
                         // injection vector. Reject anything that introduces functions,
                         // loops, assignments, statement separators, host access, or
                         // identifiers we don't intend.
+                        // Three-layer filter:
+                        //   1. Character allowlist — only $.()'"!=<>&|- alphanumeric _ whitespace.
+                        //      Excludes ; { } ` \\ , ? : [ ] + * / and any other structural
+                        //      character that enables side effects, host access, template
+                        //      literals, escape evasion, ternaries, comma-sequence, or string
+                        //      concatenation tricks.
+                        //   2. String literals are stripped before identifier check so
+                        //      legitimate uses like ``$.x === 'constructor'`` are preserved.
+                        //   3. Identifier denylist on the stripped string — blocks
+                        //      ``constructor``, ``prototype``, ``__proto__`` (the GraalJS
+                        //      sandbox-escape primitives), the host-bridge globals
+                        //      (Function, eval, Reflect, Proxy, Java, Object, etc.), and JS
+                        //      control-flow keywords. Bare assignment ``=`` is also rejected.
+                        // The bypass ``$.constructor.constructor('return Java.type(...)')()``
+                        // is rejected because ``constructor`` is denied. Variants like
+                        // ``$['c'+'o'+...]`` are blocked by the character allowlist
+                        // (no ``+`` outside arithmetic on numbers, no ``[``).
                         + "function safeCondition(cond) {"
                         + "  if (typeof cond !== 'string') return null;"
                         + "  if (cond.length > 256) return null;"
-                        + "  var deny = /(\\bfunction\\b|=>|\\bwhile\\b|\\bfor\\b|\\bdo\\b|\\bif\\b|\\bcase\\b|\\bswitch\\b|\\breturn\\b|\\bvar\\b|\\blet\\b|\\bconst\\b|\\bnew\\b|\\bthrow\\b|\\btry\\b|\\bcatch\\b|\\beval\\b|\\bFunction\\b|\\bgloballThis\\b|\\bglobalThis\\b|\\bimport\\b|\\brequire\\b|\\bJava\\b|__|;|\\{|\\}|\\?|:|\\\\|`)/;"
-                        + "  if (deny.test(cond)) return null;"
-                        + "  if (/(^|[^=!<>])=([^=]|$)/.test(cond)) return null;" // bare = (assignment)
+                        + "  if (!/^[$\\w\\s.()'\"!=<>&|\\-]*$/.test(cond)) return null;"
+                        + "  var stripped = cond.replace(/'[^']*'/g, \"''\").replace(/\"[^\"]*\"/g, '\"\"');"
+                        + "  var banned = /\\b(constructor|prototype|__proto__|__defineGetter__|__defineSetter__|__lookupGetter__|__lookupSetter__|Function|eval|globalThis|Object|Reflect|Proxy|Java|require|import|process|setTimeout|setInterval|setImmediate|queueMicrotask|Promise|fetch|XMLHttpRequest|new|throw|try|catch|finally|while|for|do|if|else|case|switch|return|var|let|const|function|class|yield|await|async|delete|typeof|instanceof|void|in|of)\\b/;"
+                        + "  if (banned.test(stripped)) return null;"
+                        + "  if (/(^|[^=!<>])=(?!=)/.test(stripped)) return null;"
                         + "  return cond;"
                         + "}"
 
@@ -1607,8 +1626,20 @@ public class JavaScriptBuilder {
                         + "      var schemaErr = null;"
                         + "      try {"
                         + "        var schema = JSON.parse(gen.output_schema);"
-                        + "        if (schema && typeof schema === 'object' && schema.properties && schema.type === 'object') {"
-                        + "          schemaErr = 'output_schema looks like a JSON Schema (has type+properties) — use an example object instead, e.g. {\"path\":\"...\",\"content\":\"...\"}';"
+                        // Reject anything that looks like a JSON Schema. The previous heuristic
+                        // required both ``properties`` and ``type === 'object'`` which missed
+                        // ``{type:'object', required:[...]}`` (no properties) and
+                        // ``{$schema, properties}`` (no top-level type). Flag the presence of
+                        // any JSON-Schema-only key.
+                        + "        var schemaKeys = ['$schema', 'properties', 'required', 'additionalProperties', 'definitions', '$defs', '$ref', 'allOf', 'anyOf', 'oneOf', 'patternProperties'];"
+                        + "        var looksLikeSchema = false;"
+                        + "        if (schema && typeof schema === 'object') {"
+                        + "          for (var ski = 0; ski < schemaKeys.length; ski++) {"
+                        + "            if (Object.prototype.hasOwnProperty.call(schema, schemaKeys[ski])) { looksLikeSchema = true; break; }"
+                        + "          }"
+                        + "        }"
+                        + "        if (looksLikeSchema) {"
+                        + "          schemaErr = 'output_schema looks like a JSON Schema — use an instance-shape example object instead, e.g. {\"path\":\"...\",\"content\":\"...\"}';"
                         + "        } else if (schema && typeof schema === 'object') {"
                         + "          var sKeys = Object.keys(schema);"
                         + "          for (var sk = 0; sk < sKeys.length; sk++) {"

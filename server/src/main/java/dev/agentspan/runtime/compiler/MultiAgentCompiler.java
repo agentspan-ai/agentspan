@@ -2097,9 +2097,14 @@ public class MultiAgentCompiler {
         // ``compilePlanToWorkflowScript`` returns ``{workflow_def: null, error: "..."}``
         // on validation failures (cycle, duplicate id, unsafe success_condition,
         // bad output_schema). Without this gate, ``parse_wf`` would call
-        // JSON.parse(null) → INLINE failure → SUB_WORKFLOW launched with no def
-        // → fallback fires with no diagnostic. Route on the compiler's result and
-        // TERMINATE with the error message so it's visible to the caller.
+        // JSON.parse(null) → INLINE failure → SUB_WORKFLOW launched with no def.
+        //
+        // Fold both ``no error string but null wfDef`` and ``error string set``
+        // into one ``compile_failed`` sentinel so the gate can't have a
+        // fall-through case. When a fallback agent is configured, route compile
+        // failures into it — compile failure is the canonical case the agentic
+        // fallback exists to recover from. Only TERMINATE when no fallback is
+        // available.
         String compileStatusRef = prefix + "_compile_status";
         WorkflowTask compileStatus = new WorkflowTask();
         compileStatus.setType("INLINE");
@@ -2112,8 +2117,29 @@ public class MultiAgentCompiler {
                 "err",
                 "${" + compileRef + ".output.result.error}",
                 "expression",
-                "(function(){ if ($.err) return 'compile_error'; if (!$.wfDef) return 'no_def'; return 'ok'; })()"));
+                "(function(){ if ($.err || !$.wfDef) return 'compile_failed'; return 'ok'; })()"));
         tasks.add(compileStatus);
+
+        // Compile-failure branch: fallback agent if configured, else TERMINATE.
+        List<WorkflowTask> compileFailureBranch;
+        if (fallbackConfig != null) {
+            // Reuse the regular fallback infrastructure but with ``compileRef``
+            // as the error source — the compile_plan task's output contains the
+            // error string. A distinct prefix prevents task-name collision with
+            // the exec-failure fallback emitted below.
+            compileFailureBranch =
+                    buildFallbackBranch(config, fallbackConfig, prefix + "_compile", plannerResult, compileRef);
+        } else {
+            WorkflowTask compileFail = new WorkflowTask();
+            compileFail.setType("TERMINATE");
+            compileFail.setTaskReferenceName(prefix + "_compile_fail");
+            compileFail.setInputParameters(Map.of(
+                    "terminationStatus",
+                    "FAILED",
+                    "terminationReason",
+                    "Plan compilation failed: ${" + compileRef + ".output.result.error}"));
+            compileFailureBranch = List.of(compileFail);
+        }
 
         WorkflowTask compileGate = new WorkflowTask();
         compileGate.setType("SWITCH");
@@ -2121,15 +2147,7 @@ public class MultiAgentCompiler {
         compileGate.setEvaluatorType("value-param");
         compileGate.setExpression("switchCaseValue");
         compileGate.setInputParameters(Map.of("switchCaseValue", "${" + compileStatusRef + ".output.result}"));
-        WorkflowTask compileFail = new WorkflowTask();
-        compileFail.setType("TERMINATE");
-        compileFail.setTaskReferenceName(prefix + "_compile_fail");
-        compileFail.setInputParameters(Map.of(
-                "terminationStatus",
-                "FAILED",
-                "terminationReason",
-                "Plan compilation failed: ${" + compileRef + ".output.result.error}"));
-        compileGate.setDecisionCases(Map.of("compile_error", List.of(compileFail)));
+        compileGate.setDecisionCases(Map.of("compile_failed", compileFailureBranch));
         compileGate.setDefaultCase(List.of());
         tasks.add(compileGate);
 

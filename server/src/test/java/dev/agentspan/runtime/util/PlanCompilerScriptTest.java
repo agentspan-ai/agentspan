@@ -273,15 +273,42 @@ class PlanCompilerScriptTest {
 
     @Test
     void testUnsafeSuccessConditionIsRejected() throws Exception {
-        // Planner-supplied success_condition that would attempt a hang or
-        // host-access lookup. safeCondition must reject these.
+        // Planner-supplied success_condition that would attempt a hang, host
+        // access, or sandbox escape. safeCondition must reject all of these.
         String[] unsafeConditions = {
+            // Original cases — keywords/loops/host access
             "function() { while (true) {} }",
             "$.x === 1; while(1){}",
             "Java.type('java.lang.Runtime')",
             "eval('1+1')",
             "$.x = 5",
             "var foo = 1",
+            // Round-2 finds — sandbox-escape primitives
+            "$.constructor.constructor('return Java.type(0)')()",
+            "$.constructor",
+            "$.prototype.foo",
+            "$.__proto__",
+            // Bracket access (not allowed at all — would also bypass identifier check)
+            "$['constructor']",
+            "$.x['__proto__']",
+            // Comma operator (sequence with side effect)
+            "$.x === 1, eval('1')",
+            // String concatenation to spell forbidden identifiers
+            "$['c'+'onstructor']",
+            // Backslash (escape evasion / unicode escapes)
+            "$.\\u0063onstructor",
+            // Backtick (template literals)
+            "`${$.x}` === '1'",
+            // Ternary (control flow)
+            "$.x ? 1 : 0",
+            // Object/Reflect/Proxy globals
+            "Object.keys($).length > 0",
+            "Reflect.get($, 'x')",
+            "Proxy",
+            // Defensive: __defineGetter__ (older sandbox escape vector)
+            "$.__defineGetter__",
+            // Bare assignment in deeper position
+            "(function(){ x = 1; return $.y; })()",
         };
         for (String unsafe : unsafeConditions) {
             String planJson = String.format(
@@ -295,6 +322,33 @@ class PlanCompilerScriptTest {
             assertThat(error)
                     .as("unsafe success_condition '%s' must be rejected", unsafe)
                     .contains("unsafe success_condition");
+        }
+    }
+
+    @Test
+    void testSuccessConditionAllowsLiteralBannedWordInString() throws Exception {
+        // Counter-test: a banned identifier appearing inside a string LITERAL
+        // (not as an identifier reference) is legitimate and must be accepted.
+        // safeCondition strips strings before identifier-checking so this works.
+        String[] safeWithLiterals = {
+            "$.kind === 'constructor'",
+            "$.role !== 'eval-pending'",
+            "$.msg === 'Function returned ok'",
+        };
+        for (String cond : safeWithLiterals) {
+            String planJson = String.format(
+                    """
+                            {
+                              "steps": [{"id": "s1", "operations": [{"tool": "noop", "args": {}}]}],
+                              "validation": [{"tool": "check", "success_condition": %s}]
+                            }""",
+                    MAPPER.writeValueAsString(cond));
+            // Must compile cleanly.
+            Map<String, Object> wf = compilePlan(planJson);
+            assertThat(wf)
+                    .as("safe condition '%s' (banned word in string literal) should compile",
+                            cond)
+                    .isNotNull();
         }
     }
 

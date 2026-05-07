@@ -1176,8 +1176,42 @@ class MultiAgentCompilerTest {
                         && t.getTaskReferenceName().contains("compile_gate"))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Expected compile_gate SWITCH"));
-        List<WorkflowTask> errBranch = compileGate.getDecisionCases().get("compile_error");
+        List<WorkflowTask> errBranch = compileGate.getDecisionCases().get("compile_failed");
         assertThat(errBranch).isNotEmpty();
+        // With a fallback agent configured, compile failure routes to the fallback
+        // (last task is the fallback SUB_WORKFLOW), not TERMINATE. The whole point
+        // of fallback is to recover from this kind of failure.
+        WorkflowTask lastErrTask = errBranch.get(errBranch.size() - 1);
+        assertThat(lastErrTask.getType())
+                .as("compile_failed branch should route to fallback SUB_WORKFLOW when fallback is configured")
+                .isEqualTo("SUB_WORKFLOW");
+    }
+
+    @Test
+    void testPlanExecuteCompileErrorTerminatesWhenNoFallback() {
+        // Counter-test: with no fallback agent, compile failure must TERMINATE
+        // with a visible error message rather than silently swallowing.
+        AgentConfig planner = simpleSubAgent("planner", "Plan");
+        AgentConfig harness = AgentConfig.builder()
+                .name("no_fallback_compile")
+                .model("openai/gpt-4o-mini")
+                .strategy("plan_execute")
+                .agents(List.of(planner))
+                .build();
+
+        WorkflowDef wf = new MultiAgentCompiler(compiler).compile(harness);
+        WorkflowTask routeSwitch = wf.getTasks().stream()
+                .filter(t -> "SWITCH".equals(t.getType()) && t.getTaskReferenceName().contains("plan_route"))
+                .findFirst()
+                .orElseThrow();
+        List<WorkflowTask> hasPlanBranch = routeSwitch.getDecisionCases().get("has_plan");
+        WorkflowTask compileGate = hasPlanBranch.stream()
+                .filter(t -> "SWITCH".equals(t.getType())
+                        && t.getTaskReferenceName().contains("compile_gate"))
+                .findFirst()
+                .orElseThrow();
+        List<WorkflowTask> errBranch = compileGate.getDecisionCases().get("compile_failed");
+        assertThat(errBranch).hasSize(1);
         assertThat(errBranch.get(0).getType()).isEqualTo("TERMINATE");
         assertThat(errBranch.get(0).getInputParameters().get("terminationReason"))
                 .asString()
@@ -1214,6 +1248,33 @@ class MultiAgentCompilerTest {
         assertThat(inputs).containsKey("media");
         assertThat(inputs.get("cwd")).isEqualTo("${workflow.input.cwd}");
         assertThat(inputs.get("credentials")).isEqualTo("${workflow.input.credentials}");
+    }
+
+    @Test
+    void testAgentConfigToBuilderPreservesAllFieldsExceptOverridden() {
+        // The fallback rebuild in compilePlanExecute uses ``toBuilder().maxTurns(N).build()``
+        // instead of an explicit field-copy whitelist (which previously dropped
+        // memory/promptInputs/handoffs/etc when fallback_max_turns was set).
+        // Verify the toBuilder mechanism preserves every set field except the override.
+        AgentConfig original = AgentConfig.builder()
+                .name("fallback")
+                .model("openai/gpt-4o")
+                .instructions("Original instructions")
+                .maxTurns(20)
+                .maxTokens(8192)
+                .temperature(0.7)
+                .credentials(List.of("CRED_A", "CRED_B"))
+                .build();
+
+        AgentConfig rebuilt = original.toBuilder().maxTurns(7).build();
+
+        assertThat(rebuilt.getMaxTurns()).as("override should apply").isEqualTo(7);
+        assertThat(rebuilt.getName()).isEqualTo("fallback");
+        assertThat(rebuilt.getModel()).isEqualTo("openai/gpt-4o");
+        assertThat(rebuilt.getInstructions()).isEqualTo("Original instructions");
+        assertThat(rebuilt.getMaxTokens()).isEqualTo(8192);
+        assertThat(rebuilt.getTemperature()).isEqualTo(0.7);
+        assertThat(rebuilt.getCredentials()).containsExactly("CRED_A", "CRED_B");
     }
 
     @Test
