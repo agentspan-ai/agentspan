@@ -695,6 +695,7 @@ public class AgentService {
             String query = "workflowType = '" + workflowName + "' AND status IN ('RUNNING', 'COMPLETED')";
             SearchResult<WorkflowSummary> results =
                     workflowService.searchWorkflows(0, 1, "startTime:DESC", idempotencyKey, query);
+
             if (results.getTotalHits() > 0) {
                 WorkflowSummary match = results.getResults().get(0);
                 if (idempotencyKey.equals(match.getCorrelationId())) {

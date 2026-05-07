@@ -62,7 +62,10 @@ public class AgentCompiler {
     /** Result of compiling prefill tool calls: tasks to add pre-loop + refs for message injection. */
     record PrefillCompilationResult(List<WorkflowTask> tasks, List<PrefillRef> refs) {
         static final PrefillCompilationResult EMPTY = new PrefillCompilationResult(List.of(), List.of());
-        boolean hasRefs() { return !refs.isEmpty(); }
+
+        boolean hasRefs() {
+            return !refs.isEmpty();
+        }
     }
 
     static final class ResolvedInstructions {
@@ -477,14 +480,14 @@ public class AgentCompiler {
         // stop_when: always evaluate — user callbacks check external state (e.g.
         // file existence) that must be respected even on tool-call turns.
         if (stopWhenRef != null) {
-            termCondition.append(String.format(
-                    " && $.%s.should_continue == true", stopWhenRef));
+            termCondition.append(String.format(" && $.%s.should_continue == true", stopWhenRef));
         }
         // termination: skip on tool-call turns — text_mention/text_contains
         // conditions can't meaningfully evaluate when the LLM produced no text.
         if (terminationRef != null) {
             termCondition.append(String.format(
-                    " && ($.%s['finishReason'] == 'TOOL_CALLS' || $.%s.should_continue == true)", llmRef, terminationRef));
+                    " && ($.%s['finishReason'] == 'TOOL_CALLS' || $.%s.should_continue == true)",
+                    llmRef, terminationRef));
         }
         termCondition.append(" ) { true; } else { false; }");
 
@@ -1034,8 +1037,7 @@ public class AgentCompiler {
 
         // Multiple prefill tools → static FORK_JOIN for parallel execution
         if (tasks.size() > 1) {
-            List<List<WorkflowTask>> branches = tasks.stream()
-                    .map(List::of).toList();
+            List<List<WorkflowTask>> branches = tasks.stream().map(List::of).toList();
             WorkflowTask fork = new WorkflowTask();
             fork.setType("FORK_JOIN");
             fork.setTaskReferenceName(toRef(config.getName()) + "_prefill_fork");
@@ -1044,8 +1046,8 @@ public class AgentCompiler {
             WorkflowTask join = new WorkflowTask();
             join.setType("JOIN");
             join.setTaskReferenceName(toRef(config.getName()) + "_prefill_join");
-            join.setJoinOn(tasks.stream()
-                    .map(WorkflowTask::getTaskReferenceName).toList());
+            join.setJoinOn(
+                    tasks.stream().map(WorkflowTask::getTaskReferenceName).toList());
 
             return new PrefillCompilationResult(List.of(fork, join), refs);
         }
@@ -1058,8 +1060,11 @@ public class AgentCompiler {
     }
 
     WorkflowTask buildLlmTask(
-            AgentConfig config, ParsedModel parsed, String llmRef,
-            List<Map<String, Object>> toolSpecs, List<PrefillRef> prefillRefs) {
+            AgentConfig config,
+            ParsedModel parsed,
+            String llmRef,
+            List<Map<String, Object>> toolSpecs,
+            List<PrefillRef> prefillRefs) {
         WorkflowTask llm = new WorkflowTask();
         llm.setName("LLM_CHAT_COMPLETE");
         llm.setTaskReferenceName(llmRef);
@@ -1155,15 +1160,20 @@ public class AgentCompiler {
         if (prefillRefs != null && !prefillRefs.isEmpty()) {
             for (PrefillRef pr : prefillRefs) {
                 messages.add(Map.of(
-                        "role", "tool_call",
-                        "toolCalls", List.of(Map.of(
+                        "role",
+                        "tool_call",
+                        "toolCalls",
+                        List.of(Map.of(
                                 "name", pr.toolName(),
                                 "taskReferenceName", pr.refName(),
                                 "inputParameters", pr.arguments()))));
                 messages.add(Map.of(
-                        "role", "tool",
-                        "message", "${" + pr.refName() + ".output.result}",
-                        "toolCalls", List.of(Map.of(
+                        "role",
+                        "tool",
+                        "message",
+                        "${" + pr.refName() + ".output.result}",
+                        "toolCalls",
+                        List.of(Map.of(
                                 "taskReferenceName", pr.refName(),
                                 "name", pr.toolName(),
                                 "output", Map.of("result", "${" + pr.refName() + ".output.result}")))));
@@ -1560,11 +1570,14 @@ public class AgentCompiler {
         if (task.getForkTasks() != null) {
             task.getForkTasks().forEach(branch -> branch.forEach(AgentCompiler::ensureTaskNames));
         }
-        // Recurse into sub-workflow's inline workflowDef
+        // Recurse into sub-workflow's inline workflowDef.
+        // Use getWorkflowDefinition() (returns Object) and instanceof check —
+        // getWorkflowDef() casts to WorkflowDef and throws if it's a runtime expression String
+        // (e.g. "${parse_wf.output.result}") used for inline plan-execute sub-workflows.
         if (task.getSubWorkflowParam() != null
-                && task.getSubWorkflowParam().getWorkflowDef() != null
-                && task.getSubWorkflowParam().getWorkflowDef().getTasks() != null) {
-            task.getSubWorkflowParam().getWorkflowDef().getTasks().forEach(AgentCompiler::ensureTaskNames);
+                && task.getSubWorkflowParam().getWorkflowDefinition() instanceof WorkflowDef wfDef
+                && wfDef.getTasks() != null) {
+            wfDef.getTasks().forEach(AgentCompiler::ensureTaskNames);
         }
     }
 
@@ -1891,13 +1904,13 @@ public class AgentCompiler {
                     deduplicateRefs(branch, seen, renames);
                 }
             }
+            // Skip sub-workflows whose workflowDefinition is a runtime expression String
+            // (e.g. "${parse_wf.output.result}") used by plan-execute inline sub-workflows.
             if (task.getSubWorkflowParam() != null
-                    && task.getSubWorkflowParam().getWorkflowDef() != null
-                    && task.getSubWorkflowParam().getWorkflowDef().getTasks() != null) {
+                    && task.getSubWorkflowParam().getWorkflowDefinition() instanceof WorkflowDef nestedWfDef
+                    && nestedWfDef.getTasks() != null) {
                 // Sub-workflows have their own ref namespace
-                ensureUniqueRefNames(
-                        task.getSubWorkflowParam().getWorkflowDef().getTasks(),
-                        task.getSubWorkflowParam().getWorkflowDef());
+                ensureUniqueRefNames(nestedWfDef.getTasks(), nestedWfDef);
             }
         }
     }

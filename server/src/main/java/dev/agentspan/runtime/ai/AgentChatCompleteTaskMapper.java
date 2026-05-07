@@ -216,8 +216,7 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
             if (maxCalls != null) {
                 int count = callCounts.getOrDefault(spec.getName(), 0);
                 if (count >= maxCalls) {
-                    log.info("Tool '{}' removed — reached max_calls limit ({}/{})",
-                            spec.getName(), count, maxCalls);
+                    log.info("Tool '{}' removed — reached max_calls limit ({}/{})", spec.getName(), count, maxCalls);
                     continue;
                 }
             }
@@ -667,15 +666,14 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         if (!reactive && budget > 0) {
             int estimated = estimateTokenCount(chatCompletion);
             if (estimated > budget) {
-                log.info(
-                        "Budget-triggered condensation: estimated {} tokens exceeds {} budget",
-                        estimated,
-                        budget);
+                log.info("Budget-triggered condensation: estimated {} tokens exceeds {} budget", estimated, budget);
                 budgetTriggered = true;
             }
         }
 
-        boolean proactive = !reactive && !budgetTriggered && contextWindow > 0
+        boolean proactive = !reactive
+                && !budgetTriggered
+                && contextWindow > 0
                 && shouldCondenseProactively(chatCompletion, contextWindow, maxTokens);
 
         if (!reactive && !proactive && !budgetTriggered) {
@@ -726,8 +724,10 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         int keptExchanges = keepCount;
         int exchangesCondensed = totalExchanges - keptExchanges;
 
-        String trigger = reactive ? "token limit hit"
-                : budgetTriggered ? "budget (exceeds contextWindowBudget=" + budget + ")"
+        String trigger = reactive
+                ? "token limit hit"
+                : budgetTriggered
+                        ? "budget (exceeds contextWindowBudget=" + budget + ")"
                         : "proactive (exceeds context window)";
         int messagesAfter = messages.size();
         log.info(

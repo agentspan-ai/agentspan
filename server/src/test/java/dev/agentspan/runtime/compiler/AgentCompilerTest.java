@@ -268,8 +268,7 @@ class AgentCompilerTest {
 
         // stop_when: NO TOOL_CALLS bypass
         assertThat(cond).contains("both_agent_stop_when.should_continue == true");
-        assertThat(cond)
-                .doesNotContain("'TOOL_CALLS' || $.both_agent_stop_when.should_continue");
+        assertThat(cond).doesNotContain("'TOOL_CALLS' || $.both_agent_stop_when.should_continue");
 
         // termination: HAS TOOL_CALLS bypass
         assertThat(cond).contains("'TOOL_CALLS' || $.both_agent_termination.should_continue");
@@ -1067,8 +1066,7 @@ class AgentCompilerTest {
         ToolConfig tool = ToolConfig.builder()
                 .name("contextbook_read")
                 .description("Read contextbook")
-                .inputSchema(Map.of("type", "object",
-                        "properties", Map.of("section", Map.of("type", "string"))))
+                .inputSchema(Map.of("type", "object", "properties", Map.of("section", Map.of("type", "string"))))
                 .toolType("worker")
                 .build();
 
@@ -1100,7 +1098,8 @@ class AgentCompilerTest {
         WorkflowTask loop = wf.getTasks().get(3);
         WorkflowTask llmTask = loop.getLoopOver().stream()
                 .filter(t -> "LLM_CHAT_COMPLETE".equals(t.getType()))
-                .findFirst().orElseThrow();
+                .findFirst()
+                .orElseThrow();
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> messages =
                 (List<Map<String, Object>>) llmTask.getInputParameters().get("messages");
@@ -1108,11 +1107,11 @@ class AgentCompilerTest {
         // Find tool_call and tool messages
         Map<String, Object> toolCallMsg = messages.stream()
                 .filter(m -> "tool_call".equals(m.get("role")))
-                .findFirst().orElse(null);
+                .findFirst()
+                .orElse(null);
         assertThat(toolCallMsg).isNotNull();
         @SuppressWarnings("unchecked")
-        List<Map<String, Object>> toolCalls =
-                (List<Map<String, Object>>) toolCallMsg.get("toolCalls");
+        List<Map<String, Object>> toolCalls = (List<Map<String, Object>>) toolCallMsg.get("toolCalls");
         assertThat(toolCalls).hasSize(1);
         assertThat(toolCalls.get(0).get("name")).isEqualTo("contextbook_read");
         assertThat(toolCalls.get(0).get("taskReferenceName")).isEqualTo("prefill_agent_prefill_0");
@@ -1120,14 +1119,14 @@ class AgentCompilerTest {
 
         Map<String, Object> toolResultMsg = messages.stream()
                 .filter(m -> "tool".equals(m.get("role")))
-                .findFirst().orElse(null);
+                .findFirst()
+                .orElse(null);
         assertThat(toolResultMsg).isNotNull();
         assertThat(toolResultMsg.get("message")).isEqualTo("${prefill_agent_prefill_0.output.result}");
 
         // Tool result must have toolCalls for Anthropic adapter to build tool_result blocks
         @SuppressWarnings("unchecked")
-        List<Map<String, Object>> resultToolCalls =
-                (List<Map<String, Object>>) toolResultMsg.get("toolCalls");
+        List<Map<String, Object>> resultToolCalls = (List<Map<String, Object>>) toolResultMsg.get("toolCalls");
         assertThat(resultToolCalls).hasSize(1);
         assertThat(resultToolCalls.get(0).get("taskReferenceName")).isEqualTo("prefill_agent_prefill_0");
         assertThat(resultToolCalls.get(0).get("name")).isEqualTo("contextbook_read");
@@ -1194,15 +1193,16 @@ class AgentCompilerTest {
         WorkflowTask loop = wf.getTasks().get(4);
         WorkflowTask llmTask = loop.getLoopOver().stream()
                 .filter(t -> "LLM_CHAT_COMPLETE".equals(t.getType()))
-                .findFirst().orElseThrow();
+                .findFirst()
+                .orElseThrow();
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> messages =
                 (List<Map<String, Object>>) llmTask.getInputParameters().get("messages");
 
-        long toolCallCount = messages.stream()
-                .filter(m -> "tool_call".equals(m.get("role"))).count();
-        long toolResultCount = messages.stream()
-                .filter(m -> "tool".equals(m.get("role"))).count();
+        long toolCallCount =
+                messages.stream().filter(m -> "tool_call".equals(m.get("role"))).count();
+        long toolResultCount =
+                messages.stream().filter(m -> "tool".equals(m.get("role"))).count();
         assertThat(toolCallCount).isEqualTo(2);
         assertThat(toolResultCount).isEqualTo(2);
     }
@@ -1234,14 +1234,16 @@ class AgentCompilerTest {
         WorkflowTask loop = wf.getTasks().get(3); // after ctx_resolve, init_state, prefill task
         WorkflowTask llmTask = loop.getLoopOver().stream()
                 .filter(t -> "LLM_CHAT_COMPLETE".equals(t.getType()))
-                .findFirst().orElseThrow();
+                .findFirst()
+                .orElseThrow();
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> messages =
                 (List<Map<String, Object>>) llmTask.getInputParameters().get("messages");
 
         Map<String, Object> toolCallMsg = messages.stream()
                 .filter(m -> "tool_call".equals(m.get("role")))
-                .findFirst().orElseThrow();
+                .findFirst()
+                .orElseThrow();
 
         // Must use "toolCalls" (camelCase), NOT "tool_calls" (snake_case)
         assertThat(toolCallMsg).containsKey("toolCalls");
@@ -1260,13 +1262,13 @@ class AgentCompilerTest {
         // to create proper tool_result content blocks (not empty user messages).
         Map<String, Object> toolResultMsg = messages.stream()
                 .filter(m -> "tool".equals(m.get("role")))
-                .findFirst().orElseThrow();
+                .findFirst()
+                .orElseThrow();
         assertThat(toolResultMsg).containsKey("toolCalls");
         assertThat(toolResultMsg).doesNotContainKey("toolCallId");
 
         @SuppressWarnings("unchecked")
-        List<Map<String, Object>> resultTcs =
-                (List<Map<String, Object>>) toolResultMsg.get("toolCalls");
+        List<Map<String, Object>> resultTcs = (List<Map<String, Object>>) toolResultMsg.get("toolCalls");
         Map<String, Object> resultTc = resultTcs.get(0);
         assertThat(resultTc).containsKey("taskReferenceName");
         assertThat(resultTc).containsKey("name");
@@ -1300,11 +1302,14 @@ class AgentCompilerTest {
         WorkflowTask loop = wf.getTasks().get(2);
         WorkflowTask llmTask = loop.getLoopOver().stream()
                 .filter(t -> "LLM_CHAT_COMPLETE".equals(t.getType()))
-                .findFirst().orElseThrow();
+                .findFirst()
+                .orElseThrow();
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> messages =
                 (List<Map<String, Object>>) llmTask.getInputParameters().get("messages");
-        assertThat(messages.stream().noneMatch(m -> "tool_call".equals(m.get("role")))).isTrue();
-        assertThat(messages.stream().noneMatch(m -> "tool".equals(m.get("role")))).isTrue();
+        assertThat(messages.stream().noneMatch(m -> "tool_call".equals(m.get("role"))))
+                .isTrue();
+        assertThat(messages.stream().noneMatch(m -> "tool".equals(m.get("role"))))
+                .isTrue();
     }
 }
