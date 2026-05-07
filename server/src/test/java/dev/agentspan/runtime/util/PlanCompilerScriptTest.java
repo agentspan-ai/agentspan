@@ -529,6 +529,88 @@ class PlanCompilerScriptTest {
     }
 
     @Test
+    void testInnerToolTasksReceiveCwdCredentialsMedia() throws Exception {
+        // Round-3 finding: parent forwards cwd/credentials/media to the
+        // SUB_WORKFLOW input but compilePlanToWorkflowScript only injected
+        // __agentspan_ctx__ and session_id into per-tool SIMPLE tasks. Tools
+        // saw workflow.input.cwd populated at the dynamic-workflow level but
+        // their own input maps didn't include it, so filesystem tools ran
+        // rootless. Verify inner tool tasks now receive the ambient inputs.
+        String planJson = """
+                {
+                  "steps": [{"id": "s1", "operations": [
+                    {"tool": "static_op", "args": {"x": 1}},
+                    {"tool": "gen_op", "generate": {
+                      "instructions": "go",
+                      "output_schema": "{\\"y\\":\\"...\\"}"
+                    }}
+                  ]}],
+                  "validation": [{"tool": "check", "args": {"path": "/tmp"}, "success_condition": "$.passed === true"}],
+                  "on_success": [{"tool": "celebrate", "args": {}}],
+                  "on_failure": [{"tool": "log_failure", "args": {}}]
+                }""";
+        Map<String, Object> wf = compilePlan(planJson);
+        List<Map<String, Object>> tasks = allTasks(wf);
+
+        // Every SIMPLE task that's a user-provided tool (not 'switch'/'INLINE_TASK'/etc)
+        // must carry the ambient inputs. Walk every SIMPLE we emitted.
+        List<Map<String, Object>> simpleTasks = tasks.stream()
+                .filter(t -> "SIMPLE".equals(t.get("type")))
+                .toList();
+        assertThat(simpleTasks)
+                .as("Plan should produce at least one SIMPLE task per operation, validation, and hook")
+                .isNotEmpty();
+
+        for (var t : simpleTasks) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> inputs = (Map<String, Object>) t.get("inputParameters");
+            String name = String.valueOf(t.get("name"));
+            assertThat(inputs)
+                    .as("SIMPLE task '%s' should receive ambient cwd", name)
+                    .containsEntry("cwd", "${workflow.input.cwd}");
+            assertThat(inputs)
+                    .as("SIMPLE task '%s' should receive ambient credentials", name)
+                    .containsEntry("credentials", "${workflow.input.credentials}");
+            assertThat(inputs)
+                    .as("SIMPLE task '%s' should receive ambient media", name)
+                    .containsEntry("media", "${workflow.input.media}");
+            assertThat(inputs)
+                    .as("SIMPLE task '%s' should still receive session_id", name)
+                    .containsEntry("session_id", "${workflow.input.session_id}");
+            assertThat(inputs)
+                    .as("SIMPLE task '%s' should still receive __agentspan_ctx__", name)
+                    .containsEntry("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
+        }
+    }
+
+    @Test
+    void testNoValidationPlanResultPointsAtLastTaskNotLiteral() throws Exception {
+        // Round-3 finding: when no validation block is present, the previous
+        // outputParameters emitted a literal 'completed' string. On a FAILED
+        // sub-workflow this still resolved to the literal — and the parent's
+        // output_select picked it over the fallback's recovered output.
+        // Verify the result now points at the last operation's output.
+        String planJson = """
+                {
+                  "steps": [{"id": "s1", "operations": [
+                    {"tool": "do_thing", "args": {"x": 1}}
+                  ]}]
+                }""";
+        Map<String, Object> wf = compilePlan(planJson);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> outputs = (Map<String, Object>) wf.get("outputParameters");
+        String result = String.valueOf(outputs.get("result"));
+        // result must reference a task output (which resolves to a literal
+        // ``${...}`` string on a FAILED workflow that the parent's safe()
+        // helper detects), not the literal string 'completed'.
+        assertThat(result)
+                .as("result should reference a task output, not a static 'completed' literal")
+                .startsWith("${")
+                .endsWith(".output.result}");
+        assertThat(result).doesNotContain("completed");
+    }
+
+    @Test
     void testWorkflowDefIsNotArrayWrapped() throws Exception {
         // Old behavior: JSON.stringify([wfDef]) and parse_wf unwrap arr[0].
         // New behavior: bare object — verify by direct JSON parse.

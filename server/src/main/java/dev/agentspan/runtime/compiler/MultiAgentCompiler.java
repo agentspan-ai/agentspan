@@ -1958,8 +1958,10 @@ public class MultiAgentCompiler {
             }
             if (!isToolRegisteredInHarness(config, toolName)) {
                 throw new IllegalArgumentException(
-                        "plan_source.tool '" + toolName + "' is not registered as a tool on '"
-                                + config.getName() + "' or any of its sub-agents");
+                        "plan_source.tool '" + toolName + "' is not registered as a harness-level tool on '"
+                                + config.getName() + "'. The plan_reader task is emitted in the harness's task "
+                                + "namespace, so the tool must be declared in tools=[...] on the harness itself "
+                                + "(declaring it on a sub-agent does not work).");
             }
             @SuppressWarnings("unchecked")
             Map<String, Object> toolArgs = (Map<String, Object>) planSource.getOrDefault("args", Map.of());

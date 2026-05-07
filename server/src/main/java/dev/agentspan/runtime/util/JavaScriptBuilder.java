@@ -1316,15 +1316,26 @@ public class JavaScriptBuilder {
                         + "  }"
                         + "}"
 
-                        // Case 4: Find JSON object with "steps" key anywhere in text via brace matching
+                        // Case 4: Find JSON object with "steps" key anywhere in text via
+                        // brace matching. Tracks string-literal state so braces inside
+                        // string values (e.g. ``{"key": "}{"}``) don't miscount and slice
+                        // the wrong substring. Skips backslash-escaped quotes inside strings.
                         + "var stepsIdx = text.indexOf('\"steps\"');"
                         + "if (stepsIdx >= 0) {"
                         + "  var openIdx = text.lastIndexOf('{', stepsIdx);"
                         + "  if (openIdx >= 0) {"
-                        + "    var depth = 0; var closeIdx = -1;"
+                        + "    var depth = 0; var closeIdx = -1; var inStr = false; var prev = '';"
                         + "    for (var ci = openIdx; ci < text.length; ci++) {"
-                        + "      if (text[ci] === '{') depth++;"
-                        + "      else if (text[ci] === '}') { depth--; if (depth === 0) { closeIdx = ci; break; } }"
+                        + "      var cc = text[ci];"
+                        + "      if (inStr) {"
+                        + "        if (cc === '\\\\') { prev = (prev === '\\\\') ? '' : '\\\\'; }"
+                        + "        else if (cc === '\"' && prev !== '\\\\') { inStr = false; prev = ''; }"
+                        + "        else { prev = cc; }"
+                        + "      } else {"
+                        + "        if (cc === '\"') { inStr = true; prev = ''; }"
+                        + "        else if (cc === '{') { depth++; }"
+                        + "        else if (cc === '}') { depth--; if (depth === 0) { closeIdx = ci; break; } }"
+                        + "      }"
                         + "    }"
                         + "    if (closeIdx > openIdx) {"
                         + "      try {"
@@ -1413,6 +1424,22 @@ public class JavaScriptBuilder {
                 // the literal '${' appearing in this script source — Conductor would
                 // resolve it before GraalJS runs if we used a literal.
                 "function ref(s) { return String.fromCharCode(36) + '{' + s + '}'; }"
+
+                        // Inject the ambient parent-workflow inputs onto every emitted
+                        // tool task. This mirrors what compileSubAgent passes into
+                        // sub-workflows, so a tool inside the dynamic plan sees the same
+                        // execution context (cwd, credentials, media) the parent harness
+                        // received. Forced overrides — LLM-supplied args cannot redirect
+                        // these. Without this injection the parent forwards cwd to the
+                        // SUB_WORKFLOW input but per-tool SIMPLE tasks never receive it.
+                        + "function injectAmbient(args) {"
+                        + "  args.__agentspan_ctx__ = ref('workflow.input.__agentspan_ctx__');"
+                        + "  args.session_id = ref('workflow.input.session_id');"
+                        + "  args.cwd = ref('workflow.input.cwd');"
+                        + "  args.credentials = ref('workflow.input.credentials');"
+                        + "  args.media = ref('workflow.input.media');"
+                        + "  return args;"
+                        + "}"
 
                         // Parse inputs
                         + "var plan; try { plan = typeof $.planJson === 'string' ? JSON.parse($.planJson) : $.planJson; }"
@@ -1509,6 +1536,13 @@ public class JavaScriptBuilder {
                         + "var counter = 0;"
                         + "function uid(base) { return base + '_' + (counter++); }"
                         + "var lastAggRef = null;"
+                        // ``lastOpRef`` tracks the most recently emitted top-level
+                        // operation task — used as the result source when the plan has
+                        // no validation block. Without this, the dynamic workflow would
+                        // emit a literal 'completed' string for ``result`` regardless
+                        // of actual completion, and the parent's output_select would
+                        // pick that literal up over the fallback's recovered output.
+                        + "var lastOpRef = null;"
 
                         // Topological sort steps by depends_on. Cycles produce a hard error
                         // — silent partial-DAG emission was the previous behavior and made
@@ -1559,8 +1593,7 @@ public class JavaScriptBuilder {
                         + "    if (op.args) {"
                         + "      var sArgs = {};"
                         + "      for (var ak in op.args) sArgs[ak] = op.args[ak];"
-                        + "      sArgs.__agentspan_ctx__ = ref('workflow.input.__agentspan_ctx__');"
-                        + "      sArgs.session_id = ref('workflow.input.session_id');"
+                        + "      injectAmbient(sArgs);"
                         + "      chain.push({"
                         + "        name: op.tool, taskReferenceName: uid('s_' + step.id),"
                         + "        type: 'SIMPLE', inputParameters: sArgs,"
@@ -1615,10 +1648,7 @@ public class JavaScriptBuilder {
                         // Conductor needs the SIMPLE task wrapped in a decisionCases branch
                         // so the all-undefined-args scenario can't fire.
                         + "      var toolRef = uid('t_' + step.id);"
-                        + "      var toolInputs = {"
-                        + "        __agentspan_ctx__: ref('workflow.input.__agentspan_ctx__'),"
-                        + "        session_id: ref('workflow.input.session_id')"
-                        + "      };"
+                        + "      var toolInputs = injectAmbient({});"
                         // output_schema is treated as an instance-shape example object —
                         // its top-level keys are the tool's input arg names. Reject real
                         // JSON Schema (presence of "properties") so callers can't pass
@@ -1678,7 +1708,10 @@ public class JavaScriptBuilder {
                         + "    if (chain.length > 0) branches.push(chain);"
                         + "  }" // end operations loop
 
-                        // Wrap in FORK_JOIN if parallel, else flatten sequentially
+                        // Wrap in FORK_JOIN if parallel, else flatten sequentially.
+                        // Track the last emitted task reference so the dynamic workflow's
+                        // outputParameters can point at real output (vs. a static literal)
+                        // for plans without a validation block.
                         + "  if (step.parallel && branches.length > 1) {"
                         + "    var forkRef = uid('fork_' + step.id);"
                         + "    var joinRef = uid('join_' + step.id);"
@@ -1694,10 +1727,12 @@ public class JavaScriptBuilder {
                         + "      name: 'join', taskReferenceName: joinRef,"
                         + "      type: 'JOIN', joinOn: joinOn"
                         + "    });"
+                        + "    lastOpRef = joinRef;"
                         + "  } else {"
                         + "    for (var b2 = 0; b2 < branches.length; b2++) {"
                         + "      for (var t = 0; t < branches[b2].length; t++) {"
                         + "        tasks.push(branches[b2][t]);"
+                        + "        lastOpRef = branches[b2][t].taskReferenceName;"
                         + "      }"
                         + "    }"
                         + "  }"
@@ -1716,8 +1751,7 @@ public class JavaScriptBuilder {
                         + "  var vRef = uid('val');"
                         + "  var vArgs = {};"
                         + "  if (v.args) { for (var vk in v.args) vArgs[vk] = v.args[vk]; }"
-                        + "  vArgs.__agentspan_ctx__ = ref('workflow.input.__agentspan_ctx__');"
-                        + "  vArgs.session_id = ref('workflow.input.session_id');"
+                        + "  injectAmbient(vArgs);"
                         + "  var simpleTask = {"
                         + "    name: v.tool, taskReferenceName: vRef,"
                         + "    type: 'SIMPLE', inputParameters: vArgs"
@@ -1811,8 +1845,7 @@ public class JavaScriptBuilder {
                         + "    var sAct = sa[si2];"
                         + "    var sActArgs = {};"
                         + "    if (sAct.args) { for (var sk2 in sAct.args) sActArgs[sk2] = sAct.args[sk2]; }"
-                        + "    sActArgs.__agentspan_ctx__ = ref('workflow.input.__agentspan_ctx__');"
-                        + "    sActArgs.session_id = ref('workflow.input.session_id');"
+                        + "    injectAmbient(sActArgs);"
                         + "    onSuccess.push({"
                         + "      name: sAct.tool, taskReferenceName: uid('ok'),"
                         + "      type: 'SIMPLE', inputParameters: sActArgs"
@@ -1824,8 +1857,7 @@ public class JavaScriptBuilder {
                         + "    var fAct = fa[fi];"
                         + "    var fActArgs = {};"
                         + "    if (fAct.args) { for (var fk in fAct.args) fActArgs[fk] = fAct.args[fk]; }"
-                        + "    fActArgs.__agentspan_ctx__ = ref('workflow.input.__agentspan_ctx__');"
-                        + "    fActArgs.session_id = ref('workflow.input.session_id');"
+                        + "    injectAmbient(fActArgs);"
                         + "    onFailure.push({"
                         + "      name: fAct.tool, taskReferenceName: uid('fail'),"
                         + "      type: 'SIMPLE', inputParameters: fActArgs"
@@ -1848,14 +1880,28 @@ public class JavaScriptBuilder {
                         + "  });"
                         + "}" // end if validations
 
-                        // Build WorkflowDef. When no validation block exists, individual
-                        // task failures already bubble through SUB_WORKFLOW (no
-                        // optional:true) so the parent SWITCH routes to fallback. The
-                        // literal 'completed' is only reached if every task succeeded.
+                        // Build WorkflowDef. Output sources, in order:
+                        //   1. Validation aggregator if present (lastAggRef) — passes
+                        //      'passed' or 'failed' as the canonical status.
+                        //   2. Last operation's output (lastOpRef) — for plans without a
+                        //      validation block, the final tool's output is the most
+                        //      meaningful result. On TERMINATEd workflows the last op
+                        //      may not have run, so this reference resolves to a literal
+                        //      ``${...}`` string which the parent's output_select safe()
+                        //      helper detects and skips, allowing the fallback's
+                        //      recovered output to surface instead.
+                        //   3. Empty-plan fallback (should be unreachable — plans are
+                        //      validated to have at least one step).
+                        // The previous code emitted a literal ``'completed'`` here,
+                        // which was truthy and not a ``${`` literal so the parent's
+                        // safe() coalesce picked it over real fallback output —
+                        // shadowing actual recovery on plans without validation.
+                        + "var resultSource = lastAggRef ? ref(lastAggRef + '.output.result')"
+                        + "                : (lastOpRef ? ref(lastOpRef + '.output.result') : '');"
                         + "var wfDef = {"
                         + "  name: wfName, version: 1, tasks: tasks,"
                         + "  outputParameters: {"
-                        + "    result: lastAggRef ? ref(lastAggRef + '.output.result') : 'completed',"
+                        + "    result: resultSource,"
                         + "    status: lastAggRef ? ref(lastAggRef + '.output.result') : 'completed'"
                         + "  },"
                         + "  timeoutPolicy: 'TIME_OUT_WF', timeoutSeconds: harnessTimeout, schemaVersion: 2"
