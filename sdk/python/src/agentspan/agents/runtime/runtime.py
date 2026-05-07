@@ -730,10 +730,12 @@ class AgentRuntime:
                     logger.debug("Starting workers for agent '%s'", agent.name)
                     self._worker_manager.start()
                     self._workers_started = True
-                elif new_workers:
-                    # Inject new workers into the running TaskHandler without
-                    # stopping existing ones.  This avoids the fork() deadlock
-                    # window caused by a full stop/restart cycle.
+                else:
+                    # New stateful runs can register the same task names under
+                    # a different domain. WorkerManager is domain-aware and
+                    # starts only missing (task_name, domain) pairs, so call it
+                    # even when the task-name set has not changed — this avoids
+                    # the fork() deadlock window of a full stop/restart cycle.
                     self._worker_manager.start()
 
         return wf
@@ -846,10 +848,12 @@ class AgentRuntime:
                     logger.debug("Starting workers for agent '%s'", agent.name)
                     self._worker_manager.start()
                     self._workers_started = True
-                elif new_workers:
-                    # Inject new workers into the running TaskHandler without
-                    # stopping existing ones.  This avoids the fork() deadlock
-                    # window caused by a full stop/restart cycle.
+                else:
+                    # New stateful runs can register the same task names under
+                    # a different domain. WorkerManager is domain-aware and
+                    # starts only missing (task_name, domain) pairs, so call it
+                    # even when the task-name set has not changed — this avoids
+                    # the fork() deadlock window of a full stop/restart cycle.
                     self._worker_manager.start()
 
     def _collect_worker_names(
