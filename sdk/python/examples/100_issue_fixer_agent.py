@@ -291,6 +291,20 @@ def main():
 
     # Tools the compiled plan invokes as deterministic SIMPLE tasks.
     # Declared here so the runtime registers them as Conductor workers.
+    #
+    # Single sub-agent (coder_exploration), no fallback agent. By design — see
+    # commit 1fad27a9: the trade-off is that ANY failure in the plan path
+    # (compile error, plan extraction failure, validation failure, tool error)
+    # TERMINATES this `coder` SUB_WORKFLOW. The enclosing SWARM (coder_qa_loop)
+    # will not get a chance to recover via QA feedback — the iteration ends.
+    # We accept this brittleness because:
+    #   - The coder_explorer + coder_planner sequential is supposed to produce
+    #     a deterministic plan; if it doesn't, retrying agentic-style would
+    #     burn tokens on the same failure mode.
+    #   - The contextbook plan_source is a deterministic recovery for plan
+    #     extraction failures specifically.
+    # If you need agentic recovery for compile/validation failures, add a
+    # second agent (e.g., coder_implementer_fallback) to `agents=[...]` below.
     coder = Agent(
         name="coder",
         model=SONNET,

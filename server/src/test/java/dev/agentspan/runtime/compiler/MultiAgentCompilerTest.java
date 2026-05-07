@@ -1105,25 +1105,23 @@ class MultiAgentCompilerTest {
     }
 
     @Test
-    void testPlanExecutePlanSourceWithRegisteredToolCompiles() {
-        // Counter-test: a registered tool must compile cleanly.
+    void testPlanExecutePlanSourceWithHarnessLevelToolCompiles() {
+        // Counter-test: tool registered on the harness itself compiles cleanly.
+        // The harness namespace is what matters because plan_reader is emitted
+        // as a SIMPLE task at the parent level.
         ToolConfig contextbookRead = ToolConfig.builder()
                 .name("contextbook_read")
                 .description("Read from contextbook")
                 .toolType("worker")
                 .inputSchema(Map.of("type", "object"))
                 .build();
-        AgentConfig planner = AgentConfig.builder()
-                .name("planner")
-                .model("openai/gpt-4o-mini")
-                .instructions("Plan")
-                .tools(List.of(contextbookRead))
-                .build();
+        AgentConfig planner = simpleSubAgent("planner", "Plan");
         AgentConfig harness = AgentConfig.builder()
                 .name("good_plan_source")
                 .model("openai/gpt-4o-mini")
                 .strategy("plan_execute")
                 .agents(List.of(planner))
+                .tools(List.of(contextbookRead)) // ← harness-level
                 .planSource(Map.of("tool", "contextbook_read", "args", Map.of("section", "coder_plan")))
                 .build();
 
@@ -1138,6 +1136,40 @@ class MultiAgentCompilerTest {
         assertThat(hasPlanReader)
                 .as("Expected a SIMPLE plan_reader task calling contextbook_read")
                 .isTrue();
+    }
+
+    @Test
+    void testPlanExecutePlanSourceWithSubAgentOnlyToolIsRejected() {
+        // Tool registered only on a sub-agent (not on the harness) must fail
+        // compile. The plan_reader SIMPLE task is emitted in the harness's task
+        // namespace; a worker registered only on a sub-agent will not be polled
+        // for the parent's task. Surfacing this at deploy beats a silent
+        // runtime hang.
+        ToolConfig contextbookRead = ToolConfig.builder()
+                .name("contextbook_read")
+                .description("Read from contextbook")
+                .toolType("worker")
+                .inputSchema(Map.of("type", "object"))
+                .build();
+        AgentConfig planner = AgentConfig.builder()
+                .name("planner")
+                .model("openai/gpt-4o-mini")
+                .instructions("Plan")
+                .tools(List.of(contextbookRead)) // ← only on sub-agent
+                .build();
+        AgentConfig harness = AgentConfig.builder()
+                .name("sub_agent_only_tool")
+                .model("openai/gpt-4o-mini")
+                .strategy("plan_execute")
+                .agents(List.of(planner))
+                .planSource(Map.of("tool", "contextbook_read", "args", Map.of()))
+                .build();
+
+        assertThatThrownBy(() -> new MultiAgentCompiler(compiler).compile(harness))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("plan_source.tool")
+                .hasMessageContaining("contextbook_read")
+                .hasMessageContaining("not registered");
     }
 
     @Test

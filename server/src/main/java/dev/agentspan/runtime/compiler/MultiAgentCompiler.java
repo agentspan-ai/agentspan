@@ -47,10 +47,17 @@ public class MultiAgentCompiler {
     }
 
     /**
-     * Walk the harness ``config`` and any of its sub-agents to see if a tool
-     * with ``toolName`` is registered. Used to validate ``plan_source.tool``
-     * and similar string-named tool references at compile time so typos
-     * surface at deploy rather than as silent runtime no-ops.
+     * Check whether a tool named ``toolName`` is registered on the harness
+     * itself (not on a deeper sub-agent). Used to validate
+     * ``plan_source.tool`` at compile time.
+     *
+     * <p>The check is intentionally non-recursive: the {@code plan_reader}
+     * SIMPLE task is emitted in the parent harness's task namespace, so a
+     * tool that exists only on a deeper sub-agent's worker won't be polled
+     * for the parent's task name. Forcing the user to declare the tool on
+     * the harness keeps registration and polling namespaces consistent and
+     * makes the misconfiguration surface at deploy with a clear message
+     * rather than as a silent runtime no-op.
      */
     private boolean isToolRegisteredInHarness(AgentConfig config, String toolName) {
         if (config == null) return false;
@@ -58,12 +65,6 @@ public class MultiAgentCompiler {
         if (tools != null) {
             for (ToolConfig t : tools) {
                 if (toolName.equals(t.getName())) return true;
-            }
-        }
-        List<AgentConfig> subs = config.getAgents();
-        if (subs != null) {
-            for (AgentConfig sub : subs) {
-                if (isToolRegisteredInHarness(sub, toolName)) return true;
             }
         }
         return false;
@@ -2019,10 +2020,16 @@ public class MultiAgentCompiler {
                         + " return 'has_plan'; } catch(e) { return 'no_plan'; } })()"));
         tasks.add(hasJsonCheck);
 
-        // Build the two branches
+        // Build the two branches.
+        // Fallback agents see ``markdown_plan`` (the original planner prose
+        // produced by extract_json) — not ``plannerResult`` (the coerced /
+        // possibly re-serialized form). The original text is what the LLM
+        // wrote and is more useful context when the agentic recovery loop
+        // tries to repair the situation.
+        String fallbackPlanText = "${" + extractRef + ".output.result.markdown_plan}";
         List<WorkflowTask> hasPlanTasks =
-                buildPlanExecutionBranch(config, plannerConfig, fallbackConfig, prefix, extractRef, plannerResult);
-        List<WorkflowTask> noPlanTasks = buildFallbackOnlyBranch(config, fallbackConfig, prefix, plannerResult);
+                buildPlanExecutionBranch(config, plannerConfig, fallbackConfig, prefix, extractRef, fallbackPlanText);
+        List<WorkflowTask> noPlanTasks = buildFallbackOnlyBranch(config, fallbackConfig, prefix, fallbackPlanText);
 
         WorkflowTask routeSwitch = new WorkflowTask();
         routeSwitch.setType("SWITCH");
@@ -2039,17 +2046,32 @@ public class MultiAgentCompiler {
         WorkflowTask outputSelect = new WorkflowTask();
         outputSelect.setType("INLINE");
         outputSelect.setTaskReferenceName(outputRef);
-        outputSelect.setInputParameters(Map.of(
-                "evaluatorType", "graaljs",
-                // Try plan execution result first, then fallback result
-                "planResult", "${" + prefix + "_plan_exec.output.result}",
-                "fallbackResult", "${" + prefix + "_fallback.output.result}",
-                "noPlanResult", "${" + prefix + "_noplan_fallback.output.result}",
+        // Output selector: pick the result from whichever branch ran. Up to four
+        // refs may appear in the workflow definition (plan_exec, exec-failure
+        // fallback, compile-failure fallback, no-plan fallback) but only one
+        // executes per run. Conductor leaves unresolved expressions as literal
+        // strings starting with ``${`` — the ``safe`` helper below filters
+        // those out so the JS coalesce only picks live results. ``optional:true``
+        // was previously needed to mask the unresolved-ref errors but it also
+        // swallowed real expression bugs; the safe-helper approach keeps this
+        // task non-optional so genuine errors surface.
+        Map<String, Object> outputInputs = new LinkedHashMap<>();
+        outputInputs.put("evaluatorType", "graaljs");
+        outputInputs.put("planResult", "${" + prefix + "_plan_exec.output.result}");
+        outputInputs.put("fallbackResult", "${" + prefix + "_fallback.output.result}");
+        outputInputs.put("noPlanResult", "${" + prefix + "_noplan_fallback.output.result}");
+        outputInputs.put("compileFallbackResult", "${" + prefix + "_compile_fallback.output.result}");
+        outputInputs.put(
                 "expression",
-                        "(function(){ "
-                                + "var r = $.planResult || $.fallbackResult || $.noPlanResult || ''; "
-                                + "return (typeof r === 'object') ? JSON.stringify(r) : String(r); })()"));
-        outputSelect.setOptional(true);
+                "(function(){ "
+                        // Detect literal ``${...}`` left over when a branch didn't run. Build
+                        // the marker char from charCode 36 ($) so this script's source itself
+                        // doesn't get pre-resolved by Conductor.
+                        + "var marker = String.fromCharCode(36) + '{';"
+                        + "function safe(v){ if (v == null) return null; if (typeof v === 'string' && v.indexOf(marker) === 0) return null; return v; }"
+                        + "var r = safe($.planResult) || safe($.fallbackResult) || safe($.compileFallbackResult) || safe($.noPlanResult) || '';"
+                        + "return (typeof r === 'object') ? JSON.stringify(r) : String(r); })()");
+        outputSelect.setInputParameters(outputInputs);
         tasks.add(outputSelect);
 
         wf.setTasks(tasks);

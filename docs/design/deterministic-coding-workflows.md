@@ -593,8 +593,12 @@ The server compiles this as: `INLINE(extract_refs) → FORK_JOIN_DYNAMIC(prefetc
 | GraalJS plan compiler is complex | Hard to debug | Unit tests; start simple, add complexity |
 | LLM output is malformed JSON | Operation fails | JSON validation in INLINE; retry once with "fix your JSON" |
 | Tool call fails (e.g., edit_file old_string not found) | Step fails | Fallback to agentic loop which can inspect and retry |
-| No JSON fence in planner output | Can't compile plan | Try `plan_source` tool; else fall through to fallback agent (or TERMINATE if no fallback configured) |
-| Plan compilation rejects the plan (cycle, duplicate id, unsafe `success_condition`, malformed `output_schema`) | Can't execute | Compile-error gate TERMINATEs the parent workflow with the structured error message |
-| Tool / parse / validation failure inside the dynamic sub-workflow | Sub-workflow fails | Parent SWITCH on `taskStatus !== COMPLETED` routes to fallback agent |
+| No JSON fence in planner output | `has_json` predicate returns `no_plan` | Try `plan_source` tool; else fall through to fallback agent (or TERMINATE if no fallback configured) |
+| Plan compilation returns `{error: "..."}` (cycle, duplicate id, unsafe `success_condition`, malformed `output_schema`, JSON-Schema-shaped `output_schema`) | `compile_status` emits `compile_failed`; `compile_gate` SWITCHes | Routes to fallback agent when `fallbackConfig != null`, else TERMINATEs with the structured error string in `terminationReason` |
+| Plan compilation returns null `workflow_def` with no error (defensive — should never happen given the compiler contract) | `compile_status` emits `compile_failed` (folded with the above) | Same path as compile error |
+| LLM JSON parse failure inside a generated op | per-op `parseGate` SWITCH | TERMINATE FAILED inside the dynamic sub-workflow → bubbles to parent → fallback or TERMINATE |
+| Tool failure inside a static or generated op | non-optional task fails the SUB_WORKFLOW | Parent `exec_route` routes to fallback agent (or TERMINATE) |
+| Validation aggregator returns `'failed'` or null/garbage | validation `SWITCH` defaultCase fires | Runs `on_failure` hooks then TERMINATE FAILED → bubbles → fallback |
+| `plan_source.tool` not registered on the harness | `isToolRegisteredInHarness` check at compile | `IllegalArgumentException` at deploy — never executes |
 
 **Key principle**: Every failure degrades gracefully to existing agentic behavior. PLAN_EXECUTE is a fast-path optimization, not a replacement.
