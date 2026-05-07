@@ -1271,13 +1271,17 @@ public class JavaScriptBuilder {
                         + "}"
 
                         // Case 1: rawResult is already a plan object (has "steps" key)
+                        // markdown_plan is the original planner text when available — the
+                        // fallback agent benefits from seeing the LLM's actual prose, not a
+                        // re-stringified pretty-print of the parsed object.
                         + "var raw = $.rawResult;"
                         + "if (raw != null && typeof raw === 'object') {"
                         + "  var hasSteps = false;"
                         + "  try { hasSteps = raw.steps != null || (raw.get && raw.get('steps') != null); } catch(e) {}"
                         + "  if (hasSteps) {"
                         + "    var plan = toJS(raw);"
-                        + "    return {plan_json: JSON.stringify(plan), markdown_plan: JSON.stringify(plan, null, 2)};"
+                        + "    var origText = ($.coercedResult && String($.coercedResult).length > 0) ? String($.coercedResult) : JSON.stringify(plan);"
+                        + "    return {plan_json: JSON.stringify(plan), markdown_plan: origText};"
                         + "  }"
                         + "}"
 

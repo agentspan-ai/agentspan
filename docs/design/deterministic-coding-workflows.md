@@ -67,7 +67,11 @@ interface Operation {
   generate?: {
     instructions: string;        // what the LLM should produce
     context?: string;            // additional context (current code, reference data, etc.)
-    output_schema: string;       // JSON schema describing expected LLM output
+    output_schema: string;       // JSON-encoded instance-shape example, e.g.
+                               // '{"path":"...","content":"..."}'. Top-level
+                               // keys become the tool's input arg names.
+                               // Real JSON Schema ({"type":"object","properties":...})
+                               // is rejected at compile time.
     model?: string;              // override model for this generation (default: harness model)
   };
 }
@@ -75,7 +79,11 @@ interface Operation {
 interface Validation {
   tool: string;                  // tool to run (run_unit_tests, http_health_check, etc.)
   args?: Record<string, any>;    // tool arguments
-  success_condition?: string;    // jq/JS expression applied to tool output; truthy = pass
+  success_condition?: string;    // Restricted JS expression applied to tool output; truthy = pass.
+                                 // The string is whitelisted against host access, function
+                                 // declarations, loops, assignments, and control-flow keywords;
+                                 // length-capped at 256 chars. Examples: "$.exit_code === 0",
+                                 // "$.passed === true", "$.indexOf('passed') >= 0".
 }
 
 interface ToolCall {
@@ -231,8 +239,12 @@ When `strategy=PLAN_EXECUTE`:
 ```python
 class Agent:
     # ... existing fields ...
-    plan_json_section: str = None    # contextbook section containing the plan
-                                     # If None, extracted from planner's output
+    plan_source: dict = None         # Optional deterministic plan source.
+                                     # {"tool": "tool_name", "args": {...}} — the named
+                                     # tool is called after the planner; its output is
+                                     # used as the plan if the planner's text fails fence
+                                     # extraction. Validated at compile time: tool must
+                                     # be registered on this harness or a sub-agent.
     fallback_max_turns: int = 5      # LLM budget for error recovery
 ```
 
@@ -581,7 +593,8 @@ The server compiles this as: `INLINE(extract_refs) → FORK_JOIN_DYNAMIC(prefetc
 | GraalJS plan compiler is complex | Hard to debug | Unit tests; start simple, add complexity |
 | LLM output is malformed JSON | Operation fails | JSON validation in INLINE; retry once with "fix your JSON" |
 | Tool call fails (e.g., edit_file old_string not found) | Step fails | Fallback to agentic loop which can inspect and retry |
-| No JSON fence in planner output | Can't compile plan | Degrade to Strategy.SEQUENTIAL (pure agentic) |
-| Dynamic workflow registration fails | Can't execute | Degrade to Strategy.SEQUENTIAL |
+| No JSON fence in planner output | Can't compile plan | Try `plan_source` tool; else fall through to fallback agent (or TERMINATE if no fallback configured) |
+| Plan compilation rejects the plan (cycle, duplicate id, unsafe `success_condition`, malformed `output_schema`) | Can't execute | Compile-error gate TERMINATEs the parent workflow with the structured error message |
+| Tool / parse / validation failure inside the dynamic sub-workflow | Sub-workflow fails | Parent SWITCH on `taskStatus !== COMPLETED` routes to fallback agent |
 
 **Key principle**: Every failure degrades gracefully to existing agentic behavior. PLAN_EXECUTE is a fast-path optimization, not a replacement.

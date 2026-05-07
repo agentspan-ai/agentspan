@@ -267,6 +267,13 @@ export class AgentConfigSerializer {
       config.fallbackMaxTurns = agent.fallbackMaxTurns;
     }
 
+    // Plan source (PLAN_EXECUTE strategy) — deterministic fallback for plan
+    // extraction. Forwarded as `planSource` on the wire to match server-side
+    // AgentConfig.planSource.
+    if (agent.planSource !== undefined) {
+      config.planSource = agent.planSource;
+    }
+
     return config;
   }
 
