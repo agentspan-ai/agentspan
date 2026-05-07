@@ -1415,8 +1415,25 @@ public class JavaScriptBuilder {
                         + " catch(e) { return {workflow_def: null, workflow_name: null, error: 'Invalid plan JSON: ' + e.message}; }"
                         + "var parentName = $.parentName || 'plan';"
                         + "var model = $.model || 'openai/gpt-4o-mini';"
+                        + "var harnessTimeout = (typeof $.harnessTimeoutSeconds === 'number' && $.harnessTimeoutSeconds > 0) ? $.harnessTimeoutSeconds : 600;"
                         // Name must match MultiAgentCompiler.planWorkflowName() exactly
                         + "var wfName = 'pe_' + parentName.replace(/[^a-zA-Z0-9_]/g, '_') + '_plan';"
+
+                        // ── success_condition sandbox ───────────────────────────────
+                        // Whitelist filter for plan validation `success_condition` strings.
+                        // The condition is evaluated as JS (gives expressiveness like
+                        // ``$.exit_code === 0``) but the LLM-supplied text is a script-
+                        // injection vector. Reject anything that introduces functions,
+                        // loops, assignments, statement separators, host access, or
+                        // identifiers we don't intend.
+                        + "function safeCondition(cond) {"
+                        + "  if (typeof cond !== 'string') return null;"
+                        + "  if (cond.length > 256) return null;"
+                        + "  var deny = /(\\bfunction\\b|=>|\\bwhile\\b|\\bfor\\b|\\bdo\\b|\\bif\\b|\\bcase\\b|\\bswitch\\b|\\breturn\\b|\\bvar\\b|\\blet\\b|\\bconst\\b|\\bnew\\b|\\bthrow\\b|\\btry\\b|\\bcatch\\b|\\beval\\b|\\bFunction\\b|\\bgloballThis\\b|\\bglobalThis\\b|\\bimport\\b|\\brequire\\b|\\bJava\\b|__|;|\\{|\\}|\\?|:|\\\\|`)/;"
+                        + "  if (deny.test(cond)) return null;"
+                        + "  if (/(^|[^=!<>])=([^=]|$)/.test(cond)) return null;" // bare = (assignment)
+                        + "  return cond;"
+                        + "}"
 
                         // ── Plan schema validation ──────────────────────────────────
                         + "var errors = [];"
@@ -1449,6 +1466,18 @@ public class JavaScriptBuilder {
                         + "  return {workflow_def: null, workflow_name: null, error: 'Plan validation: ' + errors.join('; ')};"
                         + "}"
 
+                        // Validate validation block: reject success_condition strings that
+                        // fail the safeCondition filter. Fail-closed — bad input must error,
+                        // not silently coerce to passed.
+                        + "var vlist = plan.validation || [];"
+                        + "for (var vci = 0; vci < vlist.length; vci++) {"
+                        + "  var vcv = vlist[vci];"
+                        + "  if (vcv.success_condition && safeCondition(vcv.success_condition) === null) {"
+                        + "    return {workflow_def: null, workflow_name: null,"
+                        + "            error: 'Validation ' + vci + ' has unsafe success_condition: ' + vcv.success_condition};"
+                        + "  }"
+                        + "}"
+
                         // Parse model into provider/model
                         + "var mParts = model.split('/');"
                         + "var defaultProvider = mParts.length > 1 ? mParts[0] : 'openai';"
@@ -1458,26 +1487,39 @@ public class JavaScriptBuilder {
                         + "function uid(base) { return base + '_' + (counter++); }"
                         + "var lastAggRef = null;"
 
-                        // Topological sort steps by depends_on
+                        // Topological sort steps by depends_on. Cycles produce a hard error
+                        // — silent partial-DAG emission was the previous behavior and made
+                        // bad plans look benign at compile time.
                         + "var steps = plan.steps || [];"
                         + "var sorted = [];"
                         + "var visited = {};"
                         + "var visiting = {};"
-                        + "function topoSort(s) {"
+                        + "var cycle = null;"
+                        + "function topoSort(s, path) {"
+                        + "  if (cycle) return;"
                         + "  if (visited[s.id]) return;"
-                        + "  if (visiting[s.id]) return;" // break cycles silently
+                        + "  if (visiting[s.id]) {"
+                        + "    var cycPath = path.slice(path.indexOf(s.id));"
+                        + "    cycPath.push(s.id);"
+                        + "    cycle = cycPath.join(' -> ');"
+                        + "    return;"
+                        + "  }"
                         + "  visiting[s.id] = true;"
+                        + "  var nextPath = path.concat([s.id]);"
                         + "  var deps = s.depends_on || [];"
                         + "  for (var d = 0; d < deps.length; d++) {"
                         + "    for (var j = 0; j < steps.length; j++) {"
-                        + "      if (steps[j].id === deps[d]) { topoSort(steps[j]); break; }"
+                        + "      if (steps[j].id === deps[d]) { topoSort(steps[j], nextPath); break; }"
                         + "    }"
                         + "  }"
                         + "  delete visiting[s.id];"
                         + "  visited[s.id] = true;"
                         + "  sorted.push(s);"
                         + "}"
-                        + "for (var i = 0; i < steps.length; i++) topoSort(steps[i]);"
+                        + "for (var i = 0; i < steps.length; i++) topoSort(steps[i], []);"
+                        + "if (cycle) {"
+                        + "  return {workflow_def: null, workflow_name: null, error: 'Cycle in depends_on: ' + cycle};"
+                        + "}"
 
                         // Build tasks for each step
                         + "for (var si = 0; si < sorted.length; si++) {"
@@ -1488,7 +1530,9 @@ public class JavaScriptBuilder {
                         + "    var op = ops[oi];"
                         + "    var chain = [];"
 
-                        // Static operation: direct SIMPLE task
+                        // Static operation: direct SIMPLE task. Not optional — failures
+                        // bubble through SUB_WORKFLOW so the parent SWITCH can route to
+                        // fallback. retryCount:1 covers transient errors.
                         + "    if (op.args) {"
                         + "      var sArgs = {};"
                         + "      for (var ak in op.args) sArgs[ak] = op.args[ak];"
@@ -1497,45 +1541,46 @@ public class JavaScriptBuilder {
                         + "      chain.push({"
                         + "        name: op.tool, taskReferenceName: uid('s_' + step.id),"
                         + "        type: 'SIMPLE', inputParameters: sArgs,"
-                        + "        optional: true, retryCount: 1, retryLogic: 'FIXED', retryDelaySeconds: 2"
+                        + "        retryCount: 1, retryLogic: 'FIXED', retryDelaySeconds: 2"
                         + "      });"
                         + "    }"
 
-                        // Generated operation: LLM → parse → tool
+                        // Generated operation: LLM → parse → SWITCH(parse_error) → tool
                         + "    else if (op.generate) {"
                         + "      var gen = op.generate;"
                         + "      var om = gen.model || model;"
                         + "      var oP = om.split('/');"
                         + "      var prov = oP.length > 1 ? oP[0] : defaultProvider;"
                         + "      var mdl = oP.length > 1 ? oP.slice(1).join('/') : om;"
+                        + "      var temp = (typeof gen.temperature === 'number') ? gen.temperature : 0;"
 
-                        // LLM_CHAT_COMPLETE task
+                        // LLM_CHAT_COMPLETE task. System prompt + jsonOutput:true is the
+                        // contract; we don't repeat the instruction in the user message.
                         + "      var llmRef = uid('llm_' + step.id);"
-                        + "      var sysMsg = 'Output ONLY valid JSON matching this schema: ' + gen.output_schema"
+                        + "      var sysMsg = 'Output ONLY valid JSON matching this shape: ' + gen.output_schema"
                         + "        + '. No markdown fences, no explanation, just the JSON object.';"
                         + "      var userMsg = gen.instructions || '';"
                         + "      if (gen.context) userMsg += '\\n\\nContext:\\n' + gen.context;"
-                        + "      userMsg += '\\n\\nRespond with valid JSON only.';"
                         + "      chain.push({"
                         + "        name: 'llm_chat_complete', taskReferenceName: llmRef,"
                         + "        type: 'LLM_CHAT_COMPLETE',"
                         + "        inputParameters: {"
                         + "          llmProvider: prov, model: mdl,"
                         + "          messages: [{role: 'system', message: sysMsg}, {role: 'user', message: userMsg}],"
-                        + "          maxTokens: gen.max_tokens || 4096, temperature: 0, jsonOutput: true,"
+                        + "          maxTokens: gen.max_tokens || 4096, temperature: temp, jsonOutput: true,"
                         + "          __agentspan_ctx__: ref('workflow.input.__agentspan_ctx__')"
                         + "        },"
-                        + "        optional: true, retryCount: 1, retryLogic: 'FIXED', retryDelaySeconds: 1"
+                        + "        retryCount: 1, retryLogic: 'FIXED', retryDelaySeconds: 1"
                         + "      });"
 
-                        // INLINE parse task: extract tool args from LLM JSON.
-                        // If parsing fails, returns {__parse_error: true} so downstream
-                        // tasks can detect it. The LLM task has retryCount:1 above.
+                        // INLINE parse task: extract tool args from LLM JSON. Returns
+                        // {__parse_error: true, reason: '...'} on failure; the SWITCH below
+                        // routes parse failures to a TERMINATE so the SUB_WORKFLOW fails
+                        // (instead of the SIMPLE tool firing with all-undefined args).
                         + "      var parseRef = uid('p_' + step.id);"
                         + "      chain.push({"
                         + "        name: 'INLINE_TASK', taskReferenceName: parseRef,"
                         + "        type: 'INLINE',"
-                        + "        optional: true,"
                         + "        inputParameters: {"
                         + "          evaluatorType: 'graaljs',"
                         + "          llmOut: ref(llmRef + '.output.result'),"
@@ -1543,27 +1588,57 @@ public class JavaScriptBuilder {
                         + "        }"
                         + "      });"
 
-                        // SIMPLE tool task: reference parsed fields by name from output_schema
+                        // SWITCH: parse_error → TERMINATE FAILED, ok → SIMPLE tool task.
+                        // Conductor needs the SIMPLE task wrapped in a decisionCases branch
+                        // so the all-undefined-args scenario can't fire.
                         + "      var toolRef = uid('t_' + step.id);"
                         + "      var toolInputs = {"
                         + "        __agentspan_ctx__: ref('workflow.input.__agentspan_ctx__'),"
                         + "        session_id: ref('workflow.input.session_id')"
                         + "      };"
+                        // output_schema is treated as an instance-shape example object —
+                        // its top-level keys are the tool's input arg names. Reject real
+                        // JSON Schema (presence of "properties") so callers can't pass
+                        // {"type":"object","properties":{...}} and silently get garbage args.
+                        + "      var schemaErr = null;"
                         + "      try {"
                         + "        var schema = JSON.parse(gen.output_schema);"
-                        + "        var sKeys = Object.keys(schema);"
-                        + "        for (var sk = 0; sk < sKeys.length; sk++) {"
-                        + "          toolInputs[sKeys[sk]] = ref(parseRef + '.output.result.' + sKeys[sk]);"
+                        + "        if (schema && typeof schema === 'object' && schema.properties && schema.type === 'object') {"
+                        + "          schemaErr = 'output_schema looks like a JSON Schema (has type+properties) — use an example object instead, e.g. {\"path\":\"...\",\"content\":\"...\"}';"
+                        + "        } else if (schema && typeof schema === 'object') {"
+                        + "          var sKeys = Object.keys(schema);"
+                        + "          for (var sk = 0; sk < sKeys.length; sk++) {"
+                        + "            toolInputs[sKeys[sk]] = ref(parseRef + '.output.result.' + sKeys[sk]);"
+                        + "          }"
+                        + "        } else {"
+                        + "          schemaErr = 'output_schema must be a JSON object';"
                         + "        }"
                         + "      } catch(e) {"
-                        // fallback: pass entire parsed result as _args
                         + "        toolInputs._args = ref(parseRef + '.output.result');"
                         + "      }"
-                        + "      chain.push({"
+                        + "      if (schemaErr) {"
+                        + "        return {workflow_def: null, workflow_name: null,"
+                        + "                error: 'Step ' + step.id + ' op ' + oi + ': ' + schemaErr};"
+                        + "      }"
+                        + "      var toolTask = {"
                         + "        name: op.tool, taskReferenceName: toolRef,"
                         + "        type: 'SIMPLE', inputParameters: toolInputs,"
-                        + "        optional: true, retryCount: 1, retryLogic: 'FIXED', retryDelaySeconds: 2"
-                        + "      });"
+                        + "        retryCount: 1, retryLogic: 'FIXED', retryDelaySeconds: 2"
+                        + "      };"
+                        + "      var parseGate = {"
+                        + "        name: 'switch', taskReferenceName: uid('pgate_' + step.id),"
+                        + "        type: 'SWITCH', evaluatorType: 'graaljs',"
+                        + "        expression: '(function(){ return $.parsed && $.parsed.__parse_error ? \"err\" : \"ok\"; })()',"
+                        + "        inputParameters: {parsed: ref(parseRef + '.output.result')},"
+                        + "        decisionCases: {ok: [toolTask]},"
+                        + "        defaultCase: ["
+                        + "          {name: 'TERMINATE_TASK', taskReferenceName: uid('p_term_' + step.id),"
+                        + "           type: 'TERMINATE',"
+                        + "           inputParameters: {terminationStatus: 'FAILED',"
+                        + "                             terminationReason: 'LLM JSON parse failed for ' + op.tool}}"
+                        + "        ]"
+                        + "      };"
+                        + "      chain.push(parseGate);"
                         + "    }"
                         + "    if (chain.length > 0) branches.push(chain);"
                         + "  }" // end operations loop
@@ -1610,10 +1685,10 @@ public class JavaScriptBuilder {
                         + "  vArgs.session_id = ref('workflow.input.session_id');"
                         + "  var simpleTask = {"
                         + "    name: v.tool, taskReferenceName: vRef,"
-                        + "    type: 'SIMPLE', inputParameters: vArgs,"
-                        + "    optional: true"
+                        + "    type: 'SIMPLE', inputParameters: vArgs"
                         + "  };"
-                        // Build the INLINE eval expression
+                        // Build the INLINE eval expression. success_condition has already
+                        // passed safeCondition() during plan validation above.
                         + "  var evalRef = uid('val_eval');"
                         + "  var evalExpr;"
                         + "  if (v.success_condition) {"
@@ -1641,8 +1716,7 @@ public class JavaScriptBuilder {
                         + "  };"
                         + "  var evalTask = {"
                         + "    name: 'INLINE_TASK', taskReferenceName: evalRef,"
-                        + "    type: 'INLINE', inputParameters: evalInputs,"
-                        + "    optional: true"
+                        + "    type: 'INLINE', inputParameters: evalInputs"
                         + "  };"
                         + "  valChains.push([simpleTask, evalTask]);"
                         + "  evalRefs.push(evalRef);"
@@ -1693,7 +1767,9 @@ public class JavaScriptBuilder {
                         + "    type: 'INLINE', inputParameters: aggInputs"
                         + "  });"
 
-                        // SWITCH on validation: passed → on_success, failed → on_failure + TERMINATE
+                        // SWITCH on validation: passed → on_success, anything else → fail.
+                        // Default case is failure (TERMINATE) so a null/error aggregator
+                        // result fails closed instead of routing to onSuccess.
                         + "  var onSuccess = [];"
                         + "  var sa = plan.on_success || [];"
                         + "  for (var si2 = 0; si2 < sa.length; si2++) {"
@@ -1704,7 +1780,7 @@ public class JavaScriptBuilder {
                         + "    sActArgs.session_id = ref('workflow.input.session_id');"
                         + "    onSuccess.push({"
                         + "      name: sAct.tool, taskReferenceName: uid('ok'),"
-                        + "      type: 'SIMPLE', inputParameters: sActArgs, optional: true"
+                        + "      type: 'SIMPLE', inputParameters: sActArgs"
                         + "    });"
                         + "  }"
                         + "  var onFailure = [];"
@@ -1717,7 +1793,7 @@ public class JavaScriptBuilder {
                         + "    fActArgs.session_id = ref('workflow.input.session_id');"
                         + "    onFailure.push({"
                         + "      name: fAct.tool, taskReferenceName: uid('fail'),"
-                        + "      type: 'SIMPLE', inputParameters: fActArgs, optional: true"
+                        + "      type: 'SIMPLE', inputParameters: fActArgs"
                         + "    });"
                         + "  }"
                         + "  onFailure.push({"
@@ -1725,36 +1801,37 @@ public class JavaScriptBuilder {
                         + "    type: 'TERMINATE',"
                         + "    inputParameters: {terminationStatus: 'FAILED', terminationReason: 'Plan validation failed'}"
                         + "  });"
-                        // Route: 'failed' → failure actions + TERMINATE, default → success actions (or done)
-                        // Using 'failed' as the named case and success as default avoids the issue
-                        // where Conductor falls through to defaultCase when the matched case has 0 tasks.
+                        // passed → onSuccess; anything else (failed, null, garbage) → onFailure.
+                        // defaultCase is the failure path for fail-closed semantics.
                         + "  tasks.push({"
                         + "    name: 'switch', taskReferenceName: uid('vsw'),"
                         + "    type: 'SWITCH', evaluatorType: 'value-param',"
                         + "    expression: 'switchCaseValue',"
                         + "    inputParameters: {switchCaseValue: ref(aggRef + '.output.result')},"
-                        + "    decisionCases: {failed: onFailure},"
-                        + "    defaultCase: onSuccess"
+                        + "    decisionCases: {passed: onSuccess},"
+                        + "    defaultCase: onFailure"
                         + "  });"
                         + "}" // end if validations
 
-                        // Build WorkflowDef
+                        // Build WorkflowDef. When no validation block exists, individual
+                        // task failures already bubble through SUB_WORKFLOW (no
+                        // optional:true) so the parent SWITCH routes to fallback. The
+                        // literal 'completed' is only reached if every task succeeded.
                         + "var wfDef = {"
                         + "  name: wfName, version: 1, tasks: tasks,"
                         + "  outputParameters: {"
                         + "    result: lastAggRef ? ref(lastAggRef + '.output.result') : 'completed',"
                         + "    status: lastAggRef ? ref(lastAggRef + '.output.result') : 'completed'"
                         + "  },"
-                        + "  timeoutPolicy: 'TIME_OUT_WF', timeoutSeconds: 600, schemaVersion: 2"
+                        + "  timeoutPolicy: 'TIME_OUT_WF', timeoutSeconds: harnessTimeout, schemaVersion: 2"
                         + "};"
                         // Return workflow_def as a JSON STRING (not a nested JS object) because
                         // GraalJS may not reliably convert deeply nested JavaScript objects to
                         // Java Maps/Lists. The parent workflow's parse_wf INLINE task parses
-                        // this string back via JSON.parse(), producing clean Maps that
-                        // SubWorkflow.start() can convertValue() to WorkflowDef.
-                        // Note: ParametersUtils does NOT recurse into resolved expression values,
-                        // so ${...} expressions inside the workflow def survive regardless.
-                        // Wrapped in an array for historical consistency with registration API.
-                        + "return {workflow_def: JSON.stringify([wfDef]), workflow_name: wfName};");
+                        // this string back via JSON.parse(), producing a clean Map that
+                        // SubWorkflow.start() can convertValue() to WorkflowDef. ParametersUtils
+                        // does NOT recurse into resolved expression values, so ${...} expressions
+                        // inside the workflow def survive regardless.
+                        + "return {workflow_def: JSON.stringify(wfDef), workflow_name: wfName};");
     }
 }

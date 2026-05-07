@@ -41,11 +41,13 @@ class PlanCompilerScriptTest {
                 + "}; var __result = " + script + ";";
         graalCtx.eval("js", wrappedScript);
         Value resultVal = graalCtx.eval("js", "__result");
+        // Surface compile errors so tests fail with the actual reason instead of NPE.
+        if (resultVal.hasMember("error") && !resultVal.getMember("error").isNull()) {
+            throw new AssertionError("Plan compilation failed: " + resultVal.getMember("error").asString());
+        }
         String resultJson = resultVal.getMember("workflow_def").asString();
         assertThat(resultJson).as("workflow_def should be non-null").isNotNull();
-        List<Map<String, Object>> wfList = MAPPER.readValue(resultJson,
-                MAPPER.getTypeFactory().constructCollectionType(List.class, Map.class));
-        return wfList.get(0);
+        return (Map<String, Object>) MAPPER.readValue(resultJson, Map.class);
     }
 
     @SuppressWarnings("unchecked")

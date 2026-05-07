@@ -20,7 +20,7 @@ import lombok.NoArgsConstructor;
  * Mirrors the Python Agent class fields for server-side compilation.
  */
 @Data
-@Builder
+@Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)

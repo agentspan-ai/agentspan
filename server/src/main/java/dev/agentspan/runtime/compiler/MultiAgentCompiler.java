@@ -46,6 +46,29 @@ public class MultiAgentCompiler {
         return "pe_" + toRef(parentName) + "_plan";
     }
 
+    /**
+     * Walk the harness ``config`` and any of its sub-agents to see if a tool
+     * with ``toolName`` is registered. Used to validate ``plan_source.tool``
+     * and similar string-named tool references at compile time so typos
+     * surface at deploy rather than as silent runtime no-ops.
+     */
+    private boolean isToolRegisteredInHarness(AgentConfig config, String toolName) {
+        if (config == null) return false;
+        List<ToolConfig> tools = config.getTools();
+        if (tools != null) {
+            for (ToolConfig t : tools) {
+                if (toolName.equals(t.getName())) return true;
+            }
+        }
+        List<AgentConfig> subs = config.getAgents();
+        if (subs != null) {
+            for (AgentConfig sub : subs) {
+                if (isToolRegisteredInHarness(sub, toolName)) return true;
+            }
+        }
+        return false;
+    }
+
     public WorkflowDef compile(AgentConfig config) {
         // Validate uniqueness
         if (config.getAgents() != null) {
@@ -1919,10 +1942,24 @@ public class MultiAgentCompiler {
         // to retrieve the plan from an external source. This provides a deterministic
         // fallback: even if the planner's text output fails extraction, the plan can
         // be read directly from where the explorer wrote it.
+        //
+        // Validate at compile time that ``planSource.tool`` is a real tool registered
+        // somewhere in the harness — a typo is silently swallowed if we wait until
+        // runtime (the ``optional:true`` task simply doesn't run, extraction falls
+        // through to the no_plan branch). Reject the harness here so the misconfig
+        // surfaces at deploy.
         String planReaderRef = null;
         if (config.getPlanSource() != null) {
             Map<String, Object> planSource = config.getPlanSource();
             String toolName = (String) planSource.get("tool");
+            if (toolName == null || toolName.isBlank()) {
+                throw new IllegalArgumentException("plan_source must include a non-empty 'tool' field");
+            }
+            if (!isToolRegisteredInHarness(config, toolName)) {
+                throw new IllegalArgumentException(
+                        "plan_source.tool '" + toolName + "' is not registered as a tool on '"
+                                + config.getName() + "' or any of its sub-agents");
+            }
             @SuppressWarnings("unchecked")
             Map<String, Object> toolArgs = (Map<String, Object>) planSource.getOrDefault("args", Map.of());
 
@@ -1961,14 +1998,25 @@ public class MultiAgentCompiler {
         tasks.add(extractTask);
 
         // ── 4. SWITCH: if JSON plan found → compile & execute, else → fallback ──
+        // Tighten the predicate beyond presence: the plan must actually parse,
+        // be an object, and have a non-empty ``steps`` array — that is what
+        // ``compilePlanToWorkflowScript`` will require. Anything weaker means
+        // the compile path will be entered for a plan that ``compile_plan``
+        // immediately rejects, and ``parse_wf`` then chokes on a null def.
         String hasJsonRef = prefix + "_has_json";
         WorkflowTask hasJsonCheck = new WorkflowTask();
         hasJsonCheck.setType("INLINE");
         hasJsonCheck.setTaskReferenceName(hasJsonRef);
         hasJsonCheck.setInputParameters(Map.of(
-                "evaluatorType", "graaljs",
-                "json", "${" + extractRef + ".output.result.plan_json}",
-                "expression", "(function(){ return $.json && $.json !== '{}' ? 'has_plan' : 'no_plan'; })()"));
+                "evaluatorType",
+                "graaljs",
+                "json",
+                "${" + extractRef + ".output.result.plan_json}",
+                "expression",
+                "(function(){ if (!$.json || $.json === '{}') return 'no_plan';"
+                        + " try { var p = JSON.parse($.json); if (!p || typeof p !== 'object') return 'no_plan';"
+                        + " if (!Array.isArray(p.steps) || p.steps.length === 0) return 'no_plan';"
+                        + " return 'has_plan'; } catch(e) { return 'no_plan'; } })()"));
         tasks.add(hasJsonCheck);
 
         // Build the two branches
@@ -2026,22 +2074,64 @@ public class MultiAgentCompiler {
         List<WorkflowTask> tasks = new ArrayList<>();
 
         // ── 5. Compile JSON plan to Conductor WorkflowDef ────────────
+        // Pass the harness timeout into the compiler so the dynamic sub-workflow's
+        // timeoutSeconds tracks the parent's contract instead of a hardcoded 600.
         String compileRef = prefix + "_compile_plan";
         WorkflowTask compileTask = new WorkflowTask();
         compileTask.setType("INLINE");
         compileTask.setTaskReferenceName(compileRef);
-        compileTask.setInputParameters(Map.of(
+        Map<String, Object> compileInputs = new LinkedHashMap<>();
+        compileInputs.put("evaluatorType", "graaljs");
+        compileInputs.put("planJson", "${" + extractRef + ".output.result.plan_json}");
+        compileInputs.put("parentName", config.getName());
+        compileInputs.put("model", config.getModel() != null ? config.getModel() : "openai/gpt-4o-mini");
+        Integer harnessTimeout = config.getTimeoutSeconds();
+        if (harnessTimeout != null && harnessTimeout > 0) {
+            compileInputs.put("harnessTimeoutSeconds", harnessTimeout);
+        }
+        compileInputs.put("expression", JavaScriptBuilder.compilePlanToWorkflowScript());
+        compileTask.setInputParameters(compileInputs);
+        tasks.add(compileTask);
+
+        // ── 5b. Surface compile errors before they reach SUB_WORKFLOW ─
+        // ``compilePlanToWorkflowScript`` returns ``{workflow_def: null, error: "..."}``
+        // on validation failures (cycle, duplicate id, unsafe success_condition,
+        // bad output_schema). Without this gate, ``parse_wf`` would call
+        // JSON.parse(null) → INLINE failure → SUB_WORKFLOW launched with no def
+        // → fallback fires with no diagnostic. Route on the compiler's result and
+        // TERMINATE with the error message so it's visible to the caller.
+        String compileStatusRef = prefix + "_compile_status";
+        WorkflowTask compileStatus = new WorkflowTask();
+        compileStatus.setType("INLINE");
+        compileStatus.setTaskReferenceName(compileStatusRef);
+        compileStatus.setInputParameters(Map.of(
                 "evaluatorType",
                 "graaljs",
-                "planJson",
-                "${" + extractRef + ".output.result.plan_json}",
-                "parentName",
-                config.getName(),
-                "model",
-                config.getModel() != null ? config.getModel() : "openai/gpt-4o-mini",
+                "wfDef",
+                "${" + compileRef + ".output.result.workflow_def}",
+                "err",
+                "${" + compileRef + ".output.result.error}",
                 "expression",
-                JavaScriptBuilder.compilePlanToWorkflowScript()));
-        tasks.add(compileTask);
+                "(function(){ if ($.err) return 'compile_error'; if (!$.wfDef) return 'no_def'; return 'ok'; })()"));
+        tasks.add(compileStatus);
+
+        WorkflowTask compileGate = new WorkflowTask();
+        compileGate.setType("SWITCH");
+        compileGate.setTaskReferenceName(prefix + "_compile_gate");
+        compileGate.setEvaluatorType("value-param");
+        compileGate.setExpression("switchCaseValue");
+        compileGate.setInputParameters(Map.of("switchCaseValue", "${" + compileStatusRef + ".output.result}"));
+        WorkflowTask compileFail = new WorkflowTask();
+        compileFail.setType("TERMINATE");
+        compileFail.setTaskReferenceName(prefix + "_compile_fail");
+        compileFail.setInputParameters(Map.of(
+                "terminationStatus",
+                "FAILED",
+                "terminationReason",
+                "Plan compilation failed: ${" + compileRef + ".output.result.error}"));
+        compileGate.setDecisionCases(Map.of("compile_error", List.of(compileFail)));
+        compileGate.setDefaultCase(List.of());
+        tasks.add(compileGate);
 
         // ── 6. Parse the workflow_def JSON string into an object ─────
         // compile_plan returns workflow_def as a JSON string to protect ${...}
@@ -2052,13 +2142,12 @@ public class MultiAgentCompiler {
         parseTask.setType("INLINE");
         parseTask.setTaskReferenceName(parseRef);
         parseTask.setInputParameters(Map.of(
-                "evaluatorType", "graaljs",
-                "wfDefJson", "${" + compileRef + ".output.result.workflow_def}",
+                "evaluatorType",
+                "graaljs",
+                "wfDefJson",
+                "${" + compileRef + ".output.result.workflow_def}",
                 "expression",
-                        "(function(){ "
-                                + "if (!$.wfDefJson) return null; "
-                                + "var arr = JSON.parse($.wfDefJson); "
-                                + "return (arr && arr.length) ? arr[0] : null; })()"));
+                "(function(){ if (!$.wfDefJson) return null; return JSON.parse($.wfDefJson); })()"));
         tasks.add(parseTask);
 
         // ── 7. Execute the dynamic workflow as inline SUB_WORKFLOW ──
@@ -2082,8 +2171,17 @@ public class MultiAgentCompiler {
         execInputs.put("session_id", "${workflow.input.session_id}");
         execInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
         execInputs.put("context", "${workflow.variables.context}");
+        // Forward execution-scoped inputs that compiled tools may need: working
+        // directory (cwd) for filesystem tools, credentials map for tools that
+        // need provider tokens, media for vision/audio tools. Previously these
+        // were silently dropped, forcing examples to hardcode WORK_DIR etc.
+        execInputs.put("cwd", "${workflow.input.cwd}");
+        execInputs.put("credentials", "${workflow.input.credentials}");
+        execInputs.put("media", "${workflow.input.media}");
         execTask.setInputParameters(execInputs);
-        execTask.setOptional(true); // Don't fail parent on sub-workflow failure
+        // No optional:true — sub-workflow failures must propagate to the parent
+        // SWITCH so the fallback agent is reached. The status check below
+        // distinguishes COMPLETED from anything else.
         tasks.add(execTask);
 
         // ── 8. SWITCH: completed → done, failed → fallback agent ─────
@@ -2157,21 +2255,13 @@ public class MultiAgentCompiler {
                                 + "return $.originalPrompt + '\\n\\nPlan:\\n' + $.plan + '\\n\\nExecution errors:\\n' + errors; })()"));
         tasks.add(fbPrompt);
 
-        // Apply fallbackMaxTurns if set
+        // Apply fallbackMaxTurns if set. Use Lombok's toBuilder so every field
+        // configured on the fallback agent (memory, prompt_inputs, tool_choice,
+        // termination, handoffs, callbacks, etc.) is preserved — the previous
+        // explicit-whitelist rebuild silently dropped anything not enumerated.
         Integer fbMaxTurns = config.getFallbackMaxTurns();
         if (fbMaxTurns != null) {
-            fallbackConfig = AgentConfig.builder()
-                    .name(fallbackConfig.getName())
-                    .model(fallbackConfig.getModel())
-                    .instructions(fallbackConfig.getInstructions())
-                    .tools(fallbackConfig.getTools())
-                    .maxTurns(fbMaxTurns)
-                    .maxTokens(fallbackConfig.getMaxTokens())
-                    .temperature(fallbackConfig.getTemperature())
-                    .credentials(fallbackConfig.getCredentials())
-                    .cliConfig(fallbackConfig.getCliConfig())
-                    .codeExecution(fallbackConfig.getCodeExecution())
-                    .build();
+            fallbackConfig = fallbackConfig.toBuilder().maxTurns(fbMaxTurns).build();
         }
 
         String fallbackRef = prefix + "_fallback";
