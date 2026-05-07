@@ -307,6 +307,162 @@ class TestPlanExecuteHappyPath:
             print(f"  Section {sf}: {sf_words} words")
             assert sf_words > 10, f"Section {sf} has only {sf_words} words"
 
+    def test_max_tokens_in_generate(self, runtime):
+        """Plan-Execute should honor max_tokens in generate blocks.
+
+        Counterfactual: if gen.max_tokens is not read by the GraalJS compiler,
+        the LLM_CHAT_COMPLETE task gets the default 4096. This test instructs
+        the planner to include max_tokens: 8192 and requests longer sections
+        (250+ words each), verifying the LLM has enough token budget.
+        """
+        max_tokens_planner_instructions = f"""\
+You are a research report planner. Given a topic, plan a detailed report.
+
+Your job:
+1. Decide on 3 sections for the report (introduction, body, conclusion)
+2. For each section, write clear instructions requesting DETAILED content (250+ words each)
+3. Output your plan as Markdown with an embedded JSON fence
+
+IMPORTANT: Your plan MUST include a ```json fence with the structured plan.
+IMPORTANT: Every generate block MUST include "max_tokens": 8192.
+
+## Available tools:
+- `create_directory`: args={{path}}
+- `write_file`: generate={{instructions, output_schema, max_tokens}}
+- `assemble_files`: args={{output_path, input_paths, separator}}
+- `check_word_count`: args={{path, min_words}}
+
+## Plan format:
+
+```json
+{{{{
+  "steps": [
+    {{{{
+      "id": "setup",
+      "parallel": false,
+      "operations": [
+        {{{{"tool": "create_directory", "args": {{{{"path": "sections"}}}}}}}}
+      ]
+    }}}},
+    {{{{
+      "id": "write_sections",
+      "depends_on": ["setup"],
+      "parallel": true,
+      "operations": [
+        {{{{
+          "tool": "write_file",
+          "generate": {{{{
+            "instructions": "Write a detailed 250+ word introduction about [topic].",
+            "output_schema": "{{{{\\\\"path\\\\": \\\\"sections/01_intro.md\\\\", \\\\"content\\\\": \\\\"...\\\\"}}}}",
+            "max_tokens": 8192
+          }}}}
+        }}}},
+        {{{{
+          "tool": "write_file",
+          "generate": {{{{
+            "instructions": "Write a detailed 250+ word section about [subtopic].",
+            "output_schema": "{{{{\\\\"path\\\\": \\\\"sections/02_body.md\\\\", \\\\"content\\\\": \\\\"...\\\\"}}}}",
+            "max_tokens": 8192
+          }}}}
+        }}}},
+        {{{{
+          "tool": "write_file",
+          "generate": {{{{
+            "instructions": "Write a detailed 250+ word conclusion about [topic].",
+            "output_schema": "{{{{\\\\"path\\\\": \\\\"sections/03_conclusion.md\\\\", \\\\"content\\\\": \\\\"...\\\\"}}}}",
+            "max_tokens": 8192
+          }}}}
+        }}}}
+      ]
+    }}}},
+    {{{{
+      "id": "assemble",
+      "depends_on": ["write_sections"],
+      "parallel": false,
+      "operations": [
+        {{{{
+          "tool": "assemble_files",
+          "args": {{{{
+            "output_path": "report.md",
+            "input_paths": "[\\\\"sections/01_intro.md\\\\", \\\\"sections/02_body.md\\\\", \\\\"sections/03_conclusion.md\\\\"]",
+            "separator": "\\\\n\\\\n---\\\\n\\\\n"
+          }}}}
+        }}}}
+      ]
+    }}}}
+  ],
+  "validation": [
+    {{{{"tool": "check_word_count", "args": {{{{"path": "report.md", "min_words": {MIN_WORD_COUNT}}}}}}}}}
+  ],
+  "on_success": []
+}}}}
+```
+
+## Rules:
+- Section files go in sections/ directory
+- Each section MUST be 250+ words (detailed, thorough)
+- Every generate block MUST include "max_tokens": 8192
+- The assemble step must list ALL section files in order
+- Always validate with check_word_count (min {MIN_WORD_COUNT} words)
+- The JSON must be valid
+"""
+
+        planner = Agent(
+            name="test_planner_maxtok",
+            model="openai/gpt-4o-mini",
+            instructions=max_tokens_planner_instructions,
+            max_turns=3,
+            max_tokens=4000,
+        )
+
+        fallback = Agent(
+            name="test_fallback_maxtok",
+            model="openai/gpt-4o-mini",
+            instructions=FALLBACK_INSTRUCTIONS,
+            tools=[create_directory, read_file, write_file, assemble_files, check_word_count],
+            max_turns=10,
+            max_tokens=8000,
+        )
+
+        harness = Agent(
+            name="test_report_gen_maxtok",
+            model="openai/gpt-4o-mini",
+            agents=[planner, fallback],
+            strategy=Strategy.PLAN_EXECUTE,
+            fallback_max_turns=5,
+        )
+
+        result = runtime.run(harness, "Write a detailed research report about: Quantum computing applications in cryptography")
+
+        print(f"\nOutput: {result.output}")
+        print(f"Status: {result.status}")
+
+        # 1. Workflow completed — proves max_tokens field didn't break compilation
+        assert result.status == "COMPLETED", f"Expected COMPLETED, got {result.status}"
+
+        # 2. Report file exists
+        report_path = os.path.join(WORK_DIR, "report.md")
+        assert os.path.exists(report_path), f"Report file not found at {report_path}"
+
+        # 3. Report has substantial content
+        with open(report_path) as f:
+            content = f.read()
+        word_count = len(content.split())
+        print(f"\nReport word count: {word_count}")
+
+        # 4. Word count meets minimum — with max_tokens: 8192, sections should be longer
+        assert word_count >= MIN_WORD_COUNT, (
+            f"Report has {word_count} words, expected >= {MIN_WORD_COUNT}"
+        )
+
+        # 5. Section files created
+        sections_dir = os.path.join(WORK_DIR, "sections")
+        assert os.path.isdir(sections_dir), "sections/ directory not created"
+        section_files = [f for f in os.listdir(sections_dir) if f.endswith(".md")]
+        assert len(section_files) >= 2, (
+            f"Expected >= 2 section files, found {len(section_files)}: {section_files}"
+        )
+
     def test_output_indicates_success(self, runtime):
         """Plan-Execute output should indicate validation passed."""
         planner = Agent(

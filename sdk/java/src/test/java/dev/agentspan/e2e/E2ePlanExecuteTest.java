@@ -259,6 +259,98 @@ class E2ePlanExecuteTest extends E2eBaseTest {
             .build();
     }
 
+    // ── Agent instructions (max_tokens variant) ─────────────────────────
+
+    static final String MAX_TOKENS_PLANNER_INSTRUCTIONS = "You are a research report planner. Given a topic, plan a detailed report.\n"
+        + "\n"
+        + "Your job:\n"
+        + "1. Decide on 3 sections for the report (introduction, body, conclusion)\n"
+        + "2. For each section, write clear instructions requesting DETAILED content (250+ words each)\n"
+        + "3. Output your plan as Markdown with an embedded JSON fence\n"
+        + "\n"
+        + "IMPORTANT: Your plan MUST include a ```json fence with the structured plan.\n"
+        + "IMPORTANT: Every generate block MUST include \"max_tokens\": 8192.\n"
+        + "\n"
+        + "## Available tools:\n"
+        + "- `create_directory`: args={path}\n"
+        + "- `write_file`: generate={instructions, output_schema, max_tokens}\n"
+        + "- `assemble_files`: args={output_path, input_paths, separator}\n"
+        + "- `check_word_count`: args={path, min_words}\n"
+        + "\n"
+        + "## Plan format:\n"
+        + "\n"
+        + "```json\n"
+        + "{\n"
+        + "  \"steps\": [\n"
+        + "    {\n"
+        + "      \"id\": \"setup\",\n"
+        + "      \"parallel\": false,\n"
+        + "      \"operations\": [\n"
+        + "        {\"tool\": \"create_directory\", \"args\": {\"path\": \"sections\"}}\n"
+        + "      ]\n"
+        + "    },\n"
+        + "    {\n"
+        + "      \"id\": \"write_sections\",\n"
+        + "      \"depends_on\": [\"setup\"],\n"
+        + "      \"parallel\": true,\n"
+        + "      \"operations\": [\n"
+        + "        {\n"
+        + "          \"tool\": \"write_file\",\n"
+        + "          \"generate\": {\n"
+        + "            \"instructions\": \"Write a detailed 250+ word introduction about [topic].\",\n"
+        + "            \"output_schema\": \"{\\\"path\\\": \\\"sections/01_intro.md\\\", \\\"content\\\": \\\"...\\\"}\",\n"
+        + "            \"max_tokens\": 8192\n"
+        + "          }\n"
+        + "        },\n"
+        + "        {\n"
+        + "          \"tool\": \"write_file\",\n"
+        + "          \"generate\": {\n"
+        + "            \"instructions\": \"Write a detailed 250+ word body section about [subtopic].\",\n"
+        + "            \"output_schema\": \"{\\\"path\\\": \\\"sections/02_body.md\\\", \\\"content\\\": \\\"...\\\"}\",\n"
+        + "            \"max_tokens\": 8192\n"
+        + "          }\n"
+        + "        },\n"
+        + "        {\n"
+        + "          \"tool\": \"write_file\",\n"
+        + "          \"generate\": {\n"
+        + "            \"instructions\": \"Write a detailed 250+ word conclusion about [topic].\",\n"
+        + "            \"output_schema\": \"{\\\"path\\\": \\\"sections/03_conclusion.md\\\", \\\"content\\\": \\\"...\\\"}\",\n"
+        + "            \"max_tokens\": 8192\n"
+        + "          }\n"
+        + "        }\n"
+        + "      ]\n"
+        + "    },\n"
+        + "    {\n"
+        + "      \"id\": \"assemble\",\n"
+        + "      \"depends_on\": [\"write_sections\"],\n"
+        + "      \"parallel\": false,\n"
+        + "      \"operations\": [\n"
+        + "        {\n"
+        + "          \"tool\": \"assemble_files\",\n"
+        + "          \"args\": {\n"
+        + "            \"output_path\": \"report.md\",\n"
+        + "            \"input_paths\": \"[\\\"sections/01_intro.md\\\", \\\"sections/02_body.md\\\", \\\"sections/03_conclusion.md\\\"]\",\n"
+        + "            \"separator\": \"\\n\\n---\\n\\n\"\n"
+        + "          }\n"
+        + "        }\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ],\n"
+        + "  \"validation\": [\n"
+        + "    {\"tool\": \"check_word_count\", \"args\": {\"path\": \"report.md\", \"min_words\": " + MIN_WORD_COUNT + "}}\n"
+        + "  ],\n"
+        + "  \"on_success\": []\n"
+        + "}\n"
+        + "```\n"
+        + "\n"
+        + "## Rules:\n"
+        + "- Section files go in sections/ directory\n"
+        + "- Each section MUST be 250+ words (detailed, thorough)\n"
+        + "- Every generate block MUST include \"max_tokens\": 8192\n"
+        + "- The assemble step must list ALL section files in order\n"
+        + "- Always validate with check_word_count (min " + MIN_WORD_COUNT + " words)\n"
+        + "- The JSON must be valid\n";
+
     // ── Agent instructions ───────────────────────────────────────────────
 
     static final String PLANNER_INSTRUCTIONS = "You are a research report planner. Given a topic, plan a structured report.\n"
@@ -453,5 +545,91 @@ class E2ePlanExecuteTest extends E2eBaseTest {
                 fail("Failed to read section file " + sf.getName() + ": " + e.getMessage());
             }
         }
+    }
+
+    /**
+     * Plan-Execute should honor max_tokens in generate blocks.
+     *
+     * <p>COUNTERFACTUAL: if gen.max_tokens is not read by the GraalJS plan compiler,
+     * the LLM_CHAT_COMPLETE task gets the hardcoded default 4096. This test instructs
+     * the planner to include max_tokens: 8192 in generate blocks and requests longer
+     * sections (250+ words each). The field must be accepted without error.
+     */
+    @Test
+    @Order(2)
+    @Timeout(value = 300, unit = TimeUnit.SECONDS)
+    void testMaxTokensInGenerate() {
+        List<ToolDef> tools = List.of(
+            createDirectoryTool(),
+            writeFileTool(),
+            readFileTool(),
+            assembleFilesTool(),
+            checkWordCountTool()
+        );
+
+        Agent planner = Agent.builder()
+            .name("test_java_planner_maxtok")
+            .model(MODEL)
+            .instructions(MAX_TOKENS_PLANNER_INSTRUCTIONS)
+            .maxTurns(3)
+            .maxTokens(4000)
+            .build();
+
+        Agent fallback = Agent.builder()
+            .name("test_java_fallback_maxtok")
+            .model(MODEL)
+            .instructions(FALLBACK_INSTRUCTIONS)
+            .tools(tools)
+            .maxTurns(10)
+            .maxTokens(8000)
+            .build();
+
+        Agent harness = Agent.builder()
+            .name("test_java_report_gen_maxtok")
+            .model(MODEL)
+            .agents(planner, fallback)
+            .strategy(Strategy.PLAN_EXECUTE)
+            .fallbackMaxTurns(5)
+            .build();
+
+        AgentResult result = runtime.run(harness,
+            "Write a detailed research report about: Quantum computing applications in cryptography");
+
+        // 1. Workflow completed — proves max_tokens field didn't break compilation
+        assertEquals(AgentStatus.COMPLETED, result.getStatus(),
+            "Agent did not complete. Status: " + result.getStatus()
+            + ". Error: " + result.getError());
+
+        // 2. Report file exists
+        Path reportPath = WORK_DIR.resolve("report.md");
+        assertTrue(Files.exists(reportPath),
+            "Report file not found at " + reportPath);
+
+        // 3. Report has substantial content
+        String content;
+        try {
+            content = Files.readString(reportPath);
+        } catch (IOException e) {
+            fail("Failed to read report file: " + e.getMessage());
+            return;
+        }
+        assertTrue(content.length() > 0, "Report file is empty");
+
+        int wordCount = content.split("\\s+").length;
+
+        // 4. Word count meets minimum
+        assertTrue(wordCount >= MIN_WORD_COUNT,
+            "Report has " + wordCount + " words, expected >= " + MIN_WORD_COUNT
+            + ". COUNTERFACTUAL: if max_tokens was ignored, LLM output may be truncated.");
+
+        // 5. Section files were created
+        Path sectionsDir = WORK_DIR.resolve("sections");
+        assertTrue(Files.isDirectory(sectionsDir), "sections/ directory not created");
+
+        File[] sectionFiles = sectionsDir.toFile().listFiles(
+            (dir, name) -> name.endsWith(".md"));
+        assertNotNull(sectionFiles, "Could not list section files");
+        assertTrue(sectionFiles.length >= 2,
+            "Expected >= 2 section files, found " + sectionFiles.length);
     }
 }
