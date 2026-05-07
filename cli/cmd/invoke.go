@@ -4,6 +4,7 @@
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -103,23 +104,23 @@ type agentspanInvokeSpec struct {
 	} `yaml:"spec"`
 }
 
-// runLimaInvoke runs the agent bundle on the Lima VM via limactl + run-agent.sh.
+// runLimaInvoke calls the Rust API on the Lima host to boot the staged agent bundle.
 func runLimaInvoke(state *lastDeployState) error {
 	cfg := config.Load()
 	vmName := state.VMName
 	if vmName == "" {
 		vmName = os.Getenv("LIMA_VM_NAME")
 		if vmName == "" {
-			vmName = "default"
+			vmName = config.DefaultLimaVMName
 		}
 	}
 
-	runAgentScript := os.Getenv("LIMA_RUN_AGENT_SCRIPT")
-	if runAgentScript == "" {
-		runAgentScript = config.DefaultLimaRunAgentScript
+	apiPort := os.Getenv("AGENT_RUNNER_API_PORT")
+	if apiPort == "" {
+		apiPort = "7878"
 	}
 
-	// Collect env vars required by the agent from agentspan.yaml.
+	// Collect env vars for the agent
 	envMap := map[string]string{
 		"AGENTSPAN_SERVER_URL": cfg.ServerURL,
 	}
@@ -137,40 +138,50 @@ func runLimaInvoke(state *lastDeployState) error {
 		}
 	}
 
-	// Write env.json to a temp file, copy to Lima.
-	envData, err := json.Marshal(envMap)
+	type invokeReq struct {
+		BundlePath string            `json:"bundle_path"`
+		Env        map[string]string `json:"env"`
+	}
+	payload, err := json.Marshal(invokeReq{BundlePath: state.RemoteBundlePath, Env: envMap})
 	if err != nil {
-		return fmt.Errorf("marshal env.json: %w", err)
-	}
-	tmpEnv, err := os.CreateTemp("", "agentspan-env-*.json")
-	if err != nil {
-		return fmt.Errorf("create temp env file: %w", err)
-	}
-	defer os.Remove(tmpEnv.Name())
-	if _, err := tmpEnv.Write(envData); err != nil {
-		tmpEnv.Close()
-		return fmt.Errorf("write temp env file: %w", err)
-	}
-	tmpEnv.Close()
-
-	remoteEnvPath := "/tmp/agentspan-env.json"
-	copyCmd := exec.Command("limactl", "copy", tmpEnv.Name(), vmName+":"+remoteEnvPath)
-	copyCmd.Stdout = os.Stdout
-	copyCmd.Stderr = os.Stderr
-	if err := copyCmd.Run(); err != nil {
-		return fmt.Errorf("copy env.json to Lima VM %q: %w", vmName, err)
+		return fmt.Errorf("marshal invoke request: %w", err)
 	}
 
 	bold := color.New(color.Bold)
-	bold.Printf("Invoking agent in Firecracker on Lima VM %q\n", vmName)
+	bold.Printf("Invoking agent via Rust API on Lima VM %q\n", vmName)
 	fmt.Printf("  Bundle : %s\n\n", state.RemoteBundlePath)
 
+	// POST to Rust API via limactl shell + curl
+	var out bytes.Buffer
 	runCmd := exec.Command("limactl", "shell", vmName, "--",
-		"sudo", runAgentScript, state.RemoteBundlePath, remoteEnvPath)
-	runCmd.Stdout = os.Stdout
+		"curl", "-s",
+		"-X", "POST",
+		"-H", "Content-Type: application/json",
+		"-d", string(payload),
+		fmt.Sprintf("http://localhost:%s/invoke", apiPort))
+	runCmd.Stdout = &out
 	runCmd.Stderr = os.Stderr
 	if err := runCmd.Run(); err != nil {
-		return fmt.Errorf("run-agent failed: %w", err)
+		return fmt.Errorf("invoke API call failed: %w", err)
+	}
+
+	type invokeResp struct {
+		ExitCode int    `json:"exit_code"`
+		Output   string `json:"output"`
+		Error    string `json:"error,omitempty"`
+	}
+	var resp invokeResp
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		// Not JSON — print raw and return
+		fmt.Print(out.String())
+		return nil
+	}
+	if resp.Error != "" {
+		return fmt.Errorf("invoke error: %s", resp.Error)
+	}
+	fmt.Print(resp.Output)
+	if resp.ExitCode != 0 {
+		return fmt.Errorf("agent exited with code %d", resp.ExitCode)
 	}
 	return nil
 }
