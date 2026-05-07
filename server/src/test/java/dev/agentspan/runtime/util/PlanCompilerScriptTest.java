@@ -83,9 +83,17 @@ class PlanCompilerScriptTest {
         if (tasks == null) return;
         for (var t : tasks) {
             out.add(t);
-            if ("FORK_JOIN".equals(t.get("type"))) {
+            String type = String.valueOf(t.get("type"));
+            if ("FORK_JOIN".equals(type)) {
                 var forkTasks = (List<List<Map<String, Object>>>) t.get("forkTasks");
                 if (forkTasks != null) forkTasks.forEach(branch -> collectTasks(branch, out));
+            } else if ("SWITCH".equals(type)) {
+                var decisionCases = (Map<String, List<Map<String, Object>>>) t.get("decisionCases");
+                if (decisionCases != null) {
+                    decisionCases.values().forEach(branch -> collectTasks(branch, out));
+                }
+                var defaultCase = (List<Map<String, Object>>) t.get("defaultCase");
+                if (defaultCase != null) collectTasks(defaultCase, out);
             }
         }
     }
@@ -526,6 +534,125 @@ class PlanCompilerScriptTest {
                           "steps": [{"id": "s1", "operations": [{"tool": "noop", "args": {}}]}]
                         }""");
         assertThat(wf.get("timeoutSeconds")).isEqualTo(600);
+    }
+
+    @Test
+    void testEverySimpleTaskHasFiveAmbientKeys() throws Exception {
+        // Structural invariant: every SIMPLE task the compiler emits — including
+        // those nested in SWITCH decisionCases (the parseGate-wrapped tool task),
+        // FORK_JOIN branches, validation chains, on_success and on_failure
+        // hooks — must carry all five ambient keys. This is the
+        // "fix-didn't-reach-siblings" guard. If any future tool emission
+        // forgets injectAmbient(), this test fails immediately.
+        String planJson = """
+                {
+                  "steps": [
+                    {"id": "s1", "operations": [
+                      {"tool": "static_op", "args": {"x": 1}},
+                      {"tool": "gen_op", "generate": {
+                        "instructions": "go",
+                        "output_schema": "{\\"y\\":\\"...\\"}"
+                      }}
+                    ]},
+                    {"id": "s2", "depends_on": ["s1"], "parallel": true, "operations": [
+                      {"tool": "parallel_a", "args": {}},
+                      {"tool": "parallel_b", "args": {}}
+                    ]}
+                  ],
+                  "validation": [
+                    {"tool": "lint_check", "args": {"path": "/tmp"}, "success_condition": "$.passed === true"},
+                    {"tool": "build_check", "args": {}, "success_condition": "$.exit_code === 0"}
+                  ],
+                  "on_success": [{"tool": "celebrate", "args": {}}],
+                  "on_failure": [{"tool": "log_failure", "args": {}}]
+                }""";
+        Map<String, Object> wf = compilePlan(planJson);
+        List<Map<String, Object>> tasks = allTasks(wf);
+
+        List<Map<String, Object>> simpleTasks = tasks.stream()
+                .filter(t -> "SIMPLE".equals(t.get("type")))
+                .toList();
+        assertThat(simpleTasks)
+                .as("Plan should produce SIMPLE tasks for static op + generated op (inside parseGate)"
+                        + " + 2 parallel ops + 2 validation tools + on_success + on_failure")
+                .hasSizeGreaterThanOrEqualTo(8);
+
+        String[] required = {
+            "cwd", "credentials", "media", "session_id", "__agentspan_ctx__"
+        };
+        String[] expectedRefs = {
+            "${workflow.input.cwd}",
+            "${workflow.input.credentials}",
+            "${workflow.input.media}",
+            "${workflow.input.session_id}",
+            "${workflow.input.__agentspan_ctx__}"
+        };
+        for (var t : simpleTasks) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> inputs = (Map<String, Object>) t.get("inputParameters");
+            String name = String.valueOf(t.get("name"));
+            String ref = String.valueOf(t.get("taskReferenceName"));
+            for (int i = 0; i < required.length; i++) {
+                assertThat(inputs)
+                        .as(
+                                "SIMPLE task '%s' (ref=%s) is missing ambient key '%s'"
+                                        + " — every emitted tool must carry the five ambient inputs",
+                                name, ref, required[i])
+                        .containsEntry(required[i], expectedRefs[i]);
+            }
+        }
+    }
+
+    @Test
+    void testGeneratedOpAmbientKeysWinOverLLMSuppliedSchemaKeys() throws Exception {
+        // Round-4 critical: in the LLM-generated tool branch, the previous
+        // ordering set ambient keys first then overlaid LLM-driven schema keys
+        // on top. An LLM emitting an output_schema with a key named 'cwd' or
+        // 'credentials' could redirect the filesystem root or substitute
+        // credentials. The fix re-inverts the ordering so injectAmbient
+        // overrides at the end, mirroring the static-args branch.
+        //
+        // This test compiles a plan with a malicious-shaped output_schema and
+        // asserts the resulting tool task still has the ambient ${...} refs,
+        // not the parsed-LLM ${parseRef.output.result.cwd} ref the schema
+        // would otherwise produce.
+        String planJson = """
+                {
+                  "steps": [{"id": "s1", "operations": [{
+                    "tool": "do_thing",
+                    "generate": {
+                      "instructions": "go",
+                      "output_schema": "{\\"cwd\\":\\"...\\",\\"credentials\\":\\"...\\",\\"media\\":\\"...\\",\\"safe_field\\":\\"...\\"}"
+                    }
+                  }]}]
+                }""";
+        Map<String, Object> wf = compilePlan(planJson);
+        List<Map<String, Object>> tasks = allTasks(wf);
+
+        Map<String, Object> doThing = tasks.stream()
+                .filter(t -> "SIMPLE".equals(t.get("type")) && "do_thing".equals(t.get("name")))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected do_thing SIMPLE task"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> inputs = (Map<String, Object>) doThing.get("inputParameters");
+
+        // Ambient keys must point at workflow.input, not at parseRef output.
+        assertThat(inputs.get("cwd"))
+                .as("LLM's output_schema 'cwd' key must NOT clobber ambient cwd injection")
+                .isEqualTo("${workflow.input.cwd}");
+        assertThat(inputs.get("credentials"))
+                .as("LLM's output_schema 'credentials' key must NOT clobber ambient credentials injection")
+                .isEqualTo("${workflow.input.credentials}");
+        assertThat(inputs.get("media"))
+                .as("LLM's output_schema 'media' key must NOT clobber ambient media injection")
+                .isEqualTo("${workflow.input.media}");
+
+        // Non-colliding LLM keys ARE wired to the parsed result — that's the
+        // legitimate behavior; only the five forced keys are protected.
+        assertThat(String.valueOf(inputs.get("safe_field")))
+                .as("Non-ambient LLM keys still flow from the parsed result")
+                .contains(".output.result.safe_field");
     }
 
     @Test

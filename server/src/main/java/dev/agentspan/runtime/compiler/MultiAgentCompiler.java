@@ -1973,9 +1973,27 @@ public class MultiAgentCompiler {
             planReaderTask.setType("SIMPLE");
 
             Map<String, Object> readerInputs = new LinkedHashMap<>(toolArgs);
+            // Forward all five ambient inputs — same set the dynamic plan's
+            // per-tool tasks receive via injectAmbient. A reader tool that
+            // needs cwd (e.g. filesystem reads of a workspace plan file) was
+            // previously starved of working-dir context and silently failed
+            // through to the no_plan branch. Forced overrides — if planSource
+            // toolArgs accidentally collided on these keys, the ambient values
+            // win.
             readerInputs.put("session_id", "${workflow.input.session_id}");
             readerInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
+            readerInputs.put("cwd", "${workflow.input.cwd}");
+            readerInputs.put("credentials", "${workflow.input.credentials}");
+            readerInputs.put("media", "${workflow.input.media}");
             planReaderTask.setInputParameters(readerInputs);
+            // ``optional:true`` is intentional: plan_source is a backup for plan
+            // extraction. A reader pointed at a contextbook section that doesn't
+            // exist yet (e.g. the planner didn't write to it on this run) is a
+            // normal "no fallback content available" condition — extract_json
+            // then tries other sources. If the harness's compile-time tool-exists
+            // validation passed but the read still failed, the no_plan SWITCH
+            // path will surface that as a missing-fence failure with the
+            // fallback agent (or TERMINATE if no fallback configured).
             planReaderTask.setOptional(true);
             tasks.add(planReaderTask);
         }

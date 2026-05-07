@@ -1270,6 +1270,29 @@ public class JavaScriptBuilder {
                         + "  return out;"
                         + "}"
 
+                        // Helper: scan ``text`` from ``openIdx`` (at a ``{``) and return the
+                        // index of the matching ``}``, accounting for string literals so
+                        // braces inside string values don't miscount. Returns -1 if no
+                        // matching brace is found. Handles backslash-escaped quotes.
+                        + "function findMatchingBrace(text, openIdx) {"
+                        + "  var depth = 0;"
+                        + "  var inStr = false;"
+                        + "  var prev = '';"
+                        + "  for (var ci = openIdx; ci < text.length; ci++) {"
+                        + "    var cc = text[ci];"
+                        + "    if (inStr) {"
+                        + "      if (cc === '\\\\') { prev = (prev === '\\\\') ? '' : '\\\\'; }"
+                        + "      else if (cc === '\"' && prev !== '\\\\') { inStr = false; prev = ''; }"
+                        + "      else { prev = cc; }"
+                        + "    } else {"
+                        + "      if (cc === '\"') { inStr = true; prev = ''; }"
+                        + "      else if (cc === '{') { depth++; }"
+                        + "      else if (cc === '}') { depth--; if (depth === 0) return ci; }"
+                        + "    }"
+                        + "  }"
+                        + "  return -1;"
+                        + "}"
+
                         // Case 1: rawResult is already a plan object (has "steps" key)
                         // markdown_plan is the original planner text when available — the
                         // fallback agent benefits from seeing the LLM's actual prose, not a
@@ -1317,26 +1340,12 @@ public class JavaScriptBuilder {
                         + "}"
 
                         // Case 4: Find JSON object with "steps" key anywhere in text via
-                        // brace matching. Tracks string-literal state so braces inside
-                        // string values (e.g. ``{"key": "}{"}``) don't miscount and slice
-                        // the wrong substring. Skips backslash-escaped quotes inside strings.
+                        // string-aware brace matching (see findMatchingBrace helper above).
                         + "var stepsIdx = text.indexOf('\"steps\"');"
                         + "if (stepsIdx >= 0) {"
                         + "  var openIdx = text.lastIndexOf('{', stepsIdx);"
                         + "  if (openIdx >= 0) {"
-                        + "    var depth = 0; var closeIdx = -1; var inStr = false; var prev = '';"
-                        + "    for (var ci = openIdx; ci < text.length; ci++) {"
-                        + "      var cc = text[ci];"
-                        + "      if (inStr) {"
-                        + "        if (cc === '\\\\') { prev = (prev === '\\\\') ? '' : '\\\\'; }"
-                        + "        else if (cc === '\"' && prev !== '\\\\') { inStr = false; prev = ''; }"
-                        + "        else { prev = cc; }"
-                        + "      } else {"
-                        + "        if (cc === '\"') { inStr = true; prev = ''; }"
-                        + "        else if (cc === '{') { depth++; }"
-                        + "        else if (cc === '}') { depth--; if (depth === 0) { closeIdx = ci; break; } }"
-                        + "      }"
-                        + "    }"
+                        + "    var closeIdx = findMatchingBrace(text, openIdx);"
                         + "    if (closeIdx > openIdx) {"
                         + "      try {"
                         + "        var extracted = JSON.parse(text.substring(openIdx, closeIdx + 1));"
@@ -1371,16 +1380,14 @@ public class JavaScriptBuilder {
                         + "      } catch(e) {}"
                         + "    }"
                         + "  }"
-                        // 5c: brace-matching in reader content
+                        // 5c: string-aware brace-matching in reader content (uses the
+                        // same findMatchingBrace helper as Case 4 — keeps both extraction
+                        // paths in sync for braces inside string values).
                         + "  var rStepsIdx = readerText.indexOf('\"steps\"');"
                         + "  if (rStepsIdx >= 0) {"
                         + "    var rOpenIdx = readerText.lastIndexOf('{', rStepsIdx);"
                         + "    if (rOpenIdx >= 0) {"
-                        + "      var rDepth = 0; var rCloseIdx = -1;"
-                        + "      for (var rci = rOpenIdx; rci < readerText.length; rci++) {"
-                        + "        if (readerText[rci] === '{') rDepth++;"
-                        + "        else if (readerText[rci] === '}') { rDepth--; if (rDepth === 0) { rCloseIdx = rci; break; } }"
-                        + "      }"
+                        + "      var rCloseIdx = findMatchingBrace(readerText, rOpenIdx);"
                         + "      if (rCloseIdx > rOpenIdx) {"
                         + "        try {"
                         + "          var rExtracted = JSON.parse(readerText.substring(rOpenIdx, rCloseIdx + 1));"
@@ -1648,7 +1655,13 @@ public class JavaScriptBuilder {
                         // Conductor needs the SIMPLE task wrapped in a decisionCases branch
                         // so the all-undefined-args scenario can't fire.
                         + "      var toolRef = uid('t_' + step.id);"
-                        + "      var toolInputs = injectAmbient({});"
+                        // Build LLM-driven keys FIRST, then injectAmbient at the end so
+                        // ambient values are forced overrides. Mirror the static-args
+                        // branch ordering. If we injected ambient first and overlaid LLM
+                        // keys after, an LLM emitting ``output_schema: {"cwd": "..."}``
+                        // could redirect the filesystem root or substitute credentials —
+                        // exactly the threat injectAmbient exists to prevent.
+                        + "      var toolInputs = {};"
                         // output_schema is treated as an instance-shape example object —
                         // its top-level keys are the tool's input arg names. Reject real
                         // JSON Schema (presence of "properties") so callers can't pass
@@ -1681,6 +1694,7 @@ public class JavaScriptBuilder {
                         + "      } catch(e) {"
                         + "        toolInputs._args = ref(parseRef + '.output.result');"
                         + "      }"
+                        + "      injectAmbient(toolInputs);" // forced overrides
                         + "      if (schemaErr) {"
                         + "        return {workflow_def: null, workflow_name: null,"
                         + "                error: 'Step ' + step.id + ' op ' + oi + ': ' + schemaErr};"
@@ -1727,7 +1741,24 @@ public class JavaScriptBuilder {
                         + "      name: 'join', taskReferenceName: joinRef,"
                         + "      type: 'JOIN', joinOn: joinOn"
                         + "    });"
-                        + "    lastOpRef = joinRef;"
+                        // After JOIN, emit an INLINE aggregator so lastOpRef has a real
+                        // ``.result`` property. Conductor's JoinTask.output is
+                        // ``{taskRef → outputMap}`` with no top-level ``result`` key, so
+                        // ``${joinRef.output.result}`` would resolve to a literal placeholder
+                        // and the dynamic workflow's terminal-parallel-step result would be
+                        // empty. The aggregator collects each branch's last task's output
+                        // into an array so downstream consumers see a real value.
+                        + "    var pAggRef = uid('parallel_agg_' + step.id);"
+                        + "    var pAggInputs = {evaluatorType: 'graaljs', count: joinOn.length};"
+                        + "    for (var ja = 0; ja < joinOn.length; ja++) {"
+                        + "      pAggInputs['b' + ja] = ref(joinOn[ja] + '.output.result');"
+                        + "    }"
+                        + "    pAggInputs.expression = \"(function(){ var out = []; for (var i = 0; i < $.count; i++) out.push($['b' + i]); return out; })()\";"
+                        + "    tasks.push({"
+                        + "      name: 'INLINE_TASK', taskReferenceName: pAggRef,"
+                        + "      type: 'INLINE', inputParameters: pAggInputs"
+                        + "    });"
+                        + "    lastOpRef = pAggRef;"
                         + "  } else {"
                         + "    for (var b2 = 0; b2 < branches.length; b2++) {"
                         + "      for (var t = 0; t < branches[b2].length; t++) {"
