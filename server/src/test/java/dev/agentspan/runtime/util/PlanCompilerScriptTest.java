@@ -537,6 +537,77 @@ class PlanCompilerScriptTest {
     }
 
     @Test
+    void testSequentialTerminalGeneratedOpResultPointsAtInnerTool() throws Exception {
+        // Round-5 finding: when the final task of a sequential plan is a
+        // generated op, the chain ends in a parseGate SWITCH (not the inner
+        // tool). lastOpRef previously pointed at the SWITCH, and SWITCH outputs
+        // carry the case decision, not ``.result`` — so the dynamic workflow's
+        // outputParameters.result resolved to a literal placeholder. Verify
+        // the fix: lastOpRef must point at the inner tool task (uid 't_*').
+        String planJson = """
+                {
+                  "steps": [{"id": "s1", "operations": [
+                    {"tool": "do_thing", "generate": {
+                      "instructions": "go",
+                      "output_schema": "{\\"out\\":\\"...\\"}"
+                    }}
+                  ]}]
+                }""";
+        Map<String, Object> wf = compilePlan(planJson);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> outputs = (Map<String, Object>) wf.get("outputParameters");
+        String result = String.valueOf(outputs.get("result"));
+        // result must reference a t_* (inner tool), not a pgate_* (SWITCH wrapper).
+        assertThat(result)
+                .as("outputParameters.result must reference the inner tool task, not the parseGate SWITCH")
+                .contains("t_s1_")
+                .doesNotContain("pgate_");
+    }
+
+    @Test
+    void testParallelTerminalGeneratedOpAggregatorPointsAtInnerTool() throws Exception {
+        // Round-5 finding: when a parallel branch terminates in a generated op,
+        // joinOn correctly references the parseGate SWITCH for ordering, but
+        // parallel_agg's per-branch inputs were pulling ``${pgate_*.output.result}``
+        // — meaningless because SWITCH output carries the case decision.
+        // Verify the aggregator now references each branch's inner tool task.
+        String planJson = """
+                {
+                  "steps": [{"id": "s1", "parallel": true, "operations": [
+                    {"tool": "gen_a", "generate": {
+                      "instructions": "a",
+                      "output_schema": "{\\"x\\":\\"...\\"}"
+                    }},
+                    {"tool": "gen_b", "generate": {
+                      "instructions": "b",
+                      "output_schema": "{\\"y\\":\\"...\\"}"
+                    }}
+                  ]}]
+                }""";
+        Map<String, Object> wf = compilePlan(planJson);
+        List<Map<String, Object>> tasks = allTasks(wf);
+
+        Map<String, Object> aggregator = tasks.stream()
+                .filter(t -> "INLINE".equals(t.get("type"))
+                        && String.valueOf(t.get("taskReferenceName")).startsWith("parallel_agg_"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected parallel_agg INLINE after JOIN"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> aggInputs = (Map<String, Object>) aggregator.get("inputParameters");
+        // b0, b1 must point at t_s1_* (inner tool tasks), not pgate_s1_*.
+        for (int i = 0; i < 2; i++) {
+            String key = "b" + i;
+            String ref = String.valueOf(aggInputs.get(key));
+            assertThat(ref)
+                    .as("parallel_agg input '%s' must reference inner tool task, not parseGate SWITCH", key)
+                    .startsWith("${t_s1_")
+                    .endsWith(".output.result}")
+                    .doesNotContain("pgate_");
+        }
+    }
+
+    @Test
     void testEverySimpleTaskHasFiveAmbientKeys() throws Exception {
         // Structural invariant: every SIMPLE task the compiler emits — including
         // those nested in SWITCH decisionCases (the parseGate-wrapped tool task),

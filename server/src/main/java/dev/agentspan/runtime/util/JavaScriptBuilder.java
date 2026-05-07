@@ -1550,6 +1550,17 @@ public class JavaScriptBuilder {
                         // of actual completion, and the parent's output_select would
                         // pick that literal up over the fallback's recovered output.
                         + "var lastOpRef = null;"
+                        // Wrapper task types like SWITCH (parseGate) and JOIN don't expose
+                        // a meaningful ``.result`` on their output — SWITCH outputs the case
+                        // decision, JOIN outputs ``{taskRef → outputMap}``. ``innerRefMap``
+                        // maps a wrapper's taskReferenceName to the real tool task ref
+                        // inside it, so downstream consumers (parallel_agg, lastOpRef)
+                        // can pull from the inner ref's actual output. Used by terminalRef().
+                        + "var innerRefMap = {};"
+                        + "function terminalRef(task) {"
+                        + "  var name = task.taskReferenceName;"
+                        + "  return innerRefMap[name] || name;"
+                        + "}"
 
                         // Topological sort steps by depends_on. Cycles produce a hard error
                         // — silent partial-DAG emission was the previous behavior and made
@@ -1717,6 +1728,11 @@ public class JavaScriptBuilder {
                         + "                             terminationReason: 'LLM JSON parse failed for ' + op.tool}}"
                         + "        ]"
                         + "      };"
+                        // Record the inner toolRef so terminalRef() can find the real tool
+                        // task when something downstream needs ``.result`` (parallel_agg
+                        // inputs, sequential lastOpRef). The SWITCH itself outputs the
+                        // case decision, not the tool's result.
+                        + "      innerRefMap[parseGate.taskReferenceName] = toolRef;"
                         + "      chain.push(parseGate);"
                         + "    }"
                         + "    if (chain.length > 0) branches.push(chain);"
@@ -1749,9 +1765,14 @@ public class JavaScriptBuilder {
                         // empty. The aggregator collects each branch's last task's output
                         // into an array so downstream consumers see a real value.
                         + "    var pAggRef = uid('parallel_agg_' + step.id);"
-                        + "    var pAggInputs = {evaluatorType: 'graaljs', count: joinOn.length};"
-                        + "    for (var ja = 0; ja < joinOn.length; ja++) {"
-                        + "      pAggInputs['b' + ja] = ref(joinOn[ja] + '.output.result');"
+                        + "    var pAggInputs = {evaluatorType: 'graaljs', count: branches.length};"
+                        // Pull each branch's terminal *inner* ref — terminalRef unwraps
+                        // parseGate SWITCHes to the real tool task inside. ``joinOn`` keeps
+                        // referencing the SWITCH for ordering (fork-join sync); the
+                        // aggregator references the inner tool for ``.result``.
+                        + "    for (var ja = 0; ja < branches.length; ja++) {"
+                        + "      var bTerminal = branches[ja][branches[ja].length - 1];"
+                        + "      pAggInputs['b' + ja] = ref(terminalRef(bTerminal) + '.output.result');"
                         + "    }"
                         + "    pAggInputs.expression = \"(function(){ var out = []; for (var i = 0; i < $.count; i++) out.push($['b' + i]); return out; })()\";"
                         + "    tasks.push({"
@@ -1763,7 +1784,9 @@ public class JavaScriptBuilder {
                         + "    for (var b2 = 0; b2 < branches.length; b2++) {"
                         + "      for (var t = 0; t < branches[b2].length; t++) {"
                         + "        tasks.push(branches[b2][t]);"
-                        + "        lastOpRef = branches[b2][t].taskReferenceName;"
+                        // Use terminalRef so a parseGate SWITCH at the chain end resolves
+                        // to its inner tool task (the SWITCH itself has no ``.result``).
+                        + "        lastOpRef = terminalRef(branches[b2][t]);"
                         + "      }"
                         + "    }"
                         + "  }"
