@@ -1070,6 +1070,181 @@ class MultiAgentCompilerTest {
     }
 
     @Test
+    void testPlanExecutePlanSourceWithUnknownToolIsRejectedAtCompile() {
+        // planSource.tool that isn't registered anywhere in the harness must
+        // surface a compile-time error — not silently swallow at runtime.
+        AgentConfig planner = simpleSubAgent("planner", "Write a plan");
+        AgentConfig harness = AgentConfig.builder()
+                .name("bad_plan_source")
+                .model("openai/gpt-4o-mini")
+                .strategy("plan_execute")
+                .agents(List.of(planner))
+                .planSource(Map.of("tool", "tool_that_does_not_exist", "args", Map.of()))
+                .build();
+
+        assertThatThrownBy(() -> new MultiAgentCompiler(compiler).compile(harness))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("plan_source.tool")
+                .hasMessageContaining("tool_that_does_not_exist");
+    }
+
+    @Test
+    void testPlanExecutePlanSourceMissingToolFieldIsRejected() {
+        AgentConfig planner = simpleSubAgent("planner", "Write a plan");
+        AgentConfig harness = AgentConfig.builder()
+                .name("bad_plan_source_2")
+                .model("openai/gpt-4o-mini")
+                .strategy("plan_execute")
+                .agents(List.of(planner))
+                .planSource(Map.of("args", Map.of("section", "x"))) // no "tool"
+                .build();
+
+        assertThatThrownBy(() -> new MultiAgentCompiler(compiler).compile(harness))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("non-empty 'tool'");
+    }
+
+    @Test
+    void testPlanExecutePlanSourceWithRegisteredToolCompiles() {
+        // Counter-test: a registered tool must compile cleanly.
+        ToolConfig contextbookRead = ToolConfig.builder()
+                .name("contextbook_read")
+                .description("Read from contextbook")
+                .toolType("worker")
+                .inputSchema(Map.of("type", "object"))
+                .build();
+        AgentConfig planner = AgentConfig.builder()
+                .name("planner")
+                .model("openai/gpt-4o-mini")
+                .instructions("Plan")
+                .tools(List.of(contextbookRead))
+                .build();
+        AgentConfig harness = AgentConfig.builder()
+                .name("good_plan_source")
+                .model("openai/gpt-4o-mini")
+                .strategy("plan_execute")
+                .agents(List.of(planner))
+                .planSource(Map.of("tool", "contextbook_read", "args", Map.of("section", "coder_plan")))
+                .build();
+
+        WorkflowDef wf = new MultiAgentCompiler(compiler).compile(harness);
+        assertThat(wf.getName()).isEqualTo("good_plan_source");
+
+        // Verify the plan_reader SIMPLE task actually got emitted.
+        boolean hasPlanReader = wf.getTasks().stream()
+                .anyMatch(t -> "SIMPLE".equals(t.getType())
+                        && "contextbook_read".equals(t.getName())
+                        && t.getTaskReferenceName().contains("plan_reader"));
+        assertThat(hasPlanReader)
+                .as("Expected a SIMPLE plan_reader task calling contextbook_read")
+                .isTrue();
+    }
+
+    @Test
+    void testPlanExecuteSurfacesCompileErrors() {
+        // Verify the new compile-error gate exists: after compile_plan there
+        // should be a compile_status INLINE that emits 'compile_error' on
+        // {error: "..."} returns, and a compile_gate SWITCH that TERMINATEs
+        // with the actual error message instead of letting parse_wf trip.
+        AgentConfig planner = simpleSubAgent("planner", "Write a plan");
+        AgentConfig fallback = simpleSubAgent("fallback", "Fix");
+        AgentConfig harness = AgentConfig.builder()
+                .name("error_surfacing")
+                .model("openai/gpt-4o-mini")
+                .strategy("plan_execute")
+                .agents(List.of(planner, fallback))
+                .build();
+
+        WorkflowDef wf = new MultiAgentCompiler(compiler).compile(harness);
+
+        WorkflowTask routeSwitch = wf.getTasks().stream()
+                .filter(t -> "SWITCH".equals(t.getType()) && t.getTaskReferenceName().contains("plan_route"))
+                .findFirst()
+                .orElseThrow();
+        List<WorkflowTask> hasPlanBranch = routeSwitch.getDecisionCases().get("has_plan");
+        assertThat(hasPlanBranch).isNotNull();
+
+        boolean hasCompileStatus = hasPlanBranch.stream()
+                .anyMatch(t -> "INLINE".equals(t.getType())
+                        && t.getTaskReferenceName().contains("compile_status"));
+        assertThat(hasCompileStatus)
+                .as("has_plan branch must include compile_status INLINE to detect compile errors")
+                .isTrue();
+
+        WorkflowTask compileGate = hasPlanBranch.stream()
+                .filter(t -> "SWITCH".equals(t.getType())
+                        && t.getTaskReferenceName().contains("compile_gate"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected compile_gate SWITCH"));
+        List<WorkflowTask> errBranch = compileGate.getDecisionCases().get("compile_error");
+        assertThat(errBranch).isNotEmpty();
+        assertThat(errBranch.get(0).getType()).isEqualTo("TERMINATE");
+        assertThat(errBranch.get(0).getInputParameters().get("terminationReason"))
+                .asString()
+                .contains("Plan compilation failed");
+    }
+
+    @Test
+    void testPlanExecuteSubWorkflowForwardsCwdCredentialsMedia() {
+        // Sub-workflow input must include cwd / credentials / media so the
+        // compiled plan's tools have everything the parent does. Previously
+        // these were silently dropped, forcing examples to hardcode WORK_DIR.
+        AgentConfig planner = simpleSubAgent("planner", "Write a plan");
+        AgentConfig harness = AgentConfig.builder()
+                .name("forwarding")
+                .model("openai/gpt-4o-mini")
+                .strategy("plan_execute")
+                .agents(List.of(planner))
+                .build();
+
+        WorkflowDef wf = new MultiAgentCompiler(compiler).compile(harness);
+        WorkflowTask routeSwitch = wf.getTasks().stream()
+                .filter(t -> "SWITCH".equals(t.getType()) && t.getTaskReferenceName().contains("plan_route"))
+                .findFirst()
+                .orElseThrow();
+        List<WorkflowTask> hasPlanBranch = routeSwitch.getDecisionCases().get("has_plan");
+        WorkflowTask exec = hasPlanBranch.stream()
+                .filter(t -> "SUB_WORKFLOW".equals(t.getType()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected SUB_WORKFLOW task"));
+
+        Map<String, Object> inputs = exec.getInputParameters();
+        assertThat(inputs).containsKey("cwd");
+        assertThat(inputs).containsKey("credentials");
+        assertThat(inputs).containsKey("media");
+        assertThat(inputs.get("cwd")).isEqualTo("${workflow.input.cwd}");
+        assertThat(inputs.get("credentials")).isEqualTo("${workflow.input.credentials}");
+    }
+
+    @Test
+    void testPlanExecuteSubWorkflowIsNotOptional() {
+        // optional:true on the SUB_WORKFLOW would swallow failures and the
+        // fallback would never fire. Must not be set.
+        AgentConfig planner = simpleSubAgent("planner", "Plan");
+        AgentConfig fb = simpleSubAgent("fallback", "Fix");
+        AgentConfig harness = AgentConfig.builder()
+                .name("not_optional")
+                .model("openai/gpt-4o-mini")
+                .strategy("plan_execute")
+                .agents(List.of(planner, fb))
+                .build();
+
+        WorkflowDef wf = new MultiAgentCompiler(compiler).compile(harness);
+        WorkflowTask routeSwitch = wf.getTasks().stream()
+                .filter(t -> "SWITCH".equals(t.getType()) && t.getTaskReferenceName().contains("plan_route"))
+                .findFirst()
+                .orElseThrow();
+        List<WorkflowTask> hasPlanBranch = routeSwitch.getDecisionCases().get("has_plan");
+        WorkflowTask exec = hasPlanBranch.stream()
+                .filter(t -> "SUB_WORKFLOW".equals(t.getType()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(exec.isOptional())
+                .as("plan SUB_WORKFLOW must not be optional — failures must propagate to the fallback SWITCH")
+                .isFalse();
+    }
+
+    @Test
     void testSequentialWithMultipleGates() {
         // Two gates: stage 0 and stage 1 both have gates, stage 2 has none
         AgentConfig config = AgentConfig.builder()

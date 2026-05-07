@@ -50,6 +50,27 @@ class PlanCompilerScriptTest {
         return (Map<String, Object>) MAPPER.readValue(resultJson, Map.class);
     }
 
+    /**
+     * Compile expecting failure: returns the {@code error} string the compiler
+     * produced. Throws if the compile unexpectedly succeeded.
+     */
+    private String compilePlanExpectError(String planJson) throws Exception {
+        String script = JavaScriptBuilder.compilePlanToWorkflowScript();
+        String wrappedScript = "var $ = {"
+                + "planJson: " + MAPPER.writeValueAsString(planJson) + ","
+                + "parentName: 'test_harness',"
+                + "model: 'openai/gpt-4o-mini'"
+                + "}; var __result = " + script + ";";
+        graalCtx.eval("js", wrappedScript);
+        Value resultVal = graalCtx.eval("js", "__result");
+        if (!resultVal.hasMember("error") || resultVal.getMember("error").isNull()) {
+            String wfDef = resultVal.getMember("workflow_def").asString();
+            throw new AssertionError(
+                    "Expected compile error but got workflow_def: " + wfDef.substring(0, Math.min(200, wfDef.length())));
+        }
+        return resultVal.getMember("error").asString();
+    }
+
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> allTasks(Map<String, Object> wf) {
         List<Map<String, Object>> all = new ArrayList<>();
@@ -211,6 +232,264 @@ class PlanCompilerScriptTest {
 
         boolean hasForkJoin = topTasks.stream().anyMatch(t -> "FORK_JOIN".equals(t.get("type")));
         assertThat(hasForkJoin).as("Single validation should NOT use FORK_JOIN").isFalse();
+    }
+
+    // ── Failure-mode tests (validate the new fail-closed paths) ──────
+
+    @Test
+    void testCycleInDependsOnIsRejected() throws Exception {
+        // a → b → a — old behavior was silent partial-DAG; new behavior must
+        // surface a structured error with the full cycle path.
+        String planJson = """
+                {
+                  "steps": [
+                    {"id": "a", "depends_on": ["b"], "operations": [{"tool": "noop", "args": {}}]},
+                    {"id": "b", "depends_on": ["a"], "operations": [{"tool": "noop", "args": {}}]}
+                  ]
+                }""";
+        String error = compilePlanExpectError(planJson);
+        assertThat(error).as("cycle error must include the cycle path").contains("Cycle in depends_on");
+        assertThat(error).contains("->");
+    }
+
+    @Test
+    void testDuplicateStepIdIsRejected() throws Exception {
+        String planJson = """
+                {
+                  "steps": [
+                    {"id": "s1", "operations": [{"tool": "noop", "args": {}}]},
+                    {"id": "s1", "operations": [{"tool": "noop", "args": {}}]}
+                  ]
+                }""";
+        String error = compilePlanExpectError(planJson);
+        assertThat(error).contains("Duplicate step id: s1");
+    }
+
+    @Test
+    void testEmptyStepsArrayIsRejected() throws Exception {
+        String error = compilePlanExpectError("{\"steps\": []}");
+        assertThat(error).contains("non-empty steps array");
+    }
+
+    @Test
+    void testUnsafeSuccessConditionIsRejected() throws Exception {
+        // Planner-supplied success_condition that would attempt a hang or
+        // host-access lookup. safeCondition must reject these.
+        String[] unsafeConditions = {
+            "function() { while (true) {} }",
+            "$.x === 1; while(1){}",
+            "Java.type('java.lang.Runtime')",
+            "eval('1+1')",
+            "$.x = 5",
+            "var foo = 1",
+        };
+        for (String unsafe : unsafeConditions) {
+            String planJson = String.format(
+                    """
+                            {
+                              "steps": [{"id": "s1", "operations": [{"tool": "noop", "args": {}}]}],
+                              "validation": [{"tool": "check", "success_condition": %s}]
+                            }""",
+                    MAPPER.writeValueAsString(unsafe));
+            String error = compilePlanExpectError(planJson);
+            assertThat(error)
+                    .as("unsafe success_condition '%s' must be rejected", unsafe)
+                    .contains("unsafe success_condition");
+        }
+    }
+
+    @Test
+    void testSafeSuccessConditionsAreAccepted() throws Exception {
+        // Counter-test: representative safe conditions must compile.
+        String[] safeConditions = {
+            "$.exit_code === 0",
+            "$.passed === true",
+            "$.indexOf('passed') >= 0",
+            "$.count > 0 && $.errors === 0",
+            "$.status !== 'ERROR'",
+        };
+        for (String safe : safeConditions) {
+            String planJson = String.format(
+                    """
+                            {
+                              "steps": [{"id": "s1", "operations": [{"tool": "noop", "args": {}}]}],
+                              "validation": [{"tool": "check", "success_condition": %s}]
+                            }""",
+                    MAPPER.writeValueAsString(safe));
+            // Must compile cleanly; compilePlan throws if there's an error.
+            Map<String, Object> wf = compilePlan(planJson);
+            assertThat(wf).as("safe condition '%s' should compile", safe).isNotNull();
+        }
+    }
+
+    @Test
+    void testJsonSchemaAsOutputSchemaIsRejected() throws Exception {
+        // Real JSON Schema (with type+properties) was previously parsed as if
+        // its top-level keys were tool args, producing toolInputs.type and
+        // toolInputs.properties garbage. Must now be rejected.
+        String jsonSchemaShape = "{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"x\\\":{\\\"type\\\":\\\"string\\\"}}}";
+        String planJson = "{"
+                + "\"steps\": [{\"id\": \"s1\", \"operations\": [{"
+                + "\"tool\": \"do_thing\","
+                + "\"generate\": {"
+                + "\"instructions\": \"do it\","
+                + "\"output_schema\": \""
+                + jsonSchemaShape
+                + "\""
+                + "}}]}]}";
+        String error = compilePlanExpectError(planJson);
+        assertThat(error).contains("JSON Schema").contains("example object instead");
+    }
+
+    @Test
+    void testInstanceShapeOutputSchemaIsAccepted() throws Exception {
+        // Counter-test: a plain instance-shape example (no type+properties) must compile.
+        String planJson = "{"
+                + "\"steps\": [{\"id\": \"s1\", \"operations\": [{"
+                + "\"tool\": \"write_file\","
+                + "\"generate\": {"
+                + "\"instructions\": \"write hello\","
+                + "\"output_schema\": \"{\\\"path\\\":\\\"...\\\",\\\"content\\\":\\\"...\\\"}\""
+                + "}}]}]}";
+        Map<String, Object> wf = compilePlan(planJson);
+        assertThat(wf).isNotNull();
+    }
+
+    @Test
+    void testGeneratedOpUsesParseGateSwitch() throws Exception {
+        // Verify the parse-error short-circuit: every generated op chain must
+        // include a SWITCH after the parse INLINE so the tool task can't fire
+        // with all-undefined args when the LLM JSON is malformed.
+        String planJson = """
+                {
+                  "steps": [{"id": "s1", "operations": [{
+                    "tool": "write_file",
+                    "generate": {
+                      "instructions": "write",
+                      "output_schema": "{\\"path\\":\\"...\\"}"
+                    }
+                  }]}]
+                }""";
+        Map<String, Object> wf = compilePlan(planJson);
+        List<Map<String, Object>> tasks = allTasks(wf);
+        boolean hasParseGate = tasks.stream()
+                .anyMatch(t -> "SWITCH".equals(t.get("type"))
+                        && String.valueOf(t.get("taskReferenceName")).startsWith("pgate_"));
+        assertThat(hasParseGate)
+                .as("Generated op must produce a parse-gate SWITCH")
+                .isTrue();
+    }
+
+    @Test
+    void testNoTaskIsOptional() throws Exception {
+        // Verify the optional:true cancer is gone: every emitted task in a
+        // typical plan must have optional unset (defaults to false). Failures
+        // bubble through SUB_WORKFLOW so the parent SWITCH can route to fallback.
+        String planJson = """
+                {
+                  "steps": [
+                    {"id": "s1", "operations": [
+                      {"tool": "static_op", "args": {"x": 1}},
+                      {"tool": "gen_op", "generate": {"instructions": "go", "output_schema": "{\\"y\\":\\"...\\"}"}}
+                    ]}
+                  ],
+                  "validation": [{"tool": "check", "success_condition": "$.passed === true"}],
+                  "on_success": [{"tool": "celebrate", "args": {}}],
+                  "on_failure": [{"tool": "log_failure", "args": {}}]
+                }""";
+        Map<String, Object> wf = compilePlan(planJson);
+        List<Map<String, Object>> tasks = allTasks(wf);
+        long optionalCount = tasks.stream()
+                .filter(t -> Boolean.TRUE.equals(t.get("optional")))
+                .count();
+        assertThat(optionalCount)
+                .as("No task in the compiled plan should be optional:true")
+                .isZero();
+    }
+
+    @Test
+    void testValidationSwitchFailsClosed() throws Exception {
+        // The validation SWITCH must route 'passed' → onSuccess and *anything
+        // else* (failed, null, garbage) → onFailure as defaultCase.
+        String planJson = """
+                {
+                  "steps": [{"id": "s1", "operations": [{"tool": "noop", "args": {}}]}],
+                  "validation": [{"tool": "check", "success_condition": "$.passed === true"}],
+                  "on_success": [{"tool": "celebrate", "args": {}}],
+                  "on_failure": [{"tool": "log_failure", "args": {}}]
+                }""";
+        Map<String, Object> wf = compilePlan(planJson);
+        List<Map<String, Object>> tasks = allTasks(wf);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> validationSwitch = tasks.stream()
+                .filter(t -> "SWITCH".equals(t.get("type"))
+                        && String.valueOf(t.get("taskReferenceName")).startsWith("vsw_"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("validation SWITCH not found"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> decisionCases = (Map<String, Object>) validationSwitch.get("decisionCases");
+        assertThat(decisionCases.keySet()).contains("passed");
+        // defaultCase must be onFailure (TERMINATE among others), not onSuccess.
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> defaultCase = (List<Map<String, Object>>) validationSwitch.get("defaultCase");
+        boolean defaultHasTerminate =
+                defaultCase.stream().anyMatch(t -> "TERMINATE".equals(t.get("type")));
+        assertThat(defaultHasTerminate)
+                .as("defaultCase must include TERMINATE — fail-closed semantics")
+                .isTrue();
+    }
+
+    @Test
+    void testTimeoutFromHarnessConfig() throws Exception {
+        // harnessTimeoutSeconds input flows through to the compiled WorkflowDef.
+        String planJson = """
+                {
+                  "steps": [{"id": "s1", "operations": [{"tool": "noop", "args": {}}]}]
+                }""";
+        String script = JavaScriptBuilder.compilePlanToWorkflowScript();
+        String wrappedScript = "var $ = {"
+                + "planJson: " + MAPPER.writeValueAsString(planJson) + ","
+                + "parentName: 'test_harness',"
+                + "model: 'openai/gpt-4o-mini',"
+                + "harnessTimeoutSeconds: 1234"
+                + "}; var __result = " + script + ";";
+        graalCtx.eval("js", wrappedScript);
+        Value resultVal = graalCtx.eval("js", "__result");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> wf =
+                (Map<String, Object>) MAPPER.readValue(resultVal.getMember("workflow_def").asString(), Map.class);
+        assertThat(wf.get("timeoutSeconds"))
+                .as("timeoutSeconds should track harnessTimeoutSeconds input")
+                .isEqualTo(1234);
+    }
+
+    @Test
+    void testDefaultTimeoutWhenHarnessTimeoutAbsent() throws Exception {
+        // No harness timeout → fall back to 600.
+        Map<String, Object> wf = compilePlan(
+                """
+                        {
+                          "steps": [{"id": "s1", "operations": [{"tool": "noop", "args": {}}]}]
+                        }""");
+        assertThat(wf.get("timeoutSeconds")).isEqualTo(600);
+    }
+
+    @Test
+    void testWorkflowDefIsNotArrayWrapped() throws Exception {
+        // Old behavior: JSON.stringify([wfDef]) and parse_wf unwrap arr[0].
+        // New behavior: bare object — verify by direct JSON parse.
+        String script = JavaScriptBuilder.compilePlanToWorkflowScript();
+        String wrappedScript = "var $ = {"
+                + "planJson: '{\"steps\": [{\"id\": \"s1\", \"operations\": [{\"tool\": \"noop\", \"args\": {}}]}]}',"
+                + "parentName: 'test_harness',"
+                + "model: 'openai/gpt-4o-mini'"
+                + "}; var __result = " + script + ";";
+        graalCtx.eval("js", wrappedScript);
+        Value resultVal = graalCtx.eval("js", "__result");
+        String wfDefStr = resultVal.getMember("workflow_def").asString();
+        // Must parse as a single object, not an array.
+        Object parsed = MAPPER.readValue(wfDefStr, Object.class);
+        assertThat(parsed).isInstanceOf(Map.class);
     }
 
     @Test
