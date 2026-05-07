@@ -116,6 +116,14 @@ public class AgentConfig {
     /** Max LLM turns for the fallback agent in PLAN_EXECUTE strategy. */
     private Integer fallbackMaxTurns;
 
+    /**
+     * Optional deterministic plan source for PLAN_EXECUTE strategy.
+     * A SIMPLE task is called after the planner to read the plan from an external source
+     * (e.g. contextbook). If the planner's text output fails extraction, this fallback
+     * source is tried. Format: {"tool": "tool_name", "args": {"key": "value"}}.
+     */
+    private Map<String, Object> planSource;
+
     /** Whether this is an external agent (no model, references existing workflow). */
     @Builder.Default
     private boolean external = false;

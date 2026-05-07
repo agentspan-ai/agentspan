@@ -212,6 +212,9 @@ class AgentConfigSerializer:
         if getattr(agent, "fallback_max_turns", None) is not None:
             config["fallbackMaxTurns"] = agent.fallback_max_turns
 
+        if getattr(agent, "plan_source", None) is not None:
+            config["planSource"] = agent.plan_source
+
         # Gate condition (for sequential pipelines)
         if getattr(agent, "gate", None) is not None:
             config["gate"] = self._serialize_gate(agent)
