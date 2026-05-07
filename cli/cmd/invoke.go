@@ -12,8 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agentspan-ai/agentspan/cli/config"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -25,10 +27,12 @@ const (
 )
 
 type lastDeployState struct {
-	WorkflowID string    `json:"workflow_id"`
-	StagingDir string    `json:"staging_dir"`
-	BundleName string    `json:"bundle_name"`
-	DeployedAt time.Time `json:"deployed_at"`
+	WorkflowID       string    `json:"workflow_id"`
+	StagingDir       string    `json:"staging_dir,omitempty"`
+	BundleName       string    `json:"bundle_name"`
+	RemoteBundlePath string    `json:"remote_bundle_path,omitempty"`
+	VMName           string    `json:"vm_name,omitempty"`
+	DeployedAt       time.Time `json:"deployed_at"`
 }
 
 type bundleManifest struct {
@@ -56,13 +60,20 @@ func init() {
 }
 
 func runInvokeCmd(cmd *cobra.Command, args []string) error {
+	state, _ := loadLastDeploy()
+
+	// Lima Firecracker path — bundle staged on Lima VM
+	if state != nil && state.RemoteBundlePath != "" {
+		return runLimaInvoke(state)
+	}
+
 	stagingDir := os.Getenv(defaultStagingEnvVar)
 	if stagingDir == "" {
-		state, err := loadLastDeploy()
-		if err != nil {
+		if state != nil && state.StagingDir != "" {
+			stagingDir = state.StagingDir
+		} else {
 			return fmt.Errorf("staging dir unknown: set STAGING_DIR or run 'agentspan deploy' first")
 		}
-		stagingDir = state.StagingDir
 	}
 
 	// Project bundle — local execution path
@@ -73,6 +84,85 @@ func runInvokeCmd(cmd *cobra.Command, args []string) error {
 
 	// Plain script — Firecracker path via dev.sh
 	return runFirecrackerInvoke(stagingDir, args)
+}
+
+// agentspanInvokeSpec is the minimal slice of agentspan.yaml we need at invoke time.
+type agentspanInvokeSpec struct {
+	Spec struct {
+		Env []string `yaml:"env"`
+	} `yaml:"spec"`
+}
+
+// runLimaInvoke runs the agent bundle on the Lima VM via limactl + run-agent.sh.
+func runLimaInvoke(state *lastDeployState) error {
+	cfg := config.Load()
+	vmName := state.VMName
+	if vmName == "" {
+		vmName = os.Getenv("LIMA_VM_NAME")
+		if vmName == "" {
+			vmName = "default"
+		}
+	}
+
+	runAgentScript := os.Getenv("LIMA_RUN_AGENT_SCRIPT")
+	if runAgentScript == "" {
+		runAgentScript = "/opt/agentspan/bin/run-agent.sh"
+	}
+
+	// Collect env vars required by the agent from agentspan.yaml.
+	envMap := map[string]string{
+		"AGENTSPAN_SERVER_URL": cfg.ServerURL,
+	}
+	if buildState, err := loadLastBuild(); err == nil && buildState.SourceDir != "" {
+		agentspanPath := filepath.Join(buildState.SourceDir, "agentspan.yaml")
+		if data, err := os.ReadFile(agentspanPath); err == nil {
+			var spec agentspanInvokeSpec
+			if yaml.Unmarshal(data, &spec) == nil {
+				for _, key := range spec.Spec.Env {
+					if val := os.Getenv(key); val != "" {
+						envMap[key] = val
+					}
+				}
+			}
+		}
+	}
+
+	// Write env.json to a temp file, copy to Lima.
+	envData, err := json.Marshal(envMap)
+	if err != nil {
+		return fmt.Errorf("marshal env.json: %w", err)
+	}
+	tmpEnv, err := os.CreateTemp("", "agentspan-env-*.json")
+	if err != nil {
+		return fmt.Errorf("create temp env file: %w", err)
+	}
+	defer os.Remove(tmpEnv.Name())
+	if _, err := tmpEnv.Write(envData); err != nil {
+		tmpEnv.Close()
+		return fmt.Errorf("write temp env file: %w", err)
+	}
+	tmpEnv.Close()
+
+	remoteEnvPath := "/tmp/agentspan-env.json"
+	copyCmd := exec.Command("limactl", "copy", tmpEnv.Name(), vmName+":"+remoteEnvPath)
+	copyCmd.Stdout = os.Stdout
+	copyCmd.Stderr = os.Stderr
+	if err := copyCmd.Run(); err != nil {
+		return fmt.Errorf("copy env.json to Lima VM %q: %w", vmName, err)
+	}
+
+	bold := color.New(color.Bold)
+	bold.Printf("Invoking agent in Firecracker on Lima VM %q\n", vmName)
+	fmt.Printf("  Bundle : %s\n\n", state.RemoteBundlePath)
+
+	runCmd := exec.Command("limactl", "shell", vmName, "--",
+		"sudo", runAgentScript, state.RemoteBundlePath, remoteEnvPath)
+	runCmd.Stdout = os.Stdout
+	runCmd.Stderr = os.Stderr
+	if err := runCmd.Run(); err != nil {
+		return fmt.Errorf("run-agent.sh failed: %w", err)
+	}
+	return nil
 }
 
 // runLocalInvoke runs a project bundle locally using the bundled lib/ dependencies.

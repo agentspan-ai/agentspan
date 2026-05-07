@@ -18,7 +18,7 @@ import (
 
 const (
 	buildWorkflowName    = "agentspan_build"
-	buildWorkflowVersion = 1
+	buildWorkflowVersion = 2
 	lastBuildStateFile   = "last-build.json"
 )
 

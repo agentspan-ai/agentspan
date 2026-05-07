@@ -43,7 +43,7 @@ var deployCmd = &cobra.Command{
 
 const (
 	deployWorkflowName    = "agentspan_deploy"
-	deployWorkflowVersion = 2
+	deployWorkflowVersion = 3
 )
 
 func init() {
@@ -610,30 +610,18 @@ func runRemoteDeployCmd(cmd *cobra.Command, artifactID string) error {
 		bundleName = state.BundleName
 	}
 
-	stagingDir := os.Getenv("STAGING_DIR")
-	if stagingDir == "" {
-		return fmt.Errorf("STAGING_DIR is not set — set it to the directory where bundles should be extracted")
-	}
-	absStagingDir, err := filepath.Abs(stagingDir)
-	if err != nil {
-		return fmt.Errorf("resolve staging dir: %w", err)
-	}
-	stagingDir = absStagingDir
-
 	cfg := getConfig()
 	cc := client.NewConductorClient(cfg.ConductorURL)
 	ctx := context.Background()
 
 	bold := color.New(color.Bold)
-	bold.Println("Deploying agent to Execution Plane")
-	fmt.Printf("  Artifact : %s\n", artifactID)
-	fmt.Printf("  Staging  : %s\n\n", stagingDir)
+	bold.Println("Deploying agent to Lima Execution Plane")
+	fmt.Printf("  Artifact : %s\n\n", artifactID)
 
 	deployWorkflowID, err := cc.StartWorkflow(ctx, deployWorkflowName, deployWorkflowVersion, map[string]any{
 		"file_handle_id": artifactID,
 		"workflow_id":    workflowID,
 		"bundle_name":    bundleName,
-		"staging_dir":    stagingDir,
 	})
 	if err != nil {
 		return fmt.Errorf("start deploy workflow: %w", err)
@@ -642,7 +630,7 @@ func runRemoteDeployCmd(cmd *cobra.Command, artifactID string) error {
 	fmt.Printf("  Workflow: %s\n", deployWorkflowID)
 	fmt.Print("  Deploying")
 
-	_, err = cc.WaitForWorkflow(ctx, deployWorkflowID, func(s string) {
+	status, err := cc.WaitForWorkflow(ctx, deployWorkflowID, func(s string) {
 		fmt.Print(".")
 	})
 	fmt.Println()
@@ -650,19 +638,25 @@ func runRemoteDeployCmd(cmd *cobra.Command, artifactID string) error {
 		return err
 	}
 
+	remoteBundlePath, _ := status.Output["remote_bundle_path"].(string)
+	vmName, _ := status.Output["vm_name"].(string)
+
 	// Persist deploy state for invoke step.
 	if err := saveLastDeploy(lastDeployState{
-		WorkflowID: deployWorkflowID,
-		StagingDir: stagingDir,
-		BundleName: bundleName,
-		DeployedAt: time.Now(),
+		WorkflowID:       deployWorkflowID,
+		BundleName:       bundleName,
+		RemoteBundlePath: remoteBundlePath,
+		VMName:           vmName,
+		DeployedAt:       time.Now(),
 	}); err != nil {
 		color.New(color.FgYellow).Printf("  warning: could not save deploy state: %v\n", err)
 	}
 
 	fmt.Println()
 	color.New(color.FgGreen, color.Bold).Println("  Deploy complete.")
-	fmt.Printf("  Bundle extracted to: %s\n\n", stagingDir)
+	if remoteBundlePath != "" {
+		fmt.Printf("  Bundle staged on Lima VM %q at: %s\n\n", vmName, remoteBundlePath)
+	}
 	fmt.Println("Next: agentspan agent invoke")
 	return nil
 }

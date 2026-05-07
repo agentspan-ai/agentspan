@@ -28,8 +28,10 @@ func (c *Config) IsLocalhost() bool {
 }
 
 const (
-	DefaultServerURL    = "http://localhost:6767"
-	DefaultConductorURL = "http://localhost:8080/api"
+	DefaultServerURL         = "http://localhost:6767"
+	DefaultConductorURL      = "http://localhost:8080/api"
+	DefaultLimaVMName        = "default"
+	DefaultLimaRunAgentScript = "/opt/agentspan/bin/run-agent.sh"
 )
 
 func DefaultConfig() *Config {
