@@ -31,7 +31,7 @@ const (
 	DefaultServerURL         = "http://localhost:6767"
 	DefaultConductorURL      = "http://localhost:8080/api"
 	DefaultLimaVMName        = "default"
-	DefaultLimaRunAgentScript = "/opt/agentspan/bin/run-agent.sh"
+	DefaultLimaRunAgentScript = "/opt/agentspan/bin/run-agent"
 )
 
 func DefaultConfig() *Config {

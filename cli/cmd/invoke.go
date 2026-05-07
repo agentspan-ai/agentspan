@@ -106,7 +106,7 @@ func runLimaInvoke(state *lastDeployState) error {
 
 	runAgentScript := os.Getenv("LIMA_RUN_AGENT_SCRIPT")
 	if runAgentScript == "" {
-		runAgentScript = "/opt/agentspan/bin/run-agent.sh"
+		runAgentScript = config.DefaultLimaRunAgentScript
 	}
 
 	// Collect env vars required by the agent from agentspan.yaml.
