@@ -270,7 +270,7 @@ class TestSuite15Skills:
         config = agent._framework_config
         skill_md = config.get("skillMd", "")
 
-        assert "[Skill Parameters]" in skill_md
+        assert "MANDATORY PARAMETER OVERRIDES" in skill_md
         assert "mode: turbo" in skill_md
         assert "rounds: 1" in skill_md
 

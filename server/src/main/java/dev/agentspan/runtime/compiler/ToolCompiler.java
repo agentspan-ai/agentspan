@@ -131,6 +131,9 @@ public class ToolCompiler {
             if (tool.getOutputSchema() != null) {
                 spec.put("outputSchema", tool.getOutputSchema());
             }
+            if (tool.getMaxCalls() != null) {
+                spec.put("maxCalls", tool.getMaxCalls());
+            }
 
             // MCP tools need configParams with server info
             if ("mcp".equals(toolType) && tool.getConfig() != null) {
@@ -530,7 +533,7 @@ public class ToolCompiler {
 
         Map<String, Object> userMsg = new LinkedHashMap<>();
         userMsg.put("role", "user");
-        userMsg.put("message", "${workflow.input.prompt}");
+        userMsg.put("message", "${workflow.input.prompt}\n\nRespond in json format.");
 
         List<Map<String, Object>> messages = new ArrayList<>();
         messages.add(systemMsg);
@@ -539,6 +542,7 @@ public class ToolCompiler {
         Map<String, Object> filterLlmInput = new LinkedHashMap<>();
         filterLlmInput.put("llmProvider", provider);
         filterLlmInput.put("model", model);
+        filterLlmInput.put("maxTokens", 4096);
         filterLlmInput.put("messages", messages);
         filterLlmInput.put("temperature", 0);
         filterLlmInput.put("jsonOutput", true);
@@ -1185,11 +1189,12 @@ public class ToolCompiler {
                 + "TOOL CATALOG:\n${" + catalogRef + ".output.result.catalog}\n\n"
                 + "Respond with ONLY a JSON object: {\"selected_tools\": [\"tool_name_1\", \"tool_name_2\", ...]}";
 
+        filterLlmInputs.put("maxTokens", 4096);
         filterLlmInputs.put(
                 "messages",
                 List.of(
                         Map.of("role", "system", "message", systemPrompt),
-                        Map.of("role", "user", "message", "${workflow.input.prompt}")));
+                        Map.of("role", "user", "message", "${workflow.input.prompt}\n\nRespond in json format.")));
         filterLlmInputs.put("temperature", 0);
         filterLlmInputs.put("jsonOutput", true);
         filterLlm.setInputParameters(filterLlmInputs);
@@ -1251,11 +1256,12 @@ public class ToolCompiler {
                 + "TOOL CATALOG:\n${" + catalogRef + ".output.result.catalog}\n\n"
                 + "Respond with ONLY a JSON object: {\"selected_tools\": [\"tool_name_1\", \"tool_name_2\", ...]}";
 
+        filterLlmInputs.put("maxTokens", 4096);
         filterLlmInputs.put(
                 "messages",
                 List.of(
                         Map.of("role", "system", "message", systemPrompt),
-                        Map.of("role", "user", "message", "${workflow.input.prompt}")));
+                        Map.of("role", "user", "message", "${workflow.input.prompt}\n\nRespond in json format.")));
         filterLlmInputs.put("temperature", 0);
         filterLlmInputs.put("jsonOutput", true);
         filterLlm.setInputParameters(filterLlmInputs);

@@ -22,6 +22,7 @@ export type {
   CliConfig,
   RunOptions,
   ToolDef,
+  PrefillToolCall,
   AgentResult,
 } from "./types.js";
 

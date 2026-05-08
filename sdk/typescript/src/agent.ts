@@ -1,4 +1,4 @@
-import type { Strategy, CredentialFile, CodeExecutionConfig, CliConfig } from "./types.js";
+import type { Strategy, CredentialFile, CodeExecutionConfig, CliConfig, PrefillToolCall } from "./types.js";
 import { agentTool } from "./tool.js";
 import { ConfigurationError } from "./errors.js";
 import { ClaudeCode } from "./claude-code.js";
@@ -113,6 +113,8 @@ export interface AgentOptions {
   includeContents?: "default" | "none";
   thinkingBudgetTokens?: number;
   requiredTools?: string[];
+  /** Tool calls to execute before the first LLM turn. Results are injected into context. */
+  prefillTools?: PrefillToolCall[];
   gate?: GateCondition;
   codeExecutionConfig?: CodeExecutionConfig;
   cliConfig?: CliConfig | CliConfigOptions;
@@ -123,6 +125,16 @@ export interface AgentOptions {
   credentials?: (string | CredentialFile)[];
   /** Stateful execution — each run gets a unique domain UUID for worker isolation. */
   stateful?: boolean;
+  /** Max LLM turns for the fallback agent in PLAN_EXECUTE strategy. */
+  fallbackMaxTurns?: number;
+  /**
+   * Optional deterministic plan source for PLAN_EXECUTE strategy.
+   * A SIMPLE task is called after the planner to read the plan from an
+   * external source (e.g. contextbook). If the planner's text output fails
+   * extraction, this fallback source is tried.
+   * Format: { tool: "tool_name", args: { key: "value" } }.
+   */
+  planSource?: { tool: string; args?: Record<string, unknown> };
 }
 
 // ── Agent class ───────────────────────────────────────────
@@ -161,10 +173,13 @@ export class Agent {
   readonly includeContents?: "default" | "none";
   readonly thinkingBudgetTokens?: number;
   readonly requiredTools?: string[];
+  readonly prefillTools?: PrefillToolCall[];
   readonly gate?: GateCondition;
   readonly codeExecutionConfig?: CodeExecutionConfig;
   readonly cliConfig?: CliConfig;
   readonly credentials?: (string | CredentialFile)[];
+  readonly fallbackMaxTurns?: number;
+  readonly planSource?: { tool: string; args?: Record<string, unknown> };
 
   /** @internal Stored ClaudeCode config when model is ClaudeCode instance. */
   private readonly _claudeCodeConfig?: ClaudeCode;
@@ -214,9 +229,12 @@ export class Agent {
     this.includeContents = options.includeContents;
     this.thinkingBudgetTokens = options.thinkingBudgetTokens;
     this.requiredTools = options.requiredTools;
+    this.prefillTools = options.prefillTools;
     this.gate = options.gate;
     this.codeExecutionConfig = options.codeExecutionConfig;
     this.credentials = options.credentials;
+    this.fallbackMaxTurns = options.fallbackMaxTurns;
+    this.planSource = options.planSource;
 
     // ── Duplicate sub-agent name detection ────────────────
     if (this.agents.length > 0) {

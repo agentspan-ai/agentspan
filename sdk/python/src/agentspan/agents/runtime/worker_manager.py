@@ -158,7 +158,7 @@ class WorkerManager:
                     workers=[],
                     configuration=self._configuration,
                     scan_for_annotated_workers=True,
-                    monitor_processes=False,
+                    monitor_processes=True,
                 )
 
                 # Set worker processes to daemon BEFORE starting them.

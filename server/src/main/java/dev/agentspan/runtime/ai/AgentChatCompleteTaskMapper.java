@@ -22,6 +22,7 @@ import org.conductoross.conductor.ai.models.ChatMessage;
 import org.conductoross.conductor.ai.models.LLMResponse;
 import org.conductoross.conductor.ai.models.Media;
 import org.conductoross.conductor.ai.models.ToolCall;
+import org.conductoross.conductor.ai.models.ToolSpec;
 import org.conductoross.conductor.ai.tasks.mapper.AIModelTaskMapper;
 import org.conductoross.conductor.common.utils.StringTemplate;
 import org.conductoross.conductor.config.AIIntegrationEnabledCondition;
@@ -125,6 +126,7 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
                 history.add(new ChatMessage(ChatMessage.Role.user, chatCompletion.getUserInput()));
             }
             getHistory(workflowModel, taskModel, chatCompletion);
+            filterToolsByMaxCalls(chatCompletion, taskModel);
             condenseIfNeeded(chatCompletion, taskModel, workflowModel);
             updateTaskModel(chatCompletion, taskModel);
             sanitizeMessages(chatCompletion);
@@ -162,6 +164,68 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         }
         simpleTask.getInputData().put("messages", messages);
         simpleTask.getInputData().put("tools", chatCompletion.getTools());
+    }
+
+    /**
+     * Remove tools that have reached their {@code maxCalls} limit.
+     * Reads maxCalls from the raw inputData (before Jackson strips it from ToolSpec),
+     * counts tool_call messages in conversation history, and removes exhausted tools
+     * so the LLM cannot see or invoke them.
+     */
+    @SuppressWarnings("unchecked")
+    void filterToolsByMaxCalls(ChatCompletion chatCompletion, TaskModel taskModel) {
+        List<ToolSpec> tools = chatCompletion.getTools();
+        if (tools == null || tools.isEmpty()) return;
+
+        // Build maxCalls map from raw inputData (ToolSpec doesn't have maxCalls field)
+        Map<String, Integer> maxCallsMap = new HashMap<>();
+        Object rawTools = taskModel.getInputData().get("tools");
+        if (rawTools instanceof List) {
+            for (Object item : (List<?>) rawTools) {
+                if (item instanceof Map) {
+                    Map<String, Object> toolMap = (Map<String, Object>) item;
+                    Object maxCallsObj = toolMap.get("maxCalls");
+                    Object nameObj = toolMap.get("name");
+                    if (maxCallsObj instanceof Number && nameObj instanceof String) {
+                        maxCallsMap.put((String) nameObj, ((Number) maxCallsObj).intValue());
+                    }
+                }
+            }
+        }
+        if (maxCallsMap.isEmpty()) return;
+
+        // Count tool calls in conversation history
+        Map<String, Integer> callCounts = new HashMap<>();
+        List<ChatMessage> messages = chatCompletion.getMessages();
+        if (messages != null) {
+            for (ChatMessage msg : messages) {
+                if (msg.getRole() == ChatMessage.Role.tool_call && msg.getToolCalls() != null) {
+                    for (ToolCall tc : msg.getToolCalls()) {
+                        if (tc.getName() != null && maxCallsMap.containsKey(tc.getName())) {
+                            callCounts.merge(tc.getName(), 1, Integer::sum);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Filter out tools that hit their limit
+        List<ToolSpec> filtered = new ArrayList<>();
+        for (ToolSpec spec : tools) {
+            Integer maxCalls = maxCallsMap.get(spec.getName());
+            if (maxCalls != null) {
+                int count = callCounts.getOrDefault(spec.getName(), 0);
+                if (count >= maxCalls) {
+                    log.info("Tool '{}' removed — reached max_calls limit ({}/{})", spec.getName(), count, maxCalls);
+                    continue;
+                }
+            }
+            filtered.add(spec);
+        }
+
+        if (filtered.size() < tools.size()) {
+            chatCompletion.setTools(filtered);
+        }
     }
 
     void sanitizeMessages(ChatCompletion chatCompletion) {
@@ -216,9 +280,9 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
      *       older reads of the same section are truncated.</li>
      * </ol>
      */
-    private static final int RECENT_TOOL_RESULTS_TO_KEEP = 6;
+    private static final int RECENT_TOOL_RESULTS_TO_KEEP = 3;
 
-    private static final int TOOL_RESULT_TRUNCATE_LENGTH = 500;
+    private static final int TOOL_RESULT_TRUNCATE_LENGTH = 200;
     private static final Set<String> WRITE_ONLY_TOOLS = Set.of("contextbook_write", "contextbook_summary");
 
     void compactToolHistory(List<ChatMessage> messages) {
@@ -294,6 +358,24 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
                 // Truncate old tool results (not recent)
                 if (!isRecent) {
                     truncateToolResult(msg, tc);
+                }
+            }
+        }
+
+        // Strip inputParameters from old tool_call messages — the LLM doesn't need
+        // to see the full file paths and patterns from calls it made many turns ago.
+        List<Integer> toolCallIndices = new ArrayList<>();
+        for (int i = 0; i < messages.size(); i++) {
+            if (messages.get(i).getRole() == ChatMessage.Role.tool_call) {
+                toolCallIndices.add(i);
+            }
+        }
+        int toolCallRecentCutoff = toolCallIndices.size() - RECENT_TOOL_RESULTS_TO_KEEP;
+        for (int ci = 0; ci < toolCallRecentCutoff && ci < toolCallIndices.size(); ci++) {
+            ChatMessage tcMsg = messages.get(toolCallIndices.get(ci));
+            if (tcMsg.getToolCalls() != null) {
+                for (ToolCall tc : tcMsg.getToolCalls()) {
+                    tc.setInputParameters(null);
                 }
             }
         }
@@ -572,10 +654,29 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
             }
         }
 
-        boolean proactive =
-                !reactive && contextWindow > 0 && shouldCondenseProactively(chatCompletion, contextWindow, maxTokens);
+        // Budget-triggered condensation: fires when estimated tokens exceed the configured budget,
+        // even if well below the model's actual context window.
+        int budget = 0;
+        Object budgetObj = task.getInputData().get("contextWindowBudget");
+        if (budgetObj instanceof Number) {
+            budget = ((Number) budgetObj).intValue();
+        }
 
-        if (!reactive && !proactive) {
+        boolean budgetTriggered = false;
+        if (!reactive && budget > 0) {
+            int estimated = estimateTokenCount(chatCompletion);
+            if (estimated > budget) {
+                log.info("Budget-triggered condensation: estimated {} tokens exceeds {} budget", estimated, budget);
+                budgetTriggered = true;
+            }
+        }
+
+        boolean proactive = !reactive
+                && !budgetTriggered
+                && contextWindow > 0
+                && shouldCondenseProactively(chatCompletion, contextWindow, maxTokens);
+
+        if (!reactive && !proactive && !budgetTriggered) {
             return;
         }
 
@@ -602,21 +703,38 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
 
         int messagesBefore = initial.size() + history.size();
         int totalExchanges = groupExchanges(history).size();
-        int keptExchanges = Math.min(recentExchangesToKeep, totalExchanges);
-        int exchangesCondensed = totalExchanges - keptExchanges;
+        int keepCount = Math.min(recentExchangesToKeep, totalExchanges);
 
-        List<ChatMessage> condensed = condenseHistory(history);
-
+        List<ChatMessage> condensed = condenseHistory(history, keepCount);
         messages.clear();
         messages.addAll(initial);
         messages.addAll(condensed);
 
-        String trigger = reactive ? "token limit hit" : "proactive (exceeds context window)";
+        // Adaptive: keep reducing recent exchanges until under budget or at minimum
+        if (budget > 0) {
+            while (keepCount > 1 && estimateTokenCount(chatCompletion) > budget) {
+                keepCount--;
+                condensed = condenseHistory(history, keepCount);
+                messages.clear();
+                messages.addAll(initial);
+                messages.addAll(condensed);
+            }
+        }
+
+        int keptExchanges = keepCount;
+        int exchangesCondensed = totalExchanges - keptExchanges;
+
+        String trigger = reactive
+                ? "token limit hit"
+                : budgetTriggered
+                        ? "budget (exceeds contextWindowBudget=" + budget + ")"
+                        : "proactive (exceeds context window)";
         int messagesAfter = messages.size();
         log.info(
-                "Condensed conversation from {} to {} messages (triggered by {})",
+                "Condensed conversation from {} to {} messages, kept {} exchanges (triggered by {})",
                 messagesBefore,
                 messagesAfter,
+                keptExchanges,
                 trigger);
 
         // Store condensation metadata on the task for audit trail and UI visibility
@@ -771,9 +889,13 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
      * and keeping the most recent ones verbatim.
      */
     List<ChatMessage> condenseHistory(List<ChatMessage> history) {
+        return condenseHistory(history, recentExchangesToKeep);
+    }
+
+    List<ChatMessage> condenseHistory(List<ChatMessage> history, int keepCount) {
         List<Exchange> exchanges = groupExchanges(history);
 
-        int keepCount = Math.min(recentExchangesToKeep, exchanges.size());
+        keepCount = Math.min(keepCount, exchanges.size());
         int condenseBoundary = exchanges.size() - keepCount;
 
         if (condenseBoundary <= 0) {

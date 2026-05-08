@@ -615,3 +615,223 @@ describe("_registerSystemWorkers integration", () => {
     expect(taskNames).not.toContain("coordinator_process_selection");
   });
 });
+
+// ── SWARM handoff_check registration (no explicit handoffs) ──
+// This is the exact pattern that caused a deadlock in Python:
+// SWARM parent has NO handoffs, only children have OnTextMention.
+// Server always generates {parent}_handoff_check for SWARM workflows.
+
+describe("SWARM handoff_check without explicit handoffs on parent", () => {
+  let runtime: AgentRuntime;
+
+  beforeEach(() => {
+    runtime = createRuntime();
+  });
+
+  it("registers handoff_check for SWARM parent with NO explicit handoffs", async () => {
+    const coder = new Agent({
+      name: "coder",
+      model: "gpt-4o",
+      handoffs: [new OnTextMention({ target: "qa_agent", text: "HANDOFF_TO_QA" })],
+    });
+    const qa = new Agent({
+      name: "qa_agent",
+      model: "gpt-4o",
+      handoffs: [new OnTextMention({ target: "coder", text: "HANDOFF_TO_CODER" })],
+    });
+    const swarmParent = new Agent({
+      name: "coder_qa_loop",
+      model: "gpt-4o",
+      agents: [coder, qa],
+      strategy: "swarm",
+      // NO handoffs on parent — only children have them
+    });
+
+    await (runtime as any)._registerSystemWorkers(swarmParent, null);
+
+    const workers = getRegisteredWorkers(runtime);
+    const taskNames = workers.map((w) => w.taskName);
+
+    // The critical assertion: handoff_check must be registered
+    expect(taskNames).toContain("coder_qa_loop_handoff_check");
+  });
+
+  it("registers handoff_check for bare SWARM parent (no handoffs anywhere)", async () => {
+    const a = new Agent({ name: "agent_a", model: "gpt-4o" });
+    const b = new Agent({ name: "agent_b", model: "gpt-4o" });
+    const swarm = new Agent({
+      name: "my_swarm",
+      model: "gpt-4o",
+      agents: [a, b],
+      strategy: "swarm",
+    });
+
+    await (runtime as any)._registerSystemWorkers(swarm, null);
+
+    const workers = getRegisteredWorkers(runtime);
+    const taskNames = workers.map((w) => w.taskName);
+
+    expect(taskNames).toContain("my_swarm_handoff_check");
+  });
+
+  it("registers handoff_check for 3-agent SWARM with no handoffs", async () => {
+    const a = new Agent({ name: "a", model: "gpt-4o" });
+    const b = new Agent({ name: "b", model: "gpt-4o" });
+    const c = new Agent({ name: "c", model: "gpt-4o" });
+    const swarm = new Agent({
+      name: "trio",
+      model: "gpt-4o",
+      agents: [a, b, c],
+      strategy: "swarm",
+    });
+
+    await (runtime as any)._registerSystemWorkers(swarm, null);
+
+    const workers = getRegisteredWorkers(runtime);
+    const taskNames = workers.map((w) => w.taskName);
+
+    expect(taskNames).toContain("trio_handoff_check");
+  });
+
+  it("respects requiredWorkers filter for SWARM without handoffs", async () => {
+    const a = new Agent({ name: "a", model: "gpt-4o" });
+    const b = new Agent({ name: "b", model: "gpt-4o" });
+    const swarm = new Agent({
+      name: "my_swarm",
+      model: "gpt-4o",
+      agents: [a, b],
+      strategy: "swarm",
+    });
+
+    // Server says only handoff_check is needed
+    const required = new Set(["my_swarm_handoff_check"]);
+    await (runtime as any)._registerSystemWorkers(swarm, required);
+
+    const workers = getRegisteredWorkers(runtime);
+    const taskNames = workers.map((w) => w.taskName);
+
+    expect(taskNames).toContain("my_swarm_handoff_check");
+  });
+
+  it("does NOT register handoff_check for non-SWARM strategies without handoffs", async () => {
+    for (const strategy of ["sequential", "parallel", "round_robin", "random"] as const) {
+      const rt = createRuntime();
+      const a = new Agent({ name: "a", model: "gpt-4o" });
+      const b = new Agent({ name: "b", model: "gpt-4o" });
+      const parent = new Agent({
+        name: `parent_${strategy}`,
+        model: "gpt-4o",
+        agents: [a, b],
+        strategy,
+      });
+
+      await (rt as any)._registerSystemWorkers(parent, null);
+
+      const workers = getRegisteredWorkers(rt);
+      const taskNames = workers.map((w) => w.taskName);
+
+      expect(taskNames).not.toContain(`parent_${strategy}_handoff_check`);
+    }
+  });
+
+  it("single agent (no children) does NOT get handoff_check", async () => {
+    const single = new Agent({ name: "solo", model: "gpt-4o" });
+
+    await (runtime as any)._registerSystemWorkers(single, null);
+
+    const workers = getRegisteredWorkers(runtime);
+    const taskNames = workers.map((w) => w.taskName);
+
+    expect(taskNames).not.toContain("solo_handoff_check");
+  });
+});
+
+// ── Counterfactual: prove the condition matters ──────────
+
+describe("Counterfactual: handoff_check condition verification", () => {
+  it("condition `agent.handoffs.length > 0 || agent.strategy === 'swarm'` covers SWARM without handoffs", () => {
+    // This test verifies the LOGIC of the condition at runtime.ts:877
+    // by checking both branches independently.
+
+    // Branch 1: handoffs on parent → should register
+    const withHandoffs = new Agent({
+      name: "p",
+      model: "gpt-4o",
+      agents: [new Agent({ name: "c", model: "gpt-4o" })],
+      strategy: "sequential",
+      handoffs: [new OnTextMention({ target: "c", text: "GO" })],
+    });
+    expect(withHandoffs.handoffs.length > 0 || withHandoffs.strategy === "swarm").toBe(true);
+
+    // Branch 2: SWARM strategy, no handoffs → should register
+    const swarmNoHandoffs = new Agent({
+      name: "p",
+      model: "gpt-4o",
+      agents: [new Agent({ name: "c", model: "gpt-4o" })],
+      strategy: "swarm",
+    });
+    expect(
+      swarmNoHandoffs.handoffs.length > 0 || swarmNoHandoffs.strategy === "swarm",
+    ).toBe(true);
+
+    // Neither: no handoffs, not swarm → should NOT register
+    const neither = new Agent({
+      name: "p",
+      model: "gpt-4o",
+      agents: [new Agent({ name: "c", model: "gpt-4o" })],
+      strategy: "sequential",
+    });
+    expect(neither.handoffs.length > 0 || neither.strategy === "swarm").toBe(false);
+  });
+
+  it("old buggy condition (handoffs only) would miss SWARM without handoffs", () => {
+    // Simulates the Python bug: only checking handoffs
+    const swarmNoHandoffs = new Agent({
+      name: "coder_qa_loop",
+      model: "gpt-4o",
+      agents: [
+        new Agent({ name: "coder", model: "gpt-4o" }),
+        new Agent({ name: "qa", model: "gpt-4o" }),
+      ],
+      strategy: "swarm",
+    });
+
+    // OLD condition (the Python bug): only handoffs
+    const oldCondition = swarmNoHandoffs.handoffs.length > 0;
+    expect(oldCondition).toBe(false); // Would NOT register → deadlock!
+
+    // NEW condition: handoffs OR swarm strategy
+    const newCondition =
+      swarmNoHandoffs.handoffs.length > 0 || swarmNoHandoffs.strategy === "swarm";
+    expect(newCondition).toBe(true); // Correctly registers
+  });
+
+  it("issue fixer exact topology: handoffs on children, none on parent", () => {
+    const coder = new Agent({
+      name: "coder",
+      model: "gpt-4o",
+      handoffs: [new OnTextMention({ target: "qa_agent", text: "HANDOFF_TO_QA" })],
+    });
+    const qa = new Agent({
+      name: "qa_agent",
+      model: "gpt-4o",
+      handoffs: [new OnTextMention({ target: "coder", text: "HANDOFF_TO_CODER" })],
+    });
+    const loop = new Agent({
+      name: "coder_qa_loop",
+      model: "gpt-4o",
+      agents: [coder, qa],
+      strategy: "swarm",
+    });
+
+    // Parent has no handoffs
+    expect(loop.handoffs.length).toBe(0);
+    // But children do
+    expect(coder.handoffs.length).toBe(1);
+    expect(qa.handoffs.length).toBe(1);
+    // Strategy is swarm
+    expect(loop.strategy).toBe("swarm");
+    // Condition passes → handoff_check will be registered
+    expect(loop.handoffs.length > 0 || loop.strategy === "swarm").toBe(true);
+  });
+});

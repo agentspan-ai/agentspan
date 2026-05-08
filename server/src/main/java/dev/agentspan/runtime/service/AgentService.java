@@ -14,6 +14,7 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -41,6 +42,7 @@ import com.netflix.conductor.service.WorkflowService;
 import dev.agentspan.runtime.auth.RequestContextHolder;
 import dev.agentspan.runtime.auth.User;
 import dev.agentspan.runtime.compiler.AgentCompiler;
+import dev.agentspan.runtime.compiler.MultiAgentCompiler;
 import dev.agentspan.runtime.credentials.ExecutionTokenService;
 import dev.agentspan.runtime.model.*;
 import dev.agentspan.runtime.normalizer.NormalizerRegistry;
@@ -69,6 +71,9 @@ public class AgentService {
     @Autowired(required = false)
     private ExecutionTokenService executionTokenService;
 
+    @Autowired
+    private Environment environment;
+
     /** Package-private constructor for testing with ExecutionTokenService */
     AgentService(
             AgentCompiler agentCompiler,
@@ -81,6 +86,33 @@ public class AgentService {
             ExecutionService executionService,
             ProviderValidator providerValidator,
             ExecutionTokenService executionTokenService) {
+        this(
+                agentCompiler,
+                normalizerRegistry,
+                executionDAO,
+                metadataDAO,
+                workflowExecutor,
+                workflowService,
+                streamRegistry,
+                executionService,
+                providerValidator,
+                executionTokenService,
+                null);
+    }
+
+    /** Package-private constructor for testing with ExecutionTokenService and Environment */
+    AgentService(
+            AgentCompiler agentCompiler,
+            NormalizerRegistry normalizerRegistry,
+            ExecutionDAO executionDAO,
+            MetadataDAO metadataDAO,
+            WorkflowExecutor workflowExecutor,
+            WorkflowService workflowService,
+            AgentStreamRegistry streamRegistry,
+            ExecutionService executionService,
+            ProviderValidator providerValidator,
+            ExecutionTokenService executionTokenService,
+            Environment environment) {
         this.agentCompiler = agentCompiler;
         this.normalizerRegistry = normalizerRegistry;
         this.executionDAO = executionDAO;
@@ -91,6 +123,7 @@ public class AgentService {
         this.executionService = executionService;
         this.providerValidator = providerValidator;
         this.executionTokenService = executionTokenService;
+        this.environment = environment;
     }
 
     /**
@@ -136,6 +169,7 @@ public class AgentService {
 
         // 0. Pre-register child workflows for agent_tool types
         registerAgentToolWorkflows(config);
+        registerPlanExecutePlaceholders(config);
 
         // 1. Compile
         WorkflowDef def = agentCompiler.compile(config);
@@ -184,6 +218,7 @@ public class AgentService {
 
         // 0. Pre-register child workflows for agent_tool types
         registerAgentToolWorkflows(config);
+        registerPlanExecutePlaceholders(config);
 
         // 1. Compile
         WorkflowDef def = agentCompiler.compile(config);
@@ -223,6 +258,11 @@ public class AgentService {
         }
         input.put("cwd", cwd);
 
+        // Build __agentspan_ctx__: server URL + optional execution token
+        Map<String, Object> agentCtx = new LinkedHashMap<>();
+        String port = environment != null ? environment.getProperty("server.port", "6767") : "6767";
+        agentCtx.put("serverUrl", "http://localhost:" + port);
+
         // Mint execution token and embed in workflow variables for worker credential resolution
         if (executionTokenService != null) {
             try {
@@ -243,14 +283,13 @@ public class AgentService {
                 if (currentUser != null) {
                     String token = executionTokenService.mint(
                             currentUser.getId(), null /* executionId not known yet */, declaredNames, timeoutSeconds);
-                    Map<String, Object> agentCtx = new LinkedHashMap<>();
                     agentCtx.put("execution_token", token);
-                    input.put("__agentspan_ctx__", agentCtx);
                 }
             } catch (Exception e) {
                 log.warn("Failed to mint execution token: {}", e.getMessage());
             }
         }
+        input.put("__agentspan_ctx__", agentCtx);
 
         startReq.setInput(input);
 
@@ -656,6 +695,7 @@ public class AgentService {
             String query = "workflowType = '" + workflowName + "' AND status IN ('RUNNING', 'COMPLETED')";
             SearchResult<WorkflowSummary> results =
                     workflowService.searchWorkflows(0, 1, "startTime:DESC", idempotencyKey, query);
+
             if (results.getTotalHits() > 0) {
                 WorkflowSummary match = results.getResults().get(0);
                 if (idempotencyKey.equals(match.getCorrelationId())) {
@@ -974,6 +1014,38 @@ public class AgentService {
         }
     }
 
+    /**
+     * Pre-register placeholder workflows for PLAN_EXECUTE strategy agents.
+     * Conductor validates SUB_WORKFLOW references at registration time, so the
+     * dynamic plan workflow must exist (even as a stub) before the parent workflow
+     * is registered. At runtime the INLINE compile task overwrites the stub.
+     */
+    private void registerPlanExecutePlaceholders(AgentConfig config) {
+        if ("plan_execute".equals(config.getStrategy())) {
+            String planWfName = MultiAgentCompiler.planWorkflowName(config.getName());
+            WorkflowDef stub = new WorkflowDef();
+            stub.setName(planWfName);
+            stub.setVersion(1);
+            stub.setSchemaVersion(2);
+            stub.setDescription("Placeholder — overwritten at runtime by plan compiler");
+            WorkflowTask terminate = new WorkflowTask();
+            terminate.setType("TERMINATE");
+            terminate.setTaskReferenceName("placeholder_terminate");
+            terminate.setInputParameters(Map.of(
+                    "terminationStatus", "FAILED",
+                    "terminationReason", "Placeholder not overwritten — plan compilation may have failed"));
+            stub.setTasks(List.of(terminate));
+            metadataDAO.updateWorkflowDef(stub);
+            log.info("Registered plan-execute placeholder workflow: {}", planWfName);
+        }
+        // Recurse into sub-agents
+        if (config.getAgents() != null) {
+            for (AgentConfig sub : config.getAgents()) {
+                registerPlanExecutePlaceholders(sub);
+            }
+        }
+    }
+
     // ── Provider validation ─────────────────────────────────────────
 
     private Optional<String> validateModelProvider(AgentConfig config) {
@@ -1283,10 +1355,12 @@ public class AgentService {
                     collectSimpleTaskNamesFromTasks(branch, names);
                 }
             }
-            // Inline sub-workflows
-            if (task.getSubWorkflowParam() != null && task.getSubWorkflowParam().getWorkflowDef() != null) {
-                collectSimpleTaskNamesFromTasks(
-                        task.getSubWorkflowParam().getWorkflowDef().getTasks(), names);
+            // Inline sub-workflows — skip if workflowDefinition is a runtime expression String
+            // (e.g. "${parse_wf.output.result}") used by plan-execute inline sub-workflows.
+            if (task.getSubWorkflowParam() != null
+                    && task.getSubWorkflowParam().getWorkflowDefinition()
+                            instanceof WorkflowDef wfDef) {
+                collectSimpleTaskNamesFromTasks(wfDef.getTasks(), names);
             }
         }
     }

@@ -41,6 +41,7 @@ class Strategy(str, Enum):
     RANDOM = "random"
     SWARM = "swarm"
     MANUAL = "manual"
+    PLAN_EXECUTE = "plan_execute"
 
 
 @dataclass(frozen=True)
@@ -109,6 +110,8 @@ class AgentDef:
     cli_config: Optional[Any] = None
     cli_allowed_commands: List[str] = field(default_factory=list)
     credentials: List[Any] = field(default_factory=list)
+    context_window_budget: Optional[int] = None
+    prefill_tools: List[Any] = field(default_factory=list)
 
 
 # ── @agent decorator ────────────────────────────────────────────────────
@@ -135,6 +138,7 @@ def agent(
     cli_config: Optional[Any] = None,
     cli_allowed_commands: Optional[List[str]] = None,
     credentials: Optional[List[Any]] = None,
+    context_window_budget: Optional[int] = None,
 ) -> Any:
     """Register a Python function as an agent definition.
 
@@ -187,6 +191,7 @@ def agent(
             cli_config=cli_config,
             cli_allowed_commands=list(cli_allowed_commands) if cli_allowed_commands else [],
             credentials=list(credentials) if credentials else [],
+            context_window_budget=context_window_budget,
         )
 
         @functools.wraps(fn)
@@ -244,6 +249,8 @@ def _resolve_agent(obj: Any, parent_model: str = "") -> "Agent":
             cli_config=ad.cli_config,
             cli_allowed_commands=ad.cli_allowed_commands or None,
             credentials=ad.credentials or None,
+            context_window_budget=ad.context_window_budget,
+            prefill_tools=ad.prefill_tools or None,
         )
     raise TypeError(f"Expected an Agent or @agent-decorated function, got {type(obj).__name__}")
 
@@ -362,6 +369,10 @@ class Agent:
         base_url: Optional[str] = None,
         credentials: Optional[List[Any]] = None,
         stateful: bool = False,
+        context_window_budget: Optional[int] = None,
+        prefill_tools: Optional[List[Any]] = None,
+        fallback_max_turns: Optional[int] = None,
+        plan_source: Optional[Dict[str, Any]] = None,
     ) -> None:
         if not name or not isinstance(name, str):
             raise ValueError("Agent name must be a non-empty string")
@@ -426,6 +437,10 @@ class Agent:
         self.dependencies: Dict[str, Any] = dict(dependencies) if dependencies else {}
         self.max_turns = max_turns
         self.max_tokens = max_tokens
+        self.context_window_budget = context_window_budget
+        self.prefill_tools: List[Any] = list(prefill_tools) if prefill_tools else []
+        self.fallback_max_turns = fallback_max_turns
+        self.plan_source = plan_source
         self.timeout_seconds = timeout_seconds
         self.temperature = temperature
         self.stop_when = stop_when

@@ -897,7 +897,7 @@ export class AgentRuntime {
 
   /**
    * Register a termination condition worker.
-   * Server dispatches {agent}_termination with {result, iteration, messages}.
+   * Server dispatches {agent}_termination with {result, iteration}.
    * Worker returns {should_continue, reason}.
    */
   private async _registerTerminationWorker(
@@ -928,7 +928,8 @@ export class AgentRuntime {
     const taskName = gDef.taskName!;
     const fn = gDef.func!;
     this.workerManager.addWorker(taskName, async (inputData) => {
-      const content = String(inputData["content"] ?? "");
+      const raw = inputData["content"] ?? "";
+      const content = typeof raw === "object" ? JSON.stringify(raw) : String(raw);
       try {
         const result = await fn(content);
         return {
@@ -953,7 +954,7 @@ export class AgentRuntime {
 
   /**
    * Register a stopWhen callback worker.
-   * Server dispatches {agent}_stop_when with {result, iteration}.
+   * Server dispatches {agent}_stop_when with {result, iteration, messages}.
    * Worker returns {should_continue}.
    */
   private async _registerStopWhenWorker(

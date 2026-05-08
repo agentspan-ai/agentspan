@@ -43,6 +43,9 @@ public @interface Tool {
     /** Maximum execution time in seconds. 0 means no explicit timeout (server default applies). */
     int timeoutSeconds() default 0;
 
+    /** Maximum number of times this tool can be called. 0 means unlimited. */
+    int maxCalls() default 0;
+
     /** Credential environment variable names required by this tool. */
     String[] credentials() default {};
 }

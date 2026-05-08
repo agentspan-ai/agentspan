@@ -20,7 +20,7 @@ import lombok.NoArgsConstructor;
  * Mirrors the Python Agent class fields for server-side compilation.
  */
 @Data
-@Builder
+@Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -57,9 +57,14 @@ public class AgentConfig {
     private MemoryConfig memory;
 
     @Builder.Default
-    private int maxTurns = 25;
+    private int maxTurns = 100;
 
     private Integer maxTokens;
+
+    /** Token budget for context condensation. When the estimated prompt token count
+     *  exceeds this value, condensation fires proactively — even if well below
+     *  the model's actual context window. */
+    private Integer contextWindowBudget;
 
     @Builder.Default
     private int timeoutSeconds = 0;
@@ -96,6 +101,9 @@ public class AgentConfig {
     /** Tools that must be called before the agent can complete. */
     private List<String> requiredTools;
 
+    /** Tool calls to execute before the first LLM turn. Results are injected into context. */
+    private List<PrefillToolCallConfig> prefillTools;
+
     /**
      * Gate condition for conditional sequential pipelines.
      * Can be a Map (declarative, e.g. text_contains) or a WorkerRef (callable).
@@ -104,6 +112,17 @@ public class AgentConfig {
 
     /** Agent-level credential names (e.g. ["GH_TOKEN", "AWS_ACCESS_KEY_ID"]). */
     private List<String> credentials;
+
+    /** Max LLM turns for the fallback agent in PLAN_EXECUTE strategy. */
+    private Integer fallbackMaxTurns;
+
+    /**
+     * Optional deterministic plan source for PLAN_EXECUTE strategy.
+     * A SIMPLE task is called after the planner to read the plan from an external source
+     * (e.g. contextbook). If the planner's text output fails extraction, this fallback
+     * source is tried. Format: {"tool": "tool_name", "args": {"key": "value"}}.
+     */
+    private Map<String, Object> planSource;
 
     /** Whether this is an external agent (no model, references existing workflow). */
     @Builder.Default

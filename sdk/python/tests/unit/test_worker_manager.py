@@ -52,7 +52,7 @@ class TestWorkerManagerStart:
             workers=[],
             configuration=config,
             scan_for_annotated_workers=True,
-            monitor_processes=False,
+            monitor_processes=True,
         )
         mock_handler.start_processes.assert_called_once()
 

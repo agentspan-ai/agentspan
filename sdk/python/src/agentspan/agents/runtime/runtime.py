@@ -20,7 +20,7 @@ import re
 import threading
 import time
 import uuid
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from agentspan.agents.agent import Agent
 from agentspan.agents.exceptions import _raise_api_error
@@ -417,6 +417,20 @@ class AgentRuntime:
         with _workflow_credentials_lock:
             _workflow_credentials.pop(execution_id, None)
 
+    def _resolve_worker_domain(self, execution_id: str, run_id: Optional[str]) -> Optional[str]:
+        """Return the domain workers should poll for this execution.
+
+        A fresh stateful start uses ``run_id`` as the task domain.  If the
+        server returns an existing execution for an idempotency key, that
+        execution already has its original ``taskToDomain`` mapping, so the
+        freshly generated ``run_id`` would be wrong.  Prefer the server's
+        recorded domain and fall back to the generated one for brand-new runs
+        or older servers.
+        """
+        if not run_id:
+            return None
+        return self._extract_domain(execution_id) or run_id
+
     def _pre_deploy_nested_skills(self, agent: Agent) -> list:
         """Pre-deploy any skill agents nested inside agent_tool wrappers.
 
@@ -716,10 +730,12 @@ class AgentRuntime:
                     logger.debug("Starting workers for agent '%s'", agent.name)
                     self._worker_manager.start()
                     self._workers_started = True
-                elif new_workers:
-                    # Inject new workers into the running TaskHandler without
-                    # stopping existing ones.  This avoids the fork() deadlock
-                    # window caused by a full stop/restart cycle.
+                else:
+                    # New stateful runs can register the same task names under
+                    # a different domain. WorkerManager is domain-aware and
+                    # starts only missing (task_name, domain) pairs, so call it
+                    # even when the task-name set has not changed — this avoids
+                    # the fork() deadlock window of a full stop/restart cycle.
                     self._worker_manager.start()
 
         return wf
@@ -832,10 +848,12 @@ class AgentRuntime:
                     logger.debug("Starting workers for agent '%s'", agent.name)
                     self._worker_manager.start()
                     self._workers_started = True
-                elif new_workers:
-                    # Inject new workers into the running TaskHandler without
-                    # stopping existing ones.  This avoids the fork() deadlock
-                    # window caused by a full stop/restart cycle.
+                else:
+                    # New stateful runs can register the same task names under
+                    # a different domain. WorkerManager is domain-aware and
+                    # starts only missing (task_name, domain) pairs, so call it
+                    # even when the task-name set has not changed — this avoids
+                    # the fork() deadlock window of a full stop/restart cycle.
                     self._worker_manager.start()
 
     def _collect_worker_names(
@@ -939,8 +957,9 @@ class AgentRuntime:
         ):
             names.add(f"{agent.name}_router_fn")
 
-        # Handoff check (swarm with handoff conditions)
-        if agent.handoffs:
+        # Handoff check — needed for any SWARM parent (server always generates
+        # the task) or any agent with explicit handoff conditions.
+        if agent.handoffs or (agent.strategy == "swarm" and agent.agents):
             names.add(f"{agent.name}_handoff_check")
 
         # Swarm transfer workers — prefixed with SOURCE agent name
@@ -956,6 +975,49 @@ class AgentRuntime:
             names.add(f"{agent.name}_process_selection")
 
         return names
+
+    def _collect_registered_pairs(
+        self, agent: Agent, domain: Optional[str]
+    ) -> List[Tuple[str, Optional[str]]]:
+        """Return ``(task_name, registered_domain)`` pairs for user-tool workers.
+
+        Mirrors the per-tool domain decision in
+        ``ToolRegistry.register_tool_workers``: a tool's worker uses the
+        passed-in ``domain`` only when its owning agent is stateful (or the
+        tool itself is). Everything else is registered with ``domain=None``.
+
+        Used by ``LocalLivenessCheck.verify`` to confirm each registered
+        worker subprocess is alive.
+        """
+        from agentspan.agents.tool import get_tool_def
+
+        pairs: List[Tuple[str, Optional[str]]] = []
+        agent_stateful = bool(getattr(agent, "stateful", False))
+        for t in getattr(agent, "tools", []) or []:
+            try:
+                td = get_tool_def(t)
+            except TypeError:
+                continue
+            if td.tool_type not in ("worker", "cli"):
+                continue
+            if td.func is None:
+                continue
+            tool_domain = domain if (agent_stateful or td.stateful) else None
+            pairs.append((td.name, tool_domain))
+
+        for sub in getattr(agent, "agents", []) or []:
+            if getattr(sub, "external", False):
+                continue
+            pairs.extend(self._collect_registered_pairs(sub, domain))
+
+        # Dedupe while preserving order
+        seen: set = set()
+        unique: List[Tuple[str, Optional[str]]] = []
+        for p in pairs:
+            if p not in seen:
+                seen.add(p)
+                unique.append(p)
+        return unique
 
     def _register_workers(
         self, agent: Agent, *, required_workers: Optional[set] = None, domain: Optional[str] = None
@@ -1121,8 +1183,9 @@ class AgentRuntime:
             if _server_needs(task_name):
                 self._register_router_worker(agent, domain=domain)
 
-        # 7. Handoff check (swarm with handoff conditions)
-        if agent.handoffs:
+        # 7. Handoff check — needed for any SWARM parent (server always
+        #    generates the task) or any agent with explicit handoff conditions.
+        if agent.handoffs or (agent.strategy == "swarm" and agent.agents):
             task_name = f"{agent.name}_handoff_check"
             if _server_needs(task_name):
                 self._register_handoff_worker(agent, domain=domain)
@@ -1210,7 +1273,12 @@ class AgentRuntime:
                 self._worker_manager.start()
 
     def _register_skill_workers(self, agent: Agent, domain: "Optional[str]" = None) -> None:
-        """Register skill workers (scripts + read_skill_file) for a skill-based agent."""
+        """Register skill workers (scripts + read_skill_file) for a skill-based agent.
+
+        Registers on BOTH the specified domain AND the default (None) domain.
+        Skill sub-workflows may be scheduled by the server without a domain,
+        so workers must be available on both queues to avoid poll starvation.
+        """
         from conductor.client.worker.worker_task import worker_task
 
         from agentspan.agents.runtime._dispatch import make_tool_worker
@@ -1220,17 +1288,19 @@ class AgentRuntime:
         if not skill_workers:
             return
 
+        domains = [domain, None] if domain else [None]
         for sw in skill_workers:
             wrapper = make_tool_worker(sw.func, sw.name)
-            worker_task(
-                task_definition_name=sw.name,
-                task_def=_default_task_def(sw.name),
-                register_task_def=True,
-                overwrite_task_def=True,
-                domain=domain,
-                lease_extend_enabled=True,
-            )(wrapper)
-            logger.debug("Registered skill worker '%s'", sw.name)
+            for d in domains:
+                worker_task(
+                    task_definition_name=sw.name,
+                    task_def=_default_task_def(sw.name),
+                    register_task_def=True,
+                    overwrite_task_def=True,
+                    domain=d,
+                    lease_extend_enabled=True,
+                )(wrapper)
+            logger.debug("Registered skill worker '%s' (domains=%s)", sw.name, domains)
 
     def _register_guardrail_worker(self, agent_name: str, guardrails: list, domain: "Optional[str]" = None) -> None:
         """Register guardrail workers for custom function guardrails.
@@ -2507,8 +2577,34 @@ class AgentRuntime:
             run_id=run_id,
         )
 
-        self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
-        self._register_and_start_skill_workers(pre_deployed_skills, domain=run_id)
+        worker_domain = self._resolve_worker_domain(execution_id, run_id)
+
+        self._prepare_workers(agent, required_workers=required_workers, domain=worker_domain)
+        self._register_and_start_skill_workers(pre_deployed_skills, domain=worker_domain)
+
+        if self._config.liveness_enabled:
+            from agentspan.agents.runtime._liveness import LocalLivenessCheck
+
+            expected_pairs = self._collect_registered_pairs(agent, worker_domain)
+            LocalLivenessCheck.verify(
+                self._worker_manager,
+                expected_pairs,
+                timeout=self._config.liveness_startup_timeout_seconds,
+            )
+
+        # Resume telemetry only matters when the caller passed an
+        # ``idempotency_key`` — that's the only path where ``_start_via_server``
+        # can return an existing execution under a previously-recorded domain.
+        # Skipping the ``_extract_domain`` HTTP roundtrip on fresh starts
+        # avoids a hot-path GET ``get_workflow`` call on every run.
+        if idempotency_key:
+            recorded_domain = self._extract_domain(execution_id)
+            if run_id and recorded_domain and recorded_domain != run_id:
+                logger.info(
+                    "Resumed existing execution %s under domain %s "
+                    "(triggered by idempotency_key=%s); re-attached workers.",
+                    execution_id, recorded_domain, idempotency_key,
+                )
 
         self._register_workflow_credentials(execution_id, credentials)
 
@@ -3621,11 +3717,43 @@ class AgentRuntime:
             run_id=run_id,
         )
 
-        self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
-        self._register_and_start_skill_workers(pre_deployed_skills, domain=run_id)
+        worker_domain = self._resolve_worker_domain(execution_id, run_id)
 
+        self._prepare_workers(agent, required_workers=required_workers, domain=worker_domain)
+        self._register_and_start_skill_workers(pre_deployed_skills, domain=worker_domain)
+
+        if self._config.liveness_enabled:
+            from agentspan.agents.runtime._liveness import LocalLivenessCheck
+
+            expected_pairs = self._collect_registered_pairs(agent, worker_domain)
+            LocalLivenessCheck.verify(
+                self._worker_manager,
+                expected_pairs,
+                timeout=self._config.liveness_startup_timeout_seconds,
+            )
+
+        # ``is_resumed`` can only be True when the caller passed an
+        # ``idempotency_key`` — without one, the server never matches an
+        # existing execution. Skip the ``_extract_domain`` HTTP call on
+        # the fresh-start hot path.
+        is_resumed = False
+        if idempotency_key:
+            recorded_domain = self._extract_domain(execution_id)
+            is_resumed = bool(
+                run_id and recorded_domain and recorded_domain != run_id
+            )
+            if is_resumed:
+                logger.info(
+                    "Resumed existing execution %s under domain %s "
+                    "(triggered by idempotency_key=%s); re-attached workers.",
+                    execution_id, recorded_domain, idempotency_key,
+                )
         return AgentHandle(
-            execution_id=execution_id, runtime=self, correlation_id=correlation_id, run_id=run_id
+            execution_id=execution_id,
+            runtime=self,
+            correlation_id=correlation_id,
+            run_id=worker_domain,
+            is_resumed=is_resumed,
         )
 
     # ── Streaming execution ─────────────────────────────────────────
@@ -4016,8 +4144,31 @@ class AgentRuntime:
             run_id=run_id,
         )
 
-        self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
-        self._register_and_start_skill_workers(pre_deployed_skills, domain=run_id)
+        worker_domain = self._resolve_worker_domain(execution_id, run_id)
+
+        self._prepare_workers(agent, required_workers=required_workers, domain=worker_domain)
+        self._register_and_start_skill_workers(pre_deployed_skills, domain=worker_domain)
+
+        if self._config.liveness_enabled:
+            from agentspan.agents.runtime._liveness import LocalLivenessCheck
+
+            expected_pairs = self._collect_registered_pairs(agent, worker_domain)
+            LocalLivenessCheck.verify(
+                self._worker_manager,
+                expected_pairs,
+                timeout=self._config.liveness_startup_timeout_seconds,
+            )
+
+        # See sync ``run`` site above — only check on idempotent replay.
+        if idempotency_key:
+            recorded_domain = self._extract_domain(execution_id)
+            if run_id and recorded_domain and recorded_domain != run_id:
+                logger.info(
+                    "Resumed existing execution %s under domain %s "
+                    "(triggered by idempotency_key=%s); re-attached workers.",
+                    execution_id, recorded_domain, idempotency_key,
+                )
+
         self._register_workflow_credentials(execution_id, credentials)
 
         effective_timeout = timeout or (
@@ -4152,11 +4303,40 @@ class AgentRuntime:
             run_id=run_id,
         )
 
-        self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
-        self._register_and_start_skill_workers(pre_deployed_skills, domain=run_id)
+        worker_domain = self._resolve_worker_domain(execution_id, run_id)
 
+        self._prepare_workers(agent, required_workers=required_workers, domain=worker_domain)
+        self._register_and_start_skill_workers(pre_deployed_skills, domain=worker_domain)
+
+        if self._config.liveness_enabled:
+            from agentspan.agents.runtime._liveness import LocalLivenessCheck
+
+            expected_pairs = self._collect_registered_pairs(agent, worker_domain)
+            LocalLivenessCheck.verify(
+                self._worker_manager,
+                expected_pairs,
+                timeout=self._config.liveness_startup_timeout_seconds,
+            )
+
+        # See sync ``start`` site above — only check on idempotent replay.
+        is_resumed = False
+        if idempotency_key:
+            recorded_domain = self._extract_domain(execution_id)
+            is_resumed = bool(
+                run_id and recorded_domain and recorded_domain != run_id
+            )
+            if is_resumed:
+                logger.info(
+                    "Resumed existing execution %s under domain %s "
+                    "(triggered by idempotency_key=%s); re-attached workers.",
+                    execution_id, recorded_domain, idempotency_key,
+                )
         return AgentHandle(
-            execution_id=execution_id, runtime=self, correlation_id=correlation_id, run_id=run_id
+            execution_id=execution_id,
+            runtime=self,
+            correlation_id=correlation_id,
+            run_id=worker_domain,
+            is_resumed=is_resumed,
         )
 
     async def stream_async(

@@ -259,6 +259,18 @@ public class AgentConfigSerializer {
             agentMap.put("requiredTools", agent.getRequiredTools());
         }
 
+        // Prefill tools (tool calls to execute before the first LLM turn)
+        if (agent.getPrefillTools() != null && !agent.getPrefillTools().isEmpty()) {
+            List<Map<String, Object>> prefillList = new ArrayList<>();
+            for (var pt : agent.getPrefillTools()) {
+                Map<String, Object> ptMap = new LinkedHashMap<>();
+                ptMap.put("toolName", pt.getToolName());
+                ptMap.put("arguments", pt.getArguments());
+                prefillList.add(ptMap);
+            }
+            agentMap.put("prefillTools", prefillList);
+        }
+
         // Agent-level credentials
         if (agent.getCredentials() != null && !agent.getCredentials().isEmpty()) {
             agentMap.put("credentials", agent.getCredentials());
@@ -274,6 +286,11 @@ public class AgentConfigSerializer {
             Map<String, Object> stopWhen = new LinkedHashMap<>();
             stopWhen.put("taskName", agent.getStopWhenTaskName());
             agentMap.put("stopWhen", stopWhen);
+        }
+
+        // Fallback max turns (PLAN_EXECUTE strategy)
+        if (agent.getFallbackMaxTurns() != null) {
+            agentMap.put("fallbackMaxTurns", agent.getFallbackMaxTurns());
         }
 
         // Stateful mode
@@ -390,6 +407,9 @@ public class AgentConfigSerializer {
         }
         if (tool.getTimeoutSeconds() > 0) {
             toolMap.put("timeoutSeconds", tool.getTimeoutSeconds());
+        }
+        if (tool.getMaxCalls() > 0) {
+            toolMap.put("maxCalls", tool.getMaxCalls());
         }
 
         // Credentials must be nested inside config so the server includes them

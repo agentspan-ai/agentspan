@@ -7,6 +7,7 @@ import ai.agentspan.enums.Strategy;
 import ai.agentspan.execution.CliConfig;
 import ai.agentspan.handoff.Handoff;
 import ai.agentspan.model.GuardrailDef;
+import ai.agentspan.model.PrefillToolCall;
 import ai.agentspan.model.PromptTemplate;
 import ai.agentspan.model.ToolDef;
 import ai.agentspan.termination.TerminationCondition;
@@ -72,6 +73,8 @@ public class Agent {
     private final Map<String, Object> metadata;
     private final List<String> allowedCommands;
     private final String stopWhenTaskName;
+    private final Integer fallbackMaxTurns;
+    private final List<PrefillToolCall> prefillTools;
     private final boolean synthesize;
     private final boolean stateful;
     private final String baseUrl;
@@ -116,6 +119,8 @@ public class Agent {
         this.metadata = builder.metadata;
         this.allowedCommands = builder.allowedCommands != null ? new ArrayList<>(builder.allowedCommands) : new ArrayList<>();
         this.stopWhenTaskName = builder.stopWhenTaskName;
+        this.fallbackMaxTurns = builder.fallbackMaxTurns;
+        this.prefillTools = builder.prefillTools != null ? new ArrayList<>(builder.prefillTools) : new ArrayList<>();
         this.synthesize = builder.synthesize;
         this.stateful = builder.stateful;
         this.baseUrl = builder.baseUrl;
@@ -198,6 +203,8 @@ public class Agent {
     public Map<String, Object> getMetadata() { return metadata; }
     public List<String> getAllowedCommands() { return allowedCommands; }
     public String getStopWhenTaskName() { return stopWhenTaskName; }
+    public Integer getFallbackMaxTurns() { return fallbackMaxTurns; }
+    public List<PrefillToolCall> getPrefillTools() { return prefillTools; }
     public boolean isSynthesize() { return synthesize; }
     public boolean isStateful() { return stateful; }
     public String getBaseUrl() { return baseUrl; }
@@ -262,6 +269,8 @@ public class Agent {
         private Map<String, Object> metadata;
         private List<String> allowedCommands;
         private String stopWhenTaskName;
+        private Integer fallbackMaxTurns;
+        private List<PrefillToolCall> prefillTools;
         private boolean synthesize = true;
         private boolean stateful = false;
         private String baseUrl;
@@ -561,6 +570,18 @@ public class Agent {
          */
         public Builder stopWhen(String taskName) {
             this.stopWhenTaskName = taskName;
+            return this;
+        }
+
+        /** Max LLM turns for the fallback agent in PLAN_EXECUTE strategy. */
+        public Builder fallbackMaxTurns(int fallbackMaxTurns) {
+            this.fallbackMaxTurns = fallbackMaxTurns;
+            return this;
+        }
+
+        /** Tool calls to execute before the first LLM turn. Results are injected into context. */
+        public Builder prefillTools(List<PrefillToolCall> prefillTools) {
+            this.prefillTools = prefillTools;
             return this;
         }
 

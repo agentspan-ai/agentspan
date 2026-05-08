@@ -130,6 +130,10 @@ class AgentConfigSerializer:
         if agent.max_tokens is not None:
             config["maxTokens"] = agent.max_tokens
 
+        # Context window budget for proactive condensation
+        if agent.context_window_budget is not None:
+            config["contextWindowBudget"] = agent.context_window_budget
+
         # Temperature
         if agent.temperature is not None:
             config["temperature"] = agent.temperature
@@ -199,6 +203,18 @@ class AgentConfigSerializer:
         if getattr(agent, "required_tools", None):
             config["requiredTools"] = agent.required_tools
 
+        if getattr(agent, "prefill_tools", None):
+            config["prefillTools"] = [
+                {"toolName": pt.tool_name, "arguments": pt.arguments}
+                for pt in agent.prefill_tools
+            ]
+
+        if getattr(agent, "fallback_max_turns", None) is not None:
+            config["fallbackMaxTurns"] = agent.fallback_max_turns
+
+        if getattr(agent, "plan_source", None) is not None:
+            config["planSource"] = agent.plan_source
+
         # Gate condition (for sequential pipelines)
         if getattr(agent, "gate", None) is not None:
             config["gate"] = self._serialize_gate(agent)
@@ -257,6 +273,9 @@ class AgentConfigSerializer:
 
         if td.timeout_seconds is not None:
             result["timeoutSeconds"] = td.timeout_seconds
+
+        if td.max_calls is not None:
+            result["maxCalls"] = td.max_calls
 
         if td.config:
             if td.tool_type == "agent_tool" and "agent" in td.config:

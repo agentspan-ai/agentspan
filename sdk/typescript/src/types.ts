@@ -11,7 +11,8 @@ export type Strategy =
   | "round_robin"
   | "random"
   | "swarm"
-  | "manual";
+  | "manual"
+  | "plan_execute";
 
 /**
  * Agent event types emitted during execution.
@@ -265,6 +266,16 @@ export interface ToolDef {
   config?: Record<string, unknown>;
   /** Stateful tool — worker registers under execution's domain for isolation. */
   stateful?: boolean;
+  /** Maximum number of times this tool can be called. */
+  maxCalls?: number;
+  /** Create a pre-declared tool call for use with `Agent({ prefillTools: [...] })`. */
+  call(args: Record<string, unknown>): PrefillToolCall;
+}
+
+/** A tool call to execute before the LLM runs. */
+export interface PrefillToolCall {
+  toolName: string;
+  arguments: Record<string, unknown>;
 }
 
 // ── Agent result ─────────────────────────────────────────

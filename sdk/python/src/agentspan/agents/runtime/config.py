@@ -44,6 +44,14 @@ def _env_int(var: str, default: int = 0) -> int:
     return int(val)
 
 
+def _env_float(var: str, default: float = 0.0) -> float:
+    """Read a float environment variable."""
+    val = os.environ.get(var)
+    if val is None or val.strip() == "":
+        return default
+    return float(val)
+
+
 @dataclass
 class AgentConfig:
     """Configuration for the agents runtime.
@@ -64,6 +72,21 @@ class AgentConfig:
             credential resolution. Required credentials must come from the
             credential service.
         log_level: Logging level for the agentspan logger.
+        liveness_enabled: Master switch for the worker liveness checks
+            added in the worker-liveness fix. Disable to opt out.
+        liveness_startup_timeout_seconds: How long ``LocalLivenessCheck``
+            waits for each registered worker process to become alive after
+            ``start()``.
+        liveness_stall_seconds: ``ServerLivenessMonitor`` flags a task in
+            our domain that has been queued this long with ``pollCount=0``.
+        liveness_check_interval_seconds: Tick interval for
+            ``ServerLivenessMonitor``.
+        liveness_stall_policy: What to do on stall. ``"restart_worker"``
+            (default) SIGKILLs the stuck subprocess so the TaskHandler
+            monitor respawns it; ``"raise"`` skips restart and surfaces
+            ``WorkerStallError`` from ``join()``; ``"warn"`` only logs.
+        liveness_stall_max_restarts: Cumulative cap on auto-restarts per
+            execution. Beyond this, the policy falls through to ``"raise"``.
     """
 
     server_url: str = "http://localhost:6767/api"
@@ -79,6 +102,12 @@ class AgentConfig:
     auto_register_integrations: bool = False
     streaming_enabled: bool = True
     credential_strict_mode: bool = False
+    liveness_enabled: bool = True
+    liveness_startup_timeout_seconds: float = 2.0
+    liveness_stall_seconds: float = 30.0
+    liveness_check_interval_seconds: float = 10.0
+    liveness_stall_policy: str = "restart_worker"
+    liveness_stall_max_restarts: int = 1
     log_level: str = "INFO"
 
     def __post_init__(self):
@@ -93,6 +122,13 @@ class AgentConfig:
                 self.server_url = stripped + "/api"
             else:
                 self.server_url = stripped
+        valid_policies = ("restart_worker", "raise", "warn")
+        if self.liveness_stall_policy not in valid_policies:
+            logger.warning(
+                "Invalid liveness_stall_policy %r — falling back to 'restart_worker'.",
+                self.liveness_stall_policy,
+            )
+            self.liveness_stall_policy = "restart_worker"
 
     @classmethod
     def from_env(cls) -> AgentConfig:
@@ -114,6 +150,12 @@ class AgentConfig:
             auto_register_integrations=_env_bool("AGENTSPAN_INTEGRATIONS_AUTO_REGISTER", False),
             streaming_enabled=_env_bool("AGENTSPAN_STREAMING_ENABLED", True),
             credential_strict_mode=_env_bool("AGENTSPAN_CREDENTIAL_STRICT_MODE", False),
+            liveness_enabled=_env_bool("AGENTSPAN_LIVENESS_ENABLED", True),
+            liveness_startup_timeout_seconds=_env_float("AGENTSPAN_LIVENESS_STARTUP_TIMEOUT", 2.0),
+            liveness_stall_seconds=_env_float("AGENTSPAN_LIVENESS_STALL_SECONDS", 30.0),
+            liveness_check_interval_seconds=_env_float("AGENTSPAN_LIVENESS_CHECK_INTERVAL", 10.0),
+            liveness_stall_policy=_env("AGENTSPAN_LIVENESS_STALL_POLICY", "restart_worker"),
+            liveness_stall_max_restarts=_env_int("AGENTSPAN_LIVENESS_STALL_MAX_RESTARTS", 1),
             log_level=log_level,
         )
 
