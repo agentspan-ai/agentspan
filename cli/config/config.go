@@ -28,10 +28,13 @@ func (c *Config) IsLocalhost() bool {
 }
 
 const (
-	DefaultServerURL         = "http://localhost:6767"
-	DefaultConductorURL      = "http://localhost:8080/api"
-	DefaultLimaVMName        = "default"
+	DefaultServerURL          = "http://localhost:6767"
+	DefaultConductorURL       = "http://localhost:8080/api"
+	DefaultLimaVMName         = "default"
 	DefaultLimaRunAgentScript = "/opt/agentspan/bin/run-agent"
+	// URL used by agents running inside the Firecracker guest to reach the Agentspan server.
+	// Routes via Lima NAT → macOS LAN IP. Override with MACOS_LAN_IP env var if needed.
+	DefaultLimaGuestServerURL = "http://192.168.1.249:6767"
 )
 
 func DefaultConfig() *Config {
