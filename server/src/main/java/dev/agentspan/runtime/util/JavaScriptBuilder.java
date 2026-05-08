@@ -1628,13 +1628,20 @@ public class JavaScriptBuilder {
                         + "      var mdl = oP.length > 1 ? oP.slice(1).join('/') : om;"
                         + "      var temp = (typeof gen.temperature === 'number') ? gen.temperature : 0;"
 
-                        // LLM_CHAT_COMPLETE task. System prompt + jsonOutput:true is the
-                        // contract; we don't repeat the instruction in the user message.
+                        // LLM_CHAT_COMPLETE task. System prompt + jsonOutput:true carry
+                        // the format contract. The trailing "Respond as json." is required
+                        // by OpenAI's Responses API: when ``text.format`` is ``json_object``,
+                        // the literal word "json" must appear in the input (user) messages
+                        // — case-insensitive but on the user side specifically. The system
+                        // prompt's "JSON" mention is not sufficient for this check. The
+                        // user-message nudge is therefore not cargo-cult; it is the
+                        // OpenAI-required guard.
                         + "      var llmRef = uid('llm_' + step.id);"
                         + "      var sysMsg = 'Output ONLY valid JSON matching this shape: ' + gen.output_schema"
                         + "        + '. No markdown fences, no explanation, just the JSON object.';"
                         + "      var userMsg = gen.instructions || '';"
                         + "      if (gen.context) userMsg += '\\n\\nContext:\\n' + gen.context;"
+                        + "      userMsg += '\\n\\nRespond as json.';"
                         + "      chain.push({"
                         + "        name: 'llm_chat_complete', taskReferenceName: llmRef,"
                         + "        type: 'LLM_CHAT_COMPLETE',"
@@ -1922,6 +1929,22 @@ public class JavaScriptBuilder {
                         + "    type: 'TERMINATE',"
                         + "    inputParameters: {terminationStatus: 'FAILED', terminationReason: 'Plan validation failed'}"
                         + "  });"
+                        // Conductor's SWITCH falls through to defaultCase when the matched
+                        // decision case is EMPTY. With ``decisionCases:{passed: onSuccess}``
+                        // and an empty ``on_success`` (the common case — most plans don't
+                        // emit on_success hooks), val_agg='passed' would fall through to
+                        // defaultCase=onFailure and TERMINATE. That's a fail-closed bug
+                        // dressed up as a feature. Insert a no-op INLINE so the matched
+                        // case is never empty. The no-op produces a sentinel result that
+                        // downstream consumers ignore.
+                        + "  if (onSuccess.length === 0) {"
+                        + "    onSuccess.push({"
+                        + "      name: 'INLINE_TASK', taskReferenceName: uid('ok_noop'),"
+                        + "      type: 'INLINE',"
+                        + "      inputParameters: {evaluatorType: 'graaljs',"
+                        + "                        expression: \"(function(){ return {validation: 'passed'}; })()\"}"
+                        + "    });"
+                        + "  }"
                         // passed → onSuccess; anything else (failed, null, garbage) → onFailure.
                         // defaultCase is the failure path for fail-closed semantics.
                         + "  tasks.push({"

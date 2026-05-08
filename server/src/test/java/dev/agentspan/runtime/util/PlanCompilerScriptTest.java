@@ -537,6 +537,71 @@ class PlanCompilerScriptTest {
     }
 
     @Test
+    void testValidationPassedBranchHasNoOpWhenOnSuccessIsEmpty() throws Exception {
+        // Conductor's SWITCH falls through to defaultCase when the matched
+        // decision case is empty. With validation present but no on_success
+        // actions, the 'passed' branch would be [], val_agg='passed' would
+        // route to default (onFailure with TERMINATE) and the workflow
+        // would falsely TERMINATE on a successful validation.
+        //
+        // This test asserts the compiler inserts a no-op INLINE in the
+        // 'passed' branch when on_success is empty, so the matched case
+        // is never empty.
+        String planJson = """
+                {
+                  "steps": [{"id": "s1", "operations": [{"tool": "noop", "args": {}}]}],
+                  "validation": [{"tool": "check", "success_condition": "$.passed === true"}]
+                }""";
+        Map<String, Object> wf = compilePlan(planJson);
+        List<Map<String, Object>> tasks = allTasks(wf);
+        Map<String, Object> validationSwitch = tasks.stream()
+                .filter(t -> "SWITCH".equals(t.get("type"))
+                        && String.valueOf(t.get("taskReferenceName")).startsWith("vsw_"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("validation SWITCH not found"));
+        @SuppressWarnings("unchecked")
+        Map<String, List<Map<String, Object>>> decisionCases =
+                (Map<String, List<Map<String, Object>>>) validationSwitch.get("decisionCases");
+        List<Map<String, Object>> passedBranch = decisionCases.get("passed");
+        assertThat(passedBranch)
+                .as(
+                        "Validation 'passed' branch must NOT be empty — empty matched-case"
+                                + " causes Conductor SWITCH to fall through to defaultCase (TERMINATE).")
+                .isNotEmpty();
+        // The no-op should be an INLINE that returns a sentinel.
+        Map<String, Object> first = passedBranch.get(0);
+        assertThat(first.get("type")).isEqualTo("INLINE");
+        assertThat(String.valueOf(first.get("taskReferenceName"))).startsWith("ok_noop_");
+    }
+
+    @Test
+    void testValidationPassedBranchPreservesOnSuccessTasks() throws Exception {
+        // Counter-test: if on_success IS provided, the passed branch should
+        // contain those tasks and NOT the no-op placeholder.
+        String planJson = """
+                {
+                  "steps": [{"id": "s1", "operations": [{"tool": "noop", "args": {}}]}],
+                  "validation": [{"tool": "check", "success_condition": "$.passed === true"}],
+                  "on_success": [{"tool": "celebrate", "args": {"x": 1}}]
+                }""";
+        Map<String, Object> wf = compilePlan(planJson);
+        List<Map<String, Object>> tasks = allTasks(wf);
+        Map<String, Object> validationSwitch = tasks.stream()
+                .filter(t -> "SWITCH".equals(t.get("type"))
+                        && String.valueOf(t.get("taskReferenceName")).startsWith("vsw_"))
+                .findFirst()
+                .orElseThrow();
+        @SuppressWarnings("unchecked")
+        Map<String, List<Map<String, Object>>> decisionCases =
+                (Map<String, List<Map<String, Object>>>) validationSwitch.get("decisionCases");
+        List<Map<String, Object>> passedBranch = decisionCases.get("passed");
+        // First (and only) task should be the celebrate SIMPLE, not a no-op.
+        assertThat(passedBranch).hasSize(1);
+        assertThat(passedBranch.get(0).get("name")).isEqualTo("celebrate");
+        assertThat(passedBranch.get(0).get("type")).isEqualTo("SIMPLE");
+    }
+
+    @Test
     void testSequentialTerminalGeneratedOpResultPointsAtInnerTool() throws Exception {
         // Round-5 finding: when the final task of a sequential plan is a
         // generated op, the chain ends in a parseGate SWITCH (not the inner
