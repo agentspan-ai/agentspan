@@ -120,10 +120,14 @@ func runLimaInvoke(state *lastDeployState) error {
 		apiPort = "7878"
 	}
 
-	// Collect env vars for the agent
+	// Collect env vars for the agent.
+	// Use the Lima guest URL so agents inside the Firecracker VM can reach the Agentspan server
+	// via the TAP gateway (172.16.0.1) → Lima socat proxy → macOS Agentspan.
+	agentspanURL := config.DefaultLimaGuestServerURL
 	envMap := map[string]string{
-		"AGENTSPAN_SERVER_URL": cfg.ServerURL,
+		"AGENTSPAN_SERVER_URL": agentspanURL,
 	}
+	_ = cfg
 	if buildState, err := loadLastBuild(); err == nil && buildState.SourceDir != "" {
 		agentspanPath := filepath.Join(buildState.SourceDir, "agentspan.yaml")
 		if data, err := os.ReadFile(agentspanPath); err == nil {
