@@ -11,7 +11,13 @@ import (
 )
 
 func sysProcAttr() *syscall.SysProcAttr {
-	return &syscall.SysProcAttr{}
+	// CREATE_NEW_PROCESS_GROUP prevents Ctrl+C / console-close events from the
+	// parent terminal propagating to the server child process, so the server
+	// stays alive after the CLI exits or the launch terminal is closed.
+	const createNewProcessGroup = 0x00000200
+	return &syscall.SysProcAttr{
+		CreationFlags: createNewProcessGroup,
+	}
 }
 
 func killProcess(process *os.Process) error {
@@ -19,14 +25,22 @@ func killProcess(process *os.Process) error {
 }
 
 func processRunning(pid int) bool {
-	process, err := os.FindProcess(pid)
+	// Signal(0) is not supported on Windows — it returns an error for both
+	// running and dead processes, making it useless as a liveness check.
+	// Use GetExitCodeProcess instead: STILL_ACTIVE (259) means the process
+	// is still running; any other exit code means it has terminated.
+	const processQueryLimitedInformation = 0x1000
+	const stillActive = 259
+	handle, err := syscall.OpenProcess(processQueryLimitedInformation, false, uint32(pid))
 	if err != nil {
 		return false
 	}
-	// On Windows, FindProcess always succeeds. Signal(0) checks liveness
-	// without terminating the process.
-	err = process.Signal(syscall.Signal(0))
-	return err == nil
+	defer syscall.CloseHandle(handle)
+	var exitCode uint32
+	if err := syscall.GetExitCodeProcess(handle, &exitCode); err != nil {
+		return false
+	}
+	return exitCode == stillActive
 }
 
 func getFreeDiskMB(path string) int64 {
