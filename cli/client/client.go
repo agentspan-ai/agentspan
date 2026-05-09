@@ -237,7 +237,37 @@ type AgentExecutionSummary struct {
 	CreatedBy     string `json:"createdBy"`
 }
 
-// SearchExecutions searches agent executions with optional filters
+
+// PruneResult holds the outcome of a bulk execution removal operation.
+type PruneResult struct {
+	Deleted int `json:"deleted"`
+	Failed  int `json:"failed"`
+}
+
+// RemoveExecution deletes a single execution by ID.
+func (c *Client) RemoveExecution(executionId string) error {
+	resp, err := c.doRequest("DELETE", "/api/agent/executions/"+url.PathEscape(executionId), nil)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	return nil
+}
+
+// BulkRemoveExecutions deletes multiple executions by ID and returns a summary.
+func (c *Client) BulkRemoveExecutions(ids []string) (*PruneResult, error) {
+	resp, err := c.doRequest("DELETE", "/api/agent/executions/bulk/remove", ids)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var result PruneResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode prune result: %w", err)
+	}
+	return &result, nil
+}
+
 func (c *Client) SearchExecutions(start, size int, agentName, status, freeText string) (*ExecutionSearchResult, error) {
 	params := url.Values{}
 	params.Set("start", fmt.Sprintf("%d", start))

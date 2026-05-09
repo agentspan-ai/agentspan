@@ -476,6 +476,193 @@ public class AgentService {
     }
 
     /**
+     * Prune old executions to prevent unbounded DB growth.
+     *
+     * <p>Removes executions older than {@code maxAgeDays} days. If {@code maxCount} is
+     * greater than zero, also removes executions beyond the most-recent {@code maxCount}
+     * (oldest first). Both criteria are combined with union semantics — an execution is
+     * pruned if it matches either condition.</p>
+     *
+     * @param maxAgeDays remove executions older than this many days (0 = skip age check)
+     * @param maxCount   keep at most this many executions (0 = no count limit)
+     * @return a {@link PruneResult} with the count and IDs of pruned executions
+     */
+    public void removeExecution(String executionId, boolean archiveWorkflow) {
+        removeExecutionWithVisited(executionId, archiveWorkflow, new HashSet<>());
+    }
+
+    private void removeExecutionWithVisited(String executionId, boolean archiveWorkflow, Set<String> visited) {
+        if (executionId == null || executionId.isBlank() || !visited.add(executionId)) {
+            return;
+        }
+        Workflow workflow = null;
+        try {
+            workflow = executionService.getExecutionStatus(executionId, false);
+        } catch (Exception e) {
+            log.warn("Could not retrieve execution status for {}: {}", executionId, e.getMessage());
+        }
+        if (workflow != null) {
+            // Remove child sub-workflows first
+            for (Task task : workflow.getTasks()) {
+                if (TaskType.SUB_WORKFLOW.name().equals(task.getTaskType()) && task.getSubWorkflowId() != null) {
+                    removeExecutionWithVisited(task.getSubWorkflowId(), archiveWorkflow, visited);
+                }
+            }
+            // Remove parent workflow if this is a sub-workflow
+            String parentId = workflow.getParentWorkflowId();
+            if (parentId != null && !parentId.isBlank()) {
+                removeExecutionWithVisited(parentId, archiveWorkflow, visited);
+            }
+        }
+        try {
+            executionService.removeWorkflow(executionId, archiveWorkflow);
+        } catch (Exception e) {
+            log.warn("Could not remove execution {}: {}", executionId, e.getMessage());
+        }
+    }
+
+    @Deprecated
+    private void _removeExecution_old(String executionId, boolean archiveWorkflow) {
+        removeExecution(executionId, archiveWorkflow, new HashSet<>());
+    }
+
+    private void removeExecution(String executionId, boolean archiveWorkflow, Set<String> visited) {
+        if (visited.contains(executionId)) {
+            return;
+        }
+        visited.add(executionId);
+        try {
+            Workflow workflow = executionService.getExecutionStatus(executionId, true);
+            if (workflow == null) {
+                log.warn("Execution not found for removal: {}", executionId);
+                return;
+            }
+            // Remove sub-workflow children
+            if (workflow.getTasks() != null) {
+                for (Task task : workflow.getTasks()) {
+                    if (Task.TaskType.SUB_WORKFLOW.name().equals(task.getTaskType())
+                            && task.getSubWorkflowId() != null) {
+                        removeExecution(task.getSubWorkflowId(), archiveWorkflow, visited);
+                    }
+                }
+            }
+            executionService.removeWorkflow(executionId, archiveWorkflow);
+        } catch (Exception e) {
+            log.warn("Failed to remove execution {}: {}", executionId, e.getMessage());
+        }
+    }
+
+    public PruneResult bulkRemoveExecutions(List<String> executionIds) {
+        List<String> removed = new ArrayList<>();
+        Set<String> visited = new HashSet<>();
+        for (String id : executionIds) {
+            if (visited.contains(id)) {
+                continue;
+            }
+            try {
+                removeExecution(id, true, visited);
+                removed.add(id);
+            } catch (Exception e) {
+                log.warn("Skipping execution {} in bulk remove: {}", id, e.getMessage());
+            }
+        }
+        return PruneResult.builder()
+                .prunedCount(removed.size())
+                .prunedExecutionIds(removed)
+                .build();
+    }
+
+    public PruneResult pruneExecutions(int maxAgeDays, int maxCount) {
+        Set<String> toPrune = new LinkedHashSet<>();
+
+        // --- Age-based pruning ---
+        if (maxAgeDays > 0) {
+            long cutoffMillis = java.time.Instant.now()
+                    .minus(maxAgeDays, java.time.temporal.ChronoUnit.DAYS)
+                    .toEpochMilli();
+            String ageQuery = "startTime < " + cutoffMillis;
+            try {
+                int pageSize = 100;
+                int pageStart = 0;
+                while (true) {
+                    SearchResult<WorkflowSummary> page =
+                            workflowService.searchWorkflows(pageStart, pageSize, "startTime:ASC", "*", ageQuery);
+                    List<WorkflowSummary> results = page.getResults();
+                    if (results == null || results.isEmpty()) break;
+                    for (WorkflowSummary ws : results) {
+                        toPrune.add(ws.getWorkflowId());
+                    }
+                    if (results.size() < pageSize) break;
+                    pageStart += pageSize;
+                }
+            } catch (Exception e) {
+                log.warn("Age-based prune search failed: {}", e.getMessage());
+            }
+        }
+
+        // --- Count-based pruning ---
+        if (maxCount > 0) {
+            try {
+                // Get total count of all agent executions
+                List<String> agentNames = listAgents().stream()
+                        .map(AgentSummary::getName)
+                        .collect(Collectors.toList());
+                if (!agentNames.isEmpty()) {
+                    String nameList = agentNames.stream()
+                            .map(n -> "'" + n + "'")
+                            .collect(Collectors.joining(","));
+                    String countQuery = "workflowType IN (" + nameList + ")";
+                    int pageSize = 100;
+                    int pageStart = 0;
+                    List<String> allIds = new ArrayList<>();
+                    while (true) {
+                        SearchResult<WorkflowSummary> page =
+                                workflowService.searchWorkflows(pageStart, pageSize, "startTime:ASC", "*", countQuery);
+                        List<WorkflowSummary> results = page.getResults();
+                        if (results == null || results.isEmpty()) break;
+                        for (WorkflowSummary ws : results) {
+                            allIds.add(ws.getWorkflowId());
+                        }
+                        if (results.size() < pageSize) break;
+                        pageStart += pageSize;
+                    }
+                    // Keep the most recent maxCount; prune the rest (oldest first)
+                    if (allIds.size() > maxCount) {
+                        List<String> excess = allIds.subList(0, allIds.size() - maxCount);
+                        toPrune.addAll(excess);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Count-based prune search failed: {}", e.getMessage());
+            }
+        }
+
+        // --- Delete each candidate ---
+        List<String> pruned = new ArrayList<>();
+        for (String id : toPrune) {
+            try {
+                // Terminate if still running (ignore errors for already-terminal workflows)
+                try {
+                    workflowService.terminateWorkflow(id, "Pruned by agentspan");
+                } catch (Exception ignored) {
+                    // Already completed/terminated — safe to proceed with removal
+                }
+                executionService.removeWorkflow(id, false);
+                pruned.add(id);
+                log.debug("Pruned execution: {}", id);
+            } catch (Exception e) {
+                log.warn("Failed to prune execution {}: {}", id, e.getMessage());
+            }
+        }
+
+        log.info("Pruned {} execution(s) (maxAgeDays={}, maxCount={})", pruned.size(), maxAgeDays, maxCount);
+        return PruneResult.builder()
+                .prunedCount(pruned.size())
+                .prunedExecutionIds(pruned)
+                .build();
+    }
+
+    /**
      * Gracefully stop an agent execution by setting the _stop_requested flag.
      *
      * <p>The loop exits after the current iteration completes and the workflow

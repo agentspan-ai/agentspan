@@ -30,6 +30,7 @@ import dev.agentspan.runtime.model.CreateTrackingWorkflowRequest;
 import dev.agentspan.runtime.model.CreateTrackingWorkflowResponse;
 import dev.agentspan.runtime.model.InjectTaskRequest;
 import dev.agentspan.runtime.model.InjectTaskResponse;
+import dev.agentspan.runtime.model.PruneResult;
 import dev.agentspan.runtime.model.StartRequest;
 import dev.agentspan.runtime.model.StartResponse;
 import dev.agentspan.runtime.model.TaskListResponse;
@@ -263,6 +264,29 @@ public class AgentController {
     @PostMapping("/executions/{executionId}/rerun")
     public String rerunExecution(@PathVariable String executionId, @RequestBody RerunWorkflowRequest request) {
         return agentService.rerunExecution(executionId, request);
+    }
+
+    /** Prune old completed executions to prevent unbounded DB growth. */
+    @DeleteMapping("/executions/prune")
+    public PruneResult pruneExecutions(
+            @RequestParam(defaultValue = "0") int maxAgeDays,
+            @RequestParam(defaultValue = "0") int maxCount) {
+        return agentService.pruneExecutions(maxAgeDays, maxCount);
+    }
+
+    /** Bulk remove a list of executions by ID. */
+    @DeleteMapping("/executions/bulk/remove")
+    public PruneResult bulkRemoveExecutions(@RequestBody List<String> executionIds) {
+        return agentService.bulkRemoveExecutions(executionIds);
+    }
+
+    /** Remove a single execution (and its sub-workflows) from the DB. */
+    @DeleteMapping("/executions/{executionId}/remove")
+    @ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
+    public void removeExecution(
+            @PathVariable String executionId,
+            @RequestParam(defaultValue = "true") boolean archiveWorkflow) {
+        agentService.removeExecution(executionId, archiveWorkflow);
     }
 
     /** Terminate a running execution (used by UI delete action). */

@@ -457,3 +457,60 @@ func TestDoRequest_Returns4xxError(t *testing.T) {
 		t.Errorf("error = %q, want to contain 400", err.Error())
 	}
 }
+
+// ─── Prune Executions ────────────────────────────────────────────────────────
+
+func TestPruneExecutions_SendsCorrectRequest(t *testing.T) {
+	var gotMethod, gotPath, gotQuery string
+	_, c := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"prunedCount":        5,
+			"prunedExecutionIds": []string{"id1", "id2", "id3", "id4", "id5"},
+		})
+	}))
+
+	result, err := c.PruneExecutions(30, 100)
+	if err != nil {
+		t.Fatalf("PruneExecutions: %v", err)
+	}
+	if gotMethod != http.MethodDelete {
+		t.Errorf("method = %q, want DELETE", gotMethod)
+	}
+	if gotPath != "/api/agent/executions/prune" {
+		t.Errorf("path = %q, want /api/agent/executions/prune", gotPath)
+	}
+	if !strings.Contains(gotQuery, "maxAgeDays=30") {
+		t.Errorf("query = %q, want maxAgeDays=30", gotQuery)
+	}
+	if !strings.Contains(gotQuery, "maxCount=100") {
+		t.Errorf("query = %q, want maxCount=100", gotQuery)
+	}
+	if result.PrunedCount != 5 {
+		t.Errorf("PrunedCount = %d, want 5", result.PrunedCount)
+	}
+	if len(result.PrunedExecutionIds) != 5 {
+		t.Errorf("PrunedExecutionIds len = %d, want 5", len(result.PrunedExecutionIds))
+	}
+}
+
+func TestPruneExecutions_ZeroResults(t *testing.T) {
+	_, c := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"prunedCount":        0,
+			"prunedExecutionIds": []string{},
+		})
+	}))
+
+	result, err := c.PruneExecutions(7, 0)
+	if err != nil {
+		t.Fatalf("PruneExecutions: %v", err)
+	}
+	if result.PrunedCount != 0 {
+		t.Errorf("PrunedCount = %d, want 0", result.PrunedCount)
+	}
+}
