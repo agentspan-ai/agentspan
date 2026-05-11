@@ -11,9 +11,10 @@ import (
 )
 
 type Config struct {
-	ServerURL    string `json:"server_url"`
-	APIKey       string `json:"api_key,omitempty"`
-	ConductorURL string `json:"conductor_url,omitempty"`
+	ServerURL          string `json:"server_url"`
+	APIKey             string `json:"api_key,omitempty"`
+	ConductorURL       string `json:"conductor_url,omitempty"`
+	LimaGuestServerURL string `json:"lima_guest_server_url,omitempty"`
 }
 
 // IsLocalhost returns true when the server URL points to a loopback address
@@ -33,14 +34,16 @@ const (
 	DefaultLimaVMName         = "default"
 	DefaultLimaRunAgentScript = "/opt/agentspan/bin/run-agent"
 	// URL used by agents running inside the Firecracker guest to reach the Agentspan server.
-	// Routes via Lima NAT → macOS LAN IP. Override with MACOS_LAN_IP env var if needed.
-	DefaultLimaGuestServerURL = "http://192.168.1.249:6767"
+	// Default points to localhost — override in ~/.agentspan/config.json
+	// (lima_guest_server_url) with the macOS LAN IP since the guest cannot reach localhost.
+	DefaultLimaGuestServerURL = "http://localhost:6767"
 )
 
 func DefaultConfig() *Config {
 	return &Config{
-		ServerURL:    DefaultServerURL,
-		ConductorURL: DefaultConductorURL,
+		ServerURL:          DefaultServerURL,
+		ConductorURL:       DefaultConductorURL,
+		LimaGuestServerURL: DefaultLimaGuestServerURL,
 	}
 }
 
@@ -81,6 +84,9 @@ func Load() *Config {
 		}
 		if cfg.APIKey == "" {
 			cfg.APIKey = fileCfg.APIKey
+		}
+		if fileCfg.LimaGuestServerURL != "" {
+			cfg.LimaGuestServerURL = fileCfg.LimaGuestServerURL
 		}
 	}
 
