@@ -22,6 +22,15 @@ dependencies {
     // Required for ExampleLc4j* examples that use LangChain4j @Tool annotations
     compileOnly 'dev.langchain4j:langchain4j:1.0.0'
     runtimeOnly 'dev.langchain4j:langchain4j:1.0.0'
+    // Required for ExampleLc4j05Passthrough — drives an OpenAI chat model client-side
+    compileOnly 'dev.langchain4j:langchain4j-open-ai:1.0.0'
+    runtimeOnly 'dev.langchain4j:langchain4j-open-ai:1.0.0'
 }
 
 compileJava.options.compilerArgs << '-parameters'
+
+// Allow running individual examples via:
+//   ./gradlew :examples:run -PmainClass=ai.agentspan.examples.ExampleLc4j01BasicAgent
+application {
+    mainClass = project.findProperty('mainClass') ?: 'ai.agentspan.examples.Example01BasicAgent'
+}

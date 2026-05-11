@@ -45,6 +45,30 @@ public class AgentConfigSerializer {
             return skillMap;
         }
 
+        // LangChain passthrough — server wraps the agent as a single worker tool with no LLM
+        // loop. The client-side framework (e.g. LangChain4j AiServices) drives its own model
+        // and tools; Agentspan only orchestrates the wrapping worker. Required keys:
+        //   _framework = "langchain"
+        //   _worker_name = <name>   (supplied via frameworkConfig)
+        // The worker ToolDef itself is still emitted via the normal `tools` path below so the
+        // SDK can register and invoke its `func` when the server schedules the worker task.
+        if ("langchain".equals(agent.getFramework())) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("name", agent.getName());
+            map.put("_framework", "langchain");
+            Map<String, Object> cfg = agent.getFrameworkConfig();
+            if (cfg != null) map.putAll(cfg);
+            // Emit the tools list as well so the SDK worker poller registers the func.
+            if (agent.getTools() != null && !agent.getTools().isEmpty()) {
+                List<Map<String, Object>> toolsList = new ArrayList<>();
+                for (ToolDef tool : agent.getTools()) {
+                    toolsList.add(serializeTool(tool, false));
+                }
+                map.put("tools", toolsList);
+            }
+            return map;
+        }
+
         Map<String, Object> agentMap = new LinkedHashMap<>();
 
         agentMap.put("name", agent.getName());

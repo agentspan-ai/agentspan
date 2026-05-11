@@ -41,7 +41,7 @@ import dev.langchain4j.service.AiServices;
  *       (see examples/build.gradle)</li>
  * </ul>
  */
-public class ExampleLc4j05Passthrough {
+public class ExampleLc4jPassthrough {
 
     // ── LangChain4j tool class — unchanged from any existing codebase ─────────
 

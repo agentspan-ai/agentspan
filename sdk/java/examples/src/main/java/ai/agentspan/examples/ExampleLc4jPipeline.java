@@ -34,7 +34,7 @@ import ai.agentspan.model.AgentResult;
  *   <li>langchain4j on the classpath (see examples/build.gradle)</li>
  * </ul>
  */
-public class ExampleLc4j04Pipeline {
+public class ExampleLc4jPipeline {
 
     // ── LangChain4j tool class used in stage 1 ────────────────────────────────
 

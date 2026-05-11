@@ -43,7 +43,7 @@ import java.util.List;
  *       works without it, falling back to a stubbed response)</li>
  * </ul>
  */
-public class ExampleLc4j03WithCredentials {
+public class ExampleLc4jCredentials {
 
     // ── LangChain4j tool class: pure computation, no secrets ──────────────────
 
