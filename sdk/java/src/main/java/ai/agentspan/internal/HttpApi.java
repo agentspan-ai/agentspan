@@ -56,32 +56,6 @@ public class HttpApi {
     }
 
     /**
-     * Start a framework-backed agent execution (e.g. LangChain passthrough).
-     *
-     * <p>The server routes the raw config through the matching framework normalizer
-     * (see {@code dev.agentspan.runtime.normalizer.*}) which produces an AgentConfig
-     * without requiring a {@code model} field. Use this for agents whose entire
-     * loop runs client-side as a single worker.
-     *
-     * @param framework framework identifier (e.g. {@code "langchain"})
-     * @param rawConfig framework-specific config map
-     * @param prompt    user prompt
-     * @param sessionId optional session ID
-     * @return server response containing workflowId
-     */
-    public Map<String, Object> startFrameworkAgent(
-            String framework, Map<String, Object> rawConfig, String prompt, String sessionId) {
-        Map<String, Object> body = new HashMap<>();
-        body.put("framework", framework);
-        body.put("rawConfig", rawConfig);
-        body.put("prompt", prompt);
-        if (sessionId != null && !sessionId.isEmpty()) {
-            body.put("sessionId", sessionId);
-        }
-        return post("/api/agent/start", body);
-    }
-
-    /**
      * Compile an agent configuration into a workflow definition.
      *
      * <p>Calls {@code POST /api/agent/compile} with {@code {"agentConfig": agentConfig}}
