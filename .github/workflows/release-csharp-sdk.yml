@@ -14,6 +14,7 @@ permissions:
 jobs:
   publish-nuget:
     runs-on: ubuntu-latest
+    environment: nuget
     defaults:
       run:
         working-directory: sdk/csharp
