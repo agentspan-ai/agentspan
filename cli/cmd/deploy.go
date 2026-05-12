@@ -601,6 +601,7 @@ func runRemoteDeployCmd(cmd *cobra.Command, artifactID string) error {
 	// Resolve workflow ID — prefer flag, fall back to last-build state.
 	workflowID, _ := cmd.Flags().GetString("workflow-id")
 	bundleName := ""
+	var sourceDir string
 	if workflowID == "" {
 		state, err := loadLastBuild()
 		if err != nil {
@@ -608,6 +609,7 @@ func runRemoteDeployCmd(cmd *cobra.Command, artifactID string) error {
 		}
 		workflowID = state.WorkflowID
 		bundleName = state.BundleName
+		sourceDir = state.SourceDir
 	}
 
 	cfg := getConfig()
@@ -642,14 +644,24 @@ func runRemoteDeployCmd(cmd *cobra.Command, artifactID string) error {
 	vmName, _ := status.Output["vm_name"].(string)
 
 	// Persist deploy state for invoke step.
-	if err := saveLastDeploy(lastDeployState{
+	deployState := lastDeployState{
 		WorkflowID:       deployWorkflowID,
 		BundleName:       bundleName,
 		RemoteBundlePath: remoteBundlePath,
 		VMName:           vmName,
 		DeployedAt:       time.Now(),
-	}); err != nil {
+	}
+	if err := saveLastDeploy(deployState); err != nil {
 		color.New(color.FgYellow).Printf("  warning: could not save deploy state: %v\n", err)
+	}
+
+	// Also write to global agent registry so --name works from any directory.
+	if sourceDir != "" {
+		if agentName := readAgentName(sourceDir); agentName != "" {
+			if err := saveGlobalAgentDeploy(agentName, deployState); err != nil {
+				color.New(color.FgYellow).Printf("  warning: could not save global agent state: %v\n", err)
+			}
+		}
 	}
 
 	fmt.Println()

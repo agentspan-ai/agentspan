@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/agentspan-ai/agentspan/cli/config"
@@ -19,12 +18,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const (
-	defaultDevSHEnvVar   = "AGENTSPAN_DEV_SH"
-	defaultStagingEnvVar = "STAGING_DIR"
-	defaultEntrypoint    = "hello.py"
-	bundleManifestFile   = "bundle-manifest.json"
-)
+const bundleManifestFile = "bundle-manifest.json"
 
 type lastDeployState struct {
 	WorkflowID       string    `json:"workflow_id"`
@@ -41,67 +35,48 @@ type bundleManifest struct {
 	Runtime    string `json:"runtime"`
 }
 
+// agentspanInvokeSpec is the minimal slice of agentspan.yaml we need at invoke time.
+type agentspanInvokeSpec struct {
+	Metadata struct {
+		Name string `yaml:"name"`
+	} `yaml:"metadata"`
+	Spec struct {
+		Env []string `yaml:"env"`
+	} `yaml:"spec"`
+}
+
+var invokeAgentName string
+
 var invokeCmd = &cobra.Command{
-	Use:   "invoke [entrypoint]",
-	Short: "Invoke an agent in its execution environment",
-	Long: `Run the staged agent.
+	Use:   "invoke",
+	Short: "Invoke a deployed agent in its execution environment",
+	Long: `Boot the staged agent bundle in a Firecracker microVM via the Lima VM.
 
-For project bundles (with bundle-manifest.json): runs locally using the
-bundled dependencies and the entrypoint declared in agentspan.yaml.
-
-For plain script bundles: runs the script inside a Firecracker microVM via
-dev.sh (AGENTSPAN_DEV_SH must be set).`,
-	Args: cobra.MaximumNArgs(1),
+Use --name to invoke any previously deployed agent by name, from any directory.
+Without --name, uses the deploy state from the current project directory.`,
+	Args: cobra.NoArgs,
 	RunE: runInvokeCmd,
 }
 
 func init() {
 	agentCmd.AddCommand(invokeCmd)
+	invokeCmd.Flags().StringVar(&invokeAgentName, "name", "", "Invoke a deployed agent by name (any directory)")
 }
 
 func runInvokeCmd(cmd *cobra.Command, args []string) error {
-	cwd, _ := os.Getwd()
-	_, inAgentspanProject := os.Stat(filepath.Join(cwd, "agentspan.yaml"))
-
-	// Lima Firecracker path — project-local deploy state
-	if inAgentspanProject == nil {
-		state, err := loadLastDeploy()
+	if invokeAgentName != "" {
+		state, err := loadGlobalAgentDeploy(invokeAgentName)
 		if err != nil {
-			return fmt.Errorf("not deployed — run 'agentspan deploy' first")
+			return err
 		}
 		return runLimaInvoke(state)
 	}
 
-	// Legacy paths for non-agentspan.yaml projects
-	state, _ := loadLastDeploy()
-	if state != nil && state.RemoteBundlePath != "" {
-		return runLimaInvoke(state)
+	state, err := loadLastDeploy()
+	if err != nil {
+		return fmt.Errorf("not deployed — run 'agentspan deploy' first")
 	}
-
-	stagingDir := os.Getenv(defaultStagingEnvVar)
-	if stagingDir == "" {
-		if state != nil && state.StagingDir != "" {
-			stagingDir = state.StagingDir
-		} else {
-			return fmt.Errorf("staging dir unknown: set STAGING_DIR or run 'agentspan deploy' first")
-		}
-	}
-
-	// Project bundle — local execution path
-	manifestPath := filepath.Join(stagingDir, bundleManifestFile)
-	if _, err := os.Stat(manifestPath); err == nil {
-		return runLocalInvoke(stagingDir, manifestPath)
-	}
-
-	// Plain script — Firecracker path via dev.sh
-	return runFirecrackerInvoke(stagingDir, args)
-}
-
-// agentspanInvokeSpec is the minimal slice of agentspan.yaml we need at invoke time.
-type agentspanInvokeSpec struct {
-	Spec struct {
-		Env []string `yaml:"env"`
-	} `yaml:"spec"`
+	return runLimaInvoke(state)
 }
 
 // runLimaInvoke calls the Rust API on the Lima host to boot the staged agent bundle.
@@ -195,89 +170,49 @@ func runLimaInvoke(state *lastDeployState) error {
 	return nil
 }
 
-// runLocalInvoke runs a project bundle locally using the bundled lib/ dependencies.
-func runLocalInvoke(stagingDir, manifestPath string) error {
-	data, err := os.ReadFile(manifestPath)
+// globalAgentDeployPath returns the path for the named agent's global deploy state.
+func globalAgentDeployPath(name string) string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".agentspan", "agents", name+".json")
+}
+
+// saveGlobalAgentDeploy writes deploy state to the global agent registry.
+func saveGlobalAgentDeploy(name string, deploy lastDeployState) error {
+	path := globalAgentDeployPath(name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(deploy, "", "  ")
 	if err != nil {
-		return fmt.Errorf("read bundle manifest: %w", err)
+		return err
 	}
-	var manifest bundleManifest
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return fmt.Errorf("parse bundle manifest: %w", err)
-	}
-
-	python := findPythonBinary(stagingDir)
-	if python == "" {
-		return fmt.Errorf("no Python interpreter found; install Python or set the PYTHON environment variable")
-	}
-
-	bold := color.New(color.Bold)
-	bold.Printf("Invoking %s (%s)\n", manifest.Name, manifest.Entrypoint)
-	fmt.Printf("  Staging : %s\n\n", stagingDir)
-
-	libDir := filepath.Join(stagingDir, "lib")
-	pythonPath := libDir + string(os.PathListSeparator) + stagingDir
-	if existing := os.Getenv("PYTHONPATH"); existing != "" {
-		pythonPath += string(os.PathListSeparator) + existing
-	}
-
-	env := setPythonPath(os.Environ(), pythonPath)
-
-	c := exec.Command(python, "-m", manifest.Entrypoint)
-	c.Env = env
-	c.Stdout = os.Stdout
-	c.Stderr = os.Stderr
-
-	if err := c.Run(); err != nil {
-		return fmt.Errorf("agent exited with error: %w", err)
-	}
-	return nil
+	return os.WriteFile(path, data, 0o600)
 }
 
-// runFirecrackerInvoke runs a plain script inside a Firecracker microVM via dev.sh.
-func runFirecrackerInvoke(stagingDir string, args []string) error {
-	entrypoint := os.Getenv("AGENTSPAN_ENTRYPOINT")
-	if entrypoint == "" {
-		entrypoint = defaultEntrypoint
+// loadGlobalAgentDeploy reads deploy state from the global agent registry.
+func loadGlobalAgentDeploy(name string) (*lastDeployState, error) {
+	data, err := os.ReadFile(globalAgentDeployPath(name))
+	if err != nil {
+		return nil, fmt.Errorf("agent %q not found — run 'agentspan deploy' from the agent directory first", name)
 	}
-	if len(args) > 0 {
-		entrypoint = args[0]
+	var state lastDeployState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return nil, fmt.Errorf("parse global agent state for %q: %w", name, err)
 	}
-
-	devSH := os.Getenv(defaultDevSHEnvVar)
-	if devSH == "" {
-		return fmt.Errorf("AGENTSPAN_DEV_SH is not set — point it to the firecracker/dev.sh script")
-	}
-
-	script := filepath.Join(stagingDir, entrypoint)
-	if _, err := os.Stat(script); err != nil {
-		return fmt.Errorf("staged script not found: %s (run 'agentspan deploy' first)", script)
-	}
-
-	bold := color.New(color.Bold)
-	bold.Printf("Invoking %s in Firecracker\n", entrypoint)
-	fmt.Printf("  Script  : %s\n", script)
-	fmt.Printf("  dev.sh  : %s\n\n", devSH)
-
-	c := exec.Command(devSH, "run", script)
-	c.Stdout = os.Stdout
-	c.Stderr = os.Stderr
-
-	if err := c.Run(); err != nil {
-		return fmt.Errorf("dev.sh run failed: %w", err)
-	}
-	return nil
+	return &state, nil
 }
 
-// setPythonPath replaces or prepends PYTHONPATH in an env slice.
-func setPythonPath(env []string, pythonPath string) []string {
-	out := make([]string, 0, len(env)+1)
-	for _, e := range env {
-		if !strings.HasPrefix(e, "PYTHONPATH=") {
-			out = append(out, e)
-		}
+// readAgentName extracts metadata.name from an agentspan.yaml file.
+func readAgentName(sourceDir string) string {
+	data, err := os.ReadFile(filepath.Join(sourceDir, "agentspan.yaml"))
+	if err != nil {
+		return ""
 	}
-	return append(out, "PYTHONPATH="+pythonPath)
+	var spec agentspanInvokeSpec
+	if yaml.Unmarshal(data, &spec) != nil {
+		return ""
+	}
+	return spec.Metadata.Name
 }
 
 func saveLastDeploy(deploy lastDeployState) error {
