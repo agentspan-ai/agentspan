@@ -57,16 +57,16 @@ func runAgent(cmd *cobra.Command, args []string) error {
 			Prompt:      prompt,
 		}
 	} else {
-		agentName := readAgentName(".")
-		if agentName == "" {
-			return fmt.Errorf("agentspan.yaml not found or missing metadata.name — run from the agent project directory")
+		ref := readAgentRef(".")
+		if ref == nil {
+			return fmt.Errorf("agentspan.yaml not found or missing required metadata fields — run from the agent project directory")
 		}
 		bold := color.New(color.Bold)
-		bold.Printf("Starting agent: %s\n", agentName)
+		bold.Printf("Starting agent: %s\n", ref.Name)
 
-		agentDef, err := c.GetAgent(agentName, nil)
+		agentDef, err := c.GetAgent(ref.Name, nil)
 		if err != nil {
-			return fmt.Errorf("failed to get agent %q: %w", agentName, err)
+			return fmt.Errorf("failed to get agent %q: %w", ref.Name, err)
 		}
 		startReq = &client.StartRequest{
 			AgentConfig: agentDef,

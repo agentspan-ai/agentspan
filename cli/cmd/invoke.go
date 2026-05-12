@@ -17,14 +17,25 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// agentspanInvokeSpec is the minimal slice of agentspan.yaml we need at invoke time.
+// agentspanInvokeSpec is the minimal slice of agentspan.yaml we need at invoke/run time.
 type agentspanInvokeSpec struct {
 	Metadata struct {
-		Name string `yaml:"name"`
+		Customer  string `yaml:"customer"`
+		Cluster   string `yaml:"cluster"`
+		Namespace string `yaml:"namespace"`
+		Name      string `yaml:"name"`
 	} `yaml:"metadata"`
 	Spec struct {
 		Env []string `yaml:"env"`
 	} `yaml:"spec"`
+}
+
+// agentRef holds the full agent identity read from agentspan.yaml.
+type agentRef struct {
+	Customer  string
+	Cluster   string
+	Namespace string
+	Name      string
 }
 
 var invokeCmd = &cobra.Command{
@@ -32,8 +43,8 @@ var invokeCmd = &cobra.Command{
 	Short: "Invoke a deployed agent in its execution environment",
 	Long: `Boot the staged agent bundle in a Firecracker microVM via the Lima VM.
 
-Reads metadata.name from agentspan.yaml in the current directory.
-The Rust API resolves the bundle path from Valkey using that name.`,
+Reads metadata.customer/cluster/namespace/name from agentspan.yaml in the
+current directory. The Rust API resolves the bundle path from Valkey.`,
 	Args: cobra.NoArgs,
 	RunE: runInvokeCmd,
 }
@@ -43,15 +54,15 @@ func init() {
 }
 
 func runInvokeCmd(cmd *cobra.Command, args []string) error {
-	agentName := readAgentName(".")
-	if agentName == "" {
-		return fmt.Errorf("agentspan.yaml not found or missing metadata.name — run from the agent project directory")
+	ref := readAgentRef(".")
+	if ref == nil {
+		return fmt.Errorf("agentspan.yaml not found or missing required metadata fields (customer, cluster, namespace, name)")
 	}
-	return runLimaInvoke(agentName)
+	return runLimaInvoke(ref)
 }
 
 // runLimaInvoke calls the Rust API on the Lima host to boot the staged agent bundle.
-func runLimaInvoke(agentName string) error {
+func runLimaInvoke(ref *agentRef) error {
 	cfg := config.Load()
 	vmName := os.Getenv("LIMA_VM_NAME")
 	if vmName == "" {
@@ -90,16 +101,26 @@ func runLimaInvoke(agentName string) error {
 	}
 
 	type invokeReq struct {
+		Customer  string            `json:"customer"`
+		Cluster   string            `json:"cluster"`
+		Namespace string            `json:"namespace"`
 		AgentName string            `json:"agent_name"`
 		Env       map[string]string `json:"env"`
 	}
-	payload, err := json.Marshal(invokeReq{AgentName: agentName, Env: envMap})
+	payload, err := json.Marshal(invokeReq{
+		Customer:  ref.Customer,
+		Cluster:   ref.Cluster,
+		Namespace: ref.Namespace,
+		AgentName: ref.Name,
+		Env:       envMap,
+	})
 	if err != nil {
 		return fmt.Errorf("marshal invoke request: %w", err)
 	}
 
 	bold := color.New(color.Bold)
-	bold.Printf("Invoking agent %q via Rust API on Lima VM %q\n", agentName, vmName)
+	bold.Printf("Invoking agent %q (%s/%s/%s) via Rust API on Lima VM %q\n",
+		ref.Name, ref.Customer, ref.Cluster, ref.Namespace, vmName)
 	fmt.Println()
 
 	var out bytes.Buffer
@@ -135,15 +156,25 @@ func runLimaInvoke(agentName string) error {
 	return nil
 }
 
-// readAgentName extracts metadata.name from agentspan.yaml in dir.
-func readAgentName(dir string) string {
+// readAgentRef reads the full agent identity from agentspan.yaml in dir.
+// Returns nil if any required field (customer, cluster, namespace, name) is missing.
+func readAgentRef(dir string) *agentRef {
 	data, err := os.ReadFile(filepath.Join(dir, "agentspan.yaml"))
 	if err != nil {
-		return ""
+		return nil
 	}
 	var spec agentspanInvokeSpec
 	if yaml.Unmarshal(data, &spec) != nil {
-		return ""
+		return nil
 	}
-	return spec.Metadata.Name
+	m := spec.Metadata
+	if m.Customer == "" || m.Cluster == "" || m.Namespace == "" || m.Name == "" {
+		return nil
+	}
+	return &agentRef{
+		Customer:  m.Customer,
+		Cluster:   m.Cluster,
+		Namespace: m.Namespace,
+		Name:      m.Name,
+	}
 }

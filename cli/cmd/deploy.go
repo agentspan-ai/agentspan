@@ -43,7 +43,7 @@ var deployCmd = &cobra.Command{
 
 const (
 	deployWorkflowName    = "agentspan_deploy"
-	deployWorkflowVersion = 4
+	deployWorkflowVersion = 5
 )
 
 func init() {
@@ -608,7 +608,7 @@ func formatDiscoveryTable(agents []discoveredAgent, pkg string) string {
 // runRemoteDeployCmd deploys an artifact to the Firecracker Execution Plane
 // via the Conductor deploy workflow.
 func runRemoteDeployCmd(cmd *cobra.Command, br *buildResult) error {
-	agentName := readAgentName(".")
+	ref := readAgentRef(".")
 
 	cfg := getConfig()
 	cc := client.NewConductorClient(cfg.ConductorURL)
@@ -618,12 +618,18 @@ func runRemoteDeployCmd(cmd *cobra.Command, br *buildResult) error {
 	bold.Println("Deploying agent to Lima Execution Plane")
 	fmt.Printf("  Artifact : %s\n\n", br.fileHandleID)
 
-	deployWorkflowID, err := cc.StartWorkflow(ctx, deployWorkflowName, deployWorkflowVersion, map[string]any{
+	input := map[string]any{
 		"file_handle_id": br.fileHandleID,
 		"workflow_id":    br.workflowID,
 		"bundle_name":    br.bundleName,
-		"agent_name":     agentName,
-	})
+	}
+	if ref != nil {
+		input["customer"] = ref.Customer
+		input["cluster"] = ref.Cluster
+		input["namespace"] = ref.Namespace
+		input["agent_name"] = ref.Name
+	}
+	deployWorkflowID, err := cc.StartWorkflow(ctx, deployWorkflowName, deployWorkflowVersion, input)
 	if err != nil {
 		return fmt.Errorf("start deploy workflow: %w", err)
 	}
