@@ -29,7 +29,7 @@ public static class Program
 {
     public static async Task Main()
     {
-        var baseUrl = Environment.GetEnvironmentVariable("AGENTSPAN_SERVER_URL") ?? "http://localhost:6767";
+        var baseUrl = Environment.GetEnvironmentVariable("AGENTSPAN_SERVER_URL") ?? "http://localhost:6767/api";
 
         var agent = SemanticKernelAgent.From(
             name:         "sk_calc_agent",
