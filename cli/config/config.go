@@ -15,6 +15,7 @@ type Config struct {
 	APIKey             string `json:"api_key,omitempty"`
 	ConductorURL       string `json:"conductor_url,omitempty"`
 	LimaGuestServerURL string `json:"lima_guest_server_url,omitempty"`
+	LLMModel           string `json:"llm_model,omitempty"`
 }
 
 // IsLocalhost returns true when the server URL points to a loopback address
@@ -87,6 +88,9 @@ func Load() *Config {
 		}
 		if fileCfg.LimaGuestServerURL != "" {
 			cfg.LimaGuestServerURL = fileCfg.LimaGuestServerURL
+		}
+		if fileCfg.LLMModel != "" {
+			cfg.LLMModel = fileCfg.LLMModel
 		}
 	}
 
