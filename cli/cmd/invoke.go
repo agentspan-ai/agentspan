@@ -55,6 +55,12 @@ func runLimaInvoke(agentName string) error {
 	cfg := config.Load()
 	vmName := os.Getenv("LIMA_VM_NAME")
 	if vmName == "" {
+		vmName = os.Getenv("LIMA_VM")
+	}
+	if vmName == "" && cfg.LimaVMName != "" {
+		vmName = cfg.LimaVMName
+	}
+	if vmName == "" {
 		vmName = config.DefaultLimaVMName
 	}
 
