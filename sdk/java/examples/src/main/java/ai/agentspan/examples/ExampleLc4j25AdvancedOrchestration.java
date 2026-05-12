@@ -204,10 +204,16 @@ public class ExampleLc4j25AdvancedOrchestration {
         s = s.substring(1, s.length() - 1).trim();
         if (s.isEmpty()) return out;
 
-        Pattern p = Pattern.compile("\"([^\"]+)\"\\s*:\\s*(-?\\d+(?:\\.\\d+)?)");
+        // Accept scientific notation (e.g. 1.8e12, -3.4E-2) and quoted numeric
+        // strings ("1800") so the parser tolerates whatever shape the LLM
+        // emits, matching Python's json.loads(...) flexibility.
+        Pattern p = Pattern.compile(
+            "\"([^\"]+)\"\\s*:\\s*(?:\"(-?\\d+(?:\\.\\d+)?(?:[eE][-+]?\\d+)?)\"|(-?\\d+(?:\\.\\d+)?(?:[eE][-+]?\\d+)?))"
+        );
         Matcher m = p.matcher(s);
         while (m.find()) {
-            out.put(m.group(1), Double.parseDouble(m.group(2)));
+            String num = m.group(2) != null ? m.group(2) : m.group(3);
+            out.put(m.group(1), Double.parseDouble(num));
         }
         if (out.isEmpty() && !s.isEmpty()) {
             throw new RuntimeException("no numeric fields parsed");

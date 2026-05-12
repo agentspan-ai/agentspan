@@ -151,13 +151,12 @@ public class ExampleLc4j24OutputParsers {
         @SuppressWarnings("unused")
         ExtractedFields example = new ExtractedFields("2025-03-15", "$249.99", "billing@example.com");
 
+        // Python uses the shorter prompt below — match it for parity.
         Agent agent = LangChain4jAgent.from(
             "output_parsers_agent",
             Settings.LLM_MODEL,
             "You are a data extraction and formatting assistant. "
-                + "Use tools to retrieve, parse, and structure information clearly. "
-                + "When returning structured fields, prefer JSON matching the schema "
-                + "{\"date\": string, \"amount\": string, \"email\": string}.",
+                + "Use tools to retrieve, parse, and structure information clearly.",
             new OutputParserTools()
         );
 

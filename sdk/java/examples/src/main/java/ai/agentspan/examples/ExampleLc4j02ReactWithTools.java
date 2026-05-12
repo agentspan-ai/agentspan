@@ -167,10 +167,12 @@ public class ExampleLc4j02ReactWithTools {
     }
 
     public static void main(String[] args) {
+        // Python's create_agent(llm, tools=[...]) sends no system prompt unless
+        // the caller provides one — match that by passing null instructions.
         Agent agent = LangChain4jAgent.from(
             "react_tools_agent",
             Settings.LLM_MODEL,
-            "You are a helpful assistant. Use the available tools when appropriate.",
+            null,
             new UtilityTools()
         );
 

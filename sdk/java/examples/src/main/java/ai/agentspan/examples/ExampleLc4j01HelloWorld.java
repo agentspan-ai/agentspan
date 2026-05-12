@@ -33,11 +33,12 @@ import ai.agentspan.model.AgentResult;
 public class ExampleLc4j01HelloWorld {
 
     public static void main(String[] args) {
-        // No tool POJO needed — pass no tool objects to LangChain4jAgent.from.
+        // No tool POJO, no system prompt — matches Python's
+        // create_agent(llm, tools=[], name=...) which sends no system message.
         Agent agent = LangChain4jAgent.from(
             "hello_world_agent",
             Settings.LLM_MODEL,
-            "You are a helpful assistant."
+            null
         );
 
         AgentResult result = Agentspan.run(
