@@ -219,8 +219,6 @@ func renderCheckResult(r CheckResult) string {
 	return style.Render(line)
 }
 
-
-
 // ─── Check Commands ──────────────────────────────────────────────────────────
 
 func (m DoctorModel) runSystemChecks() tea.Cmd {
@@ -351,6 +349,6 @@ func min(a, b int) int {
 
 // ─── Test accessors ───────────────────────────────────────────────────────────
 
-func (m DoctorModel) Running() bool                    { return m.running }
-func (m DoctorModel) Sections() map[string][]CheckResult { return m.sections }
+func (m DoctorModel) Running() bool                           { return m.running }
+func (m DoctorModel) Sections() map[string][]CheckResult      { return m.sections }
 func (m *DoctorModel) SetSections(s map[string][]CheckResult) { m.sections = s; m.running = false }

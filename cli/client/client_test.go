@@ -457,3 +457,91 @@ func TestDoRequest_Returns4xxError(t *testing.T) {
 		t.Errorf("error = %q, want to contain 400", err.Error())
 	}
 }
+
+// ─── DeleteExecution ─────────────────────────────────────────────────────────
+
+func TestDeleteExecution_SendsDeleteWithPurge(t *testing.T) {
+	var gotMethod, gotPath string
+	_, c := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.RawPath
+		if gotPath == "" {
+			gotPath = r.URL.Path
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	if err := c.DeleteExecution("exec-abc"); err != nil {
+		t.Fatalf("DeleteExecution: %v", err)
+	}
+	if gotMethod != http.MethodDelete {
+		t.Errorf("method = %q, want DELETE", gotMethod)
+	}
+	if !strings.Contains(gotPath, "exec-abc") {
+		t.Errorf("path = %q, want to contain exec-abc", gotPath)
+	}
+}
+
+func TestDeleteExecution_PathEscapesExecutionID(t *testing.T) {
+	var gotPath string
+	_, c := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.RawPath
+		if gotPath == "" {
+			gotPath = r.URL.Path
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	if err := c.DeleteExecution("id/with/slashes"); err != nil {
+		t.Fatalf("DeleteExecution: %v", err)
+	}
+	if !strings.Contains(gotPath, "id%2Fwith%2Fslashes") {
+		t.Errorf("path = %q, want escaped slashes", gotPath)
+	}
+}
+
+// ─── BulkDeleteExecutions ────────────────────────────────────────────────────
+
+func TestBulkDeleteExecutions_SendsCorrectPayload(t *testing.T) {
+	var gotMethod, gotPath string
+	var gotBody BulkDeleteRequest
+	_, c := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	ids := []string{"id-1", "id-2", "id-3"}
+	if err := c.BulkDeleteExecutions(ids); err != nil {
+		t.Fatalf("BulkDeleteExecutions: %v", err)
+	}
+	if gotMethod != http.MethodDelete {
+		t.Errorf("method = %q, want DELETE", gotMethod)
+	}
+	if gotPath != "/api/agent/executions/bulk/delete" {
+		t.Errorf("path = %q, want /api/agent/executions/bulk/delete", gotPath)
+	}
+	if len(gotBody.IDs) != 3 {
+		t.Errorf("ids count = %d, want 3", len(gotBody.IDs))
+	}
+	for i, id := range ids {
+		if gotBody.IDs[i] != id {
+			t.Errorf("ids[%d] = %q, want %q", i, gotBody.IDs[i], id)
+		}
+	}
+}
+
+func TestBulkDeleteExecutions_ReturnsErrorOn4xx(t *testing.T) {
+	_, c := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "bad request", http.StatusBadRequest)
+	}))
+
+	err := c.BulkDeleteExecutions([]string{"id-1"})
+	if err == nil {
+		t.Fatal("expected error for 400")
+	}
+	if !strings.Contains(err.Error(), "400") {
+		t.Errorf("error = %q, want to contain 400", err.Error())
+	}
+}

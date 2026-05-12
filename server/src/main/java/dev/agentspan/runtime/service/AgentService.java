@@ -1355,4 +1355,106 @@ public class AgentService {
     public List<TaskExecLog> getTaskLogs(String taskId) {
         return executionService.getTaskLogs(taskId);
     }
+
+    // ── Execution deletion ───────────────────────────────────────────
+
+    /**
+     * Permanently delete a single execution record and all related sub-workflow
+     * records from persistence.
+     *
+     * <p>Resolution rules:
+     * <ol>
+     *   <li>Fetch the workflow. If it has a parent, resolve the root parent first.</li>
+     *   <li>Collect the root parent ID plus all sub-workflow IDs reachable from it.</li>
+     *   <li>Delete every collected ID via {@code workflowService.deleteWorkflow}.</li>
+     * </ol>
+     * </p>
+     */
+    public void deleteExecutionCascade(String executionId) {
+        Set<String> toDelete = resolveExecutionFamily(executionId);
+        for (String id : toDelete) {
+            try {
+                workflowService.deleteWorkflow(id, false);
+                log.info("Deleted execution record: {}", id);
+            } catch (Exception e) {
+                log.warn("Failed to delete execution {}: {}", id, e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Permanently delete multiple execution records (and their sub-workflows /
+     * parent workflows) from persistence.
+     *
+     * <p>Each ID is resolved to its full family (parent + all sub-workflows) before
+     * deletion, so passing either a parent or a child ID produces the same result.</p>
+     */
+    public void bulkDeleteExecutions(List<String> ids) {
+        Set<String> toDelete = new LinkedHashSet<>();
+        for (String id : ids) {
+            try {
+                toDelete.addAll(resolveExecutionFamily(id));
+            } catch (Exception e) {
+                log.warn("Could not resolve execution family for {}: {}", id, e.getMessage());
+                toDelete.add(id); // best-effort: delete what was asked
+            }
+        }
+        for (String id : toDelete) {
+            try {
+                workflowService.deleteWorkflow(id, false);
+                log.info("Bulk-deleted execution record: {}", id);
+            } catch (Exception e) {
+                log.warn("Failed to bulk-delete execution {}: {}", id, e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Given any execution ID (parent or sub-workflow), return the full set of IDs
+     * that should be deleted together: the root parent plus every sub-workflow
+     * reachable from it.
+     */
+    private Set<String> resolveExecutionFamily(String executionId) {
+        Set<String> family = new LinkedHashSet<>();
+        String rootId = resolveRootParent(executionId);
+        collectSubWorkflowIds(rootId, family);
+        return family;
+    }
+
+    /**
+     * Walk up the parent chain to find the root (top-level) workflow ID.
+     * Returns {@code executionId} itself if it has no parent.
+     */
+    private String resolveRootParent(String executionId) {
+        try {
+            Workflow wf = executionService.getExecutionStatus(executionId, false);
+            String parentId = wf.getParentWorkflowId();
+            if (parentId != null && !parentId.isBlank()) {
+                return resolveRootParent(parentId);
+            }
+        } catch (Exception e) {
+            log.debug("Could not fetch workflow {} to resolve parent: {}", executionId, e.getMessage());
+        }
+        return executionId;
+    }
+
+    /**
+     * Recursively collect {@code rootId} and all sub-workflow IDs reachable from it.
+     */
+    private void collectSubWorkflowIds(String workflowId, Set<String> collected) {
+        if (!collected.add(workflowId)) {
+            return; // already visited
+        }
+        try {
+            Workflow wf = executionService.getExecutionStatus(workflowId, true);
+            for (Task task : wf.getTasks()) {
+                String subId = task.getSubWorkflowId();
+                if (subId != null && !subId.isBlank()) {
+                    collectSubWorkflowIds(subId, collected);
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Could not fetch sub-workflows for {}: {}", workflowId, e.getMessage());
+        }
+    }
 }

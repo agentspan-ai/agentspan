@@ -620,12 +620,12 @@ func (m ServerModel) FooterHints() string {
 
 // ─── Test accessors ───────────────────────────────────────────────────────────
 
-func (m ServerModel) Following() bool         { return m.following }
-func (m ServerModel) Action() ServerAction    { return m.action }
-func (m ServerModel) Err() string             { return m.err }
-func (m ServerModel) Checking() bool          { return m.checking }
-func (m *ServerModel) SetHealthy(v bool)      { m.healthy = v; m.checking = false }
-func (m *ServerModel) SetErr(e string)        { m.err = e }
+func (m ServerModel) Following() bool      { return m.following }
+func (m ServerModel) Action() ServerAction { return m.action }
+func (m ServerModel) Err() string          { return m.err }
+func (m ServerModel) Checking() bool       { return m.checking }
+func (m *ServerModel) SetHealthy(v bool)   { m.healthy = v; m.checking = false }
+func (m *ServerModel) SetErr(e string)     { m.err = e }
 
 // WantsEsc returns true when there is a confirm dialog open.
 func (m ServerModel) WantsEsc() bool {

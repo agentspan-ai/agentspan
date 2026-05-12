@@ -264,8 +264,8 @@ func (m ExecutionsModel) Searching() bool     { return m.searching }
 func (m ExecutionsModel) SearchQuery() string { return m.searchQuery }
 func (m ExecutionsModel) Loading() bool       { return m.loading }
 
-func (m *ExecutionsModel) SetTotal(n int64)   { m.total = n }
-func (m *ExecutionsModel) SetPageSize(n int)  { m.pageSize = n }
+func (m *ExecutionsModel) SetTotal(n int64)  { m.total = n }
+func (m *ExecutionsModel) SetPageSize(n int) { m.pageSize = n }
 
 func (m *ExecutionsModel) InjectRunning(id string) {
 	m.executions = []client.AgentExecutionSummary{{

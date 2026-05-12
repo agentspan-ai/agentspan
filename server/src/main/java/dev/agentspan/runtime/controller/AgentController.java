@@ -25,6 +25,7 @@ import com.netflix.conductor.core.exception.NotFoundException;
 import dev.agentspan.runtime.model.AgentExecutionDetail;
 import dev.agentspan.runtime.model.AgentRun;
 import dev.agentspan.runtime.model.AgentSummary;
+import dev.agentspan.runtime.model.BulkDeleteRequest;
 import dev.agentspan.runtime.model.CompileResponse;
 import dev.agentspan.runtime.model.CreateTrackingWorkflowRequest;
 import dev.agentspan.runtime.model.CreateTrackingWorkflowResponse;
@@ -265,9 +266,20 @@ public class AgentController {
         return agentService.rerunExecution(executionId, request);
     }
 
-    /** Terminate a running execution (used by UI delete action). */
+    /**
+     * Delete an execution record from persistence.
+     *
+     * <p>If {@code purge=false}, falls back to terminate behavior for compatibility.</p>
+     */
     @DeleteMapping("/executions/{executionId}")
-    public void terminateExecution(@PathVariable String executionId, @RequestParam(required = false) String reason) {
+    public void terminateExecution(
+            @PathVariable String executionId,
+            @RequestParam(defaultValue = "true") boolean purge,
+            @RequestParam(required = false) String reason) {
+        if (purge) {
+            agentService.deleteExecutionCascade(executionId);
+            return;
+        }
         agentService.cancelAgent(executionId, reason);
     }
 
@@ -349,6 +361,19 @@ public class AgentController {
     @PostMapping("/executions/bulk/terminate")
     public void bulkTerminate(@RequestBody List<String> ids, @RequestParam(required = false) String reason) {
         ids.forEach(id -> agentService.cancelAgent(id, reason));
+    }
+
+    /**
+     * Permanently delete multiple execution records (and their sub-workflows / parent workflows)
+     * from persistence.
+     *
+     * <p>Accepts a JSON body: {@code {"ids": ["id1", "id2", ...]}}.</p>
+     */
+    @DeleteMapping("/executions/bulk/delete")
+    public void bulkDeleteExecutions(@RequestBody BulkDeleteRequest request) {
+        if (request.getIds() != null && !request.getIds().isEmpty()) {
+            agentService.bulkDeleteExecutions(request.getIds());
+        }
     }
 
     // ── Definition metadata ─────────────────────────────────────────

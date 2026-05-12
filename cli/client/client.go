@@ -532,3 +532,32 @@ func (c *Client) SetBinding(logicalKey, storeName string) error {
 	resp.Body.Close()
 	return nil
 }
+
+// ─── Execution deletion ───────────────────────────────────────────────────────
+
+// DeleteExecution permanently removes a single execution record (and its
+// sub-workflows / parent workflow) from the server's persistence layer.
+func (c *Client) DeleteExecution(executionID string) error {
+	resp, err := c.doRequest("DELETE", "/api/agent/executions/"+url.PathEscape(executionID)+"?purge=true", nil)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	return nil
+}
+
+// BulkDeleteRequest is the payload for DELETE /api/agent/executions/bulk/delete.
+type BulkDeleteRequest struct {
+	IDs []string `json:"ids"`
+}
+
+// BulkDeleteExecutions permanently removes multiple execution records (and their
+// related sub-workflows / parent workflows) from the server's persistence layer.
+func (c *Client) BulkDeleteExecutions(ids []string) error {
+	resp, err := c.doRequest("DELETE", "/api/agent/executions/bulk/delete", &BulkDeleteRequest{IDs: ids})
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	return nil
+}
