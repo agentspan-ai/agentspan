@@ -1,0 +1,70 @@
+// Copyright (c) 2025 Agentspan
+// Licensed under the MIT License. See LICENSE file in the project root for details.
+
+package ai.agentspan.examples;
+
+import ai.agentspan.Agent;
+import ai.agentspan.Agentspan;
+import ai.agentspan.frameworks.GoogleADKAgent;
+import ai.agentspan.model.AgentResult;
+import dev.langchain4j.agent.tool.P;
+import dev.langchain4j.agent.tool.Tool;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/**
+ * Example Adk 06 — Streaming
+ *
+ * <p>Java port of <code>sdk/python/examples/adk/06_streaming.py</code>.
+ *
+ * <p>Demonstrates: a documentation lookup ADK agent with a streaming-capable
+ * pattern. The Python source shows {@code runtime.stream(...)} as an
+ * alternative; this Java port uses the synchronous {@code Agentspan.run}.
+ */
+public class ExampleAdk06Streaming {
+
+    static class DocsTools {
+
+        @Tool(name = "search_documentation", value = "Search the product documentation.")
+        public Map<String, Object> searchDocumentation(@P("query") String query) {
+            Map<String, Map<String, Object>> docs = new LinkedHashMap<>();
+            docs.put("installation", Map.of(
+                "title", "Installation Guide",
+                "content", "Run `pip install mypackage`. Requires Python 3.9+."));
+            docs.put("authentication", Map.of(
+                "title", "Authentication",
+                "content", "Use API keys via the X-API-Key header. Keys are managed in the dashboard."));
+            docs.put("rate limits", Map.of(
+                "title", "Rate Limiting",
+                "content", "Free tier: 100 req/min. Pro: 1000 req/min. Enterprise: unlimited."));
+
+            String q = query.toLowerCase();
+            for (Map.Entry<String, Map<String, Object>> entry : docs.entrySet()) {
+                if (q.contains(entry.getKey())) {
+                    Map<String, Object> r = new LinkedHashMap<>();
+                    r.put("found", true);
+                    r.putAll(entry.getValue());
+                    return r;
+                }
+            }
+            return Map.of("found", false, "message", "No matching documentation found.");
+        }
+    }
+
+    public static void main(String[] args) {
+        Agent agent = GoogleADKAgent.builder()
+            .name("docs_assistant")
+            .model(Settings.LLM_MODEL)
+            .instruction(
+                "You are a documentation assistant. Use the search tool to find "
+                + "relevant docs and provide clear, well-formatted answers.")
+            .tools(new DocsTools())
+            .build();
+
+        AgentResult result = Agentspan.run(agent, "How do I authenticate with the API?");
+        result.printResult();
+
+        Agentspan.shutdown();
+    }
+}

@@ -18,6 +18,7 @@ repositories {
 
 dependencies {
     implementation project(':')
+    compileOnly 'dev.langchain4j:langchain4j:1.0.0'
     runtimeOnly 'org.slf4j:slf4j-simple:2.0.13'
 }
 
