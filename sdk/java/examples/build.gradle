@@ -18,7 +18,12 @@ repositories {
 
 dependencies {
     implementation project(':')
+    // @Tool / @P annotations from LangChain4j are RUNTIME-retained; if the
+    // dependency is only on the compile classpath, the JVM silently drops them
+    // at class-load time and reflection-based tool extraction returns empty.
+    // Keep this on both classpaths.
     compileOnly 'dev.langchain4j:langchain4j:1.0.0'
+    runtimeOnly 'dev.langchain4j:langchain4j:1.0.0'
     runtimeOnly 'org.slf4j:slf4j-simple:2.0.13'
 }
 

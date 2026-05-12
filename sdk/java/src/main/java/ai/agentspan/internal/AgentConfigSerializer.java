@@ -62,12 +62,21 @@ public class AgentConfigSerializer {
                 map.put("google_adk".equals(fw) ? "instruction" : "instructions",
                         agent.getInstructions());
             }
-            // Tools: emit names so the server can wire them, while SDK registers
-            // their handlers via the worker manager.
+            // Tools: framework normalizers (OpenAINormalizer, GoogleADKNormalizer)
+            // expect the worker_ref shape `{_worker_ref, description, parameters}`
+            // — matching Python's frameworks/serializer.py. The default
+            // `{name, description, inputSchema, toolType}` shape gets dropped on
+            // the floor by these normalizers (no _worker_ref → no schema → LLM
+            // sees a paramless tool → calls it with empty inputData → NPE in
+            // the worker). The SDK still registers worker handlers separately.
             if (agent.getTools() != null && !agent.getTools().isEmpty()) {
                 List<Map<String, Object>> toolsList = new ArrayList<>();
                 for (ToolDef tool : agent.getTools()) {
-                    toolsList.add(serializeTool(tool, false));
+                    Map<String, Object> t = new LinkedHashMap<>();
+                    t.put("_worker_ref", tool.getName());
+                    t.put("description", tool.getDescription());
+                    t.put("parameters", tool.getInputSchema());
+                    toolsList.add(t);
                 }
                 map.put("tools", toolsList);
             }
