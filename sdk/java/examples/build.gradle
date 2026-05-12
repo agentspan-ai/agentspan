@@ -22,3 +22,9 @@ dependencies {
 }
 
 compileJava.options.compilerArgs << '-parameters'
+
+// Allow running individual examples via:
+//   ./gradlew :examples:run -PmainClass=ai.agentspan.examples.ExampleOpenAi01BasicAgent
+application {
+    mainClass = project.findProperty('mainClass') ?: 'ai.agentspan.examples.Example01BasicAgent'
+}

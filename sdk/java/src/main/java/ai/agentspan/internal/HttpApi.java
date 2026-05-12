@@ -56,6 +56,33 @@ public class HttpApi {
     }
 
     /**
+     * Start a framework-backed agent execution.
+     *
+     * <p>For agents whose config is normalized server-side by a framework normalizer
+     * (e.g. OpenAI Agents SDK, Google ADK, LangGraph). The server reads
+     * {@code framework} + {@code rawConfig} fields, dispatches to the matching
+     * {@code dev.agentspan.runtime.normalizer.*}, and produces an AgentConfig
+     * without requiring a typed model field on the SDK side.
+     *
+     * @param framework framework identifier (e.g. {@code "openai"}, {@code "google_adk"})
+     * @param rawConfig framework-specific raw config map
+     * @param prompt    user prompt
+     * @param sessionId optional session ID
+     * @return server response containing workflowId
+     */
+    public Map<String, Object> startFrameworkAgent(
+            String framework, Map<String, Object> rawConfig, String prompt, String sessionId) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("framework", framework);
+        body.put("rawConfig", rawConfig);
+        body.put("prompt", prompt);
+        if (sessionId != null && !sessionId.isEmpty()) {
+            body.put("sessionId", sessionId);
+        }
+        return post("/api/agent/start", body);
+    }
+
+    /**
      * Compile an agent configuration into a workflow definition.
      *
      * <p>Calls {@code POST /api/agent/compile} with {@code {"agentConfig": agentConfig}}

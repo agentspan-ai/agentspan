@@ -163,7 +163,17 @@ public class AgentRuntime implements AutoCloseable {
 
             logger.debug("Starting agent '{}' with prompt: {}", agent.getName(), prompt);
 
-            Map<String, Object> response = httpApi.startAgent(agentConfig, prompt, sessionId);
+            // Framework-backed agents (openai, google_adk, langgraph, vercel_ai)
+            // must be sent via the server's framework+rawConfig fields so the
+            // matching normalizer runs server-side. The "skill" framework keeps
+            // the legacy path because its serialized config still includes model.
+            Map<String, Object> response;
+            String framework = agent.getFramework();
+            if (framework != null && !framework.isEmpty() && !"skill".equals(framework)) {
+                response = httpApi.startFrameworkAgent(framework, agentConfig, prompt, sessionId);
+            } else {
+                response = httpApi.startAgent(agentConfig, prompt, sessionId);
+            }
             String workflowId = extractWorkflowId(response);
 
             logger.info("Agent '{}' started with workflow ID: {}", agent.getName(), workflowId);

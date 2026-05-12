@@ -45,6 +45,38 @@ public class AgentConfigSerializer {
             return skillMap;
         }
 
+        // OpenAI Agents SDK and Google ADK use the framework+rawConfig path.
+        // The server normalizers (OpenAINormalizer, GoogleADKNormalizer) read
+        // the raw config map directly. We also emit the tools list (when present)
+        // so the SDK worker poller registers handlers for any locally-defined
+        // @Tool-annotated worker tools the agent declares.
+        String fw = agent.getFramework();
+        if ("openai".equals(fw) || "google_adk".equals(fw)) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("name", agent.getName());
+            if (agent.getModel() != null && !agent.getModel().isEmpty()) {
+                map.put("model", agent.getModel());
+            }
+            // OpenAI uses `instructions`; ADK uses `instruction` (singular).
+            if (agent.getInstructions() != null && !agent.getInstructions().isEmpty()) {
+                map.put("google_adk".equals(fw) ? "instruction" : "instructions",
+                        agent.getInstructions());
+            }
+            // Tools: emit names so the server can wire them, while SDK registers
+            // their handlers via the worker manager.
+            if (agent.getTools() != null && !agent.getTools().isEmpty()) {
+                List<Map<String, Object>> toolsList = new ArrayList<>();
+                for (ToolDef tool : agent.getTools()) {
+                    toolsList.add(serializeTool(tool, false));
+                }
+                map.put("tools", toolsList);
+            }
+            // Framework-specific extras (handoffs, sub_agents, output_type, etc.)
+            Map<String, Object> cfg = agent.getFrameworkConfig();
+            if (cfg != null) map.putAll(cfg);
+            return map;
+        }
+
         Map<String, Object> agentMap = new LinkedHashMap<>();
 
         agentMap.put("name", agent.getName());
