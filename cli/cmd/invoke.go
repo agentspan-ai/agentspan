@@ -139,6 +139,8 @@ func runLimaInvoke(state *lastDeployState) error {
 				for _, key := range spec.Spec.Env {
 					if val := os.Getenv(key); val != "" {
 						envMap[key] = val
+					} else if key == "AGENTSPAN_LLM_MODEL" && cfg.LLMModel != "" {
+						envMap[key] = cfg.LLMModel
 					}
 				}
 			}
