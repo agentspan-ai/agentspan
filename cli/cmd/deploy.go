@@ -43,7 +43,7 @@ var deployCmd = &cobra.Command{
 
 const (
 	deployWorkflowName    = "agentspan_deploy"
-	deployWorkflowVersion = 3
+	deployWorkflowVersion = 4
 )
 
 func init() {
@@ -58,16 +58,26 @@ func init() {
 }
 
 func runDeployCmd(cmd *cobra.Command, args []string) error {
-	// If --artifact is set, use the Conductor/Firecracker deploy path.
-	// If not set but last-build.json exists, use it automatically.
 	artifactID, _ := cmd.Flags().GetString("artifact")
-	if artifactID == "" {
-		if state, err := loadLastBuild(); err == nil && state.FileHandleID != "" {
-			artifactID = state.FileHandleID
+
+	// Firecracker path: agentspan.yaml project.
+	// Auto-build if no --artifact provided.
+	if _, err := os.Stat("agentspan.yaml"); err == nil {
+		if artifactID == "" {
+			br, err := doBuildWorkflow(cmd.Context(), getConfig().ConductorURL)
+			if err != nil {
+				return err
+			}
+			return runRemoteDeployCmd(cmd, br)
 		}
+		// --artifact provided: use it with a fresh build result container
+		return runRemoteDeployCmd(cmd, &buildResult{
+			fileHandleID: artifactID,
+		})
 	}
+
 	if artifactID != "" {
-		return runRemoteDeployCmd(cmd, artifactID)
+		return runRemoteDeployCmd(cmd, &buildResult{fileHandleID: artifactID})
 	}
 
 	// 1. Get working directory
@@ -596,21 +606,9 @@ func formatDiscoveryTable(agents []discoveredAgent, pkg string) string {
 }
 
 // runRemoteDeployCmd deploys an artifact to the Firecracker Execution Plane
-// via the Conductor deploy workflow. Called when --artifact is provided.
-func runRemoteDeployCmd(cmd *cobra.Command, artifactID string) error {
-	// Resolve workflow ID — prefer flag, fall back to last-build state.
-	workflowID, _ := cmd.Flags().GetString("workflow-id")
-	bundleName := ""
-	var sourceDir string
-	if workflowID == "" {
-		state, err := loadLastBuild()
-		if err != nil {
-			return fmt.Errorf("--workflow-id not set and no last build state found: %w", err)
-		}
-		workflowID = state.WorkflowID
-		bundleName = state.BundleName
-		sourceDir = state.SourceDir
-	}
+// via the Conductor deploy workflow.
+func runRemoteDeployCmd(cmd *cobra.Command, br *buildResult) error {
+	agentName := readAgentName(".")
 
 	cfg := getConfig()
 	cc := client.NewConductorClient(cfg.ConductorURL)
@@ -618,12 +616,13 @@ func runRemoteDeployCmd(cmd *cobra.Command, artifactID string) error {
 
 	bold := color.New(color.Bold)
 	bold.Println("Deploying agent to Lima Execution Plane")
-	fmt.Printf("  Artifact : %s\n\n", artifactID)
+	fmt.Printf("  Artifact : %s\n\n", br.fileHandleID)
 
 	deployWorkflowID, err := cc.StartWorkflow(ctx, deployWorkflowName, deployWorkflowVersion, map[string]any{
-		"file_handle_id": artifactID,
-		"workflow_id":    workflowID,
-		"bundle_name":    bundleName,
+		"file_handle_id": br.fileHandleID,
+		"workflow_id":    br.workflowID,
+		"bundle_name":    br.bundleName,
+		"agent_name":     agentName,
 	})
 	if err != nil {
 		return fmt.Errorf("start deploy workflow: %w", err)
@@ -632,7 +631,7 @@ func runRemoteDeployCmd(cmd *cobra.Command, artifactID string) error {
 	fmt.Printf("  Workflow: %s\n", deployWorkflowID)
 	fmt.Print("  Deploying")
 
-	status, err := cc.WaitForWorkflow(ctx, deployWorkflowID, func(s string) {
+	_, err = cc.WaitForWorkflow(ctx, deployWorkflowID, func(s string) {
 		fmt.Print(".")
 	})
 	fmt.Println()
@@ -640,35 +639,9 @@ func runRemoteDeployCmd(cmd *cobra.Command, artifactID string) error {
 		return err
 	}
 
-	remoteBundlePath, _ := status.Output["remote_bundle_path"].(string)
-	vmName, _ := status.Output["vm_name"].(string)
-
-	// Persist deploy state for invoke step.
-	deployState := lastDeployState{
-		WorkflowID:       deployWorkflowID,
-		BundleName:       bundleName,
-		RemoteBundlePath: remoteBundlePath,
-		VMName:           vmName,
-		DeployedAt:       time.Now(),
-	}
-	if err := saveLastDeploy(deployState); err != nil {
-		color.New(color.FgYellow).Printf("  warning: could not save deploy state: %v\n", err)
-	}
-
-	// Also write to global agent registry so --name works from any directory.
-	if sourceDir != "" {
-		if agentName := readAgentName(sourceDir); agentName != "" {
-			if err := saveGlobalAgentDeploy(agentName, deployState); err != nil {
-				color.New(color.FgYellow).Printf("  warning: could not save global agent state: %v\n", err)
-			}
-		}
-	}
-
 	fmt.Println()
 	color.New(color.FgGreen, color.Bold).Println("  Deploy complete.")
-	if remoteBundlePath != "" {
-		fmt.Printf("  Bundle staged on Lima VM %q at: %s\n\n", vmName, remoteBundlePath)
-	}
+	fmt.Println()
 	fmt.Println("Next: agentspan agent invoke")
 	return nil
 }
