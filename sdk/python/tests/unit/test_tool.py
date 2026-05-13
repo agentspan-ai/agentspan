@@ -290,11 +290,14 @@ class TestWorkerTaskDetection:
 
     def test_conductor_not_installed_raises(self):
         """If conductor-python is not installed, should fall through to TypeError."""
+        import importlib
+
+        tool_module = importlib.import_module("agentspan.agents.tool")
 
         def some_func(x: str) -> str:
             return x
 
-        with mock.patch("agentspan.agents.tool._try_worker_task", return_value=None):
+        with mock.patch.object(tool_module, "_try_worker_task", return_value=None):
             with pytest.raises(TypeError):
                 get_tool_def(some_func)
 

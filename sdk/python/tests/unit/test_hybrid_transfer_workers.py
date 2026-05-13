@@ -136,9 +136,13 @@ class TestRegisterHybridTransferWorkers:
             rt._register_hybrid_transfer_workers(mgr, domain=None)
 
         assert "manager_transfer_to_researcher" in captured_fn
-        result = asyncio.get_event_loop().run_until_complete(
-            captured_fn["manager_transfer_to_researcher"]()
-        )
+        loop = asyncio.new_event_loop()
+        try:
+            result = loop.run_until_complete(
+                captured_fn["manager_transfer_to_researcher"]()
+            )
+        finally:
+            loop.close()
         assert result == {}
 
     def test_workers_called_in_register_workers_for_hybrid(self):
