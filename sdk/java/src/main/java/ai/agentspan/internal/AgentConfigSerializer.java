@@ -157,9 +157,13 @@ public class AgentConfigSerializer {
             agentMap.put("allowedTransitions", agent.getAllowedTransitions());
         }
 
-        // Planner mode
-        if (agent.isPlanner()) {
-            agentMap.put("planner", true);
+        // Plan-first preamble (Google ADK style). Renamed from "planner"
+        // because the server's AgentConfig now uses that JSON key for the
+        // PLAN_EXECUTE planner sub-agent slot. Emitting "planner": true
+        // (boolean) into a slot the server expects to be an AgentConfig
+        // object would either fail Jackson deserialisation or silently null.
+        if (agent.isEnablePlanning()) {
+            agentMap.put("enablePlanning", true);
         }
 
         // Synthesize — only emit when explicitly disabled (true is the server default)

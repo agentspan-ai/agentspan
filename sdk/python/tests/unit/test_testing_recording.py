@@ -20,7 +20,12 @@ def _make_result():
         ],
         tool_calls=[{"name": "get_weather", "args": {"city": "NYC"}, "result": {"temp": 72}}],
         status="COMPLETED",
-        token_usage=TokenUsage(prompt_tokens=100, completion_tokens=50, total_tokens=150),
+        token_usage=TokenUsage(
+            prompt_tokens=100,
+            completion_tokens=50,
+            reasoning_tokens=25,
+            total_tokens=150,
+        ),
         metadata={"model": "gpt-4o"},
         finish_reason="stop",
         events=[
@@ -69,6 +74,7 @@ class TestRecordReplay:
         assert restored.token_usage is not None
         assert restored.token_usage.prompt_tokens == 100
         assert restored.token_usage.completion_tokens == 50
+        assert restored.token_usage.reasoning_tokens == 25
         assert restored.token_usage.total_tokens == 150
 
     def test_events_preserved(self, tmp_path):

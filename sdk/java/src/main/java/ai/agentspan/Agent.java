@@ -57,7 +57,11 @@ public class Agent {
     private final String sessionId;
     private final List<Handoff> handoffs;
     private final Map<String, List<String>> allowedTransitions;
-    private final boolean planner;
+    /** Plan-first preamble flag (Google ADK style). Renamed from
+     *  ``planner`` because the server-side AgentConfig now uses that JSON
+     *  key for the PLAN_EXECUTE planner sub-agent slot. Wire-incompatible
+     *  with the old name. */
+    private final boolean enablePlanning;
     private final boolean localCodeExecution;
     private final java.util.List<String> allowedLanguages;
     private final int codeExecutionTimeout;
@@ -103,7 +107,7 @@ public class Agent {
         this.sessionId = builder.sessionId;
         this.handoffs = builder.handoffs != null ? new ArrayList<>(builder.handoffs) : new ArrayList<>();
         this.allowedTransitions = builder.allowedTransitions;
-        this.planner = builder.planner;
+        this.enablePlanning = builder.enablePlanning;
         this.localCodeExecution = builder.localCodeExecution;
         this.allowedLanguages = builder.allowedLanguages != null ? new ArrayList<>(builder.allowedLanguages) : null;
         this.codeExecutionTimeout = builder.codeExecutionTimeout;
@@ -187,7 +191,7 @@ public class Agent {
     public String getSessionId() { return sessionId; }
     public List<Handoff> getHandoffs() { return handoffs; }
     public Map<String, List<String>> getAllowedTransitions() { return allowedTransitions; }
-    public boolean isPlanner() { return planner; }
+    public boolean isEnablePlanning() { return enablePlanning; }
     public boolean isLocalCodeExecution() { return localCodeExecution; }
     public java.util.List<String> getAllowedLanguages() { return allowedLanguages; }
     public int getCodeExecutionTimeout() { return codeExecutionTimeout; }
@@ -253,7 +257,7 @@ public class Agent {
         private String sessionId;
         private List<Handoff> handoffs;
         private Map<String, List<String>> allowedTransitions;
-        private boolean planner = false;
+        private boolean enablePlanning = false;
         private boolean localCodeExecution = false;
         private java.util.List<String> allowedLanguages = null;
         private int codeExecutionTimeout = 30;
@@ -405,11 +409,15 @@ public class Agent {
         }
 
         /**
-         * Enable planner mode. The server enhances the system prompt with planning
-         * instructions so the agent creates a step-by-step plan before executing tools.
+         * Enable plan-first preamble (Google ADK style). When true, the
+         * server enhances the system prompt with "create a step-by-step
+         * plan before executing tools." Renamed from {@code planner(...)}
+         * because the server now uses the {@code planner} JSON key for the
+         * PLAN_EXECUTE planner sub-agent slot — keeping the old name would
+         * ship a boolean into a sub-agent slot.
          */
-        public Builder planner(boolean planner) {
-            this.planner = planner;
+        public Builder enablePlanning(boolean enablePlanning) {
+            this.enablePlanning = enablePlanning;
             return this;
         }
 

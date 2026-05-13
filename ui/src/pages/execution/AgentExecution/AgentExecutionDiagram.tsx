@@ -768,15 +768,26 @@ function buildTurnNodes(
     const isSubExpanded = expandedGroups.has(subGroupId);
 
     if (turn.subAgents.length < COLLAPSE_THRESHOLD || isSubExpanded) {
+      // Build node-data for one sub-agent. When the agent's role is set
+      // (PAE: Plan / Execute / Fallback), use the role display name as
+      // the label and the role itself as the type badge so the user
+      // reads "Planner — Plan" instead of "guardrails_demo_planner —
+      // SEQUENTIAL". Falls through to the existing strategy/agent-name
+      // display when no role is detected.
+      const subData = (sub: AgentRunData): DiagramNodeData => ({
+        kind: "subagent",
+        label: sub.displayName ?? sub.agentName,
+        meta: sub.model,
+        modelName: sub.model,
+        sublabel: sub.output?.slice(0, 55) ?? sub.failureReason?.slice(0, 55),
+        strategy: turn.strategy,
+        typeLabel: sub.roleLabel,
+        ts: toTS(sub.status),
+        subAgentRun: sub,
+      });
       const makeSubBranch = (sub: AgentRunData) => ({
         id: `sub-${sub.id}`,
-        data: {
-          kind: "subagent" as Kind, label: sub.agentName,
-          meta: sub.model, modelName: sub.model,
-          sublabel: sub.output?.slice(0, 55) ?? sub.failureReason?.slice(0, 55),
-          strategy: turn.strategy,
-          ts: toTS(sub.status), subAgentRun: sub,
-        },
+        data: subData(sub),
       });
 
       if (isSubExpanded && turn.subAgents.length > MAX_EXPANDED) {
@@ -792,13 +803,16 @@ function buildTurnNodes(
         pushParallel(`${subGroupId}-fork`, [...head, ellipsisBranch, ...tail], `${subGroupId}-join`);
       } else if (turn.subAgents.length === 1) {
         const sub = turn.subAgents[0];
-        push(`sub-${sub.id}`, {
-          kind: "subagent", label: sub.agentName,
-          meta: sub.model, modelName: sub.model,
-          sublabel: sub.output?.slice(0, 55) ?? sub.failureReason?.slice(0, 55),
-          strategy: turn.strategy,
-          ts: toTS(sub.status), subAgentRun: sub,
-        });
+        push(`sub-${sub.id}`, subData(sub));
+      } else if (turn.strategy === AgentStrategy.SEQUENTIAL) {
+        // Sub-agents ran one after another (e.g. PLAN_EXECUTE: planner →
+        // plan_exec → fallback). Render them top-to-bottom in a chain
+        // instead of fanning them out as FORK_JOIN branches — each push()
+        // extends prevRef so successive subagent nodes wire into a
+        // straight vertical sequence.
+        for (const sub of turn.subAgents) {
+          push(`sub-${sub.id}`, subData(sub));
+        }
       } else {
         pushParallel(`${subGroupId}-fork`, turn.subAgents.map(makeSubBranch), `${subGroupId}-join`);
       }

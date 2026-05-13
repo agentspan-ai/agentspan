@@ -363,8 +363,20 @@ public class ToolCompiler {
         String humanJson = JavaScriptBuilder.toJson(humanConfig);
         String wmqJson = JavaScriptBuilder.toJson(wmqConfig);
 
+        // Build the set of all known tool names so the enrich script can
+        // catch hallucinated tool names (LLM emits e.g. "find" when only
+        // "shell" + "list_files" are exposed) and turn them into INLINE
+        // error tasks instead of SCHEDULED-with-no-poller hangs.
+        Map<String, Object> knownToolNames = new LinkedHashMap<>();
+        if (tools != null) {
+            for (ToolConfig t : tools) {
+                if (t.getName() != null) knownToolNames.put(t.getName(), Boolean.TRUE);
+            }
+        }
+        String knownToolNamesJson = JavaScriptBuilder.toJson(knownToolNames);
+
         String script = JavaScriptBuilder.enrichToolsScript(
-                httpJson, mcpJson, mediaJson, agentToolJson, ragJson, cliJson, humanJson, wmqJson);
+                httpJson, mcpJson, mediaJson, agentToolJson, ragJson, cliJson, humanJson, wmqJson, knownToolNamesJson);
 
         String enrichRef = agentName + "_" + p + "enrich_tools";
 
@@ -1505,8 +1517,15 @@ public class ToolCompiler {
         String ragJson = JavaScriptBuilder.toJson(ragConfig);
         String humanJson = JavaScriptBuilder.toJson(humanConfig);
         String wmqJson = JavaScriptBuilder.toJson(wmqConfig);
+        Map<String, Object> knownToolNames = new LinkedHashMap<>();
+        if (tools != null) {
+            for (ToolConfig t : tools) {
+                if (t.getName() != null) knownToolNames.put(t.getName(), Boolean.TRUE);
+            }
+        }
+        String knownToolNamesJson = JavaScriptBuilder.toJson(knownToolNames);
         String script = JavaScriptBuilder.enrichToolsScriptDynamic(
-                httpJson, mediaJson, agentToolJson, ragJson, humanJson, wmqJson);
+                httpJson, mediaJson, agentToolJson, ragJson, humanJson, wmqJson, knownToolNamesJson);
 
         String enrichRef = agentName + "_" + p + "enrich_tools";
 

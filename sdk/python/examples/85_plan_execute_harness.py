@@ -50,7 +50,7 @@ import os
 import sys
 import tempfile
 
-from agentspan.agents import Agent, AgentRuntime, Strategy, tool
+from agentspan.agents import AgentRuntime, plan_execute, tool
 from settings import settings
 
 # ── Configuration ────────────────────────────────────────────────
@@ -149,87 +149,22 @@ def check_word_count(path: str, min_words: int) -> str:
 
 # ── Agents ───────────────────────────────────────────────────────
 
+# Domain-level guidance only. The server auto-appends ``## Available tools``
+# and ``## Plan schema`` blocks to the planner's prompt at compile time —
+# no need to hand-write tool listings or JSON schema examples here.
 PLANNER_INSTRUCTIONS = f"""\
 You are a research report planner. Given a topic, plan a structured report.
 
-Your job:
-1. Decide on 3-5 sections for the report (introduction, 2-3 body sections, conclusion)
-2. For each section, write clear instructions on what content to include
-3. Output your plan as Markdown with an embedded JSON fence
+Your plan should:
+1. Use 3-5 sections (introduction, 2-3 body sections, conclusion).
+2. Put section files under ``sections/`` (e.g. ``sections/01_intro.md``).
+3. Run section writes in parallel after a setup step that creates the directory.
+4. Assemble the sections into ``report.md`` once writes complete.
+5. Validate the result with ``check_word_count`` (min {MIN_WORD_COUNT} words).
 
-IMPORTANT: Your plan MUST include a ```json fence with the structured plan.
-The JSON plan uses the Plan-Execute schema with steps, validation, and on_success.
-
-## Available tools for operations:
-- `create_directory`: args={{path}} — create a directory
-- `write_file`: generate={{instructions, output_schema}} — LLM writes content
-- `assemble_files`: args={{output_path, input_paths, separator}} — concatenate files
-- `check_word_count`: args={{path, min_words}} — validate word count
-
-## Plan format:
-
-Your output MUST end with a JSON fence like this example:
-
-```json
-{{
-  "steps": [
-    {{
-      "id": "setup",
-      "parallel": false,
-      "operations": [
-        {{"tool": "create_directory", "args": {{"path": "sections"}}}}
-      ]
-    }},
-    {{
-      "id": "write_sections",
-      "depends_on": ["setup"],
-      "parallel": true,
-      "operations": [
-        {{
-          "tool": "write_file",
-          "generate": {{
-            "instructions": "Write a 200-word introduction about [topic]. Cover [key points].",
-            "output_schema": "{{\\"path\\": \\"sections/01_intro.md\\", \\"content\\": \\"...\\"}}"
-          }}
-        }},
-        {{
-          "tool": "write_file",
-          "generate": {{
-            "instructions": "Write a 200-word section about [subtopic]. Cover [details].",
-            "output_schema": "{{\\"path\\": \\"sections/02_body.md\\", \\"content\\": \\"...\\"}}"
-          }}
-        }}
-      ]
-    }},
-    {{
-      "id": "assemble",
-      "depends_on": ["write_sections"],
-      "parallel": false,
-      "operations": [
-        {{
-          "tool": "assemble_files",
-          "args": {{
-            "output_path": "report.md",
-            "input_paths": "[\\"sections/01_intro.md\\", \\"sections/02_body.md\\"]",
-            "separator": "\\n\\n---\\n\\n"
-          }}
-        }}
-      ]
-    }}
-  ],
-  "validation": [
-    {{"tool": "check_word_count", "args": {{"path": "report.md", "min_words": {MIN_WORD_COUNT}}}}}
-  ],
-  "on_success": []
-}}
-```
-
-## Rules:
-- Section files go in sections/ directory (01_intro.md, 02_body.md, etc.)
-- Each section should be 150-300 words
-- The assemble step must list ALL section files in order
-- Always validate with check_word_count (min {MIN_WORD_COUNT} words)
-- The JSON must be valid — double-check bracket matching
+Each section should be 150-300 words. Use the ``generate`` block on
+``write_file`` ops so the LLM produces content at run time; static args for
+``create_directory`` and ``assemble_files``.
 """
 
 FALLBACK_INSTRUCTIONS = f"""\
@@ -242,30 +177,18 @@ You have access to read_file, write_file, assemble_files, and check_word_count.
 Working directory: {WORK_DIR}
 """
 
-planner = Agent(
-    name="report_planner",
-    model=settings.llm_model,
-    instructions=PLANNER_INSTRUCTIONS,
-    max_turns=3,
-    max_tokens=4000,
-)
-
-fallback = Agent(
-    name="report_fallback",
-    model=settings.llm_model,
-    instructions=FALLBACK_INSTRUCTIONS,
-    tools=[create_directory, read_file, write_file, assemble_files, check_word_count],
-    max_turns=10,
-    max_tokens=8000,
-)
-
 # ── Harness ──────────────────────────────────────────────────────
-
-report_harness = Agent(
+#
+# ``plan_execute()`` collapses the planner+fallback+harness boilerplate
+# into one call. ``tools`` is the canonical plan-executable set: every
+# ``op.tool`` in the planner's JSON is validated against this list, and
+# each tool's guardrails (none here) propagate into the compiled plan.
+report_harness = plan_execute(
     name="report_generator",
+    tools=[create_directory, read_file, write_file, assemble_files, check_word_count],
+    planner_instructions=PLANNER_INSTRUCTIONS,
+    fallback_instructions=FALLBACK_INSTRUCTIONS,
     model=settings.llm_model,
-    agents=[planner, fallback],
-    strategy=Strategy.PLAN_EXECUTE,
     fallback_max_turns=5,
 )
 

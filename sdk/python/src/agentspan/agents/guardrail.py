@@ -27,7 +27,28 @@ from typing import Callable, List, Optional, Union
 
 
 class OnFail(str, Enum):
-    """What to do when a guardrail check fails."""
+    """What to do when a guardrail check fails.
+
+    Semantics differ slightly between the LLM-loop path and the
+    deterministic ``PLAN_EXECUTE`` path:
+
+    - **LLM-loop** (default tool-using agent): each value behaves as
+      named — ``RETRY`` injects feedback into the next LLM iteration,
+      ``FIX`` substitutes ``fixed_output`` for the LLM's output,
+      ``HUMAN`` routes to a HumanTask, ``RAISE`` terminates.
+
+    - **PLAN_EXECUTE** (deterministic compiled plan): the plan has no
+      LLM loop to re-iterate, no LLM output to substitute, and no
+      in-plan way to await a human approval. So ``RETRY``, ``FIX``, and
+      ``HUMAN`` all collapse to ``RAISE`` semantics — they TERMINATE
+      the dynamic plan SUB_WORKFLOW. The PLAN_EXECUTE harness's
+      configured ``fallback`` agent then runs as the adaptive recovery
+      path: it sees the guardrail message via the failed sub-workflow's
+      output and can retry the work agentically with adjusted args.
+      In short: in plan mode, the *fallback agent* is the retry loop.
+      Configure one (``Agent(strategy=PLAN_EXECUTE, fallback=...)``) if
+      you want any non-RAISE on_fail to be recoverable.
+    """
 
     RETRY = "retry"
     RAISE = "raise"

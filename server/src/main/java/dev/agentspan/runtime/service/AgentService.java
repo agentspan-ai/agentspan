@@ -7,8 +7,6 @@ package dev.agentspan.runtime.service;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -253,12 +251,25 @@ public class AgentService {
         if (request.getCredentials() != null && !request.getCredentials().isEmpty()) {
             input.put("credentials", request.getCredentials());
         }
-        // Extract cwd from rawConfig for frameworks that pass it
+        // Resolve cwd. Native SDK callers pass it directly via StartRequest.cwd;
+        // framework agents (OpenAI/ADK) embed it in rawConfig. Default to "."
+        // only when neither path supplies a value.
         String cwd = ".";
-        if (request.getRawConfig() != null && request.getRawConfig().get("cwd") instanceof String rawCwd) {
+        if (request.getCwd() != null && !request.getCwd().isBlank()) {
+            cwd = request.getCwd();
+        } else if (request.getRawConfig() != null && request.getRawConfig().get("cwd") instanceof String rawCwd) {
             cwd = rawCwd;
         }
         input.put("cwd", cwd);
+
+        // Static plan injection — when the SDK caller passed ``plan=...``,
+        // it arrives as ``static_plan`` (a Map or JSON string). PAC's
+        // extract_json reads this as Case 0 and uses it instead of the
+        // planner LLM's output. Only meaningful for Strategy.PLAN_EXECUTE
+        // harnesses; harmless for others (they don't read this input).
+        if (request.getStaticPlan() != null) {
+            input.put("static_plan", request.getStaticPlan());
+        }
 
         // Build __agentspan_ctx__: server URL + optional execution token
         Map<String, Object> agentCtx = new LinkedHashMap<>();
@@ -307,6 +318,19 @@ public class AgentService {
         // names from the config since they are dispatched dynamically via
         // FORK_JOIN_DYNAMIC and are absent from the compiled WorkflowDef.
         if (request.getRunId() != null && !request.getRunId().isEmpty()) {
+            // Worker domain contract (see docs/design/WORKER_DOMAIN_CONTRACT.md):
+            // when an execution is stateful (runId set), EVERY worker task
+            // in the WorkflowDef is routed to the run's domain. The SDK
+            // registers workers under the same domain for any tool in any
+            // agent reachable from the root. This makes "stateful run"
+            // mean "fully isolated execution" — both stateful and
+            // non-stateful tools register under the run's domain.
+            //
+            // This shape requires the SDK side to register under the
+            // passed domain regardless of the per-tool ``stateful`` flag.
+            // The per-tool check that used to live in
+            // ``ToolRegistry.register_tool_workers`` is removed; see the
+            // contract doc for why.
             Map<String, String> taskToDomain = new HashMap<>();
             for (String taskName : startWorkerNames) {
                 taskToDomain.put(taskName, request.getRunId());
@@ -517,71 +541,6 @@ public class AgentService {
     }
 
     /**
-     * Permanently delete an execution record from the database.
-     *
-     * <p>Wraps Conductor's {@code ExecutionService.removeWorkflow} to hard-delete
-     * completed execution records.  Running executions should be terminated first.
-     *
-     * @param executionId  the execution to remove
-     * @param archiveTasks if true, archive task records instead of deleting them
-     */
-    public void deleteExecutionRecord(String executionId, boolean archiveTasks) {
-        executionService.removeWorkflow(executionId, archiveTasks);
-    }
-
-    /**
-     * Bulk-delete completed execution records older than {@code olderThanDays} days.
-     *
-     * <p>Searches for COMPLETED, FAILED, TERMINATED, and TIMED_OUT executions whose
-     * end time is before the cutoff, then removes them from the DB in batches.
-     *
-     * @param olderThanDays minimum age in days for executions to be pruned
-     * @param archiveTasks  if true, archive task records instead of deleting
-     * @return number of executions deleted
-     */
-    public int pruneExecutions(int olderThanDays, boolean archiveTasks) {
-        long cutoffEpochMs = Instant.now().minus(olderThanDays, ChronoUnit.DAYS).toEpochMilli();
-        String[] terminalStatuses = {"COMPLETED", "FAILED", "TERMINATED", "TIMED_OUT"};
-
-        List<String> workflowNames =
-                listAgents().stream().map(AgentSummary::getName).collect(Collectors.toList());
-        if (workflowNames.isEmpty()) {
-            return 0;
-        }
-
-        String nameList = workflowNames.stream().map(n -> "'" + n + "'").collect(Collectors.joining(","));
-        int deleted = 0;
-        int batchSize = 100;
-
-        for (String status : terminalStatuses) {
-            String query =
-                    "workflowType IN (" + nameList + ") AND status = '" + status + "' AND endTime < " + cutoffEpochMs;
-            int start = 0;
-            while (true) {
-                SearchResult<WorkflowSummary> page =
-                        workflowService.searchWorkflows(start, batchSize, "endTime:ASC", "*", query);
-                List<WorkflowSummary> results = page.getResults();
-                if (results == null || results.isEmpty()) {
-                    break;
-                }
-                for (WorkflowSummary ws : results) {
-                    try {
-                        executionService.removeWorkflow(ws.getWorkflowId(), archiveTasks);
-                        deleted++;
-                    } catch (Exception e) {
-                        log.warn("Could not delete execution {}: {}", ws.getWorkflowId(), e.getMessage());
-                    }
-                }
-                if (results.size() < batchSize) {
-                    break;
-                }
-                // After deletion, restart from 0 since the result set shifts
-            }
-        }
-        return deleted;
-    }
-
-    /**
      * Gracefully stop an agent execution by setting the _stop_requested flag.
      *
      * <p>The loop exits after the current iteration completes and the workflow
@@ -622,7 +581,7 @@ public class AgentService {
     public AgentRun getExecution(String executionId) {
         Workflow workflow = executionService.getExecutionStatus(executionId, true);
 
-        int promptTokens = 0, completionTokens = 0, totalTokens = 0;
+        int promptTokens = 0, completionTokens = 0, reasoningTokens = 0, totalTokens = 0;
         boolean hasTokens = false;
 
         List<AgentRun.TaskDetail> tasks = new ArrayList<>();
@@ -640,6 +599,7 @@ public class AgentService {
                 if (out != null) {
                     promptTokens += toInt(out.get("promptTokens"));
                     completionTokens += toInt(out.get("completionTokens"));
+                    reasoningTokens += extractReasoningTokens(out);
                     totalTokens += toInt(out.get("tokenUsed"));
                     hasTokens = true;
                 }
@@ -650,6 +610,7 @@ public class AgentService {
                 ? AgentRun.TokenUsage.builder()
                         .promptTokens(promptTokens)
                         .completionTokens(completionTokens)
+                        .reasoningTokens(reasoningTokens)
                         .totalTokens(totalTokens == 0 ? promptTokens + completionTokens : totalTokens)
                         .build()
                 : null;
@@ -692,6 +653,67 @@ public class AgentService {
             }
         }
         return 0;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static int extractReasoningTokens(Map<String, Object> outputData) {
+        if (outputData == null) {
+            return 0;
+        }
+
+        int direct = toInt(firstPresent(outputData, "reasoningTokens", "reasoning_tokens"));
+        int metadata = 0;
+        int usage = 0;
+        for (String key : List.of("responseMetadata", "response_metadata", "metadata")) {
+            Object metadataValue = outputData.get(key);
+            if (!(metadataValue instanceof Map<?, ?> metadataMap)) {
+                continue;
+            }
+            Map<String, Object> typedMetadata = (Map<String, Object>) metadataMap;
+            metadata = Math.max(metadata, toInt(firstPresent(typedMetadata, "reasoningTokens", "reasoning_tokens")));
+            Object metadataUsage = firstPresent(typedMetadata, "usage", "tokenUsage", "token_usage");
+            if (metadataUsage instanceof Map<?, ?> metadataUsageMap) {
+                usage = Math.max(usage, extractReasoningTokensFromUsage((Map<String, Object>) metadataUsageMap));
+            }
+        }
+
+        Object usageValue = firstPresent(outputData, "usage", "tokenUsage", "token_usage");
+        if (usageValue instanceof Map<?, ?> usageMap) {
+            usage = Math.max(usage, extractReasoningTokensFromUsage((Map<String, Object>) usageMap));
+        }
+
+        return Math.max(Math.max(direct, metadata), usage);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static int extractReasoningTokensFromUsage(Map<String, Object> usage) {
+        int direct = toInt(firstPresent(usage, "reasoningTokens", "reasoning_tokens"));
+        int details = 0;
+        for (String key : List.of(
+                "outputTokensDetails",
+                "output_tokens_details",
+                "completionTokensDetails",
+                "completion_tokens_details")) {
+            Object value = usage.get(key);
+            if (value instanceof Map<?, ?> detailsMap) {
+                details = Math.max(
+                        details,
+                        toInt(firstPresent((Map<String, Object>) detailsMap, "reasoningTokens", "reasoning_tokens")));
+            }
+        }
+        return Math.max(direct, details);
+    }
+
+    private static Object firstPresent(Map<String, Object> map, String... keys) {
+        if (map == null) {
+            return null;
+        }
+        for (String key : keys) {
+            if (map.containsKey(key)) {
+                return map.get(key);
+            }
+        }
+        return null;
     }
 
     private void validateStartInput(StartRequest request) {
@@ -1377,16 +1399,40 @@ public class AgentService {
 
     /**
      * Collect worker tool task names from the agent config for domain routing.
-     * Worker tools (@tool functions with type "worker" or "cli") are dispatched
-     * dynamically via FORK_JOIN_DYNAMIC and must be explicitly added to taskToDomain.
+     *
+     * <p>Worker tools (@tool functions with type "worker" or "cli") are
+     * dispatched dynamically via FORK_JOIN_DYNAMIC at runtime — those
+     * tasks are NOT in the static WorkflowDef and are therefore absent
+     * from {@code collectSimpleTaskNames}'s result. Without explicit
+     * inclusion here, the dynamic dispatch task gets no domain entry
+     * and is scheduled on the no-domain queue.
+     *
+     * <p>Worker domain contract (see docs/design/WORKER_DOMAIN_CONTRACT.md):
+     * when an execution is stateful (runId set), every tool — stateful
+     * or not — is routed to the run domain. The earlier policy added
+     * only stateful tools, which broke the run_command-style case
+     * (workflow {@code cf1cfecf}) where a non-stateful tool is dispatched
+     * dynamically by the LLM, the SDK registered the worker on the run
+     * domain (universal-per-execution policy), but the server scheduled
+     * the dispatch task on no-domain — mismatch, no poller.
      */
     private void collectWorkerToolNames(AgentConfig config, Map<String, String> taskToDomain, String domain) {
         if (config == null) return;
         if (config.getTools() != null) {
             for (ToolConfig tool : config.getTools()) {
-                if (tool.isStateful()) {
-                    taskToDomain.put(tool.getName(), domain);
-                }
+                // Worker tools only. Other tool types (http, api, mcp,
+                // generate_*, rag_*) compile to system tasks (HTTP, etc.)
+                // that Conductor handles internally — there is no SDK-side
+                // poller. Adding them to taskToDomain would be a no-op for
+                // the system-task path but a SCHEDULED-no-poller hang if a
+                // dynamic dispatch ever produced a SIMPLE for that name.
+                // The SDK's ``_collect_registered_pairs`` mirrors this
+                // filter; keeping the two in sync preserves the contract
+                // server.taskToDomain ⊆ SDK.registered_pairs.
+                if (tool.getName() == null || tool.getName().isEmpty()) continue;
+                String type = tool.getToolType();
+                if (type != null && !"worker".equals(type)) continue;
+                taskToDomain.put(tool.getName(), domain);
             }
         }
         if (config.getAgents() != null) {
@@ -1394,6 +1440,26 @@ public class AgentService {
                 collectWorkerToolNames(sub, taskToDomain, domain);
             }
         }
+        // PLAN_EXECUTE named slots — sub-agents that don't live in ``agents``.
+        // Without these recursions, a stateful tool listed only on a planner
+        // or fallback sub-agent's tools list would not be added to the
+        // domain map, and Conductor would route its task to whichever worker
+        // happened to poll first (cross-execution leak).
+        if (config.getPlanner() != null) {
+            collectWorkerToolNames(config.getPlanner(), taskToDomain, domain);
+        }
+        if (config.getFallback() != null) {
+            collectWorkerToolNames(config.getFallback(), taskToDomain, domain);
+        }
+        // INTENTIONALLY NOT recursing into ``config.getRouter()``: the SDK's
+        // ``_collect_registered_pairs`` and ``_collect_worker_names`` do not
+        // walk router-agents either (see runtime.py around line 1089). The
+        // worker domain contract is ``server.taskToDomain ⊆ SDK pairs``.
+        // Adding router-recursion server-side without the matching SDK walk
+        // would put a router-agent's worker tool into taskToDomain with no
+        // SDK-registered poller → the SCHEDULED-no-poller hang the contract
+        // exists to prevent. If agent-based routers ever need worker tools,
+        // both sides must be updated together along with a contract test.
     }
 
     private void collectSimpleTaskNamesFromTasks(List<WorkflowTask> tasks, Set<String> names) {
@@ -1425,8 +1491,7 @@ public class AgentService {
             // Inline sub-workflows — skip if workflowDefinition is a runtime expression String
             // (e.g. "${parse_wf.output.result}") used by plan-execute inline sub-workflows.
             if (task.getSubWorkflowParam() != null
-                    && task.getSubWorkflowParam().getWorkflowDefinition()
-                            instanceof WorkflowDef wfDef) {
+                    && task.getSubWorkflowParam().getWorkflowDefinition() instanceof WorkflowDef wfDef) {
                 collectSimpleTaskNamesFromTasks(wfDef.getTasks(), names);
             }
         }

@@ -86,7 +86,7 @@ class ToolDef:
 
     def call(self, **kwargs: Any) -> "PrefillToolCall":
         """Create a pre-declared tool call for use with ``Agent(prefill_tools=[...])``."""
-        return PrefillToolCall(tool_name=self.name, arguments=kwargs)
+        return PrefillToolCall(tool_name=self.name, arguments=kwargs, tool_def=self)
 
 
 @dataclass(frozen=True)
@@ -96,10 +96,18 @@ class PrefillToolCall:
     Created via ``tool_def.call(arg=val)`` or ``my_tool.call(arg=val)``.
     Passed to ``Agent(prefill_tools=[...])`` so the server executes these
     tools before the first LLM turn and injects results into context.
+
+    ``tool_def`` carries a back-reference to the source :class:`ToolDef` so
+    the runtime can register a worker for the prefill task even when the
+    same tool is NOT also listed in ``agent.tools``. Without this back-
+    reference the SDK only walks ``agent.tools`` for worker registration —
+    a tool that appears only in ``prefill_tools`` would be scheduled by the
+    server with no poller and the workflow would hang.
     """
 
     tool_name: str
     arguments: Dict[str, Any]
+    tool_def: Optional["ToolDef"] = None
 
 
 # ── @tool decorator ─────────────────────────────────────────────────────

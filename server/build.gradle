@@ -30,7 +30,7 @@ def pnpmCommand = { String args ->
 
 // ── Version catalog ──────────────────────────────────────────────
 ext {
-    conductorVersion   = '3.30.0.rc12'
+    conductorVersion   = '3.30.0.rc13'
     lombokVersion      = '1.18.42'
     log4jVersion       = '2.24.3'  // managed by Spring BOM, explicit for clarity
     sqliteJdbcVersion  = '3.47.0.0'
@@ -63,6 +63,11 @@ dependencies {
     implementation "org.conductoross:conductor-core:${conductorVersion}"
     implementation "org.conductoross:conductor-rest:${conductorVersion}"
     implementation "org.conductoross:conductor-common:${conductorVersion}"
+    // Same conductorVersion as the rest — the local conductor checkout's
+    // gradle.properties is set to ``3.30.0.rc13``. The OpenAI Responses
+    // API reasoning shape + previousResponseId-auto-thread disable both
+    // live in that local build (mavenLocal). Source:
+    // /Users/viren/workspace/github/conductoross/conductor.
     implementation "org.conductoross:conductor-ai:${conductorVersion}"
     implementation "org.conductoross:conductor-metrics:${conductorVersion}"
 

@@ -71,6 +71,13 @@ public class AgentConfig {
 
     private Double temperature;
 
+    /**
+     * OpenAI reasoning models (o1, gpt-5-codex, etc.) accept
+     * "minimal" | "low" | "medium" | "high". Forwarded to
+     * {@code ChatCompletion.reasoningEffort}; ignored by non-reasoning models.
+     */
+    private String reasoningEffort;
+
     /** Worker reference for stop_when callable. */
     private WorkerRef stopWhen;
 
@@ -95,8 +102,29 @@ public class AgentConfig {
     /** Extended thinking/reasoning config. */
     private ThinkingConfig thinkingConfig;
 
-    /** Whether the agent should plan before executing. */
-    private Boolean planner;
+    /**
+     * Whether the agent should plan before executing. Augments the system
+     * prompt with a "plan first, then execute" preamble. Used by the Google
+     * ADK normalizer; unrelated to the {@link #planner} sub-agent slot
+     * below.
+     */
+    private Boolean enablePlanning;
+
+    /**
+     * PLAN_EXECUTE: the agent that produces the JSON plan. Required when
+     * {@link #strategy} is {@code "plan_execute"}. The planner can be a
+     * simple agent or a multi-agent (e.g. SEQUENTIAL of explorer + planner).
+     * Replaces the old positional {@code agents.get(0)}.
+     */
+    private AgentConfig planner;
+
+    /**
+     * PLAN_EXECUTE: the agent that runs agentically when the plan can't
+     * compile or the compiled SUB_WORKFLOW fails at execution. Optional —
+     * if absent, plan failures TERMINATE the workflow. Replaces the old
+     * positional {@code agents.get(1)}.
+     */
+    private AgentConfig fallback;
 
     /** Tools that must be called before the agent can complete. */
     private List<String> requiredTools;
@@ -133,9 +161,4 @@ public class AgentConfig {
     /** Whether this is an external agent (no model, references existing workflow). */
     @Builder.Default
     private boolean external = false;
-
-    /** Whether to append a final LLM synthesis step after specialist agents complete.
-     * Set to false to pass specialist output through unchanged. Default true. */
-    @Builder.Default
-    private boolean synthesize = true;
 }

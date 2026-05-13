@@ -1,18 +1,14 @@
-"""Deterministic tests for the contextbook data flow.
+"""Deterministic tests for the issue-fixer contextbook data flow.
 
 Proves that every agent in the pipeline can read/write contextbook sections
-correctly and that the full data flows end-to-end:
-
-    issue_pr_fetcher writes issue_pr + repo_conventions
-    → tech_lead reads both, writes architecture_design_test
-    → coder reads via get_coder_context, writes implementation
-    → qa_agent reads issue_pr + architecture_design_test + implementation, writes qa_testing
-    → pr_updater reads ALL 5 sections
+correctly and that the full data flow can be represented without chat history.
 
 No server, no LLM, no mocks. Pure filesystem operations.
 """
 
+import json
 import os
+import subprocess
 import sys
 
 import pytest
@@ -24,6 +20,11 @@ _EXAMPLES_DIR = os.path.join(
 sys.path.insert(0, os.path.abspath(_EXAMPLES_DIR))
 
 import _issue_fixer_tools as tools  # noqa: E402
+
+
+def _init_git_repo(path, branch="fix/issue-42"):
+    subprocess.run(["git", "init"], cwd=path, check=True, capture_output=True, text=True)
+    subprocess.run(["git", "checkout", "-B", branch], cwd=path, check=True, capture_output=True, text=True)
 
 
 @pytest.fixture(autouse=True)
@@ -45,8 +46,11 @@ class TestSectionValidation:
     """Contextbook enforces a fixed set of section names."""
 
     VALID = {
-        "issue_pr", "repo_conventions", "architecture_design_test",
-        "coder_plan", "implementation", "implementation_report", "qa_testing",
+        "issue_pr", "repo_conventions", "design", "coder_context", "qa_findings",
+        "pr_result", "architecture_design_test", "coder_plan", "implementation",
+        "implementation_report", "qa_testing",
+        # Inner-reviewer verdict for the plan→execute→review loop.
+        "review_feedback",
     }
 
     def test_valid_sections_match(self):
@@ -74,6 +78,84 @@ class TestSectionValidation:
         tools.contextbook_write("issue_pr", "seed")
         result = tools.contextbook_read("implementation")
         assert "not been written yet" in result
+
+    def test_validate_issue_workspace_returns_json_string(self, isolated_workdir):
+        _init_git_repo(isolated_workdir, branch="fix/issue-42")
+        tools.contextbook_write(
+            "issue_pr",
+            "# Issue #42\nRepo: acme/app\nBranch: fix/issue-42\nMode: new issue fix\n",
+        )
+        tools.contextbook_write("repo_conventions", "content for repo_conventions")
+
+        result = json.loads(tools.validate_issue_workspace())
+
+        assert result["passed"] is True
+        assert result["missing"] == []
+        assert result["current_branch"] == "fix/issue-42"
+
+    def test_validate_issue_workspace_rejects_stale_contextbook_sections(
+        self, isolated_workdir
+    ):
+        _init_git_repo(isolated_workdir, branch="fix/issue-42")
+        tools.contextbook_write(
+            "issue_pr",
+            "# Issue #42\nRepo: acme/app\nBranch: fix/issue-42\nMode: new issue fix\n",
+        )
+        tools.contextbook_write("repo_conventions", "content for repo_conventions")
+        tools.contextbook_write("architecture_design_test", "old design")
+
+        result = json.loads(tools.validate_issue_workspace())
+
+        assert result["passed"] is False
+        assert result["unexpected"] == ["architecture_design_test"]
+
+    def test_validate_issue_workspace_rejects_new_issue_on_main_branch(
+        self, isolated_workdir
+    ):
+        _init_git_repo(isolated_workdir, branch="main")
+        tools.contextbook_write(
+            "issue_pr",
+            "# Issue #42\nRepo: acme/app\nBranch: main\nMode: new issue fix\n",
+        )
+        tools.contextbook_write("repo_conventions", "content for repo_conventions")
+
+        result = json.loads(tools.validate_issue_workspace())
+
+        assert result["passed"] is False
+        assert "new issue fix is on default branch 'main'" in result["branch_errors"]
+
+    def test_validate_pr_result_returns_json_string(self):
+        tools.contextbook_write(
+            "pr_result",
+            '{"passed": true, "status": "created", "url": "https://github.com/acme/app/pull/1"}',
+        )
+
+        result = json.loads(tools.validate_pr_result())
+
+        assert result["passed"] is True
+        assert result["status"] == "created"
+
+    def test_reset_contextbook_removes_stale_sections(self):
+        tools.contextbook_write("architecture_design_test", "old design")
+        tools.contextbook_write("qa_testing", "old qa")
+
+        tools._reset_contextbook()
+
+        toc = tools.contextbook_read("")
+        assert "empty" in toc.lower()
+        assert "old design" not in toc
+
+    def test_read_file_repeat_limit_blocks_fourth_read(self, isolated_workdir):
+        path = isolated_workdir / "target.txt"
+        path.write_text("one\ntwo\n", encoding="utf-8")
+
+        assert "one" in tools.read_file("target.txt")
+        assert "REPEAT READ #2" in tools.read_file("target.txt")
+        assert "REPEAT READ #3" in tools.read_file("target.txt")
+
+        result = tools.read_file("target.txt")
+
+        assert "repeat read limit exceeded" in result
 
 
 # ── Write and read round-trip ───────────────────────────────
@@ -119,7 +201,7 @@ class TestWriteReadRoundTrip:
 
 
 class TestGetCoderContext:
-    """get_coder_context reads 4 sections (skips repo_conventions)."""
+    """Legacy get_coder_context reads 4 sections (skips repo_conventions)."""
 
     CODER_SECTIONS = ("issue_pr", "architecture_design_test", "implementation", "qa_testing")
 
@@ -243,6 +325,13 @@ class TestFullPipelineFlow:
         )
         result3 = tools.contextbook_write("architecture_design_test", design_content)
         assert "wrote" in result3
+        result3b = tools.contextbook_write("design", design_content)
+        assert "wrote" in result3b
+        result3c = tools.contextbook_write(
+            "coder_context",
+            "# Coder Context\n\n## Checklist\n- [ ] IMPLEMENT\n- [ ] TEST\n",
+        )
+        assert "wrote" in result3c
 
         # ── Agent 3: coder reads via get_coder_context ──
         coder_ctx = tools.get_coder_context()
@@ -302,12 +391,27 @@ class TestFullPipelineFlow:
         )
         result5 = tools.contextbook_write("qa_testing", qa_testing_content)
         assert "wrote" in result5
+        result5b = tools.contextbook_write(
+            "qa_findings",
+            '{"status": "pass", "blockers": [], "tests_run": ["pytest"], "summary": "ok"}',
+        )
+        assert "wrote" in result5b
 
-        # Write the two additional sections added for coder pipeline
+        # Write the additional sections added for coder pipeline
         result6 = tools.contextbook_write("coder_plan", "## Coder Plan\n- Fix login handler")
         assert "wrote" in result6
         result7 = tools.contextbook_write("implementation_report", "## Report\nAll changes applied")
         assert "wrote" in result7
+        result7b = tools.contextbook_write(
+            "pr_result",
+            '{"passed": true, "status": "created", "url": "https://github.com/acme/webapp/pull/1"}',
+        )
+        assert "wrote" in result7b
+        # Inner-reviewer verdict (plan→execute→review loop).
+        result8 = tools.contextbook_write(
+            "review_feedback", "## Verdict: DONE\nImplementation matches design."
+        )
+        assert "wrote" in result8
 
         # ── Agent 5: pr_updater reads ALL sections ──
         pr_issue = tools.contextbook_read("issue_pr")
@@ -457,6 +561,38 @@ class TestBuildCommandDetection:
         assert tools._REPO_COMMANDS.get("build") == "npm run build"
         assert tools._REPO_COMMANDS.get("test") == "npm test"
 
+    def test_monorepo_package_without_scripts_falls_through_to_nested_projects(self, tmp_path):
+        (tmp_path / "package.json").write_text('{"scripts": {"prepare": "husky"}}')
+        server = tmp_path / "server"
+        server.mkdir()
+        (server / "gradlew").write_text("#!/bin/sh\n")
+        cli = tmp_path / "cli"
+        cli.mkdir()
+        (cli / "go.mod").write_text("module example.com/cli\n")
+
+        tools._detect_build_commands(tmp_path)
+
+        assert "cd server && ./gradlew testClasses" in tools._REPO_COMMANDS.get("build", "")
+        assert "cd cli && go build ./..." in tools._REPO_COMMANDS.get("build", "")
+        assert "cd server && ./gradlew test" in tools._REPO_COMMANDS.get("test", "")
+        assert "cd cli && go test ./..." in tools._REPO_COMMANDS.get("test", "")
+
+    def test_build_tools_redetect_commands_after_worker_state_reset(self, tmp_path):
+        (tmp_path / "package.json").write_text('{"scripts": {"prepare": "husky"}}')
+        server = tmp_path / "server"
+        server.mkdir()
+        (server / "gradlew").write_text("#!/bin/sh\n")
+        cli = tmp_path / "cli"
+        cli.mkdir()
+        (cli / "go.mod").write_text("module example.com/cli\n")
+
+        tools.set_working_dir(str(tmp_path))
+        tools._REPO_COMMANDS.clear()
+        tools._ensure_repo_commands()
+
+        assert "cd server && ./gradlew testClasses" in tools._REPO_COMMANDS.get("build", "")
+        assert "cd cli && go build ./..." in tools._REPO_COMMANDS.get("build", "")
+
     def test_go_project(self, tmp_path):
         (tmp_path / "go.mod").write_text("module example.com/test\n")
         tools._detect_build_commands(tmp_path)
@@ -480,6 +616,106 @@ class TestBuildCommandDetection:
     def test_empty_project(self, tmp_path):
         tools._detect_build_commands(tmp_path)
         assert tools._REPO_COMMANDS == {}
+
+
+# ── run_command safety ───────────────────────────────────────
+
+
+class TestRunCommandSafety:
+    def test_blocks_shell_file_inspection_without_terminating_tool(self):
+        result = tools.run_command("git show HEAD:server/src/main/java/Foo.java")
+        assert result.startswith("Blocked: run_command")
+        assert "read_file" in result
+        assert "git_diff" in result
+
+    def test_validation_tools_block_shell_inspection_without_running_it(self):
+        grep_result = tools.run_unit_tests("grep -n deleteExecutions server/src/main/java/Foo.java")
+        diff_result = tools.run_unit_tests("git diff --stat")
+
+        assert grep_result.startswith("Blocked: validation tools")
+        assert diff_result.startswith("Blocked: validation tools")
+        assert "git_diff" in diff_result
+
+    def test_coder_inspection_budget_blocks_before_successful_edit(self, isolated_workdir):
+        ctx = tools.ToolContext(
+            execution_id="coder-budget-before-edit",
+            agent_name="issue_fixer_coder",
+        )
+        (isolated_workdir / "src").mkdir()
+        (isolated_workdir / "src" / "app.py").write_text("def app():\n    return 1\n")
+
+        for _ in range(tools._CODER_INSPECTION_BUDGET_BEFORE_EDIT):
+            result = tools.list_directory(context=ctx)
+            assert not result.startswith("Blocked: coder inspection budget")
+
+        blocked = tools.list_directory(context=ctx)
+
+        assert blocked.startswith("Blocked: coder inspection budget exceeded")
+        assert "edit_files" in blocked
+
+    def test_successful_edit_reopens_inspection_budget(self, isolated_workdir):
+        ctx = tools.ToolContext(
+            execution_id="coder-budget-after-edit",
+            agent_name="issue_fixer_coder",
+        )
+        target = isolated_workdir / "src" / "app.py"
+        target.parent.mkdir()
+        target.write_text("def app():\n    return 1\n")
+
+        for _ in range(tools._CODER_INSPECTION_BUDGET_BEFORE_EDIT + 1):
+            tools.list_directory(context=ctx)
+
+        edit_result = tools.edit_file(
+            "src/app.py",
+            "return 1",
+            "return 2",
+            context=ctx,
+        )
+        after_edit = tools.list_directory(context=ctx)
+
+        assert edit_result.startswith("Edited")
+        assert not after_edit.startswith("Blocked: coder inspection budget")
+
+    def test_subagent_validation_budget_blocks_endless_test_loops(self):
+        ctx = tools.ToolContext(
+            execution_id="coder-validation-budget",
+            agent_name="issue_fixer_coder",
+        )
+
+        for _ in range(tools._SUBAGENT_VALIDATION_BUDGET):
+            result = tools.run_unit_tests("true", context=ctx)
+            assert not result.startswith("Blocked: validation budget")
+
+        blocked = tools.run_unit_tests("true", context=ctx)
+
+        assert blocked.startswith("Blocked: validation budget exceeded")
+
+    def test_implementation_report_requires_edit_and_validation_for_coder(
+        self, isolated_workdir
+    ):
+        ctx = tools.ToolContext(
+            execution_id="coder-report-gate",
+            agent_name="issue_fixer_coder",
+        )
+        target = isolated_workdir / "src" / "app.py"
+        target.parent.mkdir()
+        target.write_text("def app():\n    return 1\n")
+
+        no_edit = tools.write_implementation_report("done", context=ctx)
+        tools.edit_file("src/app.py", "return 1", "return 2", context=ctx)
+        no_validation = tools.write_implementation_report("done", context=ctx)
+        tools.run_unit_tests("true", context=ctx)
+        ok = tools.write_implementation_report("done", context=ctx)
+
+        assert no_edit.startswith("Error: implementation_report is blocked")
+        assert "validation" in no_validation
+        assert ok.startswith("Contextbook: wrote 'implementation_report'")
+
+    def test_allows_status_and_diff_commands(self, isolated_workdir):
+        _init_git_repo(isolated_workdir)
+        result = tools.run_command("git status --short && git diff --stat")
+        assert result.startswith("[exit 0]")
+        assert "Blocked:" not in result
 
 
 # ── Repo URL normalization ───────────────────────────────────

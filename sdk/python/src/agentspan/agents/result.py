@@ -73,11 +73,13 @@ class TokenUsage:
         prompt_tokens: Total input/prompt tokens consumed.
         completion_tokens: Total output/completion tokens generated.
         total_tokens: Sum of prompt + completion tokens.
+        reasoning_tokens: Total reasoning tokens consumed, when reported by the provider.
     """
 
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
+    reasoning_tokens: int = 0
 
 
 # ── AgentResult (returned by run()) ─────────────────────────────────────
@@ -173,10 +175,15 @@ class AgentResult:
         if self.tool_calls:
             print(f"Tool calls: {len(self.tool_calls)}")
         if self.token_usage:
+            reasoning = (
+                f", {self.token_usage.reasoning_tokens} reasoning"
+                if self.token_usage.reasoning_tokens
+                else ""
+            )
             print(
                 f"Tokens: {self.token_usage.total_tokens} total "
                 f"({self.token_usage.prompt_tokens} prompt, "
-                f"{self.token_usage.completion_tokens} completion)"
+                f"{self.token_usage.completion_tokens} completion{reasoning})"
             )
         else:
             print("Tokens: —")
@@ -528,6 +535,13 @@ class AgentHandle:
         """
         output = self._runtime._normalize_output(status.output, status.status, status.reason)
         token_usage = self._runtime._extract_token_usage(self.execution_id)
+        metadata: Dict[str, Any] = {}
+        attach_reasoning = getattr(self._runtime, "_attach_reasoning_metadata", None)
+        if attach_reasoning is not None:
+            try:
+                output, metadata = attach_reasoning(output, metadata, self.execution_id)
+            except Exception:
+                pass  # Reasoning metadata is best-effort.
         return AgentResult(
             output=output,
             execution_id=self.execution_id,
@@ -536,6 +550,7 @@ class AgentHandle:
             finish_reason=self._runtime._derive_finish_reason(status.status, status.output),
             error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
             token_usage=token_usage,
+            metadata=metadata,
         )
 
     def _maybe_start_liveness_monitor(self) -> None:
@@ -775,6 +790,16 @@ class AgentStream:
             except Exception:
                 pass  # token tracking is best-effort
 
+        metadata: Dict[str, Any] = {}
+        attach_reasoning = getattr(self.handle._runtime, "_attach_reasoning_metadata", None)
+        if attach_reasoning is not None:
+            try:
+                output, metadata = attach_reasoning(
+                    output, metadata, self.handle.execution_id
+                )
+            except Exception:
+                pass  # Reasoning metadata is best-effort.
+
         self.result = AgentResult(
             output=output,
             execution_id=self.handle.execution_id,
@@ -786,6 +811,7 @@ class AgentStream:
             events=list(self.events),
             sub_results=sub_results,
             token_usage=token_usage,
+            metadata=metadata,
         )
 
     # ── HITL convenience (delegates to handle) ────────────────────
@@ -897,6 +923,14 @@ def _build_result_from_events(
         except Exception:
             pass  # token tracking is best-effort
 
+    metadata: Dict[str, Any] = {}
+    attach_reasoning = getattr(handle._runtime, "_attach_reasoning_metadata", None)
+    if attach_reasoning is not None:
+        try:
+            output, metadata = attach_reasoning(output, metadata, handle.execution_id)
+        except Exception:
+            pass  # Reasoning metadata is best-effort.
+
     return AgentResult(
         output=output,
         execution_id=handle.execution_id,
@@ -908,6 +942,7 @@ def _build_result_from_events(
         events=list(events),
         sub_results=sub_results,
         token_usage=token_usage,
+        metadata=metadata,
     )
 
 

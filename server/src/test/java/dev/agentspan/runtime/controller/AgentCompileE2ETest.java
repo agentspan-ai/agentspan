@@ -428,7 +428,10 @@ class AgentCompileE2ETest {
     @Test
     void compileWithPlanner() throws Exception {
         Map<String, Object> config = agentConfig("planner_e2e", "openai/gpt-4o", "You are a planner.");
-        config.put("planner", true);
+        // ``enablePlanning`` (formerly the boolean ``planner`` field) toggles
+        // the plan-then-execute system-prompt preamble. The JSON field
+        // ``planner`` is now reserved for the PLAN_EXECUTE sub-agent slot.
+        config.put("enablePlanning", true);
 
         JsonNode resp = postCompile(request(config));
         List<Map<String, Object>> tasks = getTasks(resp);

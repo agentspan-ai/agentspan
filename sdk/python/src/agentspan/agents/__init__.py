@@ -34,6 +34,18 @@ from agentspan.agents.agent import (
     scatter_gather,
 )
 
+# Typed plan builders + convenience constructor (Strategy.PLAN_EXECUTE)
+from agentspan.agents.plans import (
+    Action,
+    Generate,
+    Op,
+    Plan,
+    Step,
+    Validation,
+    coerce_plan,
+    plan_execute,
+)
+
 # Claude Code configuration
 from agentspan.agents.claude_code import ClaudeCode
 

@@ -741,7 +741,7 @@ analytics_agent = Agent(
     ),
     credentials=["GITHUB_TOKEN", "GH_TOKEN"],
     metadata={"stage": "analytics", "version": "1.0"},
-    planner=True,  # #69
+    enable_planning=True,  # #69
 )
 
 

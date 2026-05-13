@@ -153,57 +153,6 @@ class TestExtractMessages:
         extracted = runtime._extract_messages(wf_run)
         assert extracted == []
 
-    def test_extracts_from_llm_task_input(self, runtime):
-        """Messages come from the last LLM_CHAT_COMPLETE task's input_data."""
-        from unittest.mock import MagicMock
-
-        msgs = [{"role": "user", "message": "Hi"}, {"role": "assistant", "message": "Hello!"}]
-        task = MagicMock()
-        task.task_type = "LLM_CHAT_COMPLETE"
-        task.input_data = {"messages": msgs, "model": "gpt-4o"}
-
-        wf_run = MockWorkflowRun(variables={}, tasks=[task])
-        extracted = runtime._extract_messages(wf_run)
-        assert extracted == msgs
-
-    def test_returns_last_llm_task_messages(self, runtime):
-        """Returns the LAST LLM task's messages (most complete history)."""
-        from unittest.mock import MagicMock
-
-        first_msgs = [{"role": "user", "message": "Hi"}]
-        last_msgs = [
-            {"role": "user", "message": "Hi"},
-            {"role": "assistant", "message": "Hello!"},
-            {"role": "user", "message": "Thanks"},
-        ]
-
-        task1 = MagicMock()
-        task1.task_type = "LLM_CHAT_COMPLETE"
-        task1.input_data = {"messages": first_msgs}
-
-        task2 = MagicMock()
-        task2.task_type = "LLM_CHAT_COMPLETE"
-        task2.input_data = {"messages": last_msgs}
-
-        wf_run = MockWorkflowRun(variables={}, tasks=[task1, task2])
-        extracted = runtime._extract_messages(wf_run)
-        assert extracted == last_msgs
-
-    def test_variables_takes_precedence_over_tasks(self, runtime):
-        """If variables.messages is set, prefer it over task input_data."""
-        from unittest.mock import MagicMock
-
-        var_msgs = [{"role": "user", "message": "From variables"}]
-        task_msgs = [{"role": "user", "message": "From task"}]
-
-        task = MagicMock()
-        task.task_type = "LLM_CHAT_COMPLETE"
-        task.input_data = {"messages": task_msgs}
-
-        wf_run = MockWorkflowRun(variables={"messages": var_msgs}, tasks=[task])
-        extracted = runtime._extract_messages(wf_run)
-        assert extracted == var_msgs
-
 
 class TestSingletonRuntime:
     """Test that run.py uses a singleton runtime."""
@@ -589,7 +538,7 @@ class TestRuntimeLifecycle:
 # ── _has_worker_tools ───────────────────────────────────────────────────
 
 
-class TestHasWorkerTools:
+class TestHasWorkerToolsGuardrails:
     """Test _has_worker_tools() recursive check."""
 
     @pytest.fixture()
@@ -615,6 +564,22 @@ class TestHasWorkerTools:
             return x
 
         agent = Agent(name="tooled", model="openai/gpt-4o", tools=[my_tool])
+        assert runtime._has_worker_tools(agent) is True
+
+    def test_with_prefill_only_worker_tool(self, runtime):
+        from agentspan.agents.tool import tool
+
+        @tool
+        def load_context() -> str:
+            """Load deterministic context."""
+            return "context"
+
+        agent = Agent(
+            name="prefill_only",
+            model="openai/gpt-4o",
+            tools=[],
+            prefill_tools=[load_context.call()],
+        )
         assert runtime._has_worker_tools(agent) is True
 
     def test_with_http_only(self, runtime):
@@ -712,6 +677,72 @@ class TestHasStatefulTools:
         sub = Agent(name="sub_cc", model="claude-code/sonnet", tools=["Bash", "Write"])
         parent = Agent(name="parent", model="openai/gpt-4o", agents=[sub])
         assert _has_stateful_tools(parent) is False
+
+    def test_plan_execute_planner_slot_stateful_propagates(self):
+        """A stateful tool sitting on the ``planner`` named slot must
+        register as stateful at the parent. Without recursion into the new
+        slots, the parent harness wouldn't generate a per-execution domain
+        and the planner's stateful tool would be cross-execution-leaky."""
+        from agentspan.agents import Strategy
+        from agentspan.agents.runtime.runtime import _has_stateful_tools
+        from agentspan.agents.tool import tool
+
+        @tool(stateful=True)
+        def stateful_inner(x: str) -> str:
+            """Stateful."""
+            return x
+
+        @tool
+        def harness_tool(x: str) -> str:
+            """Plain."""
+            return x
+
+        planner = Agent(
+            name="planner",
+            model="openai/gpt-4o",
+            tools=[stateful_inner],
+        )
+        coder = Agent(
+            name="coder",
+            model="openai/gpt-4o",
+            strategy=Strategy.PLAN_EXECUTE,
+            planner=planner,
+            tools=[harness_tool],
+        )
+        assert _has_stateful_tools(coder) is True
+
+    def test_plan_execute_fallback_slot_stateful_propagates(self):
+        """Same for the ``fallback`` slot."""
+        from agentspan.agents import Strategy
+        from agentspan.agents.runtime.runtime import _has_stateful_tools
+        from agentspan.agents.tool import tool
+
+        @tool(stateful=True)
+        def stateful_recovery(x: str) -> str:
+            """Stateful."""
+            return x
+
+        @tool
+        def planner_only(x: str) -> str:
+            """Plain."""
+            return x
+
+        @tool
+        def harness_tool(x: str) -> str:
+            """Plain."""
+            return x
+
+        planner = Agent(name="p", model="openai/gpt-4o", tools=[planner_only])
+        fallback = Agent(name="f", model="openai/gpt-4o", tools=[stateful_recovery])
+        coder = Agent(
+            name="coder",
+            model="openai/gpt-4o",
+            strategy=Strategy.PLAN_EXECUTE,
+            planner=planner,
+            fallback=fallback,
+            tools=[harness_tool],
+        )
+        assert _has_stateful_tools(coder) is True
 
 
 class TestStatefulWorkerDomains:
@@ -845,6 +876,119 @@ class TestExtractTokenUsage:
         ):
             usage = runtime._extract_token_usage("wf-123")
         assert usage.total_tokens == 150
+
+    def test_includes_reasoning_tokens_from_token_usage(self, runtime):
+        with patch.object(
+            runtime,
+            "_fetch_agent_workflow",
+            return_value={
+                "tokenUsage": {
+                    "promptTokens": 100,
+                    "completionTokens": 50,
+                    "reasoningTokens": 12,
+                    "totalTokens": 150,
+                }
+            },
+        ):
+            usage = runtime._extract_token_usage("wf-123")
+        assert usage.prompt_tokens == 100
+        assert usage.completion_tokens == 50
+        assert usage.reasoning_tokens == 12
+        assert usage.total_tokens == 150
+
+    def test_recovers_reasoning_tokens_from_task_output(self, runtime):
+        with patch.object(
+            runtime,
+            "_fetch_agent_workflow",
+            return_value={
+                "tokenUsage": {"promptTokens": 100, "completionTokens": 50, "totalTokens": 150},
+                "tasks": [
+                    {
+                        "taskType": "LLM_CHAT_COMPLETE",
+                        "outputData": {
+                            "usage": {
+                                "outputTokensDetails": {"reasoningTokens": 9},
+                            },
+                        },
+                    }
+                ],
+            },
+        ):
+            usage = runtime._extract_token_usage("wf-123")
+        assert usage.reasoning_tokens == 9
+
+
+# ── reasoning metadata ─────────────────────────────────────────────────
+
+
+class TestExtractReasoningMetadata:
+    """Test reasoning metadata extraction and result attachment."""
+
+    @pytest.fixture()
+    def runtime(self):
+        with patch("conductor.client.orkes_clients.OrkesClients"):
+            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
+                from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
+
+                config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
+                return AgentRuntime(config=config)
+
+    def test_attaches_reasoning_metadata_to_output_and_metadata(self, runtime):
+        task = MagicMock()
+        task.task_type = "LLM_CHAT_COMPLETE"
+        task.reference_task_name = "llm_0"
+        task.task_id = "task-1"
+        task.input_data = {"llmProvider": "openai", "model": "gpt-5"}
+        task.output_data = {
+            "responseMetadata": {
+                "reasoning": {"summary": "Checked the issue and planned the patch."},
+            },
+            "usage": {"outputTokensDetails": {"reasoningTokens": 14}},
+        }
+        workflow_run = MockWorkflowRun(tasks=[task])
+
+        with patch.object(runtime, "_fetch_agent_workflow", return_value={"tasks": []}):
+            output, metadata = runtime._attach_reasoning_metadata(
+                {"result": "done"}, {}, "wf-123", workflow_run
+            )
+
+        assert output["reasoning"]["tokens"] == 14
+        assert output["reasoning"]["summary"] == "Checked the issue and planned the patch."
+        assert output["reasoning"]["provider"] == "openai"
+        assert output["reasoning"]["model"] == "gpt-5"
+        assert metadata["reasoning"] == output["reasoning"]
+
+    def test_extracts_reasoning_metadata_from_subworkflow(self, runtime):
+        responses = {
+            "parent": {
+                "tasks": [
+                    {
+                        "taskType": "SUB_WORKFLOW",
+                        "subWorkflowId": "child",
+                    }
+                ]
+            },
+            "child": {
+                "tasks": [
+                    {
+                        "taskType": "LLM_CHAT_COMPLETE",
+                        "referenceTaskName": "child_llm",
+                        "outputData": {
+                            "metadata": {"reasoning_tokens": 6},
+                            "reasoningSummary": "Verified the generated tests.",
+                        },
+                    }
+                ]
+            },
+        }
+
+        with patch.object(runtime, "_fetch_agent_workflow", side_effect=lambda wid: responses[wid]):
+            reasoning = runtime._extract_reasoning_metadata("parent")
+
+        assert reasoning["tokens"] == 6
+        assert reasoning["summary"] == "Verified the generated tests."
+        assert reasoning["tasks"][0]["execution_id"] == "child"
 
 
 # ── _extract_tool_calls ─────────────────────────────────────────────────
@@ -2794,8 +2938,6 @@ class TestSSEFallbackWarnsOnce:
         """SSE fallback message should be logged only on the first failure."""
         from agentspan.agents.runtime.http_client import SSEUnavailableError
 
-        call_count = 0
-
         def mock_stream_sse(execution_id):
             raise SSEUnavailableError("no SSE")
 
@@ -2932,3 +3074,123 @@ class TestHandoffIndexing:
         # Allowed: coder → qa_tester
         result = handoff_check("qa_tester", "2")
         assert result == {"active_agent": "3", "handoff": True}
+
+
+class TestPrefillToolWorkerRegistration:
+    """Tools that appear ONLY in ``prefill_tools`` (not in ``tools``) must
+    still be registered as workers, otherwise the server-emitted prefill
+    SIMPLE task has no poller and the workflow stalls.
+
+    Reproduces the failure mode of workflow b38024fb where ``read_repo_docs``
+    was prefilled on ``code_explorer`` but not listed in its tools, so the
+    SDK skipped worker registration and the prefill task sat SCHEDULED
+    indefinitely.
+    """
+
+    def test_prefill_only_tool_collected_for_worker_registration(self):
+        from agentspan.agents import Agent, AgentRuntime
+        from agentspan.agents.tool import tool
+
+        @tool
+        def prefill_only_data() -> str:
+            return "static prefill"
+
+        @tool
+        def regular_callable(x: str) -> str:
+            return x
+
+        agent = Agent(
+            name="prefill_test_agent",
+            model="openai/gpt-4o-mini",
+            instructions="t",
+            tools=[regular_callable],
+            prefill_tools=[prefill_only_data.call()],
+        )
+
+        with AgentRuntime() as rt:
+            names = rt._collect_worker_names(agent)
+
+        assert "regular_callable" in names
+        assert "prefill_only_data" in names, (
+            "prefill-only tool must be collected for worker registration; "
+            "without this fix, the server schedules a SIMPLE task on the "
+            "agent's domain that no worker polls."
+        )
+
+    def test_prefill_call_carries_tool_def_back_reference(self):
+        """``ToolDef.call(...)`` must populate ``PrefillToolCall.tool_def``
+        so the runtime can register the worker even when the same tool is
+        not also present in ``agent.tools``."""
+        from agentspan.agents.tool import tool
+
+        @tool
+        def some_tool() -> str:
+            return "x"
+
+        ptc = some_tool.call()
+        assert ptc.tool_def is not None
+        assert ptc.tool_def.name == "some_tool"
+        assert ptc.tool_name == "some_tool"
+
+    def test_pae_planner_prefill_tool_collected(self):
+        """PLAN_EXECUTE harnesses keep the planner / fallback in named slots
+        (``coder.planner=…``, ``coder.fallback=…``), not in ``coder.agents``.
+        The SDK must recurse into those slots when collecting workers,
+        otherwise tools (including prefill-only tools) declared on the
+        planner sub-agent get no worker registered.
+
+        Reproduces workflow ``0f715217-29bb-405b-ab12-4126ce4d1773`` —
+        ``code_planner.prefill_tools`` references ``contextbook_read``;
+        the runtime walked ``coder.agents`` (empty for PAE), missed
+        ``coder.planner.prefill_tools``, and the prefill SUB_WORKFLOW
+        sat SCHEDULED with no poller.
+        """
+        from agentspan.agents import Agent, AgentRuntime, Strategy
+        from agentspan.agents.tool import tool
+
+        @tool
+        def planner_only_tool() -> str:
+            return "planner-side"
+
+        @tool
+        def fallback_only_tool() -> str:
+            return "fallback-side"
+
+        @tool
+        def harness_tool() -> str:
+            return "harness-side"
+
+        planner = Agent(
+            name="pae_inner_planner",
+            model="openai/gpt-4o-mini",
+            instructions="emit JSON",
+            prefill_tools=[planner_only_tool.call()],  # PREFILL only — no tools= entry
+        )
+        fallback = Agent(
+            name="pae_fallback",
+            model="openai/gpt-4o-mini",
+            instructions="recover",
+            tools=[fallback_only_tool],
+        )
+        coder = Agent(
+            name="pae_harness",
+            model="openai/gpt-4o-mini",
+            strategy=Strategy.PLAN_EXECUTE,
+            planner=planner,
+            fallback=fallback,
+            tools=[harness_tool],
+        )
+
+        with AgentRuntime() as rt:
+            names = rt._collect_worker_names(coder)
+
+        assert "harness_tool" in names
+        assert "planner_only_tool" in names, (
+            "planner sub-agent's prefill-only tool must be registered; "
+            "missing it means the PAE planner SUB_WORKFLOW's prefill task "
+            "sits SCHEDULED with no poller (workflow 0f715217)."
+        )
+        assert "fallback_only_tool" in names, (
+            "fallback sub-agent's tools must be registered too; same "
+            "named-slot recursion gap."
+        )

@@ -2,405 +2,486 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Issue Fixer Agent — autonomous GitHub issue to PR pipeline.
+"""Issue Fixer Agent: fetch issue/PR context, code the fix, publish the PR."""
 
-Takes a GitHub repo and issue number, analyzes the codebase, implements a fix
-with tests and docs, reviews it, and creates a pull request.
+from __future__ import annotations
 
-Architecture:
-    issue_pr_fetcher >> tech_lead >> loop(coder, qa_agent) >> pr_updater
-
-The coder<>qa loop uses SWARM strategy:
-- Coder implements, outputs HANDOFF_TO_QA
-- QA reviews, outputs QA_APPROVED (exit) or HANDOFF_TO_CODER (rework)
-- Max 3 iterations
-
-Usage:
-    python 100_issue_fixer_agent.py owner/repo 42
-    python 100_issue_fixer_agent.py owner/repo 42 --pr 157
-
-Requirements:
-    - Agentspan server running
-    - GITHUB_TOKEN: agentspan credentials set GITHUB_TOKEN <your-token>
-    - gh CLI installed and authenticated
-"""
-
+import argparse
+import dataclasses
+import json
 import os
+import re
 import tempfile
+import time as _time
 
-from _issue_fixer_instructions import (
-    CODER_EXPLORER_INSTRUCTIONS,
-    CODER_PLANNER_INSTRUCTIONS,
-    ISSUE_PR_FETCHER_INSTRUCTIONS,
-    PR_UPDATER_INSTRUCTIONS,
-    QA_AGENT_INSTRUCTIONS,
-    TECH_LEAD_INSTRUCTIONS,
-)
 from _issue_fixer_tools import (
     _contextbook_dir,
+    apply_patch,
     build_check,
     contextbook_read,
     edit_file,
     edit_files,
     file_outline,
-    find_references,
+    finalize_pr_update,
     git_diff,
-    git_log,
+    git_status,
     glob_find,
     grep_search,
     lint_and_format,
     list_directory,
+    prepare_issue_workspace,
     read_file,
     read_symbol,
-    run_command,
-    run_unit_tests,
     search_symbols,
     set_working_dir,
-    setup_repo,
-    write_architecture,
-    write_coder_plan,
+    validate_issue_workspace,
+    validate_pr_result,
+    write_coder_context,
     write_file,
     write_implementation_report,
-    write_qa_testing,
+    write_task_brief,
 )
 
-import dataclasses
-
-from agentspan.agents import Agent, AgentRuntime, Strategy
-from agentspan.agents.cli_config import CliConfig
-from agentspan.agents.handoff import OnTextMention
+from agentspan.agents import Agent, AgentRuntime, OnFail, Position, RegexGuardrail, Strategy
 from agentspan.agents.tool import get_tool_def
 
-# ── Configuration ────────────────────────────────────────────
 BRANCH_PREFIX = "fix/issue-"
-OPUS = "anthropic/claude-opus-4-6"
 SONNET = "anthropic/claude-sonnet-4-6"
-GITHUB_CREDENTIAL = "GITHUB_TOKEN"
-SERVER_URL = "http://localhost:6767"
-MAX_QA_LOOPS = 10  # max coder<>qa iterations
+CODEX = "openai/gpt-5.3-codex"
+
+FETCHER_MAX_TURNS = 20
+CODER_MAX_TURNS = 120
+
+
+FETCHER_INSTRUCTIONS = """\
+You are the PR/Issue Fetcher.
+
+The fetch and validation tools have already run through prefill_tools. The full
+issue/PR dump is available in the prefilled `issue_pr` contextbook section.
+
+Inspect the validation result first.
+- If validation FAILED: summarize the failure in plain text and do not output
+  FETCH_READY. Do not call write_task_brief.
+- If validation PASSED: produce a Task Brief for the Coder using ONLY the
+  prefilled context. Do not call any inspection or shell tools — none are
+  available to you.
+
+Task Brief format. Use these four markdown headings verbatim and in this order:
+
+## Synopsis
+Two to four sentences. State what the issue is asking for, the user-visible
+symptom or feature, and the intended outcome. Note the mode (new issue fix vs.
+PR feedback) and any salient labels.
+
+## Issue Comments
+Bulleted summary of each issue comment as `- @author: one-line takeaway`. If
+there are none, write the single line `No issue comments.`.
+
+## PR Comments
+Bulleted summary of PR body, reviews, top-level PR comments, and inline review
+comments (include `file:line` when present) as
+`- @author [kind]: one-line takeaway`. If there is no PR, write `No PR.`. If
+there is a PR with no feedback yet, write `No PR comments.`.
+
+## TODO
+Numbered, ordered, concrete steps for the Coder. Each step is a single
+actionable change, investigation, or validation. The final step must be a
+validation step (build_check and/or lint_and_format).
+
+Workflow:
+1. Call write_task_brief(content=<the brief>) exactly once with the brief in
+   the format above.
+2. After write_task_brief succeeds, emit one final response whose body is the
+   same brief text followed by a final line containing exactly FETCH_READY.
+   Do not include any tool calls in that final response.
+"""
+
+
+CODER_INSTRUCTIONS = """\
+You are the Coder. Implement the requested GitHub issue/PR fix.
+
+Context is already loaded through prefill tools:
+- issue_pr: issue body, issue comments, PR body/comments/reviews when present
+- repo_conventions: repository docs and detected build/test/lint commands
+
+Treat the TODO in task_brief as the authoritative ordered checklist for this
+fix. Follow it step-by-step; fall back to issue_pr only when more detail is
+needed.
+
+First thing first --> you have the issue context and task brief. Use it to come up with a plan on what you need to do,
+what files to search, edit, what symbols to search etc.  Then use parallel tool calls to do this in parallel as much
+as possible.  The system can do massive parallel forks so do not worry about that.
+once you do that, write it up in the contextbook with the files you have searched for.
+The contextbook for coder must contain information about a) files read b) files written
+c) checklist of what needs to be done and their current status
+
+Once the checklist is complete, ONLY then run build_check / lint_and_format and complete the work. If validation fails, repeat the process. Do not call run_unit_tests — it is temporarily disabled.
+
+Your job - In the following order.  the order MUST be the following:
+1. Understand the issue/PR context.
+2. Make focused code changes.
+3. Run relevant validation with build_check() and/or lint_and_format().
+   (run_unit_tests is intentionally disabled for now — do not call it.)
+4. Call write_coder_context(content=...) with a concise checklist/status.
+5. Call write_implementation_report(content=...) with files changed, tests run,
+   and remaining risks.
+6. After write_implementation_report succeeds, make one final response with
+   exactly CODER_DONE and no tool calls.
+
+Do not commit, push, create a PR, or update a PR. The PR updater handles that.
+Use run_command only for safe custom build/test/lint/status commands; it is not
+for reading files. Use read_file, read_symbol, grep_search, glob_find,
+file_outline, search_symbols for inspection. The tools enforce bounded inspection and validation budgets.
+"""
+
+
+no_destructive_shell = RegexGuardrail(
+    patterns=[
+        r"\brm\s+-rf?\s+/(?:\s|$)",
+        r"\brm\s+-rf?\s+/[a-zA-Z]",
+        r"\bgit\s+push\s+(?:--force|-f)\b",
+        r"\bgit\s+reset\s+--hard\b",
+        r"\bdd\s+if=.*\s+of=/dev/(?:sd[a-z]|nvme)",
+        r":\(\)\s*\{.*\}\s*;.*:",
+    ],
+    name="no_destructive_shell",
+    position=Position.INPUT,
+    on_fail=OnFail.RAISE,
+    message="Blocked: destructive shell command pattern.",
+)
+
+
+_round_start_ts = _time.time()
 
 
 def _limited(fn, max_calls: int):
-    """Return a ToolDef copy with a per-agent max_calls limit."""
     return dataclasses.replace(get_tool_def(fn), max_calls=max_calls)
 
 
-# ── Stop-when callbacks ──────────────────────────────────────
-# File-based checks: deterministic, no LLM text parsing.
-# The server skips stop_when evaluation on TOOL_CALLS turns, so these
-# only run when the LLM produced text — no need to check finishReason here.
+def _guarded(fn, guardrails):
+    return dataclasses.replace(get_tool_def(fn), guardrails=list(guardrails))
 
-import time as _time
 
-_EXECUTION_START = _time.time()
+def _begin_round() -> None:
+    global _round_start_ts
+    _round_start_ts = _time.time()
+    _time.sleep(0.05)
+
+
+def _server_base_url() -> str:
+    raw = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:6767/api")
+    return raw.rstrip("/").removesuffix("/api")
 
 
 def _contextbook_written(section: str) -> bool:
-    """Check if a contextbook section file was written during THIS execution."""
     path = _contextbook_dir() / f"{section}.md"
-    if not path.exists() or path.stat().st_size == 0:
+    return path.exists() and path.stat().st_size > 0 and path.stat().st_mtime >= _round_start_ts
+
+
+def _stop_result(context: dict, kwargs: dict) -> object:
+    if isinstance(context, dict) and "result" in context:
+        return context.get("result")
+    return kwargs.get("result")
+
+
+def _result_contains(result: object, marker: str) -> bool:
+    if result is None:
         return False
-    return path.stat().st_mtime >= _EXECUTION_START
+    if isinstance(result, list):
+        return any(_result_contains(item, marker) for item in result)
+    if isinstance(result, dict):
+        return any(_result_contains(value, marker) for value in result.values())
+    return marker in str(result)
 
 
-def _has_text_in_context(context: dict, *targets: str) -> bool:
-    """Check if ALL target strings appear in the result or tool-result messages."""
-    result = context.get("result", "")
-    result_str = str(result) if result else ""
-    if result_str and all(t in result_str for t in targets):
+_BLOCKED_TOKEN = "Blocked: coder inspection budget exceeded"
+# Net-blocked threshold for the Layer-2 stall detector. Raised 5 → 15 after
+# execution 8d5fc4fe-aef0-4528-be68-fbba323bde64 where the agent terminated
+# at iter 7 — only two turns after its single ``write_coder_context`` —
+# because every blocked tool call counted. With 3–4 parallel calls per turn
+# a threshold of 5 hit after just two turns of post-plan searching, before
+# the model had time to digest the plan and pivot to editing. At 15, the
+# agent gets ~4-5 turns of "your inspections are blocked" feedback before
+# we force termination — enough to either commit to an edit OR call
+# ``write_implementation_report`` with a concrete blocker.
+_STALLED_BLOCKED_THRESHOLD = 15
+
+# Progress-marker tool names — each call to one of these in recent history
+# subtracts from the net-blocked count below. The reasoning: a model that
+# has just emitted ``write_coder_context`` or ``write_implementation_report``
+# IS converging (just slowly); we don't want a few stale blocked messages
+# from before the progress call to mask actual forward motion. Each progress
+# call discounts the blocked count by ``_PROGRESS_DISCOUNT`` so a planning
+# event "buys back" some of the budget without infinitely suppressing the
+# stall detector.
+_PROGRESS_MARKERS = ("write_coder_context", "write_implementation_report")
+_PROGRESS_DISCOUNT = 5
+
+
+def _budget_blocked(result: object) -> bool:
+    text = str(result or "")
+    return (
+        _BLOCKED_TOKEN in text
+        or "Blocked: validation budget exceeded" in text
+        or "implementation_report is blocked" in text
+    )
+
+
+def _count_blocked_tool_messages(messages: object) -> int:
+    """Net count of blocked tool messages minus progress-marker calls.
+
+    Counts ``tool``-role messages whose content carries the inspection-blocked
+    sentinel — these are the agent's evidence of being stuck. Subtracts
+    ``_PROGRESS_DISCOUNT`` per progress-marker call (``write_coder_context``
+    or ``write_implementation_report``) seen in the same window: those signal
+    forward motion and should "buy back" some of the budget. Returns a
+    non-negative integer the caller compares against
+    ``_STALLED_BLOCKED_THRESHOLD``.
+    """
+    if not isinstance(messages, list):
+        return 0
+    blocked = 0
+    progress = 0
+    for m in messages:
+        if not isinstance(m, dict):
+            continue
+        role = m.get("role")
+        # Tool result messages: blocked sentinel lives in ``message`` or
+        # ``toolCalls[*].output.result``.
+        if role == "tool":
+            blob = str(m.get("message") or "")
+            if _BLOCKED_TOKEN in blob:
+                blocked += 1
+                continue
+            for tc in m.get("toolCalls") or []:
+                out = (tc or {}).get("output")
+                if isinstance(out, dict):
+                    if _BLOCKED_TOKEN in str(out.get("result") or ""):
+                        blocked += 1
+                        break
+                    if _BLOCKED_TOKEN in json.dumps(out):
+                        blocked += 1
+                        break
+        # Assistant tool_call messages: detect progress-marker emissions.
+        # ChatMessage.Role.tool_call serializes with these toolCalls entries
+        # and an empty ``message`` field (see AgentChatCompleteTaskMapper).
+        elif role == "tool_call":
+            for tc in m.get("toolCalls") or []:
+                name = (tc or {}).get("name") or ""
+                if name in _PROGRESS_MARKERS:
+                    progress += 1
+    return max(0, blocked - progress * _PROGRESS_DISCOUNT)
+
+
+def _fetcher_done(context: dict, **kwargs) -> bool:
+    return (
+        _contextbook_written("issue_pr")
+        and _contextbook_written("repo_conventions")
+        and _contextbook_written("task_brief")
+        and _result_contains(_stop_result(context, kwargs), "FETCH_READY")
+    )
+
+
+def _coder_done(context: dict, **kwargs) -> bool:
+    # Termination paths, in priority order:
+    # 1) The LLM's own result echoed a budget-blocked message → stop.
+    if _budget_blocked(_stop_result(context, kwargs)):
         return True
-    messages = context.get("messages", [])
-    if isinstance(messages, list):
-        for msg in messages:
-            if not isinstance(msg, dict):
-                continue
-            role = msg.get("role", "")
-            if role in ("system", "user"):
-                continue
-            content = str(msg.get("message", "") or msg.get("content", ""))
-            if content and all(t in content for t in targets):
-                return True
-    return False
+    # 2) Layer 2 forcing function: the model has been silently ignoring
+    #    inspection-budget-blocked tool results and looping. If recent
+    #    history contains >= _STALLED_BLOCKED_THRESHOLD blocked tool
+    #    messages, terminate hard so the agent doesn't run to max_turns.
+    messages = None
+    if isinstance(context, dict):
+        messages = context.get("messages")
+    if messages is None:
+        messages = kwargs.get("messages")
+    if _count_blocked_tool_messages(messages) >= _STALLED_BLOCKED_THRESHOLD:
+        return True
+    # 3) Normal happy-path completion.
+    return (
+        _contextbook_written("coder_context")
+        and _contextbook_written("implementation_report")
+        and _result_contains(_stop_result(context, kwargs), "CODER_DONE")
+    )
 
 
-def _tech_lead_done(context: dict, **kwargs) -> bool:
-    """Stop when architecture_design_test contextbook file exists."""
-    return _contextbook_written("architecture_design_test")
+def _normalize_repo_for_path(repo: str) -> str:
+    repo = re.sub(r"^https?://", "", repo or "")
+    repo = re.sub(r"^github\.com/", "", repo)
+    repo = re.sub(r"\.git$", "", repo).strip("/")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
+        raise ValueError(f"Invalid GitHub repo {repo!r}; expected owner/name")
+    return repo
 
 
-def _explorer_done(context: dict, **kwargs) -> bool:
-    """Stop when coder_plan contextbook file exists."""
-    return _contextbook_written("coder_plan")
+def _workspace_dir_for_key(idempotency_key: str) -> str:
+    safe_key = re.sub(r"[^A-Za-z0-9_.-]+", "-", idempotency_key).strip("-")
+    return os.path.join(tempfile.gettempdir(), safe_key)
 
 
-def _implementer_done(context: dict, **kwargs) -> bool:
-    """Stop when implementation_report contextbook file exists."""
-    return _contextbook_written("implementation_report")
-
-
-def _qa_approved(context: dict, **kwargs) -> bool:
-    """Stop the SWARM loop when QA approves (text-based — no file equivalent)."""
-    return _has_text_in_context(context, "QA_APPROVED")
-
-
-def _pr_done(context: dict, **kwargs) -> bool:
-    """Stop PR updater when a PR URL is output (text-based — no file equivalent)."""
-    return _has_text_in_context(context, "github.com", "/pull/")
-
-
-def main():
-    import argparse
-
+def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Issue Fixer Agent — autonomous GitHub issue to PR pipeline",
-        epilog="Examples:\n"
-        "  python 100_issue_fixer_agent.py facebook/react 42\n"
-        "  python 100_issue_fixer_agent.py facebook/react 42 --pr 157\n",
+        description="Issue Fixer Agent: fetch issue/PR context, code, publish PR",
+        epilog=(
+            "Examples:\n"
+            "  python 100_issue_fixer_agent.py facebook/react 42\n"
+            "  python 100_issue_fixer_agent.py facebook/react 42 --pr 157\n"
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("repo", type=str, help="GitHub repo (owner/name)")
     parser.add_argument("issue", type=int, help="GitHub issue number")
-    parser.add_argument("--pr", type=int, default=None, help="Existing PR number")
+    parser.add_argument("--pr", type=int, default=0, help="Existing PR number")
     args = parser.parse_args()
 
-    import re as _re
-
-    # Normalize repo to owner/name format
-    repo = _re.sub(r"^https?://", "", args.repo)
-    repo = _re.sub(r"^github\.com/", "", repo)
-    repo = _re.sub(r"\.git$", "", repo)
-    repo = repo.strip("/")
-
+    repo = _normalize_repo_for_path(args.repo)
     issue_number = args.issue
-    pr_number = args.pr
-
-    _fmt = {"repo": repo, "branch_prefix": BRANCH_PREFIX}
-
-    # Working directory — deterministic so restarts reuse existing repo clone + contextbook
+    pr_number = args.pr or 0
     repo_slug = repo.replace("/", "-")
-    issue_slug = f"pr-{pr_number}" if pr_number else f"issue-{issue_number}"
-    work_dir = os.path.join(tempfile.gettempdir(), f"{repo_slug}-fix-{issue_slug}")
+    base_idempotency_key = f"issue-fixer-v12-{repo_slug}-issue-{issue_number}" + (
+        f"-pr-{pr_number}" if pr_number else ""
+    )
+    work_dir = _workspace_dir_for_key(base_idempotency_key)
+    os.makedirs(work_dir, exist_ok=True)
     set_working_dir(work_dir)
 
-    cli = CliConfig(
-        allowed_commands=["git", "gh", "find"],
-        allow_shell=True,
-        timeout=120,
-        working_dir=work_dir,
-    )
-
-    # ═══════════════════════════════════════════════════════════════
-    # Agents
-    # ═══════════════════════════════════════════════════════════════
-
-    issue_pr_fetcher = Agent(
-        name="issue_pr_fetcher",
+    pr_fetcher = Agent(
+        name="issue_fixer_pr_fetcher",
         model=SONNET,
         stateful=True,
-        max_turns=5,
-        max_tokens=16000,
-        credentials=[GITHUB_CREDENTIAL],
-        tools=[setup_repo],
-        instructions=ISSUE_PR_FETCHER_INSTRUCTIONS.format(**_fmt),
-    )
-
-    tech_lead = Agent(
-        name="tech_lead",
-        model=OPUS,
-        stateful=True,
-        max_turns=100,
-        max_tokens=60000,
-        tools=[
-            read_file,
-            read_symbol,
-            grep_search,
-            glob_find,
-            list_directory,
-            file_outline,
-            search_symbols,
-            find_references,
-            git_log,
-            run_command,
-            write_architecture,
-            _limited(contextbook_read, 3),
+        max_turns=FETCHER_MAX_TURNS,
+        max_tokens=32000,
+        prefill_tools=[
+            prepare_issue_workspace.call(
+                repo=repo,
+                issue_number=issue_number,
+                pr_number=pr_number,
+                branch_prefix=BRANCH_PREFIX,
+            ),
+            validate_issue_workspace.call(),
+            contextbook_read.call(section="issue_pr"),
         ],
-        stop_when=_tech_lead_done,
-        instructions=TECH_LEAD_INSTRUCTIONS.format(**_fmt),
+        tools=[write_task_brief],
+        stop_when=_fetcher_done,
+        instructions=FETCHER_INSTRUCTIONS,
     )
 
-    # Coder is split into planner >> implementer (sequential).
-    # Planner reads all context + explores codebase → writes change map.
-    # Implementer reads ONLY the change map → writes code, tests, commits.
-
-    # Explorer: has tools, explores codebase, writes change map to contextbook
-    coder_explorer = Agent(
-        name="coder_explorer",
-        model=OPUS,
+    coder = Agent(
+        name="issue_fixer_coder",
+        model=SONNET,
         stateful=True,
-        max_turns=15,
-        max_tokens=60000,
+        reasoning_effort="medium",
+        max_turns=CODER_MAX_TURNS,
+        max_tokens=32000,
         prefill_tools=[
             contextbook_read.call(section="issue_pr"),
-            contextbook_read.call(section="architecture_design_test"),
-            contextbook_read.call(section="implementation_report"),
-            contextbook_read.call(section="qa_testing"),
+            contextbook_read.call(section="repo_conventions"),
+            contextbook_read.call(section="task_brief"),
+            list_directory.call(),
+            git_status.call(),
+            git_diff.call(),
         ],
         tools=[
             read_file,
             read_symbol,
             grep_search,
             glob_find,
-            list_directory,
             file_outline,
             search_symbols,
-            find_references,
-            write_coder_plan,
-        ],
-        stop_when=_explorer_done,
-        instructions=CODER_EXPLORER_INSTRUCTIONS.format(**_fmt),
-    )
-
-    # Planner: ZERO tools, reads contextbook via prefill, outputs text with JSON fence.
-    # Zero tools guarantees finishReason=END_TURN → result contains the plan text
-    # that PLAN_EXECUTE's extract_json can parse.
-    # Uses SONNET (not Opus) — this is a simple copy task, Sonnet is more
-    # instruction-following and won't add unnecessary commentary.
-    coder_planner = Agent(
-        name="coder_planner",
-        model=SONNET,
-        stateful=True,
-        max_turns=3,
-        max_tokens=16000,
-        prefill_tools=[
-            contextbook_read.call(section="coder_plan"),
-            contextbook_read.call(section="architecture_design_test"),
-        ],
-        tools=[],
-        instructions=CODER_PLANNER_INSTRUCTIONS.format(**_fmt),
-    )
-
-    # Sequential: explorer first (writes to contextbook), then planner (outputs text)
-    coder_exploration = Agent(
-        name="coder_exploration",
-        model=SONNET,
-        agents=[coder_explorer, coder_planner],
-        strategy=Strategy.SEQUENTIAL,
-        max_turns=2000,
-        max_tokens=16000,
-    )
-
-    # Tools the compiled plan invokes as deterministic SIMPLE tasks.
-    # Declared here so the runtime registers them as Conductor workers.
-    #
-    # Single sub-agent (coder_exploration), no fallback agent. By design — see
-    # commit 1fad27a9: the trade-off is that ANY failure in the plan path
-    # (compile error, plan extraction failure, validation failure, tool error)
-    # TERMINATES this `coder` SUB_WORKFLOW. The enclosing SWARM (coder_qa_loop)
-    # will not get a chance to recover via QA feedback — the iteration ends.
-    # We accept this brittleness because:
-    #   - The coder_explorer + coder_planner sequential is supposed to produce
-    #     a deterministic plan; if it doesn't, retrying agentic-style would
-    #     burn tokens on the same failure mode.
-    #   - The contextbook plan_source is a deterministic recovery for plan
-    #     extraction failures specifically.
-    # If you need agentic recovery for compile/validation failures, add a
-    # second agent (e.g., coder_implementer_fallback) to `agents=[...]` below.
-    coder = Agent(
-        name="coder",
-        model=SONNET,
-        agents=[coder_exploration],
-        strategy=Strategy.PLAN_EXECUTE,
-        max_tokens=16000,
-        plan_source={"tool": "contextbook_read", "args": {"section": "coder_plan"}},
-        tools=[
-            read_file,
             write_file,
             edit_file,
             edit_files,
-            run_command,
+            apply_patch,
             lint_and_format,
             build_check,
-            run_unit_tests,
+            write_coder_context,
             write_implementation_report,
-            contextbook_read,
         ],
+        stop_when=_coder_done,
+        instructions=CODER_INSTRUCTIONS,
     )
 
-    qa_agent = Agent(
-        name="qa_agent",
+    # PR finalization is intentionally NOT an Agent — it's a fully
+    # deterministic sequence (commit, push, create/update PR, validate). When
+    # it was wrapped as an Agent with prefill_tools and no tools, the LLM
+    # still got invoked one final time and would occasionally hallucinate
+    # ("I'll implement issue #N from scratch..."). Prompt fixes don't survive
+    # strong agent priors. The structural fix is to drop the LLM round and
+    # call the tools directly after the agent pipeline finishes — see below.
+
+    issue_fixer = Agent(
+        name="issue_fixer_pipeline",
         model=SONNET,
         stateful=True,
-        max_turns=1000,
-        max_tokens=60000,
-        credentials=[GITHUB_CREDENTIAL],
-        cli_config=cli,
-        tools=[
-            read_symbol,
-            grep_search,
-            glob_find,
-            git_diff,
-            run_command,
-            run_unit_tests,
-            write_qa_testing,
-            _limited(contextbook_read, 5),
-        ],
-        handoffs=[OnTextMention(text="HANDOFF_TO_CODER", target="coder")],
-        instructions=QA_AGENT_INSTRUCTIONS.format(**_fmt),
+        agents=[pr_fetcher, coder],
+        strategy=Strategy.SEQUENTIAL,
+        timeout_seconds=0,
+        instructions=(
+            "Run the issue fixer pipeline in order: PR/issue fetcher, then coder. "
+            "Do not skip stages. PR finalization happens deterministically after "
+            "this pipeline returns and is not an agent stage."
+        ),
     )
 
-    # SWARM: coder<>qa loop. Terminates when QA outputs QA_APPROVED.
-    coder_qa_loop = Agent(
-        name="coder_qa_loop",
-        model=SONNET,
-        agents=[coder, qa_agent],
-        strategy=Strategy.SWARM,
-        max_turns=MAX_QA_LOOPS * 30,  # budget for N full coder+qa cycles
-        max_tokens=16000,
-        stop_when=_qa_approved,
+    prompt = (
+        f"Fix issue #{issue_number} from {repo}. "
+        f"Working directory: {work_dir}. "
+        f"{'Address feedback on PR #' + str(pr_number) + '.' if pr_number else ''}"
     )
 
-    pr_updater = Agent(
-        name="pr_updater",
-        model=SONNET,
-        stateful=True,
-        max_turns=50,
-        max_tokens=16000,
-        credentials=[GITHUB_CREDENTIAL],
-        cli_config=cli,
-        tools=[git_diff, git_log, _limited(contextbook_read, 8), run_command],
-        stop_when=_pr_done,
-        instructions=PR_UPDATER_INSTRUCTIONS.format(**_fmt),
-    )
-
-    # ═══════════════════════════════════════════════════════════════
-    # Pipeline
-    # ═══════════════════════════════════════════════════════════════
-
-    pipeline = issue_pr_fetcher >> tech_lead >> coder_qa_loop >> pr_updater
-
-    # Build prompt
-    prompt_parts = [f"Fix issue #{issue_number} from {repo}."]
-    if pr_number:
-        prompt_parts.append(f"Address feedback on PR #{pr_number}.")
-    prompt_parts.append(f"Working directory: {work_dir}")
-    if pr_number:
-        prompt_parts.append(f"PR number to pass to setup_repo: {pr_number}")
-    prompt = " ".join(prompt_parts)
-
-    idempotency_key = f"issue-{issue_number}" + (f"-pr-{pr_number}" if pr_number else "")
-
+    print(f"Idempotency key: {base_idempotency_key}")
     print(f"Working directory: {work_dir}")
     print(f"Mode: {'PR feedback' if pr_number else 'New issue fix'}")
+    server_base = _server_base_url()
 
     with AgentRuntime() as rt:
-        handle = rt.start(pipeline, prompt, idempotency_key=idempotency_key)
-        print(f"Execution started: {handle.execution_id}")
-        print(f"Idempotency key: {idempotency_key}")
-        print(f"Monitor at: {SERVER_URL}/execution/{handle.execution_id}")
+        print("\n=== Running issue_fixer_pipeline: fetcher -> coder ===")
+        _begin_round()
+        result = rt.run(
+            issue_fixer,
+            (
+                f"{prompt}\n\n"
+                f"repo={repo}\nissue_number={issue_number}\npr_number={pr_number}\n"
+                f"branch_prefix={BRANCH_PREFIX}"
+            ),
+            idempotency_key=base_idempotency_key,
+            cwd=work_dir,
+        )
+        print(f"Pipeline execution: {result.execution_id}")
+        print(f"Monitor at: {server_base}/execution/{result.execution_id}")
+        if result.status not in ("COMPLETED", ""):
+            result.print_result()
+            return 1
 
-        result = handle.join(timeout=3600)
-        result.print_result()
+    # Deterministic PR finalization — no LLM involved. Calls the same @tool
+    # functions the old pr_updater Agent used to invoke via prefill_tools, but
+    # directly, so a hallucinating model can't derail this stage.
+    print("\n=== Finalizing PR (deterministic, no LLM) ===")
+    finalize_summary = finalize_pr_update(
+        repo=repo,
+        issue_number=issue_number,
+        pr_number=pr_number,
+        branch_prefix=BRANCH_PREFIX,
+    )
+    print(finalize_summary)
+    validation = validate_pr_result()
+    print(validation)
+
+    result_path = _contextbook_dir() / "pr_result.md"
+    result_text = (
+        result_path.read_text(encoding="utf-8", errors="replace") if result_path.exists() else ""
+    )
+    match = re.search(r"https://github\.com/\S+/pull/\d+", result_text)
+    if match:
+        print(f"\nPR ready: {match.group(0)}")
+        return 0
+
+    print("\nIssue fixer pipeline completed without a PR URL.")
+    print(f"pr_result: {result_path}")
+    result.print_result()
+    return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

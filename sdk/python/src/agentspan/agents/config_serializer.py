@@ -78,15 +78,22 @@ class AgentConfigSerializer:
                 ]
             return stub
 
+        # Strategy is emitted when the agent has any sub-agent declaration:
+        # legacy ``agents=[…]`` OR PLAN_EXECUTE's named slots (``planner``,
+        # ``fallback``). Without the slot check, a PLAN_EXECUTE coordinator
+        # built with ``planner=…`` would have ``strategy: None`` on the wire
+        # and the server's dispatch would fall to compileWithTools.
+        has_sub_agents = bool(agent.agents) \
+            or getattr(agent, "planner", None) is not None \
+            or getattr(agent, "fallback", None) is not None
         config: Dict[str, Any] = {
             "name": agent.name,
             "model": agent.model or None,
             "baseUrl": getattr(agent, "base_url", None),
-            "strategy": agent.strategy if agent.agents else None,
+            "strategy": agent.strategy if has_sub_agents else None,
             "maxTurns": agent.max_turns,
             "timeoutSeconds": agent.timeout_seconds,
             "external": agent.external,
-            "synthesize": getattr(agent, "synthesize", True),
         }
 
         # Instructions
@@ -139,6 +146,10 @@ class AgentConfigSerializer:
         if agent.temperature is not None:
             config["temperature"] = agent.temperature
 
+        # Reasoning effort (OpenAI reasoning models)
+        if getattr(agent, "reasoning_effort", None) is not None:
+            config["reasoningEffort"] = agent.reasoning_effort
+
         # Stop when
         if agent.stop_when is not None:
             task_name = f"{agent.name}_stop_when"
@@ -164,9 +175,22 @@ class AgentConfigSerializer:
         if agent.metadata:
             config["metadata"] = agent.metadata
 
-        # Planner
-        if getattr(agent, "planner", False):
-            config["planner"] = True
+        # Plan-first preamble (Google ADK feature; renamed from ``planner``
+        # boolean to ``enable_planning`` to free the ``planner`` JSON slot
+        # for the PLAN_EXECUTE sub-agent below).
+        if getattr(agent, "enable_planning", False):
+            config["enablePlanning"] = True
+
+        # PLAN_EXECUTE named slots: planner (required) + fallback (optional).
+        # Both serialize as nested AgentConfig dicts. The server reads them
+        # in MultiAgentCompiler.compilePlanExecute; the parent's ``tools``
+        # list (already serialized above) becomes ``knownToolNames`` on PAC.
+        planner_agent = getattr(agent, "planner", None)
+        if planner_agent is not None and not isinstance(planner_agent, bool):
+            config["planner"] = self._serialize_agent(planner_agent)
+        fallback_agent = getattr(agent, "fallback", None)
+        if fallback_agent is not None:
+            config["fallback"] = self._serialize_agent(fallback_agent)
 
         # Callbacks — emit for any position that has handlers or legacy callables
         from agentspan.agents.callback import (
@@ -216,6 +240,17 @@ class AgentConfigSerializer:
         if getattr(agent, "plan_source", None) is not None:
             config["planSource"] = agent.plan_source
 
+        # Synthesize flag — whether to append a final LLM synthesis step
+        # after specialist agents complete. Default true; pass through only
+        # when explicitly disabled to keep payloads small.
+        if not getattr(agent, "synthesize", True):
+            config["synthesize"] = False
+
+        # Masked fields — input/output field names to redact in execution
+        # history and UI. Maps to Conductor's WorkflowDef.maskedFields.
+        if getattr(agent, "masked_fields", None):
+            config["maskedFields"] = list(agent.masked_fields)
+
         # Gate condition (for sequential pipelines)
         if getattr(agent, "gate", None) is not None:
             config["gate"] = self._serialize_gate(agent)
@@ -247,10 +282,6 @@ class AgentConfigSerializer:
             config["credentials"] = [
                 c if isinstance(c, str) else c.env_var for c in agent.credentials
             ]
-
-        # Masked fields — redacted in execution history and UI
-        if getattr(agent, "masked_fields", None):
-            config["maskedFields"] = list(agent.masked_fields)
 
         # Remove None values for cleaner JSON
         return {k: v for k, v in config.items() if v is not None}

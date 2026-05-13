@@ -53,4 +53,26 @@ public class StartRequest {
      * the same agent script are running.
      */
     private String runId;
+
+    /**
+     * Working directory injected into {@code workflow.input.cwd}.
+     *
+     * <p>Filesystem-bound tools (read_file, run_command, etc.) read this from the
+     * compiled plan via {@code ${workflow.input.cwd}}. Without it the input is
+     * null and tools resolve paths against the worker's CWD — usually wrong.
+     */
+    private String cwd;
+
+    /**
+     * Static plan injection for {@code Strategy.PLAN_EXECUTE} harnesses.
+     *
+     * <p>When set, PAC's {@code extract_json} reads this as Case 0 (highest
+     * priority) and uses it instead of the planner LLM's output, turning a
+     * PLAN_EXECUTE harness into a fully deterministic pipeline. The planner
+     * LLM still runs (the workflow is compiled once) but its output is
+     * discarded. Accepts a {@code Map} (typed plan) or a JSON {@code String}.
+     *
+     * <p>Harmless for non-PLAN_EXECUTE harnesses — they don't read this input.
+     */
+    private Object staticPlan;
 }

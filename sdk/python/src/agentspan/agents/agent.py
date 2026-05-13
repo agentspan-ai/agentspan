@@ -343,6 +343,7 @@ class Agent:
         max_tokens: Optional[int] = None,
         timeout_seconds: int = 0,
         temperature: Optional[float] = None,
+        reasoning_effort: Optional[str] = None,
         stop_when: Optional[Callable[..., bool]] = None,
         termination: Optional[Any] = None,
         handoffs: Optional[List[Any]] = None,
@@ -356,7 +357,7 @@ class Agent:
         cli_commands: bool = False,
         cli_allowed_commands: Optional[List[str]] = None,
         cli_config: Optional[Any] = None,
-        planner: bool = False,
+        enable_planning: bool = False,
         callbacks: Optional[List[Any]] = None,
         before_agent_callback: Optional[Callable[..., Any]] = None,
         after_agent_callback: Optional[Callable[..., Any]] = None,
@@ -375,6 +376,9 @@ class Agent:
         plan_source: Optional[Dict[str, Any]] = None,
         synthesize: bool = True,
         masked_fields: Optional[List[str]] = None,
+        # PLAN_EXECUTE named slots (replace positional ``agents=[planner, fallback]``)
+        planner: Optional["Agent"] = None,
+        fallback: Optional["Agent"] = None,
     ) -> None:
         if not name or not isinstance(name, str):
             raise ValueError("Agent name must be a non-empty string")
@@ -391,6 +395,42 @@ class Agent:
             raise ValueError(f"Invalid strategy {strategy!r}. Must be one of: {valid}")
         if strategy == "router" and router is None:
             raise ValueError("strategy='router' requires a router argument")
+        # Named slots (``planner=``/``fallback=``) are PLAN_EXECUTE-only.
+        # Every other strategy compiler iterates the ``agents=[…]`` list
+        # directly; passing named slots with another strategy would either
+        # NPE deep inside a strategy compiler or be silently ignored.
+        # Reject at construction with a clear message rather than letting
+        # the misconfig propagate to the server.
+        if (planner is not None or fallback is not None) and strategy != "plan_execute":
+            raise ValueError(
+                "Named slots ``planner=`` and ``fallback=`` are only valid with "
+                f"``strategy=Strategy.PLAN_EXECUTE``. Got strategy={strategy!r}. "
+                "Either set ``strategy=Strategy.PLAN_EXECUTE`` or pass the sub-agents "
+                "via ``agents=[…]`` instead."
+            )
+        # PLAN_EXECUTE shape — named-slot API. Reject the legacy
+        # ``agents=[planner, fallback]`` indexing with a clear migration
+        # message rather than silently doing the wrong thing if the user
+        # mixes both shapes.
+        if strategy == "plan_execute":
+            if planner is None:
+                if agents:
+                    raise ValueError(
+                        "Strategy.PLAN_EXECUTE no longer accepts ``agents=[planner, fallback]``. "
+                        "Use the named slots: ``planner=<Agent>`` (required) and "
+                        "``fallback=<Agent>`` (optional)."
+                    )
+                raise ValueError(
+                    "Strategy.PLAN_EXECUTE requires ``planner=<Agent>`` (the agent that "
+                    "produces the JSON plan)."
+                )
+            if not tools:
+                raise ValueError(
+                    "Strategy.PLAN_EXECUTE requires ``tools=[...]`` on the parent agent. "
+                    "These are the canonical plan-executable tools — every ``op.tool`` in "
+                    "the planner's JSON plan must be one of these. Listing tools here also "
+                    "ensures the runtime starts workers for them."
+                )
         if max_turns is not None and max_turns < 1:
             raise ValueError(f"max_turns must be >= 1, got {max_turns}")
 
@@ -443,8 +483,14 @@ class Agent:
         self.prefill_tools: List[Any] = list(prefill_tools) if prefill_tools else []
         self.fallback_max_turns = fallback_max_turns
         self.plan_source = plan_source
+        self.synthesize = synthesize
+        self.masked_fields: List[str] = list(masked_fields) if masked_fields else []
         self.timeout_seconds = timeout_seconds
         self.temperature = temperature
+        # OpenAI reasoning models (o1, gpt-5-codex, etc.) accept
+        # "minimal" | "low" | "medium" | "high". Server forwards to the
+        # ChatCompletion.reasoningEffort field; ignored by non-reasoning models.
+        self.reasoning_effort = reasoning_effort
         self.stop_when = stop_when
         self.termination = termination
         self.handoffs: List[Any] = list(handoffs) if handoffs else []
@@ -454,8 +500,10 @@ class Agent:
         self.introduction = introduction
         self.metadata: Dict[str, Any] = dict(metadata) if metadata else {}
         self.stateful = stateful
-        self.synthesize = synthesize
-        self.planner = planner
+        self.enable_planning = enable_planning
+        # PLAN_EXECUTE named slots — see __init__ docstring.
+        self.planner: Optional["Agent"] = planner
+        self.fallback: Optional["Agent"] = fallback
         self.callbacks: List[Any] = list(callbacks) if callbacks else []
         self.before_agent_callback = before_agent_callback
         self.after_agent_callback = after_agent_callback
@@ -517,9 +565,6 @@ class Agent:
             self.credentials: List[Any] = list(credentials)
         else:
             self.credentials = []
-
-        # Fields whose values are redacted in execution history and UI.
-        self.masked_fields: List[str] = list(masked_fields) if masked_fields else []
 
         # Propagate agent-level credentials to CLI/code tools so the
         # dispatch layer can resolve them per-tool (the dispatch only

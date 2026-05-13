@@ -20,7 +20,7 @@ import re
 import threading
 import time
 import uuid
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Tuple, Union
 
 from agentspan.agents.agent import Agent
 from agentspan.agents.exceptions import _raise_api_error
@@ -41,7 +41,7 @@ from agentspan.agents.runtime.http_client import AgentHttpClient, SSEUnavailable
 logger = logging.getLogger("agentspan.agents.runtime")
 
 
-def _default_task_def(name: str, *, response_timeout_seconds: int = 10, retry_count: int = 2, retry_delay_seconds: int = 2) -> Any:
+def _default_task_def(name: str, *, response_timeout_seconds: int = 10) -> Any:
     """Create a TaskDef with standard retry policy for agent worker tasks.
 
     Timeout is 0 (no timeout) — the agent configuration controls execution
@@ -55,9 +55,9 @@ def _default_task_def(name: str, *, response_timeout_seconds: int = 10, retry_co
     from conductor.client.http.models.task_def import TaskDef
 
     td = TaskDef(name=name)
-    td.retry_count = retry_count
+    td.retry_count = 2
     td.retry_logic = "LINEAR_BACKOFF"
-    td.retry_delay_seconds = retry_delay_seconds
+    td.retry_delay_seconds = 2
     td.timeout_seconds = 0
     td.response_timeout_seconds = response_timeout_seconds
     td.timeout_policy = "RETRY"
@@ -103,6 +103,20 @@ def _has_stateful_tools(agent: Any) -> bool:
     for sub in getattr(agent, "agents", []):
         if _has_stateful_tools(sub):
             return True
+    # PLAN_EXECUTE named slots — sub-agents not reachable via ``agents``.
+    # Without this recursion, a coder with ``planner=<stateful agent>`` would
+    # be invisible to the run_id check, no per-execution domain would be
+    # generated, and the planner's stateful tool calls would risk being
+    # picked up by another execution's worker.
+    planner = getattr(agent, "planner", None)
+    # ``planner`` field is also used as a legacy bool flag on some Agent
+    # constructions (renamed to ``enable_planning`` but defensive guard
+    # avoids issues with mixed-version configs).
+    if planner is not None and not isinstance(planner, bool) and _has_stateful_tools(planner):
+        return True
+    fallback = getattr(agent, "fallback", None)
+    if fallback is not None and _has_stateful_tools(fallback):
+        return True
     return False
 
 
@@ -473,6 +487,8 @@ class AgentRuntime:
         credentials: Optional[List[str]] = None,
         context: Optional[Dict[str, Any]] = None,
         run_id: Optional[str] = None,
+        cwd: Optional[str] = None,
+        plan: Optional[Any] = None,
     ) -> str:
         """Start an agent via the server's /api/agent/start endpoint.
 
@@ -507,6 +523,12 @@ class AgentRuntime:
             payload["credentials"] = credentials
         if run_id:
             payload["runId"] = run_id
+        if cwd:
+            payload["cwd"] = cwd
+        if plan is not None:
+            from agentspan.agents.plans import coerce_plan
+
+            payload["staticPlan"] = coerce_plan(plan)
 
         url = self._agent_api_url("/start")
         resp = req_lib.post(url, json=payload, headers=self._agent_api_headers(), timeout=30)
@@ -539,6 +561,8 @@ class AgentRuntime:
         credentials: Optional[List[str]] = None,
         context: Optional[Dict[str, Any]] = None,
         run_id: Optional[str] = None,
+        cwd: Optional[str] = None,
+        plan: Optional[Any] = None,
     ) -> str:
         """Async version of :meth:`_start_via_server`."""
         pre_deployed_skills = self._pre_deploy_nested_skills(agent)
@@ -564,6 +588,12 @@ class AgentRuntime:
             payload["credentials"] = credentials
         if run_id:
             payload["runId"] = run_id
+        if cwd:
+            payload["cwd"] = cwd
+        if plan is not None:
+            from agentspan.agents.plans import coerce_plan
+
+            payload["staticPlan"] = coerce_plan(plan)
 
         data = await self._http.start_agent(payload)
         execution_id = data.get("executionId", "")
@@ -904,6 +934,17 @@ class AgentRuntime:
             except TypeError:
                 continue
 
+        # Prefill tools — these execute as SIMPLE tasks before the first LLM
+        # turn. A tool that appears only in ``prefill_tools`` (NOT also in
+        # ``tools``) still needs a registered worker, otherwise the
+        # server-emitted prefill task scheduled with the agent's domain has
+        # no poller and the workflow stalls. Walk the back-reference on
+        # ``PrefillToolCall.tool_def`` to find the source ToolDef.
+        for pt in getattr(agent, "prefill_tools", None) or []:
+            td = getattr(pt, "tool_def", None)
+            if td is not None and td.tool_type in ("worker", "cli"):
+                tool_names.add(td.name)
+
         # Recurse into sub-agents for their tool names
         for sub in agent.agents:
             if getattr(sub, "is_claude_code", False):
@@ -912,6 +953,23 @@ class AgentRuntime:
                 tool_names.update(
                     self._collect_worker_names(sub, required_workers=required_workers)
                 )
+
+        # PLAN_EXECUTE named slots — same recursion shape as
+        # ``_has_stateful_tools`` but for worker discovery. Without this,
+        # tools (and prefill_tools) declared on ``coder.planner`` /
+        # ``coder.fallback`` are invisible to the runtime, no worker is
+        # registered, and the server-emitted SIMPLE / prefill SUB_WORKFLOW
+        # tasks sit SCHEDULED indefinitely (see workflow 0f715217).
+        planner = getattr(agent, "planner", None)
+        if planner is not None and not isinstance(planner, bool) and not getattr(planner, "external", False):
+            tool_names.update(
+                self._collect_worker_names(planner, required_workers=required_workers)
+            )
+        fallback = getattr(agent, "fallback", None)
+        if fallback is not None and not getattr(fallback, "external", False):
+            tool_names.update(
+                self._collect_worker_names(fallback, required_workers=required_workers)
+            )
 
         # If the server told us which system workers are needed, use that
         # as the authoritative list and merge in user-defined tool names.
@@ -947,9 +1005,6 @@ class AgentRuntime:
         # Check transfer (hybrid handoff: agent has tools + sub-agents)
         if agent.tools and agent.agents:
             names.add(f"{agent.name}_check_transfer")
-            # Transfer tool no-op workers (one per sub-agent)
-            for sub in agent.agents:
-                names.add(f"{agent.name}_transfer_to_{sub.name}")
 
         # Function-based router
         if (
@@ -995,7 +1050,6 @@ class AgentRuntime:
         from agentspan.agents.tool import get_tool_def
 
         pairs: List[Tuple[str, Optional[str]]] = []
-        agent_stateful = bool(getattr(agent, "stateful", False))
         for t in getattr(agent, "tools", []) or []:
             try:
                 td = get_tool_def(t)
@@ -1005,13 +1059,45 @@ class AgentRuntime:
                 continue
             if td.func is None:
                 continue
-            tool_domain = domain if (agent_stateful or td.stateful) else None
-            pairs.append((td.name, tool_domain))
+            # Worker domain contract: the live registration in
+            # ``ToolRegistry.register_tool_workers`` uses ``domain=domain``
+            # unconditionally (see worker domain contract doc). The
+            # liveness check must mirror that — otherwise the ``expected
+            # pairs`` set diverges from the actual registrations and
+            # liveness verification gives false negatives.
+            pairs.append((td.name, domain))
+
+        # Prefill-only tools register workers too (see
+        # ``_register_workers`` block ``1b``). Mirror that here so the
+        # contract check finds them. Without this, a tool that lives
+        # only in ``prefill_tools`` (b38024fb shape) is invisible to
+        # the pairs collector even though a worker IS registered.
+        seen_in_tools = {p[0] for p in pairs}
+        for pt in getattr(agent, "prefill_tools", None) or []:
+            td = getattr(pt, "tool_def", None)
+            if td is None or td.tool_type not in ("worker", "cli") or td.func is None:
+                continue
+            if td.name in seen_in_tools:
+                continue
+            pairs.append((td.name, domain))
+            seen_in_tools.add(td.name)
 
         for sub in getattr(agent, "agents", []) or []:
             if getattr(sub, "external", False):
                 continue
             pairs.extend(self._collect_registered_pairs(sub, domain))
+
+        # PLAN_EXECUTE named slots (planner/fallback) — same as the
+        # ``agents`` recursion above. Without this, a stateful tool on
+        # ``coder.planner`` registers a worker but the liveness check
+        # doesn't know about it, so the (name, domain) pair never gets
+        # verified.
+        planner = getattr(agent, "planner", None)
+        if planner is not None and not isinstance(planner, bool) and not getattr(planner, "external", False):
+            pairs.extend(self._collect_registered_pairs(planner, domain))
+        fallback = getattr(agent, "fallback", None)
+        if fallback is not None and not getattr(fallback, "external", False):
+            pairs.extend(self._collect_registered_pairs(fallback, domain))
 
         # Dedupe while preserving order
         seen: set = set()
@@ -1115,6 +1201,33 @@ class AgentRuntime:
                     if _server_needs(g.name):
                         self._register_single_guardrail_worker(g)
 
+        # 1b. Prefill-only tools — register workers for tools that appear
+        # only in ``prefill_tools`` (the server emits a SIMPLE task per
+        # prefill entry on the agent's domain; without a poller it stalls).
+        # Skip names already covered by ``agent.tools`` to avoid double-
+        # registration when a tool is both prefilled and called by the LLM.
+        prefill_only = []
+        already_in_tools = set()
+        if agent.tools:
+            for t in agent.tools:
+                from agentspan.agents.tool import get_tool_def
+
+                try:
+                    already_in_tools.add(get_tool_def(t).name)
+                except TypeError:
+                    pass
+        for pt in getattr(agent, "prefill_tools", None) or []:
+            td = getattr(pt, "tool_def", None)
+            if td is not None and td.name not in already_in_tools and td.tool_type in ("worker", "cli"):
+                prefill_only.append(td)
+                already_in_tools.add(td.name)
+        if prefill_only:
+            tc = ToolRegistry()
+            tc.register_tool_workers(
+                prefill_only, agent.name, domain=domain,
+                agent_stateful=getattr(agent, "stateful", False),
+            )
+
         # 2. Custom guardrails (not Regex/LLM/external)
         custom_guardrails = [
             g
@@ -1174,9 +1287,6 @@ class AgentRuntime:
             task_name = f"{agent.name}_check_transfer"
             if _server_needs(task_name):
                 self._register_check_transfer_worker(agent.name, domain=domain)
-            # Always register transfer tool workers — same reasoning as swarm:
-            # collectSimpleTaskNames may not recurse into nested sub-workflows.
-            self._register_hybrid_transfer_workers(agent, domain=domain)
 
         # 6. Function-based router
         if (
@@ -1250,6 +1360,17 @@ class AgentRuntime:
                     self._register_passthrough_worker(worker)
             elif not sub.external:
                 self._register_workers(sub, required_workers=required_workers, domain=domain)
+
+        # PLAN_EXECUTE named slots — same recursion as ``_collect_worker_names``.
+        # Without this, a stateful tool (or prefill-only tool) declared on
+        # ``coder.planner`` / ``coder.fallback`` registers no worker and
+        # the server-emitted task sits SCHEDULED with no poller.
+        planner = getattr(agent, "planner", None)
+        if planner is not None and not isinstance(planner, bool) and not getattr(planner, "external", False):
+            self._register_workers(planner, required_workers=required_workers, domain=domain)
+        fallback = getattr(agent, "fallback", None)
+        if fallback is not None and not getattr(fallback, "external", False):
+            self._register_workers(fallback, required_workers=required_workers, domain=domain)
 
     # ── Worker registration helpers ────────────────────────────────
 
@@ -1621,32 +1742,6 @@ class AgentRuntime:
             lease_extend_enabled=True,
         )(check_transfer_worker)
 
-    def _register_hybrid_transfer_workers(self, agent: Agent, domain: "Optional[str]" = None) -> None:
-        """Register transfer_to_<name> no-op workers for hybrid agents (tools + sub-agents).
-
-        The transfer tools are no-ops — the actual handoff is detected by
-        check_transfer which inspects toolCalls output from the LLM task.
-        """
-        from conductor.client.worker.worker_task import worker_task
-
-        def make_worker(tool_name: str, _domain: "Optional[str]" = domain) -> None:
-            async def transfer_worker() -> object:
-                return {}
-
-            transfer_worker.__annotations__ = {"return": object}
-            worker_task(
-                task_definition_name=tool_name,
-                task_def=_default_task_def(tool_name),
-                register_task_def=True,
-                overwrite_task_def=True,
-                domain=_domain,
-                thread_count=_SYSTEM_WORKER_THREADS,
-                lease_extend_enabled=True,
-            )(transfer_worker)
-
-        for sub in agent.agents:
-            make_worker(f"{agent.name}_transfer_to_{sub.name}")
-
     def _register_router_worker(self, agent: Agent, domain: "Optional[str]" = None) -> None:
         """Register a function-based router worker."""
         from conductor.client.worker.worker_task import worker_task
@@ -1941,11 +2036,7 @@ class AgentRuntime:
 
         seen: set = set()
 
-        from agentspan.agents.agent import Agent as _Agent
-
         def _collect(a: Agent) -> None:
-            if not isinstance(a, _Agent):
-                return
             if isinstance(a.instructions, PromptTemplate) and a.model:
                 key = (a.instructions.name, a.model)
                 if key not in seen:
@@ -2114,8 +2205,6 @@ class AgentRuntime:
         seen: set = set()
 
         def _collect(a: Agent) -> None:
-            if not isinstance(a, Agent):
-                return
             if a.model and a.model not in seen:
                 seen.add(a.model)
             for sub in a.agents:
@@ -2178,7 +2267,22 @@ class AgentRuntime:
                 if not getattr(nested_agent, "external", False):
                     if self._has_worker_tools(nested_agent):
                         return True
-        return any(self._has_worker_tools(sub) for sub in agent.agents)
+        for pt in getattr(agent, "prefill_tools", None) or []:
+            td = getattr(pt, "tool_def", None)
+            if td is not None and td.tool_type in ("worker", "cli"):
+                return True
+        if any(self._has_worker_tools(sub) for sub in agent.agents):
+            return True
+        # PLAN_EXECUTE named slots — recurse same as ``_collect_worker_names``.
+        planner = getattr(agent, "planner", None)
+        if planner is not None and not isinstance(planner, bool) and not getattr(planner, "external", False):
+            if self._has_worker_tools(planner):
+                return True
+        fallback = getattr(agent, "fallback", None)
+        if fallback is not None and not getattr(fallback, "external", False):
+            if self._has_worker_tools(fallback):
+                return True
+        return False
 
     # ── Plan (compile without executing) ────────────────────────────
 
@@ -2504,6 +2608,8 @@ class AgentRuntime:
         timeout: Optional[int] = None,
         credentials: Optional[List[str]] = None,
         context: Optional[Dict[str, Any]] = None,
+        cwd: Optional[str] = None,
+        plan: Optional[Any] = None,
         **kwargs: Any,
     ) -> AgentResult:
         """Execute an agent synchronously and return the result.
@@ -2613,6 +2719,8 @@ class AgentRuntime:
             credentials=credentials,
             context=context,
             run_id=run_id,
+            cwd=cwd,
+            plan=plan,
         )
 
         worker_domain = self._resolve_worker_domain(execution_id, run_id)
@@ -2675,7 +2783,8 @@ class AgentRuntime:
         tool_calls: List[Dict[str, Any]] = []
         messages: List[Dict[str, Any]] = []
         token_usage: Optional[TokenUsage] = None
-        task_failure_reason: Optional[str] = None
+        metadata: Dict[str, Any] = {}
+        wf: Optional[Any] = None
         try:
             wf = self._workflow_client.get_workflow(
                 execution_id,
@@ -2684,16 +2793,9 @@ class AgentRuntime:
             tool_calls = self._extract_tool_calls(wf)
             messages = self._extract_messages(wf)
             token_usage = self._extract_token_usage(execution_id)
-            if raw_status == "FAILED":
-                task_failure_reason = self._extract_failed_task_reason(wf)
         except Exception as exc:
             logger.debug("Could not fetch execution details for %s: %s", execution_id, exc)
-
-        # Build the richest error message available: prefer task-level reason
-        # (includes which task failed and why) over the workflow-level reason.
-        error_reason: Optional[str] = None
-        if raw_status in ("FAILED", "TERMINATED"):
-            error_reason = task_failure_reason or status.reason
+        output, metadata = self._attach_reasoning_metadata(output, metadata, execution_id, wf)
 
         logger.info("Agent '%s' completed (execution_id=%s)", agent.name, execution_id)
         return AgentResult(
@@ -2702,10 +2804,11 @@ class AgentRuntime:
             correlation_id=correlation_id,
             status=raw_status,
             finish_reason=self._derive_finish_reason(raw_status, status.output),
-            error=error_reason,
+            error=status.reason if raw_status in ("FAILED", "TERMINATED") else None,
             tool_calls=tool_calls,
             messages=messages,
             token_usage=token_usage,
+            metadata=metadata,
             sub_results=self._extract_sub_results(output),
         )
 
@@ -2767,20 +2870,16 @@ class AgentRuntime:
         tool_calls: List[Dict[str, Any]] = []
         messages: List[Dict[str, Any]] = []
         token_usage: Optional[TokenUsage] = None
-        task_failure_reason: Optional[str] = None
+        metadata: Dict[str, Any] = {}
+        wf: Optional[Any] = None
         try:
             wf = self._workflow_client.get_workflow(execution_id, include_tasks=True)
             tool_calls = self._extract_tool_calls(wf)
             messages = self._extract_messages(wf)
             token_usage = self._extract_token_usage(execution_id)
-            if status.status == "FAILED":
-                task_failure_reason = self._extract_failed_task_reason(wf)
         except Exception as exc:
             logger.debug("Could not fetch execution details: %s", exc)
-
-        error_reason: Optional[str] = None
-        if status.status in ("FAILED", "TERMINATED"):
-            error_reason = task_failure_reason or status.reason
+        output, metadata = self._attach_reasoning_metadata(output, metadata, execution_id, wf)
 
         return AgentResult(
             output=output,
@@ -2788,10 +2887,11 @@ class AgentRuntime:
             correlation_id=correlation_id,
             status=status.status,
             finish_reason=self._derive_finish_reason(status.status, status.output),
-            error=error_reason,
+            error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
             tool_calls=tool_calls,
             messages=messages,
             token_usage=token_usage,
+            metadata=metadata,
         )
 
     def _start_by_name(
@@ -2877,6 +2977,8 @@ class AgentRuntime:
         tool_calls: List[Dict[str, Any]] = []
         messages: List[Dict[str, Any]] = []
         token_usage: Optional[TokenUsage] = None
+        metadata: Dict[str, Any] = {}
+        wf: Optional[Any] = None
         try:
             wf = await loop.run_in_executor(
                 None,
@@ -2889,6 +2991,7 @@ class AgentRuntime:
             token_usage = self._extract_token_usage(execution_id)
         except Exception as exc:
             logger.debug("Could not fetch execution details: %s", exc)
+        output, metadata = self._attach_reasoning_metadata(output, metadata, execution_id, wf)
 
         return AgentResult(
             output=output,
@@ -2900,6 +3003,7 @@ class AgentRuntime:
             tool_calls=tool_calls,
             messages=messages,
             token_usage=token_usage,
+            metadata=metadata,
         )
 
     async def _start_by_name_async(
@@ -3029,6 +3133,10 @@ class AgentRuntime:
             output = self._normalize_output(output, raw_status, status.reason)
             logger.info("Framework agent '%s' completed (execution_id=%s)", agent_name, execution_id)
             token_usage = self._extract_token_usage(execution_id)
+            metadata: Dict[str, Any] = {}
+            output, metadata = self._attach_reasoning_metadata(
+                output, metadata, execution_id
+            )
             return AgentResult(
                 output=output,
                 execution_id=execution_id,
@@ -3037,6 +3145,7 @@ class AgentRuntime:
                 finish_reason=self._derive_finish_reason(raw_status, status.output),
                 error=status.reason if raw_status in ("FAILED", "TERMINATED") else None,
                 token_usage=token_usage,
+                metadata=metadata,
                 sub_results=self._extract_sub_results(output),
             )
         finally:
@@ -3219,6 +3328,8 @@ class AgentRuntime:
         if not workers:
             return
 
+        from conductor.client.worker.worker_task import worker_task
+
         from agentspan.agents.frameworks.langgraph import (
             make_llm_finish_worker,
             make_llm_prep_worker,
@@ -3227,7 +3338,6 @@ class AgentRuntime:
             make_subgraph_finish_worker,
             make_subgraph_prep_worker,
         )
-        from conductor.client.worker.worker_task import worker_task
 
         graph_info = raw_config.get("_graph", {})
         router_refs = {
@@ -3307,12 +3417,11 @@ class AgentRuntime:
                 credential_names=credentials,
             )
         elif framework == "claude_agent_sdk":
+            from agentspan.agents.agent import Agent as AgentClass
             from agentspan.agents.frameworks.claude_agent_sdk import (
                 agent_to_claude_code_options,
                 make_claude_agent_sdk_worker,
             )
-
-            from agentspan.agents.agent import Agent as AgentClass
 
             # CRITICAL: convert Agent → ClaudeCodeOptions before passing to worker
             if isinstance(agent_obj, AgentClass):
@@ -3343,6 +3452,8 @@ class AgentRuntime:
         status = self._poll_status_until_complete(execution_id, timeout=timeout)
         output = self._normalize_output(status.output, status.status, status.reason)
         token_usage = self._extract_token_usage(execution_id)
+        metadata: Dict[str, Any] = {}
+        output, metadata = self._attach_reasoning_metadata(output, metadata, execution_id)
         return AgentResult(
             output=output,
             execution_id=execution_id,
@@ -3351,6 +3462,7 @@ class AgentRuntime:
             finish_reason=self._derive_finish_reason(status.status, status.output),
             error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
             token_usage=token_usage,
+            metadata=metadata,
             events=events,
             sub_results=self._extract_sub_results(output),
         )
@@ -3459,6 +3571,10 @@ class AgentRuntime:
 
         output = self._normalize_output(output, status.status, status.reason)
         token_usage = self._extract_token_usage(handle.execution_id)
+        metadata: Dict[str, Any] = {}
+        output, metadata = self._attach_reasoning_metadata(
+            output, metadata, handle.execution_id
+        )
         return AgentResult(
             output=output,
             execution_id=handle.execution_id,
@@ -3467,6 +3583,7 @@ class AgentRuntime:
             finish_reason=self._derive_finish_reason(status.status, status.output),
             error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
             token_usage=token_usage,
+            metadata=metadata,
             events=captured_events,
             tool_calls=tool_calls,
             sub_results=self._extract_sub_results(output),
@@ -3521,6 +3638,10 @@ class AgentRuntime:
 
         output = self._normalize_output(output, status.status, status.reason)
         token_usage = self._extract_token_usage(handle.execution_id)
+        metadata: Dict[str, Any] = {}
+        output, metadata = self._attach_reasoning_metadata(
+            output, metadata, handle.execution_id
+        )
         return AgentResult(
             output=output,
             execution_id=handle.execution_id,
@@ -3529,6 +3650,7 @@ class AgentRuntime:
             finish_reason=self._derive_finish_reason(status.status, status.output),
             error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
             token_usage=token_usage,
+            metadata=metadata,
             events=captured_events,
             tool_calls=tool_calls,
             sub_results=self._extract_sub_results(output),
@@ -3700,6 +3822,8 @@ class AgentRuntime:
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None,
+        cwd: Optional[str] = None,
+        plan: Optional[Any] = None,
         **kwargs: Any,
     ) -> AgentHandle:
         """Start an agent asynchronously and return a handle.
@@ -3769,6 +3893,8 @@ class AgentRuntime:
             timeout=effective_timeout,
             context=context,
             run_id=run_id,
+            cwd=cwd,
+            plan=plan,
         )
 
         worker_domain = self._resolve_worker_domain(execution_id, run_id)
@@ -4024,7 +4150,6 @@ class AgentRuntime:
                         has_waiting_human = True
                         if task_id and task_id not in seen_human_task_ids:
                             seen_human_task_ids.add(task_id)
-                            input_data = getattr(task, "input_data", {}) or {}
                             task_ref = getattr(task, "reference_task_name", "")
                             yield AgentEvent(
                                 type=EventType.WAITING,
@@ -4099,6 +4224,8 @@ class AgentRuntime:
         timeout: Optional[int] = None,
         credentials: Optional[List[str]] = None,
         context: Optional[Dict[str, Any]] = None,
+        cwd: Optional[str] = None,
+        plan: Optional[Any] = None,
         **kwargs: Any,
     ) -> AgentResult:
         """Execute an agent asynchronously (async-first implementation).
@@ -4196,6 +4323,8 @@ class AgentRuntime:
             credentials=credentials,
             context=context,
             run_id=run_id,
+            cwd=cwd,
+            plan=plan,
         )
 
         worker_domain = self._resolve_worker_domain(execution_id, run_id)
@@ -4254,6 +4383,8 @@ class AgentRuntime:
         tool_calls: List[Dict[str, Any]] = []
         messages: List[Dict[str, Any]] = []
         token_usage: Optional[TokenUsage] = None
+        metadata: Dict[str, Any] = {}
+        wf: Optional[Any] = None
         try:
             loop = asyncio.get_event_loop()
             wf = await loop.run_in_executor(
@@ -4268,6 +4399,7 @@ class AgentRuntime:
             token_usage = self._extract_token_usage(execution_id)
         except Exception as exc:
             logger.debug("Could not fetch execution details for %s: %s", execution_id, exc)
+        output, metadata = self._attach_reasoning_metadata(output, metadata, execution_id, wf)
 
         logger.info("Agent '%s' completed (execution_id=%s)", agent.name, execution_id)
         return AgentResult(
@@ -4280,6 +4412,7 @@ class AgentRuntime:
             tool_calls=tool_calls,
             messages=messages,
             token_usage=token_usage,
+            metadata=metadata,
             sub_results=self._extract_sub_results(output),
         )
 
@@ -4293,6 +4426,8 @@ class AgentRuntime:
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None,
+        cwd: Optional[str] = None,
+        plan: Optional[Any] = None,
         **kwargs: Any,
     ) -> AgentHandle:
         """Start an agent asynchronously and return a handle (async version).
@@ -4355,6 +4490,8 @@ class AgentRuntime:
             timeout=effective_timeout,
             context=context,
             run_id=run_id,
+            cwd=cwd,
+            plan=plan,
         )
 
         worker_domain = self._resolve_worker_domain(execution_id, run_id)
@@ -4717,6 +4854,10 @@ class AgentRuntime:
                     output = status.reason
                 output = self._normalize_output(output, status.status, status.reason)
                 token_usage = self._extract_token_usage(execution_id)
+                metadata: Dict[str, Any] = {}
+                output, metadata = self._attach_reasoning_metadata(
+                    output, metadata, execution_id
+                )
                 return AgentResult(
                     output=output,
                     execution_id=execution_id,
@@ -4725,6 +4866,7 @@ class AgentRuntime:
                     finish_reason=self._derive_finish_reason(status.status, status.output),
                     error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
                     token_usage=token_usage,
+                    metadata=metadata,
                     events=captured_events,
                     sub_results=self._extract_sub_results(output),
                 )
@@ -4745,6 +4887,10 @@ class AgentRuntime:
             output = self._normalize_output(output, raw_status, status.reason)
             logger.info("Framework agent '%s' completed (execution_id=%s)", agent_name, execution_id)
             token_usage = self._extract_token_usage(execution_id)
+            metadata: Dict[str, Any] = {}
+            output, metadata = self._attach_reasoning_metadata(
+                output, metadata, execution_id
+            )
             return AgentResult(
                 output=output,
                 execution_id=execution_id,
@@ -4753,6 +4899,7 @@ class AgentRuntime:
                 finish_reason=self._derive_finish_reason(raw_status, status.output),
                 error=status.reason if raw_status in ("FAILED", "TERMINATED") else None,
                 token_usage=token_usage,
+                metadata=metadata,
                 sub_results=self._extract_sub_results(output),
             )
         finally:
@@ -5214,10 +5361,11 @@ class AgentRuntime:
                 exec_id = execution.get("executionId")
                 if not exec_id:
                     continue
-                wf = self._workflow_client.get_workflow(exec_id, include_tasks=True)
-                messages = self._extract_messages(wf)
-                if messages:
-                    return messages
+                wf = self._workflow_client.get_workflow(exec_id, include_tasks=False)
+                if hasattr(wf, "variables") and wf.variables:
+                    messages = wf.variables.get("messages", [])
+                    if messages:
+                        return messages
             return []
         except Exception as e:
             logger.debug("Could not fetch session history for %s: %s", session_id, e)
@@ -5271,26 +5419,6 @@ class AgentRuntime:
         if output is None:
             return {"result": None}
         return {"result": output}
-
-    @staticmethod
-    def _extract_failed_task_reason(wf: Any) -> Optional[str]:
-        """Return a descriptive error from the first FAILED task in a workflow.
-
-        Combines the task reference name with its reasonForIncompletion so
-        callers can diagnose intermittent failures without manual inspection
-        of the execution history UI.
-        """
-        if not hasattr(wf, "tasks") or not wf.tasks:
-            return None
-        for task in wf.tasks:
-            status = str(getattr(task, "status", "")).upper()
-            if status == "FAILED":
-                ref = getattr(task, "reference_task_name", None) or getattr(task, "task_type", "unknown")
-                reason = getattr(task, "reason_for_incompletion", None)
-                if reason:
-                    return f"Task '{ref}' failed: {reason}"
-                return f"Task '{ref}' failed"
-        return None
 
     @staticmethod
     def _extract_sub_results(output: Dict[str, Any]) -> Dict[str, Any]:
@@ -5390,31 +5518,10 @@ class AgentRuntime:
         return non_null
 
     def _extract_messages(self, workflow_run: Any) -> List[Dict[str, Any]]:
-        """Extract conversation messages from the last LLM task in the execution.
-
-        Messages are stored in LLM_CHAT_COMPLETE task input_data, not in
-        workflow variables. We take the last LLM task to get the full
-        accumulated conversation (user + assistant + tool-call turns).
-        """
-        # Backwards-compat: check variables first (populated by some paths)
+        """Extract conversation messages from execution variables."""
         if hasattr(workflow_run, "variables") and workflow_run.variables:
-            msgs = workflow_run.variables.get("messages")
-            if msgs:
-                return msgs
-
-        # Extract from the last LLM_CHAT_COMPLETE task's input messages
-        if not (hasattr(workflow_run, "tasks") and workflow_run.tasks):
-            return []
-
-        last_llm_msgs: List[Dict[str, Any]] = []
-        for task in workflow_run.tasks:
-            task_type = str(getattr(task, "task_type", "")).upper()
-            if task_type == "LLM_CHAT_COMPLETE":
-                input_data = getattr(task, "input_data", None) or {}
-                msgs = input_data.get("messages") if isinstance(input_data, dict) else None
-                if msgs and isinstance(msgs, list):
-                    last_llm_msgs = msgs
-        return last_llm_msgs
+            return workflow_run.variables.get("messages", [])
+        return []
 
     # System task types that are never user-defined tool calls
     _SYSTEM_TASK_TYPES = frozenset(
@@ -5477,6 +5584,314 @@ class AgentRuntime:
 
         return tool_calls
 
+    @staticmethod
+    def _task_value(task: Any, snake_key: str, camel_key: str, default: Any = None) -> Any:
+        """Read a task field from either a Conductor SDK object or API dict."""
+        if isinstance(task, dict):
+            return task.get(camel_key, task.get(snake_key, default))
+        return getattr(task, snake_key, getattr(task, camel_key, default))
+
+    @staticmethod
+    def _dict_value(data: Any, *keys: str) -> Any:
+        """Return the first present key from a dict-like object."""
+        if not isinstance(data, dict):
+            return None
+        for key in keys:
+            if key in data:
+                return data[key]
+        return None
+
+    @staticmethod
+    def _coerce_int(value: Any) -> int:
+        """Best-effort integer coercion for provider metadata values."""
+        if isinstance(value, bool):
+            return int(value)
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return int(value)
+        if isinstance(value, str):
+            try:
+                return int(value)
+            except ValueError:
+                return 0
+        return 0
+
+    @classmethod
+    def _extract_reasoning_token_count(cls, output_data: Any) -> int:
+        """Extract reasoning token count from known provider/runtime output shapes."""
+        if not isinstance(output_data, dict):
+            return 0
+
+        candidates: List[int] = []
+
+        def add(value: Any) -> None:
+            token_count = cls._coerce_int(value)
+            if token_count > 0:
+                candidates.append(token_count)
+
+        direct_sources = [
+            output_data,
+            cls._dict_value(output_data, "responseMetadata", "response_metadata"),
+            cls._dict_value(output_data, "metadata"),
+        ]
+        for source in direct_sources:
+            if isinstance(source, dict):
+                add(cls._dict_value(source, "reasoningTokens", "reasoning_tokens"))
+
+        usage_sources = [
+            cls._dict_value(output_data, "usage"),
+            cls._dict_value(output_data, "tokenUsage", "token_usage"),
+        ]
+        for source in direct_sources:
+            if isinstance(source, dict):
+                usage = cls._dict_value(source, "usage", "tokenUsage", "token_usage")
+                if usage:
+                    usage_sources.append(usage)
+
+        for usage in usage_sources:
+            if not isinstance(usage, dict):
+                continue
+            detail_sources = [
+                cls._dict_value(usage, "outputTokensDetails", "output_tokens_details"),
+                cls._dict_value(usage, "completionTokensDetails", "completion_tokens_details"),
+            ]
+            for details in detail_sources:
+                if isinstance(details, dict):
+                    add(cls._dict_value(details, "reasoningTokens", "reasoning_tokens"))
+            add(cls._dict_value(usage, "reasoningTokens", "reasoning_tokens"))
+
+        # The same value can appear in both metadata and usage; use the max to
+        # avoid double-counting a single LLM task.
+        return max(candidates) if candidates else 0
+
+    @classmethod
+    def _extract_reasoning_summaries(cls, output_data: Any) -> List[str]:
+        """Extract provider-returned reasoning summaries, never hidden raw CoT."""
+        if not isinstance(output_data, dict):
+            return []
+
+        summaries: List[str] = []
+
+        def add_text(value: Any) -> None:
+            if not isinstance(value, str):
+                return
+            text = value.strip()
+            if not text:
+                return
+            if len(text) > 4000:
+                text = text[:4000].rstrip() + "..."
+            if text not in summaries:
+                summaries.append(text)
+
+        def add_summary_value(value: Any) -> None:
+            if isinstance(value, str):
+                add_text(value)
+            elif isinstance(value, dict):
+                nested = cls._dict_value(
+                    value,
+                    "summary",
+                    "reasoningSummary",
+                    "reasoning_summary",
+                    "text",
+                    "content",
+                )
+                add_summary_value(nested)
+                nested_list = cls._dict_value(value, "summaries", "reasoningSummaries")
+                add_summary_value(nested_list)
+            elif isinstance(value, list):
+                for item in value:
+                    add_summary_value(item)
+
+        sources = [
+            output_data,
+            cls._dict_value(output_data, "responseMetadata", "response_metadata"),
+            cls._dict_value(output_data, "metadata"),
+        ]
+        for source in sources:
+            if not isinstance(source, dict):
+                continue
+            for key in (
+                "reasoningSummary",
+                "reasoning_summary",
+                "reasoningSummaries",
+                "reasoning_summaries",
+            ):
+                add_summary_value(source.get(key))
+            reasoning = source.get("reasoning")
+            if isinstance(reasoning, dict):
+                add_summary_value(reasoning)
+            elif isinstance(reasoning, list):
+                add_summary_value(reasoning)
+            elif isinstance(reasoning, str):
+                # Treat a provider-returned "reasoning" string as a summary
+                # field. Do not synthesize reasoning from hidden model state.
+                add_text(reasoning)
+
+        return summaries
+
+    @classmethod
+    def _extract_reasoning_provider(cls, task: Any, output_data: Any) -> tuple[Optional[str], Optional[str]]:
+        """Best-effort provider/model extraction from non-sensitive task metadata."""
+        sources: List[Any] = []
+        input_data = cls._task_value(task, "input_data", "inputData", {})
+        if isinstance(input_data, dict):
+            sources.append(input_data)
+        if isinstance(output_data, dict):
+            sources.append(output_data)
+            for metadata_key in ("responseMetadata", "response_metadata", "metadata"):
+                metadata = output_data.get(metadata_key)
+                if isinstance(metadata, dict):
+                    sources.append(metadata)
+
+        provider: Optional[str] = None
+        model: Optional[str] = None
+        for source in sources:
+            if not isinstance(source, dict):
+                continue
+            provider = provider or cls._dict_value(source, "llmProvider", "provider")
+            model = model or cls._dict_value(source, "model", "modelName", "model_name")
+            if provider and model:
+                break
+        return (
+            str(provider) if provider is not None else None,
+            str(model) if model is not None else None,
+        )
+
+    def _extract_reasoning_metadata(
+        self,
+        execution_id: str,
+        workflow_run: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """Extract reasoning summaries/tokens from an execution tree.
+
+        Only provider/runtime-reported metadata is surfaced. Hidden chain-of-thought
+        is not requested, generated, or reconstructed here.
+        """
+        if not execution_id:
+            return {}
+
+        total_reasoning_tokens = 0
+        summaries: List[str] = []
+        tasks: List[Dict[str, Any]] = []
+        providers: set[str] = set()
+        models: set[str] = set()
+        seen_tasks: set[tuple[str, str, str]] = set()
+        visited: set[str] = set()
+
+        def add_summary(summary: str) -> None:
+            if summary not in summaries:
+                summaries.append(summary)
+
+        def collect_task(task: Any, current_execution_id: str) -> None:
+            nonlocal total_reasoning_tokens
+            task_type = str(self._task_value(task, "task_type", "taskType", "")).upper()
+            if "LLM_CHAT_COMPLETE" not in task_type:
+                return
+
+            task_ref = str(
+                self._task_value(task, "reference_task_name", "referenceTaskName", "")
+            )
+            task_id = str(self._task_value(task, "task_id", "taskId", ""))
+            task_key = (current_execution_id, task_ref, task_id)
+            if task_key in seen_tasks:
+                return
+            seen_tasks.add(task_key)
+
+            output_data = self._task_value(task, "output_data", "outputData", {}) or {}
+            token_count = self._extract_reasoning_token_count(output_data)
+            task_summaries = self._extract_reasoning_summaries(output_data)
+            provider, model = self._extract_reasoning_provider(task, output_data)
+
+            if provider:
+                providers.add(provider)
+            if model:
+                models.add(model)
+            if token_count:
+                total_reasoning_tokens += token_count
+            for summary in task_summaries:
+                add_summary(summary)
+
+            if token_count or task_summaries:
+                task_record: Dict[str, Any] = {
+                    "execution_id": current_execution_id,
+                    "task_ref": task_ref,
+                }
+                if token_count:
+                    task_record["tokens"] = token_count
+                if provider:
+                    task_record["provider"] = provider
+                if model:
+                    task_record["model"] = model
+                if task_summaries:
+                    task_record["summaries"] = task_summaries
+                tasks.append(task_record)
+
+        if workflow_run is not None and hasattr(workflow_run, "tasks"):
+            for task in getattr(workflow_run, "tasks", []) or []:
+                collect_task(task, execution_id)
+
+        def collect_execution(current_execution_id: str) -> None:
+            if current_execution_id in visited:
+                return
+            visited.add(current_execution_id)
+            data = self._fetch_agent_workflow(current_execution_id)
+            if not data:
+                return
+
+            should_collect_current = not (
+                workflow_run is not None and current_execution_id == execution_id
+            )
+            for task in data.get("tasks", []) or []:
+                if should_collect_current:
+                    collect_task(task, current_execution_id)
+                if "SUB_WORKFLOW" in str(task.get("taskType", "")).upper():
+                    sub_id = task.get("subWorkflowId")
+                    if sub_id:
+                        collect_execution(str(sub_id))
+
+        collect_execution(execution_id)
+
+        if not total_reasoning_tokens and not summaries and not tasks:
+            return {}
+
+        reasoning: Dict[str, Any] = {}
+        if total_reasoning_tokens:
+            reasoning["tokens"] = total_reasoning_tokens
+        if summaries:
+            reasoning["summaries"] = summaries
+            reasoning["summary"] = summaries[-1]
+        if len(providers) == 1:
+            reasoning["provider"] = next(iter(providers))
+        elif providers:
+            reasoning["providers"] = sorted(providers)
+        if len(models) == 1:
+            reasoning["model"] = next(iter(models))
+        elif models:
+            reasoning["models"] = sorted(models)
+        if tasks:
+            reasoning["tasks"] = tasks
+        return reasoning
+
+    def _attach_reasoning_metadata(
+        self,
+        output: Any,
+        metadata: Optional[Dict[str, Any]],
+        execution_id: str,
+        workflow_run: Optional[Any] = None,
+    ) -> tuple[Any, Dict[str, Any]]:
+        """Attach reasoning metadata to result metadata and dict outputs."""
+        metadata = dict(metadata or {})
+        reasoning = self._extract_reasoning_metadata(execution_id, workflow_run)
+        if not reasoning:
+            return output, metadata
+
+        metadata["reasoning"] = reasoning
+        if isinstance(output, dict) and "reasoning" not in output:
+            output = dict(output)
+            output["reasoning"] = reasoning
+        return output, metadata
+
     def _fetch_agent_workflow(self, execution_id: str) -> Optional[dict]:
         """Fetch an execution with its full task list from GET /api/agent/execution/{id}."""
         import requests
@@ -5498,7 +5913,9 @@ class AgentRuntime:
         """
         if not execution_id:
             return None
-        prompt, completion, total, found = self._collect_tokens_by_id(execution_id, set())
+        prompt, completion, total, reasoning, found = self._collect_tokens_by_id(
+            execution_id, set()
+        )
         if not found:
             return None
         if total == 0 and (prompt > 0 or completion > 0):
@@ -5506,52 +5923,72 @@ class AgentRuntime:
         return TokenUsage(
             prompt_tokens=prompt,
             completion_tokens=completion,
+            reasoning_tokens=reasoning,
             total_tokens=total,
         )
 
     def _collect_tokens_by_id(self, execution_id: str, visited: set) -> tuple:
         """Recursively collect token counts via GET /api/agent/{id}.
 
-        Returns ``(prompt, completion, total, found_any)`` tuple.
+        Returns ``(prompt, completion, total, reasoning, found_any)`` tuple.
         The server pre-computes ``tokenUsage`` for each execution level; this
         method reads that field and recurses into SUB_WORKFLOW tasks so the
         full agent tree is covered.
         """
         if execution_id in visited:
-            return 0, 0, 0, False
+            return 0, 0, 0, 0, False
         visited.add(execution_id)
 
         data = self._fetch_agent_workflow(execution_id)
         if not data:
-            return 0, 0, 0, False
+            return 0, 0, 0, 0, False
 
         total_prompt = 0
         total_completion = 0
         total_total = 0
+        total_reasoning = 0
         found_any = False
 
         # Use server-computed token usage for this execution level
         token_usage = data.get("tokenUsage")
         if token_usage:
-            p = int(token_usage.get("promptTokens", 0))
-            c = int(token_usage.get("completionTokens", 0))
-            t = int(token_usage.get("totalTokens", 0))
-            if p or c or t:
+            p = self._coerce_int(token_usage.get("promptTokens", 0))
+            c = self._coerce_int(token_usage.get("completionTokens", 0))
+            t = self._coerce_int(token_usage.get("totalTokens", 0))
+            r = self._coerce_int(
+                token_usage.get("reasoningTokens", token_usage.get("reasoning_tokens", 0))
+            )
+            if p or c or t or r:
                 found_any = True
                 total_prompt += p
                 total_completion += c
                 total_total += t
+                total_reasoning += r
+
+        # Older servers may not expose reasoningTokens in tokenUsage. In that
+        # case, recover it from LLM task output metadata.
+        if not token_usage or not (
+            "reasoningTokens" in token_usage or "reasoning_tokens" in token_usage
+        ):
+            for task in data.get("tasks", []) or []:
+                if "LLM_CHAT_COMPLETE" not in str(task.get("taskType", "")).upper():
+                    continue
+                reasoning = self._extract_reasoning_token_count(task.get("outputData") or {})
+                if reasoning:
+                    found_any = True
+                    total_reasoning += reasoning
 
         # Recurse into sub-agent workflows
         for task in data.get("tasks", []):
             if "SUB_WORKFLOW" in str(task.get("taskType", "")).upper():
                 sub_id = task.get("subWorkflowId")
                 if sub_id and sub_id not in visited:
-                    p, c, t, f = self._collect_tokens_by_id(sub_id, visited)
+                    p, c, t, r, f = self._collect_tokens_by_id(sub_id, visited)
                     if f:
                         found_any = True
                         total_prompt += p
                         total_completion += c
                         total_total += t
+                        total_reasoning += r
 
-        return total_prompt, total_completion, total_total, found_any
+        return total_prompt, total_completion, total_total, total_reasoning, found_any

@@ -267,17 +267,110 @@ function buildAllAttempts(
   }));
 }
 
-function mapTaskStatus(status: string): AgentStatus {
+export function mapTaskStatus(status: string): AgentStatus {
   switch (status) {
     case "COMPLETED":
       return AgentStatus.COMPLETED;
     case "FAILED":
+    case "FAILED_WITH_TERMINAL_ERROR":
+    case "TIMED_OUT":
+    case "CANCELED":
+      return AgentStatus.FAILED;
+    // ``COMPLETED_WITH_ERRORS`` fires on an ``optional:true`` task whose
+    // underlying work failed — Conductor lets the parent workflow continue
+    // (the optional contract) but the task itself failed. Show that as
+    // failed in the agent-execution view; the recovery flow shows up
+    // separately as the next sub-agent (e.g. PAC's fallback agent).
+    case "COMPLETED_WITH_ERRORS":
       return AgentStatus.FAILED;
     case "IN_PROGRESS":
+    case "SCHEDULED":
       return AgentStatus.RUNNING;
     default:
       return AgentStatus.RUNNING;
   }
+}
+
+/**
+ * Derive a PLAN_EXECUTE role from an agent's name. Mirrors the server-side
+ * naming convention emitted by {@code MultiAgentCompiler.compilePlanExecute}
+ * and {@code planWorkflowName}:
+ *
+ *   - {@code <prefix>_planner}            → "Plan"      (the agent that emits the JSON plan)
+ *   - {@code pe_<harness>_plan}           → "Execute"   (the compiled-plan SUB_WORKFLOW)
+ *   - {@code <prefix>_fallback} (and       → "Fallback"  (agentic recovery — also matches
+ *      {@code _compile_fallback},                          ``_compile_fallback`` /
+ *      {@code _noplan_fallback})                            ``_noplan_fallback`` variants)
+ *
+ * Returns ``null`` for non-PAE agents so the diagram falls back to its
+ * generic strategy/agent badge.
+ */
+export function pacAgentRole(name: string | undefined | null): { role: string; display: string } | null {
+  if (!name) return null;
+  if (/_planner$/.test(name)) return { role: "Plan", display: "Planner" };
+  if (/^pe_.+_plan$/.test(name)) return { role: "Execute", display: "Execute" };
+  if (/_fallback$/.test(name)) return { role: "Fallback", display: "Fallback" };
+  return null;
+}
+
+/**
+ * Decide whether a group of sub-agents ran sequentially or in parallel
+ * based on their actual time intervals. ``length > 1`` alone isn't a
+ * useful signal — PLAN_EXECUTE produces 3 sequential SUB_WORKFLOWs at
+ * top level (planner → plan_exec → fallback) which were previously
+ * mislabeled as PARALLEL purely because there were three of them.
+ *
+ * A pair of intervals is treated as "in parallel" if the later agent
+ * starts before the earlier agent ended. We apply a small tolerance to
+ * absorb clock fuzz; agents that finish within a few ms of each other
+ * look identical to sequential ones in the UI anyway.
+ *
+ * Falls back to PARALLEL when timestamps are missing — same default as
+ * the count-based heuristic this replaces, so we don't suddenly relabel
+ * existing synthetic / replayed runs.
+ */
+export function inferSubAgentStrategy(
+  subAgents: ReadonlyArray<{ startTime?: number; endTime?: number; turns?: ReadonlyArray<{ events?: ReadonlyArray<{ timestamp?: number }> }> }>,
+): AgentStrategy {
+  if (subAgents.length <= 1) return AgentStrategy.SEQUENTIAL;
+
+  const TOLERANCE_MS = 5;
+
+  // Each sub-agent's own startTime/endTime fields are populated by the
+  // root-level transform (line ~1042+). For nested cases where they're
+  // missing, fall back to the min/max of the sub-agent's event timestamps.
+  const intervals = subAgents.map((s) => {
+    let start = s.startTime;
+    let end = s.endTime;
+    if ((start == null || end == null) && s.turns) {
+      const ts: number[] = [];
+      for (const turn of s.turns) {
+        for (const ev of turn.events ?? []) {
+          if (typeof ev.timestamp === "number" && ev.timestamp > 0) {
+            ts.push(ev.timestamp);
+          }
+        }
+      }
+      if (ts.length > 0) {
+        if (start == null) start = Math.min(...ts);
+        if (end == null) end = Math.max(...ts);
+      }
+    }
+    return { start, end };
+  });
+
+  // Any agent missing timestamps → can't reliably tell, keep prior default.
+  if (intervals.some((i) => i.start == null || i.end == null)) {
+    return AgentStrategy.PARALLEL;
+  }
+
+  const sorted = [...intervals].sort((a, b) => (a.start! - b.start!));
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].start! < sorted[i - 1].end! - TOLERANCE_MS) {
+      return AgentStrategy.PARALLEL;
+    }
+  }
+  return AgentStrategy.SEQUENTIAL;
 }
 
 function mapWorkflowStatus(status: WorkflowExecutionStatus): AgentStatus {
@@ -537,10 +630,15 @@ export function transformWorkflowExecutionToAgentRun(
         ? Date.now() - startMs
         : execution.executionTime ?? 0;
 
-  // Infrastructure task types to skip everywhere
+  // Infrastructure task types to skip everywhere. ``PLAN_AND_COMPILE``
+  // is a server-internal compile step (PAC) — surfacing it as a top-level
+  // TOOL node confuses the user mental model ("plan → execute → fallback"
+  // doesn't include "compile the plan"). Detail still available in Debug
+  // View when needed.
   const ITER_INFRA = new Set([
     "SET_VARIABLE", "SWITCH", "INLINE", "DO_WHILE",
     "FORK", "FORK_JOIN", "FORK_JOIN_DYNAMIC", "JOIN",
+    "PLAN_AND_COMPILE",
   ]);
 
   // Debug: log all task types and reference names for diagnosis
@@ -1032,7 +1130,7 @@ export function transformWorkflowExecutionToAgentRun(
         },
         subAgents,
         strategy:
-          subAgents.length > 1 ? AgentStrategy.PARALLEL : AgentStrategy.HANDOFF,
+          subAgents.length > 1 ? inferSubAgentStrategy(subAgents) : AgentStrategy.HANDOFF,
       };
     })
     .filter((t) => t.events.length > 0 || t.subAgents.length > 0);
@@ -1105,12 +1203,31 @@ export function transformWorkflowExecutionToAgentRun(
       subWorkflowId: subWfId,
       agentName,
       turns: subTurns,
-      status: mapWorkflowStatus(task.status as any),
+      // ``task.status`` is a TASK enum (COMPLETED / FAILED / IN_PROGRESS /
+      // COMPLETED_WITH_ERRORS / …), not a workflow enum. The earlier
+      // mapWorkflowStatus call had no case for COMPLETED_WITH_ERRORS and
+      // fell through to RUNNING, which made an ``optional:true`` plan-exec
+      // SUB_WORKFLOW that had failed render with a misleading "running"
+      // badge. mapTaskStatus is the right enum domain.
+      status: mapTaskStatus(task.status),
       totalTokens: ZERO_TOKENS,
       totalDurationMs: dur,
       input: agentInput,
       output: outputStr,
       failureReason: failReason,
+      // Carry the wall-clock interval through so inferSubAgentStrategy
+      // can compare time-overlap and pick SEQUENTIAL vs PARALLEL layout.
+      // Without these the helper falls back to PARALLEL (its safe default
+      // for missing timestamps), which mislabels chronologically-disjoint
+      // PLAN_EXECUTE sub-agents.
+      startTime: task.startTime ?? undefined,
+      endTime: task.endTime ?? undefined,
+      // Semantic role for PAE sub-agents (planner / execute / fallback).
+      // When set, the diagram shows this as the badge and uses the
+      // friendlier ``displayName`` instead of the auto-generated
+      // workflow ref name (e.g. ``pe_guardrails_demo_plan``).
+      roleLabel: pacAgentRole(agentName)?.role,
+      displayName: pacAgentRole(agentName)?.display,
     } as AgentRunData;
   });
 
@@ -1279,6 +1396,15 @@ export function transformWorkflowExecutionToAgentRun(
           : 0,
         tokens: { promptTokens: rootPrompt, completionTokens: rootCompletion, totalTokens: rootPrompt + rootCompletion },
         subAgents: rootSubAgents,
+        // The diagram reads ``turn.strategy`` to choose between FORK_JOIN
+        // (parallel) and a sequential chain when laying out sub-agents.
+        // Without this field set, the multi-sub-agent path falls through
+        // to ``pushParallel`` and renders chronologically-disjoint
+        // sub-agents (e.g. PLAN_EXECUTE's planner → plan_exec → fallback)
+        // as parallel branches.
+        strategy: rootSubAgents.length > 1
+          ? inferSubAgentStrategy(rootSubAgents)
+          : AgentStrategy.SEQUENTIAL,
       });
     }
   }
@@ -1354,7 +1480,9 @@ export function transformWorkflowExecutionToAgentRun(
     },
     totalDurationMs,
     finishReason,
-    strategy: rootSubWorkflows.length > 1 ? AgentStrategy.PARALLEL : sortedIters.length > 0 ? AgentStrategy.HANDOFF : AgentStrategy.SINGLE,
+    strategy: rootSubWorkflows.length > 1
+      ? inferSubAgentStrategy(rootSubAgents)
+      : sortedIters.length > 0 ? AgentStrategy.HANDOFF : AgentStrategy.SINGLE,
     input: agentInput,
     output: finalOutput,
   };
@@ -1371,6 +1499,7 @@ const SKIP_TASK_TYPES = new Set([
   "JOIN",
   "INLINE",
   "SUB_WORKFLOW", // handled separately as sub-agents
+  "PLAN_AND_COMPILE", // server-internal PAC compile step — see ITER_INFRA comment
 ]);
 
 /**

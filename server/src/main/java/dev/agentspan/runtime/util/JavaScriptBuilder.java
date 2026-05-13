@@ -227,7 +227,8 @@ public class JavaScriptBuilder {
             String ragConfigJson,
             String cliConfigJson,
             String humanConfigJson,
-            String wmqConfigJson) {
+            String wmqConfigJson,
+            String knownToolNamesJson) {
         return iife("  var httpCfg = " + httpConfigJson + ";" + "  var mcpCfg = "
                 + mcpConfigJson + ";" + "  var mediaCfg = "
                 + mediaConfigJson + ";" + "  var agentToolCfg = "
@@ -235,11 +236,41 @@ public class JavaScriptBuilder {
                 + ragConfigJson + ";" + "  var cliCfg = "
                 + cliConfigJson + ";" + "  var humanCfg = "
                 + humanConfigJson + ";" + "  var wmqCfg = "
-                + wmqConfigJson + ";" + "  var agentState = $.agentState || {};"
+                + wmqConfigJson + ";" + "  var knownNames = " + knownToolNamesJson + ";"
+                + "  var agentState = $.agentState || {};"
                 + "  var tcs = $.toolCalls || [];"
                 + "  var result = [];"
                 + "  for (var i = 0; i < tcs.length; i++) {"
                 + "    var tc = tcs[i]; var n = tc.name;"
+                // Validate the tool name. If the LLM hallucinates a name we
+                // didn't expose, replace the SIMPLE task with an INLINE task
+                // that returns an error to the conversation. Without this the
+                // SIMPLE task gets queued under the unknown name with no worker
+                // polling for it and the workflow hangs forever.
+                + "    var isCfg = !!(httpCfg[n] || mcpCfg[n] || agentToolCfg[n] ||"
+                + "                  mediaCfg[n] || ragCfg[n] || humanCfg[n] || wmqCfg[n]);"
+                // Reject any name not in the agent's declared tools. The
+                // previous gate (``hasKnownNames``) skipped this check when
+                // ``knownNames`` was empty, which allowed an agent declared
+                // with ``tools=[]`` and only ``prefill_tools`` to dispatch
+                // hallucinated calls to the prefill workers (registered for
+                // prefill execution but never advertised to the LLM). With
+                // this tighter check, an empty knownNames means NO tool is
+                // callable by the LLM — exactly the prefill-only contract.
+                + "    var isUnknown = !isCfg && !(knownNames && knownNames[n]);"
+                + "    if (isUnknown) {"
+                + "      var availList = [];"
+                + "      for (var nm in knownNames) availList.push(nm);"
+                + "      var unknownErr = ('Unknown tool \\'' + n + '\\'. Available tools: ' + availList.join(', '));"
+                + "      var errTask = {name: n, taskReferenceName: tc.taskReferenceName || n,"
+                + "                     type: 'INLINE',"
+                + "                     inputParameters: {evaluatorType: 'graaljs',"
+                + "                       expression: 'function e(){return {result: $.errorMessage, is_error: true};} e();',"
+                + "                       errorMessage: unknownErr},"
+                + "                     optional: true};"
+                + "      result.push(errTask);"
+                + "      continue;"
+                + "    }"
                 + "    var t = {name: n, taskReferenceName: tc.taskReferenceName || n,"
                 + "             type: tc.type || 'SIMPLE', inputParameters: tc.inputParameters || {},"
                 + "             optional: true,"
@@ -789,7 +820,8 @@ public class JavaScriptBuilder {
             String agentToolConfigJson,
             String ragConfigJson,
             String humanConfigJson,
-            String wmqConfigJson) {
+            String wmqConfigJson,
+            String knownToolNamesJson) {
         return iife("  var httpCfg = " + httpConfigJson + ";" + "  var mcpCfg = $.mcpConfig || {};"
                 + "  var apiCfg = $.apiConfig || {};"
                 + "  var mediaCfg = "
@@ -797,11 +829,34 @@ public class JavaScriptBuilder {
                 + agentToolConfigJson + ";" + "  var ragCfg = "
                 + ragConfigJson + ";" + "  var humanCfg = "
                 + humanConfigJson + ";" + "  var wmqCfg = "
-                + wmqConfigJson + ";" + "  var agentState = $.agentState || {};"
+                + wmqConfigJson + ";" + "  var knownNames = " + knownToolNamesJson + ";"
+                + "  var agentState = $.agentState || {};"
                 + "  var tcs = $.toolCalls || [];"
                 + "  var result = [];"
                 + "  for (var i = 0; i < tcs.length; i++) {"
                 + "    var tc = tcs[i]; var n = tc.name;"
+                // Reject hallucinated tool names (see enrichToolsScript above
+                // for context). Without this the SIMPLE task gets queued under
+                // an unknown name and the workflow hangs forever.
+                + "    var isCfg = !!(httpCfg[n] || mcpCfg[n] || apiCfg[n] || agentToolCfg[n] ||"
+                + "                  mediaCfg[n] || ragCfg[n] || humanCfg[n] || wmqCfg[n]);"
+                // See ``enrichToolsScript`` above — empty knownNames means
+                // NO tool is callable by the LLM (locks down the prefill-only
+                // leak path).
+                + "    var isUnknown = !isCfg && !(knownNames && knownNames[n]);"
+                + "    if (isUnknown) {"
+                + "      var availList = [];"
+                + "      for (var nm in knownNames) availList.push(nm);"
+                + "      var unknownErr = ('Unknown tool \\'' + n + '\\'. Available tools: ' + availList.join(', '));"
+                + "      var errTask = {name: n, taskReferenceName: tc.taskReferenceName || n,"
+                + "                     type: 'INLINE',"
+                + "                     inputParameters: {evaluatorType: 'graaljs',"
+                + "                       expression: 'function e(){return {result: $.errorMessage, is_error: true};} e();',"
+                + "                       errorMessage: unknownErr},"
+                + "                     optional: true};"
+                + "      result.push(errTask);"
+                + "      continue;"
+                + "    }"
                 + "    var t = {name: n, taskReferenceName: tc.taskReferenceName || n,"
                 + "             type: tc.type || 'SIMPLE', inputParameters: tc.inputParameters || {},"
                 + "             optional: true,"
@@ -1293,6 +1348,32 @@ public class JavaScriptBuilder {
                         + "  return -1;"
                         + "}"
 
+                        // Case 0 (highest priority): static_plan from workflow input.
+                        // The SDK's ``runtime.run(harness, plan=...)`` plumbs a
+                        // user-supplied plan dict/Plan into ``workflow.input.static_plan``;
+                        // the planner LLM still runs (the workflow shape is fixed at
+                        // compile time) but its output is ignored. This makes
+                        // deterministic plans first-class — no more plan_source tool
+                        // dance to inject a fixed plan.
+                        + "var sp = $.staticPlan;"
+                        + "if (sp != null) {"
+                        + "  if (typeof sp === 'object') {"
+                        + "    var hasStepsSp = false;"
+                        + "    try { hasStepsSp = sp.steps != null || (sp.get && sp.get('steps') != null); } catch(e) {}"
+                        + "    if (hasStepsSp) {"
+                        + "      var planSp = toJS(sp);"
+                        + "      return {plan_json: JSON.stringify(planSp), markdown_plan: '[static plan]'};"
+                        + "    }"
+                        + "  } else if (typeof sp === 'string' && sp.length > 2) {"
+                        + "    try {"
+                        + "      var parsedSp = JSON.parse(sp);"
+                        + "      if (parsedSp && parsedSp.steps) {"
+                        + "        return {plan_json: JSON.stringify(parsedSp), markdown_plan: '[static plan]'};"
+                        + "      }"
+                        + "    } catch(e) {}"
+                        + "  }"
+                        + "}"
+
                         // Case 1: rawResult is already a plan object (has "steps" key)
                         // markdown_plan is the original planner text when available — the
                         // fallback agent benefits from seeing the LLM's actual prose, not a
@@ -1402,594 +1483,5 @@ public class JavaScriptBuilder {
 
                         // Nothing found
                         + "return {plan_json: null, markdown_plan: text};");
-    }
-
-    /**
-     * Compile a JSON plan into a Conductor WorkflowDef.
-     *
-     * <p>Input:
-     * <ul>
-     *   <li>{@code $.planJson} — JSON string of the plan (steps, validation, on_success, on_failure)</li>
-     *   <li>{@code $.parentName} — parent workflow name (used to derive unique workflow name)</li>
-     *   <li>{@code $.model} — LLM model string in provider/model format (e.g. "openai/gpt-4o-mini")</li>
-     * </ul>
-     *
-     * <p>Output: {@code {workflow_def: <WorkflowDef JSON>, workflow_name: "<name>"}}
-     *
-     * <p>The plan schema supports:
-     * <ul>
-     *   <li><b>Static operations</b> ({@code args}): compiled to SIMPLE tasks (no LLM)</li>
-     *   <li><b>Generated operations</b> ({@code generate}): compiled to LLM_CHAT_COMPLETE → INLINE(parse) → SIMPLE</li>
-     *   <li><b>Parallel steps</b>: wrapped in FORK_JOIN + JOIN</li>
-     *   <li><b>Validation</b>: SIMPLE tasks with aggregate pass/fail check</li>
-     *   <li><b>on_success / on_failure</b>: post-hooks as SIMPLE tasks</li>
-     * </ul>
-     */
-    public static String compilePlanToWorkflowScript() {
-        return iife(
-                // ref() builds Conductor expression strings like ${foo.bar} without
-                // the literal '${' appearing in this script source — Conductor would
-                // resolve it before GraalJS runs if we used a literal.
-                "function ref(s) { return String.fromCharCode(36) + '{' + s + '}'; }"
-
-                        // Inject the ambient parent-workflow inputs onto every emitted
-                        // tool task. This mirrors what compileSubAgent passes into
-                        // sub-workflows, so a tool inside the dynamic plan sees the same
-                        // execution context (cwd, credentials, media) the parent harness
-                        // received. Forced overrides — LLM-supplied args cannot redirect
-                        // these. Without this injection the parent forwards cwd to the
-                        // SUB_WORKFLOW input but per-tool SIMPLE tasks never receive it.
-                        + "function injectAmbient(args) {"
-                        + "  args.__agentspan_ctx__ = ref('workflow.input.__agentspan_ctx__');"
-                        + "  args.session_id = ref('workflow.input.session_id');"
-                        + "  args.cwd = ref('workflow.input.cwd');"
-                        + "  args.credentials = ref('workflow.input.credentials');"
-                        + "  args.media = ref('workflow.input.media');"
-                        + "  return args;"
-                        + "}"
-
-                        // Parse inputs
-                        + "var plan; try { plan = typeof $.planJson === 'string' ? JSON.parse($.planJson) : $.planJson; }"
-                        + " catch(e) { return {workflow_def: null, workflow_name: null, error: 'Invalid plan JSON: ' + e.message}; }"
-                        + "var parentName = $.parentName || 'plan';"
-                        + "var model = $.model || 'openai/gpt-4o-mini';"
-                        + "var harnessTimeout = (typeof $.harnessTimeoutSeconds === 'number' && $.harnessTimeoutSeconds > 0) ? $.harnessTimeoutSeconds : 600;"
-                        // Name must match MultiAgentCompiler.planWorkflowName() exactly
-                        + "var wfName = 'pe_' + parentName.replace(/[^a-zA-Z0-9_]/g, '_') + '_plan';"
-
-                        // ── success_condition sandbox ───────────────────────────────
-                        // Whitelist filter for plan validation `success_condition` strings.
-                        // The condition is evaluated as JS (gives expressiveness like
-                        // ``$.exit_code === 0``) but the LLM-supplied text is a script-
-                        // injection vector. Reject anything that introduces functions,
-                        // loops, assignments, statement separators, host access, or
-                        // identifiers we don't intend.
-                        // Three-layer filter:
-                        //   1. Character allowlist — only $.()'"!=<>&|- alphanumeric _ whitespace.
-                        //      Excludes ; { } ` \\ , ? : [ ] + * / and any other structural
-                        //      character that enables side effects, host access, template
-                        //      literals, escape evasion, ternaries, comma-sequence, or string
-                        //      concatenation tricks.
-                        //   2. String literals are stripped before identifier check so
-                        //      legitimate uses like ``$.x === 'constructor'`` are preserved.
-                        //   3. Identifier denylist on the stripped string — blocks
-                        //      ``constructor``, ``prototype``, ``__proto__`` (the GraalJS
-                        //      sandbox-escape primitives), the host-bridge globals
-                        //      (Function, eval, Reflect, Proxy, Java, Object, etc.), and JS
-                        //      control-flow keywords. Bare assignment ``=`` is also rejected.
-                        // The bypass ``$.constructor.constructor('return Java.type(...)')()``
-                        // is rejected because ``constructor`` is denied. Variants like
-                        // ``$['c'+'o'+...]`` are blocked by the character allowlist
-                        // (no ``+`` outside arithmetic on numbers, no ``[``).
-                        + "function safeCondition(cond) {"
-                        + "  if (typeof cond !== 'string') return null;"
-                        + "  if (cond.length > 256) return null;"
-                        + "  if (!/^[$\\w\\s.()'\"!=<>&|\\-]*$/.test(cond)) return null;"
-                        + "  var stripped = cond.replace(/'[^']*'/g, \"''\").replace(/\"[^\"]*\"/g, '\"\"');"
-                        + "  var banned = /\\b(constructor|prototype|__proto__|__defineGetter__|__defineSetter__|__lookupGetter__|__lookupSetter__|Function|eval|globalThis|Object|Reflect|Proxy|Java|require|import|process|setTimeout|setInterval|setImmediate|queueMicrotask|Promise|fetch|XMLHttpRequest|new|throw|try|catch|finally|while|for|do|if|else|case|switch|return|var|let|const|function|class|yield|await|async|delete|typeof|instanceof|void|in|of)\\b/;"
-                        + "  if (banned.test(stripped)) return null;"
-                        + "  if (/(^|[^=!<>])=(?!=)/.test(stripped)) return null;"
-                        + "  return cond;"
-                        + "}"
-
-                        // ── Plan schema validation ──────────────────────────────────
-                        + "var errors = [];"
-                        + "if (!plan || !plan.steps || !Array.isArray(plan.steps) || plan.steps.length === 0) {"
-                        + "  return {workflow_def: null, workflow_name: null, error: 'Plan must have a non-empty steps array'};"
-                        + "}"
-                        + "var stepIds = {};"
-                        + "for (var vi = 0; vi < plan.steps.length; vi++) {"
-                        + "  var vs = plan.steps[vi];"
-                        + "  if (!vs.id) errors.push('Step ' + vi + ' missing id');"
-                        + "  else if (stepIds[vs.id]) errors.push('Duplicate step id: ' + vs.id);"
-                        + "  else stepIds[vs.id] = true;"
-                        + "  if (!vs.operations || !Array.isArray(vs.operations) || vs.operations.length === 0)"
-                        + "    errors.push('Step ' + (vs.id || vi) + ' has no operations');"
-                        + "  else {"
-                        + "    for (var voi = 0; voi < vs.operations.length; voi++) {"
-                        + "      var vop = vs.operations[voi];"
-                        + "      if (!vop.tool) errors.push('Step ' + vs.id + ' op ' + voi + ' missing tool');"
-                        + "      if (!vop.args && !vop.generate)"
-                        + "        errors.push('Step ' + vs.id + ' op ' + voi + ' needs args or generate');"
-                        + "    }"
-                        + "  }"
-                        + "  var deps = vs.depends_on || [];"
-                        + "  for (var vdi = 0; vdi < deps.length; vdi++) {"
-                        + "    if (!plan.steps.some(function(x){return x.id === deps[vdi];}))"
-                        + "      errors.push('Step ' + vs.id + ' depends on unknown step: ' + deps[vdi]);"
-                        + "  }"
-                        + "}"
-                        + "if (errors.length > 0) {"
-                        + "  return {workflow_def: null, workflow_name: null, error: 'Plan validation: ' + errors.join('; ')};"
-                        + "}"
-
-                        // Validate validation block: reject success_condition strings that
-                        // fail the safeCondition filter. Fail-closed — bad input must error,
-                        // not silently coerce to passed.
-                        + "var vlist = plan.validation || [];"
-                        + "for (var vci = 0; vci < vlist.length; vci++) {"
-                        + "  var vcv = vlist[vci];"
-                        + "  if (vcv.success_condition && safeCondition(vcv.success_condition) === null) {"
-                        + "    return {workflow_def: null, workflow_name: null,"
-                        + "            error: 'Validation ' + vci + ' has unsafe success_condition: ' + vcv.success_condition};"
-                        + "  }"
-                        + "}"
-
-                        // Parse model into provider/model
-                        + "var mParts = model.split('/');"
-                        + "var defaultProvider = mParts.length > 1 ? mParts[0] : 'openai';"
-                        + "var defaultModel = mParts.length > 1 ? mParts.slice(1).join('/') : model;"
-                        + "var tasks = [];"
-                        + "var counter = 0;"
-                        + "function uid(base) { return base + '_' + (counter++); }"
-                        + "var lastAggRef = null;"
-                        // ``lastOpRef`` tracks the most recently emitted top-level
-                        // operation task — used as the result source when the plan has
-                        // no validation block. Without this, the dynamic workflow would
-                        // emit a literal 'completed' string for ``result`` regardless
-                        // of actual completion, and the parent's output_select would
-                        // pick that literal up over the fallback's recovered output.
-                        + "var lastOpRef = null;"
-                        // Wrapper task types like SWITCH (parseGate) and JOIN don't expose
-                        // a meaningful ``.result`` on their output — SWITCH outputs the case
-                        // decision, JOIN outputs ``{taskRef → outputMap}``. ``innerRefMap``
-                        // maps a wrapper's taskReferenceName to the real tool task ref
-                        // inside it, so downstream consumers (parallel_agg, lastOpRef)
-                        // can pull from the inner ref's actual output. Used by terminalRef().
-                        + "var innerRefMap = {};"
-                        + "function terminalRef(task) {"
-                        + "  var name = task.taskReferenceName;"
-                        + "  return innerRefMap[name] || name;"
-                        + "}"
-
-                        // Topological sort steps by depends_on. Cycles produce a hard error
-                        // — silent partial-DAG emission was the previous behavior and made
-                        // bad plans look benign at compile time.
-                        + "var steps = plan.steps || [];"
-                        + "var sorted = [];"
-                        + "var visited = {};"
-                        + "var visiting = {};"
-                        + "var cycle = null;"
-                        + "function topoSort(s, path) {"
-                        + "  if (cycle) return;"
-                        + "  if (visited[s.id]) return;"
-                        + "  if (visiting[s.id]) {"
-                        + "    var cycPath = path.slice(path.indexOf(s.id));"
-                        + "    cycPath.push(s.id);"
-                        + "    cycle = cycPath.join(' -> ');"
-                        + "    return;"
-                        + "  }"
-                        + "  visiting[s.id] = true;"
-                        + "  var nextPath = path.concat([s.id]);"
-                        + "  var deps = s.depends_on || [];"
-                        + "  for (var d = 0; d < deps.length; d++) {"
-                        + "    for (var j = 0; j < steps.length; j++) {"
-                        + "      if (steps[j].id === deps[d]) { topoSort(steps[j], nextPath); break; }"
-                        + "    }"
-                        + "  }"
-                        + "  delete visiting[s.id];"
-                        + "  visited[s.id] = true;"
-                        + "  sorted.push(s);"
-                        + "}"
-                        + "for (var i = 0; i < steps.length; i++) topoSort(steps[i], []);"
-                        + "if (cycle) {"
-                        + "  return {workflow_def: null, workflow_name: null, error: 'Cycle in depends_on: ' + cycle};"
-                        + "}"
-
-                        // Build tasks for each step
-                        + "for (var si = 0; si < sorted.length; si++) {"
-                        + "  var step = sorted[si];"
-                        + "  var ops = step.operations || [];"
-                        + "  var branches = [];" // each branch is an array of tasks
-                        + "  for (var oi = 0; oi < ops.length; oi++) {"
-                        + "    var op = ops[oi];"
-                        + "    var chain = [];"
-
-                        // Static operation: direct SIMPLE task. Not optional — failures
-                        // bubble through SUB_WORKFLOW so the parent SWITCH can route to
-                        // fallback. retryCount:1 covers transient errors.
-                        + "    if (op.args) {"
-                        + "      var sArgs = {};"
-                        + "      for (var ak in op.args) sArgs[ak] = op.args[ak];"
-                        + "      injectAmbient(sArgs);"
-                        + "      chain.push({"
-                        + "        name: op.tool, taskReferenceName: uid('s_' + step.id),"
-                        + "        type: 'SIMPLE', inputParameters: sArgs,"
-                        + "        retryCount: 1, retryLogic: 'FIXED', retryDelaySeconds: 2"
-                        + "      });"
-                        + "    }"
-
-                        // Generated operation: LLM → parse → SWITCH(parse_error) → tool
-                        + "    else if (op.generate) {"
-                        + "      var gen = op.generate;"
-                        + "      var om = gen.model || model;"
-                        + "      var oP = om.split('/');"
-                        + "      var prov = oP.length > 1 ? oP[0] : defaultProvider;"
-                        + "      var mdl = oP.length > 1 ? oP.slice(1).join('/') : om;"
-                        + "      var temp = (typeof gen.temperature === 'number') ? gen.temperature : 0;"
-
-                        // LLM_CHAT_COMPLETE task. System prompt + jsonOutput:true carry
-                        // the format contract. The trailing "Respond as json." is required
-                        // by OpenAI's Responses API: when ``text.format`` is ``json_object``,
-                        // the literal word "json" must appear in the input (user) messages
-                        // — case-insensitive but on the user side specifically. The system
-                        // prompt's "JSON" mention is not sufficient for this check. The
-                        // user-message nudge is therefore not cargo-cult; it is the
-                        // OpenAI-required guard.
-                        + "      var llmRef = uid('llm_' + step.id);"
-                        + "      var sysMsg = 'Output ONLY valid JSON matching this shape: ' + gen.output_schema"
-                        + "        + '. No markdown fences, no explanation, just the JSON object.';"
-                        + "      var userMsg = gen.instructions || '';"
-                        + "      if (gen.context) userMsg += '\\n\\nContext:\\n' + gen.context;"
-                        + "      userMsg += '\\n\\nRespond as json.';"
-                        + "      chain.push({"
-                        + "        name: 'llm_chat_complete', taskReferenceName: llmRef,"
-                        + "        type: 'LLM_CHAT_COMPLETE',"
-                        + "        inputParameters: {"
-                        + "          llmProvider: prov, model: mdl,"
-                        + "          messages: [{role: 'system', message: sysMsg}, {role: 'user', message: userMsg}],"
-                        + "          maxTokens: gen.max_tokens || 4096, temperature: temp, jsonOutput: true,"
-                        + "          __agentspan_ctx__: ref('workflow.input.__agentspan_ctx__')"
-                        + "        },"
-                        + "        retryCount: 1, retryLogic: 'FIXED', retryDelaySeconds: 1"
-                        + "      });"
-
-                        // INLINE parse task: extract tool args from LLM JSON. Returns
-                        // {__parse_error: true, reason: '...'} on failure; the SWITCH below
-                        // routes parse failures to a TERMINATE so the SUB_WORKFLOW fails
-                        // (instead of the SIMPLE tool firing with all-undefined args).
-                        + "      var parseRef = uid('p_' + step.id);"
-                        + "      chain.push({"
-                        + "        name: 'INLINE_TASK', taskReferenceName: parseRef,"
-                        + "        type: 'INLINE',"
-                        + "        inputParameters: {"
-                        + "          evaluatorType: 'graaljs',"
-                        + "          llmOut: ref(llmRef + '.output.result'),"
-                        + "          expression: \"(function(){ var r = $.llmOut; if (r == null || r === '') return {__parse_error: true, reason: 'empty LLM output'}; try { var p = typeof r === 'string' ? JSON.parse(r) : r; if (!p || typeof p !== 'object' || Object.keys(p).length === 0) return {__parse_error: true, reason: 'empty JSON object'}; return p; } catch(e) { return {__parse_error: true, reason: 'JSON parse: ' + e.message}; } })()\""
-                        + "        }"
-                        + "      });"
-
-                        // SWITCH: parse_error → TERMINATE FAILED, ok → SIMPLE tool task.
-                        // Conductor needs the SIMPLE task wrapped in a decisionCases branch
-                        // so the all-undefined-args scenario can't fire.
-                        + "      var toolRef = uid('t_' + step.id);"
-                        // Build LLM-driven keys FIRST, then injectAmbient at the end so
-                        // ambient values are forced overrides. Mirror the static-args
-                        // branch ordering. If we injected ambient first and overlaid LLM
-                        // keys after, an LLM emitting ``output_schema: {"cwd": "..."}``
-                        // could redirect the filesystem root or substitute credentials —
-                        // exactly the threat injectAmbient exists to prevent.
-                        + "      var toolInputs = {};"
-                        // output_schema is treated as an instance-shape example object —
-                        // its top-level keys are the tool's input arg names. Reject real
-                        // JSON Schema (presence of "properties") so callers can't pass
-                        // {"type":"object","properties":{...}} and silently get garbage args.
-                        + "      var schemaErr = null;"
-                        + "      try {"
-                        + "        var schema = JSON.parse(gen.output_schema);"
-                        // Reject anything that looks like a JSON Schema. The previous heuristic
-                        // required both ``properties`` and ``type === 'object'`` which missed
-                        // ``{type:'object', required:[...]}`` (no properties) and
-                        // ``{$schema, properties}`` (no top-level type). Flag the presence of
-                        // any JSON-Schema-only key.
-                        + "        var schemaKeys = ['$schema', 'properties', 'required', 'additionalProperties', 'definitions', '$defs', '$ref', 'allOf', 'anyOf', 'oneOf', 'patternProperties'];"
-                        + "        var looksLikeSchema = false;"
-                        + "        if (schema && typeof schema === 'object') {"
-                        + "          for (var ski = 0; ski < schemaKeys.length; ski++) {"
-                        + "            if (Object.prototype.hasOwnProperty.call(schema, schemaKeys[ski])) { looksLikeSchema = true; break; }"
-                        + "          }"
-                        + "        }"
-                        + "        if (looksLikeSchema) {"
-                        + "          schemaErr = 'output_schema looks like a JSON Schema — use an instance-shape example object instead, e.g. {\"path\":\"...\",\"content\":\"...\"}';"
-                        + "        } else if (schema && typeof schema === 'object') {"
-                        + "          var sKeys = Object.keys(schema);"
-                        + "          for (var sk = 0; sk < sKeys.length; sk++) {"
-                        + "            toolInputs[sKeys[sk]] = ref(parseRef + '.output.result.' + sKeys[sk]);"
-                        + "          }"
-                        + "        } else {"
-                        + "          schemaErr = 'output_schema must be a JSON object';"
-                        + "        }"
-                        + "      } catch(e) {"
-                        + "        toolInputs._args = ref(parseRef + '.output.result');"
-                        + "      }"
-                        + "      injectAmbient(toolInputs);" // forced overrides
-                        + "      if (schemaErr) {"
-                        + "        return {workflow_def: null, workflow_name: null,"
-                        + "                error: 'Step ' + step.id + ' op ' + oi + ': ' + schemaErr};"
-                        + "      }"
-                        + "      var toolTask = {"
-                        + "        name: op.tool, taskReferenceName: toolRef,"
-                        + "        type: 'SIMPLE', inputParameters: toolInputs,"
-                        + "        retryCount: 1, retryLogic: 'FIXED', retryDelaySeconds: 2"
-                        + "      };"
-                        + "      var parseGate = {"
-                        + "        name: 'switch', taskReferenceName: uid('pgate_' + step.id),"
-                        + "        type: 'SWITCH', evaluatorType: 'graaljs',"
-                        + "        expression: '(function(){ return $.parsed && $.parsed.__parse_error ? \"err\" : \"ok\"; })()',"
-                        + "        inputParameters: {parsed: ref(parseRef + '.output.result')},"
-                        + "        decisionCases: {ok: [toolTask]},"
-                        + "        defaultCase: ["
-                        + "          {name: 'TERMINATE_TASK', taskReferenceName: uid('p_term_' + step.id),"
-                        + "           type: 'TERMINATE',"
-                        + "           inputParameters: {terminationStatus: 'FAILED',"
-                        + "                             terminationReason: 'LLM JSON parse failed for ' + op.tool}}"
-                        + "        ]"
-                        + "      };"
-                        // Record the inner toolRef so terminalRef() can find the real tool
-                        // task when something downstream needs ``.result`` (parallel_agg
-                        // inputs, sequential lastOpRef). The SWITCH itself outputs the
-                        // case decision, not the tool's result.
-                        + "      innerRefMap[parseGate.taskReferenceName] = toolRef;"
-                        + "      chain.push(parseGate);"
-                        + "    }"
-                        + "    if (chain.length > 0) branches.push(chain);"
-                        + "  }" // end operations loop
-
-                        // Wrap in FORK_JOIN if parallel, else flatten sequentially.
-                        // Track the last emitted task reference so the dynamic workflow's
-                        // outputParameters can point at real output (vs. a static literal)
-                        // for plans without a validation block.
-                        + "  if (step.parallel && branches.length > 1) {"
-                        + "    var forkRef = uid('fork_' + step.id);"
-                        + "    var joinRef = uid('join_' + step.id);"
-                        + "    var joinOn = [];"
-                        + "    for (var b = 0; b < branches.length; b++) {"
-                        + "      joinOn.push(branches[b][branches[b].length - 1].taskReferenceName);"
-                        + "    }"
-                        + "    tasks.push({"
-                        + "      name: 'fork_join', taskReferenceName: forkRef,"
-                        + "      type: 'FORK_JOIN', forkTasks: branches"
-                        + "    });"
-                        + "    tasks.push({"
-                        + "      name: 'join', taskReferenceName: joinRef,"
-                        + "      type: 'JOIN', joinOn: joinOn"
-                        + "    });"
-                        // After JOIN, emit an INLINE aggregator so lastOpRef has a real
-                        // ``.result`` property. Conductor's JoinTask.output is
-                        // ``{taskRef → outputMap}`` with no top-level ``result`` key, so
-                        // ``${joinRef.output.result}`` would resolve to a literal placeholder
-                        // and the dynamic workflow's terminal-parallel-step result would be
-                        // empty. The aggregator collects each branch's last task's output
-                        // into an array so downstream consumers see a real value.
-                        + "    var pAggRef = uid('parallel_agg_' + step.id);"
-                        + "    var pAggInputs = {evaluatorType: 'graaljs', count: branches.length};"
-                        // Pull each branch's terminal *inner* ref — terminalRef unwraps
-                        // parseGate SWITCHes to the real tool task inside. ``joinOn`` keeps
-                        // referencing the SWITCH for ordering (fork-join sync); the
-                        // aggregator references the inner tool for ``.result``.
-                        + "    for (var ja = 0; ja < branches.length; ja++) {"
-                        + "      var bTerminal = branches[ja][branches[ja].length - 1];"
-                        + "      pAggInputs['b' + ja] = ref(terminalRef(bTerminal) + '.output.result');"
-                        + "    }"
-                        + "    pAggInputs.expression = \"(function(){ var out = []; for (var i = 0; i < $.count; i++) out.push($['b' + i]); return out; })()\";"
-                        + "    tasks.push({"
-                        + "      name: 'INLINE_TASK', taskReferenceName: pAggRef,"
-                        + "      type: 'INLINE', inputParameters: pAggInputs"
-                        + "    });"
-                        + "    lastOpRef = pAggRef;"
-                        + "  } else {"
-                        + "    for (var b2 = 0; b2 < branches.length; b2++) {"
-                        + "      for (var t = 0; t < branches[b2].length; t++) {"
-                        + "        tasks.push(branches[b2][t]);"
-                        // Use terminalRef so a parseGate SWITCH at the chain end resolves
-                        // to its inner tool task (the SWITCH itself has no ``.result``).
-                        + "        lastOpRef = terminalRef(branches[b2][t]);"
-                        + "      }"
-                        + "    }"
-                        + "  }"
-                        + "}" // end steps loop
-
-                        // Validation tasks
-                        // Each validation becomes a [SIMPLE(tool), INLINE(eval)] chain.
-                        // success_condition (e.g. "$.exit_code === 0") is evaluated in a scope
-                        // where $ = the parsed tool output.  No condition → default null/error check.
-                        // Multiple validations run in FORK_JOIN; single validation runs sequentially.
-                        + "var vals = plan.validation || [];"
-                        + "var valChains = [];"  // array of [SIMPLE, INLINE] pairs
-                        + "var evalRefs = [];"   // refs of INLINE eval tasks (for aggregator)
-                        + "for (var vi = 0; vi < vals.length; vi++) {"
-                        + "  var v = vals[vi];"
-                        + "  var vRef = uid('val');"
-                        + "  var vArgs = {};"
-                        + "  if (v.args) { for (var vk in v.args) vArgs[vk] = v.args[vk]; }"
-                        + "  injectAmbient(vArgs);"
-                        + "  var simpleTask = {"
-                        + "    name: v.tool, taskReferenceName: vRef,"
-                        + "    type: 'SIMPLE', inputParameters: vArgs"
-                        + "  };"
-                        // Build the INLINE eval expression. success_condition has already
-                        // passed safeCondition() during plan validation above.
-                        + "  var evalRef = uid('val_eval');"
-                        + "  var evalExpr;"
-                        + "  if (v.success_condition) {"
-                        + "    var cond = v.success_condition;"
-                        + "    evalExpr = \"(function(){\""
-                        + "      + \"  var raw = $.toolOut;\""
-                        + "      + \"  var out; try { out = typeof raw === 'string' ? JSON.parse(raw) : (raw || {}); } catch(e) { out = raw; }\""
-                        + "      + \"  try { var ok = (function($){ return (\" + cond + \"); })(out);\""
-                        + "      + \"  return {passed: !!ok}; } catch(e) { return {passed: false, reason: 'condition error: ' + e.message}; }\""
-                        + "      + \"})()\";"
-                        + "  } else {"
-                        + "    evalExpr = \"(function(){\""
-                        + "      + \"  var raw = $.toolOut;\""
-                        + "      + \"  if (raw == null) return {passed: false, reason: 'null output'};\""
-                        + "      + \"  var d; try { d = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch(e) { d = raw; }\""
-                        + "      + \"  if (typeof d === 'object' && d !== null && d.passed === false) return {passed: false, reason: d.reason || 'passed=false'};\""
-                        + "      + \"  if (typeof d === 'string' && d.indexOf('ERROR') >= 0) return {passed: false, reason: d};\""
-                        + "      + \"  return {passed: true};\""
-                        + "      + \"})()\";"
-                        + "  }"
-                        + "  var evalInputs = {"
-                        + "    evaluatorType: 'graaljs',"
-                        + "    toolOut: ref(vRef + '.output.result'),"
-                        + "    expression: evalExpr"
-                        + "  };"
-                        + "  var evalTask = {"
-                        + "    name: 'INLINE_TASK', taskReferenceName: evalRef,"
-                        + "    type: 'INLINE', inputParameters: evalInputs"
-                        + "  };"
-                        + "  valChains.push([simpleTask, evalTask]);"
-                        + "  evalRefs.push(evalRef);"
-                        + "}"
-
-                        // Emit validation tasks: FORK_JOIN for multiple, sequential for single
-                        + "if (valChains.length > 1) {"
-                        + "  var valForkRef = uid('val_fork');"
-                        + "  var valJoinRef = uid('val_join');"
-                        + "  var valJoinOn = [];"
-                        + "  for (var vj = 0; vj < valChains.length; vj++) {"
-                        + "    valJoinOn.push(valChains[vj][valChains[vj].length - 1].taskReferenceName);"
-                        + "  }"
-                        + "  tasks.push({"
-                        + "    name: 'val_fork', taskReferenceName: valForkRef,"
-                        + "    type: 'FORK_JOIN', forkTasks: valChains"
-                        + "  });"
-                        + "  tasks.push({"
-                        + "    name: 'val_join', taskReferenceName: valJoinRef,"
-                        + "    type: 'JOIN', joinOn: valJoinOn"
-                        + "  });"
-                        + "} else if (valChains.length === 1) {"
-                        + "  tasks.push(valChains[0][0]);"
-                        + "  tasks.push(valChains[0][1]);"
-                        + "}"
-
-                        // Aggregate validation results
-                        + "if (evalRefs.length > 0) {"
-                        + "  var aggRef = uid('val_agg');"
-                        + "  lastAggRef = aggRef;"
-                        + "  var aggInputs = {evaluatorType: 'graaljs', count: evalRefs.length};"
-                        + "  for (var ai = 0; ai < evalRefs.length; ai++) {"
-                        + "    aggInputs['v' + ai] = ref(evalRefs[ai] + '.output.result');"
-                        + "  }"
-                        + "  aggInputs.expression = \"(function(){ \""
-                        + "    + \"var all = true; \""
-                        + "    + \"for (var i = 0; i < $.count; i++) { \""
-                        + "    + \"  var r = $['v' + i]; \""
-                        + "    + \"  if (r == null) { all = false; continue; } \""
-                        + "    + \"  var d; try { d = typeof r === 'string' ? JSON.parse(r) : r; } catch(e) { d = r; } \""
-                        + "    + \"  if (typeof d === 'object' && d !== null && d.passed === false) all = false; \""
-                        + "    + \"  else if (typeof d === 'string' && d.indexOf('ERROR') >= 0) all = false; \""
-                        + "    + \"} \""
-                        + "    + \"return all ? 'passed' : 'failed'; \""
-                        + "    + \"})()\";"
-                        + "  tasks.push({"
-                        + "    name: 'INLINE_TASK', taskReferenceName: aggRef,"
-                        + "    type: 'INLINE', inputParameters: aggInputs"
-                        + "  });"
-
-                        // SWITCH on validation: passed → on_success, anything else → fail.
-                        // Default case is failure (TERMINATE) so a null/error aggregator
-                        // result fails closed instead of routing to onSuccess.
-                        + "  var onSuccess = [];"
-                        + "  var sa = plan.on_success || [];"
-                        + "  for (var si2 = 0; si2 < sa.length; si2++) {"
-                        + "    var sAct = sa[si2];"
-                        + "    var sActArgs = {};"
-                        + "    if (sAct.args) { for (var sk2 in sAct.args) sActArgs[sk2] = sAct.args[sk2]; }"
-                        + "    injectAmbient(sActArgs);"
-                        + "    onSuccess.push({"
-                        + "      name: sAct.tool, taskReferenceName: uid('ok'),"
-                        + "      type: 'SIMPLE', inputParameters: sActArgs"
-                        + "    });"
-                        + "  }"
-                        + "  var onFailure = [];"
-                        + "  var fa = plan.on_failure || [];"
-                        + "  for (var fi = 0; fi < fa.length; fi++) {"
-                        + "    var fAct = fa[fi];"
-                        + "    var fActArgs = {};"
-                        + "    if (fAct.args) { for (var fk in fAct.args) fActArgs[fk] = fAct.args[fk]; }"
-                        + "    injectAmbient(fActArgs);"
-                        + "    onFailure.push({"
-                        + "      name: fAct.tool, taskReferenceName: uid('fail'),"
-                        + "      type: 'SIMPLE', inputParameters: fActArgs"
-                        + "    });"
-                        + "  }"
-                        + "  onFailure.push({"
-                        + "    name: 'TERMINATE_TASK', taskReferenceName: uid('term'),"
-                        + "    type: 'TERMINATE',"
-                        + "    inputParameters: {terminationStatus: 'FAILED', terminationReason: 'Plan validation failed'}"
-                        + "  });"
-                        // Conductor's SWITCH falls through to defaultCase when the matched
-                        // decision case is EMPTY. With ``decisionCases:{passed: onSuccess}``
-                        // and an empty ``on_success`` (the common case — most plans don't
-                        // emit on_success hooks), val_agg='passed' would fall through to
-                        // defaultCase=onFailure and TERMINATE. That's a fail-closed bug
-                        // dressed up as a feature. Insert a no-op INLINE so the matched
-                        // case is never empty. The no-op produces a sentinel result that
-                        // downstream consumers ignore.
-                        + "  if (onSuccess.length === 0) {"
-                        + "    onSuccess.push({"
-                        + "      name: 'INLINE_TASK', taskReferenceName: uid('ok_noop'),"
-                        + "      type: 'INLINE',"
-                        + "      inputParameters: {evaluatorType: 'graaljs',"
-                        + "                        expression: \"(function(){ return {validation: 'passed'}; })()\"}"
-                        + "    });"
-                        + "  }"
-                        // passed → onSuccess; anything else (failed, null, garbage) → onFailure.
-                        // defaultCase is the failure path for fail-closed semantics.
-                        + "  tasks.push({"
-                        + "    name: 'switch', taskReferenceName: uid('vsw'),"
-                        + "    type: 'SWITCH', evaluatorType: 'value-param',"
-                        + "    expression: 'switchCaseValue',"
-                        + "    inputParameters: {switchCaseValue: ref(aggRef + '.output.result')},"
-                        + "    decisionCases: {passed: onSuccess},"
-                        + "    defaultCase: onFailure"
-                        + "  });"
-                        + "}" // end if validations
-
-                        // Build WorkflowDef. Output sources, in order:
-                        //   1. Validation aggregator if present (lastAggRef) — passes
-                        //      'passed' or 'failed' as the canonical status.
-                        //   2. Last operation's output (lastOpRef) — for plans without a
-                        //      validation block, the final tool's output is the most
-                        //      meaningful result. On TERMINATEd workflows the last op
-                        //      may not have run, so this reference resolves to a literal
-                        //      ``${...}`` string which the parent's output_select safe()
-                        //      helper detects and skips, allowing the fallback's
-                        //      recovered output to surface instead.
-                        //   3. Empty-plan fallback (should be unreachable — plans are
-                        //      validated to have at least one step).
-                        // The previous code emitted a literal ``'completed'`` here,
-                        // which was truthy and not a ``${`` literal so the parent's
-                        // safe() coalesce picked it over real fallback output —
-                        // shadowing actual recovery on plans without validation.
-                        + "var resultSource = lastAggRef ? ref(lastAggRef + '.output.result')"
-                        + "                : (lastOpRef ? ref(lastOpRef + '.output.result') : '');"
-                        + "var wfDef = {"
-                        + "  name: wfName, version: 1, tasks: tasks,"
-                        + "  outputParameters: {"
-                        + "    result: resultSource,"
-                        + "    status: lastAggRef ? ref(lastAggRef + '.output.result') : 'completed'"
-                        + "  },"
-                        + "  timeoutPolicy: 'TIME_OUT_WF', timeoutSeconds: harnessTimeout, schemaVersion: 2"
-                        + "};"
-                        // Return workflow_def as a JSON STRING (not a nested JS object) because
-                        // GraalJS may not reliably convert deeply nested JavaScript objects to
-                        // Java Maps/Lists. The parent workflow's parse_wf INLINE task parses
-                        // this string back via JSON.parse(), producing a clean Map that
-                        // SubWorkflow.start() can convertValue() to WorkflowDef. ParametersUtils
-                        // does NOT recurse into resolved expression values, so ${...} expressions
-                        // inside the workflow def survive regardless.
-                        + "return {workflow_def: JSON.stringify(wfDef), workflow_name: wfName};");
     }
 }

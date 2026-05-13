@@ -40,6 +40,7 @@ import { AgentDisplayMode } from "components/agent/agent-types";
 import { agentFirstUseAtom } from "shared/agent/agentAtomsStore";
 import { useAtom } from "jotai";
 import { AgentExecutionTab } from "./AgentExecution";
+import { isCompiledPlanWorkflow } from "./AgentExecution/CompiledPlanView";
 
 const SecondaryActions = ({
   execution,
@@ -358,9 +359,28 @@ export default function Execution() {
           }}
         >
           <>
-            {openedTab === ExecutionTabs.AGENT_EXECUTION_TAB && (
-              <AgentExecutionTab execution={execution} />
-            )}
+            {openedTab === ExecutionTabs.AGENT_EXECUTION_TAB &&
+              // Dynamic plan sub-workflows have no agent metadata — they're
+              // produced at runtime by PLAN_AND_COMPILE. The agent-run
+              // transformer would emit an empty turns list, so fall back to
+              // the Debug View (Flow diagram), which already renders pure
+              // Conductor workflows correctly. Same Flow stack as DIAGRAM_TAB.
+              (isCompiledPlanWorkflow(execution)
+                ? execution &&
+                  flowActor && (
+                    <FlowExecutionContextProvider
+                      onExpandDynamic={expandDynamic}
+                      onCollapseDynamic={collapseDynamic}
+                    >
+                      <Flow
+                        flowActor={flowActor}
+                        readOnly={true}
+                        leftPanelExpanded={rightPanelActor}
+                        isExecutionView={isExecutionView}
+                      />
+                    </FlowExecutionContextProvider>
+                  )
+                : <AgentExecutionTab execution={execution} />)}
             {openedTab === ExecutionTabs.DIAGRAM_TAB &&
               execution &&
               flowActor && (

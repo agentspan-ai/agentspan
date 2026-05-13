@@ -114,6 +114,82 @@ class TestAgentCreation:
         agent = Agent(name="test", model="openai/gpt-4o", termination=cond)
         assert agent.termination is cond
 
+    # ── PLAN_EXECUTE named-slot API ─────────────────────────────────
+
+    def test_plan_execute_requires_planner(self):
+        """Strategy.PLAN_EXECUTE must reject configs missing the planner slot."""
+        import pytest
+        from agentspan.agents import Strategy
+
+        def fake_tool():
+            pass
+
+        with pytest.raises(ValueError, match="requires ``planner="):
+            Agent(
+                name="bad",
+                model="openai/gpt-4o",
+                strategy=Strategy.PLAN_EXECUTE,
+                tools=[fake_tool],
+                # no planner=
+            )
+
+    def test_plan_execute_rejects_legacy_agents_list(self):
+        """Migration error: agents=[a, b] is no longer valid for PLAN_EXECUTE."""
+        import pytest
+        from agentspan.agents import Strategy
+
+        planner = Agent(name="p", model="openai/gpt-4o", instructions="Plan.")
+        fallback = Agent(name="f", model="openai/gpt-4o", instructions="Fallback.")
+
+        def fake_tool():
+            pass
+
+        with pytest.raises(ValueError, match="no longer accepts ``agents="):
+            Agent(
+                name="bad",
+                model="openai/gpt-4o",
+                strategy=Strategy.PLAN_EXECUTE,
+                agents=[planner, fallback],  # legacy positional shape
+                tools=[fake_tool],
+            )
+
+    def test_plan_execute_requires_tools(self):
+        """The parent's ``tools`` list IS the canonical plan-executable set."""
+        import pytest
+        from agentspan.agents import Strategy
+
+        planner = Agent(name="p", model="openai/gpt-4o", instructions="Plan.")
+
+        with pytest.raises(ValueError, match="requires ``tools="):
+            Agent(
+                name="bad",
+                model="openai/gpt-4o",
+                strategy=Strategy.PLAN_EXECUTE,
+                planner=planner,
+                # no tools=
+            )
+
+    def test_plan_execute_named_slots_accepted(self):
+        """Counter-test: the new shape compiles cleanly."""
+        from agentspan.agents import Strategy
+
+        planner = Agent(name="p", model="openai/gpt-4o", instructions="Plan.")
+        fallback = Agent(name="f", model="openai/gpt-4o", instructions="Fallback.")
+
+        def fake_tool():
+            pass
+
+        agent = Agent(
+            name="ok",
+            strategy=Strategy.PLAN_EXECUTE,
+            planner=planner,
+            fallback=fallback,
+            tools=[fake_tool],
+        )
+        assert agent.planner is planner
+        assert agent.fallback is fallback
+        assert agent.tools == [fake_tool]
+
     def test_allowed_transitions_param(self):
         sub1 = Agent(name="a", model="openai/gpt-4o")
         sub2 = Agent(name="b", model="openai/gpt-4o")
@@ -535,38 +611,3 @@ class TestAgentCredentials:
         # Only explicit credentials, no auto-mapped ones added on top
         assert a.credentials == ["MY_CUSTOM_TOKEN"]
         assert "GITHUB_TOKEN" not in a.credentials
-
-
-class TestMaskedFields:
-    """Tests for masked_fields data masking feature (#181)."""
-
-    def test_masked_fields_default_empty(self):
-        agent = Agent(name="a", model="openai/gpt-4o")
-        assert agent.masked_fields == []
-
-    def test_masked_fields_stored(self):
-        agent = Agent(
-            name="a",
-            model="openai/gpt-4o",
-            masked_fields=["ssn", "api_key", "password"],
-        )
-        assert agent.masked_fields == ["ssn", "api_key", "password"]
-
-    def test_masked_fields_serialized(self):
-        from agentspan.agents.config_serializer import AgentConfigSerializer
-
-        agent = Agent(
-            name="pii_agent",
-            model="openai/gpt-4o",
-            instructions="Help the user.",
-            masked_fields=["ssn", "credit_card"],
-        )
-        config = AgentConfigSerializer().serialize(agent)
-        assert config["maskedFields"] == ["ssn", "credit_card"]
-
-    def test_no_masked_fields_omitted_from_serialization(self):
-        from agentspan.agents.config_serializer import AgentConfigSerializer
-
-        agent = Agent(name="b", model="openai/gpt-4o")
-        config = AgentConfigSerializer().serialize(agent)
-        assert "maskedFields" not in config

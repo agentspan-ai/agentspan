@@ -20,6 +20,7 @@ import dev.agentspan.runtime.model.*;
 import dev.agentspan.runtime.util.JavaScriptBuilder;
 import dev.agentspan.runtime.util.ModelParser;
 import dev.agentspan.runtime.util.ModelParser.ParsedModel;
+import dev.agentspan.runtime.util.WorkflowTaskUtils;
 
 /**
  * Compiles an AgentConfig into a Conductor WorkflowDef.
@@ -103,20 +104,71 @@ public class AgentCompiler {
             throw new IllegalArgumentException("Cannot compile external agent '" + config.getName() + "' directly. "
                     + "External agents are compiled as SubWorkflowTask references.");
         } else {
+            // ``hasAgents`` covers any of the ways an agent can declare
+            // sub-agents: the legacy ``agents=[…]`` list, OR the named
+            // PLAN_EXECUTE slots (``planner=`` and/or ``fallback=``).
+            // Without checking the named slots, a PLAN_EXECUTE coordinator
+            // declared with ``planner=`` would have an empty agents list,
+            // hasAgents=false, and dispatch would fall to compileWithTools
+            // — silently dropping the strategy.
             boolean hasAgents =
-                    config.getAgents() != null && !config.getAgents().isEmpty();
+                    (config.getAgents() != null && !config.getAgents().isEmpty())
+                            || config.getPlanner() != null
+                            || config.getFallback() != null;
             boolean hasTools = config.getTools() != null && !config.getTools().isEmpty();
 
-            // Multi-agent with NO tools -> delegate to MultiAgentCompiler
-            if (hasAgents && !hasTools) {
+            String strategy = config.getStrategy();
+
+            // Named slots (``planner=``/``fallback=``) are PLAN_EXECUTE-only.
+            // Every other strategy compiler iterates ``config.getAgents()``
+            // directly without consulting the named slots; the dispatch fix
+            // that broadened ``hasAgents`` admits planner-only configs into
+            // those compilers, which then NPE on ``config.getAgents().size()``.
+            // Reject the cross-product here with a clear migration message
+            // rather than letting it die with an opaque stack trace deep
+            // inside compileSequential / compileParallel / compileHandoff
+            // / compileHybrid / etc.
+            boolean hasNamedSlots = config.getPlanner() != null || config.getFallback() != null;
+            boolean isPlanExecute = "plan_execute".equals(strategy);
+            if (hasNamedSlots && !isPlanExecute) {
+                throw new IllegalArgumentException("Named slots ``planner=`` and ``fallback=`` are only valid with "
+                        + "``strategy=Strategy.PLAN_EXECUTE``. Agent '" + config.getName()
+                        + "' has strategy='" + (strategy == null ? "(unset → handoff)" : strategy)
+                        + "'. Either set ``strategy=Strategy.PLAN_EXECUTE`` or pass the "
+                        + "sub-agents via ``agents=[…]`` instead.");
+            }
+
+            // Strategy-led dispatch: an explicit non-handoff multi-agent
+            // strategy (PLAN_EXECUTE, SEQUENTIAL, PARALLEL, ROUTER, SWARM,
+            // ROUND_ROBIN, RANDOM, MANUAL) always routes to MultiAgentCompiler.
+            // Previously a non-empty ``tools`` field silently rerouted to
+            // ``compileHybrid``, which only knows handoff semantics — the
+            // declared strategy was dropped on the floor. Hybrid is reserved
+            // for the handoff case (the only one it actually implements).
+            boolean isMultiAgentStrategy = strategy != null && !strategy.isEmpty() && !"handoff".equals(strategy);
+
+            if (hasAgents && isMultiAgentStrategy) {
+                if (hasTools) {
+                    log.debug(
+                            "Strategy '{}' on agent '{}': ignoring {} parent-level tools "
+                                    + "(declare them on the relevant sub-agent instead).",
+                            strategy,
+                            config.getName(),
+                            config.getTools().size());
+                }
+                wf = new MultiAgentCompiler(this).compile(config);
+            } else if (hasAgents && !hasTools) {
+                // Multi-agent (handoff, or unset → handoff) with NO tools.
                 wf = new MultiAgentCompiler(this).compile(config);
             } else if (hasAgents && hasTools) {
-                // Both tools AND sub-agents -> hybrid mode
+                // Handoff strategy with parent-level tools → hybrid mode.
+                int subAgentCount =
+                        config.getAgents() != null ? config.getAgents().size() : 0;
                 log.debug(
                         "Hybrid mode: agent '{}' has {} tools and {} sub-agents",
                         config.getName(),
                         config.getTools().size(),
-                        config.getAgents().size());
+                        subAgentCount);
                 wf = compileHybrid(config);
             } else if (!hasTools) {
                 // No tools -> simple single LLM call
@@ -171,15 +223,23 @@ public class AgentCompiler {
         WorkflowDef wf = createWorkflow(config);
         ResolvedInstructions resolvedInstructions = resolveInstructions(config, instructionsRef);
 
-        // Build LLM task
-        WorkflowTask llmTask = buildLlmTask(config, parsed, llmRef, null);
+        // Compile prefill tool calls (pre-loop tasks + message refs).
+        // Done unconditionally so a no-tool agent (e.g. a planner that reads
+        // contextbook via prefill_tools) sees its prefill content. Previously
+        // this branch ignored prefill_tools entirely and the SDK had to add a
+        // dummy tool just to route through compileWithTools.
+        PrefillCompilationResult prefill = compilePrefillTasks(config);
+
+        // Build LLM task with prefill refs threaded into messages.
+        WorkflowTask llmTask = buildLlmTask(config, parsed, llmRef, null, prefill.refs());
 
         // Check for output guardrails
         List<GuardrailConfig> outputGuardrails = getOutputGuardrails(config);
 
         if (outputGuardrails.isEmpty()) {
-            // Simple path: single LLM call, no loop
+            // Simple path: prefill tasks → single LLM call, no loop
             List<WorkflowTask> tasks = new ArrayList<>(resolvedInstructions.getPreTasks());
+            tasks.addAll(prefill.tasks());
             tasks.add(llmTask);
             wf.setTasks(tasks);
             Map<String, Object> simpleOutput = new LinkedHashMap<>();
@@ -250,6 +310,7 @@ public class AgentCompiler {
         WorkflowTask resolveTask = buildResolveOutputTask(resolveRef, llmRef);
 
         List<WorkflowTask> tasks = new ArrayList<>(resolvedInstructions.getPreTasks());
+        tasks.addAll(prefill.tasks());
         tasks.add(loop);
         tasks.add(resolveTask);
         wf.setTasks(tasks);
@@ -588,8 +649,19 @@ public class AgentCompiler {
             outputParams.put("context", "${workflow.variables._agent_state}");
             wf.setOutputParameters(outputParams);
         } else {
+            // Synthesize a non-empty workflow ``result`` even when the loop
+            // terminated on a TOOL_CALLS turn (e.g. ``stop_when`` fired right
+            // after the model called ``write_coder_plan``). Without this, the
+            // LLM's empty text result becomes the agent's output and the
+            // downstream stage sees nothing useful. This INLINE task prefers
+            // the LLM's text; if empty, falls back to a JSON dump of the last
+            // turn's tool-call inputs (which is where ``write_*`` tools put
+            // their content arg).
+            String synthRef = toRef(config.getName()) + "_synth_output";
+            allTasks.add(buildSynthesizeOutputTask(synthRef, llmRef));
+
             Map<String, Object> outputParams = new LinkedHashMap<>();
-            outputParams.put("result", ref(llmRef + ".output.result"));
+            outputParams.put("result", ref(synthRef + ".output.result"));
             outputParams.put("finishReason", ref(llmRef + ".output.finishReason"));
             outputParams.put("rejectionReason", "${workflow.variables.rejectionReason}");
             outputParams.put("context", "${workflow.variables._agent_state}");
@@ -998,9 +1070,6 @@ public class AgentCompiler {
         wf.setTimeoutSeconds(60L);
         wf.setTimeoutPolicy(null);
         wf.setInputParameters(WORKFLOW_INPUTS);
-        if (config.getMaskedFields() != null && !config.getMaskedFields().isEmpty()) {
-            wf.setMaskedFields(config.getMaskedFields());
-        }
         return wf;
     }
 
@@ -1139,8 +1208,8 @@ public class AgentCompiler {
                 instrText += "\n\n" + buildCliInstructions(config);
             }
 
-            // Planner: enhance instructions with plan-then-execute prompt
-            if (Boolean.TRUE.equals(config.getPlanner())) {
+            // Plan-first preamble: enhance instructions with plan-then-execute prompt
+            if (Boolean.TRUE.equals(config.getEnablePlanning())) {
                 instrText += "\n\nBefore executing, create a step-by-step plan. "
                         + "Think through each step carefully, then execute the plan "
                         + "systematically using your available tools. After each step, "
@@ -1157,30 +1226,44 @@ public class AgentCompiler {
             messages.addAll(config.getMemory().getMessages());
         }
 
-        // Prefill tool call results: inject as tool_call + tool response before user message.
-        // Field names must match ChatMessage/ToolCall Java models exactly (camelCase):
-        //   ChatMessage.toolCalls (not tool_calls), ToolCall.inputParameters (not input).
+        // Prefill tool call results: inject as a SINGLE system message containing
+        // all prefill outputs concatenated as labeled sections. Previously this
+        // emitted one ``tool_call`` + one ``tool`` message per prefill, which
+        // left those tool names visible in conversation history — the LLM kept
+        // hallucinating calls to them (contextbook_read, list_directory,
+        // git_status, git_diff) on every subsequent turn, wasting tool budgets
+        // and flooding logs even though the dispatch guard rejected them. The
+        // model can't hallucinate a call to something it's never seen as a
+        // ``tool_call`` in history.
+        //
+        // Conductor's ``${refName.output.field}`` placeholders resolve inside
+        // string values at task-scheduling time, so the single message body
+        // here is dynamically filled with the actual prefill task outputs.
         if (prefillRefs != null && !prefillRefs.isEmpty()) {
+            StringBuilder ctx = new StringBuilder();
+            ctx.append("# Pre-loaded context\n\n")
+                    .append("The following inputs were collected deterministically at the start ")
+                    .append("of this run and are provided here as static context. They are NOT ")
+                    .append("callable tools in this conversation — do not attempt to call any of ")
+                    .append("them. If you need fresh information, use the tools advertised in ")
+                    .append("your tool list.\n\n");
             for (PrefillRef pr : prefillRefs) {
-                messages.add(Map.of(
-                        "role",
-                        "tool_call",
-                        "toolCalls",
-                        List.of(Map.of(
-                                "name", pr.toolName(),
-                                "taskReferenceName", pr.refName(),
-                                "inputParameters", pr.arguments()))));
-                messages.add(Map.of(
-                        "role",
-                        "tool",
-                        "message",
-                        "${" + pr.refName() + ".output.result}",
-                        "toolCalls",
-                        List.of(Map.of(
-                                "taskReferenceName", pr.refName(),
-                                "name", pr.toolName(),
-                                "output", Map.of("result", "${" + pr.refName() + ".output.result}")))));
+                ctx.append("## ").append(pr.toolName());
+                Map<String, Object> args = pr.arguments();
+                if (args != null && !args.isEmpty()) {
+                    String summary = args.entrySet().stream()
+                            .filter(e -> !"__agentspan_ctx__".equals(e.getKey()))
+                            .map(e -> e.getKey() + "=" + e.getValue())
+                            .collect(java.util.stream.Collectors.joining(", "));
+                    if (!summary.isEmpty()) {
+                        ctx.append("(").append(summary).append(")");
+                    }
+                }
+                ctx.append("\n\n")
+                        .append("${").append(pr.refName()).append(".output.result}")
+                        .append("\n\n");
             }
+            messages.add(Map.of("role", "system", "message", ctx.toString()));
         }
 
         // User message
@@ -1207,6 +1290,24 @@ public class AgentCompiler {
             inputs.put("temperature", config.getTemperature());
         } else if (toolSpecs != null) {
             inputs.put("temperature", 0);
+        }
+
+        // Reasoning effort — forwarded to ChatCompletion.reasoningEffort via
+        // Jackson's convertValue in AgentChatCompleteTaskMapper. OpenAI
+        // reasoning models (o1, gpt-5-codex) accept minimal|low|medium|high;
+        // non-reasoning models ignore it. Targets the failure mode where
+        // codex spends all completion tokens on internal reasoning and emits
+        // finishReason=STOP with empty content.
+        if (config.getReasoningEffort() != null && !config.getReasoningEffort().isBlank()) {
+            inputs.put("reasoningEffort", config.getReasoningEffort());
+            // OpenAI's Responses API only emits chain-of-thought summary text
+            // on ``reasoning`` output items when ``reasoning.summary`` is set
+            // on the request. Without it, the model burns reasoning tokens
+            // but the summary blocks come back empty and conductor's
+            // OpenAIResponsesChatModel has nothing to surface. Default to
+            // ``auto`` so reasoning-effort callers get visible reasoning
+            // output by default. Non-reasoning models silently ignore it.
+            inputs.put("reasoningSummary", "auto");
         }
 
         // Thinking config: extended reasoning
@@ -1471,6 +1572,50 @@ public class AgentCompiler {
         return task;
     }
 
+    /**
+     * Build a post-loop INLINE task that ensures the workflow's ``result``
+     * is non-empty even when the loop terminated on a TOOL_CALLS turn.
+     *
+     * <p>Prefers the LLM's text result. If that is empty/null, falls back
+     * to a JSON-stringified summary of the last turn's tool calls — this
+     * surfaces the {@code content} argument of "writer" tools (e.g.
+     * {@code write_coder_plan(content=…)}) into the workflow output so a
+     * downstream stage can read it without a contextbook re-fetch.
+     */
+    WorkflowTask buildSynthesizeOutputTask(String synthRef, String llmRef) {
+        WorkflowTask task = new WorkflowTask();
+        task.setType("INLINE");
+        task.setTaskReferenceName(synthRef);
+
+        Map<String, Object> inputs = new LinkedHashMap<>();
+        inputs.put("evaluatorType", "graaljs");
+        // Self-contained inline so we don't depend on JavaScriptBuilder
+        // for a one-off helper.
+        inputs.put(
+                "expression",
+                "(function(){"
+                        + "  var txt = $.llm_result;"
+                        + "  if (txt !== null && txt !== undefined && String(txt).trim() !== '' && String(txt).trim() !== '[]') {"
+                        + "    return txt;"
+                        + "  }"
+                        + "  var tcs = $.tool_calls;"
+                        + "  if (Array.isArray(tcs) && tcs.length > 0) {"
+                        + "    var summary = [];"
+                        + "    for (var i = 0; i < tcs.length; i++) {"
+                        + "      var tc = tcs[i] || {};"
+                        + "      summary.push({name: tc.name, inputs: tc.inputParameters || tc.inputs || {}});"
+                        + "    }"
+                        + "    try { return JSON.stringify(summary); } catch (e) { return String(summary); }"
+                        + "  }"
+                        + "  return txt || '';"
+                        + "})()");
+        inputs.put("llm_result", ref(llmRef + ".output.result"));
+        inputs.put("tool_calls", ref(llmRef + ".output.toolCalls"));
+        task.setInputParameters(inputs);
+
+        return task;
+    }
+
     List<GuardrailConfig> getOutputGuardrails(AgentConfig config) {
         if (config.getGuardrails() == null) return List.of();
         return config.getGuardrails().stream()
@@ -1479,15 +1624,33 @@ public class AgentCompiler {
     }
 
     String buildGuardrailContinue(List<String[]> guardrailRefs) {
+        // Null-guard each ref. When the LLM doesn't call the guardrailed
+        // tool in this iteration (a turn that ended on plain text — STOP —
+        // or finished by calling a different tool), the per-tool guardrail
+        // task ref is null in the workflow context. Without the null guard,
+        // ``$.X.result.should_continue`` throws ``TypeError: Cannot read
+        // property 'result' of null`` and the entire DO_WHILE condition
+        // crashes — which Conductor surfaces as FAILED_WITH_TERMINAL_ERROR
+        // even though the LLM finished cleanly.
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < guardrailRefs.size(); i++) {
             if (i > 0) sb.append(" || ");
             String refName = guardrailRefs.get(i)[0];
             boolean isInline = Boolean.parseBoolean(guardrailRefs.get(i)[1]);
             if (isInline) {
-                sb.append("$.").append(refName).append(".result.should_continue == true");
+                sb.append("($.")
+                        .append(refName)
+                        .append(" != null && $.")
+                        .append(refName)
+                        .append(".result != null && $.")
+                        .append(refName)
+                        .append(".result.should_continue == true)");
             } else {
-                sb.append("$.").append(refName).append(".should_continue == true");
+                sb.append("($.")
+                        .append(refName)
+                        .append(" != null && $.")
+                        .append(refName)
+                        .append(".should_continue == true)");
             }
         }
         return sb.toString();
@@ -1550,29 +1713,17 @@ public class AgentCompiler {
      *
      * This is called after compilation to ensure consistent naming.
      */
+    /**
+     * Backfill missing task names in the agent's workflow tree, including
+     * any inline {@link WorkflowDef}s embedded via {@code SubWorkflowParam}.
+     * Delegates the bulk of the work to {@link WorkflowTaskUtils#ensureTaskName}
+     * (the shared helper used by PAC's dynamic SUB_WORKFLOW emission too)
+     * and adds the SUB_WORKFLOW recursion that's specific to compile-time
+     * embedding.
+     */
     static void ensureTaskNames(WorkflowTask task) {
         if (task == null) return;
-        if ("LLM_CHAT_COMPLETE".equals(task.getType())) {
-            task.setName("llm_chat_complete");
-        } else if ("SIMPLE".equals(task.getType())
-                && task.getName() != null
-                && !task.getName().isEmpty()) {
-            // SIMPLE tasks: preserve the task definition name (workers poll on it)
-        } else if (task.getName() == null || task.getName().isEmpty()) {
-            task.setName(task.getTaskReferenceName());
-        }
-        if (task.getLoopOver() != null) {
-            task.getLoopOver().forEach(AgentCompiler::ensureTaskNames);
-        }
-        if (task.getDecisionCases() != null) {
-            task.getDecisionCases().values().forEach(tasks -> tasks.forEach(AgentCompiler::ensureTaskNames));
-        }
-        if (task.getDefaultCase() != null) {
-            task.getDefaultCase().forEach(AgentCompiler::ensureTaskNames);
-        }
-        if (task.getForkTasks() != null) {
-            task.getForkTasks().forEach(branch -> branch.forEach(AgentCompiler::ensureTaskNames));
-        }
+        WorkflowTaskUtils.ensureTaskName(task);
         // Recurse into sub-workflow's inline workflowDef.
         // Use getWorkflowDefinition() (returns Object) and instanceof check —
         // getWorkflowDef() casts to WorkflowDef and throws if it's a runtime expression String
@@ -2224,7 +2375,14 @@ public class AgentCompiler {
      */
     static Set<String> collectCapabilities(AgentConfig config) {
         Set<String> caps = new LinkedHashSet<>();
-        boolean hasAgents = config.getAgents() != null && !config.getAgents().isEmpty();
+        // Mirror the dispatch-site definition of ``hasAgents`` — named
+        // PLAN_EXECUTE slots count as sub-agents for capability purposes
+        // too. Without this, a PLAN_EXECUTE coordinator built with
+        // ``planner=`` got tagged ``simple`` in workflow metadata and its
+        // planner/fallback children were invisible to the recursion.
+        boolean hasAgents = (config.getAgents() != null && !config.getAgents().isEmpty())
+                || config.getPlanner() != null
+                || config.getFallback() != null;
         boolean hasTools = config.getTools() != null && !config.getTools().isEmpty();
 
         if (hasAgents && hasTools) {
@@ -2239,11 +2397,18 @@ public class AgentCompiler {
             caps.add("simple");
         }
 
-        // Recurse into sub-agents
-        if (hasAgents) {
+        // Recurse into every sub-agent reachable from this config —
+        // legacy ``agents=[…]`` AND named ``planner``/``fallback`` slots.
+        if (config.getAgents() != null) {
             for (AgentConfig sub : config.getAgents()) {
                 caps.addAll(collectCapabilities(sub));
             }
+        }
+        if (config.getPlanner() != null) {
+            caps.addAll(collectCapabilities(config.getPlanner()));
+        }
+        if (config.getFallback() != null) {
+            caps.addAll(collectCapabilities(config.getFallback()));
         }
         return caps;
     }
