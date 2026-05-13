@@ -169,3 +169,63 @@ export async function findToolTasks(
 
   return { results, allTasks };
 }
+
+/**
+ * Find tool tasks recursively — traverses SUB_WORKFLOW tasks one level deep.
+ * Needed for pipeline executions where each stage runs in its own sub-workflow.
+ */
+export async function findToolTasksDeep(
+  executionId: string,
+  toolNames: string[],
+): Promise<{ results: Record<string, TaskInfo>; allTasks: string[] }> {
+  const remaining = new Set(toolNames);
+  const results: Record<string, TaskInfo> = {};
+  const allTasks: string[] = [];
+
+  async function scanWorkflow(wfId: string, depth: number): Promise<void> {
+    if (remaining.size === 0 || depth > 3) return;
+    const wf = await getWorkflow(wfId);
+    const tasks = (wf.tasks ?? []) as Record<string, unknown>[];
+
+    for (const task of tasks) {
+      const ref = (task.referenceTaskName ?? '') as string;
+      const taskDef = (task.taskDefName ?? '') as string;
+      const taskType = (task.taskType ?? '') as string;
+      const inputData = (task.inputData ?? {}) as Record<string, unknown>;
+      allTasks.push(`${ref}[def=${taskDef},type=${taskType}]`);
+
+      for (const name of [...remaining]) {
+        const match =
+          name === taskDef ||
+          name === taskType ||
+          ref.includes(name) ||
+          (!SYSTEM_TASK_TYPES.has(taskType) && JSON.stringify(inputData).includes(name));
+
+        if (match) {
+          results[name] = {
+            status: (task.status ?? '') as string,
+            output: (task.outputData ?? {}) as Record<string, unknown>,
+            input: inputData,
+            ref,
+            taskDef,
+            taskType,
+            reason: (task.reasonForIncompletion ?? '') as string,
+          };
+          remaining.delete(name);
+        }
+      }
+
+      // Recurse into sub-workflows
+      if (taskType === 'SUB_WORKFLOW' && remaining.size > 0) {
+        const subId = ((task.outputData as Record<string, unknown>)?.subWorkflowId ??
+          (task.inputData as Record<string, unknown>)?.subWorkflowId) as string | undefined;
+        if (subId) {
+          await scanWorkflow(subId, depth + 1);
+        }
+      }
+    }
+  }
+
+  await scanWorkflow(executionId, 0);
+  return { results, allTasks };
+}

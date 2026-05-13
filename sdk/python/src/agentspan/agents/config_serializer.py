@@ -86,6 +86,7 @@ class AgentConfigSerializer:
             "maxTurns": agent.max_turns,
             "timeoutSeconds": agent.timeout_seconds,
             "external": agent.external,
+            "synthesize": getattr(agent, "synthesize", True),
         }
 
         # Instructions

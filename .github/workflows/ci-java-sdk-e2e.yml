@@ -19,12 +19,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Java 11
+      - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
-          java-version: '11'
+          java-version: '21'
           distribution: 'temurin'
-          cache: maven
+          cache: gradle
 
       - name: Build server JAR
         run: ./gradlew bootJar -x test -q
@@ -51,9 +51,9 @@ jobs:
         run: |
           ARGS="-Pe2e -DAGENTSPAN_SERVER_URL=$AGENTSPAN_SERVER_URL -DAGENTSPAN_LLM_MODEL=$AGENTSPAN_LLM_MODEL"
           if [[ -n "${{ inputs.suite }}" ]]; then
-            ARGS="$ARGS -Dtest=${{ inputs.suite }}"
+            ARGS="$ARGS --tests '*.${{ inputs.suite }}*'"
           fi
-          mvn test $ARGS
+          ./gradlew test $ARGS
         working-directory: sdk/java
 
       - name: Stop server

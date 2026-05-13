@@ -290,6 +290,28 @@ def _tool_by_name(ad, name):
     return None
 
 
+def _find_tool_task_outputs(workflow, tool_name):
+    """Return list of (status, output_json_str) for all tasks matching tool_name."""
+    results = []
+    system_types = {
+        "LLM_CHAT_COMPLETE", "SWITCH", "DO_WHILE", "INLINE", "SET_VARIABLE",
+        "FORK", "FORK_JOIN_DYNAMIC", "JOIN", "SUB_WORKFLOW", "TERMINATE",
+        "WAIT", "EVENT", "DECISION",
+    }
+    for task in workflow.get("tasks", []):
+        task_type = task.get("taskType", "")
+        task_def = task.get("taskDefName", "")
+        ref = task.get("referenceTaskName", "")
+        if task_type in system_types:
+            continue
+        if tool_name == task_def or tool_name == task_type or tool_name in ref:
+            results.append((
+                task.get("status", ""),
+                str(task.get("outputData", {})),
+            ))
+    return results
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Tests
 # ═══════════════════════════════════════════════════════════════════════════
@@ -420,7 +442,7 @@ class TestSuite8Guardrails:
     # ── Tool output regex retry (email blocked) ──────────────────────
 
     def test_tool_output_regex_retry(self, runtime, model):
-        """redact_tool returns email → regex retry removes it."""
+        """redact_tool returns email → guardrail retries; tool task output must be clean."""
         agent = _agent_with_email_tool(model)
         result = runtime.run(
             agent,
@@ -431,16 +453,17 @@ class TestSuite8Guardrails:
         assert result.status in ("COMPLETED", "FAILED", "TERMINATED"), (
             f"[Email] Unexpected status. {diag}"
         )
-        if result.status in ("FAILED", "TERMINATED"):
-            # Guardrail escalated — acceptable behavior
-            pass
-        else:
-            # status is COMPLETED — output MUST be clean
-            output = _get_output_text(result)
-            email_re = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
-            assert not email_re.search(output), (
-                f"[Email] Email still in output. output={output[:300]}"
-            )
+        # Structural check: inspect the tool task output records, not LLM prose.
+        # The LLM may mention the email in its explanation of what the guardrail
+        # did — that's not a guardrail failure. The guardrail acts on TOOL output.
+        assert result.execution_id, f"[Email] No execution_id. {diag}"
+        wf = _get_workflow(result.execution_id)
+        email_re = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+        for status, out_json in _find_tool_task_outputs(wf, "redact_tool"):
+            if status == "COMPLETED":
+                assert not email_re.search(out_json), (
+                    f"[Email] Guardrail did not remove email from COMPLETED tool output: {out_json[:300]}"
+                )
 
     # ── Agent output multi-pattern regex ──────────────────────────────
 

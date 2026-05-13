@@ -4,28 +4,50 @@ Java SDK for the [Agentspan](https://agentspan.dev) agent orchestration platform
 
 ## Requirements
 
-- Java 11+
-- Maven 3.6+
-- A running Agentspan/Conductor server
+- Java 21+
+- Maven 3.6+ or Gradle 7+
+- A running Agentspan server
 
 ## Installation
 
-Add to your `pom.xml`:
+Maven (`pom.xml`):
 
 ```xml
 <dependency>
-    <groupId>dev.agentspan</groupId>
-    <artifactId>agentspan-sdk</artifactId>
+    <groupId>ai.agentspan</groupId>
+    <artifactId>java-sdk</artifactId>
     <version>0.1.0</version>
 </dependency>
+```
+
+Gradle (`build.gradle`):
+
+```groovy
+implementation 'ai.agentspan:java-sdk:0.1.0'
+```
+
+### Spring Boot starter
+
+For Spring Boot apps, add the auto-configuration starter instead:
+
+```xml
+<dependency>
+    <groupId>ai.agentspan</groupId>
+    <artifactId>java-sdk-spring</artifactId>
+    <version>0.1.0</version>
+</dependency>
+```
+
+```groovy
+implementation 'ai.agentspan:java-sdk-spring:0.1.0'
 ```
 
 ## Quick Start
 
 ```java
-import dev.agentspan.Agent;
-import dev.agentspan.Agentspan;
-import dev.agentspan.model.AgentResult;
+import ai.agentspan.Agent;
+import ai.agentspan.Agentspan;
+import ai.agentspan.model.AgentResult;
 
 public class Main {
     public static void main(String[] args) {
@@ -56,8 +78,8 @@ export AGENTSPAN_LLM_MODEL=openai/gpt-4o
 Or configure programmatically:
 
 ```java
-import dev.agentspan.AgentConfig;
-import dev.agentspan.Agentspan;
+import ai.agentspan.AgentConfig;
+import ai.agentspan.Agentspan;
 
 AgentConfig config = new AgentConfig(
     "http://localhost:6767/api",
@@ -74,8 +96,8 @@ Agentspan.configure(config);
 Define tools using the `@Tool` annotation:
 
 ```java
-import dev.agentspan.annotations.Tool;
-import dev.agentspan.internal.ToolRegistry;
+import ai.agentspan.annotations.Tool;
+import ai.agentspan.internal.ToolRegistry;
 
 public class WeatherTools {
     @Tool(name = "get_weather", description = "Get weather for a city")

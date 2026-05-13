@@ -1,7 +1,10 @@
 """Unit tests for the Claude Agent SDK passthrough integration."""
 
 import asyncio
+import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+pytest.importorskip("claude_code_sdk", reason="claude_code_sdk not installed")
 
 
 def _make_options(system_prompt="You are a reviewer"):

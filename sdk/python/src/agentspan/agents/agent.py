@@ -362,6 +362,7 @@ class Agent:
         base_url: Optional[str] = None,
         credentials: Optional[List[Any]] = None,
         stateful: bool = False,
+        synthesize: bool = True,
         masked_fields: Optional[List[str]] = None,
     ) -> None:
         if not name or not isinstance(name, str):
@@ -438,6 +439,7 @@ class Agent:
         self.introduction = introduction
         self.metadata: Dict[str, Any] = dict(metadata) if metadata else {}
         self.stateful = stateful
+        self.synthesize = synthesize
         self.planner = planner
         self.callbacks: List[Any] = list(callbacks) if callbacks else []
         self.before_agent_callback = before_agent_callback

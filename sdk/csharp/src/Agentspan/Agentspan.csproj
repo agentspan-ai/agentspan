@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Agentspan</RootNamespace>
+    <AssemblyName>Agentspan</AssemblyName>
+
+    <!-- NuGet package metadata -->
+    <PackageId>Agentspan</PackageId>
+    <Version>0.1.0</Version>
+    <Description>Agentspan .NET SDK — durable, scalable, observable AI agents</Description>
+    <Authors>Agentspan</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/agentspan-ai/agentspan</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/agentspan-ai/agentspan</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>agents;ai;llm;orchestration;agentspan;multi-agent</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+
+    <!-- Include XML doc comments for IntelliSense -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Suppress warnings for missing XML docs on public members we haven't documented yet -->
+    <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- System.Text.Json and System.Threading.Channels are in-box on .NET 10 -->
+    <!-- conductor-csharp brings Newtonsoft.Json + Microsoft.Extensions.Logging.Abstractions transitively -->
+    <PackageReference Include="conductor-csharp" Version="1.1.4" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+</Project>
