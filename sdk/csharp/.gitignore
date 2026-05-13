@@ -1,0 +1,24 @@
+obj/
+bin/
+*.user
+.vs/
+.idea/
+*.DS_Store
+
+# Build outputs (belt-and-suspenders — obj/ and bin/ above cover most cases)
+*.dll
+*.pdb
+*.exe
+*.mdb
+*.cache
+*.nupkg
+*.snupkg
+
+# Test results
+TestResults/
+coverage/
+*.trx
+*.coverage
+
+# Publish output
+publish/

@@ -200,6 +200,10 @@ func runServerStart(cmd *cobra.Command, args []string) error {
 	proc.Stdout = logF
 	proc.Stderr = logF
 	proc.SysProcAttr = sysProcAttr()
+	// Always start the server in its data directory so SQLite creates
+	// agent-runtime.db there — not in the user's current working directory
+	// (which may be a read-only path such as /mnt/c/WINDOWS/System32 in WSL).
+	proc.Dir = dir
 
 	if err := proc.Start(); err != nil {
 		logF.Close()
