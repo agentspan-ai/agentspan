@@ -968,6 +968,9 @@ public class AgentCompiler {
         wf.setTimeoutSeconds(60L);
         wf.setTimeoutPolicy(null);
         wf.setInputParameters(WORKFLOW_INPUTS);
+        if (config.getMaskedFields() != null && !config.getMaskedFields().isEmpty()) {
+            wf.setMaskedFields(config.getMaskedFields());
+        }
         return wf;
     }
 

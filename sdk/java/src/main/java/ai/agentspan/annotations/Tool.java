@@ -45,4 +45,10 @@ public @interface Tool {
 
     /** Credential environment variable names required by this tool. */
     String[] credentials() default {};
+
+    /** Number of times Conductor retries the task on failure. Default matches SDK default of 2. */
+    int retryCount() default 2;
+
+    /** Seconds between retries (LINEAR_BACKOFF). Default matches SDK default of 2. */
+    int retryDelaySeconds() default 2;
 }
