@@ -63,11 +63,12 @@ agent = Agent(
     name="weatherbot",
     model="openai/gpt-4o", # if you set OPENAI_API_KEY
     # model="anthropic/claude-sonnet-4-6",  # if you set ANTHROPIC_API_KEY
+    instructions="You are an outdoor activity assistant. When asked about a city, look up the weather there, then recommend 2-3 specific outdoor activities suited to those conditions. Be direct: good weather for hiking is different from good weather for a beach day.",
     tools=[get_weather],
 )
 
 with AgentRuntime() as runtime:
-    result = runtime.run(agent, "What's the weather in NYC?")
+    result = runtime.run(agent, "What should I do today in NYC?")
     result.print_result()
 ```
 
@@ -106,9 +107,10 @@ agent = Agent(
     name="weatherbot",
     model="openai/gpt-4o", # if you set OPENAI_API_KEY
     # model="anthropic/claude-sonnet-4-6",  # if you set ANTHROPIC_API_KEY
+    instructions="You are an outdoor activity assistant. When asked about a city, look up the weather there, then recommend 2-3 specific outdoor activities suited to those conditions. Be direct: good weather for hiking is different from good weather for a beach day.",
     tools=[get_weather],
 )
-result = run(agent, "What's the weather in NYC?")
+result = run(agent, "What should I do today in NYC?")
 result.print_result()
 ```
 
