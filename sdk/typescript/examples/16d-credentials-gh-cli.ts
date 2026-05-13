@@ -8,7 +8,7 @@
  *
  * Setup (one-time, via CLI):
  *   agentspan login
- *   agentspan credentials set --name GH_TOKEN
+ *   agentspan credentials set GH_TOKEN <your-gh-token>
  *
  * Requirements:
  *   - Agentspan server running at AGENTSPAN_SERVER_URL

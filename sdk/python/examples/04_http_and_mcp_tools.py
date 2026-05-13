@@ -20,8 +20,8 @@ MCP Test Server Setup (mcp-testkit):
     mcp-testkit --transport http --auth <secret>
 
     # Store credentials via CLI or Agentspan UI:
-    agentspan credentials set --name HTTP_TEST_API_KEY --value <secret>
-    agentspan credentials set --name MCP_TEST_API_KEY --value <secret>
+    agentspan credentials set HTTP_TEST_API_KEY <secret>
+    agentspan credentials set MCP_TEST_API_KEY <secret>
 
 Requirements:
     - Conductor server with LLM support

@@ -160,7 +160,7 @@ class TestRunByName:
         agent = Agent(name="bot", model="openai/gpt-4o")
         with patch.object(rt, "_run_by_name") as mock_name:
             with patch.object(rt, "_prepare_workers"):
-                with patch.object(rt, "_start_via_server", return_value=("wf-id", None)):
+                with patch.object(rt, "_start_via_server", return_value=("wf-id", None, [])):
                     with patch.object(rt, "_poll_status_until_complete") as mock_poll:
                         mock_poll.return_value = MagicMock(
                             output={"result": "ok"},

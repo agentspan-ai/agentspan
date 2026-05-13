@@ -15,7 +15,9 @@ source = { editable = "." }
 dependencies = [
     { name = "cloudpickle" },
     { name = "conductor-python" },
+    { name = "google-adk" },
     { name = "httpx" },
+    { name = "openai-agents" },
 ]
 
 [package.optional-dependencies]
@@ -28,7 +30,8 @@ dev = [
     { name = "ruff" },
 ]
 testing = [
-    { name = "litellm" },
+    { name = "anthropic" },
+    { name = "openai" },
 ]
 validation = [
     { name = "google-adk" },
@@ -52,15 +55,18 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anthropic", marker = "extra == 'testing'", specifier = ">=0.30" },
     { name = "cloudpickle", specifier = ">=2.0" },
-    { name = "conductor-python", specifier = ">=1.3.6" },
+    { name = "conductor-python", specifier = ">=1.3.11" },
+    { name = "google-adk", specifier = ">=1.27.1" },
     { name = "google-adk", marker = "extra == 'validation'", specifier = ">=1.18.0" },
     { name = "httpx", specifier = ">=0.24" },
     { name = "jinja2", marker = "extra == 'validation'", specifier = ">=3.1" },
-    { name = "litellm", marker = "extra == 'testing'", specifier = ">=1.0" },
     { name = "litellm", marker = "extra == 'validation'", specifier = ">=1.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
+    { name = "openai", marker = "extra == 'testing'", specifier = ">=1.0" },
     { name = "openai", marker = "extra == 'validation'", specifier = ">=1.0" },
+    { name = "openai-agents", specifier = ">=0.12.2" },
     { name = "openai-agents", marker = "extra == 'validation'", specifier = ">=0.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21" },
@@ -264,6 +270,25 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/ee/67/531ea369ba64dcff5ec9c3402f9f51bf748cec26dde048a2f973a4eea7f5/annotated_types-0.7.0.tar.gz", hash = "sha256:aff07c09a53a08bc8cfccb9c85b05f1aa9a2a6f23728d790723543408344ce89", size = 16081, upload-time = "2024-05-20T21:33:25.928Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/78/b6/6307fbef88d9b5ee7421e68d78a9f162e0da4900bc5f5793f6d3d0e34fb8/annotated_types-0.7.0-py3-none-any.whl", hash = "sha256:1f02e8b43a8fbbc3f3e0d4f0f4bfc8131bcb4eebe8849b8e5c773f3a1c582a53", size = 13643, upload-time = "2024-05-20T21:33:24.1Z" },
+]
+
+[[package]]
+name = "anthropic"
+version = "0.91.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "distro" },
+    { name = "docstring-parser" },
+    { name = "httpx" },
+    { name = "jiter" },
+    { name = "pydantic" },
+    { name = "sniffio" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c7/b5/f39ae52ce035490217203581b9bfca8ca853c3a497961d0e5a2f091d0233/anthropic-0.91.0.tar.gz", hash = "sha256:a6afd894d55c26504e3d33909fb3f174d0db7d63369bfe9bb387da3e2806076a", size = 599272, upload-time = "2026-04-07T18:41:17.202Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ea/1e/7f06da237fde2d7f760a1b61a554c0e780dffe1d264e5aacd0287a7a142b/anthropic-0.91.0-py3-none-any.whl", hash = "sha256:b8672878642774198aa6272f40eb526b9ca11c2a72d4a935d867d445c7371f68", size = 481829, upload-time = "2026-04-07T18:41:15.326Z" },
 ]
 
 [[package]]
@@ -554,7 +579,7 @@ wheels = [
 
 [[package]]
 name = "conductor-python"
-version = "1.3.6"
+version = "1.3.11"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "astor" },
@@ -570,9 +595,9 @@ dependencies = [
     { name = "six" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8a/45/e8dad9f5171d180090809015ab0d3cbd4c111a7200845bcf5680b3ddd9d8/conductor_python-1.3.6.tar.gz", hash = "sha256:67bb3621ba2513751f7a918661f32be6e10d428e064c117d5bd1722c7bbafd99", size = 241986, upload-time = "2026-03-17T16:16:39.908Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/82/f5/cea2d12c2a18a872d33e95e352d8db7f34906b74bb5d9fd516b035e25c86/conductor_python-1.3.11.tar.gz", hash = "sha256:3e1b92206680f0ea2eb04067d01581c11fa58766be2b434c1143ca52138e33a0", size = 253409, upload-time = "2026-04-21T02:37:30.836Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/64/62/353ce370b910acbc40434acf2ff95333cb21df3054787053025b4aa07c32/conductor_python-1.3.6-py3-none-any.whl", hash = "sha256:e6a238a1448c3a0284a27226182babafe3c155f2d4107997795cb538b6a1a2dd", size = 391810, upload-time = "2026-03-17T16:16:41.146Z" },
+    { url = "https://files.pythonhosted.org/packages/52/fc/36221040700169da342d800f5922b9689c862a0b6a6b819c3cd38fa66047/conductor_python-1.3.11-py3-none-any.whl", hash = "sha256:c22dfe2fddf5aeec6d285ca6cd5960967f9376bb16dcb70062327cffa3ea9b87", size = 404572, upload-time = "2026-04-21T02:37:32.316Z" },
 ]
 
 [[package]]

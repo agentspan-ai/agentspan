@@ -7,6 +7,8 @@ package dev.agentspan.runtime.service;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -32,7 +34,9 @@ import com.netflix.conductor.common.run.WorkflowSummary;
 import com.netflix.conductor.core.exception.NotFoundException;
 import com.netflix.conductor.core.execution.StartWorkflowInput;
 import com.netflix.conductor.core.execution.WorkflowExecutor;
+import com.netflix.conductor.dao.ExecutionDAO;
 import com.netflix.conductor.dao.MetadataDAO;
+import com.netflix.conductor.model.WorkflowModel;
 import com.netflix.conductor.service.ExecutionService;
 import com.netflix.conductor.service.WorkflowService;
 
@@ -56,6 +60,7 @@ public class AgentService {
 
     private final AgentCompiler agentCompiler;
     private final NormalizerRegistry normalizerRegistry;
+    private final ExecutionDAO executionDAO;
     private final MetadataDAO metadataDAO;
     private final WorkflowExecutor workflowExecutor;
     private final WorkflowService workflowService;
@@ -70,6 +75,7 @@ public class AgentService {
     AgentService(
             AgentCompiler agentCompiler,
             NormalizerRegistry normalizerRegistry,
+            ExecutionDAO executionDAO,
             MetadataDAO metadataDAO,
             WorkflowExecutor workflowExecutor,
             WorkflowService workflowService,
@@ -79,6 +85,7 @@ public class AgentService {
             ExecutionTokenService executionTokenService) {
         this.agentCompiler = agentCompiler;
         this.normalizerRegistry = normalizerRegistry;
+        this.executionDAO = executionDAO;
         this.metadataDAO = metadataDAO;
         this.workflowExecutor = workflowExecutor;
         this.workflowService = workflowService;
@@ -252,6 +259,29 @@ public class AgentService {
         Set<String> startWorkerNames = collectSimpleTaskNames(def);
         collectDynamicTransferNames(config, startWorkerNames);
         List<String> requiredWorkers = new ArrayList<>(startWorkerNames);
+
+        // Domain-based task routing for stateful agents.
+        // Route only Python worker tasks to the run-specific domain.
+        // We cannot use "*" because that would also route system tasks like
+        // LLM_CHAT_COMPLETE to the domain, where no worker polls them.
+        // startWorkerNames has static SIMPLE tasks; we also add worker tool
+        // names from the config since they are dispatched dynamically via
+        // FORK_JOIN_DYNAMIC and are absent from the compiled WorkflowDef.
+        if (request.getRunId() != null && !request.getRunId().isEmpty()) {
+            Map<String, String> taskToDomain = new HashMap<>();
+            for (String taskName : startWorkerNames) {
+                taskToDomain.put(taskName, request.getRunId());
+            }
+            collectWorkerToolNames(config, taskToDomain, request.getRunId());
+            if (!taskToDomain.isEmpty()) {
+                startReq.setTaskToDomain(taskToDomain);
+                log.info(
+                        "Stateful agent '{}': routing {} worker task(s) to domain '{}'",
+                        config.getName(),
+                        taskToDomain.size(),
+                        request.getRunId());
+            }
+        }
 
         // Idempotency: use the key as correlationId and check for existing executions
         if (request.getIdempotencyKey() != null && !request.getIdempotencyKey().isEmpty()) {
@@ -445,6 +475,102 @@ public class AgentService {
     /** Cancel a running agent execution. */
     public void cancelAgent(String executionId, String reason) {
         workflowService.terminateWorkflow(executionId, reason != null ? reason : "Cancelled by user");
+    }
+
+    /**
+     * Permanently delete an execution record from the database.
+     *
+     * <p>Wraps Conductor's {@code ExecutionService.removeWorkflow} to hard-delete
+     * completed execution records.  Running executions should be terminated first.
+     *
+     * @param executionId  the execution to remove
+     * @param archiveTasks if true, archive task records instead of deleting them
+     */
+    public void deleteExecutionRecord(String executionId, boolean archiveTasks) {
+        executionService.removeWorkflow(executionId, archiveTasks);
+    }
+
+    /**
+     * Bulk-delete completed execution records older than {@code olderThanDays} days.
+     *
+     * <p>Searches for COMPLETED, FAILED, TERMINATED, and TIMED_OUT executions whose
+     * end time is before the cutoff, then removes them from the DB in batches.
+     *
+     * @param olderThanDays minimum age in days for executions to be pruned
+     * @param archiveTasks  if true, archive task records instead of deleting
+     * @return number of executions deleted
+     */
+    public int pruneExecutions(int olderThanDays, boolean archiveTasks) {
+        long cutoffEpochMs = Instant.now().minus(olderThanDays, ChronoUnit.DAYS).toEpochMilli();
+        String[] terminalStatuses = {"COMPLETED", "FAILED", "TERMINATED", "TIMED_OUT"};
+
+        List<String> workflowNames =
+                listAgents().stream().map(AgentSummary::getName).collect(Collectors.toList());
+        if (workflowNames.isEmpty()) {
+            return 0;
+        }
+
+        String nameList = workflowNames.stream().map(n -> "'" + n + "'").collect(Collectors.joining(","));
+        int deleted = 0;
+        int batchSize = 100;
+
+        for (String status : terminalStatuses) {
+            String query =
+                    "workflowType IN (" + nameList + ") AND status = '" + status + "' AND endTime < " + cutoffEpochMs;
+            int start = 0;
+            while (true) {
+                SearchResult<WorkflowSummary> page =
+                        workflowService.searchWorkflows(start, batchSize, "endTime:ASC", "*", query);
+                List<WorkflowSummary> results = page.getResults();
+                if (results == null || results.isEmpty()) {
+                    break;
+                }
+                for (WorkflowSummary ws : results) {
+                    try {
+                        executionService.removeWorkflow(ws.getWorkflowId(), archiveTasks);
+                        deleted++;
+                    } catch (Exception e) {
+                        log.warn("Could not delete execution {}: {}", ws.getWorkflowId(), e.getMessage());
+                    }
+                }
+                if (results.size() < batchSize) {
+                    break;
+                }
+                // After deletion, restart from 0 since the result set shifts
+            }
+        }
+        return deleted;
+    }
+
+    /**
+     * Gracefully stop an agent execution by setting the _stop_requested flag.
+     *
+     * <p>The loop exits after the current iteration completes and the workflow
+     * reaches COMPLETED status with the last LLM output as the result.
+     * Also sends a WMQ message to unblock agents waiting on
+     * PULL_WORKFLOW_MESSAGES.</p>
+     */
+    public void stopAgent(String executionId) {
+        // Set the stop flag — the DoWhile loop condition checks this variable.
+        // Get the workflow model, update its variables map, and persist.
+        WorkflowModel workflow = executionDAO.getWorkflow(executionId, false);
+        workflow.getVariables().put("_stop_requested", true);
+        executionDAO.updateWorkflow(workflow);
+        // Note: the SDK also sends a WMQ unblock message via the Conductor client
+        // to wake agents blocked on PULL_WORKFLOW_MESSAGES.
+    }
+
+    /**
+     * Inject a persistent signal into a running agent's context.
+     *
+     * <p>Sets the {@code _signal_injection} workflow variable. The context
+     * injection script reads this on each iteration and prepends it to the
+     * LLM's user message as {@code [SIGNALS]...[/SIGNALS]}.</p>
+     */
+    public void signalAgent(String executionId, String message) {
+        WorkflowModel workflow = executionDAO.getWorkflow(executionId, false);
+        workflow.getVariables().put("_signal_injection", message != null ? message : "");
+        executionDAO.updateWorkflow(workflow);
     }
 
     /**
@@ -666,7 +792,8 @@ public class AgentService {
         // Register dispatch task for this agent's tools
         if (config.getTools() != null) {
             for (ToolConfig tool : config.getTools()) {
-                if ("worker".equals(tool.getToolType()) && !registered.contains(tool.getName())) {
+                String tt = tool.getToolType();
+                if ("worker".equals(tt) && !registered.contains(tool.getName())) {
                     registerTaskDef(tool.getName());
                     registered.add(tool.getName());
                 }
@@ -1017,9 +1144,10 @@ public class AgentService {
             result.put("reasonForIncompletion", reason);
         }
 
-        // Find pending HUMAN task
+        // Find pending HUMAN or PULL_WORKFLOW_MESSAGES task
         for (Task task : workflow.getTasks()) {
-            if ("HUMAN".equals(task.getTaskType()) && task.getStatus() == Task.Status.IN_PROGRESS) {
+            if (("HUMAN".equals(task.getTaskType()) || "PULL_WORKFLOW_MESSAGES".equals(task.getTaskType()))
+                    && task.getStatus() == Task.Status.IN_PROGRESS) {
                 Map<String, Object> pendingTool = new LinkedHashMap<>();
                 pendingTool.put("taskRefName", task.getReferenceTaskName());
                 if (task.getInputData() != null) {
@@ -1171,6 +1299,27 @@ public class AgentService {
         if (config.getAgents() != null) {
             for (AgentConfig sub : config.getAgents()) {
                 collectDynamicTransferNames(sub, names);
+            }
+        }
+    }
+
+    /**
+     * Collect worker tool task names from the agent config for domain routing.
+     * Worker tools (@tool functions with type "worker" or "cli") are dispatched
+     * dynamically via FORK_JOIN_DYNAMIC and must be explicitly added to taskToDomain.
+     */
+    private void collectWorkerToolNames(AgentConfig config, Map<String, String> taskToDomain, String domain) {
+        if (config == null) return;
+        if (config.getTools() != null) {
+            for (ToolConfig tool : config.getTools()) {
+                if (tool.isStateful()) {
+                    taskToDomain.put(tool.getName(), domain);
+                }
+            }
+        }
+        if (config.getAgents() != null) {
+            for (AgentConfig sub : config.getAgents()) {
+                collectWorkerToolNames(sub, taskToDomain, domain);
             }
         }
     }

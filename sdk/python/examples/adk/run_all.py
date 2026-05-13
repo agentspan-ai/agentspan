@@ -2169,7 +2169,7 @@ def print_report(results: List[ExampleResult]) -> None:
 
             _console.print(f"\n  [{kind_style}]{kind}[/{kind_style}]  [bold]{label}[/bold]")
 
-            # Workflow ID(s)
+            # Execution ID(s)
             wf = r.execution_id or "—"
             _console.print(f"    [dim]workflow:[/dim]  {wf}")
 
@@ -2336,7 +2336,7 @@ def _make_display(states: List[_RunState], total: int) -> Group:
     table.add_column("Example", min_width=30)
     table.add_column("Status", width=12)
     table.add_column("WF Status", width=11)
-    table.add_column("Workflow ID", min_width=36)
+    table.add_column("Execution ID", min_width=36)
     table.add_column("Time", width=7, justify="right")
 
     for s in states:

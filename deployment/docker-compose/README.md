@@ -18,7 +18,9 @@ docker compose version
 ```bash
 cd deployment/docker-compose
 cp .env.example .env
-# set at least one provider key in .env (for example OPENAI_API_KEY)
+# Generate and set the encryption master key
+# openssl rand -base64 32
+# Set at least one provider key in .env (for example OPENAI_API_KEY)
 docker compose up -d
 ```
 

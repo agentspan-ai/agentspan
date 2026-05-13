@@ -75,6 +75,30 @@ def serialize_langgraph(graph: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
     """
     name = getattr(graph, "name", None) or _DEFAULT_NAME
 
+    # Graphs with checkpointers (MemorySaver, etc.) require the full LangGraph
+    # runtime for session state persistence across turns. Extracting the graph
+    # structure strips the checkpointer, breaking memory. Force passthrough.
+    if getattr(graph, "checkpointer", None) is not None:
+        logger.info(
+            "LangGraph '%s': has checkpointer — using passthrough to "
+            "preserve session state management",
+            name,
+        )
+        raw_config: Dict[str, Any] = {"name": name, "_worker_name": name}
+        worker = WorkerInfo(
+            name=name,
+            description=f"LangGraph passthrough worker for {name}",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "prompt": {"type": "string"},
+                    "session_id": {"type": "string"},
+                },
+            },
+            func=None,
+        )
+        return raw_config, [worker]
+
     # Try full extraction: find model and tools in the compiled graph
     model_str = _find_model_in_graph(graph)
     tool_objs = _find_tools_in_graph(graph)
@@ -417,6 +441,32 @@ def _serialize_graph_structure(
                 break
     except Exception:
         pass
+
+    # Fallback: if input_key not found (e.g. StateGraph(dict) with no typed schema),
+    # scan the first node's function source for state access patterns like
+    # state.get("key") or state["key"]. Use the first key found.
+    if "input_key" not in raw_config.get("_graph", {}):
+        _detect_input_key_from_nodes(raw_config, node_funcs)
+
+    # TODO(server): Messages-based graph states (input_key="messages" or
+    # state schema has a "messages" field) need the server to inject the user
+    # prompt as [{"role": "user", "content": prompt}] — not as a plain string.
+    # Until the server supports _input_is_messages, these graphs will fail
+    # with "No non-empty user prompt" because the LLM prep task receives
+    # empty messages. See examples 27 (persistent_memory) and 28 (streaming_tokens).
+    #
+    # Signal to the server that the input field is a messages list:
+    detected_key = raw_config.get("_graph", {}).get("input_key")
+    has_messages = False
+    try:
+        schema = graph.get_input_jsonschema()
+        has_messages = "messages" in schema.get("properties", {})
+    except Exception:
+        pass
+    if detected_key == "messages":
+        has_messages = True
+    if has_messages:
+        raw_config["_graph"]["_input_is_messages"] = True
 
     # Extract state reducer annotations from graph channels
     # (e.g. Annotated[list, operator.add] → {"field": "add"})
@@ -1496,12 +1546,69 @@ def make_langgraph_worker(
     return tool_worker
 
 
+def _detect_input_key_from_nodes(
+    raw_config: Dict[str, Any], node_funcs: Dict[str, Any]
+) -> None:
+    """Detect input_key by scanning node function source for state access patterns.
+
+    Fallback for StateGraph(dict) where get_input_jsonschema() returns no
+    typed properties. Scans the first node's source for patterns like:
+      state.get("key", ...)
+      state["key"]
+    Sets raw_config["_graph"]["input_key"] if a key is found.
+    """
+    import ast
+    import inspect
+    import textwrap
+
+    for func in node_funcs.values():
+        try:
+            src = textwrap.dedent(inspect.getsource(func))
+            tree = ast.parse(src)
+        except Exception:
+            continue
+
+        for node in ast.walk(tree):
+            # state.get("key", ...)
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "get"
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+            ):
+                raw_config.setdefault("_graph", {})["input_key"] = node.args[0].value
+                return
+            # state["key"]
+            if (
+                isinstance(node, ast.Subscript)
+                and isinstance(node.slice, ast.Constant)
+                and isinstance(node.slice.value, str)
+            ):
+                raw_config.setdefault("_graph", {})["input_key"] = node.slice.value
+                return
+
+
 def _build_input(graph: Any, prompt: str) -> Dict[str, Any]:
     """Auto-detect input format from graph's JSON schema."""
     try:
         schema = graph.get_input_jsonschema()
         props = schema.get("properties", {})
         if "messages" in props:
+            # Detect if the messages field expects plain dicts or LangChain messages.
+            # Plain dict: items.type == "object" with no $ref or anyOf
+            # LangChain: items has anyOf/allOf/$ref pointing to message classes
+            msg_schema = props.get("messages", {})
+            items = msg_schema.get("items", {})
+            is_plain_dict = (
+                items.get("type") == "object"
+                and "anyOf" not in items
+                and "allOf" not in items
+                and "$ref" not in items
+            )
+            if is_plain_dict:
+                return {"messages": [{"role": "user", "content": prompt}]}
             from langchain_core.messages import HumanMessage
 
             return {"messages": [HumanMessage(content=prompt)]}
@@ -1589,12 +1696,13 @@ def _extract_output(final_state: Optional[Dict[str, Any]]) -> str:
     if final_state is None:
         return ""
     messages = final_state.get("messages", [])
-    # Walk in reverse to find the last AIMessage with content and no tool calls
+    # Walk in reverse to find the last AI/assistant message with content
     for msg in reversed(messages):
         msg_type = getattr(msg, "type", None) or (
             msg.get("type") if isinstance(msg, dict) else None
         )
-        if msg_type == "ai":
+        msg_role = msg.get("role") if isinstance(msg, dict) else None
+        if msg_type == "ai" or msg_role == "assistant":
             content = getattr(msg, "content", "") or (
                 msg.get("content", "") if isinstance(msg, dict) else ""
             )

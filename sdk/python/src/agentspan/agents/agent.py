@@ -359,7 +359,11 @@ class Agent:
         thinking_budget_tokens: Optional[int] = None,
         required_tools: Optional[List[str]] = None,
         gate: Optional[Any] = None,
+        base_url: Optional[str] = None,
         credentials: Optional[List[Any]] = None,
+        stateful: bool = False,
+        synthesize: bool = True,
+        masked_fields: Optional[List[str]] = None,
     ) -> None:
         if not name or not isinstance(name, str):
             raise ValueError("Agent name must be a non-empty string")
@@ -389,6 +393,7 @@ class Agent:
         else:
             self.model = model
 
+        self.base_url = base_url
         self.instructions = instructions
         self.tools: List[Any] = list(tools) if tools else []
 
@@ -433,6 +438,8 @@ class Agent:
         )
         self.introduction = introduction
         self.metadata: Dict[str, Any] = dict(metadata) if metadata else {}
+        self.stateful = stateful
+        self.synthesize = synthesize
         self.planner = planner
         self.callbacks: List[Any] = list(callbacks) if callbacks else []
         self.before_agent_callback = before_agent_callback
@@ -495,6 +502,9 @@ class Agent:
             self.credentials: List[Any] = list(credentials)
         else:
             self.credentials = []
+
+        # Fields whose values are redacted in execution history and UI.
+        self.masked_fields: List[str] = list(masked_fields) if masked_fields else []
 
         # Propagate agent-level credentials to CLI/code tools so the
         # dispatch layer can resolve them per-tool (the dispatch only

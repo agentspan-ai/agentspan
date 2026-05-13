@@ -14,7 +14,7 @@ export interface MemoryEntry {
  * Interface for pluggable memory storage backends.
  */
 export interface MemoryStore {
-  add(entry: Omit<MemoryEntry, 'id'> & { id?: string }): string;
+  add(entry: Omit<MemoryEntry, "id"> & { id?: string }): string;
   search(query: string, topK: number): MemoryEntry[];
   delete(id: string): void;
   clear(): void;
@@ -24,7 +24,7 @@ export interface MemoryStore {
 // ── Chat message type ───────────────────────────────────
 
 interface ChatMessage {
-  role: 'system' | 'user' | 'assistant' | 'tool';
+  role: "system" | "user" | "assistant" | "tool";
   content?: string;
   name?: string;
   args?: unknown;
@@ -48,23 +48,23 @@ export class ConversationMemory {
   }
 
   addUserMessage(content: string): void {
-    this.messages.push({ role: 'user', content });
+    this.messages.push({ role: "user", content });
   }
 
   addAssistantMessage(content: string): void {
-    this.messages.push({ role: 'assistant', content });
+    this.messages.push({ role: "assistant", content });
   }
 
   addSystemMessage(content: string): void {
-    this.messages.push({ role: 'system', content });
+    this.messages.push({ role: "system", content });
   }
 
   addToolCall(name: string, args: unknown): void {
-    this.messages.push({ role: 'tool', name, args });
+    this.messages.push({ role: "tool", name, args });
   }
 
   addToolResult(name: string, result: unknown): void {
-    this.messages.push({ role: 'tool', name, result });
+    this.messages.push({ role: "tool", name, result });
   }
 
   /**
@@ -81,7 +81,7 @@ export class ConversationMemory {
     const nonSystemMessages: ChatMessage[] = [];
 
     for (const msg of this.messages) {
-      if (msg.role === 'system') {
+      if (msg.role === "system") {
         systemMessages.push(msg);
       } else {
         nonSystemMessages.push(msg);
@@ -90,9 +90,7 @@ export class ConversationMemory {
 
     // How many non-system messages can we keep?
     const nonSystemSlots = Math.max(0, this.maxMessages - systemMessages.length);
-    const trimmedNonSystem = nonSystemSlots === 0
-      ? []
-      : nonSystemMessages.slice(-nonSystemSlots);
+    const trimmedNonSystem = nonSystemSlots === 0 ? [] : nonSystemMessages.slice(-nonSystemSlots);
 
     // Reconstruct in order: system messages first, then trimmed non-system
     // Actually, we need to preserve relative ordering. Rebuild from original order.
@@ -154,7 +152,7 @@ function overlapScore(queryTokens: Set<string>, contentTokens: Set<string>): num
 export class InMemoryStore implements MemoryStore {
   private entries: Map<string, MemoryEntry> = new Map();
 
-  add(entry: Omit<MemoryEntry, 'id'> & { id?: string }): string {
+  add(entry: Omit<MemoryEntry, "id"> & { id?: string }): string {
     const id = entry.id ?? generateId();
     const memoryEntry: MemoryEntry = {
       id,
@@ -275,11 +273,11 @@ export class SemanticMemory {
    */
   getContext(query: string): string {
     const memories = this.search(query);
-    if (memories.length === 0) return '';
-    const lines = ['Relevant context from memory:'];
+    if (memories.length === 0) return "";
+    const lines = ["Relevant context from memory:"];
     memories.forEach((mem, i) => {
       lines.push(`  ${i + 1}. ${mem}`);
     });
-    return lines.join('\n');
+    return lines.join("\n");
   }
 }

@@ -161,7 +161,6 @@ const graph = builder.compile({ name: "document_grader_agent" });
 
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',
-  tools: [],
   framework: 'langgraph',
 };
 

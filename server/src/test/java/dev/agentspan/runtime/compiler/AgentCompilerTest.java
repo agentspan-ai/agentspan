@@ -887,4 +887,71 @@ class AgentCompilerTest {
         assertThat(retryMeta.get("retryDelaySeconds")).isEqualTo(3);
         assertThat(retryMeta.get("backoffScaleFactor")).isEqualTo(3);
     }
+
+    // ── Hyphenated-name regression (GitHub issue: JS identifier with hyphens) ──
+
+    @Test
+    void toRef_replacesHyphensWithUnderscores() {
+        assertThat(AgentCompiler.toRef("prepare-information")).isEqualTo("prepare_information");
+        assertThat(AgentCompiler.toRef("my-agent-name")).isEqualTo("my_agent_name");
+        assertThat(AgentCompiler.toRef("plain_name")).isEqualTo("plain_name");
+        assertThat(AgentCompiler.toRef("has spaces")).isEqualTo("has_spaces");
+        assertThat(AgentCompiler.toRef("dot.separated")).isEqualTo("dot_separated");
+    }
+
+    @Test
+    void hyphenatedAgentName_loopConditionUsesValidJsIdentifier() {
+        // Regression: $.prepare-information_loop[...] is invalid JS — the hyphen is
+        // parsed as subtraction. The compiler must sanitize the name.
+        ToolConfig tool = ToolConfig.builder()
+                .name("search")
+                .description("Search the web")
+                .inputSchema(Map.of("type", "object"))
+                .toolType("worker")
+                .build();
+
+        AgentConfig config = AgentConfig.builder()
+                .name("prepare-information")
+                .model("openai/gpt-4o")
+                .instructions("Prepare information.")
+                .tools(List.of(tool))
+                .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        // The loop task ref must not contain a hyphen
+        WorkflowTask loop = wf.getTasks().get(2);
+        assertThat(loop.getType()).isEqualTo("DO_WHILE");
+        assertThat(loop.getTaskReferenceName()).isEqualTo("prepare_information_loop");
+        assertThat(loop.getTaskReferenceName()).doesNotContain("-");
+
+        // The loop condition must reference the sanitized name
+        String condition = loop.getLoopCondition();
+        assertThat(condition).contains("prepare_information_loop");
+        assertThat(condition).doesNotContain("prepare-information");
+
+        // All task reference names inside the loop must be valid JS identifiers
+        for (WorkflowTask task : loop.getLoopOver()) {
+            assertThat(task.getTaskReferenceName())
+                    .as("task ref '%s' must not contain hyphens", task.getTaskReferenceName())
+                    .doesNotContain("-");
+        }
+    }
+
+    @Test
+    void hyphenatedAgentName_allTopLevelRefsAreSanitized() {
+        AgentConfig config = AgentConfig.builder()
+                .name("my-agent")
+                .model("openai/gpt-4o")
+                .instructions("I am helpful.")
+                .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        for (WorkflowTask task : wf.getTasks()) {
+            assertThat(task.getTaskReferenceName())
+                    .as("top-level task ref must not contain hyphens")
+                    .doesNotContain("-");
+        }
+    }
 }

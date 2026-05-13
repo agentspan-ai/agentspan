@@ -59,6 +59,7 @@ class FinishReason(str, Enum):
     TIMEOUT = "timeout"  # Execution timed out
     GUARDRAIL = "guardrail"  # Blocked by guardrail
     REJECTED = "rejected"  # HITL tool was rejected
+    STOPPED = "stopped"  # Graceful stop via handle.stop()
 
 
 # ── TokenUsage ──────────────────────────────────────────────────────────
@@ -233,11 +234,16 @@ class AgentHandle:
     """
 
     def __init__(
-        self, execution_id: str, runtime: Any, correlation_id: Optional[str] = None
+        self,
+        execution_id: str,
+        runtime: Any,
+        correlation_id: Optional[str] = None,
+        run_id: Optional[str] = None,
     ) -> None:
         self.execution_id = execution_id
         self.correlation_id = correlation_id
         self._runtime = runtime
+        self.run_id = run_id  # domain UUID for stateful agents; None for stateless
 
     # ── Status ──────────────────────────────────────────────────────
 
@@ -270,12 +276,25 @@ class AgentHandle:
         self._runtime.pause(self.execution_id)
 
     def resume(self) -> None:
-        """Resume a paused agent workflow."""
-        self._runtime.resume(self.execution_id)
+        """Resume a paused agent execution."""
+        self._runtime._resume_workflow(self.execution_id)
 
     def cancel(self, reason: str = "") -> None:
         """Cancel the agent workflow."""
         self._runtime.cancel(self.execution_id, reason)
+
+    def stop(self) -> None:
+        """Gracefully stop the agent execution.
+
+        The loop exits after the current iteration completes.  The
+        execution reaches ``COMPLETED`` status with the last LLM output
+        preserved.  This is deterministic — it does not depend on the LLM
+        following stop instructions.
+
+        For immediate termination (``TERMINATED`` status), use
+        :meth:`cancel` instead.
+        """
+        self._runtime.stop(self.execution_id)
 
     # ── Streaming ────────────────────────────────────────────────────
 
@@ -320,17 +339,143 @@ class AgentHandle:
 
     async def resume_async(self) -> None:
         """Async version of :meth:`resume`."""
-        await self._runtime.resume_async(self.execution_id)
+        await self._runtime._resume_workflow_async(self.execution_id)
 
     async def cancel_async(self, reason: str = "") -> None:
         """Async version of :meth:`cancel`."""
         await self._runtime.cancel_async(self.execution_id, reason)
 
+    async def stop_async(self) -> None:
+        """Async version of :meth:`stop`."""
+        await self._runtime.stop_async(self.execution_id)
+
     def stream_async(self) -> "AsyncAgentStream":
         """Async streaming view. Returns an :class:`AsyncAgentStream`."""
         return AsyncAgentStream(handle=self, runtime=self._runtime)
 
+    # ── join() — block until terminal ────────────────────────────────
+
+    def join(self, timeout: Optional[float] = None) -> "AgentResult":
+        """Block until the agent execution reaches a terminal state.
+
+        Analogous to ``Thread.join()``.  Polls the server at 1-second
+        intervals until the execution is complete, then returns a full
+        :class:`AgentResult`.
+
+        Args:
+            timeout: Maximum time to wait in **seconds** (not milliseconds).
+                ``None`` means wait forever.
+
+        Returns:
+            An :class:`AgentResult` with output, status, finish_reason,
+            token_usage, and error populated.
+
+        Raises:
+            TimeoutError: If ``timeout`` is set and the agent execution has not
+                reached a terminal state before the deadline.
+
+        Warning:
+            The :class:`AgentRuntime` that created this handle **must remain
+            open** (i.e. its ``with`` block must still be active) while
+            ``join()`` runs.  Closing the runtime cancels Conductor workers,
+            which may stall the execution.
+
+        Example::
+
+            with AgentRuntime() as runtime:
+                handle = runtime.start(agent, "Hello")
+                result = handle.join(timeout=120)
+                print(result.output)
+        """
+        import time
+
+        poll_interval = 1
+        elapsed: float = 0.0
+
+        while True:
+            status = self._runtime.get_status(self.execution_id)
+            if status.is_complete:
+                break
+            if timeout is not None and elapsed >= timeout:
+                raise TimeoutError(
+                    f"Agent execution {self.execution_id!r} did not complete "
+                    f"within {timeout}s."
+                )
+            time.sleep(poll_interval)
+            elapsed += poll_interval
+
+        return self._build_result(status)
+
+    async def join_async(self, timeout: Optional[float] = None) -> "AgentResult":
+        """Async version of :meth:`join`.
+
+        Awaits until the agent execution reaches a terminal state.
+
+        Args:
+            timeout: Maximum time to wait in **seconds**.  ``None`` means
+                wait forever.
+
+        Returns:
+            An :class:`AgentResult`.
+
+        Raises:
+            TimeoutError: If ``timeout`` is set and the deadline is reached
+                before the agent execution completes.
+
+        Warning:
+            The :class:`AgentRuntime` must remain open while this coroutine
+            runs (same constraint as :meth:`join`).
+
+        Example::
+
+            async with AgentRuntime() as runtime:
+                handle = await runtime.start_async(agent, "Hello")
+                result = await handle.join_async(timeout=120)
+                print(result.output)
+        """
+        import asyncio
+
+        poll_interval = 1
+        elapsed: float = 0.0
+
+        while True:
+            status = await self._runtime.get_status_async(self.execution_id)
+            if status.is_complete:
+                break
+            if timeout is not None and elapsed >= timeout:
+                raise TimeoutError(
+                    f"Agent execution {self.execution_id!r} did not complete "
+                    f"within {timeout}s."
+                )
+            await asyncio.sleep(poll_interval)
+            elapsed += poll_interval
+
+        return self._build_result(status)
+
+    def _build_result(self, status: "AgentStatus") -> "AgentResult":
+        """Convert a terminal :class:`AgentStatus` into a full :class:`AgentResult`.
+
+        Reuses the same normalisation logic as :meth:`AgentRuntime.run`.
+        """
+        output = self._runtime._normalize_output(status.output, status.status, status.reason)
+        token_usage = self._runtime._extract_token_usage(self.execution_id)
+        return AgentResult(
+            output=output,
+            execution_id=self.execution_id,
+            correlation_id=self.correlation_id,
+            status=status.status,
+            finish_reason=self._runtime._derive_finish_reason(status.status, status.output),
+            error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
+            token_usage=token_usage,
+        )
+
     def __repr__(self) -> str:
+        """Return a developer-friendly string representation.
+
+        Key methods: ``get_status()``, ``join()``, ``join_async()``,
+        ``stream()``, ``respond()``, ``approve()``, ``reject()``,
+        ``pause()``, ``resume()``, ``cancel()``.
+        """
         return f"AgentHandle(execution_id={self.execution_id!r})"
 
 

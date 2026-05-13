@@ -36,7 +36,11 @@ public class ShutdownConfig {
                 .addShutdownHook(new Thread(
                         () -> {
                             logger.info("Shutdown signal received — completing SSE emitters");
-                            streamRegistry.completeAll();
+                            try {
+                                streamRegistry.completeAll();
+                            } catch (Exception e) {
+                                logger.warn("Exception completing SSE emitters during shutdown: {}", e.getMessage());
+                            }
 
                             // Conductor-core's WorkflowSweeper runs in a non-daemon thread with a
                             // tight pollAndSweep loop that ignores interruption. Spring's

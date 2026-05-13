@@ -41,4 +41,16 @@ public class StartRequest {
 
     /** Per-call timeout override (seconds). Applied server-side to the workflow definition. */
     private Integer timeoutSeconds;
+
+    /**
+     * Per-execution isolation key for stateful agents.
+     *
+     * <p>When set, the server maps every worker tool task to this domain via
+     * {@code taskToDomain} in the {@link StartWorkflowRequest}.  The Python SDK
+     * registers the corresponding workers under the same domain so that Conductor
+     * routes tasks exclusively to the workers that belong to this execution,
+     * preventing cross-instance reply mixing when multiple concurrent instances of
+     * the same agent script are running.
+     */
+    private String runId;
 }

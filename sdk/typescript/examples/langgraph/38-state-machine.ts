@@ -172,7 +172,6 @@ const graph = builder.compile({ name: "order_state_machine" });
 
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',
-  tools: [],
   framework: 'langgraph',
 };
 

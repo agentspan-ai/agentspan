@@ -1,0 +1,87 @@
+site_name: Agentspan Docs
+site_description: Documentation for building durable AI agents with Agentspan.
+site_url: https://agentspan.ai/docs/
+repo_url: https://github.com/agentspan-ai/agentspan
+repo_name: agentspan-ai/agentspan
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+site_dir: site
+strict: true
+
+theme:
+  name: material
+  features:
+    - navigation.instant
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - content.action.edit
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+not_in_nav: |
+  design/**
+  sdk-design/**
+  superpowers/**
+  python-sdk/**
+  typescript-sdk/**
+  langchain-integration.md
+  langgraph-integration.md
+  local-code-execution-design.md
+
+exclude_docs: |
+  /guardrails.md
+  design/**
+  sdk-design/**
+  superpowers/**
+  python-sdk/**
+  typescript-sdk/**
+  langchain-integration.md
+  langgraph-integration.md
+  local-code-execution-design.md
+
+nav:
+  - Overview: index.md
+  - Getting Started:
+      - Why Agentspan: why-agentspan.md
+      - Quickstart: quickstart.md
+  - Concepts:
+      - Agents: concepts/agents.md
+      - Tools: concepts/tools.md
+      - Multi-Agent Strategies: concepts/multi-agent.md
+      - Guardrails: concepts/guardrails.md
+      - Memory: concepts/memory.md
+      - Streaming: concepts/streaming.md
+      - Testing: concepts/testing.md
+  - Examples:
+      - Support Ticket Triage: examples/support-triage.md
+      - Research Pipeline: examples/research-pipeline.md
+      - Batch Document Processor: examples/document-processor.md
+      - Crash and Resume: examples/crash-resume.md
+      - Human in the Loop: examples/human-in-the-loop.md
+      - LangGraph Code Review Bot: examples/langgraph.md
+      - OpenAI Agents SDK Customer Support: examples/openai-agents-sdk.md
+      - Google ADK Research Assistant: examples/google-adk.md
+  - Reference:
+      - Providers: providers.md
+      - AI Models: ai-models.md
+      - CLI: cli.md
+      - Deployment: deployment.md
+      - Self-Hosting: self-hosting.md
+      - Integrations: integrations.md
+      - Worker Types: worker-types.md

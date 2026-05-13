@@ -1,5 +1,5 @@
-import { execSync } from 'child_process';
-import type { ToolDef } from './types.js';
+import { execSync } from "child_process";
+import type { ToolDef } from "./types.js";
 
 // ── Command Validator ───────────────────────────────────
 
@@ -28,18 +28,64 @@ export class CommandValidator {
   ];
 
   // Bash/shell patterns
-  private static readonly BASH_COMMAND_RE =
-    /(?:^|[|;&]\s*|`|\$\(\s*)(\w[\w.+-]*)/gm;
+  private static readonly BASH_COMMAND_RE = /(?:^|[|;&]\s*|`|\$\(\s*)(\w[\w.+-]*)/gm;
 
   private static readonly BASH_BUILTINS = new Set([
-    'if', 'then', 'else', 'elif', 'fi', 'for', 'while', 'do', 'done',
-    'case', 'esac', 'in', 'function', 'select', 'until',
-    'echo', 'printf', 'read', 'local', 'export', 'unset', 'set',
-    'shift', 'return', 'exit', 'true', 'false', 'test', '[', '[[',
-    'declare', 'typeset', 'readonly', 'source', '.', 'eval', 'exec',
-    'trap', 'wait', 'break', 'continue', 'cd', 'pushd', 'popd', 'pwd',
-    'dirs', 'hash', 'type', 'command', 'builtin', 'enable', 'let',
-    'shopt', 'complete', 'compgen',
+    "if",
+    "then",
+    "else",
+    "elif",
+    "fi",
+    "for",
+    "while",
+    "do",
+    "done",
+    "case",
+    "esac",
+    "in",
+    "function",
+    "select",
+    "until",
+    "echo",
+    "printf",
+    "read",
+    "local",
+    "export",
+    "unset",
+    "set",
+    "shift",
+    "return",
+    "exit",
+    "true",
+    "false",
+    "test",
+    "[",
+    "[[",
+    "declare",
+    "typeset",
+    "readonly",
+    "source",
+    ".",
+    "eval",
+    "exec",
+    "trap",
+    "wait",
+    "break",
+    "continue",
+    "cd",
+    "pushd",
+    "popd",
+    "pwd",
+    "dirs",
+    "hash",
+    "type",
+    "command",
+    "builtin",
+    "enable",
+    "let",
+    "shopt",
+    "complete",
+    "compgen",
   ]);
 
   // Heredoc delimiter pattern: << 'WORD' or << WORD or <<- WORD
@@ -60,9 +106,9 @@ export class CommandValidator {
       return null; // no restrictions
     }
 
-    if (language === 'python' || language === 'python3') {
+    if (language === "python" || language === "python3") {
       return this.validatePython(code);
-    } else if (language === 'bash' || language === 'sh') {
+    } else if (language === "bash" || language === "sh") {
       return this.validateBash(code);
     }
     // For other languages, skip command validation
@@ -77,12 +123,12 @@ export class CommandValidator {
       while ((match = re.exec(code)) !== null) {
         const raw = match[1];
         // Handle /usr/bin/cmd -> cmd
-        const parts = raw.split('/');
+        const parts = raw.split("/");
         const cmd = parts[parts.length - 1];
         if (!this.allowedCommands.has(cmd)) {
           return (
             `Command '${cmd}' is not allowed. ` +
-            `Allowed commands: ${[...this.allowedCommands].sort().join(', ')}`
+            `Allowed commands: ${[...this.allowedCommands].sort().join(", ")}`
           );
         }
       }
@@ -104,19 +150,19 @@ export class CommandValidator {
 
     // Strip comments
     const lines: string[] = [];
-    for (let line of code.split('\n')) {
+    for (let line of code.split("\n")) {
       const stripped = line.trimStart();
-      if (stripped.startsWith('#')) {
+      if (stripped.startsWith("#")) {
         continue;
       }
       // Remove inline comments (naive — doesn't handle quoted #)
-      const commentIdx = line.indexOf(' #');
+      const commentIdx = line.indexOf(" #");
       if (commentIdx >= 0) {
         line = line.substring(0, commentIdx);
       }
       lines.push(line);
     }
-    const cleaned = lines.join('\n');
+    const cleaned = lines.join("\n");
 
     const cmdRe = new RegExp(
       CommandValidator.BASH_COMMAND_RE.source,
@@ -134,7 +180,7 @@ export class CommandValidator {
       if (!this.allowedCommands.has(cmd)) {
         return (
           `Command '${cmd}' is not allowed. ` +
-          `Allowed commands: ${[...this.allowedCommands].sort().join(', ')}`
+          `Allowed commands: ${[...this.allowedCommands].sort().join(", ")}`
         );
       }
     }
@@ -195,26 +241,24 @@ export abstract class CodeExecutor {
    *   agents define code execution tools with different configs.
    */
   asTool(name?: string, agentName?: string): ToolDef {
-    const baseName = name ?? 'execute_code';
+    const baseName = name ?? "execute_code";
     const toolName = agentName ? `${agentName}_${baseName}` : baseName;
-    const executor = this;
-
     return {
       name: toolName,
-      description: 'Execute code and return the result',
+      description: "Execute code and return the result",
       inputSchema: {
-        type: 'object',
+        type: "object",
         properties: {
-          code: { type: 'string', description: 'The code to execute' },
-          language: { type: 'string', description: 'Programming language' },
+          code: { type: "string", description: "The code to execute" },
+          language: { type: "string", description: "Programming language" },
         },
-        required: ['code'],
+        required: ["code"],
       },
-      toolType: 'worker',
+      toolType: "worker",
       func: async (args: Record<string, unknown>) => {
         const code = args.code as string;
         const language = args.language as string | undefined;
-        return executor.execute(code, language);
+        return this.execute(code, language);
       },
     };
   }
@@ -234,21 +278,21 @@ export class LocalCodeExecutor extends CodeExecutor {
   }
 
   execute(code: string, language?: string): ExecutionResult {
-    const lang = language ?? 'javascript';
+    const lang = language ?? "javascript";
     let command: string;
 
     switch (lang) {
-      case 'python':
-      case 'python3':
+      case "python":
+      case "python3":
         command = `python3 -c ${JSON.stringify(code)}`;
         break;
-      case 'javascript':
-      case 'js':
-      case 'node':
+      case "javascript":
+      case "js":
+      case "node":
         command = `node -e ${JSON.stringify(code)}`;
         break;
-      case 'bash':
-      case 'sh':
+      case "bash":
+      case "sh":
         command = `bash -c ${JSON.stringify(code)}`;
         break;
       default:
@@ -259,13 +303,13 @@ export class LocalCodeExecutor extends CodeExecutor {
     try {
       const output = execSync(command, {
         timeout: this.timeout,
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
       });
 
       return createExecutionResult({
         output: output.trim(),
-        error: '',
+        error: "",
         exitCode: 0,
         timedOut: false,
       });
@@ -278,11 +322,11 @@ export class LocalCodeExecutor extends CodeExecutor {
         signal?: string;
       };
 
-      const timedOut = execErr.killed === true || execErr.signal === 'SIGTERM';
+      const timedOut = execErr.killed === true || execErr.signal === "SIGTERM";
 
       return createExecutionResult({
-        output: typeof execErr.stdout === 'string' ? execErr.stdout.trim() : '',
-        error: typeof execErr.stderr === 'string' ? execErr.stderr.trim() : String(err),
+        output: typeof execErr.stdout === "string" ? execErr.stdout.trim() : "",
+        error: typeof execErr.stderr === "string" ? execErr.stderr.trim() : String(err),
         exitCode: execErr.status ?? 1,
         timedOut,
       });
@@ -308,17 +352,17 @@ export class DockerCodeExecutor extends CodeExecutor {
   }
 
   execute(code: string, language?: string): ExecutionResult {
-    const lang = language ?? 'python';
+    const lang = language ?? "python";
     let runCmd: string;
 
     switch (lang) {
-      case 'python':
-      case 'python3':
+      case "python":
+      case "python3":
         runCmd = `python3 -c ${JSON.stringify(code)}`;
         break;
-      case 'javascript':
-      case 'js':
-      case 'node':
+      case "javascript":
+      case "js":
+      case "node":
         runCmd = `node -e ${JSON.stringify(code)}`;
         break;
       default:
@@ -326,19 +370,19 @@ export class DockerCodeExecutor extends CodeExecutor {
         break;
     }
 
-    const memFlag = this.memoryLimit ? ` --memory=${this.memoryLimit}` : '';
+    const memFlag = this.memoryLimit ? ` --memory=${this.memoryLimit}` : "";
     const command = `docker run --rm${memFlag} ${this.image} ${runCmd}`;
 
     try {
       const output = execSync(command, {
         timeout: this.timeout,
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
       });
 
       return createExecutionResult({
         output: output.trim(),
-        error: '',
+        error: "",
         exitCode: 0,
         timedOut: false,
       });
@@ -351,11 +395,11 @@ export class DockerCodeExecutor extends CodeExecutor {
         signal?: string;
       };
 
-      const timedOut = execErr.killed === true || execErr.signal === 'SIGTERM';
+      const timedOut = execErr.killed === true || execErr.signal === "SIGTERM";
 
       return createExecutionResult({
-        output: typeof execErr.stdout === 'string' ? execErr.stdout.trim() : '',
-        error: typeof execErr.stderr === 'string' ? execErr.stderr.trim() : String(err),
+        output: typeof execErr.stdout === "string" ? execErr.stdout.trim() : "",
+        error: typeof execErr.stderr === "string" ? execErr.stderr.trim() : String(err),
         exitCode: execErr.status ?? 1,
         timedOut,
       });
@@ -375,14 +419,14 @@ export class JupyterCodeExecutor extends CodeExecutor {
 
   constructor(options?: { kernelName?: string; timeout?: number }) {
     super();
-    this.kernelName = options?.kernelName ?? 'python3';
+    this.kernelName = options?.kernelName ?? "python3";
     this.timeout = options?.timeout ?? 30;
   }
 
   execute(_code: string, _language?: string): ExecutionResult {
     return createExecutionResult({
-      output: '',
-      error: 'JupyterCodeExecutor requires a running Jupyter runtime. Not yet implemented.',
+      output: "",
+      error: "JupyterCodeExecutor requires a running Jupyter runtime. Not yet implemented.",
       exitCode: 1,
       timedOut: false,
     });
@@ -399,11 +443,7 @@ export class ServerlessCodeExecutor extends CodeExecutor {
   readonly timeout: number;
   readonly headers: Record<string, string>;
 
-  constructor(options: {
-    endpoint: string;
-    timeout?: number;
-    headers?: Record<string, string>;
-  }) {
+  constructor(options: { endpoint: string; timeout?: number; headers?: Record<string, string> }) {
     super();
     this.endpoint = options.endpoint;
     this.timeout = options.timeout ?? 30;
@@ -412,18 +452,18 @@ export class ServerlessCodeExecutor extends CodeExecutor {
 
   execute(code: string, language?: string): ExecutionResult {
     // Build a synchronous HTTP call via child_process for the sync interface
-    const payload = JSON.stringify({ code, language: language ?? 'python' });
+    const payload = JSON.stringify({ code, language: language ?? "python" });
     const headerArgs = Object.entries(this.headers)
       .map(([k, v]) => `-H ${JSON.stringify(`${k}: ${v}`)}`)
-      .join(' ');
+      .join(" ");
 
     const command = `curl -s -X POST ${headerArgs} -H "Content-Type: application/json" -d ${JSON.stringify(payload)} --max-time ${this.timeout} ${JSON.stringify(this.endpoint)}`;
 
     try {
       const output = execSync(command, {
         timeout: this.timeout * 1000,
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
       });
 
       // Attempt to parse as JSON response
@@ -431,15 +471,15 @@ export class ServerlessCodeExecutor extends CodeExecutor {
         const parsed = JSON.parse(output) as Record<string, unknown>;
         return createExecutionResult({
           output: String(parsed.output ?? parsed.result ?? output),
-          error: String(parsed.error ?? ''),
-          exitCode: typeof parsed.exitCode === 'number' ? parsed.exitCode : 0,
+          error: String(parsed.error ?? ""),
+          exitCode: typeof parsed.exitCode === "number" ? parsed.exitCode : 0,
           timedOut: false,
         });
       } catch {
         // Plain text response
         return createExecutionResult({
           output: output.trim(),
-          error: '',
+          error: "",
           exitCode: 0,
           timedOut: false,
         });
@@ -453,11 +493,11 @@ export class ServerlessCodeExecutor extends CodeExecutor {
         signal?: string;
       };
 
-      const timedOut = execErr.killed === true || execErr.signal === 'SIGTERM';
+      const timedOut = execErr.killed === true || execErr.signal === "SIGTERM";
 
       return createExecutionResult({
-        output: typeof execErr.stdout === 'string' ? execErr.stdout.trim() : '',
-        error: typeof execErr.stderr === 'string' ? execErr.stderr.trim() : String(err),
+        output: typeof execErr.stdout === "string" ? execErr.stdout.trim() : "",
+        error: typeof execErr.stderr === "string" ? execErr.stderr.trim() : String(err),
         exitCode: execErr.status ?? 1,
         timedOut,
       });

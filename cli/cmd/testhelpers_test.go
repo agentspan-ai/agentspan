@@ -13,10 +13,7 @@ func newTempHome(t *testing.T) string {
 	t.Setenv("HOME", dir)
 	t.Setenv("AGENTSPAN_SERVER_URL", "")
 	t.Setenv("AGENT_SERVER_URL", "")
-	t.Setenv("AGENTSPAN_AUTH_KEY", "")
-	t.Setenv("CONDUCTOR_AUTH_KEY", "")
-	t.Setenv("AGENTSPAN_AUTH_SECRET", "")
-	t.Setenv("CONDUCTOR_AUTH_SECRET", "")
+	t.Setenv("AGENTSPAN_API_KEY", "")
 	return dir
 }
 

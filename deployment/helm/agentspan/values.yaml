@@ -112,6 +112,10 @@ secrets:
   existingSecret: ""
   create: true
 
+  # Master key for credential encryption (AES-256-GCM, base64-encoded 32 bytes)
+  # Generate with: openssl rand -base64 32
+  masterKey: ""
+
   postgresUser: agentspan
   postgresPassword: changeme
 

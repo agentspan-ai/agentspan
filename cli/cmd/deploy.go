@@ -253,8 +253,8 @@ func hasTSDependency(path string) bool {
 
 // packageInfo holds the inferred package/path and how to pass it to the subprocess.
 type packageInfo struct {
-	Value string // dotted module name or directory path
-	IsPath bool  // true = pass as --path; false = pass as --package
+	Value  string // dotted module name or directory path
+	IsPath bool   // true = pass as --path; false = pass as --package
 }
 
 // inferPackage determines the package/path to scan for agents.
@@ -395,12 +395,6 @@ func buildEnv(cfg *config.Config) []string {
 	filtered = append(filtered, "AGENTSPAN_AUTO_START_SERVER=false")
 	if cfg.APIKey != "" {
 		filtered = append(filtered, "AGENTSPAN_API_KEY="+cfg.APIKey)
-	}
-	if cfg.AuthKey != "" {
-		filtered = append(filtered, "AGENTSPAN_AUTH_KEY="+cfg.AuthKey)
-	}
-	if cfg.AuthSecret != "" {
-		filtered = append(filtered, "AGENTSPAN_AUTH_SECRET="+cfg.AuthSecret)
 	}
 	return filtered
 }

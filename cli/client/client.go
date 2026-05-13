@@ -20,8 +20,6 @@ import (
 type Client struct {
 	baseURL    string
 	httpClient *http.Client
-	authKey    string
-	authSecret string
 	apiKey     string
 }
 
@@ -29,8 +27,6 @@ func New(cfg *config.Config) *Client {
 	return &Client{
 		baseURL:    strings.TrimRight(cfg.ServerURL, "/"),
 		httpClient: &http.Client{Timeout: 30 * time.Second},
-		authKey:    cfg.AuthKey,
-		authSecret: cfg.AuthSecret,
 		apiKey:     cfg.APIKey,
 	}
 }
@@ -54,13 +50,6 @@ func (c *Client) doRequest(method, path string, body interface{}) (*http.Respons
 	}
 	if c.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	} else {
-		if c.authKey != "" {
-			req.Header.Set("X-Auth-Key", c.authKey)
-		}
-		if c.authSecret != "" {
-			req.Header.Set("X-Auth-Secret", c.authSecret)
-		}
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -361,8 +350,8 @@ func (c *Client) Stream(executionID string, lastEventID string, events chan<- SS
 		if lastEventID != "" {
 			req.Header.Set("Last-Event-ID", lastEventID)
 		}
-		if c.authKey != "" {
-			req.Header.Set("X-Auth-Key", c.authKey)
+		if c.apiKey != "" {
+			req.Header.Set("Authorization", "Bearer "+c.apiKey)
 		}
 
 		resp, err := streamClient.Do(req)
@@ -542,4 +531,33 @@ func (c *Client) SetBinding(logicalKey, storeName string) error {
 	}
 	resp.Body.Close()
 	return nil
+}
+
+// PruneExecutions deletes terminal execution records older than olderThanDays days.
+// Returns the number of records deleted.
+func (c *Client) PruneExecutions(olderThanDays int, archiveTasks bool) (int, error) {
+	params := url.Values{}
+	params.Set("olderThanDays", fmt.Sprintf("%d", olderThanDays))
+	if archiveTasks {
+		params.Set("archiveTasks", "true")
+	}
+	resp, err := c.doRequest("POST", "/api/agent/executions/prune?"+params.Encode(), nil)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return 0, fmt.Errorf("decode response: %w", err)
+	}
+	deleted := 0
+	if v, ok := result["deleted"]; ok {
+		switch n := v.(type) {
+		case float64:
+			deleted = int(n)
+		case int:
+			deleted = n
+		}
+	}
+	return deleted, nil
 }

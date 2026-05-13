@@ -47,4 +47,11 @@ public class ToolConfig {
 
     /** Tool-level guardrails. */
     private List<GuardrailConfig> guardrails;
+
+    /**
+     * When {@code true}, this tool's worker is registered under a per-execution
+     * domain so concurrent executions of the same agent cannot steal each other's
+     * task results.  Matches {@code @tool(stateful=True)} in the Python SDK.
+     */
+    private boolean stateful;
 }

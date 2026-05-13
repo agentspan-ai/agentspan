@@ -135,7 +135,7 @@ function formatTagName(tag) {
 }
 
 // Build output
-const serverUrl = spec.servers?.[0]?.url || 'http://localhost:8080';
+const serverUrl = spec.servers?.[0]?.url || 'http://localhost:6767';
 
 const categories = [];
 for (const [tag, endpoints] of tagMap.entries()) {

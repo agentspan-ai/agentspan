@@ -39,11 +39,9 @@ func TestIsLocalhost(t *testing.T) {
 
 func TestAPIKeyRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HOME", dir)
-	t.Setenv("AGENTSPAN_AUTH_KEY", "")
-	t.Setenv("CONDUCTOR_AUTH_KEY", "")
-	t.Setenv("AGENTSPAN_AUTH_SECRET", "")
-	t.Setenv("CONDUCTOR_AUTH_SECRET", "")
+	t.Setenv("HOME", dir)        // Unix
+	t.Setenv("USERPROFILE", dir) // Windows
+	t.Setenv("AGENTSPAN_API_KEY", "")
 
 	cfg := config.DefaultConfig()
 	cfg.APIKey = "test-jwt-token-abc123"
@@ -72,11 +70,9 @@ func TestAPIKeyRoundTrip(t *testing.T) {
 
 func TestAPIKeyClearedOnLogout(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HOME", dir)
-	t.Setenv("AGENTSPAN_AUTH_KEY", "")
-	t.Setenv("CONDUCTOR_AUTH_KEY", "")
-	t.Setenv("AGENTSPAN_AUTH_SECRET", "")
-	t.Setenv("CONDUCTOR_AUTH_SECRET", "")
+	t.Setenv("HOME", dir)        // Unix
+	t.Setenv("USERPROFILE", dir) // Windows
+	t.Setenv("AGENTSPAN_API_KEY", "")
 
 	cfg := config.DefaultConfig()
 	cfg.APIKey = "some-token"

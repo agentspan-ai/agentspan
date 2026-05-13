@@ -30,6 +30,9 @@ public class AgentConfig {
     private String description;
     private String model;
 
+    /** Custom base URL for the LLM provider (per-agent override). */
+    private String baseUrl;
+
     /**
      * Instructions can be a plain string or a PromptTemplateRef object.
      * When serialized from Python, callable instructions are resolved to strings.
@@ -102,7 +105,18 @@ public class AgentConfig {
     /** Agent-level credential names (e.g. ["GH_TOKEN", "AWS_ACCESS_KEY_ID"]). */
     private List<String> credentials;
 
+    /**
+     * Input/output field names whose values should be redacted in the execution
+     * history and UI.  Maps directly to Conductor's {@code WorkflowDef.maskedFields}.
+     */
+    private List<String> maskedFields;
+
     /** Whether this is an external agent (no model, references existing workflow). */
     @Builder.Default
     private boolean external = false;
+
+    /** Whether to append a final LLM synthesis step after specialist agents complete.
+     * Set to false to pass specialist output through unchanged. Default true. */
+    @Builder.Default
+    private boolean synthesize = true;
 }

@@ -1,0 +1,80 @@
+plugins {
+    id 'java-library'
+    id 'com.vanniktech.maven.publish' version '0.34.0'
+}
+
+group = 'ai.agentspan'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+ext {
+    springBootVersion = '3.3.5'
+}
+
+dependencies {
+    api project(':')
+
+    compileOnly "org.springframework.boot:spring-boot-autoconfigure:${springBootVersion}"
+    compileOnly "org.springframework.boot:spring-boot:${springBootVersion}"
+
+    annotationProcessor "org.springframework.boot:spring-boot-configuration-processor:${springBootVersion}"
+
+    testImplementation "org.springframework.boot:spring-boot-test:${springBootVersion}"
+    testImplementation "org.springframework.boot:spring-boot-autoconfigure:${springBootVersion}"
+    testImplementation "org.springframework:spring-test:6.1.14"
+    testImplementation "org.junit.jupiter:junit-jupiter:5.11.0"
+    testImplementation "org.assertj:assertj-core:3.26.3"
+    testRuntimeOnly "org.slf4j:slf4j-simple:2.0.13"
+}
+
+compileJava.options.compilerArgs << '-parameters'
+
+test {
+    useJUnitPlatform()
+}
+
+tasks.withType(Javadoc).configureEach {
+    options.addStringOption('Xdoclint:none', '-quiet')
+}
+
+mavenPublishing {
+    publishToMavenCentral(true)
+    if (project.findProperty('signingInMemoryKey') != null) {
+        signAllPublications()
+    }
+
+    coordinates('ai.agentspan', 'java-sdk-spring', project.version.toString())
+
+    pom {
+        name = 'Agentspan Java SDK Spring Boot Starter'
+        description = 'Spring Boot auto-configuration for the Agentspan Java SDK'
+        url = 'https://github.com/agentspan-ai/agentspan'
+        licenses {
+            license {
+                name = 'MIT License'
+                url = 'https://opensource.org/licenses/MIT'
+            }
+        }
+        developers {
+            developer {
+                organization = 'Agentspan'
+                organizationUrl = 'https://agentspan.ai'
+                name = 'Agentspan Development Team'
+                email = 'developers@orkes.io'
+            }
+        }
+        scm {
+            connection = 'scm:git:git://github.com/agentspan-ai/agentspan.git'
+            developerConnection = 'scm:git:ssh://github.com/agentspan-ai/agentspan.git'
+            url = 'https://github.com/agentspan-ai/agentspan'
+        }
+    }
+}

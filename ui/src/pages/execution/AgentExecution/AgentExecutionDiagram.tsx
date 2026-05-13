@@ -434,6 +434,28 @@ function NodeCard({ data, width, height, selected, onSelect, onDrillIn, onBack, 
             View execution <ArrowRight size={10} />
           </div>
         )}
+
+        {/* Retry attempt badge — shown when task was retried (totalAttempts > 1) */}
+        {(() => {
+          const attempts = data.event?.taskMeta?.totalAttempts;
+          if (!attempts || attempts <= 1) return null;
+          return (
+            <div style={{
+              position: "absolute", bottom: 6, right: 8,
+              display: "inline-flex", alignItems: "center", gap: 3,
+              padding: "2px 7px",
+              borderRadius: 4,
+              backgroundColor: "#fff7ed",
+              border: "1px solid #f59e0b",
+              fontSize: "0.66rem",
+              fontWeight: 600,
+              color: "#b45309",
+              lineHeight: 1,
+            }}>
+              <span style={{ fontSize: "0.72rem" }}>⟳</span> {attempts} attempts
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

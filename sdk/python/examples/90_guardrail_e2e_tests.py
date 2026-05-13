@@ -145,7 +145,7 @@ class TestRunner:
 
         # Matrix table
         print("\n  ╔════╤══════════════╤════════╤════════╤════════╤══════════════════════════════════════╗")
-        print("  ║ #  │ Position     │ Type   │ OnFail │ Result │ Workflow ID                          ║")
+        print("  ║ #  │ Position     │ Type   │ OnFail │ Result │ Execution ID                         ║")
         print("  ╠════╪══════════════╪════════╪════════╪════════╪══════════════════════════════════════╣")
 
         positions = ["Agent OUT"] * 9 + ["Tool INPUT"] * 9 + ["Tool OUTPUT"] * 9

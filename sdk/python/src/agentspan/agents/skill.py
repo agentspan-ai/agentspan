@@ -234,6 +234,13 @@ def skill(
             for section_name in skill_sections:
                 resource_files.append(f"skill_section:{section_name}")
 
+    # 5c. Inject runtime params into SKILL.md so the server's orchestrator
+    # sees them in the system prompt. This ensures params like "rounds: 1"
+    # are visible regardless of how the skill is invoked (standalone or agent_tool).
+    if merged_params:
+        param_block = format_skill_params(merged_params)
+        skill_md = skill_md + "\n\n" + param_block + "\n"
+
     # 6. Build raw config
     raw_config: Dict[str, Any] = {
         "model": str(model) if model else "",
@@ -247,6 +254,7 @@ def skill(
         "resourceFiles": resource_files,
         "crossSkillRefs": cross_refs,
         "defaultParams": default_params,
+        "params": merged_params,
     }
 
     # 7. Return Agent with framework marker

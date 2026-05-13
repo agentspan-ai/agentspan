@@ -97,7 +97,8 @@ public class ToolCompiler {
             Map.entry("generate_audio", "GENERATE_AUDIO"),
             Map.entry("generate_video", "GENERATE_VIDEO"),
             Map.entry("rag_index", "LLM_INDEX_TEXT"),
-            Map.entry("rag_search", "LLM_SEARCH_INDEX"));
+            Map.entry("rag_search", "LLM_SEARCH_INDEX"),
+            Map.entry("pull_workflow_messages", "PULL_WORKFLOW_MESSAGES"));
 
     // ── Public API ───────────────────────────────────────────────────────
 
@@ -208,6 +209,7 @@ public class ToolCompiler {
      */
     public ToolCallRoutingResult buildToolCallRoutingWithResult(
             String agentName, String llmRef, List<ToolConfig> tools, boolean hasApproval, String model) {
+        agentName = AgentCompiler.toRef(agentName);
         List<String> retryRefs = new ArrayList<>();
         List<String[]> guardrailRefs = new ArrayList<>();
 
@@ -255,6 +257,7 @@ public class ToolCompiler {
      * @return {@code Object[]{WorkflowTask enrichTask, String outputRef}}
      */
     public Object[] buildEnrichTask(String agentName, String llmRef, List<ToolConfig> tools, String prefix) {
+        agentName = AgentCompiler.toRef(agentName);
         String p = (prefix != null && !prefix.isEmpty()) ? prefix : "";
 
         // Build config maps from tool definitions at compile time
@@ -265,6 +268,7 @@ public class ToolCompiler {
         Map<String, Object> ragConfig = new LinkedHashMap<>();
         Map<String, Object> cliConfig = new LinkedHashMap<>();
         Map<String, Object> humanConfig = new LinkedHashMap<>();
+        Map<String, Object> wmqConfig = new LinkedHashMap<>();
 
         if (tools != null) {
             Set<String> serverSideTypes = Set.of(
@@ -278,7 +282,8 @@ public class ToolCompiler {
                     "generate_pdf",
                     "rag_index",
                     "rag_search",
-                    "human");
+                    "human",
+                    "pull_workflow_messages");
 
             for (ToolConfig tool : tools) {
                 String toolType = tool.getToolType() != null ? tool.getToolType() : "worker";
@@ -338,6 +343,10 @@ public class ToolCompiler {
                     humanEntry.put("displayName", agentName + " — " + tool.getName());
                     humanEntry.put("description", tool.getDescription());
                     humanConfig.put(tool.getName(), humanEntry);
+                } else if ("pull_workflow_messages".equals(toolType)) {
+                    Map<String, Object> wmqEntry = new LinkedHashMap<>();
+                    wmqEntry.put("batchSize", cfg.getOrDefault("batchSize", 1));
+                    wmqConfig.put(tool.getName(), wmqEntry);
                 }
             }
         }
@@ -349,9 +358,10 @@ public class ToolCompiler {
         String ragJson = JavaScriptBuilder.toJson(ragConfig);
         String cliJson = JavaScriptBuilder.toJson(cliConfig);
         String humanJson = JavaScriptBuilder.toJson(humanConfig);
+        String wmqJson = JavaScriptBuilder.toJson(wmqConfig);
 
         String script = JavaScriptBuilder.enrichToolsScript(
-                httpJson, mcpJson, mediaJson, agentToolJson, ragJson, cliJson, humanJson);
+                httpJson, mcpJson, mediaJson, agentToolJson, ragJson, cliJson, humanJson, wmqJson);
 
         String enrichRef = agentName + "_" + p + "enrich_tools";
 
@@ -387,6 +397,7 @@ public class ToolCompiler {
      * @return the configured FORK_JOIN_DYNAMIC WorkflowTask (with JOIN as a child)
      */
     public WorkflowTask buildDynamicFork(String agentName, String toolCallsRef, String prefix) {
+        agentName = AgentCompiler.toRef(agentName);
         String p = (prefix != null && !prefix.isEmpty()) ? prefix : "";
 
         // Fork task
@@ -488,6 +499,7 @@ public class ToolCompiler {
      */
     public Object[] buildToolFilter(
             String agentName, List<Map<String, Object>> toolSpecs, String provider, String model, int maxTools) {
+        agentName = AgentCompiler.toRef(agentName);
         // Build tool catalog for the FilterLLM prompt
         StringBuilder catalogBuilder = new StringBuilder();
         for (Map<String, Object> spec : toolSpecs) {
@@ -625,7 +637,7 @@ public class ToolCompiler {
      */
     public DiscoveryResult buildMcpDiscoveryTasks(
             String agentName, List<ToolConfig> mcpTools, List<Map<String, Object>> staticToolSpecs, String model) {
-
+        agentName = AgentCompiler.toRef(agentName);
         List<WorkflowTask> preTasks = new ArrayList<>();
 
         // ── 1. LIST_MCP_TOOLS tasks (one per unique server) ──────────
@@ -773,7 +785,7 @@ public class ToolCompiler {
      */
     public DiscoveryResult buildApiDiscoveryTasks(
             String agentName, List<ToolConfig> apiTools, List<Map<String, Object>> staticToolSpecs, String model) {
-
+        agentName = AgentCompiler.toRef(agentName);
         List<WorkflowTask> preTasks = new ArrayList<>();
 
         // ── 1. LIST_API_TOOLS tasks (one per unique spec_url) ──────────
@@ -945,6 +957,7 @@ public class ToolCompiler {
             List<Map<String, Object>> staticToolSpecs,
             String model) {
 
+        agentName = AgentCompiler.toRef(agentName);
         List<WorkflowTask> preTasks = new ArrayList<>();
         int maxTools = 32;
 
@@ -1323,7 +1336,7 @@ public class ToolCompiler {
             String model,
             String mcpConfigRef,
             String apiConfigRef) {
-
+        agentName = AgentCompiler.toRef(agentName);
         List<String> retryRefs = new ArrayList<>();
         List<String[]> guardrailRefs = new ArrayList<>();
 
@@ -1422,12 +1435,14 @@ public class ToolCompiler {
             String p,
             String mcpConfigRef,
             String apiConfigRef) {
+        agentName = AgentCompiler.toRef(agentName);
         // Build static configs (HTTP, media, agent_tool, RAG) at compile time — same as buildEnrichTask
         Map<String, Object> httpConfig = new LinkedHashMap<>();
         Map<String, Object> mediaConfig = new LinkedHashMap<>();
         Map<String, Object> agentToolConfig = new LinkedHashMap<>();
         Map<String, Object> ragConfig = new LinkedHashMap<>();
         Map<String, Object> humanConfig = new LinkedHashMap<>();
+        Map<String, Object> wmqConfig = new LinkedHashMap<>();
 
         if (tools != null) {
             for (ToolConfig tool : tools) {
@@ -1469,6 +1484,10 @@ public class ToolCompiler {
                     humanEntry.put("displayName", agentName + " — " + tool.getName());
                     humanEntry.put("description", tool.getDescription());
                     humanConfig.put(tool.getName(), humanEntry);
+                } else if ("pull_workflow_messages".equals(toolType)) {
+                    Map<String, Object> wmqEntry = new LinkedHashMap<>();
+                    wmqEntry.put("batchSize", cfg.getOrDefault("batchSize", 1));
+                    wmqConfig.put(tool.getName(), wmqEntry);
                 }
                 // MCP config comes from runtime — skip here
             }
@@ -1479,8 +1498,9 @@ public class ToolCompiler {
         String agentToolJson = JavaScriptBuilder.toJson(agentToolConfig);
         String ragJson = JavaScriptBuilder.toJson(ragConfig);
         String humanJson = JavaScriptBuilder.toJson(humanConfig);
-        String script =
-                JavaScriptBuilder.enrichToolsScriptDynamic(httpJson, mediaJson, agentToolJson, ragJson, humanJson);
+        String wmqJson = JavaScriptBuilder.toJson(wmqConfig);
+        String script = JavaScriptBuilder.enrichToolsScriptDynamic(
+                httpJson, mediaJson, agentToolJson, ragJson, humanJson, wmqJson);
 
         String enrichRef = agentName + "_" + p + "enrich_tools";
 
@@ -1639,6 +1659,7 @@ public class ToolCompiler {
      * @return list of two tasks: [mergeInline, setVariable]
      */
     public List<WorkflowTask> buildStateMergeTasks(String agentName, String joinRef, String prefix) {
+        agentName = AgentCompiler.toRef(agentName);
         String p = (prefix != null && !prefix.isEmpty()) ? prefix : "";
 
         // 1. INLINE merge task

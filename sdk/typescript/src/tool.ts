@@ -1,20 +1,20 @@
-import { createRequire } from 'node:module';
-import { isAbsolute, join } from 'node:path';
-import type { ToolDef, ToolType, ToolContext, CredentialFile } from './types.js';
-import { ConfigurationError } from './errors.js';
+import { createRequire } from "node:module";
+import { isAbsolute, join } from "node:path";
+import type { ToolDef, ToolType, ToolContext, CredentialFile } from "./types.js";
+import { ConfigurationError } from "./errors.js";
 
 // `import.meta.url` survives tsup's CJS build on Node 25 and breaks `require()`.
 // Use the current file when available in CJS, and fall back to the caller's
 // working tree in ESM so optional peer dependencies still resolve.
 const require = createRequire(
-  typeof __filename === 'string' && isAbsolute(__filename)
+  typeof __filename === "string" && isAbsolute(__filename)
     ? __filename
-    : join(process.cwd(), '__agentspan_sdk__.cjs'),
+    : join(process.cwd(), "__agentspan_sdk__.cjs"),
 );
 
 // ── Symbol for attaching ToolDef metadata ─────────────────
 
-const TOOL_DEF: unique symbol = Symbol('TOOL_DEF');
+const TOOL_DEF: unique symbol = Symbol("TOOL_DEF");
 
 // ── Type for the callable returned by tool() ──────────────
 
@@ -34,34 +34,7 @@ export type ToolFunction<TInput = unknown, TOutput = unknown> = ((
  * Returns true if `obj` looks like a Zod schema (has `._def` property).
  */
 export function isZodSchema(obj: unknown): boolean {
-  return obj != null && typeof obj === 'object' && '_def' in obj;
-}
-
-/**
- * Convert a Zod schema or JSON Schema object to JSON Schema.
- * If it's already JSON Schema, returns as-is.
- * Uses Zod v4's built-in z.toJSONSchema() — no external dependency needed.
- */
-/**
- * Convert a Zod schema to JSON Schema.
- * Supports both Zod v3 (via zod-to-json-schema) and Zod v4 (built-in z.toJSONSchema).
- */
-async function zodSchemaToJson(schema: unknown): Promise<object> {
-  // Try Zod v4 built-in first (z.toJSONSchema exists on the module)
-  try {
-    const zod = await import('zod');
-    if (typeof (zod as any).toJSONSchema === 'function') {
-      return (zod as any).toJSONSchema(schema) as object;
-    }
-  } catch { /* fall through */ }
-
-  // Fall back to zod-to-json-schema (works with Zod v3)
-  try {
-    const { zodToJsonSchema } = await import('zod-to-json-schema');
-    return zodToJsonSchema(schema as any, { target: 'jsonSchema7' });
-  } catch { /* fall through */ }
-
-  throw new ConfigurationError('Cannot convert Zod schema to JSON Schema. Install zod-to-json-schema or use Zod v4+.');
+  return obj != null && typeof obj === "object" && "_def" in obj;
 }
 
 // Synchronous version using cached converter
@@ -71,21 +44,27 @@ function initZodConverter(): void {
   if (_zodConverter) return;
   try {
     // Try Zod v4 built-in
-    const zod = require('zod');
-    if (typeof zod.toJSONSchema === 'function') {
+    const zod = require("zod");
+    if (typeof zod.toJSONSchema === "function") {
       _zodConverter = (s: unknown) => zod.toJSONSchema(s) as object;
       return;
     }
-  } catch { /* fall through */ }
+  } catch {
+    /* fall through */
+  }
 
   try {
     // Fall back to zod-to-json-schema
-    const { zodToJsonSchema } = require('zod-to-json-schema');
-    _zodConverter = (s: unknown) => zodToJsonSchema(s as any, { target: 'jsonSchema7' });
+    const { zodToJsonSchema } = require("zod-to-json-schema");
+    _zodConverter = (s: unknown) => zodToJsonSchema(s as any, { target: "jsonSchema7" });
     return;
-  } catch { /* fall through */ }
+  } catch {
+    /* fall through */
+  }
 
-  _zodConverter = () => { throw new ConfigurationError('No Zod-to-JSON-Schema converter available'); };
+  _zodConverter = () => {
+    throw new ConfigurationError("No Zod-to-JSON-Schema converter available");
+  };
 }
 
 export function toJsonSchema(schema: unknown): object {
@@ -98,7 +77,7 @@ export function toJsonSchema(schema: unknown): object {
 
 // ── tool() ────────────────────────────────────────────────
 
-export interface ToolOptions<TInput = unknown, TOutput = unknown> {
+export interface ToolOptions {
   name?: string;
   description: string;
   inputSchema: unknown; // Zod schema or JSON Schema object
@@ -119,19 +98,17 @@ export interface ToolOptions<TInput = unknown, TOutput = unknown> {
  */
 export function tool<TInput = unknown, TOutput = unknown>(
   fn: (args: TInput, ctx?: ToolContext) => Promise<TOutput>,
-  options: ToolOptions<TInput, TOutput>,
+  options: ToolOptions,
 ): ToolFunction<TInput, TOutput> {
-  const name = options.name || fn.name || 'unnamed_tool';
+  const name = options.name || fn.name || "unnamed_tool";
   const inputSchema = toJsonSchema(options.inputSchema);
-  const outputSchema = options.outputSchema
-    ? toJsonSchema(options.outputSchema)
-    : undefined;
+  const outputSchema = options.outputSchema ? toJsonSchema(options.outputSchema) : undefined;
 
   const def: ToolDef = {
     name,
     description: options.description,
     inputSchema,
-    toolType: 'worker',
+    toolType: "worker",
     func: options.external ? null : fn,
     ...(outputSchema !== undefined && { outputSchema }),
     ...(options.approvalRequired !== undefined && {
@@ -162,7 +139,7 @@ export function tool<TInput = unknown, TOutput = unknown>(
   });
 
   // Preserve function name
-  Object.defineProperty(wrapper, 'name', { value: name });
+  Object.defineProperty(wrapper, "name", { value: name });
 
   return wrapper as ToolFunction<TInput, TOutput>;
 }
@@ -176,10 +153,10 @@ export function tool<TInput = unknown, TOutput = unknown>(
 function isVercelAITool(obj: unknown): boolean {
   return (
     obj != null &&
-    typeof obj === 'object' &&
-    'execute' in obj &&
-    typeof (obj as Record<string, unknown>).execute === 'function' &&
-    'parameters' in obj &&
+    typeof obj === "object" &&
+    "execute" in obj &&
+    typeof (obj as Record<string, unknown>).execute === "function" &&
+    "parameters" in obj &&
     isZodSchema((obj as Record<string, unknown>).parameters)
   );
 }
@@ -191,7 +168,7 @@ function isVercelAITool(obj: unknown): boolean {
 function hasToolDef(obj: unknown): boolean {
   return (
     obj != null &&
-    (typeof obj === 'object' || typeof obj === 'function') &&
+    (typeof obj === "object" || typeof obj === "function") &&
     TOOL_DEF in (obj as object)
   );
 }
@@ -200,13 +177,13 @@ function hasToolDef(obj: unknown): boolean {
  * Check if an object is a raw ToolDef (has name + description + inputSchema).
  */
 function isRawToolDef(obj: unknown): boolean {
-  if (obj == null || typeof obj !== 'object') return false;
+  if (obj == null || typeof obj !== "object") return false;
   const o = obj as Record<string, unknown>;
   return (
-    typeof o.name === 'string' &&
-    typeof o.description === 'string' &&
+    typeof o.name === "string" &&
+    typeof o.description === "string" &&
     o.inputSchema != null &&
-    typeof o.inputSchema === 'object'
+    typeof o.inputSchema === "object"
   );
 }
 
@@ -217,21 +194,17 @@ function wrapVercelAITool(aiTool: Record<string, unknown>): ToolDef {
   const params = aiTool.parameters;
   const jsonSchema = toJsonSchema(params);
   const executeFn = aiTool.execute as Function;
-  const description =
-    typeof aiTool.description === 'string' ? aiTool.description : '';
+  const description = typeof aiTool.description === "string" ? aiTool.description : "";
   const name =
-    typeof aiTool.description === 'string'
-      ? aiTool.description.slice(0, 30).replace(/\s+/g, '_')
-      : 'ai_tool';
+    typeof aiTool.description === "string"
+      ? aiTool.description.slice(0, 30).replace(/\s+/g, "_")
+      : "ai_tool";
 
-  const wrapped = tool(
-    async (args: unknown) => executeFn(args, {}),
-    {
-      name,
-      description,
-      inputSchema: jsonSchema,
-    },
-  );
+  const wrapped = tool(async (args: unknown) => executeFn(args, {}), {
+    name,
+    description,
+    inputSchema: jsonSchema,
+  });
   return getToolDef(wrapped);
 }
 
@@ -261,7 +234,7 @@ export function getToolDef(obj: unknown): ToolDef {
       name: raw.name as string,
       description: raw.description as string,
       inputSchema: raw.inputSchema as object,
-      toolType: (raw.toolType as ToolType) ?? 'worker',
+      toolType: (raw.toolType as ToolType) ?? "worker",
       ...(raw.func !== undefined && { func: raw.func as Function | null }),
       ...(raw.outputSchema !== undefined && {
         outputSchema: raw.outputSchema as object,
@@ -286,9 +259,7 @@ export function getToolDef(obj: unknown): ToolDef {
     };
   }
 
-  throw new ConfigurationError(
-    `Unrecognized tool format: ${typeof obj}`,
-  );
+  throw new ConfigurationError(`Unrecognized tool format: ${typeof obj}`);
 }
 
 /**
@@ -313,9 +284,7 @@ function serverTool(
   return {
     name,
     description,
-    inputSchema: inputSchema
-      ? toJsonSchema(inputSchema)
-      : { type: 'object', properties: {} },
+    inputSchema: inputSchema ? toJsonSchema(inputSchema) : { type: "object", properties: {} },
     toolType,
     func: null,
     config,
@@ -329,7 +298,7 @@ export interface HttpToolOptions {
   name: string;
   description: string;
   url: string;
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+  method?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
   headers?: Record<string, string>;
   inputSchema?: unknown;
   accept?: string[];
@@ -340,7 +309,7 @@ export interface HttpToolOptions {
 export function httpTool(opts: HttpToolOptions): ToolDef {
   const config: Record<string, unknown> = {
     url: opts.url,
-    method: opts.method ?? 'GET',
+    method: opts.method ?? "GET",
   };
   if (opts.headers) config.headers = opts.headers;
   if (opts.accept) config.accept = opts.accept;
@@ -348,7 +317,7 @@ export function httpTool(opts: HttpToolOptions): ToolDef {
   if (opts.credentials) config.credentials = opts.credentials;
 
   return serverTool(
-    'http',
+    "http",
     opts.name,
     opts.description,
     opts.inputSchema ? toJsonSchema(opts.inputSchema) : undefined,
@@ -379,8 +348,8 @@ export function mcpTool(opts: McpToolOptions): ToolDef {
   if (opts.credentials) config.credentials = opts.credentials;
 
   return serverTool(
-    'mcp',
-    opts.name ?? 'mcp_tools',
+    "mcp",
+    opts.name ?? "mcp_tools",
     opts.description ?? `MCP tools from ${opts.serverUrl}`,
     undefined,
     config,
@@ -410,8 +379,8 @@ export function apiTool(opts: ApiToolOptions): ToolDef {
   if (opts.credentials) config.credentials = opts.credentials;
 
   return serverTool(
-    'api',
-    opts.name ?? 'api_tools',
+    "api",
+    opts.name ?? "api_tools",
     opts.description ?? `API tools from ${opts.url}`,
     undefined,
     config,
@@ -433,37 +402,33 @@ export interface AgentToolOptions {
  * The `agent` parameter is typed as `unknown` to avoid circular dependency;
  * it must be an Agent instance at runtime.
  */
-export function agentTool(
-  agent: unknown,
-  opts?: AgentToolOptions,
-): ToolDef {
+export function agentTool(agent: unknown, opts?: AgentToolOptions): ToolDef {
   // Extract name from agent for defaults
   const agentObj = agent as { name?: string };
-  const agentName = agentObj.name ?? 'agent';
+  const agentName = agentObj.name ?? "agent";
   const name = opts?.name ?? agentName;
   const description = opts?.description ?? `Invoke the ${agentName} agent`;
 
   // Input schema matching Python: { request: string } required
   const inputSchema = {
-    type: 'object',
+    type: "object",
     properties: {
       request: {
-        type: 'string',
-        description: 'The request or question to send to this agent.',
+        type: "string",
+        description: "The request or question to send to this agent.",
       },
     },
-    required: ['request'],
+    required: ["request"],
   };
 
   const config: Record<string, unknown> = {
     agent,
   };
   if (opts?.retryCount !== undefined) config.retryCount = opts.retryCount;
-  if (opts?.retryDelaySeconds !== undefined)
-    config.retryDelaySeconds = opts.retryDelaySeconds;
+  if (opts?.retryDelaySeconds !== undefined) config.retryDelaySeconds = opts.retryDelaySeconds;
   if (opts?.optional !== undefined) config.optional = opts.optional;
 
-  return serverTool('agent_tool', name, description, inputSchema, config);
+  return serverTool("agent_tool", name, description, inputSchema, config);
 }
 
 // ── humanTool ─────────────────────────────────────────────
@@ -477,18 +442,18 @@ export interface HumanToolOptions {
 export function humanTool(opts: HumanToolOptions): ToolDef {
   // Default inputSchema matches Python: { question: string, required }
   const defaultSchema = {
-    type: 'object',
+    type: "object",
     properties: {
       question: {
-        type: 'string',
-        description: 'The question or prompt to present to the human.',
+        type: "string",
+        description: "The question or prompt to present to the human.",
       },
     },
-    required: ['question'],
+    required: ["question"],
   };
 
   return serverTool(
-    'human',
+    "human",
     opts.name,
     opts.description,
     opts.inputSchema ? toJsonSchema(opts.inputSchema) : defaultSchema,
@@ -510,7 +475,7 @@ export interface ImageToolOptions {
 
 export function imageTool(opts: ImageToolOptions): ToolDef {
   const config: Record<string, unknown> = {
-    taskType: 'GENERATE_IMAGE',
+    taskType: "GENERATE_IMAGE",
     llmProvider: opts.llmProvider,
     model: opts.model,
   };
@@ -519,22 +484,29 @@ export function imageTool(opts: ImageToolOptions): ToolDef {
 
   // Default inputSchema matches Python
   const defaultSchema = {
-    type: 'object',
+    type: "object",
     properties: {
-      prompt: { type: 'string', description: 'Text description of the image to generate.' },
-      style: { type: 'string', description: "Image style: 'vivid' or 'natural'." },
-      width: { type: 'integer', description: 'Image width in pixels.', default: 1024 },
-      height: { type: 'integer', description: 'Image height in pixels.', default: 1024 },
-      size: { type: 'string', description: "Image size (e.g. '1024x1024'). Alternative to width/height." },
-      n: { type: 'integer', description: 'Number of images to generate.', default: 1 },
-      outputFormat: { type: 'string', description: "Output format: 'png', 'jpg', or 'webp'.", default: 'png' },
-      weight: { type: 'number', description: 'Image weight parameter.' },
+      prompt: { type: "string", description: "Text description of the image to generate." },
+      style: { type: "string", description: "Image style: 'vivid' or 'natural'." },
+      width: { type: "integer", description: "Image width in pixels.", default: 1024 },
+      height: { type: "integer", description: "Image height in pixels.", default: 1024 },
+      size: {
+        type: "string",
+        description: "Image size (e.g. '1024x1024'). Alternative to width/height.",
+      },
+      n: { type: "integer", description: "Number of images to generate.", default: 1 },
+      outputFormat: {
+        type: "string",
+        description: "Output format: 'png', 'jpg', or 'webp'.",
+        default: "png",
+      },
+      weight: { type: "number", description: "Image weight parameter." },
     },
-    required: ['prompt'],
+    required: ["prompt"],
   };
 
   return serverTool(
-    'generate_image',
+    "generate_image",
     opts.name,
     opts.description,
     opts.inputSchema ? toJsonSchema(opts.inputSchema) : defaultSchema,
@@ -557,7 +529,7 @@ export interface AudioToolOptions {
 
 export function audioTool(opts: AudioToolOptions): ToolDef {
   const config: Record<string, unknown> = {
-    taskType: 'GENERATE_AUDIO',
+    taskType: "GENERATE_AUDIO",
     llmProvider: opts.llmProvider,
     model: opts.model,
   };
@@ -567,19 +539,32 @@ export function audioTool(opts: AudioToolOptions): ToolDef {
 
   // Default inputSchema matches Python
   const defaultSchema = {
-    type: 'object',
+    type: "object",
     properties: {
-      text: { type: 'string', description: 'Text to convert to speech.' },
-      voice: { type: 'string', description: 'Voice to use.', enum: ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'], default: 'alloy' },
-      speed: { type: 'number', description: 'Speech speed multiplier (0.25 to 4.0).', default: 1.0 },
-      responseFormat: { type: 'string', description: "Audio format: 'mp3', 'wav', 'opus', 'aac', or 'flac'.", default: 'mp3' },
-      n: { type: 'integer', description: 'Number of audio outputs to generate.', default: 1 },
+      text: { type: "string", description: "Text to convert to speech." },
+      voice: {
+        type: "string",
+        description: "Voice to use.",
+        enum: ["alloy", "echo", "fable", "onyx", "nova", "shimmer"],
+        default: "alloy",
+      },
+      speed: {
+        type: "number",
+        description: "Speech speed multiplier (0.25 to 4.0).",
+        default: 1.0,
+      },
+      responseFormat: {
+        type: "string",
+        description: "Audio format: 'mp3', 'wav', 'opus', 'aac', or 'flac'.",
+        default: "mp3",
+      },
+      n: { type: "integer", description: "Number of audio outputs to generate.", default: 1 },
     },
-    required: ['text'],
+    required: ["text"],
   };
 
   return serverTool(
-    'generate_audio',
+    "generate_audio",
     opts.name,
     opts.description,
     opts.inputSchema ? toJsonSchema(opts.inputSchema) : defaultSchema,
@@ -604,7 +589,7 @@ export interface VideoToolOptions {
 
 export function videoTool(opts: VideoToolOptions): ToolDef {
   const config: Record<string, unknown> = {
-    taskType: 'GENERATE_VIDEO',
+    taskType: "GENERATE_VIDEO",
     llmProvider: opts.llmProvider,
     model: opts.model,
   };
@@ -616,34 +601,43 @@ export function videoTool(opts: VideoToolOptions): ToolDef {
 
   // Default inputSchema matches Python
   const defaultSchema = {
-    type: 'object',
+    type: "object",
     properties: {
-      prompt: { type: 'string', description: 'Text description of the video scene.' },
-      inputImage: { type: 'string', description: 'Base64-encoded or URL image for image-to-video generation.' },
-      duration: { type: 'integer', description: 'Video duration in seconds.', default: 5 },
-      width: { type: 'integer', description: 'Video width in pixels.', default: 1280 },
-      height: { type: 'integer', description: 'Video height in pixels.', default: 720 },
-      fps: { type: 'integer', description: 'Frames per second.', default: 24 },
-      outputFormat: { type: 'string', description: "Video format (e.g. 'mp4').", default: 'mp4' },
-      style: { type: 'string', description: "Video style (e.g. 'cinematic', 'natural')." },
-      motion: { type: 'string', description: "Movement intensity (e.g. 'slow', 'normal', 'extreme')." },
-      seed: { type: 'integer', description: 'Seed for reproducibility.' },
-      guidanceScale: { type: 'number', description: 'Prompt adherence strength (1.0 to 20.0).' },
-      aspectRatio: { type: 'string', description: "Aspect ratio (e.g. '16:9', '1:1')." },
-      negativePrompt: { type: 'string', description: 'Description of what to exclude from the video.' },
-      personGeneration: { type: 'string', description: 'Controls for human figure generation.' },
-      resolution: { type: 'string', description: "Quality level (e.g. '720p', '1080p')." },
-      generateAudio: { type: 'boolean', description: 'Whether to generate audio with the video.' },
-      size: { type: 'string', description: "Video size specification (e.g. '1280x720')." },
-      n: { type: 'integer', description: 'Number of videos to generate.', default: 1 },
-      maxDurationSeconds: { type: 'integer', description: 'Maximum duration ceiling in seconds.' },
-      maxCostDollars: { type: 'number', description: 'Maximum cost limit in dollars.' },
+      prompt: { type: "string", description: "Text description of the video scene." },
+      inputImage: {
+        type: "string",
+        description: "Base64-encoded or URL image for image-to-video generation.",
+      },
+      duration: { type: "integer", description: "Video duration in seconds.", default: 5 },
+      width: { type: "integer", description: "Video width in pixels.", default: 1280 },
+      height: { type: "integer", description: "Video height in pixels.", default: 720 },
+      fps: { type: "integer", description: "Frames per second.", default: 24 },
+      outputFormat: { type: "string", description: "Video format (e.g. 'mp4').", default: "mp4" },
+      style: { type: "string", description: "Video style (e.g. 'cinematic', 'natural')." },
+      motion: {
+        type: "string",
+        description: "Movement intensity (e.g. 'slow', 'normal', 'extreme').",
+      },
+      seed: { type: "integer", description: "Seed for reproducibility." },
+      guidanceScale: { type: "number", description: "Prompt adherence strength (1.0 to 20.0)." },
+      aspectRatio: { type: "string", description: "Aspect ratio (e.g. '16:9', '1:1')." },
+      negativePrompt: {
+        type: "string",
+        description: "Description of what to exclude from the video.",
+      },
+      personGeneration: { type: "string", description: "Controls for human figure generation." },
+      resolution: { type: "string", description: "Quality level (e.g. '720p', '1080p')." },
+      generateAudio: { type: "boolean", description: "Whether to generate audio with the video." },
+      size: { type: "string", description: "Video size specification (e.g. '1280x720')." },
+      n: { type: "integer", description: "Number of videos to generate.", default: 1 },
+      maxDurationSeconds: { type: "integer", description: "Maximum duration ceiling in seconds." },
+      maxCostDollars: { type: "number", description: "Maximum cost limit in dollars." },
     },
-    required: ['prompt'],
+    required: ["prompt"],
   };
 
   return serverTool(
-    'generate_video',
+    "generate_video",
     opts.name,
     opts.description,
     opts.inputSchema ? toJsonSchema(opts.inputSchema) : defaultSchema,
@@ -663,39 +657,39 @@ export interface PdfToolOptions {
 }
 
 export function pdfTool(opts?: PdfToolOptions): ToolDef {
-  const config: Record<string, unknown> = { taskType: 'GENERATE_PDF' };
+  const config: Record<string, unknown> = { taskType: "GENERATE_PDF" };
   if (opts?.pageSize) config.pageSize = opts.pageSize;
   if (opts?.theme) config.theme = opts.theme;
   if (opts?.fontSize !== undefined) config.fontSize = opts.fontSize;
 
   // Default inputSchema matches Python
   const defaultSchema = {
-    type: 'object',
+    type: "object",
     properties: {
-      markdown: { type: 'string', description: 'Markdown text to convert to PDF.' },
+      markdown: { type: "string", description: "Markdown text to convert to PDF." },
       pageSize: {
-        type: 'string',
-        description: 'Page size: A4, LETTER, LEGAL, A3, or A5.',
-        default: 'A4',
+        type: "string",
+        description: "Page size: A4, LETTER, LEGAL, A3, or A5.",
+        default: "A4",
       },
       theme: {
-        type: 'string',
+        type: "string",
         description: "Style preset: 'default' or 'compact'.",
-        default: 'default',
+        default: "default",
       },
       baseFontSize: {
-        type: 'number',
-        description: 'Base font size in points.',
+        type: "number",
+        description: "Base font size in points.",
         default: 11,
       },
     },
-    required: ['markdown'],
+    required: ["markdown"],
   };
 
   return serverTool(
-    'generate_pdf',
-    opts?.name ?? 'generate_pdf',
-    opts?.description ?? 'Generate a PDF document from markdown text.',
+    "generate_pdf",
+    opts?.name ?? "generate_pdf",
+    opts?.description ?? "Generate a PDF document from markdown text.",
     opts?.inputSchema ? toJsonSchema(opts.inputSchema) : defaultSchema,
     config,
   );
@@ -718,9 +712,9 @@ export interface SearchToolOptions {
 
 export function searchTool(opts: SearchToolOptions): ToolDef {
   const config: Record<string, unknown> = {
-    taskType: 'LLM_SEARCH_INDEX',
+    taskType: "LLM_SEARCH_INDEX",
     vectorDB: opts.vectorDb,
-    namespace: opts.namespace ?? 'default_ns',
+    namespace: opts.namespace ?? "default_ns",
     index: opts.index,
     embeddingModelProvider: opts.embeddingModelProvider,
     embeddingModel: opts.embeddingModel,
@@ -730,15 +724,15 @@ export function searchTool(opts: SearchToolOptions): ToolDef {
 
   // Default inputSchema matches Python
   const defaultSchema = {
-    type: 'object',
+    type: "object",
     properties: {
-      query: { type: 'string', description: 'The search query.' },
+      query: { type: "string", description: "The search query." },
     },
-    required: ['query'],
+    required: ["query"],
   };
 
   return serverTool(
-    'rag_search',
+    "rag_search",
     opts.name,
     opts.description,
     opts.inputSchema ? toJsonSchema(opts.inputSchema) : defaultSchema,
@@ -764,9 +758,9 @@ export interface IndexToolOptions {
 
 export function indexTool(opts: IndexToolOptions): ToolDef {
   const config: Record<string, unknown> = {
-    taskType: 'LLM_INDEX_TEXT',
+    taskType: "LLM_INDEX_TEXT",
     vectorDB: opts.vectorDb,
-    namespace: opts.namespace ?? 'default_ns',
+    namespace: opts.namespace ?? "default_ns",
     index: opts.index,
     embeddingModelProvider: opts.embeddingModelProvider,
     embeddingModel: opts.embeddingModel,
@@ -777,20 +771,20 @@ export function indexTool(opts: IndexToolOptions): ToolDef {
 
   // Default inputSchema matches Python
   const defaultSchema = {
-    type: 'object',
+    type: "object",
     properties: {
-      text: { type: 'string', description: 'The text content to index.' },
-      docId: { type: 'string', description: 'Unique document identifier.' },
+      text: { type: "string", description: "The text content to index." },
+      docId: { type: "string", description: "Unique document identifier." },
       metadata: {
-        type: 'object',
-        description: 'Optional metadata to store with the document.',
+        type: "object",
+        description: "Optional metadata to store with the document.",
       },
     },
-    required: ['text', 'docId'],
+    required: ["text", "docId"],
   };
 
   return serverTool(
-    'rag_index',
+    "rag_index",
     opts.name,
     opts.description,
     opts.inputSchema ? toJsonSchema(opts.inputSchema) : defaultSchema,
@@ -800,7 +794,7 @@ export function indexTool(opts: IndexToolOptions): ToolDef {
 
 // ── @Tool decorator ───────────────────────────────────────
 
-const TOOL_DECORATOR_KEY = Symbol('TOOL_DECORATOR');
+const TOOL_DECORATOR_KEY = Symbol("TOOL_DECORATOR");
 
 interface ToolDecoratorOptions {
   name?: string;
@@ -820,11 +814,7 @@ interface ToolDecoratorOptions {
  * Use `toolsFrom(instance)` to extract decorated methods as tool() wrappers.
  */
 export function Tool(options?: ToolDecoratorOptions) {
-  return function (
-    target: object,
-    propertyKey: string,
-    descriptor: PropertyDescriptor,
-  ): void {
+  return function (target: object, propertyKey: string, descriptor: PropertyDescriptor): void {
     // Store decorator options on the descriptor's value
     const metadata: ToolDecoratorOptions & { _methodName: string } = {
       ...options,
@@ -847,21 +837,19 @@ export function Tool(options?: ToolDecoratorOptions) {
  * Extract all @Tool-decorated methods from a class instance as tool() wrappers,
  * bound to the instance.
  */
-export function toolsFrom(
-  instance: object,
-): ToolFunction<unknown, unknown>[] {
+export function toolsFrom(instance: object): ToolFunction<unknown, unknown>[] {
   const tools: ToolFunction<unknown, unknown>[] = [];
   const proto = Object.getPrototypeOf(instance);
   const propertyNames = Object.getOwnPropertyNames(proto);
 
   for (const key of propertyNames) {
-    if (key === 'constructor') continue;
+    if (key === "constructor") continue;
     const descriptor = Object.getOwnPropertyDescriptor(proto, key);
-    if (!descriptor?.value || typeof descriptor.value !== 'function') continue;
+    if (!descriptor?.value || typeof descriptor.value !== "function") continue;
 
-    const metadata = (descriptor.value as Record<symbol, unknown>)[
-      TOOL_DECORATOR_KEY
-    ] as (ToolDecoratorOptions & { _methodName: string }) | undefined;
+    const metadata = (descriptor.value as Record<symbol, unknown>)[TOOL_DECORATOR_KEY] as
+      | (ToolDecoratorOptions & { _methodName: string })
+      | undefined;
 
     if (!metadata) continue;
 
@@ -869,10 +857,9 @@ export function toolsFrom(
     const boundFn = descriptor.value.bind(instance);
 
     const toolName = metadata.name ?? methodName;
-    const description =
-      metadata.description ?? `Tool: ${toolName}`;
+    const description = metadata.description ?? `Tool: ${toolName}`;
     const inputSchema = metadata.inputSchema ?? {
-      type: 'object',
+      type: "object",
       properties: {},
     };
 

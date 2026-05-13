@@ -177,6 +177,19 @@ public class AgentController {
         agentService.cancelAgent(executionId, reason);
     }
 
+    /** Gracefully stop an agent execution (loop exits after current iteration). */
+    @PostMapping("/{executionId}/stop")
+    public void stopAgent(@PathVariable String executionId) {
+        agentService.stopAgent(executionId);
+    }
+
+    /** Inject a persistent signal into a running agent's context. */
+    @PostMapping("/{executionId}/signal")
+    public void signalAgent(@PathVariable String executionId, @RequestBody Map<String, Object> body) {
+        String message = body != null ? (String) body.getOrDefault("message", "") : "";
+        agentService.signalAgent(executionId, message);
+    }
+
     /**
      * Get the current status of an agent execution.
      * Lightweight polling fallback when SSE is not available.
@@ -256,6 +269,37 @@ public class AgentController {
     @DeleteMapping("/executions/{executionId}")
     public void terminateExecution(@PathVariable String executionId, @RequestParam(required = false) String reason) {
         agentService.cancelAgent(executionId, reason);
+    }
+
+    /**
+     * Permanently delete an execution record from the database.
+     *
+     * <p>Unlike {@code DELETE /executions/{id}} (which terminates a running execution),
+     * this endpoint removes the record entirely — equivalent to Conductor's
+     * {@code removeWorkflow}. Use for storage cleanup of completed executions.</p>
+     *
+     * @param executionId  the execution to delete
+     * @param archiveTasks if true, archive task records instead of hard-deleting (default false)
+     */
+    @DeleteMapping("/executions/{executionId}/record")
+    public void deleteExecutionRecord(
+            @PathVariable String executionId, @RequestParam(defaultValue = "false") boolean archiveTasks) {
+        agentService.deleteExecutionRecord(executionId, archiveTasks);
+    }
+
+    /**
+     * Bulk-delete completed/failed execution records older than {@code olderThanDays} days.
+     *
+     * @param olderThanDays minimum age in days (default 30)
+     * @param archiveTasks  if true, archive tasks instead of hard-deleting (default false)
+     * @return map with {@code deleted} count
+     */
+    @PostMapping("/executions/prune")
+    public Map<String, Object> pruneExecutions(
+            @RequestParam(defaultValue = "30") int olderThanDays,
+            @RequestParam(defaultValue = "false") boolean archiveTasks) {
+        int deleted = agentService.pruneExecutions(olderThanDays, archiveTasks);
+        return Map.of("deleted", deleted);
     }
 
     /** Get paginated task list for an execution. */

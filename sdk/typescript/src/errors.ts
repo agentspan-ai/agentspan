@@ -4,7 +4,7 @@
 export class AgentspanError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'AgentspanError';
+    this.name = "AgentspanError";
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
@@ -18,7 +18,7 @@ export class AgentAPIError extends AgentspanError {
 
   constructor(message: string, statusCode: number, responseBody: string) {
     super(message);
-    this.name = 'AgentAPIError';
+    this.name = "AgentAPIError";
     this.statusCode = statusCode;
     this.responseBody = responseBody;
     Object.setPrototypeOf(this, new.target.prototype);
@@ -33,7 +33,7 @@ export class AgentNotFoundError extends AgentspanError {
 
   constructor(agentName: string) {
     super(`Agent not found: ${agentName}`);
-    this.name = 'AgentNotFoundError';
+    this.name = "AgentNotFoundError";
     this.agentName = agentName;
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -45,7 +45,7 @@ export class AgentNotFoundError extends AgentspanError {
 export class ConfigurationError extends AgentspanError {
   constructor(message: string) {
     super(message);
-    this.name = 'ConfigurationError';
+    this.name = "ConfigurationError";
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
@@ -58,7 +58,7 @@ export class CredentialNotFoundError extends AgentspanError {
 
   constructor(credentialName: string) {
     super(`Credential not found: ${credentialName}`);
-    this.name = 'CredentialNotFoundError';
+    this.name = "CredentialNotFoundError";
     this.credentialName = credentialName;
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -68,9 +68,9 @@ export class CredentialNotFoundError extends AgentspanError {
  * Credential authentication error — execution token invalid or expired.
  */
 export class CredentialAuthError extends AgentspanError {
-  constructor(message: string = 'Credential authentication failed') {
+  constructor(message: string = "Credential authentication failed") {
     super(message);
-    this.name = 'CredentialAuthError';
+    this.name = "CredentialAuthError";
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
@@ -79,9 +79,9 @@ export class CredentialAuthError extends AgentspanError {
  * Credential rate limit exceeded (120 calls/min).
  */
 export class CredentialRateLimitError extends AgentspanError {
-  constructor(message: string = 'Credential rate limit exceeded') {
+  constructor(message: string = "Credential rate limit exceeded") {
     super(message);
-    this.name = 'CredentialRateLimitError';
+    this.name = "CredentialRateLimitError";
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
@@ -90,9 +90,9 @@ export class CredentialRateLimitError extends AgentspanError {
  * Credential service error — server-side failure.
  */
 export class CredentialServiceError extends AgentspanError {
-  constructor(message: string = 'Credential service error') {
+  constructor(message: string = "Credential service error") {
     super(message);
-    this.name = 'CredentialServiceError';
+    this.name = "CredentialServiceError";
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
@@ -101,9 +101,9 @@ export class CredentialServiceError extends AgentspanError {
  * SSE connection timeout — no events received within the timeout window.
  */
 export class SSETimeoutError extends AgentspanError {
-  constructor(message: string = 'SSE connection timed out') {
+  constructor(message: string = "SSE connection timed out") {
     super(message);
-    this.name = 'SSETimeoutError';
+    this.name = "SSETimeoutError";
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
@@ -115,7 +115,7 @@ export class SSETimeoutError extends AgentspanError {
 export class TerminalToolError extends AgentspanError {
   constructor(message: string) {
     super(message);
-    this.name = 'TerminalToolError';
+    this.name = "TerminalToolError";
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
@@ -129,7 +129,7 @@ export class GuardrailFailedError extends AgentspanError {
 
   constructor(guardrailName: string, failureMessage: string) {
     super(`Guardrail '${guardrailName}' failed: ${failureMessage}`);
-    this.name = 'GuardrailFailedError';
+    this.name = "GuardrailFailedError";
     this.guardrailName = guardrailName;
     this.failureMessage = failureMessage;
     Object.setPrototypeOf(this, new.target.prototype);

@@ -68,6 +68,7 @@ public class GuardrailCompiler {
      */
     public List<GuardrailTaskResult> compileGuardrailTasks(
             List<GuardrailConfig> guardrails, String agentName, String contentRef) {
+        agentName = AgentCompiler.toRef(agentName);
 
         if (guardrails == null || guardrails.isEmpty()) {
             return new ArrayList<>();
@@ -100,6 +101,7 @@ public class GuardrailCompiler {
      */
     public List<GuardrailTaskResult> compileToolGuardrailTasks(
             List<GuardrailConfig> guardrails, String agentName, String contentRef) {
+        agentName = AgentCompiler.toRef(agentName);
 
         if (guardrails == null || guardrails.isEmpty()) {
             return new ArrayList<>();

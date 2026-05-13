@@ -36,6 +36,9 @@ class AgentServiceTokenTest {
     private dev.agentspan.runtime.compiler.AgentCompiler agentCompiler;
 
     @Mock
+    private com.netflix.conductor.dao.ExecutionDAO executionDAO;
+
+    @Mock
     private com.netflix.conductor.dao.MetadataDAO metadataDAO;
 
     @Mock
@@ -65,6 +68,7 @@ class AgentServiceTokenTest {
         agentService = new AgentService(
                 agentCompiler,
                 normalizerRegistry,
+                executionDAO,
                 metadataDAO,
                 workflowExecutor,
                 workflowService,

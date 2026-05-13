@@ -1,0 +1,62 @@
+name: CI Java SDK E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: 'LLM model to use'
+        default: 'openai/gpt-4o-mini'
+        required: false
+      suite:
+        description: 'Test suite filter (e.g. E2eSuite1BasicValidation)'
+        default: ''
+        required: false
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Build server JAR
+        run: ./gradlew bootJar -x test -q
+        working-directory: server
+
+      - name: Start server
+        run: |
+          java -jar server/build/libs/agentspan-runtime.jar --server.port=6767 &
+          echo "SERVER_PID=$!" >> $GITHUB_ENV
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:6767/health > /dev/null 2>&1; then
+              echo "Server healthy"
+              break
+            fi
+            if [[ $i -eq 30 ]]; then echo "Server failed to start"; exit 1; fi
+            sleep 2
+          done
+
+      - name: Run Java e2e tests
+        env:
+          AGENTSPAN_SERVER_URL: http://localhost:6767/api
+          AGENTSPAN_LLM_MODEL: ${{ inputs.model }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          ARGS="-Pe2e -DAGENTSPAN_SERVER_URL=$AGENTSPAN_SERVER_URL -DAGENTSPAN_LLM_MODEL=$AGENTSPAN_LLM_MODEL"
+          if [[ -n "${{ inputs.suite }}" ]]; then
+            ARGS="$ARGS --tests '*.${{ inputs.suite }}*'"
+          fi
+          ./gradlew test $ARGS
+        working-directory: sdk/java
+
+      - name: Stop server
+        if: always()
+        run: |
+          if [[ -n "$SERVER_PID" ]]; then kill "$SERVER_PID" 2>/dev/null || true; fi

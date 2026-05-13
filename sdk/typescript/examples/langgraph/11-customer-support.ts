@@ -128,7 +128,6 @@ const graph = builder.compile({ name: "customer_support" });
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',
-  tools: [],
   framework: 'langgraph',
 };
 

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from "vitest";
 import {
   assertToolUsed,
   assertGuardrailPassed,
@@ -6,9 +6,9 @@ import {
   assertHandoffTo,
   assertStatus,
   assertNoErrors,
-} from '../../../src/testing/assertions.js';
-import { makeAgentResult } from '../../../src/result.js';
-import type { AgentEvent } from '../../../src/types.js';
+} from "../../../src/testing/assertions.js";
+import { makeAgentResult } from "../../../src/result.js";
+import type { AgentEvent } from "../../../src/types.js";
 
 // ── Helpers ──────────────────────────────────────────────
 
@@ -18,8 +18,8 @@ function makeResult(opts: {
   subResults?: Record<string, unknown>;
 }) {
   return makeAgentResult({
-    executionId: 'wf-test',
-    status: opts.status ?? 'COMPLETED',
+    executionId: "wf-test",
+    status: opts.status ?? "COMPLETED",
     events: opts.events ?? [],
     subResults: opts.subResults,
   });
@@ -27,26 +27,26 @@ function makeResult(opts: {
 
 // ── assertToolUsed ───────────────────────────────────────
 
-describe('assertToolUsed', () => {
-  it('passes when tool_call event exists for the tool', () => {
+describe("assertToolUsed", () => {
+  it("passes when tool_call event exists for the tool", () => {
     const result = makeResult({
-      events: [{ type: 'tool_call', toolName: 'search' }],
+      events: [{ type: "tool_call", toolName: "search" }],
     });
-    expect(() => assertToolUsed(result, 'search')).not.toThrow();
+    expect(() => assertToolUsed(result, "search")).not.toThrow();
   });
 
-  it('throws when tool was not used', () => {
+  it("throws when tool was not used", () => {
     const result = makeResult({ events: [] });
-    expect(() => assertToolUsed(result, 'search')).toThrow(
+    expect(() => assertToolUsed(result, "search")).toThrow(
       /Expected tool "search" to have been used/,
     );
   });
 
-  it('throws when a different tool was used', () => {
+  it("throws when a different tool was used", () => {
     const result = makeResult({
-      events: [{ type: 'tool_call', toolName: 'fetch' }],
+      events: [{ type: "tool_call", toolName: "fetch" }],
     });
-    expect(() => assertToolUsed(result, 'search')).toThrow(
+    expect(() => assertToolUsed(result, "search")).toThrow(
       /Expected tool "search" to have been used/,
     );
   });
@@ -54,17 +54,17 @@ describe('assertToolUsed', () => {
 
 // ── assertGuardrailPassed ────────────────────────────────
 
-describe('assertGuardrailPassed', () => {
-  it('passes when guardrail_pass event exists', () => {
+describe("assertGuardrailPassed", () => {
+  it("passes when guardrail_pass event exists", () => {
     const result = makeResult({
-      events: [{ type: 'guardrail_pass', guardrailName: 'no_pii' }],
+      events: [{ type: "guardrail_pass", guardrailName: "no_pii" }],
     });
-    expect(() => assertGuardrailPassed(result, 'no_pii')).not.toThrow();
+    expect(() => assertGuardrailPassed(result, "no_pii")).not.toThrow();
   });
 
-  it('throws when guardrail did not pass', () => {
+  it("throws when guardrail did not pass", () => {
     const result = makeResult({ events: [] });
-    expect(() => assertGuardrailPassed(result, 'no_pii')).toThrow(
+    expect(() => assertGuardrailPassed(result, "no_pii")).toThrow(
       /Expected guardrail "no_pii" to have passed/,
     );
   });
@@ -72,36 +72,36 @@ describe('assertGuardrailPassed', () => {
 
 // ── assertAgentRan ───────────────────────────────────────
 
-describe('assertAgentRan', () => {
-  it('passes when agent is in subResults', () => {
+describe("assertAgentRan", () => {
+  it("passes when agent is in subResults", () => {
     const result = makeResult({
-      subResults: { child_agent: { result: 'done' } },
+      subResults: { child_agent: { result: "done" } },
     });
-    expect(() => assertAgentRan(result, 'child_agent')).not.toThrow();
+    expect(() => assertAgentRan(result, "child_agent")).not.toThrow();
   });
 
-  it('passes when done event mentions agent name', () => {
+  it("passes when done event mentions agent name", () => {
     const result = makeResult({
       events: [
         {
-          type: 'done',
-          output: { result: 'Mock execution of child_agent' },
+          type: "done",
+          output: { result: "Mock execution of child_agent" },
         },
       ],
     });
-    expect(() => assertAgentRan(result, 'child_agent')).not.toThrow();
+    expect(() => assertAgentRan(result, "child_agent")).not.toThrow();
   });
 
-  it('passes when handoff event targets agent', () => {
+  it("passes when handoff event targets agent", () => {
     const result = makeResult({
-      events: [{ type: 'handoff', target: 'child_agent' }],
+      events: [{ type: "handoff", target: "child_agent" }],
     });
-    expect(() => assertAgentRan(result, 'child_agent')).not.toThrow();
+    expect(() => assertAgentRan(result, "child_agent")).not.toThrow();
   });
 
-  it('throws when agent did not run', () => {
+  it("throws when agent did not run", () => {
     const result = makeResult({ events: [] });
-    expect(() => assertAgentRan(result, 'child_agent')).toThrow(
+    expect(() => assertAgentRan(result, "child_agent")).toThrow(
       /Expected agent "child_agent" to have run/,
     );
   });
@@ -109,100 +109,89 @@ describe('assertAgentRan', () => {
 
 // ── assertHandoffTo ──────────────────────────────────────
 
-describe('assertHandoffTo', () => {
-  it('passes when handoff event targets the agent', () => {
+describe("assertHandoffTo", () => {
+  it("passes when handoff event targets the agent", () => {
     const result = makeResult({
-      events: [{ type: 'handoff', target: 'specialist' }],
+      events: [{ type: "handoff", target: "specialist" }],
     });
-    expect(() => assertHandoffTo(result, 'specialist')).not.toThrow();
+    expect(() => assertHandoffTo(result, "specialist")).not.toThrow();
   });
 
-  it('throws when no handoff to target', () => {
+  it("throws when no handoff to target", () => {
     const result = makeResult({ events: [] });
-    expect(() => assertHandoffTo(result, 'specialist')).toThrow(
-      /Expected handoff to "specialist"/,
-    );
+    expect(() => assertHandoffTo(result, "specialist")).toThrow(/Expected handoff to "specialist"/);
   });
 
-  it('throws when handoff to different target', () => {
+  it("throws when handoff to different target", () => {
     const result = makeResult({
-      events: [{ type: 'handoff', target: 'other' }],
+      events: [{ type: "handoff", target: "other" }],
     });
-    expect(() => assertHandoffTo(result, 'specialist')).toThrow(
-      /Expected handoff to "specialist"/,
-    );
+    expect(() => assertHandoffTo(result, "specialist")).toThrow(/Expected handoff to "specialist"/);
   });
 });
 
 // ── assertStatus ─────────────────────────────────────────
 
-describe('assertStatus', () => {
-  it('passes when status matches', () => {
-    const result = makeResult({ status: 'COMPLETED' });
-    expect(() => assertStatus(result, 'COMPLETED')).not.toThrow();
+describe("assertStatus", () => {
+  it("passes when status matches", () => {
+    const result = makeResult({ status: "COMPLETED" });
+    expect(() => assertStatus(result, "COMPLETED")).not.toThrow();
   });
 
-  it('throws when status does not match', () => {
-    const result = makeResult({ status: 'COMPLETED' });
-    expect(() => assertStatus(result, 'FAILED')).toThrow(
+  it("throws when status does not match", () => {
+    const result = makeResult({ status: "COMPLETED" });
+    expect(() => assertStatus(result, "FAILED")).toThrow(
       /Expected status "FAILED", got "COMPLETED"/,
     );
   });
 
-  it('works for FAILED status', () => {
-    const result = makeResult({ status: 'FAILED' });
-    expect(() => assertStatus(result, 'FAILED')).not.toThrow();
+  it("works for FAILED status", () => {
+    const result = makeResult({ status: "FAILED" });
+    expect(() => assertStatus(result, "FAILED")).not.toThrow();
   });
 
-  it('works for TIMED_OUT status', () => {
-    const result = makeResult({ status: 'TIMED_OUT' });
-    expect(() => assertStatus(result, 'TIMED_OUT')).not.toThrow();
+  it("works for TIMED_OUT status", () => {
+    const result = makeResult({ status: "TIMED_OUT" });
+    expect(() => assertStatus(result, "TIMED_OUT")).not.toThrow();
   });
 });
 
 // ── assertNoErrors ───────────────────────────────────────
 
-describe('assertNoErrors', () => {
-  it('passes when no error events exist', () => {
+describe("assertNoErrors", () => {
+  it("passes when no error events exist", () => {
     const result = makeResult({
-      events: [
-        { type: 'tool_call', toolName: 'search' },
-        { type: 'done' },
-      ],
+      events: [{ type: "tool_call", toolName: "search" }, { type: "done" }],
     });
     expect(() => assertNoErrors(result)).not.toThrow();
   });
 
-  it('passes for empty events', () => {
+  it("passes for empty events", () => {
     const result = makeResult({ events: [] });
     expect(() => assertNoErrors(result)).not.toThrow();
   });
 
-  it('throws when error events exist', () => {
+  it("throws when error events exist", () => {
     const result = makeResult({
-      events: [{ type: 'error', content: 'something broke' }],
+      events: [{ type: "error", content: "something broke" }],
     });
-    expect(() => assertNoErrors(result)).toThrow(
-      /Expected no errors, but found 1/,
-    );
+    expect(() => assertNoErrors(result)).toThrow(/Expected no errors, but found 1/);
   });
 
-  it('includes error content in message', () => {
+  it("includes error content in message", () => {
     const result = makeResult({
-      events: [{ type: 'error', content: 'disk full' }],
+      events: [{ type: "error", content: "disk full" }],
     });
     expect(() => assertNoErrors(result)).toThrow(/disk full/);
   });
 
-  it('reports count of multiple errors', () => {
+  it("reports count of multiple errors", () => {
     const result = makeResult({
       events: [
-        { type: 'error', content: 'err1' },
-        { type: 'error', content: 'err2' },
+        { type: "error", content: "err1" },
+        { type: "error", content: "err2" },
       ],
     });
-    expect(() => assertNoErrors(result)).toThrow(
-      /Expected no errors, but found 2/,
-    );
+    expect(() => assertNoErrors(result)).toThrow(/Expected no errors, but found 2/);
   });
 });

@@ -64,7 +64,7 @@ export class TextMention extends TerminationCondition {
   }
 
   shouldTerminate(context: TerminationContext): TerminationResult {
-    let result = String(context.result ?? '');
+    let result = String(context.result ?? "");
     let text = this.text;
     if (!this.caseSensitive) {
       result = result.toLowerCase();
@@ -73,12 +73,12 @@ export class TextMention extends TerminationCondition {
     if (result.includes(text)) {
       return { shouldTerminate: true, reason: `Text '${this.text}' found in output` };
     }
-    return { shouldTerminate: false, reason: '' };
+    return { shouldTerminate: false, reason: "" };
   }
 
   toJSON(): object {
     return {
-      type: 'text_mention',
+      type: "text_mention",
       text: this.text,
       caseSensitive: this.caseSensitive,
     };
@@ -97,16 +97,16 @@ export class StopMessage extends TerminationCondition {
   }
 
   shouldTerminate(context: TerminationContext): TerminationResult {
-    const result = String(context.result ?? '').trim();
+    const result = String(context.result ?? "").trim();
     if (result === this.stopMessage) {
       return { shouldTerminate: true, reason: `Stop message '${this.stopMessage}' received` };
     }
-    return { shouldTerminate: false, reason: '' };
+    return { shouldTerminate: false, reason: "" };
   }
 
   toJSON(): object {
     return {
-      type: 'stop_message',
+      type: "stop_message",
       stopMessage: this.stopMessage,
     };
   }
@@ -131,12 +131,12 @@ export class MaxMessage extends TerminationCondition {
         reason: `Message count (${messages.length}) >= limit (${this.maxMessages})`,
       };
     }
-    return { shouldTerminate: false, reason: '' };
+    return { shouldTerminate: false, reason: "" };
   }
 
   toJSON(): object {
     return {
-      type: 'max_message',
+      type: "max_message",
       maxMessages: this.maxMessages,
     };
   }
@@ -185,14 +185,15 @@ export class TokenUsageCondition extends TerminationCondition {
         reason: `Completion tokens (${completion}) >= limit (${this.maxCompletionTokens})`,
       };
     }
-    return { shouldTerminate: false, reason: '' };
+    return { shouldTerminate: false, reason: "" };
   }
 
   toJSON(): object {
-    const result: Record<string, unknown> = { type: 'token_usage' };
+    const result: Record<string, unknown> = { type: "token_usage" };
     if (this.maxTotalTokens !== undefined) result.maxTotalTokens = this.maxTotalTokens;
     if (this.maxPromptTokens !== undefined) result.maxPromptTokens = this.maxPromptTokens;
-    if (this.maxCompletionTokens !== undefined) result.maxCompletionTokens = this.maxCompletionTokens;
+    if (this.maxCompletionTokens !== undefined)
+      result.maxCompletionTokens = this.maxCompletionTokens;
     return result;
   }
 }
@@ -226,16 +227,16 @@ export class AndCondition extends TerminationCondition {
     for (const cond of this.conditions) {
       const result = cond.shouldTerminate(context);
       if (!result.shouldTerminate) {
-        return { shouldTerminate: false, reason: '' };
+        return { shouldTerminate: false, reason: "" };
       }
       if (result.reason) reasons.push(result.reason);
     }
-    return { shouldTerminate: true, reason: reasons.join(' AND ') };
+    return { shouldTerminate: true, reason: reasons.join(" AND ") };
   }
 
   toJSON(): object {
     return {
-      type: 'and',
+      type: "and",
       conditions: this.conditions.map((c) => c.toJSON()),
     };
   }
@@ -268,12 +269,12 @@ export class OrCondition extends TerminationCondition {
       const result = cond.shouldTerminate(context);
       if (result.shouldTerminate) return result;
     }
-    return { shouldTerminate: false, reason: '' };
+    return { shouldTerminate: false, reason: "" };
   }
 
   toJSON(): object {
     return {
-      type: 'or',
+      type: "or",
       conditions: this.conditions.map((c) => c.toJSON()),
     };
   }

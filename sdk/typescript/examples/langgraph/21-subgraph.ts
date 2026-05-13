@@ -161,7 +161,6 @@ const graph = parentBuilder.compile({ name: "document_pipeline_with_subgraph" })
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',
-  tools: [],
   framework: 'langgraph',
 };
 

@@ -126,9 +126,15 @@ public class AgentStreamRegistry {
     /**
      * Mark an execution as complete. Completes all emitters and schedules
      * buffer cleanup.
+     *
+     * <p>Does NOT resolve aliases — completing a child sub-workflow must not
+     * close the parent's SSE stream.</p>
      */
     public void complete(String executionId) {
-        String targetId = aliases.getOrDefault(executionId, executionId);
+        // Do NOT resolve alias here: completing a child workflow should not
+        // close the parent's emitters. Only the root (parent) workflow's
+        // complete() call should close the parent stream.
+        String targetId = executionId;
 
         CopyOnWriteArrayList<SseEmitter> list = emitters.remove(targetId);
         if (list != null) {
@@ -143,8 +149,10 @@ public class AgentStreamRegistry {
         // Mark for buffer cleanup after retention period
         completedAt.put(targetId, System.currentTimeMillis());
 
-        // Clean up aliases pointing to this execution
-        aliases.entrySet().removeIf(e -> e.getValue().equals(targetId));
+        // Note: aliases are NOT cleaned up here. A child workflow's alias (child→parent)
+        // must persist until the parent completes, so that any late events from the child
+        // still forward to the parent. The parent's complete() (which won't be an alias)
+        // handles final cleanup.
 
         logger.debug("Completed SSE stream for execution {}", targetId);
     }

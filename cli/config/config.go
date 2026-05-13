@@ -11,10 +11,8 @@ import (
 )
 
 type Config struct {
-	ServerURL  string `json:"server_url"`
-	AuthKey    string `json:"auth_key,omitempty"`
-	AuthSecret string `json:"auth_secret,omitempty"`
-	APIKey     string `json:"api_key,omitempty"`
+	ServerURL string `json:"server_url"`
+	APIKey    string `json:"api_key,omitempty"`
 }
 
 // IsLocalhost returns true when the server URL points to a loopback address
@@ -46,21 +44,11 @@ func configPath() string {
 func Load() *Config {
 	cfg := DefaultConfig()
 
-	// Env vars override (AGENTSPAN_* primary, CONDUCTOR_* fallback)
+	// Env vars override
 	if url := os.Getenv("AGENTSPAN_SERVER_URL"); url != "" {
 		cfg.ServerURL = url
 	} else if url := os.Getenv("AGENT_SERVER_URL"); url != "" {
 		cfg.ServerURL = url
-	}
-	if key := os.Getenv("AGENTSPAN_AUTH_KEY"); key != "" {
-		cfg.AuthKey = key
-	} else if key := os.Getenv("CONDUCTOR_AUTH_KEY"); key != "" {
-		cfg.AuthKey = key
-	}
-	if secret := os.Getenv("AGENTSPAN_AUTH_SECRET"); secret != "" {
-		cfg.AuthSecret = secret
-	} else if secret := os.Getenv("CONDUCTOR_AUTH_SECRET"); secret != "" {
-		cfg.AuthSecret = secret
 	}
 	if apiKey := os.Getenv("AGENTSPAN_API_KEY"); apiKey != "" {
 		cfg.APIKey = apiKey
@@ -75,12 +63,6 @@ func Load() *Config {
 	if json.Unmarshal(data, &fileCfg) == nil {
 		if cfg.ServerURL == "http://localhost:6767" && fileCfg.ServerURL != "" {
 			cfg.ServerURL = fileCfg.ServerURL
-		}
-		if cfg.AuthKey == "" && fileCfg.AuthKey != "" {
-			cfg.AuthKey = fileCfg.AuthKey
-		}
-		if cfg.AuthSecret == "" && fileCfg.AuthSecret != "" {
-			cfg.AuthSecret = fileCfg.AuthSecret
 		}
 		if cfg.APIKey == "" {
 			cfg.APIKey = fileCfg.APIKey

@@ -310,14 +310,14 @@ def _run_single(
 
 
 def _parse_port(server_url: str) -> int:
-    """Extract port from URL like http://localhost:6767/api. Defaults to 8080."""
+    """Extract port from URL like http://localhost:6767/api. Defaults to 6767."""
     try:
         from urllib.parse import urlparse
 
         parsed = urlparse(server_url)
-        return parsed.port or 8080
+        return parsed.port or 6767
     except Exception:
-        return 8080
+        return 6767
 
 
 _API_KEY_VARS = {"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY"}

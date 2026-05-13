@@ -50,6 +50,6 @@ WORKDIR /app
 
 COPY --from=builder /build/runtime.jar app.jar
 
-EXPOSE 8080
+EXPOSE 6767
 
 ENTRYPOINT ["java", "-jar", "app.jar"]

@@ -20,18 +20,18 @@
 // ── Permission modes ──────────────────────────────────────
 
 export enum PermissionMode {
-  DEFAULT = 'default',
-  ACCEPT_EDITS = 'acceptEdits',
-  PLAN = 'plan',
-  BYPASS = 'bypassPermissions',
+  DEFAULT = "default",
+  ACCEPT_EDITS = "acceptEdits",
+  PLAN = "plan",
+  BYPASS = "bypassPermissions",
 }
 
 // ── Model aliases ─────────────────────────────────────────
 
 const MODEL_ALIASES: Record<string, string> = {
-  opus: 'claude-opus-4-6',
-  sonnet: 'claude-sonnet-4-6',
-  haiku: 'claude-haiku-4-5',
+  opus: "claude-opus-4-6",
+  sonnet: "claude-sonnet-4-6",
+  haiku: "claude-haiku-4-5",
 };
 
 /**
@@ -56,7 +56,7 @@ export class ClaudeCode {
   readonly permissionMode: PermissionMode;
 
   constructor(
-    modelName: string = '',
+    modelName: string = "",
     permissionMode: PermissionMode = PermissionMode.ACCEPT_EDITS,
   ) {
     this.modelName = modelName;
@@ -70,6 +70,6 @@ export class ClaudeCode {
     if (this.modelName) {
       return `claude-code/${this.modelName}`;
     }
-    return 'claude-code';
+    return "claude-code";
   }
 }

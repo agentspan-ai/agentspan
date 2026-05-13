@@ -48,7 +48,7 @@ def run_standalone():
             "Start the workflow and show me the result.",
         )
 
-        print(f"Execution ID: {result.workflow_id}")
+        print(f"Execution ID: {result.execution_id}")
         print(f"Status: {result.status}")
         print(f"Tokens: {result.token_usage}")
         result.print_result()
@@ -69,7 +69,7 @@ def run_with_load_skills():
     if "conductor" in skills:
         with AgentRuntime() as rt:
             result = rt.run(skills["conductor"], "List all workflow definitions")
-            print(f"Execution ID: {result.workflow_id}")
+            print(f"Execution ID: {result.execution_id}")
             print(f"Status: {result.status}")
             result.print_result()
 
@@ -112,7 +112,7 @@ def run_multi_skill_team():
             "```",
         )
 
-        print(f"Execution ID: {result.workflow_id}")
+        print(f"Execution ID: {result.execution_id}")
         print(f"Status: {result.status}")
 
         # Show sub-agent executions

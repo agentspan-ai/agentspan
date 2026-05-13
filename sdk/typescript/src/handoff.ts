@@ -28,10 +28,10 @@ export class OnToolResult {
   }
 
   shouldHandoff(context: HandoffContext): boolean {
-    const calledTool = context.toolName ?? '';
+    const calledTool = context.toolName ?? "";
     if (calledTool !== this.toolName) return false;
     if (this.resultContains !== undefined) {
-      const toolResult = String(context.toolResult ?? '');
+      const toolResult = String(context.toolResult ?? "");
       return toolResult.includes(this.resultContains);
     }
     return true;
@@ -40,7 +40,7 @@ export class OnToolResult {
   toJSON(): object {
     const result: Record<string, unknown> = {
       target: this.target,
-      type: 'on_tool_result',
+      type: "on_tool_result",
       toolName: this.toolName,
     };
     if (this.resultContains !== undefined) {
@@ -63,14 +63,14 @@ export class OnTextMention {
   }
 
   shouldHandoff(context: HandoffContext): boolean {
-    const result = String(context.result ?? '').toLowerCase();
+    const result = String(context.result ?? "").toLowerCase();
     return result.includes(this.text.toLowerCase());
   }
 
   toJSON(): object {
     return {
       target: this.target,
-      type: 'on_text_mention',
+      type: "on_text_mention",
       text: this.text,
     };
   }
@@ -88,7 +88,7 @@ export class OnCondition {
   constructor(options: { target: string; condition: Function; agentName?: string }) {
     this.target = options.target;
     this.condition = options.condition;
-    const agentName = options.agentName ?? 'agent';
+    const agentName = options.agentName ?? "agent";
     this.taskName = `${agentName}_handoff_check`;
   }
 
@@ -103,7 +103,7 @@ export class OnCondition {
   toJSON(): object {
     return {
       target: this.target,
-      type: 'on_condition',
+      type: "on_condition",
       taskName: this.taskName,
     };
   }
@@ -125,7 +125,7 @@ export class TextGate {
 
   toJSON(): object {
     return {
-      type: 'text_contains',
+      type: "text_contains",
       text: this.text,
       caseSensitive: this.caseSensitive,
     };
@@ -140,7 +140,7 @@ export function gate(
   fn: Function,
   options?: { agentName?: string },
 ): { taskName: string; fn: Function } {
-  const agentName = options?.agentName ?? 'agent';
+  const agentName = options?.agentName ?? "agent";
   return {
     taskName: `${agentName}_gate`,
     fn,

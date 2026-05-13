@@ -135,7 +135,6 @@ const graph = builder.compile({ name: "debate_agents" });
 
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',
-  tools: [],
   framework: 'langgraph',
 };
 

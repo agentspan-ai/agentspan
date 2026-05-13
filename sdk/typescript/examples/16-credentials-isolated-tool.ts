@@ -16,7 +16,7 @@
  *
  * Setup (one-time, via CLI):
  *   agentspan login                                     # authenticate
- *   agentspan credentials set --name GITHUB_TOKEN       # enter token when prompted
+ *   agentspan credentials set GITHUB_TOKEN <your-github-token> # enter token when prompted
  *
  * Requirements:
  *   - Agentspan server running at AGENTSPAN_SERVER_URL

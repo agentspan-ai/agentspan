@@ -106,6 +106,8 @@ from agentspan.agents.run import (
     deploy,
     deploy_async,
     plan,
+    resume,
+    resume_async,
     run,
     run_async,
     serve,
@@ -177,6 +179,9 @@ from agentspan.agents.termination import (
     TokenUsageTermination,
 )
 
+# OpenAI Agents SDK compatibility
+from agentspan.agents.openai_compat import RunResult, Runner
+
 # Tool decorator and constructors
 from agentspan.agents.tool import (
     ToolContext,
@@ -193,12 +198,20 @@ from agentspan.agents.tool import (
     search_tool,
     tool,
     video_tool,
+    wait_for_message_tool,
 )
+
+# openai-agents name alias — ``from agentspan.agents import function_tool``
+function_tool = tool
 
 # Tracing (optional — only activates if opentelemetry is installed)
 from agentspan.agents.tracing import is_tracing_enabled
 
 __all__ = [
+    # OpenAI Agents SDK compatibility
+    "Runner",
+    "RunResult",
+    "function_tool",
     # Core
     "Agent",
     "AgentDef",
@@ -221,6 +234,7 @@ __all__ = [
     "http_tool",
     "human_tool",
     "mcp_tool",
+    "wait_for_message_tool",
     "image_tool",
     "audio_tool",
     "video_tool",
@@ -233,6 +247,8 @@ __all__ = [
     "deploy",
     "deploy_async",
     "plan",
+    "resume",
+    "resume_async",
     "run",
     "run_async",
     "serve",

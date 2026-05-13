@@ -16,7 +16,7 @@ Run:
 
 Requirements:
     - Agentspan server running
-    - OPENAI_API_KEY stored: agentspan credentials set --name OPENAI_API_KEY
+    - OPENAI_API_KEY stored: agentspan credentials set OPENAI_API_KEY <your-openai-api-key>
 """
 
 import os

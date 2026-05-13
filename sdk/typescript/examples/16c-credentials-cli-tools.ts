@@ -9,9 +9,9 @@
  *
  * Setup (one-time, via CLI):
  *   agentspan login
- *   agentspan credentials set --name GITHUB_TOKEN
- *   agentspan credentials set --name AWS_ACCESS_KEY_ID
- *   agentspan credentials set --name AWS_SECRET_ACCESS_KEY
+ *   agentspan credentials set GITHUB_TOKEN <your-github-token>
+ *   agentspan credentials set AWS_ACCESS_KEY_ID <your-aws-access-key-id>
+ *   agentspan credentials set AWS_SECRET_ACCESS_KEY <your-aws-secret-access-key>
  *
  * Requirements:
  *   - Agentspan server running at AGENTSPAN_SERVER_URL

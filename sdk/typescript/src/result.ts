@@ -1,5 +1,5 @@
-import type { AgentResult, AgentEvent, Status, FinishReason, TokenUsage } from './types.js';
-import { normalizeOutput, createAgentResult } from './types.js';
+import type { AgentResult, AgentEvent, Status, FinishReason, TokenUsage } from "./types.js";
+import { normalizeOutput, createAgentResult } from "./types.js";
 
 // ── Runtime-accessible const objects ────────────────────
 
@@ -7,26 +7,26 @@ import { normalizeOutput, createAgentResult } from './types.js';
  * Event types as a runtime-accessible const object.
  */
 export const EventTypes = {
-  THINKING: 'thinking',
-  TOOL_CALL: 'tool_call',
-  TOOL_RESULT: 'tool_result',
-  GUARDRAIL_PASS: 'guardrail_pass',
-  GUARDRAIL_FAIL: 'guardrail_fail',
-  WAITING: 'waiting',
-  HANDOFF: 'handoff',
-  MESSAGE: 'message',
-  ERROR: 'error',
-  DONE: 'done',
+  THINKING: "thinking",
+  TOOL_CALL: "tool_call",
+  TOOL_RESULT: "tool_result",
+  GUARDRAIL_PASS: "guardrail_pass",
+  GUARDRAIL_FAIL: "guardrail_fail",
+  WAITING: "waiting",
+  HANDOFF: "handoff",
+  MESSAGE: "message",
+  ERROR: "error",
+  DONE: "done",
 } as const;
 
 /**
  * Terminal workflow statuses as a runtime-accessible const object.
  */
 export const Statuses = {
-  COMPLETED: 'COMPLETED',
-  FAILED: 'FAILED',
-  TERMINATED: 'TERMINATED',
-  TIMED_OUT: 'TIMED_OUT',
+  COMPLETED: "COMPLETED",
+  FAILED: "FAILED",
+  TERMINATED: "TERMINATED",
+  TIMED_OUT: "TIMED_OUT",
 } as const;
 
 /**
@@ -43,14 +43,14 @@ export const TERMINAL_STATUSES: ReadonlySet<string> = new Set([
  * Finish reasons as a runtime-accessible const object.
  */
 export const FinishReasons = {
-  STOP: 'stop',
-  LENGTH: 'length',
-  TOOL_CALLS: 'tool_calls',
-  ERROR: 'error',
-  CANCELLED: 'cancelled',
-  TIMEOUT: 'timeout',
-  GUARDRAIL: 'guardrail',
-  REJECTED: 'rejected',
+  STOP: "stop",
+  LENGTH: "length",
+  TOOL_CALLS: "tool_calls",
+  ERROR: "error",
+  CANCELLED: "cancelled",
+  TIMEOUT: "timeout",
+  GUARDRAIL: "guardrail",
+  REJECTED: "rejected",
 } as const;
 
 // ── makeAgentResult factory ─────────────────────────────
@@ -81,7 +81,7 @@ export interface MakeAgentResultData {
  * - object -> as-is
  */
 export function makeAgentResult(data: MakeAgentResultData): AgentResult {
-  const status = (data.status as Status) ?? 'FAILED';
+  const status = (data.status as Status) ?? "FAILED";
   const finishReason = resolveFinishReason(data);
   const errorMessage = data.error ?? data.errorMessage;
 
@@ -90,7 +90,7 @@ export function makeAgentResult(data: MakeAgentResultData): AgentResult {
 
   return createAgentResult({
     output,
-    executionId: data.executionId ?? '',
+    executionId: data.executionId ?? "",
     correlationId: data.correlationId,
     messages: data.messages ?? [],
     toolCalls: data.toolCalls ?? [],
@@ -112,18 +112,18 @@ function resolveFinishReason(data: MakeAgentResultData): FinishReason {
     return data.finishReason as FinishReason;
   }
 
-  const status = data.status ?? 'FAILED';
+  const status = data.status ?? "FAILED";
 
   switch (status) {
-    case 'COMPLETED':
-      return 'stop';
-    case 'FAILED':
-      return 'error';
-    case 'TERMINATED':
-      return 'cancelled';
-    case 'TIMED_OUT':
-      return 'timeout';
+    case "COMPLETED":
+      return "stop";
+    case "FAILED":
+      return "error";
+    case "TERMINATED":
+      return "cancelled";
+    case "TIMED_OUT":
+      return "timeout";
     default:
-      return 'error';
+      return "error";
   }
 }

@@ -124,6 +124,26 @@ class AgentHttpClient:
         except httpx.HTTPStatusError as exc:
             _raise_api_error(exc, url=url)
 
+    async def stop(self, execution_id: str) -> None:
+        """POST /agent/{id}/stop — graceful deterministic stop."""
+        client = await self._get_client()
+        url = self._url(f"/{execution_id}/stop")
+        resp = await client.post(url)
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            _raise_api_error(exc, url=url)
+
+    async def signal(self, execution_id: str, message: str) -> None:
+        """POST /agent/{id}/signal — inject persistent context."""
+        client = await self._get_client()
+        url = self._url(f"/{execution_id}/signal")
+        resp = await client.post(url, json={"message": message})
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            _raise_api_error(exc, url=url)
+
     async def stream_sse(self, execution_id: str) -> AsyncIterator[Dict[str, Any]]:
         """GET /agent/stream/{id} — consume SSE events.
 
