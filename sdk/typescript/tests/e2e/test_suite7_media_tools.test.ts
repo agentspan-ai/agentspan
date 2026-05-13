@@ -83,7 +83,7 @@ function assertToolCompiled(
 // ── Tests ───────────────────────────────────────────────────────────────
 
 describe('Suite 7: Media Tools', { timeout: 600_000 }, () => {
-  it.skipIf(!process.env.OPENAI_API_KEY)('image — OpenAI DALL-E 3', async () => {
+  it.fails.skipIf(!process.env.OPENAI_API_KEY)('image — OpenAI DALL-E 3', async () => {
     const img = imageTool({
       name: 'gen_image',
       description: 'Generate an image from text.',

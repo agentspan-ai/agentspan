@@ -373,6 +373,8 @@ class Agent:
         prefill_tools: Optional[List[Any]] = None,
         fallback_max_turns: Optional[int] = None,
         plan_source: Optional[Dict[str, Any]] = None,
+        synthesize: bool = True,
+        masked_fields: Optional[List[str]] = None,
     ) -> None:
         if not name or not isinstance(name, str):
             raise ValueError("Agent name must be a non-empty string")
@@ -452,6 +454,7 @@ class Agent:
         self.introduction = introduction
         self.metadata: Dict[str, Any] = dict(metadata) if metadata else {}
         self.stateful = stateful
+        self.synthesize = synthesize
         self.planner = planner
         self.callbacks: List[Any] = list(callbacks) if callbacks else []
         self.before_agent_callback = before_agent_callback
@@ -514,6 +517,9 @@ class Agent:
             self.credentials: List[Any] = list(credentials)
         else:
             self.credentials = []
+
+        # Fields whose values are redacted in execution history and UI.
+        self.masked_fields: List[str] = list(masked_fields) if masked_fields else []
 
         # Propagate agent-level credentials to CLI/code tools so the
         # dispatch layer can resolve them per-tool (the dispatch only

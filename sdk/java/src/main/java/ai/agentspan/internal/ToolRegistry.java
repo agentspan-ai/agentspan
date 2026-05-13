@@ -96,6 +96,8 @@ public class ToolRegistry {
                 .approvalRequired(ann.approvalRequired())
                 .timeoutSeconds(ann.timeoutSeconds())
                 .maxCalls(ann.maxCalls())
+                .retryCount(ann.retryCount())
+                .retryDelaySeconds(ann.retryDelaySeconds())
                 .toolType("worker")
                 .credentials(credentials)
                 .build());
