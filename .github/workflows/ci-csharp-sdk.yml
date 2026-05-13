@@ -1,0 +1,29 @@
+name: CI C# SDK
+
+on:
+  pull_request:
+    paths:
+      - 'sdk/csharp/**'
+  push:
+    branches:
+      - main
+    paths:
+      - 'sdk/csharp/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/csharp
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build solution
+        run: dotnet build Agentspan.sln --configuration Release
