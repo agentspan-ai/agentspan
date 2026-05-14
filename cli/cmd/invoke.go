@@ -80,13 +80,8 @@ func runLimaInvoke(ref *agentRef) error {
 		apiPort = "7878"
 	}
 
-	agentspanURL := cfg.LimaGuestServerURL
-	if agentspanURL == "" {
-		agentspanURL = config.DefaultLimaGuestServerURL
-	}
-	envMap := map[string]string{
-		"AGENTSPAN_SERVER_URL": agentspanURL,
-	}
+	// AGENTSPAN_SERVER_URL is injected by the runner from runner.local.toml [host] name.
+	envMap := map[string]string{}
 	if data, err := os.ReadFile(filepath.Join(".", "agentspan.yaml")); err == nil {
 		var spec agentspanInvokeSpec
 		if yaml.Unmarshal(data, &spec) == nil {
