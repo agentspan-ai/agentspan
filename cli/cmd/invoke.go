@@ -4,17 +4,21 @@
 package cmd
 
 import (
-	"bytes"
-	"encoding/json"
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 
+	"github.com/agentspan-ai/agentspan/cli/client"
 	"github.com/agentspan-ai/agentspan/cli/config"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
+)
+
+const (
+	invokeWorkflowName    = "agentspan_invoke"
+	invokeWorkflowVersion = 1
 )
 
 // agentspanInvokeSpec is the minimal slice of agentspan.yaml we need at invoke/run time.
@@ -41,10 +45,10 @@ type agentRef struct {
 var invokeCmd = &cobra.Command{
 	Use:   "invoke",
 	Short: "Invoke a deployed agent in its execution environment",
-	Long: `Boot the staged agent bundle in a Firecracker microVM via the Lima VM.
+	Long: `Boot the staged agent bundle in a Firecracker microVM via the Conductor workflow.
 
 Reads metadata.customer/cluster/namespace/name from agentspan.yaml in the
-current directory. The Rust API resolves the bundle path from Valkey.`,
+current directory. The Rust worker resolves the bundle path from Valkey.`,
 	Args: cobra.NoArgs,
 	RunE: runInvokeCmd,
 }
@@ -58,97 +62,77 @@ func runInvokeCmd(cmd *cobra.Command, args []string) error {
 	if ref == nil {
 		return fmt.Errorf("agentspan.yaml not found or missing required metadata fields (customer, cluster, namespace, name)")
 	}
-	return runLimaInvoke(ref)
-}
 
-// runLimaInvoke calls the Rust API on the Lima host to boot the staged agent bundle.
-func runLimaInvoke(ref *agentRef) error {
 	cfg := config.Load()
-	vmName := os.Getenv("LIMA_VM_NAME")
-	if vmName == "" && cfg.LimaVMName != "" {
-		vmName = cfg.LimaVMName
-	}
-	if vmName == "" {
-		vmName = config.DefaultLimaVMName
-	}
+	cc := client.NewConductorClient(cfg.ConductorURL)
+	ctx := context.Background()
 
-	apiPort := os.Getenv("AGENT_RUNNER_API_PORT")
-	if apiPort == "" && cfg.RunnerAPIPort != "" {
-		apiPort = cfg.RunnerAPIPort
-	}
-	if apiPort == "" {
-		apiPort = config.DefaultRunnerAPIPort
-	}
-
-	// AGENTSPAN_SERVER_URL is injected by the runner from runner.local.toml [host] name.
-	envMap := map[string]string{}
-	if data, err := os.ReadFile(filepath.Join(".", "agentspan.yaml")); err == nil {
-		var spec agentspanInvokeSpec
-		if yaml.Unmarshal(data, &spec) == nil {
-			for _, key := range spec.Spec.Env {
-				if val := os.Getenv(key); val != "" {
-					envMap[key] = val
-				} else if key == "AGENTSPAN_LLM_MODEL" && cfg.LLMModel != "" {
-					envMap[key] = cfg.LLMModel
-				}
-			}
-		}
-	}
-
-	type invokeReq struct {
-		Customer  string            `json:"customer"`
-		Cluster   string            `json:"cluster"`
-		Namespace string            `json:"namespace"`
-		AgentName string            `json:"agent_name"`
-		Env       map[string]string `json:"env"`
-	}
-	payload, err := json.Marshal(invokeReq{
-		Customer:  ref.Customer,
-		Cluster:   ref.Cluster,
-		Namespace: ref.Namespace,
-		AgentName: ref.Name,
-		Env:       envMap,
-	})
-	if err != nil {
-		return fmt.Errorf("marshal invoke request: %w", err)
-	}
+	// Build env map from agentspan.yaml spec.env
+	envMap := buildInvokeEnvMap(cfg)
 
 	bold := color.New(color.Bold)
-	bold.Printf("Invoking agent %q (%s/%s/%s) via Rust API on Lima VM %q\n",
-		ref.Name, ref.Customer, ref.Cluster, ref.Namespace, vmName)
+	bold.Printf("Invoking agent %q (%s/%s/%s)\n\n",
+		ref.Name, ref.Customer, ref.Cluster, ref.Namespace)
+
+	input := map[string]any{
+		"customer":   ref.Customer,
+		"cluster":    ref.Cluster,
+		"namespace":  ref.Namespace,
+		"agent_name": ref.Name,
+		"env":        envMap,
+	}
+
+	workflowID, err := cc.StartWorkflow(ctx, invokeWorkflowName, invokeWorkflowVersion, input)
+	if err != nil {
+		return fmt.Errorf("start invoke workflow: %w", err)
+	}
+	fmt.Printf("  Workflow: %s\n", workflowID)
+	fmt.Print("  Invoking")
+
+	status, err := cc.WaitForWorkflow(ctx, workflowID, func(s string) {
+		fmt.Print(".")
+	})
 	fmt.Println()
-
-	var out bytes.Buffer
-	runCmd := exec.Command("limactl", "shell", vmName, "--",
-		"curl", "-s",
-		"-X", "POST",
-		"-H", "Content-Type: application/json",
-		"-d", string(payload),
-		fmt.Sprintf("http://localhost:%s/invoke", apiPort))
-	runCmd.Stdout = &out
-	runCmd.Stderr = os.Stderr
-	if err := runCmd.Run(); err != nil {
-		return fmt.Errorf("invoke API call failed: %w", err)
+	if err != nil {
+		return err
 	}
 
-	type invokeResp struct {
-		ExitCode int    `json:"exit_code"`
-		Output   string `json:"output"`
-		Error    string `json:"error,omitempty"`
+	// Print agent output from workflow result
+	fmt.Println()
+	if output, ok := status.Output["output"].(string); ok && output != "" {
+		fmt.Print(output)
 	}
-	var resp invokeResp
-	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
-		fmt.Print(out.String())
-		return nil
+
+	exitCode := 0
+	if ec, ok := status.Output["exit_code"].(float64); ok {
+		exitCode = int(ec)
 	}
-	if resp.Error != "" {
-		return fmt.Errorf("invoke error: %s", resp.Error)
-	}
-	fmt.Print(resp.Output)
-	if resp.ExitCode != 0 {
-		return fmt.Errorf("agent exited with code %d", resp.ExitCode)
+	if exitCode != 0 {
+		return fmt.Errorf("agent exited with code %d", exitCode)
 	}
 	return nil
+}
+
+// buildInvokeEnvMap reads agentspan.yaml spec.env and resolves values from
+// environment variables or CLI config.
+func buildInvokeEnvMap(cfg *config.Config) map[string]string {
+	envMap := map[string]string{}
+	data, err := os.ReadFile(filepath.Join(".", "agentspan.yaml"))
+	if err != nil {
+		return envMap
+	}
+	var spec agentspanInvokeSpec
+	if yaml.Unmarshal(data, &spec) != nil {
+		return envMap
+	}
+	for _, key := range spec.Spec.Env {
+		if val := os.Getenv(key); val != "" {
+			envMap[key] = val
+		} else if key == "AGENTSPAN_LLM_MODEL" && cfg.LLMModel != "" {
+			envMap[key] = cfg.LLMModel
+		}
+	}
+	return envMap
 }
 
 // readAgentRef reads the full agent identity from agentspan.yaml in dir.
