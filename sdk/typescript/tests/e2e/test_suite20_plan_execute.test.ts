@@ -265,7 +265,8 @@ describe('Suite 20: Plan-Execute Strategy', () => {
     const harness = new Agent({
       name: 'ts_test_report_gen',
       model: MODEL,
-      agents: [planner, fallback],
+      planner,
+      fallback,
       strategy: 'plan_execute',
       fallbackMaxTurns: 5,
     });
@@ -421,7 +422,8 @@ IMPORTANT: Every generate block MUST include "max_tokens": 8192.
     const harness = new Agent({
       name: 'ts_test_report_gen_maxtok',
       model: MODEL,
-      agents: [planner, fallback],
+      planner,
+      fallback,
       strategy: 'plan_execute',
       fallbackMaxTurns: 5,
     });

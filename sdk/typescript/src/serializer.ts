@@ -154,10 +154,14 @@ export class AgentConfigSerializer {
     // Sub-agents (recursive)
     if (agent.agents.length > 0) {
       config.agents = agent.agents.map((a) => this.serializeAgent(a));
-      // Strategy ONLY when agents is non-empty
-      if (agent.strategy) {
-        config.strategy = agent.strategy;
-      }
+    }
+    // Strategy is emitted when the agent has any sub-agent declaration:
+    // legacy agents=[...] OR PLAN_EXECUTE's named slots (planner / fallback).
+    // Without the slot check, a PLAN_EXECUTE coordinator built with
+    // planner=... would serialize with strategy: undefined and the server's
+    // dispatch would fall to compileWithTools.
+    if (agent.strategy && (agent.agents.length > 0 || agent.planner !== undefined || agent.fallback !== undefined)) {
+      config.strategy = agent.strategy;
     }
 
     // Router
@@ -213,8 +217,18 @@ export class AgentConfigSerializer {
     // Metadata
     if (agent.metadata) config.metadata = agent.metadata;
 
-    // Planner
-    if (agent.planner) config.planner = agent.planner;
+    // Plan-first preamble (Google ADK feature) — boolean.
+    // Renamed from the legacy `planner: boolean` to free the `planner` JSON
+    // slot for the PLAN_EXECUTE sub-agent below.
+    if (agent.enablePlanning) config.enablePlanning = true;
+
+    // PLAN_EXECUTE named slots: planner (required) + fallback (optional).
+    // Both serialize as nested AgentConfig dicts so the server's
+    // MultiAgentCompiler.compilePlanExecute can dispatch.
+    // (fallbackMaxTurns + planSource are serialized below alongside the
+    // other PLAN_EXECUTE knobs.)
+    if (agent.planner) config.planner = this.serializeAgent(agent.planner);
+    if (agent.fallback) config.fallback = this.serializeAgent(agent.fallback);
 
     // Callbacks
     if (agent.callbacks.length > 0) {

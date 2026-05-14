@@ -79,7 +79,7 @@ describe("serializeAgent() — simple agent", () => {
       temperature: 0.7,
       timeoutSeconds: 300,
       external: true,
-      planner: true,
+      enablePlanning: true,
       includeContents: "none",
       requiredTools: ["search"],
     });
@@ -90,7 +90,7 @@ describe("serializeAgent() — simple agent", () => {
     expect(config.temperature).toBe(0.7);
     expect(config.timeoutSeconds).toBe(300);
     expect(config.external).toBe(true);
-    expect(config.planner).toBe(true);
+    expect(config.enablePlanning).toBe(true);
     expect(config.includeContents).toBe("none");
     expect(config.requiredTools).toEqual(["search"]);
   });

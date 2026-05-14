@@ -109,7 +109,26 @@ export interface AgentOptions {
   introduction?: string;
   metadata?: Record<string, unknown>;
   callbacks?: CallbackHandler[];
-  planner?: boolean;
+  /**
+   * Plan-first preamble (Google ADK feature). When true, the server augments
+   * the system prompt with a "plan first, then execute" instruction. Not to
+   * be confused with the {@link planner} sub-agent slot below — those serve
+   * different purposes.
+   */
+  enablePlanning?: boolean;
+  /**
+   * PLAN_EXECUTE: the agent that produces the JSON plan. Required when
+   * {@link strategy} is {@code "plan_execute"}. The planner can be a simple
+   * agent or a multi-agent (e.g. SEQUENTIAL of explorer + planner).
+   * Replaces the old positional {@code agents=[planner, fallback]} shape.
+   */
+  planner?: Agent;
+  /**
+   * PLAN_EXECUTE: the agent that runs agentically when the plan can't
+   * compile or the compiled SUB_WORKFLOW fails at execution. Optional — if
+   * absent, plan failures TERMINATE the workflow.
+   */
+  fallback?: Agent;
   includeContents?: "default" | "none";
   thinkingBudgetTokens?: number;
   requiredTools?: string[];
@@ -169,7 +188,11 @@ export class Agent {
   readonly introduction?: string;
   readonly metadata?: Record<string, unknown>;
   readonly callbacks: CallbackHandler[];
-  readonly planner: boolean;
+  readonly enablePlanning: boolean;
+  /** PLAN_EXECUTE named slot (sub-agent that produces the JSON plan). */
+  readonly planner?: Agent;
+  /** PLAN_EXECUTE named slot (sub-agent that runs agentically on plan failure). */
+  readonly fallback?: Agent;
   readonly includeContents?: "default" | "none";
   readonly thinkingBudgetTokens?: number;
   readonly requiredTools?: string[];
@@ -225,7 +248,34 @@ export class Agent {
     this.introduction = options.introduction;
     this.metadata = options.metadata;
     this.callbacks = options.callbacks ?? [];
-    this.planner = options.planner ?? false;
+    this.enablePlanning = options.enablePlanning ?? false;
+    this.planner = options.planner;
+    this.fallback = options.fallback;
+    // ── PLAN_EXECUTE named-slot validation ────────────────
+    // Named slots (planner=, fallback=) only valid with strategy=plan_execute;
+    // passing them elsewhere would either NPE deep in a strategy compiler or
+    // be silently ignored. Reject at construction with a clear message.
+    if ((this.planner !== undefined || this.fallback !== undefined)
+        && this.strategy !== "plan_execute") {
+      throw new ConfigurationError(
+        `Named slots 'planner' and 'fallback' are only valid with strategy='plan_execute'. ` +
+          `Got strategy=${this.strategy ?? "<undefined>"}. ` +
+          `Either set strategy='plan_execute' or pass sub-agents via agents=[...] instead.`,
+      );
+    }
+    if (this.strategy === "plan_execute") {
+      if (this.planner === undefined) {
+        if (this.agents.length > 0) {
+          throw new ConfigurationError(
+            `strategy='plan_execute' no longer accepts agents=[planner, fallback]. ` +
+              `Use the named slots: planner=<Agent> (required) and fallback=<Agent> (optional).`,
+          );
+        }
+        throw new ConfigurationError(
+          `strategy='plan_execute' requires planner=<Agent> (the agent that produces the JSON plan).`,
+        );
+      }
+    }
     this.includeContents = options.includeContents;
     this.thinkingBudgetTokens = options.thinkingBudgetTokens;
     this.requiredTools = options.requiredTools;
@@ -466,7 +516,7 @@ export function agentsFrom(instance: object): Agent[] {
         timeoutSeconds: metadata.timeoutSeconds,
         external: metadata.external,
         metadata: metadata.metadata,
-        planner: metadata.planner,
+        enablePlanning: metadata.enablePlanning,
         credentials: metadata.credentials,
       }),
     );

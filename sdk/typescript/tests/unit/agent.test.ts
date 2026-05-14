@@ -20,7 +20,7 @@ describe("Agent", () => {
       expect(a.maxTurns).toBe(25);
       expect(a.timeoutSeconds).toBe(0);
       expect(a.external).toBe(false);
-      expect(a.planner).toBe(false);
+      expect(a.enablePlanning).toBe(false);
       expect(a.guardrails).toEqual([]);
       expect(a.handoffs).toEqual([]);
       expect(a.callbacks).toEqual([]);
@@ -55,7 +55,7 @@ describe("Agent", () => {
         allowedTransitions: { full_agent: ["sub"] },
         introduction: "I am the full agent.",
         metadata: { version: "1.0" },
-        planner: true,
+        enablePlanning: true,
         includeContents: "default",
         thinkingBudgetTokens: 1024,
         requiredTools: ["tool_a"],
@@ -73,7 +73,7 @@ describe("Agent", () => {
       expect(a.maxTokens).toBe(4096);
       expect(a.temperature).toBe(0.7);
       expect(a.timeoutSeconds).toBe(300);
-      expect(a.planner).toBe(true);
+      expect(a.enablePlanning).toBe(true);
       expect(a.includeContents).toBe("default");
       expect(a.thinkingBudgetTokens).toBe(1024);
       expect(a.requiredTools).toEqual(["tool_a"]);
