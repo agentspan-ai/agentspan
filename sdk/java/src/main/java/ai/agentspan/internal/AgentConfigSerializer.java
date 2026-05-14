@@ -157,9 +157,13 @@ public class AgentConfigSerializer {
             agentMap.put("allowedTransitions", agent.getAllowedTransitions());
         }
 
-        // Planner mode
-        if (agent.isPlanner()) {
-            agentMap.put("planner", true);
+        // Plan-first preamble (Google ADK style). Renamed from "planner"
+        // because the server's AgentConfig now uses that JSON key for the
+        // PLAN_EXECUTE planner sub-agent slot. Emitting "planner": true
+        // (boolean) into a slot the server expects to be an AgentConfig
+        // object would either fail Jackson deserialisation or silently null.
+        if (agent.isEnablePlanning()) {
+            agentMap.put("enablePlanning", true);
         }
 
         // Synthesize — only emit when explicitly disabled (true is the server default)
@@ -259,6 +263,18 @@ public class AgentConfigSerializer {
             agentMap.put("requiredTools", agent.getRequiredTools());
         }
 
+        // Prefill tools (tool calls to execute before the first LLM turn)
+        if (agent.getPrefillTools() != null && !agent.getPrefillTools().isEmpty()) {
+            List<Map<String, Object>> prefillList = new ArrayList<>();
+            for (var pt : agent.getPrefillTools()) {
+                Map<String, Object> ptMap = new LinkedHashMap<>();
+                ptMap.put("toolName", pt.getToolName());
+                ptMap.put("arguments", pt.getArguments());
+                prefillList.add(ptMap);
+            }
+            agentMap.put("prefillTools", prefillList);
+        }
+
         // Agent-level credentials
         if (agent.getCredentials() != null && !agent.getCredentials().isEmpty()) {
             agentMap.put("credentials", agent.getCredentials());
@@ -274,6 +290,11 @@ public class AgentConfigSerializer {
             Map<String, Object> stopWhen = new LinkedHashMap<>();
             stopWhen.put("taskName", agent.getStopWhenTaskName());
             agentMap.put("stopWhen", stopWhen);
+        }
+
+        // Fallback max turns (PLAN_EXECUTE strategy)
+        if (agent.getFallbackMaxTurns() != null) {
+            agentMap.put("fallbackMaxTurns", agent.getFallbackMaxTurns());
         }
 
         // Stateful mode
@@ -390,6 +411,9 @@ public class AgentConfigSerializer {
         }
         if (tool.getTimeoutSeconds() > 0) {
             toolMap.put("timeoutSeconds", tool.getTimeoutSeconds());
+        }
+        if (tool.getMaxCalls() > 0) {
+            toolMap.put("maxCalls", tool.getMaxCalls());
         }
 
         // Credentials must be nested inside config so the server includes them

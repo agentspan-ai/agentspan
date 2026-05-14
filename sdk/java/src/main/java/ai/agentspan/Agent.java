@@ -7,6 +7,7 @@ import ai.agentspan.enums.Strategy;
 import ai.agentspan.execution.CliConfig;
 import ai.agentspan.handoff.Handoff;
 import ai.agentspan.model.GuardrailDef;
+import ai.agentspan.model.PrefillToolCall;
 import ai.agentspan.model.PromptTemplate;
 import ai.agentspan.model.ToolDef;
 import ai.agentspan.termination.TerminationCondition;
@@ -56,7 +57,11 @@ public class Agent {
     private final String sessionId;
     private final List<Handoff> handoffs;
     private final Map<String, List<String>> allowedTransitions;
-    private final boolean planner;
+    /** Plan-first preamble flag (Google ADK style). Renamed from
+     *  ``planner`` because the server-side AgentConfig now uses that JSON
+     *  key for the PLAN_EXECUTE planner sub-agent slot. Wire-incompatible
+     *  with the old name. */
+    private final boolean enablePlanning;
     private final boolean localCodeExecution;
     private final java.util.List<String> allowedLanguages;
     private final int codeExecutionTimeout;
@@ -72,6 +77,8 @@ public class Agent {
     private final Map<String, Object> metadata;
     private final List<String> allowedCommands;
     private final String stopWhenTaskName;
+    private final Integer fallbackMaxTurns;
+    private final List<PrefillToolCall> prefillTools;
     private final boolean synthesize;
     private final boolean stateful;
     private final String baseUrl;
@@ -100,7 +107,7 @@ public class Agent {
         this.sessionId = builder.sessionId;
         this.handoffs = builder.handoffs != null ? new ArrayList<>(builder.handoffs) : new ArrayList<>();
         this.allowedTransitions = builder.allowedTransitions;
-        this.planner = builder.planner;
+        this.enablePlanning = builder.enablePlanning;
         this.localCodeExecution = builder.localCodeExecution;
         this.allowedLanguages = builder.allowedLanguages != null ? new ArrayList<>(builder.allowedLanguages) : null;
         this.codeExecutionTimeout = builder.codeExecutionTimeout;
@@ -116,6 +123,8 @@ public class Agent {
         this.metadata = builder.metadata;
         this.allowedCommands = builder.allowedCommands != null ? new ArrayList<>(builder.allowedCommands) : new ArrayList<>();
         this.stopWhenTaskName = builder.stopWhenTaskName;
+        this.fallbackMaxTurns = builder.fallbackMaxTurns;
+        this.prefillTools = builder.prefillTools != null ? new ArrayList<>(builder.prefillTools) : new ArrayList<>();
         this.synthesize = builder.synthesize;
         this.stateful = builder.stateful;
         this.baseUrl = builder.baseUrl;
@@ -182,7 +191,7 @@ public class Agent {
     public String getSessionId() { return sessionId; }
     public List<Handoff> getHandoffs() { return handoffs; }
     public Map<String, List<String>> getAllowedTransitions() { return allowedTransitions; }
-    public boolean isPlanner() { return planner; }
+    public boolean isEnablePlanning() { return enablePlanning; }
     public boolean isLocalCodeExecution() { return localCodeExecution; }
     public java.util.List<String> getAllowedLanguages() { return allowedLanguages; }
     public int getCodeExecutionTimeout() { return codeExecutionTimeout; }
@@ -198,6 +207,8 @@ public class Agent {
     public Map<String, Object> getMetadata() { return metadata; }
     public List<String> getAllowedCommands() { return allowedCommands; }
     public String getStopWhenTaskName() { return stopWhenTaskName; }
+    public Integer getFallbackMaxTurns() { return fallbackMaxTurns; }
+    public List<PrefillToolCall> getPrefillTools() { return prefillTools; }
     public boolean isSynthesize() { return synthesize; }
     public boolean isStateful() { return stateful; }
     public String getBaseUrl() { return baseUrl; }
@@ -246,7 +257,7 @@ public class Agent {
         private String sessionId;
         private List<Handoff> handoffs;
         private Map<String, List<String>> allowedTransitions;
-        private boolean planner = false;
+        private boolean enablePlanning = false;
         private boolean localCodeExecution = false;
         private java.util.List<String> allowedLanguages = null;
         private int codeExecutionTimeout = 30;
@@ -262,6 +273,8 @@ public class Agent {
         private Map<String, Object> metadata;
         private List<String> allowedCommands;
         private String stopWhenTaskName;
+        private Integer fallbackMaxTurns;
+        private List<PrefillToolCall> prefillTools;
         private boolean synthesize = true;
         private boolean stateful = false;
         private String baseUrl;
@@ -396,11 +409,15 @@ public class Agent {
         }
 
         /**
-         * Enable planner mode. The server enhances the system prompt with planning
-         * instructions so the agent creates a step-by-step plan before executing tools.
+         * Enable plan-first preamble (Google ADK style). When true, the
+         * server enhances the system prompt with "create a step-by-step
+         * plan before executing tools." Renamed from {@code planner(...)}
+         * because the server now uses the {@code planner} JSON key for the
+         * PLAN_EXECUTE planner sub-agent slot — keeping the old name would
+         * ship a boolean into a sub-agent slot.
          */
-        public Builder planner(boolean planner) {
-            this.planner = planner;
+        public Builder enablePlanning(boolean enablePlanning) {
+            this.enablePlanning = enablePlanning;
             return this;
         }
 
@@ -561,6 +578,18 @@ public class Agent {
          */
         public Builder stopWhen(String taskName) {
             this.stopWhenTaskName = taskName;
+            return this;
+        }
+
+        /** Max LLM turns for the fallback agent in PLAN_EXECUTE strategy. */
+        public Builder fallbackMaxTurns(int fallbackMaxTurns) {
+            this.fallbackMaxTurns = fallbackMaxTurns;
+            return this;
+        }
+
+        /** Tool calls to execute before the first LLM turn. Results are injected into context. */
+        public Builder prefillTools(List<PrefillToolCall> prefillTools) {
+            this.prefillTools = prefillTools;
             return this;
         }
 

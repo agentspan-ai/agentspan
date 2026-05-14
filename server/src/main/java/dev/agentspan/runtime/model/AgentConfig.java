@@ -20,7 +20,7 @@ import lombok.NoArgsConstructor;
  * Mirrors the Python Agent class fields for server-side compilation.
  */
 @Data
-@Builder
+@Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -57,14 +57,26 @@ public class AgentConfig {
     private MemoryConfig memory;
 
     @Builder.Default
-    private int maxTurns = 25;
+    private int maxTurns = 100;
 
     private Integer maxTokens;
+
+    /** Token budget for context condensation. When the estimated prompt token count
+     *  exceeds this value, condensation fires proactively — even if well below
+     *  the model's actual context window. */
+    private Integer contextWindowBudget;
 
     @Builder.Default
     private int timeoutSeconds = 0;
 
     private Double temperature;
+
+    /**
+     * OpenAI reasoning models (o1, gpt-5-codex, etc.) accept
+     * "minimal" | "low" | "medium" | "high". Forwarded to
+     * {@code ChatCompletion.reasoningEffort}; ignored by non-reasoning models.
+     */
+    private String reasoningEffort;
 
     /** Worker reference for stop_when callable. */
     private WorkerRef stopWhen;
@@ -90,11 +102,35 @@ public class AgentConfig {
     /** Extended thinking/reasoning config. */
     private ThinkingConfig thinkingConfig;
 
-    /** Whether the agent should plan before executing. */
-    private Boolean planner;
+    /**
+     * Whether the agent should plan before executing. Augments the system
+     * prompt with a "plan first, then execute" preamble. Used by the Google
+     * ADK normalizer; unrelated to the {@link #planner} sub-agent slot
+     * below.
+     */
+    private Boolean enablePlanning;
+
+    /**
+     * PLAN_EXECUTE: the agent that produces the JSON plan. Required when
+     * {@link #strategy} is {@code "plan_execute"}. The planner can be a
+     * simple agent or a multi-agent (e.g. SEQUENTIAL of explorer + planner).
+     * Replaces the old positional {@code agents.get(0)}.
+     */
+    private AgentConfig planner;
+
+    /**
+     * PLAN_EXECUTE: the agent that runs agentically when the plan can't
+     * compile or the compiled SUB_WORKFLOW fails at execution. Optional —
+     * if absent, plan failures TERMINATE the workflow. Replaces the old
+     * positional {@code agents.get(1)}.
+     */
+    private AgentConfig fallback;
 
     /** Tools that must be called before the agent can complete. */
     private List<String> requiredTools;
+
+    /** Tool calls to execute before the first LLM turn. Results are injected into context. */
+    private List<PrefillToolCallConfig> prefillTools;
 
     /**
      * Gate condition for conditional sequential pipelines.
@@ -104,6 +140,17 @@ public class AgentConfig {
 
     /** Agent-level credential names (e.g. ["GH_TOKEN", "AWS_ACCESS_KEY_ID"]). */
     private List<String> credentials;
+
+    /** Max LLM turns for the fallback agent in PLAN_EXECUTE strategy. */
+    private Integer fallbackMaxTurns;
+
+    /**
+     * Optional deterministic plan source for PLAN_EXECUTE strategy.
+     * A SIMPLE task is called after the planner to read the plan from an external source
+     * (e.g. contextbook). If the planner's text output fails extraction, this fallback
+     * source is tried. Format: {"tool": "tool_name", "args": {"key": "value"}}.
+     */
+    private Map<String, Object> planSource;
 
     /**
      * Input/output field names whose values should be redacted in the execution

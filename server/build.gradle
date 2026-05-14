@@ -110,6 +110,13 @@ dependencies {
     testCompileOnly "org.projectlombok:lombok:${lombokVersion}"
     testAnnotationProcessor "org.projectlombok:lombok:${lombokVersion}"
 
+    // GraalVM polyglot API — needed to compile/run the PLAN_EXECUTE compiler
+    // script tests (SynthOutputScriptTest, EnrichToolsScriptTest). Runtime jars
+    // come transitively via conductor-graalvm, but the compile-only API jar
+    // must be on the test classpath so javac can resolve org.graalvm.polyglot.
+    testImplementation 'org.graalvm.polyglot:polyglot:25.0.2'
+    testImplementation 'org.graalvm.js:js:25.0.2'
+
     // Logging
     implementation('org.apache.logging.log4j:log4j-core')
     implementation('org.apache.logging.log4j:log4j-api')
