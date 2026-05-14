@@ -24,6 +24,7 @@ import dev.agentspan.runtime.service.PlanAndCompileTask;
 import dev.agentspan.runtime.util.JavaScriptBuilder;
 import dev.agentspan.runtime.util.ModelParser;
 import dev.agentspan.runtime.util.ModelParser.ParsedModel;
+import dev.agentspan.runtime.util.WorkflowTaskUtils;
 
 /**
  * Compiles multi-agent strategies into Conductor workflows.
@@ -1390,6 +1391,12 @@ public class MultiAgentCompiler {
                 "finishReason", ref(llmRef + ".output.finishReason"),
                 "is_transfer", ref(checkTransferRef + ".output.is_transfer"),
                 "transfer_to", ref(checkTransferRef + ".output.transfer_to")));
+        // Backfill task.name on system tasks (SET_VARIABLE, DO_WHILE, INLINE)
+        // so Conductor's WorkflowSweeper doesn't trip on "TaskDef name cannot
+        // be null" when the SUB_WORKFLOW executes — the outer compile-pass
+        // doesn't recurse into SubWorkflowParam.workflowDefinition, so each
+        // embedding compiler owns that pass for its own sub-workflows.
+        WorkflowTaskUtils.ensureAllTaskNames(subWf);
         return subWf;
     }
 
@@ -1414,6 +1421,7 @@ public class MultiAgentCompiler {
         innerTask.setTaskReferenceName(innerRef);
         innerTask.setSubWorkflowParam(new SubWorkflowParams());
         innerTask.getSubWorkflowParam().setName(innerWf.getName());
+        WorkflowTaskUtils.ensureAllTaskNames(innerWf);
         innerTask.getSubWorkflowParam().setWorkflowDef(innerWf);
         Map<String, Object> innerInputs = new LinkedHashMap<>();
         innerInputs.put("prompt", "${workflow.input.prompt}");
@@ -1472,6 +1480,9 @@ public class MultiAgentCompiler {
                 "finishReason", "stop",
                 "is_transfer", ref(checkTransferRef + ".output.is_transfer"),
                 "transfer_to", ref(checkTransferRef + ".output.transfer_to")));
+        // See compileSwarmAgentWorkflow above — backfill task names so the
+        // embedded SUB_WORKFLOW passes Conductor's null-name validation.
+        WorkflowTaskUtils.ensureAllTaskNames(subWf);
         return subWf;
     }
 
@@ -1623,6 +1634,7 @@ public class MultiAgentCompiler {
         subTask.setTaskReferenceName(subRef);
         subTask.setSubWorkflowParam(new SubWorkflowParams());
         subTask.getSubWorkflowParam().setName(strategyWf.getName());
+        WorkflowTaskUtils.ensureAllTaskNames(strategyWf);
         subTask.getSubWorkflowParam().setWorkflowDef(strategyWf);
         Map<String, Object> subInputs = new LinkedHashMap<>();
         subInputs.put("prompt", "${workflow.input.prompt}");
@@ -1902,6 +1914,7 @@ public class MultiAgentCompiler {
         subTask.setTaskReferenceName(taskRef);
         subTask.setSubWorkflowParam(new SubWorkflowParams());
         subTask.getSubWorkflowParam().setName(routerWf.getName());
+        WorkflowTaskUtils.ensureAllTaskNames(routerWf);
         subTask.getSubWorkflowParam().setWorkflowDef(routerWf);
         subTask.setInputParameters(Map.of("conversation", "${workflow.variables.conversation}"));
 
