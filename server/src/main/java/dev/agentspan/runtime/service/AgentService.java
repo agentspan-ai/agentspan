@@ -1350,10 +1350,17 @@ public class AgentService {
                     collectSimpleTaskNamesFromTasks(branch, names);
                 }
             }
-            // Inline sub-workflows
-            if (task.getSubWorkflowParam() != null && task.getSubWorkflowParam().getWorkflowDef() != null) {
-                collectSimpleTaskNamesFromTasks(
-                        task.getSubWorkflowParam().getWorkflowDef().getTasks(), names);
+            // Inline sub-workflows. Skip when workflowDefinition is a runtime
+            // expression String (e.g. "${compile_task.output.workflowDef}")
+            // used by plan-execute inline sub-workflows — the compiled DAG
+            // is built at runtime by PlanAndCompileTask, not statically here,
+            // so there are no SIMPLE task names to collect at this point.
+            // Without this guard, getWorkflowDef() would ClassCastException
+            // on the String.
+            if (task.getSubWorkflowParam() != null
+                    && task.getSubWorkflowParam().getWorkflowDefinition() instanceof WorkflowDef nestedWfDef
+                    && nestedWfDef.getTasks() != null) {
+                collectSimpleTaskNamesFromTasks(nestedWfDef.getTasks(), names);
             }
         }
     }
