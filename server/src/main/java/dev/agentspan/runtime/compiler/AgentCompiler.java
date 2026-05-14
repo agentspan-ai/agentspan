@@ -1261,7 +1261,9 @@ public class AgentCompiler {
                     }
                 }
                 ctx.append("\n\n")
-                        .append("${").append(pr.refName()).append(".output.result}")
+                        .append("${")
+                        .append(pr.refName())
+                        .append(".output.result}")
                         .append("\n\n");
             }
             messages.add(Map.of("role", "system", "message", ctx.toString()));

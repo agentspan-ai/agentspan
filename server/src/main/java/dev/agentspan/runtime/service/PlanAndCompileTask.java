@@ -1091,8 +1091,8 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
                 injectAmbient(sActArgs);
                 // on_success actions follow the same toolType routing as
                 // step operations — no silent SIMPLE for agent_tool/mcp/http.
-                Map<String, Object> okTask = buildToolTask(
-                        String.valueOf(sAct.get("tool")), sActArgs, ctx.uid("ok"), ctx);
+                Map<String, Object> okTask =
+                        buildToolTask(String.valueOf(sAct.get("tool")), sActArgs, ctx.uid("ok"), ctx);
                 onSuccess.add(okTask);
             }
         }
@@ -1105,8 +1105,8 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
                     fActArgs.putAll((Map<String, Object>) fAct.get("args"));
                 }
                 injectAmbient(fActArgs);
-                Map<String, Object> failTask = buildToolTask(
-                        String.valueOf(fAct.get("tool")), fActArgs, ctx.uid("fail"), ctx);
+                Map<String, Object> failTask =
+                        buildToolTask(String.valueOf(fAct.get("tool")), fActArgs, ctx.uid("fail"), ctx);
                 onFailure.add(failTask);
             }
         }
@@ -1227,22 +1227,19 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
     private Map<String, Object> buildToolTask(
             String toolName, Map<String, Object> args, String taskRef, CompileCtx ctx) {
         ToolConfig tc = ctx.parentToolsByName.get(toolName);
-        String toolType = (tc != null && tc.getToolType() != null && !tc.getToolType().isEmpty())
-                ? tc.getToolType()
-                : "worker";
+        String toolType =
+                (tc != null && tc.getToolType() != null && !tc.getToolType().isEmpty()) ? tc.getToolType() : "worker";
         @SuppressWarnings("unchecked")
-        Map<String, Object> cfg = (tc != null && tc.getConfig() != null)
-                ? (Map<String, Object>) (Map<?, ?>) tc.getConfig()
-                : Map.of();
+        Map<String, Object> cfg =
+                (tc != null && tc.getConfig() != null) ? (Map<String, Object>) (Map<?, ?>) tc.getConfig() : Map.of();
 
         Map<String, Object> task = new LinkedHashMap<>();
         task.put("taskReferenceName", taskRef);
 
         switch (toolType) {
             case "agent_tool": {
-                String workflowName = cfg.get("workflowName") instanceof String wn && !wn.isEmpty()
-                        ? wn
-                        : toolName + "_agent_wf";
+                String workflowName =
+                        cfg.get("workflowName") instanceof String wn && !wn.isEmpty() ? wn : toolName + "_agent_wf";
                 task.put("name", workflowName);
                 task.put("type", "SUB_WORKFLOW");
                 Map<String, Object> subParam = new LinkedHashMap<>();

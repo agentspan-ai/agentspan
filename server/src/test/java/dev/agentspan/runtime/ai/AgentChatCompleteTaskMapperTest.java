@@ -899,7 +899,8 @@ class AgentChatCompleteTaskMapperTest {
             int msgIdx = 2 + i * 2;
             String body = (i < 2 ? oldResult : recentResult) + "_iter" + i;
             assertThat(messages.get(msgIdx).getMessage()).isEqualTo(body);
-            Object outResult = messages.get(msgIdx).getToolCalls().get(0).getOutput().get("result");
+            Object outResult =
+                    messages.get(msgIdx).getToolCalls().get(0).getOutput().get("result");
             assertThat(outResult).isEqualTo(body);
         }
     }
@@ -915,9 +916,7 @@ class AgentChatCompleteTaskMapperTest {
         messages.add(new ChatMessage(ChatMessage.Role.system, "sys"));
         for (int i = 0; i < 6; i++) {
             messages.add(toolCallMsg(
-                    "grep_search",
-                    "toolu_p__" + i,
-                    Map.of("pattern", "pattern_for_iter_" + i, "path", "src/")));
+                    "grep_search", "toolu_p__" + i, Map.of("pattern", "pattern_for_iter_" + i, "path", "src/")));
             messages.add(toolResponseMsg("grep_search", "toolu_p__" + i, "match line " + i));
         }
         messages.add(new ChatMessage(ChatMessage.Role.user, "go"));
@@ -992,8 +991,7 @@ class AgentChatCompleteTaskMapperTest {
                         + "previousResponseId is set (see execution 8083490c)")
                 .isFalse();
         assertThat(sawSecond)
-                .as("most-recent prior loop assistant message must be suppressed when "
-                        + "previousResponseId is set")
+                .as("most-recent prior loop assistant message must be suppressed when " + "previousResponseId is set")
                 .isFalse();
     }
 
@@ -1117,8 +1115,8 @@ class AgentChatCompleteTaskMapperTest {
         // The assistant tool_call message MUST be suppressed — OpenAI's
         // server-side store already has it via previousResponseId.
         // (Execution 8083490c was the original double-billing observation.)
-        boolean sawAssistantToolCallMessage = cc.getMessages().stream()
-                .anyMatch(m -> m.getRole() == ChatMessage.Role.tool_call);
+        boolean sawAssistantToolCallMessage =
+                cc.getMessages().stream().anyMatch(m -> m.getRole() == ChatMessage.Role.tool_call);
         assertThat(sawAssistantToolCallMessage)
                 .as("prior loop assistant tool_call message MUST be suppressed "
                         + "(it's already on OpenAI's server-side store)")

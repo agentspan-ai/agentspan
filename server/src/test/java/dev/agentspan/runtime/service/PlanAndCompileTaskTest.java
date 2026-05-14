@@ -1215,9 +1215,10 @@ class PlanAndCompileTaskTest {
         Map<String, Object> task = all.stream()
                 .filter(t -> "SUB_WORKFLOW".equals(t.get("type")))
                 .findFirst()
-                .orElseThrow(() -> new AssertionError(
-                        "expected a SUB_WORKFLOW task for agent_tool op; got: "
-                                + all.stream().map(t -> t.get("type") + ":" + t.get("name")).toList()));
+                .orElseThrow(() -> new AssertionError("expected a SUB_WORKFLOW task for agent_tool op; got: "
+                        + all.stream()
+                                .map(t -> t.get("type") + ":" + t.get("name"))
+                                .toList()));
         assertThat(task.get("name")).isEqualTo("subtask_coder_agent_wf");
         @SuppressWarnings("unchecked")
         Map<String, Object> sub = (Map<String, Object>) task.get("subWorkflowParam");
@@ -1515,9 +1516,8 @@ class PlanAndCompileTaskTest {
                 // One-time visual proof: dump the compiled WorkflowDef to
                 // stdout. When ``./gradlew test --info`` is used, this lands
                 // in the build log so reviewers can see the structure.
-                System.out.println(
-                        "\n=== PAC determinism proof: compiled WorkflowDef (printed once, "
-                                + "all 10 iterations are byte-equal) ===");
+                System.out.println("\n=== PAC determinism proof: compiled WorkflowDef (printed once, "
+                        + "all 10 iterations are byte-equal) ===");
                 System.out.println(reference);
                 System.out.println("=== end proof ===\n");
             } else {
@@ -1531,11 +1531,15 @@ class PlanAndCompileTaskTest {
         // claimed to route to. Without this the determinism check could
         // pass trivially on a degenerate plan.
         List<Map<String, Object>> all = allTasks(referenceWf);
-        long subCount = all.stream().filter(t -> "SUB_WORKFLOW".equals(t.get("type"))).count();
-        long mcpCount = all.stream().filter(t -> "CALL_MCP_TOOL".equals(t.get("type"))).count();
+        long subCount =
+                all.stream().filter(t -> "SUB_WORKFLOW".equals(t.get("type"))).count();
+        long mcpCount =
+                all.stream().filter(t -> "CALL_MCP_TOOL".equals(t.get("type"))).count();
         long httpCount = all.stream().filter(t -> "HTTP".equals(t.get("type"))).count();
-        long humanCount = all.stream().filter(t -> "HUMAN".equals(t.get("type"))).count();
-        long simpleCount = all.stream().filter(t -> "SIMPLE".equals(t.get("type"))).count();
+        long humanCount =
+                all.stream().filter(t -> "HUMAN".equals(t.get("type"))).count();
+        long simpleCount =
+                all.stream().filter(t -> "SIMPLE".equals(t.get("type"))).count();
         assertThat(subCount).as("two agent_tool ops → two SUB_WORKFLOWs").isEqualTo(2);
         assertThat(mcpCount).as("one mcp op → one CALL_MCP_TOOL").isEqualTo(1);
         assertThat(httpCount).as("one http op → one HTTP").isEqualTo(1);
@@ -1571,8 +1575,11 @@ class PlanAndCompileTaskTest {
         Map<String, Object> wf = (Map<String, Object>) output.get("workflowDef");
         List<Map<String, Object>> all = allTasks(wf);
         // Exactly one SUB_WORKFLOW task: the judge validator.
-        long subCount = all.stream().filter(t -> "SUB_WORKFLOW".equals(t.get("type"))).count();
-        assertThat(subCount).as("validation block should route judge through SUB_WORKFLOW").isEqualTo(1);
+        long subCount =
+                all.stream().filter(t -> "SUB_WORKFLOW".equals(t.get("type"))).count();
+        assertThat(subCount)
+                .as("validation block should route judge through SUB_WORKFLOW")
+                .isEqualTo(1);
     }
 
     /** Quick JSON string-encode for inlining into a plan literal. */

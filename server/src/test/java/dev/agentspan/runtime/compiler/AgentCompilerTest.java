@@ -1117,8 +1117,10 @@ class AgentCompilerTest {
                 (List<Map<String, Object>>) llmTask.getInputParameters().get("messages");
 
         // No tool_call / tool messages from prefill.
-        long toolCallCount = messages.stream().filter(m -> "tool_call".equals(m.get("role"))).count();
-        long toolRespCount = messages.stream().filter(m -> "tool".equals(m.get("role"))).count();
+        long toolCallCount =
+                messages.stream().filter(m -> "tool_call".equals(m.get("role"))).count();
+        long toolRespCount =
+                messages.stream().filter(m -> "tool".equals(m.get("role"))).count();
         assertThat(toolCallCount)
                 .as("prefill must NOT produce tool_call messages anymore")
                 .isZero();
@@ -1128,9 +1130,8 @@ class AgentCompilerTest {
 
         // Locate the prefill-context system message (the SECOND system message —
         // the first is the agent's instructions).
-        List<Map<String, Object>> systemMsgs = messages.stream()
-                .filter(m -> "system".equals(m.get("role")))
-                .toList();
+        List<Map<String, Object>> systemMsgs =
+                messages.stream().filter(m -> "system".equals(m.get("role"))).toList();
         assertThat(systemMsgs)
                 .as("expect [agent instructions, prefill context] as the two leading system messages")
                 .hasSize(2);
@@ -1218,9 +1219,8 @@ class AgentCompilerTest {
         assertThat(toolCallCount).isZero();
         assertThat(toolResultCount).isZero();
 
-        List<Map<String, Object>> systemMsgs = messages.stream()
-                .filter(m -> "system".equals(m.get("role")))
-                .toList();
+        List<Map<String, Object>> systemMsgs =
+                messages.stream().filter(m -> "system".equals(m.get("role"))).toList();
         assertThat(systemMsgs).hasSize(2);
         String body = (String) systemMsgs.get(1).get("message");
         assertThat(body).contains("contextbook_read");
