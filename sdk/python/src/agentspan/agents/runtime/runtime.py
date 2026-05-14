@@ -41,7 +41,7 @@ from agentspan.agents.runtime.http_client import AgentHttpClient, SSEUnavailable
 logger = logging.getLogger("agentspan.agents.runtime")
 
 
-def _default_task_def(name: str, *, response_timeout_seconds: int = 10) -> Any:
+def _default_task_def(name: str, *, response_timeout_seconds: int = 10, retry_count: int = 2, retry_delay_seconds: int = 2) -> Any:
     """Create a TaskDef with standard retry policy for agent worker tasks.
 
     Timeout is 0 (no timeout) — the agent configuration controls execution
@@ -55,9 +55,9 @@ def _default_task_def(name: str, *, response_timeout_seconds: int = 10) -> Any:
     from conductor.client.http.models.task_def import TaskDef
 
     td = TaskDef(name=name)
-    td.retry_count = 2
+    td.retry_count = retry_count
     td.retry_logic = "LINEAR_BACKOFF"
-    td.retry_delay_seconds = 2
+    td.retry_delay_seconds = retry_delay_seconds
     td.timeout_seconds = 0
     td.response_timeout_seconds = response_timeout_seconds
     td.timeout_policy = "RETRY"
@@ -1005,6 +1005,9 @@ class AgentRuntime:
         # Check transfer (hybrid handoff: agent has tools + sub-agents)
         if agent.tools and agent.agents:
             names.add(f"{agent.name}_check_transfer")
+            # Transfer tool no-op workers (one per sub-agent)
+            for sub in agent.agents:
+                names.add(f"{agent.name}_transfer_to_{sub.name}")
 
         # Function-based router
         if (
@@ -1287,6 +1290,9 @@ class AgentRuntime:
             task_name = f"{agent.name}_check_transfer"
             if _server_needs(task_name):
                 self._register_check_transfer_worker(agent.name, domain=domain)
+            # Always register transfer tool workers — same reasoning as swarm:
+            # collectSimpleTaskNames may not recurse into nested sub-workflows.
+            self._register_hybrid_transfer_workers(agent, domain=domain)
 
         # 6. Function-based router
         if (
@@ -1742,6 +1748,32 @@ class AgentRuntime:
             lease_extend_enabled=True,
         )(check_transfer_worker)
 
+    def _register_hybrid_transfer_workers(self, agent: Agent, domain: "Optional[str]" = None) -> None:
+        """Register transfer_to_<name> no-op workers for hybrid agents (tools + sub-agents).
+
+        The transfer tools are no-ops — the actual handoff is detected by
+        check_transfer which inspects toolCalls output from the LLM task.
+        """
+        from conductor.client.worker.worker_task import worker_task
+
+        def make_worker(tool_name: str, _domain: "Optional[str]" = domain) -> None:
+            async def transfer_worker() -> object:
+                return {}
+
+            transfer_worker.__annotations__ = {"return": object}
+            worker_task(
+                task_definition_name=tool_name,
+                task_def=_default_task_def(tool_name),
+                register_task_def=True,
+                overwrite_task_def=True,
+                domain=_domain,
+                thread_count=_SYSTEM_WORKER_THREADS,
+                lease_extend_enabled=True,
+            )(transfer_worker)
+
+        for sub in agent.agents:
+            make_worker(f"{agent.name}_transfer_to_{sub.name}")
+
     def _register_router_worker(self, agent: Agent, domain: "Optional[str]" = None) -> None:
         """Register a function-based router worker."""
         from conductor.client.worker.worker_task import worker_task
@@ -2032,11 +2064,14 @@ class AgentRuntime:
         model associations on the server if needed.
         """
         from agentspan.agents._internal.model_parser import parse_model
+        from agentspan.agents.agent import Agent as _Agent
         from agentspan.agents.agent import PromptTemplate
 
         seen: set = set()
 
         def _collect(a: Agent) -> None:
+            if not isinstance(a, _Agent):
+                return
             if isinstance(a.instructions, PromptTemplate) and a.model:
                 key = (a.instructions.name, a.model)
                 if key not in seen:
@@ -2205,6 +2240,8 @@ class AgentRuntime:
         seen: set = set()
 
         def _collect(a: Agent) -> None:
+            if not isinstance(a, Agent):
+                return
             if a.model and a.model not in seen:
                 seen.add(a.model)
             for sub in a.agents:

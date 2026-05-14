@@ -46,9 +46,9 @@ class TestSectionValidation:
     """Contextbook enforces a fixed set of section names."""
 
     VALID = {
-        "issue_pr", "repo_conventions", "design", "coder_context", "qa_findings",
-        "pr_result", "architecture_design_test", "coder_plan", "implementation",
-        "implementation_report", "qa_testing",
+        "issue_pr", "repo_conventions", "task_brief", "design", "coder_context",
+        "qa_findings", "pr_result", "architecture_design_test", "coder_plan",
+        "implementation", "implementation_report", "qa_testing",
         # Inner-reviewer verdict for the plan→execute→review loop.
         "review_feedback",
     }
@@ -155,7 +155,12 @@ class TestSectionValidation:
 
         result = tools.read_file("target.txt")
 
-        assert "repeat read limit exceeded" in result
+        # 4th read trips the repeat-read limit. The warning now surfaces as
+        # an inline banner prefixed with "REPEAT READ #4" and "STOP RE-READING"
+        # so the agent stops re-issuing the same query (replaces the older
+        # "repeat read limit exceeded" string).
+        assert "REPEAT READ #4" in result
+        assert "STOP RE-READING" in result
 
 
 # ── Write and read round-trip ───────────────────────────────
@@ -296,6 +301,14 @@ class TestFullPipelineFlow:
         assert "wrote" in result1
         result2 = tools.contextbook_write("repo_conventions", conventions_content)
         assert "wrote" in result2
+        # Fetcher also writes task_brief (one of the three gates in
+        # ``_fetcher_done`` — see 100_issue_fixer_agent.py).
+        result2b = tools.contextbook_write(
+            "task_brief",
+            "## Task\nFix authentication bypass — login accepts empty passwords.\n"
+            "## Acceptance\n- Empty/null password → 400\n- Valid password → 200",
+        )
+        assert "wrote" in result2b
 
         # ── Agent 2: tech_lead reads issue_pr + repo_conventions ──
         issue_pr_read = tools.contextbook_read("issue_pr")

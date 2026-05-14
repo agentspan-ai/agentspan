@@ -79,7 +79,11 @@ class ToolRegistry:
                 # when the server expected them on the run domain.
                 worker_task(
                     task_definition_name=td.name,
-                    task_def=_default_task_def(td.name),
+                    task_def=_default_task_def(
+                        td.name,
+                        retry_count=getattr(td, "retry_count", 2),
+                        retry_delay_seconds=getattr(td, "retry_delay_seconds", 2),
+                    ),
                     register_task_def=True,
                     overwrite_task_def=True,
                     domain=domain,

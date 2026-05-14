@@ -268,8 +268,11 @@ export interface ToolDef {
   stateful?: boolean;
   /** Maximum number of times this tool can be called. */
   maxCalls?: number;
-  /** Create a pre-declared tool call for use with `Agent({ prefillTools: [...] })`. */
-  call(args: Record<string, unknown>): PrefillToolCall;
+  /** Create a pre-declared tool call for use with `Agent({ prefillTools: [...] })`.
+   *  Optional — only tools intended to be usable as prefill (e.g. via the
+   *  @tool decorator) supply this method. ToolDef literals constructed by
+   *  helpers like ``CodeExecutor.asTool()`` may omit it. */
+  call?(args: Record<string, unknown>): PrefillToolCall;
 }
 
 /** A tool call to execute before the LLM runs. */
