@@ -29,15 +29,13 @@ public static class Program
 {
     public static async Task Main()
     {
-        var baseUrl = Environment.GetEnvironmentVariable("AGENTSPAN_SERVER_URL") ?? "http://localhost:6767/api";
-
         var agent = SemanticKernelAgent.From(
             name:         "sk_calc_agent",
-            model:        "openai/gpt-4o-mini",
+            model:        Settings.LlmModel,
             instructions: "You are a calculator. Use the tools to answer math questions.",
             new CalculatorPlugin());
 
-        await using var runtime = new AgentRuntime(new AgentRuntimeOptions { ServerUrl = baseUrl });
+        await using var runtime = new AgentRuntime(new AgentRuntimeOptions { ServerUrl = Settings.ServerUrl });
         var result = await runtime.RunAsync(agent, "What is 7 + 8, and then multiply that by 3?");
 
         result.PrintResult();

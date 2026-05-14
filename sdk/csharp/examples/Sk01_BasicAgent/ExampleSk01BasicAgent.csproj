@@ -12,4 +12,7 @@
     <ProjectReference Include="..\..\src\Agentspan\Agentspan.csproj" />
     <ProjectReference Include="..\..\src\Agentspan.SemanticKernel\Agentspan.SemanticKernel.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\Shared\Settings.cs" />
+  </ItemGroup>
 </Project>
