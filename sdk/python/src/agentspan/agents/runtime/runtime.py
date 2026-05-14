@@ -41,7 +41,7 @@ from agentspan.agents.runtime.http_client import AgentHttpClient, SSEUnavailable
 logger = logging.getLogger("agentspan.agents.runtime")
 
 
-def _default_task_def(name: str, *, response_timeout_seconds: int = 10) -> Any:
+def _default_task_def(name: str, *, response_timeout_seconds: int = 10, retry_count: int = 2, retry_delay_seconds: int = 2) -> Any:
     """Create a TaskDef with standard retry policy for agent worker tasks.
 
     Timeout is 0 (no timeout) — the agent configuration controls execution
@@ -55,9 +55,9 @@ def _default_task_def(name: str, *, response_timeout_seconds: int = 10) -> Any:
     from conductor.client.http.models.task_def import TaskDef
 
     td = TaskDef(name=name)
-    td.retry_count = 2
+    td.retry_count = retry_count
     td.retry_logic = "LINEAR_BACKOFF"
-    td.retry_delay_seconds = 2
+    td.retry_delay_seconds = retry_delay_seconds
     td.timeout_seconds = 0
     td.response_timeout_seconds = response_timeout_seconds
     td.timeout_policy = "RETRY"
@@ -929,6 +929,9 @@ class AgentRuntime:
         # Check transfer (hybrid handoff: agent has tools + sub-agents)
         if agent.tools and agent.agents:
             names.add(f"{agent.name}_check_transfer")
+            # Transfer tool no-op workers (one per sub-agent)
+            for sub in agent.agents:
+                names.add(f"{agent.name}_transfer_to_{sub.name}")
 
         # Function-based router
         if (
@@ -1109,6 +1112,9 @@ class AgentRuntime:
             task_name = f"{agent.name}_check_transfer"
             if _server_needs(task_name):
                 self._register_check_transfer_worker(agent.name, domain=domain)
+            # Always register transfer tool workers — same reasoning as swarm:
+            # collectSimpleTaskNames may not recurse into nested sub-workflows.
+            self._register_hybrid_transfer_workers(agent, domain=domain)
 
         # 6. Function-based router
         if (
@@ -1545,6 +1551,32 @@ class AgentRuntime:
             lease_extend_enabled=True,
         )(check_transfer_worker)
 
+    def _register_hybrid_transfer_workers(self, agent: Agent, domain: "Optional[str]" = None) -> None:
+        """Register transfer_to_<name> no-op workers for hybrid agents (tools + sub-agents).
+
+        The transfer tools are no-ops — the actual handoff is detected by
+        check_transfer which inspects toolCalls output from the LLM task.
+        """
+        from conductor.client.worker.worker_task import worker_task
+
+        def make_worker(tool_name: str, _domain: "Optional[str]" = domain) -> None:
+            async def transfer_worker() -> object:
+                return {}
+
+            transfer_worker.__annotations__ = {"return": object}
+            worker_task(
+                task_definition_name=tool_name,
+                task_def=_default_task_def(tool_name),
+                register_task_def=True,
+                overwrite_task_def=True,
+                domain=_domain,
+                thread_count=_SYSTEM_WORKER_THREADS,
+                lease_extend_enabled=True,
+            )(transfer_worker)
+
+        for sub in agent.agents:
+            make_worker(f"{agent.name}_transfer_to_{sub.name}")
+
     def _register_router_worker(self, agent: Agent, domain: "Optional[str]" = None) -> None:
         """Register a function-based router worker."""
         from conductor.client.worker.worker_task import worker_task
@@ -1839,7 +1871,11 @@ class AgentRuntime:
 
         seen: set = set()
 
+        from agentspan.agents.agent import Agent as _Agent
+
         def _collect(a: Agent) -> None:
+            if not isinstance(a, _Agent):
+                return
             if isinstance(a.instructions, PromptTemplate) and a.model:
                 key = (a.instructions.name, a.model)
                 if key not in seen:
@@ -2008,6 +2044,8 @@ class AgentRuntime:
         seen: set = set()
 
         def _collect(a: Agent) -> None:
+            if not isinstance(a, Agent):
+                return
             if a.model and a.model not in seen:
                 seen.add(a.model)
             for sub in a.agents:
@@ -2541,6 +2579,7 @@ class AgentRuntime:
         tool_calls: List[Dict[str, Any]] = []
         messages: List[Dict[str, Any]] = []
         token_usage: Optional[TokenUsage] = None
+        task_failure_reason: Optional[str] = None
         try:
             wf = self._workflow_client.get_workflow(
                 execution_id,
@@ -2549,8 +2588,16 @@ class AgentRuntime:
             tool_calls = self._extract_tool_calls(wf)
             messages = self._extract_messages(wf)
             token_usage = self._extract_token_usage(execution_id)
+            if raw_status == "FAILED":
+                task_failure_reason = self._extract_failed_task_reason(wf)
         except Exception as exc:
             logger.debug("Could not fetch execution details for %s: %s", execution_id, exc)
+
+        # Build the richest error message available: prefer task-level reason
+        # (includes which task failed and why) over the workflow-level reason.
+        error_reason: Optional[str] = None
+        if raw_status in ("FAILED", "TERMINATED"):
+            error_reason = task_failure_reason or status.reason
 
         logger.info("Agent '%s' completed (execution_id=%s)", agent.name, execution_id)
         return AgentResult(
@@ -2559,7 +2606,7 @@ class AgentRuntime:
             correlation_id=correlation_id,
             status=raw_status,
             finish_reason=self._derive_finish_reason(raw_status, status.output),
-            error=status.reason if raw_status in ("FAILED", "TERMINATED") else None,
+            error=error_reason,
             tool_calls=tool_calls,
             messages=messages,
             token_usage=token_usage,
@@ -2624,13 +2671,20 @@ class AgentRuntime:
         tool_calls: List[Dict[str, Any]] = []
         messages: List[Dict[str, Any]] = []
         token_usage: Optional[TokenUsage] = None
+        task_failure_reason: Optional[str] = None
         try:
             wf = self._workflow_client.get_workflow(execution_id, include_tasks=True)
             tool_calls = self._extract_tool_calls(wf)
             messages = self._extract_messages(wf)
             token_usage = self._extract_token_usage(execution_id)
+            if status.status == "FAILED":
+                task_failure_reason = self._extract_failed_task_reason(wf)
         except Exception as exc:
             logger.debug("Could not fetch execution details: %s", exc)
+
+        error_reason: Optional[str] = None
+        if status.status in ("FAILED", "TERMINATED"):
+            error_reason = task_failure_reason or status.reason
 
         return AgentResult(
             output=output,
@@ -2638,7 +2692,7 @@ class AgentRuntime:
             correlation_id=correlation_id,
             status=status.status,
             finish_reason=self._derive_finish_reason(status.status, status.output),
-            error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
+            error=error_reason,
             tool_calls=tool_calls,
             messages=messages,
             token_usage=token_usage,
@@ -4980,11 +5034,10 @@ class AgentRuntime:
                 exec_id = execution.get("executionId")
                 if not exec_id:
                     continue
-                wf = self._workflow_client.get_workflow(exec_id, include_tasks=False)
-                if hasattr(wf, "variables") and wf.variables:
-                    messages = wf.variables.get("messages", [])
-                    if messages:
-                        return messages
+                wf = self._workflow_client.get_workflow(exec_id, include_tasks=True)
+                messages = self._extract_messages(wf)
+                if messages:
+                    return messages
             return []
         except Exception as e:
             logger.debug("Could not fetch session history for %s: %s", session_id, e)
@@ -5038,6 +5091,26 @@ class AgentRuntime:
         if output is None:
             return {"result": None}
         return {"result": output}
+
+    @staticmethod
+    def _extract_failed_task_reason(wf: Any) -> Optional[str]:
+        """Return a descriptive error from the first FAILED task in a workflow.
+
+        Combines the task reference name with its reasonForIncompletion so
+        callers can diagnose intermittent failures without manual inspection
+        of the execution history UI.
+        """
+        if not hasattr(wf, "tasks") or not wf.tasks:
+            return None
+        for task in wf.tasks:
+            status = str(getattr(task, "status", "")).upper()
+            if status == "FAILED":
+                ref = getattr(task, "reference_task_name", None) or getattr(task, "task_type", "unknown")
+                reason = getattr(task, "reason_for_incompletion", None)
+                if reason:
+                    return f"Task '{ref}' failed: {reason}"
+                return f"Task '{ref}' failed"
+        return None
 
     @staticmethod
     def _extract_sub_results(output: Dict[str, Any]) -> Dict[str, Any]:
@@ -5137,10 +5210,31 @@ class AgentRuntime:
         return non_null
 
     def _extract_messages(self, workflow_run: Any) -> List[Dict[str, Any]]:
-        """Extract conversation messages from execution variables."""
+        """Extract conversation messages from the last LLM task in the execution.
+
+        Messages are stored in LLM_CHAT_COMPLETE task input_data, not in
+        workflow variables. We take the last LLM task to get the full
+        accumulated conversation (user + assistant + tool-call turns).
+        """
+        # Backwards-compat: check variables first (populated by some paths)
         if hasattr(workflow_run, "variables") and workflow_run.variables:
-            return workflow_run.variables.get("messages", [])
-        return []
+            msgs = workflow_run.variables.get("messages")
+            if msgs:
+                return msgs
+
+        # Extract from the last LLM_CHAT_COMPLETE task's input messages
+        if not (hasattr(workflow_run, "tasks") and workflow_run.tasks):
+            return []
+
+        last_llm_msgs: List[Dict[str, Any]] = []
+        for task in workflow_run.tasks:
+            task_type = str(getattr(task, "task_type", "")).upper()
+            if task_type == "LLM_CHAT_COMPLETE":
+                input_data = getattr(task, "input_data", None) or {}
+                msgs = input_data.get("messages") if isinstance(input_data, dict) else None
+                if msgs and isinstance(msgs, list):
+                    last_llm_msgs = msgs
+        return last_llm_msgs
 
     # System task types that are never user-defined tool calls
     _SYSTEM_TASK_TYPES = frozenset(

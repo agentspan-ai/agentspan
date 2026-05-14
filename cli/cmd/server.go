@@ -195,7 +195,7 @@ func runServerStart(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("open log file: %w", err)
 	}
 
-	proc := exec.Command("java", javaArgs...)
+	proc := exec.Command(javaExe(), javaArgs...)
 	proc.Env = env
 	proc.Stdout = logF
 	proc.Stderr = logF
