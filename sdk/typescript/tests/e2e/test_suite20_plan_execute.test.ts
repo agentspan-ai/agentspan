@@ -265,6 +265,11 @@ describe('Suite 20: Plan-Execute Strategy', () => {
     const harness = new Agent({
       name: 'ts_test_report_gen',
       model: MODEL,
+      // The harness's tools list is the set the planner is allowed to reference
+      // in its JSON plan. PAC compilation resolves operations against this
+      // list — without it the compiled SUB_WORKFLOW has no executable tools
+      // and the fallback agent runs agentically (slow) instead.
+      tools: [createDirectory, readFile, writeFile, assembleFiles, checkWordCount],
       planner,
       fallback,
       strategy: 'plan_execute',
@@ -422,6 +427,8 @@ IMPORTANT: Every generate block MUST include "max_tokens": 8192.
     const harness = new Agent({
       name: 'ts_test_report_gen_maxtok',
       model: MODEL,
+      // See above — harness.tools is the planner's tool catalog.
+      tools: [createDirectory, readFile, writeFile, assembleFiles, checkWordCount],
       planner,
       fallback,
       strategy: 'plan_execute',
