@@ -63,6 +63,21 @@ public sealed class Agent
     /// </summary>
     public bool Stateful { get; set; }
 
+    /// <summary>
+    /// Framework tag for shape-adapter agents. When set, the serializer emits the
+    /// framework+rawConfig wire shape consumed by server normalizers (e.g.
+    /// <c>"openai"</c> → OpenAINormalizer, <c>"google_adk"</c> → GoogleADKNormalizer).
+    /// Set indirectly via the framework-specific builders in Agentspan.OpenAI /
+    /// Agentspan.GoogleADK; setting on a plain Agent is not typical.
+    /// </summary>
+    public string? Framework { get; set; }
+
+    /// <summary>
+    /// Framework-specific raw config passed verbatim to the server normalizer
+    /// (e.g. <c>"handoffs"</c> for OpenAI, <c>"sub_agents"</c> for ADK).
+    /// </summary>
+    public Dictionary<string, object>? FrameworkConfig { get; set; }
+
     public Agent(string name)
     {
         if (string.IsNullOrWhiteSpace(name))
