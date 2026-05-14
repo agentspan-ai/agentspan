@@ -6,6 +6,7 @@
 package dev.agentspan.runtime.compiler;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -1254,7 +1255,7 @@ public class AgentCompiler {
                     String summary = args.entrySet().stream()
                             .filter(e -> !"__agentspan_ctx__".equals(e.getKey()))
                             .map(e -> e.getKey() + "=" + e.getValue())
-                            .collect(java.util.stream.Collectors.joining(", "));
+                            .collect(Collectors.joining(", "));
                     if (!summary.isEmpty()) {
                         ctx.append("(").append(summary).append(")");
                     }

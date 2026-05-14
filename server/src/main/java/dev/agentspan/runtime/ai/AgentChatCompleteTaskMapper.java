@@ -11,6 +11,7 @@ import static com.netflix.conductor.common.metadata.tasks.TaskType.TASK_TYPE_SUB
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -662,7 +663,7 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         // prompt — at which point ``validateRunnableConversation`` rejects
         // the next LLM call with "No non-empty user prompt or media".
         // Pinning the first user message prevents that cliff.
-        java.util.Set<Integer> pinnedIndices = new java.util.LinkedHashSet<>();
+        Set<Integer> pinnedIndices = new LinkedHashSet<>();
         for (int i = 0; i < messages.size(); i++) {
             if (messages.get(i).getRole() == ChatMessage.Role.system) {
                 pinnedIndices.add(i);
