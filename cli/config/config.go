@@ -11,11 +11,12 @@ import (
 )
 
 type Config struct {
-	ServerURL    string `json:"server_url"`
-	APIKey       string `json:"api_key,omitempty"`
-	ConductorURL string `json:"conductor_url,omitempty"`
-	LimaVMName   string `json:"lima_vm_name,omitempty"`
-	LLMModel     string `json:"llm_model,omitempty"`
+	ServerURL      string `json:"server_url"`
+	APIKey         string `json:"api_key,omitempty"`
+	ConductorURL   string `json:"conductor_url,omitempty"`
+	LimaVMName     string `json:"lima_vm_name,omitempty"`
+	RunnerAPIPort  string `json:"runner_api_port,omitempty"`
+	LLMModel       string `json:"llm_model,omitempty"`
 }
 
 // IsLocalhost returns true when the server URL points to a loopback address
@@ -33,6 +34,7 @@ const (
 	DefaultServerURL          = "http://localhost:6767"
 	DefaultConductorURL       = "http://localhost:8080/api"
 	DefaultLimaVMName         = "default"
+	DefaultRunnerAPIPort      = "7878"
 	DefaultLimaRunAgentScript = "/opt/agentspan/bin/run-agent"
 )
 
@@ -83,6 +85,9 @@ func Load() *Config {
 		}
 		if fileCfg.LimaVMName != "" {
 			cfg.LimaVMName = fileCfg.LimaVMName
+		}
+		if fileCfg.RunnerAPIPort != "" {
+			cfg.RunnerAPIPort = fileCfg.RunnerAPIPort
 		}
 		if fileCfg.LLMModel != "" {
 			cfg.LLMModel = fileCfg.LLMModel

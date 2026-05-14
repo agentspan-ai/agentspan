@@ -65,9 +65,6 @@ func runInvokeCmd(cmd *cobra.Command, args []string) error {
 func runLimaInvoke(ref *agentRef) error {
 	cfg := config.Load()
 	vmName := os.Getenv("LIMA_VM_NAME")
-	if vmName == "" {
-		vmName = os.Getenv("LIMA_VM")
-	}
 	if vmName == "" && cfg.LimaVMName != "" {
 		vmName = cfg.LimaVMName
 	}
@@ -76,8 +73,11 @@ func runLimaInvoke(ref *agentRef) error {
 	}
 
 	apiPort := os.Getenv("AGENT_RUNNER_API_PORT")
+	if apiPort == "" && cfg.RunnerAPIPort != "" {
+		apiPort = cfg.RunnerAPIPort
+	}
 	if apiPort == "" {
-		apiPort = "7878"
+		apiPort = config.DefaultRunnerAPIPort
 	}
 
 	// AGENTSPAN_SERVER_URL is injected by the runner from runner.local.toml [host] name.
