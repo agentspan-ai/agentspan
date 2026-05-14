@@ -72,6 +72,20 @@ public class AgentConfigSerializer {
             if (agent.getTools() != null && !agent.getTools().isEmpty()) {
                 List<Map<String, Object>> toolsList = new ArrayList<>();
                 for (ToolDef tool : agent.getTools()) {
+                    // Agent-as-tool: emit `{_type: "AgentTool", name, description, agent}`
+                    // so the framework normalizer can compile this as a SUB_WORKFLOW
+                    // task (toolType=agent_tool). Matches Python's
+                    // _try_extract_agent_tool in frameworks/serializer.py.
+                    if ("agent_tool".equals(tool.getToolType()) && tool.getAgentRef() != null) {
+                        Map<String, Object> t = new LinkedHashMap<>();
+                        t.put("_type", "AgentTool");
+                        t.put("name", tool.getName());
+                        t.put("description", tool.getDescription() != null ? tool.getDescription() : "");
+                        t.put("agent", serializeAgent(tool.getAgentRef()));
+                        toolsList.add(t);
+                        continue;
+                    }
+                    // Regular worker tool: _worker_ref shape.
                     Map<String, Object> t = new LinkedHashMap<>();
                     t.put("_worker_ref", tool.getName());
                     t.put("description", tool.getDescription());
