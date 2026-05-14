@@ -148,6 +148,19 @@ class AgentCompilerTest {
         // Loop condition should include termination check
         String loopCondition = loop.getLoopCondition();
         assertThat(loopCondition).contains("term_agent_termination.should_continue");
+
+        // Regression: the termination clause must NOT be wrapped in
+        // ``(finishReason == 'TOOL_CALLS' || …)``. That OR short-circuited
+        // count-based terminations (MaxMessage, TokenUsage) on every tool-call
+        // turn, so the loop ran to maxTurns instead of stopping at the
+        // configured limit. Text-based terminations already return
+        // should_continue=true when the LLM result is empty (tool-call turns),
+        // so no special-case is needed in the loop condition.
+        assertThat(loopCondition)
+                .as("termination clause must not OR with finishReason==TOOL_CALLS — "
+                        + "that breaks count-based terminations (MaxMessage)")
+                .doesNotContain("'TOOL_CALLS' || $.term_agent_termination")
+                .doesNotContain("TOOL_CALLS\" || $.term_agent_termination");
     }
 
     @Test
@@ -212,8 +225,13 @@ class AgentCompilerTest {
 
     @Test
     void testTerminationStillBypassedOnToolCallTurns() {
-        // termination (text_mention) SHOULD still be bypassed on tool-call turns
-        // because it checks LLM text output which doesn't exist on TOOL_CALLS turns.
+        // Despite the (now-removed) TOOL_CALLS bypass: text-based terminations
+        // (text_mention/stop_message) already return should_continue=true when
+        // the LLM result is empty (tool-call turns), so they never trigger on
+        // tool-call turns by themselves. Count-based terminations (MaxMessage)
+        // MUST fire on tool-call turns to honor the configured cap. The loop
+        // condition therefore evaluates termination.should_continue
+        // unconditionally — no TOOL_CALLS short-circuit.
         ToolConfig tool = ToolConfig.builder()
                 .name("calc")
                 .description("Calculator")
@@ -239,14 +257,20 @@ class AgentCompilerTest {
         WorkflowTask loop = wf.getTasks().get(2);
         String cond = loop.getLoopCondition();
 
-        // Termination SHOULD have the TOOL_CALLS bypass (unlike stop_when)
-        assertThat(cond).contains("'TOOL_CALLS' || $.term_test_termination.should_continue");
+        // Termination is checked unconditionally — no TOOL_CALLS short-circuit.
+        // Text-based terminations naturally pass through on tool-call turns
+        // (empty result → no text match → should_continue=true), so the OR
+        // clause that used to live here was both unnecessary for text-based
+        // and broken for count-based (MaxMessage) terminations.
+        assertThat(cond).contains("$.term_test_termination.should_continue == true");
+        assertThat(cond).doesNotContain("'TOOL_CALLS' || $.term_test_termination");
     }
 
     @Test
-    void testStopWhenAndTerminationTreatedDifferently() {
-        // When both stop_when and termination are present, only termination
-        // gets the TOOL_CALLS bypass. stop_when fires unconditionally.
+    void testStopWhenAndTerminationBothEvaluatedUnconditionally() {
+        // Both stop_when and termination are evaluated unconditionally on every
+        // turn — the previous behavior, which OR-ed termination with
+        // ``finishReason == 'TOOL_CALLS'``, broke count-based terminations.
         ToolConfig tool = ToolConfig.builder()
                 .name("search")
                 .description("Search")
@@ -270,12 +294,14 @@ class AgentCompilerTest {
         WorkflowTask loop = wf.getTasks().get(2);
         String cond = loop.getLoopCondition();
 
-        // stop_when: NO TOOL_CALLS bypass
+        // stop_when: no TOOL_CALLS bypass
         assertThat(cond).contains("both_agent_stop_when.should_continue == true");
         assertThat(cond).doesNotContain("'TOOL_CALLS' || $.both_agent_stop_when.should_continue");
 
-        // termination: HAS TOOL_CALLS bypass
-        assertThat(cond).contains("'TOOL_CALLS' || $.both_agent_termination.should_continue");
+        // termination: also no TOOL_CALLS bypass (regression: this was wrapped
+        // in ``finishReason == 'TOOL_CALLS' || …`` which broke MaxMessage).
+        assertThat(cond).contains("$.both_agent_termination.should_continue == true");
+        assertThat(cond).doesNotContain("'TOOL_CALLS' || $.both_agent_termination");
     }
 
     @Test
@@ -1673,5 +1699,70 @@ class AgentCompilerTest {
 
         assertThat(llmTask.getInputParameters()).doesNotContainKey("reasoningEffort");
         assertThat(llmTask.getInputParameters()).doesNotContainKey("reasoningSummary");
+    }
+
+    /**
+     * Regression: the user-message template that joins ctx_inject output with the
+     * base prompt must NOT contain a literal "\n\n" separator. The ctx_inject script
+     * carries its own trailing separator when non-empty (and empty otherwise) — a
+     * literal joiner here produces a leading "\n\n" artifact when there's no context
+     * to inject, which shifts the LLM's behavior at temperature 0 and (in the
+     * suite12 max_message regression) made the model answer in one shot instead of
+     * calling tools.
+     */
+    @Test
+    void testCtxInjectMessageHasNoLiteralSeparator() {
+        ToolConfig tool = ToolConfig.builder()
+                .name("echo_tool")
+                .description("Echo")
+                .inputSchema(Map.of("type", "object"))
+                .toolType("worker")
+                .build();
+
+        AgentConfig config = AgentConfig.builder()
+                .name("ctx_join_agent")
+                .model("openai/gpt-4o-mini")
+                .instructions("Be concise.")
+                .tools(List.of(tool))
+                .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        WorkflowTask loop = wf.getTasks().stream()
+                .filter(t -> "DO_WHILE".equals(t.getType()))
+                .findFirst()
+                .orElseThrow();
+
+        WorkflowTask llmTask = loop.getLoopOver().stream()
+                .filter(t -> "LLM_CHAT_COMPLETE".equals(t.getType()))
+                .findFirst()
+                .orElseThrow();
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> messages =
+                (List<Map<String, Object>>) llmTask.getInputParameters().get("messages");
+        Map<String, Object> userMsg = messages.stream()
+                .filter(m -> "user".equals(m.get("role")))
+                .findFirst()
+                .orElseThrow();
+
+        String message = (String) userMsg.get("message");
+        assertThat(message)
+                .as("user message must reference both ctx_inject result and workflow prompt")
+                .contains("ctx_join_agent_ctx_inject.output.result")
+                .contains("workflow.input.prompt");
+        assertThat(message)
+                .as("user message MUST NOT contain literal \"\\n\\n\" between ctx and prompt — "
+                        + "ctx_inject script owns its own trailing separator")
+                .doesNotContain("}\n\n${");
+
+        // The LLM task's name must be the lowercase TaskDef alias. If left as
+        // "LLM_CHAT_COMPLETE" (matching the type), Conductor misses the
+        // registered TaskDef, falls back to default tool-routing config, and
+        // the model stops emitting tool calls — which is exactly the suite12
+        // max_message regression.
+        assertThat(llmTask.getName())
+                .as("LLM_CHAT_COMPLETE task name must be lowercase TaskDef alias")
+                .isEqualTo("llm_chat_complete");
     }
 }

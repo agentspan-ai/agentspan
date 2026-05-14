@@ -428,16 +428,19 @@ public class AgentCompiler {
         loopTasks.add(ctxInject);
 
         // Replace user message prompt with context prefix + base prompt.
-        // ctx_inject outputs only the state/signals prefix (small, changes per turn).
-        // The base prompt is referenced once via ${workflow.input.prompt} — Conductor
-        // resolves both ${} references but only the prefix is stored per-turn.
+        // ctx_inject outputs only the state/signals prefix (small, changes per turn)
+        // with its own trailing '\n\n' separator when non-empty, empty otherwise —
+        // so concatenation never injects a leading-whitespace artifact when there's
+        // no context to prepend. The base prompt is referenced once via
+        // ${workflow.input.prompt} — Conductor resolves both ${} references but
+        // only the prefix is stored per-turn.
         @SuppressWarnings("unchecked")
         List<Object> llmMessages = (List<Object>) llmTask.getInputParameters().get("messages");
         for (int mi = 0; mi < llmMessages.size(); mi++) {
             if (llmMessages.get(mi) instanceof Map<?, ?> msg && "user".equals(msg.get("role"))) {
                 Map<String, Object> injectedMsg = new LinkedHashMap<>();
                 injectedMsg.put("role", "user");
-                injectedMsg.put("message", "${" + ctxInjectRef + ".output.result}\n\n${workflow.input.prompt}");
+                injectedMsg.put("message", "${" + ctxInjectRef + ".output.result}${workflow.input.prompt}");
                 injectedMsg.put("media", "${workflow.input.media}");
                 llmMessages.set(mi, injectedMsg);
                 break;
@@ -544,12 +547,16 @@ public class AgentCompiler {
         if (stopWhenRef != null) {
             termCondition.append(String.format(" && $.%s.should_continue == true", stopWhenRef));
         }
-        // termination: skip on tool-call turns — text_mention/text_contains
-        // conditions can't meaningfully evaluate when the LLM produced no text.
+        // termination: always evaluate. The TerminationCondition implementations
+        // already handle tool-call turns correctly — text_mention/stop_message
+        // return should_continue=true when the LLM result is empty (which is
+        // what happens on tool-call turns), and count-based terminations
+        // (max_message, token_usage) must fire regardless of LLM output. The
+        // earlier ``finishReason == 'TOOL_CALLS' || …`` short-circuit broke
+        // MaxMessage termination because the loop kept iterating past the
+        // configured limit on every tool-call turn.
         if (terminationRef != null) {
-            termCondition.append(String.format(
-                    " && ($.%s['finishReason'] == 'TOOL_CALLS' || $.%s.should_continue == true)",
-                    llmRef, terminationRef));
+            termCondition.append(String.format(" && $.%s.should_continue == true", terminationRef));
         }
         termCondition.append(" ) { true; } else { false; }");
 
@@ -791,7 +798,10 @@ public class AgentCompiler {
         hybridCtxInject.setInputParameters(hybridCtxInjectInputs);
         loopTasks.add(hybridCtxInject);
 
-        // Replace user message with context prefix + base prompt
+        // Replace user message with context prefix + base prompt.
+        // Prefix carries its own trailing '\n\n' when non-empty, empty otherwise —
+        // see contextInjectionScript() docstring for why the joiner can't be a
+        // literal here (leading whitespace shifts LLM behavior at temperature 0).
         @SuppressWarnings("unchecked")
         List<Object> hybridLlmMessages =
                 (List<Object>) llmTask.getInputParameters().get("messages");
@@ -799,7 +809,7 @@ public class AgentCompiler {
             if (hybridLlmMessages.get(mi) instanceof Map<?, ?> msg && "user".equals(msg.get("role"))) {
                 Map<String, Object> injectedMsg = new LinkedHashMap<>();
                 injectedMsg.put("role", "user");
-                injectedMsg.put("message", "${" + hybridCtxInjectRef + ".output.result}\n\n${workflow.input.prompt}");
+                injectedMsg.put("message", "${" + hybridCtxInjectRef + ".output.result}${workflow.input.prompt}");
                 injectedMsg.put("media", "${workflow.input.media}");
                 hybridLlmMessages.set(mi, injectedMsg);
                 break;

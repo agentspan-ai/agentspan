@@ -46,9 +46,14 @@ public final class WorkflowTaskUtils {
     public static void ensureTaskName(WorkflowTask task) {
         if (task == null) return;
         if ("LLM_CHAT_COMPLETE".equals(task.getType())) {
-            if (task.getName() == null || task.getName().isEmpty()) {
-                task.setName("llm_chat_complete");
-            }
+            // Always normalize to the lowercase TaskDef name. Several compile
+            // sites set name = "LLM_CHAT_COMPLETE" (matching the type) — that
+            // makes Conductor look up a TaskDef of that uppercase name, miss,
+            // and fall back to defaults that change LLM behavior (notably the
+            // tool-routing defaults). The lowercase form is the only registered
+            // TaskDef. This must run unconditionally, not just when name is
+            // empty.
+            task.setName("llm_chat_complete");
         } else if ("SIMPLE".equals(task.getType())
                 && task.getName() != null
                 && !task.getName().isEmpty()) {

@@ -1212,17 +1212,22 @@ public class JavaScriptBuilder {
     /**
      * Context injection script: builds the state/signals prefix for the user prompt.
      *
-     * <p>Returns ONLY the context prefix (state JSON + signals). The base prompt is
-     * NOT included in the output — the caller concatenates the prefix with the prompt
-     * via Conductor template resolution (e.g. {@code ${ctx_inject.output.result}\n\n${workflow.input.prompt}}).
-     * This avoids storing the full prompt (which never changes) in every iteration's
-     * task output, reducing workflow payload by ~N × prompt_size.</p>
+     * <p>Returns ONLY the context prefix (state JSON + signals), with a trailing
+     * {@code "\n\n"} separator when the prefix is non-empty so the caller can append
+     * the base prompt without injecting a separator literal. The caller concatenates
+     * via Conductor template resolution as {@code ${ctx_inject.output.result}${workflow.input.prompt}}
+     * (no literal separator). When state and signals are both empty, this returns
+     * the empty string — so the LLM sees the prompt unchanged, not a {@code "\n\n<prompt>"}
+     * leading-whitespace artifact that would shift token alignment at temperature 0.</p>
+     *
+     * <p>This split avoids storing the full prompt (which never changes) in every
+     * iteration's task output, reducing workflow payload by ~N × prompt_size.</p>
      *
      * <p>Input: {@code state} → the _agent_state dict,
      *        {@code signals} → signal injection string,
      *        {@code maxSize} → max total context bytes,
      *        {@code maxValueSize} → max per-value bytes.</p>
-     * <p>Output: the context prefix string (empty string if no state/signals).</p>
+     * <p>Output: the context prefix string with trailing {@code "\n\n"} (or empty).</p>
      */
     public static String contextInjectionScript() {
         return iife(
@@ -1261,13 +1266,17 @@ public class JavaScriptBuilder {
                         + "  delete truncated[tKeys.shift()];"
                         + "  json = JSON.stringify(truncated);"
                         + "}"
-                        // Build prefix: signals (if any) + context (if any)
+                        // Build prefix: signals (if any) + context (if any).
+                        // Trailing '\n\n' is part of the prefix so the message
+                        // template can be ${ctx.result}${prompt} without
+                        // injecting a leading-whitespace artifact when empty.
                         + "var parts = [];"
                         + "if (signals) { parts.push('[SIGNALS]\\n' + signals + '\\n[/SIGNALS]'); }"
                         + "if (Object.keys(truncated).length > 0) {"
                         + "  parts.push('Context:\\n```json\\n' + JSON.stringify(truncated, null, 2) + '\\n```');"
                         + "}"
-                        + "return parts.join('\\n\\n');");
+                        + "if (parts.length === 0) return '';"
+                        + "return parts.join('\\n\\n') + '\\n\\n';");
     }
 
     /**
