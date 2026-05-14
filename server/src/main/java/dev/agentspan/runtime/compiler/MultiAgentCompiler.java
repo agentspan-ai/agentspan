@@ -242,8 +242,8 @@ public class MultiAgentCompiler {
         wf.setOutputParameters(Map.of(
                 "result",
                 config.isSynthesize()
-                    ? ref(toRef(config.getName()) + "_final.output.result")
-                    : "${workflow.variables.conversation}",
+                        ? ref(toRef(config.getName()) + "_final.output.result")
+                        : "${workflow.variables.conversation}",
                 "context",
                 "${workflow.variables._agent_state}"));
         agentCompiler.applyTimeout(wf, config);
@@ -832,8 +832,8 @@ public class MultiAgentCompiler {
         wf.setOutputParameters(Map.of(
                 "result",
                 config.isSynthesize()
-                    ? ref(toRef(config.getName()) + "_final.output.result")
-                    : "${workflow.variables.conversation}",
+                        ? ref(toRef(config.getName()) + "_final.output.result")
+                        : "${workflow.variables.conversation}",
                 "context",
                 "${workflow.variables._agent_state}"));
         agentCompiler.applyTimeout(wf, config);
@@ -1121,8 +1121,8 @@ public class MultiAgentCompiler {
         wf.setOutputParameters(Map.of(
                 "result",
                 config.isSynthesize()
-                    ? ref(toRef(config.getName()) + "_final.output.result")
-                    : "${workflow.variables.conversation}",
+                        ? ref(toRef(config.getName()) + "_final.output.result")
+                        : "${workflow.variables.conversation}",
                 "context",
                 "${workflow.variables._agent_state}"));
         agentCompiler.applyTimeout(wf, config);
