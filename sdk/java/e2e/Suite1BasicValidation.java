@@ -1,7 +1,6 @@
 // Copyright (c) 2025 Agentspan
 // Licensed under the MIT License. See LICENSE file in the project root for details.
 
-package ai.agentspan.e2e;
 
 import ai.agentspan.Agent;
 import ai.agentspan.AgentRuntime;
@@ -33,13 +32,13 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 @Tag("e2e")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-class E2eSuite1BasicValidation extends E2eBaseTest {
+class Suite1BasicValidation extends BaseTest {
 
     private static AgentRuntime runtime;
 
     @BeforeAll
     static void setup() {
-        // Note: checkServerHealth() from E2eBaseTest runs before setup().
+        // Note: checkServerHealth() from BaseTest runs before setup().
         // Use BASE_URL (without /api suffix) since AgentConfig + HttpApi
         // already prepend /api to every path.
         runtime = new AgentRuntime(new ai.agentspan.AgentConfig(BASE_URL, null, null, 100, 1));

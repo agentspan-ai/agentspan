@@ -1,8 +1,6 @@
 // Copyright (c) 2025 Agentspan
 // Licensed under the MIT License. See LICENSE file in the project root for details.
 
-package ai.agentspan.e2e;
-
 import org.junit.jupiter.api.BeforeAll;
 
 import java.net.URI;
@@ -28,7 +26,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  *   <li>Helper to extract agentDef from a plan() result</li>
  * </ul>
  */
-public abstract class E2eBaseTest {
+public abstract class BaseTest {
 
     /** API URL for the Agentspan server (includes /api suffix). */
     protected static final String SERVER_URL =

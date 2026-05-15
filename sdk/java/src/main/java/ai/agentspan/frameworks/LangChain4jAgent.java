@@ -311,6 +311,18 @@ public class LangChain4jAgent {
         if (value == null) return defaultFor(targetType);
         if (targetType.isInstance(value)) return value;
 
+        // When the LLM emits a JSON object/array for a String-typed parameter,
+        // serialize it as JSON instead of using Java's Map/List toString format
+        // (which uses `{key=value}` rather than `{"key":"value"}`). Tool authors
+        // expect JSON when they declare `String values`.
+        if (targetType == String.class && (value instanceof Map || value instanceof List)) {
+            try {
+                return ai.agentspan.internal.JsonMapper.get().writeValueAsString(value);
+            } catch (Exception e) {
+                return value.toString();
+            }
+        }
+
         String str = value.toString();
         if (targetType == String.class) return str;
         if (targetType == int.class || targetType == Integer.class) {

@@ -40,6 +40,14 @@ dependencies {
 compileJava.options.compilerArgs << '-parameters'
 compileTestJava.options.compilerArgs << '-parameters'
 
+sourceSets {
+    test {
+        java {
+            srcDirs += file('e2e')
+        }
+    }
+}
+
 test {
     useJUnitPlatform {
         // Exclude e2e tests by default; run with -Pe2e to include them
