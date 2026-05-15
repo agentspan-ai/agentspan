@@ -468,11 +468,28 @@ IMPORTANT: Every generate block MUST include "max_tokens": 8192.
     const result = await runtime.run(harness, 'Write a detailed research report about: Quantum computing applications in cryptography');
 
     // 1. Workflow completed — proves max_tokens field didn't break compilation
-    expect(result.status).toBe('COMPLETED');
+    expect(result.status, `max_tokens result: ${JSON.stringify(result).slice(0, 500)}`).toBe(
+      'COMPLETED',
+    );
 
-    // 2. Report file exists
+    // 2. Report file exists. Dump WORK_DIR on failure so CI runs that
+    // intermittently lose report.md are diagnosable from logs alone — the
+    // failure here means either the plan didn't emit assemble_files or
+    // the fallback agent finished without producing it.
     const reportPath = path.join(WORK_DIR, 'report.md');
-    expect(fs.existsSync(reportPath)).toBe(true);
+    if (!fs.existsSync(reportPath)) {
+      const list = (dir: string): string[] => {
+        if (!fs.existsSync(dir)) return [];
+        return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+          const p = path.join(dir, e.name);
+          return e.isDirectory() ? [p + '/', ...list(p)] : [p];
+        });
+      };
+      const tree = list(WORK_DIR).join(', ');
+      console.error(`[suite20 max_tokens] WORK_DIR=${WORK_DIR} contents: ${tree || '(empty)'}`);
+      console.error(`[suite20 max_tokens] executionId=${result.executionId} status=${result.status}`);
+    }
+    expect(fs.existsSync(reportPath), `report.md missing in ${WORK_DIR}`).toBe(true);
 
     // 3. Report has substantial content
     const content = fs.readFileSync(reportPath, 'utf-8');
