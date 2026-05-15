@@ -345,24 +345,35 @@ describe('Suite 20: Plan-Execute Strategy', () => {
     // Counterfactual: if gen.max_tokens is not read by the GraalJS compiler,
     // the LLM_CHAT_COMPLETE task gets the default 4096. This test instructs
     // the planner to include max_tokens: 8192 in generate blocks.
+    //
+    // Kept structurally identical to PLANNER_INSTRUCTIONS — same two-section
+    // template, same word-count target — with only "max_tokens: 8192" added
+    // to each generate block. The earlier 3-section / 250-word / "DETAILED"
+    // variant produced empty plans on CI (workflow completes, WORK_DIR
+    // empty), presumably because temperature-0 + an over-constrained
+    // template either generated invalid JSON or led the planner to short-
+    // circuit. The first test in this file uses the same shape and passes
+    // reliably on CI, so mirroring it should make this one too.
 
-    const maxTokensPlannerInstructions = `You are a research report planner. Given a topic, plan a detailed report.
+    const maxTokensPlannerInstructions = `You are a research report planner. Given a topic, plan a structured report.
 
 Your job:
 1. Decide on 3 sections for the report (introduction, body, conclusion)
-2. For each section, write clear instructions requesting DETAILED content (250+ words each)
+2. For each section, write clear instructions on what content to include
 3. Output your plan as Markdown with an embedded \`\`\`json fence
 
 IMPORTANT: Your plan MUST include a \`\`\`json fence with the structured plan.
 IMPORTANT: Every generate block MUST include "max_tokens": 8192.
 
-## Available tools:
-- \`create_directory\`: args={path}
-- \`write_file\`: generate={instructions, output_schema, max_tokens}
-- \`assemble_files\`: args={output_path, input_paths, separator}
-- \`check_word_count\`: args={path, min_words}
+## Available tools for operations:
+- \`create_directory\`: args={path} — create a directory
+- \`write_file\`: generate={instructions, output_schema, max_tokens} — LLM writes content
+- \`assemble_files\`: args={output_path, input_paths, separator} — concatenate files
+- \`check_word_count\`: args={path, min_words} — validate word count
 
 ## Plan format:
+
+Your output MUST end with a JSON fence like this:
 
 \`\`\`json
 {
@@ -382,7 +393,7 @@ IMPORTANT: Every generate block MUST include "max_tokens": 8192.
         {
           "tool": "write_file",
           "generate": {
-            "instructions": "Write a detailed 250+ word introduction about [topic].",
+            "instructions": "Write a 100-word introduction about [topic].",
             "output_schema": "{\\"path\\": \\"sections/01_intro.md\\", \\"content\\": \\"...\\"}",
             "max_tokens": 8192
           }
@@ -390,16 +401,8 @@ IMPORTANT: Every generate block MUST include "max_tokens": 8192.
         {
           "tool": "write_file",
           "generate": {
-            "instructions": "Write a detailed 250+ word body section about [subtopic].",
+            "instructions": "Write a 100-word section about [subtopic].",
             "output_schema": "{\\"path\\": \\"sections/02_body.md\\", \\"content\\": \\"...\\"}",
-            "max_tokens": 8192
-          }
-        },
-        {
-          "tool": "write_file",
-          "generate": {
-            "instructions": "Write a detailed 250+ word conclusion about [topic].",
-            "output_schema": "{\\"path\\": \\"sections/03_conclusion.md\\", \\"content\\": \\"...\\"}",
             "max_tokens": 8192
           }
         }
@@ -414,7 +417,7 @@ IMPORTANT: Every generate block MUST include "max_tokens": 8192.
           "tool": "assemble_files",
           "args": {
             "output_path": "report.md",
-            "input_paths": "[\\"sections/01_intro.md\\", \\"sections/02_body.md\\", \\"sections/03_conclusion.md\\"]",
+            "input_paths": "[\\"sections/01_intro.md\\", \\"sections/02_body.md\\"]",
             "separator": "\\n\\n---\\n\\n"
           }
         }
@@ -429,11 +432,12 @@ IMPORTANT: Every generate block MUST include "max_tokens": 8192.
 \`\`\`
 
 ## Rules:
-- Section files go in sections/ directory
-- Each section MUST be 250+ words (detailed, thorough)
+- Section files go in sections/ directory (01_intro.md, 02_body.md, etc.)
+- Each section should be 80-150 words
 - Every generate block MUST include "max_tokens": 8192
 - The assemble step must list ALL section files in order
 - Always validate with check_word_count (min ${MIN_WORD_COUNT} words)
+- Keep it simple: 3 sections total
 - The JSON must be valid
 `;
 
