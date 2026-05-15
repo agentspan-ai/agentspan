@@ -218,6 +218,27 @@ with AgentRuntime() as runtime:
     report: WeatherReport = result.output  # Fully typed
 ```
 
+
+### Environment Variables
+
+Agentspan can be configured using environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `AGENTSPAN_LOG_LEVEL` | `INFO` | Logging level: `DEBUG`, `INFO`, `WARN`, `ERROR` |
+| `AGENTSPAN_SERVER_URL` | `http://localhost:6767/api` | Agentspan server API URL |
+| `AGENTSPAN_API_KEY` | - | Bearer token for server authentication |
+| `AGENTSPAN_AUTO_START_SERVER` | `true` | Auto-start local server if not running |
+| `AGENTSPAN_AUTO_START_WORKERS` | `true` | Auto-start worker processes |
+| `AGENTSPAN_WORKER_THREADS` | `1` | Number of worker threads |
+| `AGENTSPAN_STREAMING_ENABLED` | `true` | Enable streaming responses |
+
+**Example:**
+```bash
+export AGENTSPAN_LOG_LEVEL=DEBUG
+export AGENTSPAN_SERVER_URL=https://my-server.com/api
+```
+
 ### Credential Management
 
 Store API keys and secrets once on the server. Tools resolve them automatically at runtime — no `.env` files, no hardcoded keys, no secrets in git.
