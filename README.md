@@ -652,6 +652,35 @@ writer = Agent(name="writer", model="gemini-2.0-flash",
 pipeline = SequentialAgent(name="pipeline", sub_agents=[researcher, writer])
 ```
 
+## Configuration
+
+### Environment Variables
+
+Agentspan supports several environment variables for configuration:
+
+#### Logging
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LOGGING_LEVEL_ROOT` | `WARN` | Root logger level (TRACE, DEBUG, INFO, WARN, ERROR) |
+| `LOGGING_LEVEL_DEV_AGENTSPAN` | `INFO` | Agentspan application logger level |
+
+**Note:** Some configurations may also accept `AGENTSPAN_LOG_LEVEL` as an alias for application-level logging.
+
+**Examples:**
+
+```bash
+# Enable debug logging for troubleshooting
+export LOGGING_LEVEL_ROOT=INFO
+export LOGGING_LEVEL_DEV_AGENTSPAN=DEBUG
+
+# Production settings (default)
+export LOGGING_LEVEL_ROOT=WARN
+export LOGGING_LEVEL_DEV_AGENTSPAN=INFO
+```
+
+For complete deployment configuration options, see [deployment/README.md](deployment/README.md).
+
 ## Deployment
 
 | Environment | Guide |
