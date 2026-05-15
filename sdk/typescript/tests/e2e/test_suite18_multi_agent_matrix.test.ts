@@ -956,13 +956,23 @@ async function launchAndPollAll(
 ): Promise<Map<number, TestResult>> {
   const handles: { idx: number; handle: AgentHandle; spec: TestSpec }[] = [];
 
-  // Launch all concurrently
+  // Launch all concurrently. Stagger slightly so 21 concurrent compile-and-
+  // register requests don't pile up on the server in CI (where compile is
+  // an order of magnitude slower than local) — previously two of them came
+  // back as runtime.start() rejections with an executionId='' FAILED result
+  // and no log of *why*. Each launch is delayed by idx * 50ms so the burst
+  // spreads over ~1s instead of going out simultaneously.
   const launchPromises = specs.map(async (spec, idx) => {
+    if (idx > 0) await new Promise((r) => setTimeout(r, idx * 50));
     try {
       const handle = await runtime.start(spec.agent, spec.prompt);
       handles.push({ idx, handle, spec });
     } catch (err) {
-      // If start itself fails, record immediately as FAILED
+      // If start itself fails, record immediately as FAILED — log the cause
+      // so CI failures are diagnosable instead of silent.
+      console.error(
+        `[suite18] start failed for ${spec.testId}: ${(err as Error)?.message ?? err}`,
+      );
       handles.push({
         idx,
         handle: null as unknown as AgentHandle,
