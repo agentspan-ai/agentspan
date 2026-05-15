@@ -15,6 +15,7 @@ type Config struct {
 	APIKey       string `json:"api_key,omitempty"`
 	ConductorURL string `json:"conductor_url,omitempty"`
 	LLMModel     string `json:"llm_model,omitempty"`
+	ValkeyURL    string `json:"valkey_url,omitempty"`
 }
 
 // IsLocalhost returns true when the server URL points to a loopback address
@@ -31,12 +32,14 @@ func (c *Config) IsLocalhost() bool {
 const (
 	DefaultServerURL    = "http://localhost:6767"
 	DefaultConductorURL = "http://localhost:8080/api"
+	DefaultValkeyURL    = "redis://127.0.0.1:6379"
 )
 
 func DefaultConfig() *Config {
 	return &Config{
 		ServerURL:    DefaultServerURL,
 		ConductorURL: DefaultConductorURL,
+		ValkeyURL:    DefaultValkeyURL,
 	}
 }
 
@@ -64,6 +67,9 @@ func Load() *Config {
 	if url := os.Getenv("CONDUCTOR_URL"); url != "" {
 		cfg.ConductorURL = url
 	}
+	if url := os.Getenv("VALKEY_URL"); url != "" {
+		cfg.ValkeyURL = url
+	}
 
 	// File overrides (env vars take precedence)
 	data, err := os.ReadFile(configPath())
@@ -83,6 +89,9 @@ func Load() *Config {
 		}
 		if fileCfg.LLMModel != "" {
 			cfg.LLMModel = fileCfg.LLMModel
+		}
+		if fileCfg.ValkeyURL != "" {
+			cfg.ValkeyURL = fileCfg.ValkeyURL
 		}
 	}
 
