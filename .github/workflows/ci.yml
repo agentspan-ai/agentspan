@@ -254,6 +254,23 @@ jobs:
             --junitxml=../../e2e-results/junit.xml \
             -n 1
 
+      # Integration suites (guardrail-matrix, multi-agent-matrix, plan-execute,
+      # token-usage, lease-extension, etc.) live under ``tests/integration/`` and
+      # are gated behind ``--integration``. Without this step the matrix-shaped
+      # tests — which exercise the same LLM-behaviour assumptions as the TS
+      # ts-e2e suite17/18 — never run, so prompt regressions visible to TS CI
+      # are invisible to Python CI. ``continue-on-error: true`` while we tighten
+      # the prompts so a single stochastic LLM refusal doesn't block the whole
+      # python-e2e job; remove once green.
+      - name: Run Python integration suites
+        if: always()
+        working-directory: sdk/python
+        continue-on-error: true
+        run: |
+          uv run pytest tests/integration/ --integration -v --tb=short \
+            --junitxml=../../e2e-results/junit-integration.xml \
+            -n 1
+
       - name: Generate Python HTML report
         if: always()
         working-directory: sdk/python
