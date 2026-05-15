@@ -227,7 +227,8 @@ public class JavaScriptBuilder {
             String ragConfigJson,
             String cliConfigJson,
             String humanConfigJson,
-            String wmqConfigJson) {
+            String wmqConfigJson,
+            String knownToolNamesJson) {
         return iife("  var httpCfg = " + httpConfigJson + ";" + "  var mcpCfg = "
                 + mcpConfigJson + ";" + "  var mediaCfg = "
                 + mediaConfigJson + ";" + "  var agentToolCfg = "
@@ -235,11 +236,41 @@ public class JavaScriptBuilder {
                 + ragConfigJson + ";" + "  var cliCfg = "
                 + cliConfigJson + ";" + "  var humanCfg = "
                 + humanConfigJson + ";" + "  var wmqCfg = "
-                + wmqConfigJson + ";" + "  var agentState = $.agentState || {};"
+                + wmqConfigJson + ";" + "  var knownNames = " + knownToolNamesJson + ";"
+                + "  var agentState = $.agentState || {};"
                 + "  var tcs = $.toolCalls || [];"
                 + "  var result = [];"
                 + "  for (var i = 0; i < tcs.length; i++) {"
                 + "    var tc = tcs[i]; var n = tc.name;"
+                // Validate the tool name. If the LLM hallucinates a name we
+                // didn't expose, replace the SIMPLE task with an INLINE task
+                // that returns an error to the conversation. Without this the
+                // SIMPLE task gets queued under the unknown name with no worker
+                // polling for it and the workflow hangs forever.
+                + "    var isCfg = !!(httpCfg[n] || mcpCfg[n] || agentToolCfg[n] ||"
+                + "                  mediaCfg[n] || ragCfg[n] || humanCfg[n] || wmqCfg[n]);"
+                // Reject any name not in the agent's declared tools. The
+                // previous gate (``hasKnownNames``) skipped this check when
+                // ``knownNames`` was empty, which allowed an agent declared
+                // with ``tools=[]`` and only ``prefill_tools`` to dispatch
+                // hallucinated calls to the prefill workers (registered for
+                // prefill execution but never advertised to the LLM). With
+                // this tighter check, an empty knownNames means NO tool is
+                // callable by the LLM — exactly the prefill-only contract.
+                + "    var isUnknown = !isCfg && !(knownNames && knownNames[n]);"
+                + "    if (isUnknown) {"
+                + "      var availList = [];"
+                + "      for (var nm in knownNames) availList.push(nm);"
+                + "      var unknownErr = ('Unknown tool \\'' + n + '\\'. Available tools: ' + availList.join(', '));"
+                + "      var errTask = {name: n, taskReferenceName: tc.taskReferenceName || n,"
+                + "                     type: 'INLINE',"
+                + "                     inputParameters: {evaluatorType: 'graaljs',"
+                + "                       expression: 'function e(){return {result: $.errorMessage, is_error: true};} e();',"
+                + "                       errorMessage: unknownErr},"
+                + "                     optional: true};"
+                + "      result.push(errTask);"
+                + "      continue;"
+                + "    }"
                 + "    var t = {name: n, taskReferenceName: tc.taskReferenceName || n,"
                 + "             type: tc.type || 'SIMPLE', inputParameters: tc.inputParameters || {},"
                 + "             optional: true,"
@@ -789,7 +820,8 @@ public class JavaScriptBuilder {
             String agentToolConfigJson,
             String ragConfigJson,
             String humanConfigJson,
-            String wmqConfigJson) {
+            String wmqConfigJson,
+            String knownToolNamesJson) {
         return iife("  var httpCfg = " + httpConfigJson + ";" + "  var mcpCfg = $.mcpConfig || {};"
                 + "  var apiCfg = $.apiConfig || {};"
                 + "  var mediaCfg = "
@@ -797,11 +829,34 @@ public class JavaScriptBuilder {
                 + agentToolConfigJson + ";" + "  var ragCfg = "
                 + ragConfigJson + ";" + "  var humanCfg = "
                 + humanConfigJson + ";" + "  var wmqCfg = "
-                + wmqConfigJson + ";" + "  var agentState = $.agentState || {};"
+                + wmqConfigJson + ";" + "  var knownNames = " + knownToolNamesJson + ";"
+                + "  var agentState = $.agentState || {};"
                 + "  var tcs = $.toolCalls || [];"
                 + "  var result = [];"
                 + "  for (var i = 0; i < tcs.length; i++) {"
                 + "    var tc = tcs[i]; var n = tc.name;"
+                // Reject hallucinated tool names (see enrichToolsScript above
+                // for context). Without this the SIMPLE task gets queued under
+                // an unknown name and the workflow hangs forever.
+                + "    var isCfg = !!(httpCfg[n] || mcpCfg[n] || apiCfg[n] || agentToolCfg[n] ||"
+                + "                  mediaCfg[n] || ragCfg[n] || humanCfg[n] || wmqCfg[n]);"
+                // See ``enrichToolsScript`` above — empty knownNames means
+                // NO tool is callable by the LLM (locks down the prefill-only
+                // leak path).
+                + "    var isUnknown = !isCfg && !(knownNames && knownNames[n]);"
+                + "    if (isUnknown) {"
+                + "      var availList = [];"
+                + "      for (var nm in knownNames) availList.push(nm);"
+                + "      var unknownErr = ('Unknown tool \\'' + n + '\\'. Available tools: ' + availList.join(', '));"
+                + "      var errTask = {name: n, taskReferenceName: tc.taskReferenceName || n,"
+                + "                     type: 'INLINE',"
+                + "                     inputParameters: {evaluatorType: 'graaljs',"
+                + "                       expression: 'function e(){return {result: $.errorMessage, is_error: true};} e();',"
+                + "                       errorMessage: unknownErr},"
+                + "                     optional: true};"
+                + "      result.push(errTask);"
+                + "      continue;"
+                + "    }"
                 + "    var t = {name: n, taskReferenceName: tc.taskReferenceName || n,"
                 + "             type: tc.type || 'SIMPLE', inputParameters: tc.inputParameters || {},"
                 + "             optional: true,"
@@ -1155,12 +1210,19 @@ public class JavaScriptBuilder {
     }
 
     /**
-     * Context injection script: prepends context JSON block to user prompt.
-     * If context is empty, returns the prompt unchanged.
-     * Enforces size limits: per-value truncation and total size budget.
-     * Input: {@code state} → the _agent_state dict, {@code prompt} → original prompt,
-     *        {@code maxSize} → max total context bytes, {@code maxValueSize} → max per-value bytes.
-     * Output: the prompt string with context prepended.
+     * Context injection script: builds the state/signals prefix for the user prompt.
+     *
+     * <p>Returns ONLY the context prefix (state JSON + signals). The base prompt is
+     * NOT included in the output — the caller concatenates the prefix with the prompt
+     * via Conductor template resolution (e.g. {@code ${ctx_inject.output.result}\n\n${workflow.input.prompt}}).
+     * This avoids storing the full prompt (which never changes) in every iteration's
+     * task output, reducing workflow payload by ~N × prompt_size.</p>
+     *
+     * <p>Input: {@code state} → the _agent_state dict,
+     *        {@code signals} → signal injection string,
+     *        {@code maxSize} → max total context bytes,
+     *        {@code maxValueSize} → max per-value bytes.</p>
+     * <p>Output: the context prefix string (empty string if no state/signals).</p>
      */
     public static String contextInjectionScript() {
         return iife(
@@ -1171,9 +1233,8 @@ public class JavaScriptBuilder {
                 // properties, not map entries. Use state.get(k) for value access
                 // since bracket notation may not work for Java Maps.
                 "var rawState = $.state;"
-                        + "var prompt = $.prompt || '';"
                         + "var signals = $.signals || '';"
-                        + "if (!rawState && !signals) return prompt;"
+                        + "if (!rawState && !signals) return '';"
                         + "var maxSize = $.maxSize || 32768;"
                         + "var maxValueSize = $.maxValueSize || 4096;"
                         // Collect map entries via for-in (works on Java Maps in GraalJS)
@@ -1200,13 +1261,12 @@ public class JavaScriptBuilder {
                         + "  delete truncated[tKeys.shift()];"
                         + "  json = JSON.stringify(truncated);"
                         + "}"
-                        // Build result: signals (if any) + context (if any) + prompt
+                        // Build prefix: signals (if any) + context (if any)
                         + "var parts = [];"
                         + "if (signals) { parts.push('[SIGNALS]\\n' + signals + '\\n[/SIGNALS]'); }"
                         + "if (Object.keys(truncated).length > 0) {"
                         + "  parts.push('Context:\\n```json\\n' + JSON.stringify(truncated, null, 2) + '\\n```');"
                         + "}"
-                        + "parts.push(prompt);"
                         + "return parts.join('\\n\\n');");
     }
 
@@ -1226,5 +1286,202 @@ public class JavaScriptBuilder {
                 + "  merged[agents[i]] = $['child_' + i] || {};"
                 + "}"
                 + "return merged;");
+    }
+
+    /**
+     * Extract a JSON plan from the planner's output.
+     *
+     * <p>Handles two cases:
+     * <ol>
+     *   <li>The LLM returned a JSON object directly (no markdown) — detected by checking
+     *       if {@code $.rawResult} is an object with a {@code steps} key.</li>
+     *   <li>The LLM returned Markdown with an embedded {@code ```json} fence — extracted
+     *       via regex from {@code $.coercedResult} (the stringified version).</li>
+     * </ol>
+     *
+     * <p>Input: {@code $.rawResult} — the raw sub-workflow result (may be Java Map),
+     *         {@code $.coercedResult} — the stringified version,
+     *         {@code $.planReaderContent} — optional content from plan_source tool (deterministic fallback).
+     * <p>Output: {@code {plan_json: "<JSON string>", markdown_plan: "<full text>"}}
+     * Returns {@code plan_json: null} when no valid plan is found.
+     */
+    public static String extractJsonFenceScript() {
+        return iife(
+                // Helper: convert a Java Map / JS object to a proper JS object
+                // GraalJS Java Maps don't serialize with JSON.stringify, so we
+                // manually copy entries into a plain JS object.
+                "function toJS(obj) {"
+                        + "  if (obj == null) return null;"
+                        + "  if (typeof obj !== 'object') return obj;"
+                        + "  if (Array.isArray(obj)) {"
+                        + "    var arr = []; for (var i = 0; i < obj.length; i++) arr.push(toJS(obj[i])); return arr;"
+                        + "  }"
+                        + "  var out = {};"
+                        + "  var keys = obj.keySet ? obj.keySet().toArray() : Object.keys(obj);"
+                        + "  for (var i = 0; i < keys.length; i++) {"
+                        + "    var k = keys[i]; var v = obj.get ? obj.get(k) : obj[k];"
+                        + "    out[k] = toJS(v);"
+                        + "  }"
+                        + "  return out;"
+                        + "}"
+
+                        // Helper: scan ``text`` from ``openIdx`` (at a ``{``) and return the
+                        // index of the matching ``}``, accounting for string literals so
+                        // braces inside string values don't miscount. Returns -1 if no
+                        // matching brace is found. Handles backslash-escaped quotes.
+                        + "function findMatchingBrace(text, openIdx) {"
+                        + "  var depth = 0;"
+                        + "  var inStr = false;"
+                        + "  var prev = '';"
+                        + "  for (var ci = openIdx; ci < text.length; ci++) {"
+                        + "    var cc = text[ci];"
+                        + "    if (inStr) {"
+                        + "      if (cc === '\\\\') { prev = (prev === '\\\\') ? '' : '\\\\'; }"
+                        + "      else if (cc === '\"' && prev !== '\\\\') { inStr = false; prev = ''; }"
+                        + "      else { prev = cc; }"
+                        + "    } else {"
+                        + "      if (cc === '\"') { inStr = true; prev = ''; }"
+                        + "      else if (cc === '{') { depth++; }"
+                        + "      else if (cc === '}') { depth--; if (depth === 0) return ci; }"
+                        + "    }"
+                        + "  }"
+                        + "  return -1;"
+                        + "}"
+
+                        // Case 0 (highest priority): static_plan from workflow input.
+                        // The SDK's ``runtime.run(harness, plan=...)`` plumbs a
+                        // user-supplied plan dict/Plan into ``workflow.input.static_plan``;
+                        // the planner LLM still runs (the workflow shape is fixed at
+                        // compile time) but its output is ignored. This makes
+                        // deterministic plans first-class — no more plan_source tool
+                        // dance to inject a fixed plan.
+                        + "var sp = $.staticPlan;"
+                        + "if (sp != null) {"
+                        + "  if (typeof sp === 'object') {"
+                        + "    var hasStepsSp = false;"
+                        + "    try { hasStepsSp = sp.steps != null || (sp.get && sp.get('steps') != null); } catch(e) {}"
+                        + "    if (hasStepsSp) {"
+                        + "      var planSp = toJS(sp);"
+                        + "      return {plan_json: JSON.stringify(planSp), markdown_plan: '[static plan]'};"
+                        + "    }"
+                        + "  } else if (typeof sp === 'string' && sp.length > 2) {"
+                        + "    try {"
+                        + "      var parsedSp = JSON.parse(sp);"
+                        + "      if (parsedSp && parsedSp.steps) {"
+                        + "        return {plan_json: JSON.stringify(parsedSp), markdown_plan: '[static plan]'};"
+                        + "      }"
+                        + "    } catch(e) {}"
+                        + "  }"
+                        + "}"
+
+                        // Case 1: rawResult is already a plan object (has "steps" key)
+                        // markdown_plan is the original planner text when available — the
+                        // fallback agent benefits from seeing the LLM's actual prose, not a
+                        // re-stringified pretty-print of the parsed object.
+                        + "var raw = $.rawResult;"
+                        + "if (raw != null && typeof raw === 'object') {"
+                        + "  var hasSteps = false;"
+                        + "  try { hasSteps = raw.steps != null || (raw.get && raw.get('steps') != null); } catch(e) {}"
+                        + "  if (hasSteps) {"
+                        + "    var plan = toJS(raw);"
+                        + "    var origText = ($.coercedResult && String($.coercedResult).length > 0) ? String($.coercedResult) : JSON.stringify(plan);"
+                        + "    return {plan_json: JSON.stringify(plan), markdown_plan: origText};"
+                        + "  }"
+                        + "}"
+
+                        // Case 2: coercedResult is a JSON string (the LLM output was pure JSON text)
+                        + "var coerced = $.coercedResult || '';"
+                        + "if (typeof coerced === 'string' && coerced.length > 2) {"
+                        + "  try {"
+                        + "    var parsed = JSON.parse(coerced);"
+                        + "    if (parsed && parsed.steps) {"
+                        + "      return {plan_json: JSON.stringify(parsed), markdown_plan: coerced};"
+                        + "    }"
+                        + "  } catch(e) {}"
+                        + "}"
+
+                        // Case 3: coercedResult is Markdown with a ```json fence
+                        // Try multiple fence patterns: with/without newlines, with/without space
+                        + "var text = String(coerced);"
+                        + "var fencePatterns = ["
+                        + "  /```json\\s*\\n([\\s\\S]*?)\\n\\s*```/," // standard: ```json\n...\n```
+                        + "  /```json\\s*([\\s\\S]*?)```/," // lenient: no newline required
+                        + "  /```\\s*\\n(\\{[\\s\\S]*?\\})\\n\\s*```/" // plain fence with JSON object
+                        + "];"
+                        + "for (var pi = 0; pi < fencePatterns.length; pi++) {"
+                        + "  var fmatch = text.match(fencePatterns[pi]);"
+                        + "  if (fmatch) {"
+                        + "    try {"
+                        + "      var fenced = JSON.parse(fmatch[1].trim());"
+                        + "      if (fenced && fenced.steps) {"
+                        + "        return {plan_json: JSON.stringify(fenced), markdown_plan: text};"
+                        + "      }"
+                        + "    } catch(e) {}"
+                        + "  }"
+                        + "}"
+
+                        // Case 4: Find JSON object with "steps" key anywhere in text via
+                        // string-aware brace matching (see findMatchingBrace helper above).
+                        + "var stepsIdx = text.indexOf('\"steps\"');"
+                        + "if (stepsIdx >= 0) {"
+                        + "  var openIdx = text.lastIndexOf('{', stepsIdx);"
+                        + "  if (openIdx >= 0) {"
+                        + "    var closeIdx = findMatchingBrace(text, openIdx);"
+                        + "    if (closeIdx > openIdx) {"
+                        + "      try {"
+                        + "        var extracted = JSON.parse(text.substring(openIdx, closeIdx + 1));"
+                        + "        if (extracted && extracted.steps) {"
+                        + "          return {plan_json: JSON.stringify(extracted), markdown_plan: text};"
+                        + "        }"
+                        + "      } catch(e) {}"
+                        + "    }"
+                        + "  }"
+                        + "}"
+
+                        // Case 5: planReaderContent — deterministic fallback from plan_source tool
+                        // If the planner text failed extraction, try the external source content.
+                        + "var readerText = $.planReaderContent ? String($.planReaderContent) : '';"
+                        + "if (readerText && readerText.length > 2) {"
+                        // 5a: direct JSON parse
+                        + "  try {"
+                        + "    var rParsed = JSON.parse(readerText);"
+                        + "    if (rParsed && rParsed.steps) {"
+                        + "      return {plan_json: JSON.stringify(rParsed), markdown_plan: readerText};"
+                        + "    }"
+                        + "  } catch(e) {}"
+                        // 5b: ```json fence in reader content
+                        + "  for (var ri = 0; ri < fencePatterns.length; ri++) {"
+                        + "    var rmatch = readerText.match(fencePatterns[ri]);"
+                        + "    if (rmatch) {"
+                        + "      try {"
+                        + "        var rfenced = JSON.parse(rmatch[1].trim());"
+                        + "        if (rfenced && rfenced.steps) {"
+                        + "          return {plan_json: JSON.stringify(rfenced), markdown_plan: readerText};"
+                        + "        }"
+                        + "      } catch(e) {}"
+                        + "    }"
+                        + "  }"
+                        // 5c: string-aware brace-matching in reader content (uses the
+                        // same findMatchingBrace helper as Case 4 — keeps both extraction
+                        // paths in sync for braces inside string values).
+                        + "  var rStepsIdx = readerText.indexOf('\"steps\"');"
+                        + "  if (rStepsIdx >= 0) {"
+                        + "    var rOpenIdx = readerText.lastIndexOf('{', rStepsIdx);"
+                        + "    if (rOpenIdx >= 0) {"
+                        + "      var rCloseIdx = findMatchingBrace(readerText, rOpenIdx);"
+                        + "      if (rCloseIdx > rOpenIdx) {"
+                        + "        try {"
+                        + "          var rExtracted = JSON.parse(readerText.substring(rOpenIdx, rCloseIdx + 1));"
+                        + "          if (rExtracted && rExtracted.steps) {"
+                        + "            return {plan_json: JSON.stringify(rExtracted), markdown_plan: readerText};"
+                        + "          }"
+                        + "        } catch(e) {}"
+                        + "      }"
+                        + "    }"
+                        + "  }"
+                        + "}"
+
+                        // Nothing found
+                        + "return {plan_json: null, markdown_plan: text};");
     }
 }

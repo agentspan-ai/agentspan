@@ -58,6 +58,7 @@ public class AgentRun {
     public static class TokenUsage {
         private int promptTokens;
         private int completionTokens;
+        private int reasoningTokens;
         private int totalTokens;
     }
 

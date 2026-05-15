@@ -3,7 +3,7 @@
 
 """Planner — agent that plans before executing.
 
-When ``planner=True``, the server enhances the system prompt with planning
+When ``enable_planning=True``, the server enhances the system prompt with planning
 instructions so the agent creates a step-by-step plan before executing
 tools. This improves performance on complex, multi-step tasks.
 
@@ -65,7 +65,7 @@ agent = Agent(
         "write structured reports with multiple sections."
     ),
     tools=[search_web, write_section],
-    planner=True,
+    enable_planning=True,
 )
 
 

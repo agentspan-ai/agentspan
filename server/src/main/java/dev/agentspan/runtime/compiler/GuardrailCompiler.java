@@ -337,6 +337,7 @@ public class GuardrailCompiler {
         String outPath = isInline ? guardrailRef + ".output.result" : guardrailRef + ".output";
 
         String s = suffix;
+        String onFail = guard.getOnFail() != null ? guard.getOnFail() : "raise";
 
         // --- SwitchTask (value-based, not JavaScript) ---
         WorkflowTask sw = new WorkflowTask();
@@ -351,22 +352,38 @@ public class GuardrailCompiler {
 
         Map<String, List<WorkflowTask>> decisionCases = new LinkedHashMap<>();
 
-        // --- "retry" case: InlineTask that formats feedback ---
+        // Emit only the cases that are reachable for this guardrail's
+        // configuration. Previously every guardrail emitted retry+raise+fix
+        // unconditionally — for an ``on_fail=raise`` guardrail the retry/fix
+        // branches were dead WorkflowTasks (Conductor still validated and
+        // registered their TaskDefs). The reachability map below mirrors what
+        // the regex/llm guardrail JS scripts can actually return:
+        //   - retry → can return ``retry`` until exhausted, then ``raise``
+        //   - fix   → custom guardrails return ``fix`` directly; regex/llm
+        //             scripts coerce ``fix`` → ``raise``, so still need raise
+        //   - human → returns ``human``
+        //   - raise → returns ``raise``
+        // ``raise`` is always emitted as the catch-all so unexpected on_fail
+        // values fail closed instead of falling through to the pass branch.
         String retryRef = agentName + "_guardrail_retry" + s;
-        WorkflowTask retryTask = new WorkflowTask();
-        retryTask.setTaskReferenceName(retryRef);
-        retryTask.setType("INLINE");
 
-        Map<String, Object> retryInputs = new LinkedHashMap<>();
-        retryInputs.put("evaluatorType", "graaljs");
-        retryInputs.put("expression", JavaScriptBuilder.guardrailRetryScript());
-        retryInputs.put("guardrail_message", "${" + outPath + ".message}");
-        retryInputs.put("llm_output", contentRef);
-        retryTask.setInputParameters(retryInputs);
+        if ("retry".equals(onFail)) {
+            // --- "retry" case: InlineTask that formats feedback ---
+            WorkflowTask retryTask = new WorkflowTask();
+            retryTask.setTaskReferenceName(retryRef);
+            retryTask.setType("INLINE");
 
-        decisionCases.put("retry", List.of(retryTask));
+            Map<String, Object> retryInputs = new LinkedHashMap<>();
+            retryInputs.put("evaluatorType", "graaljs");
+            retryInputs.put("expression", JavaScriptBuilder.guardrailRetryScript());
+            retryInputs.put("guardrail_message", "${" + outPath + ".message}");
+            retryInputs.put("llm_output", contentRef);
+            retryTask.setInputParameters(retryInputs);
 
-        // --- "raise" case: terminate workflow ---
+            decisionCases.put("retry", List.of(retryTask));
+        }
+
+        // --- "raise" case (always emitted): terminate workflow ---
         WorkflowTask terminateTask = new WorkflowTask();
         terminateTask.setType("TERMINATE");
         terminateTask.setTaskReferenceName(agentName + "_guardrail_terminate" + s);
@@ -378,29 +395,31 @@ public class GuardrailCompiler {
 
         decisionCases.put("raise", List.of(terminateTask));
 
-        // --- "fix" case: InlineTask that passes through fixed_output + SET_VARIABLE to store it ---
-        WorkflowTask fixTask = new WorkflowTask();
-        fixTask.setTaskReferenceName(agentName + "_guardrail_fix" + s);
-        fixTask.setType("INLINE");
+        if ("fix".equals(onFail)) {
+            // --- "fix" case: InlineTask that passes through fixed_output + SET_VARIABLE to store it ---
+            WorkflowTask fixTask = new WorkflowTask();
+            fixTask.setTaskReferenceName(agentName + "_guardrail_fix" + s);
+            fixTask.setType("INLINE");
 
-        Map<String, Object> fixInputs = new LinkedHashMap<>();
-        fixInputs.put("evaluatorType", "graaljs");
-        fixInputs.put("expression", JavaScriptBuilder.guardrailFixScript());
-        fixInputs.put("fixed_output", "${" + outPath + ".fixed_output}");
-        fixTask.setInputParameters(fixInputs);
+            Map<String, Object> fixInputs = new LinkedHashMap<>();
+            fixInputs.put("evaluatorType", "graaljs");
+            fixInputs.put("expression", JavaScriptBuilder.guardrailFixScript());
+            fixInputs.put("fixed_output", "${" + outPath + ".fixed_output}");
+            fixTask.setInputParameters(fixInputs);
 
-        // Store fixed output in workflow variable so post-loop output resolution can use it
-        WorkflowTask fixSetVar = new WorkflowTask();
-        fixSetVar.setType("SET_VARIABLE");
-        fixSetVar.setTaskReferenceName(agentName + "_guardrail_fix_set" + s);
-        Map<String, Object> fixSetVarInputs = new LinkedHashMap<>();
-        fixSetVarInputs.put("_fixed_output", "${" + outPath + ".fixed_output}");
-        fixSetVar.setInputParameters(fixSetVarInputs);
+            // Store fixed output in workflow variable so post-loop output resolution can use it
+            WorkflowTask fixSetVar = new WorkflowTask();
+            fixSetVar.setType("SET_VARIABLE");
+            fixSetVar.setTaskReferenceName(agentName + "_guardrail_fix_set" + s);
+            Map<String, Object> fixSetVarInputs = new LinkedHashMap<>();
+            fixSetVarInputs.put("_fixed_output", "${" + outPath + ".fixed_output}");
+            fixSetVar.setInputParameters(fixSetVarInputs);
 
-        decisionCases.put("fix", List.of(fixTask, fixSetVar));
+            decisionCases.put("fix", List.of(fixTask, fixSetVar));
+        }
 
-        // --- "human" case: HumanTask + validate + normalize + process + inner switch ---
-        if ("human".equals(guard.getOnFail())) {
+        if ("human".equals(onFail)) {
+            // --- "human" case: HumanTask + validate + normalize + process + inner switch ---
             decisionCases.put("human", compileHumanCase(guard, agentName, contentRef, outPath, s, agentModel));
         }
 

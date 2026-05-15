@@ -327,3 +327,51 @@ class TestAgentConfigSerializer:
         assert "guardrails" not in config
         assert "termination" not in config
         assert "handoffs" not in config
+        assert "prefillTools" not in config
+
+    def test_serialize_prefill_tools(self):
+        """prefill_tools are serialized as prefillTools."""
+        from agentspan.agents.agent import Agent
+        from agentspan.agents.tool import PrefillToolCall
+
+        agent = Agent(
+            name="test",
+            model="openai/gpt-4o",
+            prefill_tools=[
+                PrefillToolCall(tool_name="contextbook_read", arguments={"section": "plan"}),
+                PrefillToolCall(tool_name="git_diff", arguments={}),
+            ],
+        )
+        config = self.serializer.serialize(agent)
+
+        assert "prefillTools" in config
+        assert len(config["prefillTools"]) == 2
+        assert config["prefillTools"][0] == {
+            "toolName": "contextbook_read",
+            "arguments": {"section": "plan"},
+        }
+        assert config["prefillTools"][1] == {
+            "toolName": "git_diff",
+            "arguments": {},
+        }
+
+    def test_serialize_prefill_tools_via_call(self):
+        """tool.call() creates PrefillToolCall that serializes correctly."""
+        from agentspan.agents.agent import Agent
+        from agentspan.agents.tool import tool
+
+        @tool
+        def my_tool(section: str) -> str:
+            """Read a section."""
+            return section
+
+        agent = Agent(
+            name="test",
+            model="openai/gpt-4o",
+            prefill_tools=[my_tool.call(section="foo")],
+        )
+        config = self.serializer.serialize(agent)
+
+        assert config["prefillTools"] == [
+            {"toolName": "my_tool", "arguments": {"section": "foo"}},
+        ]

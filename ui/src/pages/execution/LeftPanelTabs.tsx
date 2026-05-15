@@ -25,6 +25,12 @@ export default function LeftPanelTabs({
 }: LeftPanelTabsProps) {
   const [firstUse] = useAtom(agentFirstUseAtom);
 
+  // Debug View is always available. It shows the raw Conductor flow
+  // diagram and is essential for inspecting orchestration-only workflows
+  // (e.g. PLAN_EXECUTE coordinators) whose tasks are pure plumbing —
+  // INLINE, SET_VARIABLE, SUB_WORKFLOW, SWITCH — with no LLM turns for the
+  // Agent Execution tab to render. Hiding it for agents leaves users with
+  // no view at all when the agent's structure doesn't fit the turn model.
   const leftPanelTabItems = [
     {
       label: "Agent Execution",

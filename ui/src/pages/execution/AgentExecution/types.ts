@@ -139,6 +139,21 @@ export interface AgentRunData {
   failureReason?: string;
   /** Agent definition from workflow.definition.metadata.agentDef */
   agentDef?: Record<string, unknown>;
+  /** Wall-clock interval (ms). Used by ``inferSubAgentStrategy`` to
+   * decide SEQUENTIAL vs PARALLEL layout from actual time-overlap
+   * rather than a count-based heuristic. */
+  startTime?: number;
+  endTime?: number;
+  /** Semantic role of this agent within a strategy harness, derived
+   * from naming conventions emitted by the server (``_planner``,
+   * ``pe_*_plan``, ``_fallback``). When set, the diagram shows this
+   * label as the agent's badge instead of the generic strategy label,
+   * and uses the role as the display name (Planner / Execute /
+   * Fallback) so users see roles, not auto-generated workflow names. */
+  roleLabel?: string;
+  /** Display-friendly name. When set, the diagram uses this in place of
+   * ``agentName`` (typically a long auto-generated workflow ref name). */
+  displayName?: string;
 }
 
 export interface ExecutionMetrics {

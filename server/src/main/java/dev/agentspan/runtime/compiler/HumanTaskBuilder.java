@@ -381,6 +381,7 @@ public class HumanTaskBuilder {
                 ModelParser.ParsedModel parsed = ModelParser.parse(model);
                 normInputs.put("llmProvider", parsed.getProvider());
                 normInputs.put("model", parsed.getModel());
+                normInputs.put("maxTokens", 4096);
                 normInputs.put(
                         "messages",
                         List.of(

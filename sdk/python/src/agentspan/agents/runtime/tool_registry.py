@@ -66,16 +66,31 @@ class ToolRegistry:
             if td.func is not None and td.tool_type in ("worker", "cli"):
                 guardrails = td.guardrails if td.guardrails else None
                 wrapper = make_tool_worker(td.func, td.name, guardrails=guardrails, tool_def=td)
+                # Worker domain contract (see docs/design/WORKER_DOMAIN_CONTRACT.md):
+                # when ``domain`` is non-None, the execution is stateful
+                # and the server has placed every SIMPLE task into
+                # ``taskToDomain`` mapped to that domain. The SDK MUST
+                # register its workers under the same domain — otherwise
+                # tasks scheduled on the run domain have no poller and
+                # sit SCHEDULED forever (workflow ``4e0d2953`` is the
+                # canonical instance of this regression). The earlier
+                # per-tool ``td.stateful`` check that gated this would
+                # leave non-stateful tools registered on no-domain even
+                # when the server expected them on the run domain.
                 worker_task(
                     task_definition_name=td.name,
-                    task_def=_default_task_def(td.name, retry_count=td.retry_count, retry_delay_seconds=td.retry_delay_seconds),
+                    task_def=_default_task_def(
+                        td.name,
+                        retry_count=getattr(td, "retry_count", 2),
+                        retry_delay_seconds=getattr(td, "retry_delay_seconds", 2),
+                    ),
                     register_task_def=True,
                     overwrite_task_def=True,
-                    domain=domain if (agent_stateful or td.stateful) else None,
+                    domain=domain,
                     lease_extend_enabled=True,
                 )(wrapper)
                 _tool_task_names[td.name] = td.name
-                logger.debug("Registered tool worker '%s'", td.name)
+                logger.debug("Registered tool worker '%s' under domain=%s", td.name, domain)
 
         logger.debug(
             "Registered %d worker tools for agent '%s'",

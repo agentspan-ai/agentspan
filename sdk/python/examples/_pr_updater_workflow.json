@@ -1,0 +1,197 @@
+{
+  "name": "pr_updater_deterministic",
+  "description": "Deterministic PR updater — no LLM. Reads contextbook, pushes, creates/updates PR.",
+  "version": 1,
+  "schemaVersion": 2,
+  "inputParameters": ["repo", "working_dir"],
+  "tasks": [
+    {
+      "name": "parallel_reads",
+      "taskReferenceName": "fork_reads",
+      "type": "FORK_JOIN",
+      "forkTasks": [
+        [
+          {
+            "name": "contextbook_read",
+            "taskReferenceName": "read_issue_pr",
+            "type": "SIMPLE",
+            "inputParameters": { "section": "issue_pr" }
+          }
+        ],
+        [
+          {
+            "name": "contextbook_read",
+            "taskReferenceName": "read_design",
+            "type": "SIMPLE",
+            "inputParameters": { "section": "architecture_design_test" }
+          }
+        ],
+        [
+          {
+            "name": "contextbook_read",
+            "taskReferenceName": "read_impl",
+            "type": "SIMPLE",
+            "inputParameters": { "section": "implementation" }
+          }
+        ],
+        [
+          {
+            "name": "contextbook_read",
+            "taskReferenceName": "read_qa",
+            "type": "SIMPLE",
+            "inputParameters": { "section": "qa_testing" }
+          }
+        ],
+        [
+          {
+            "name": "contextbook_read",
+            "taskReferenceName": "read_conventions",
+            "type": "SIMPLE",
+            "inputParameters": { "section": "repo_conventions" }
+          }
+        ],
+        [
+          {
+            "name": "run_command",
+            "taskReferenceName": "get_branch",
+            "type": "SIMPLE",
+            "inputParameters": { "command": "git branch --show-current" }
+          }
+        ],
+        [
+          {
+            "name": "run_command",
+            "taskReferenceName": "get_log",
+            "type": "SIMPLE",
+            "inputParameters": { "command": "git log --oneline -10" }
+          }
+        ],
+        [
+          {
+            "name": "git_diff",
+            "taskReferenceName": "get_diff",
+            "type": "SIMPLE",
+            "inputParameters": {}
+          }
+        ]
+      ]
+    },
+    {
+      "name": "join_reads",
+      "taskReferenceName": "join_reads",
+      "type": "JOIN",
+      "joinOn": [
+        "read_issue_pr", "read_design", "read_impl", "read_qa",
+        "read_conventions", "get_branch", "get_log", "get_diff"
+      ]
+    },
+
+    {
+      "name": "run_command",
+      "taskReferenceName": "stage_and_push",
+      "type": "SIMPLE",
+      "inputParameters": {
+        "command": "git add -A -- ':!.contextbook' && (git diff --cached --quiet || git commit -m 'fix: address review feedback') && (git push origin HEAD 2>&1 || git push --set-upstream origin $(git branch --show-current) 2>&1)"
+      }
+    },
+
+    {
+      "name": "run_command",
+      "taskReferenceName": "check_pr_exists",
+      "type": "SIMPLE",
+      "inputParameters": {
+        "command": "gh pr view --repo ${workflow.input.repo} --json number,url 2>/dev/null || echo NO_PR"
+      }
+    },
+
+    {
+      "name": "extract_pr_info",
+      "taskReferenceName": "extract_pr_info",
+      "type": "INLINE",
+      "inputParameters": {
+        "evaluatorType": "graaljs",
+        "expression": "function e() { var raw = $.check_result || ''; if (raw.indexOf('NO_PR') >= 0) return { exists: false, number: 0, url: '' }; try { var parsed = JSON.parse(raw.replace(/^\\[exit \\d+\\]\\n?/, '')); return { exists: true, number: parsed.number || 0, url: parsed.url || '' }; } catch(e) { return { exists: false, number: 0, url: '' }; } } e();",
+        "check_result": "${check_pr_exists.output.result}"
+      }
+    },
+
+    {
+      "name": "extract_issue_number",
+      "taskReferenceName": "extract_issue_number",
+      "type": "INLINE",
+      "inputParameters": {
+        "evaluatorType": "graaljs",
+        "expression": "function e() { var text = $.issue_pr || ''; var m = text.match(/# Issue #(\\d+)/); return { issue_number: m ? m[1] : '0' }; } e();",
+        "issue_pr": "${read_issue_pr.output.result}"
+      }
+    },
+
+    {
+      "name": "compose_pr_body",
+      "taskReferenceName": "compose_pr_body",
+      "type": "INLINE",
+      "inputParameters": {
+        "evaluatorType": "graaljs",
+        "expression": "function e() { var n = $.issue_num; var impl = $.impl || '(none)'; var qa = $.qa || '(none)'; var issue = $.issue || '(none)'; var design = $.design || '(none)'; var conv = $.conv || '(none)'; var branch = ($.branch || '').replace(/^\\[exit \\d+\\]\\n?/, '').trim(); var repo = $.repo; var body = 'Fixes #' + n + '\\n\\n'; body += '## Summary\\n' + impl.split('\\n').slice(0, 20).join('\\n') + '\\n\\n'; body += '## Testing\\n' + qa.split('\\n').slice(0, 20).join('\\n') + '\\n\\n'; body += '<details><summary>contextbook: issue_pr</summary>\\n\\n' + issue + '\\n\\n</details>\\n\\n'; body += '<details><summary>contextbook: architecture_design_test</summary>\\n\\n' + design + '\\n\\n</details>\\n\\n'; body += '<details><summary>contextbook: implementation</summary>\\n\\n' + impl + '\\n\\n</details>\\n\\n'; body += '<details><summary>contextbook: qa_testing</summary>\\n\\n' + qa + '\\n\\n</details>\\n\\n'; body += '<details><summary>contextbook: repo_conventions</summary>\\n\\n' + conv + '\\n\\n</details>\\n\\n'; body += '<details><summary>context.json</summary>\\n\\n```json\\n{\"repo\": \"' + repo + '\", \"branch\": \"' + branch + '\", \"agents\": [\"issue_pr_fetcher\", \"tech_lead\", \"coder\", \"qa_agent\", \"pr_updater\"]}\\n```\\n\\n</details>'; return { body: body, title: 'fix: issue #' + n, branch: branch }; } e();",
+        "issue_num": "${extract_issue_number.output.result.issue_number}",
+        "impl": "${read_impl.output.result}",
+        "qa": "${read_qa.output.result}",
+        "issue": "${read_issue_pr.output.result}",
+        "design": "${read_design.output.result}",
+        "conv": "${read_conventions.output.result}",
+        "branch": "${get_branch.output.result}",
+        "repo": "${workflow.input.repo}"
+      }
+    },
+
+    {
+      "name": "create_or_update_pr",
+      "taskReferenceName": "pr_switch",
+      "type": "SWITCH",
+      "evaluatorType": "graaljs",
+      "expression": "$.pr_exists ? 'exists' : 'create'",
+      "inputParameters": {
+        "pr_exists": "${extract_pr_info.output.result.exists}"
+      },
+      "decisionCases": {
+        "create": [
+          {
+            "name": "run_command",
+            "taskReferenceName": "create_pr",
+            "type": "SIMPLE",
+            "inputParameters": {
+              "command": "gh pr create --repo ${workflow.input.repo} --title '${compose_pr_body.output.result.title}' --body-file /dev/stdin <<'PRBODYEOF'\n${compose_pr_body.output.result.body}\nPRBODYEOF"
+            }
+          }
+        ],
+        "exists": [
+          {
+            "name": "run_command",
+            "taskReferenceName": "comment_pr",
+            "type": "SIMPLE",
+            "inputParameters": {
+              "command": "gh pr comment --repo ${workflow.input.repo} ${extract_pr_info.output.result.number} --body-file /dev/stdin <<'PRBODYEOF'\n${compose_pr_body.output.result.body}\nPRBODYEOF"
+            }
+          }
+        ]
+      }
+    },
+
+    {
+      "name": "get_pr_url",
+      "taskReferenceName": "get_pr_url",
+      "type": "INLINE",
+      "inputParameters": {
+        "evaluatorType": "graaljs",
+        "expression": "function e() { if ($.existing_url) return { url: $.existing_url }; var out = $.create_result || ''; var m = out.match(/https:\\/\\/github\\.com\\/[^\\s]+\\/pull\\/\\d+/); return { url: m ? m[0] : 'https://github.com/' + $.repo + '/pull/unknown' }; } e();",
+        "existing_url": "${extract_pr_info.output.result.url}",
+        "create_result": "${create_pr.output.result}",
+        "repo": "${workflow.input.repo}"
+      }
+    }
+  ],
+  "outputParameters": {
+    "result": "${get_pr_url.output.result.url}",
+    "pr_url": "${get_pr_url.output.result.url}"
+  }
+}

@@ -88,6 +88,7 @@ export interface ToolOptions {
   isolated?: boolean;
   credentials?: (string | CredentialFile)[];
   guardrails?: unknown[];
+  maxCalls?: number;
 }
 
 /**
@@ -123,6 +124,8 @@ export function tool<TInput = unknown, TOutput = unknown>(
       credentials: options.credentials,
     }),
     ...(options.guardrails !== undefined && { guardrails: options.guardrails }),
+    ...(options.maxCalls !== undefined && { maxCalls: options.maxCalls }),
+    call: (args: Record<string, unknown>) => ({ toolName: name, arguments: args }),
   };
 
   // Create the wrapper function
@@ -256,6 +259,8 @@ export function getToolDef(obj: unknown): ToolDef {
       ...(raw.config !== undefined && {
         config: raw.config as Record<string, unknown>,
       }),
+      ...(raw.maxCalls !== undefined && { maxCalls: raw.maxCalls as number }),
+      call: (args: Record<string, unknown>) => ({ toolName: raw.name as string, arguments: args }),
     };
   }
 
@@ -289,6 +294,7 @@ function serverTool(
     func: null,
     config,
     ...extras,
+    call: (args: Record<string, unknown>) => ({ toolName: name, arguments: args }),
   };
 }
 
@@ -807,6 +813,7 @@ interface ToolDecoratorOptions {
   isolated?: boolean;
   credentials?: (string | CredentialFile)[];
   guardrails?: unknown[];
+  maxCalls?: number;
 }
 
 /**
@@ -874,6 +881,7 @@ export function toolsFrom(instance: object): ToolFunction<unknown, unknown>[] {
       isolated: metadata.isolated,
       credentials: metadata.credentials,
       guardrails: metadata.guardrails,
+      maxCalls: metadata.maxCalls,
     });
 
     tools.push(wrapped);

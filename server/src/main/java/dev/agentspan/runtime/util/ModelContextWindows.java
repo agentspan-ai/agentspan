@@ -44,8 +44,14 @@ public class ModelContextWindows {
     static {
         // OpenAI  (source: developers.openai.com/api/docs/models — March 2026)
         DEFAULTS.put("gpt-5.4", 1_050_000);
+        DEFAULTS.put("gpt-5.3-codex", 400_000);
+        DEFAULTS.put("gpt-5.3", 400_000);
         DEFAULTS.put("gpt-5.2", 400_000);
         DEFAULTS.put("gpt-5-mini", 400_000);
+        // Catch-all for any other gpt-5.x variant — better to assume a
+        // conservative 400k window and let proactive condensation fire than
+        // to leave the model unknown and grow the conversation unbounded.
+        DEFAULTS.put("gpt-5", 400_000);
         DEFAULTS.put("gpt-4.1-mini", 1_047_576);
         DEFAULTS.put("gpt-4.1-nano", 1_047_576);
         DEFAULTS.put("gpt-4.1", 1_047_576);

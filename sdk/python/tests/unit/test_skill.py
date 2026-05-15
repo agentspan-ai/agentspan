@@ -547,7 +547,7 @@ class TestFormatSkillParams:
         from agentspan.agents.skill import format_skill_params
 
         result = format_skill_params({"rounds": 5, "style": "verbose"})
-        assert "[Skill Parameters]" in result
+        assert "MANDATORY PARAMETER OVERRIDES" in result
         assert "rounds: 5" in result
         assert "style: verbose" in result
 
@@ -560,7 +560,7 @@ class TestFormatSkillParams:
         from agentspan.agents.skill import format_prompt_with_params
 
         result = format_prompt_with_params("Review this code", {"rounds": 5})
-        assert result.startswith("[Skill Parameters]")
+        assert result.startswith("## MANDATORY PARAMETER OVERRIDES")
         assert "rounds: 5" in result
         assert "[User Request]" in result
         assert result.endswith("Review this code")
@@ -579,5 +579,5 @@ class TestFormatSkillParams:
         )
         assert "rounds: 5" in result
         assert "style: verbose" in result
-        assert "[Skill Parameters]" in result
+        assert "MANDATORY PARAMETER OVERRIDES" in result
         assert "[User Request]" in result

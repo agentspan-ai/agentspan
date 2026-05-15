@@ -34,6 +34,18 @@ from agentspan.agents.agent import (
     scatter_gather,
 )
 
+# Typed plan builders + convenience constructor (Strategy.PLAN_EXECUTE)
+from agentspan.agents.plans import (
+    Action,
+    Generate,
+    Op,
+    Plan,
+    Step,
+    Validation,
+    coerce_plan,
+    plan_execute,
+)
+
 # Claude Code configuration
 from agentspan.agents.claude_code import ClaudeCode
 
@@ -54,6 +66,7 @@ from agentspan.agents.code_executor import (
 
 # Exceptions
 from agentspan.agents.exceptions import AgentAPIError, AgentNotFoundError, AgentspanError
+from agentspan.agents.runtime._liveness import WorkerStallError, WorkerStartupError
 
 # Skills
 from agentspan.agents.skill import (
@@ -184,6 +197,7 @@ from agentspan.agents.openai_compat import RunResult, Runner
 
 # Tool decorator and constructors
 from agentspan.agents.tool import (
+    PrefillToolCall,
     ToolContext,
     ToolDef,
     agent_tool,
@@ -311,6 +325,8 @@ __all__ = [
     "AgentspanError",
     "AgentAPIError",
     "AgentNotFoundError",
+    "WorkerStallError",
+    "WorkerStartupError",
     # Agent discovery
     "discover_agents",
     # Tracing

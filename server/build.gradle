@@ -30,7 +30,7 @@ def pnpmCommand = { String args ->
 
 // ── Version catalog ──────────────────────────────────────────────
 ext {
-    conductorVersion   = '3.30.0.rc3'
+    conductorVersion   = '3.30.0.rc12'
     lombokVersion      = '1.18.42'
     log4jVersion       = '2.24.3'  // managed by Spring BOM, explicit for clarity
     sqliteJdbcVersion  = '3.47.0.0'
@@ -63,6 +63,12 @@ dependencies {
     implementation "org.conductoross:conductor-core:${conductorVersion}"
     implementation "org.conductoross:conductor-rest:${conductorVersion}"
     implementation "org.conductoross:conductor-common:${conductorVersion}"
+    // Same conductorVersion as the rest — pinned to the latest published
+    // ``3.30.0.rc12`` on Maven Central. The OpenAI Responses API reasoning
+    // shape + previousResponseId-auto-thread disable both live in that
+    // published build. (Local rc13 is in our private checkout at
+    // /Users/viren/workspace/github/conductoross/conductor — switch back
+    // to rc13 + mavenLocal when iterating against that checkout.)
     implementation "org.conductoross:conductor-ai:${conductorVersion}"
     implementation "org.conductoross:conductor-metrics:${conductorVersion}"
 
@@ -109,6 +115,12 @@ dependencies {
     testImplementation "org.mockito:mockito-core:${mockitoVersion}"
     testCompileOnly "org.projectlombok:lombok:${lombokVersion}"
     testAnnotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+
+    // GraalVM polyglot API — needed to compile/run PlanCompilerScriptTest
+    // (the runtime jars come transitively via conductor-graalvm, but we need
+    // the compile-only API jar explicitly so javac can resolve org.graalvm.polyglot)
+    testImplementation 'org.graalvm.polyglot:polyglot:25.0.2'
+    testImplementation 'org.graalvm.js:js:25.0.2'
 
     // Logging
     implementation('org.apache.logging.log4j:log4j-core')

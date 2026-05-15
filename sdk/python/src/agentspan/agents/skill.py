@@ -104,19 +104,23 @@ def detect_language(path: Path) -> str:
 
 
 def format_skill_params(params: Dict[str, Any]) -> str:
-    """Format skill parameters as a prompt prefix.
+    """Format skill parameters as a mandatory override block.
 
     Args:
         params: Key-value pairs to inject.
 
     Returns:
-        Formatted string like ``[Skill Parameters]\\nkey: value\\n...``
-        or empty string if params is empty.
+        Formatted override block or empty string if params is empty.
     """
     if not params:
         return ""
-    lines = [f"{k}: {v}" for k, v in params.items()]
-    return "[Skill Parameters]\n" + "\n".join(lines)
+    lines = [f"  {k}: {v}" for k, v in params.items()]
+    return (
+        "## MANDATORY PARAMETER OVERRIDES\n"
+        "The following parameters were set by the caller and OVERRIDE any defaults.\n"
+        "You MUST use these values instead of the defaults specified elsewhere.\n\n"
+        + "\n".join(lines)
+    )
 
 
 def format_prompt_with_params(prompt: str, params: Dict[str, Any]) -> str:
@@ -127,7 +131,7 @@ def format_prompt_with_params(prompt: str, params: Dict[str, Any]) -> str:
         params: Skill parameters to inject.
 
     Returns:
-        The prompt with a ``[Skill Parameters]`` prefix followed by
+        The prompt with a mandatory parameter overrides prefix followed by
         ``[User Request]``, or the original prompt when *params* is empty.
     """
     prefix = format_skill_params(params)
@@ -234,12 +238,18 @@ def skill(
             for section_name in skill_sections:
                 resource_files.append(f"skill_section:{section_name}")
 
-    # 5c. Inject runtime params into SKILL.md so the server's orchestrator
-    # sees them in the system prompt. This ensures params like "rounds: 1"
-    # are visible regardless of how the skill is invoked (standalone or agent_tool).
+    # 5c. Inject runtime params into SKILL.md right after frontmatter so
+    # the orchestrator sees them BEFORE any default values in the body.
+    # Appending to the end was too weak — the LLM followed defaults first.
     if merged_params:
         param_block = format_skill_params(merged_params)
-        skill_md = skill_md + "\n\n" + param_block + "\n"
+        # Insert after the closing --- of frontmatter
+        fm_end = skill_md.find("---", skill_md.find("---") + 3)
+        if fm_end != -1:
+            insert_pos = fm_end + 3
+            skill_md = skill_md[:insert_pos] + "\n\n" + param_block + "\n" + skill_md[insert_pos:]
+        else:
+            skill_md = param_block + "\n\n" + skill_md
 
     # 6. Build raw config
     raw_config: Dict[str, Any] = {

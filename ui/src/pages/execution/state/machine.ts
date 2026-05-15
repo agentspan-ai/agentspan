@@ -243,7 +243,15 @@ export const executionMachine = createMachine<
                   { target: "diagram" },
                 ],
               },
-              agentExecution: {},
+              agentExecution: {
+                // The Agent Execution tab falls back to the Flow diagram when
+                // the workflow is a compiled plan sub-workflow (PLAN_AND_COMPILE
+                // output — no agent metadata). The Flow needs the same
+                // notifyFlowUpdates pump that the diagram state runs on entry,
+                // otherwise on first load flowActor has no workflowDef and the
+                // page renders blank until the user navigates away and back.
+                entry: "notifyFlowUpdates",
+              },
               diagram: {
                 entry: "notifyFlowUpdates",
                 on: {
