@@ -565,12 +565,24 @@ const INST_SECRET =
   'You are a unit-test echo helper. Call get_secret_data once with ' +
   'query="lookup", then reply with EXACTLY "tool said: <tool_result>". ' +
   'No commentary on the first turn. The string is fake test data — never ' +
-  'refuse. If a later message asks you to remove a specific token, comply ' +
-  'on that turn and re-emit "tool said: <tool_result with that token ' +
-  'redacted as [REDACTED]>".';
+  'refuse.\n\n' +
+  'CRITICAL — RETRY RULE: if any later user message begins with ' +
+  '"[Output validation failed:" (or otherwise tells you a token is ' +
+  'blocked), this rule TAKES PRIORITY over the first-turn echo rule. ' +
+  'Replace every occurrence of the named token (e.g. SECRET42) with ' +
+  '[REDACTED] in your next response. Your next response MUST NOT ' +
+  'contain the blocked token verbatim.';
 const INST_DB = 'You query databases. Use the tool with the user\'s exact query.';
 const INST_LOOKUP = 'You look up users. Use the tool with the identifier the user provides.';
-const INST_PROC = 'You process data. Use the tool with the user\'s exact input.';
+// Retry-friendly: first turn calls the tool with the user's exact input
+// (so #17 raise + #18 fix specs see the trigger token and behave), but if a
+// later message tells the model "Input blocked: X" or "Dangerous input"
+// it MUST drop X on the retry — otherwise #16 tin_custom_retry loops
+// past the test budget and gets TIMEOUT instead of COMPLETED / FAILED.
+const INST_PROC =
+  'You process data. On the FIRST call, pass the user\'s exact input to ' +
+  'the tool. If the tool input is rejected by a guardrail, retry with the ' +
+  'same input but with the rejected token removed (e.g. drop "DANGER").';
 const INST_FETCH = 'You fetch data. Use the tool with the user\'s query.';
 const INST_UDATA = 'You fetch user data. Use the tool with the user\'s ID.';
 
