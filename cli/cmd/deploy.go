@@ -639,6 +639,14 @@ func runRemoteDeployCmd(cmd *cobra.Command, br *buildResult) error {
 		input["namespace"] = ref.Namespace
 		input["agent_name"] = ref.Name
 	}
+	if res := readResources("."); res != nil {
+		r := map[string]string{}
+		if res.CPU != ""     { r["cpu"]      = res.CPU     }
+		if res.CPUTime != "" { r["cpu_time"] = res.CPUTime }
+		if res.Memory != ""  { r["memory"]   = res.Memory  }
+		if res.Storage != "" { r["storage"]  = res.Storage }
+		input["resources"] = r
+	}
 	deployWorkflowID, err := cc.StartWorkflow(ctx, deployWorkflowName, deployWorkflowVersion, input)
 	if err != nil {
 		return fmt.Errorf("start deploy workflow: %w", err)
