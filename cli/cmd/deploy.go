@@ -18,6 +18,7 @@ import (
 	"github.com/agentspan-ai/agentspan/cli/client"
 	"github.com/agentspan-ai/agentspan/cli/config"
 	"github.com/fatih/color"
+	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cobra"
 )
 
@@ -61,10 +62,19 @@ func runDeployCmd(cmd *cobra.Command, args []string) error {
 	artifactID, _ := cmd.Flags().GetString("artifact")
 
 	// Firecracker path: agentspan.yaml project.
-	// Auto-build if no --artifact provided.
+	// Auto-build if no --artifact provided; skip build if Valkey has a cached build.
 	if _, err := os.Stat("agentspan.yaml"); err == nil {
 		if artifactID == "" {
-			br, err := doBuildWorkflow(cmd.Context(), getConfig().ConductorURL)
+			cfg := getConfig()
+			if ref := readAgentRef("."); ref != nil {
+				if cached := lookupCachedBuild(cfg.ValkeyURL, ref); cached != nil {
+					color.New(color.Bold).Printf("Reusing build from Valkey (built %s)\n",
+						cached.builtAt.Format("2006-01-02 15:04:05"))
+					fmt.Printf("  Artifact : %s\n\n", cached.fileHandleID)
+					return runRemoteDeployCmd(cmd, &cached.buildResult)
+				}
+			}
+			br, err := doBuildWorkflow(cmd.Context(), cfg.ConductorURL)
 			if err != nil {
 				return err
 			}
@@ -698,4 +708,51 @@ func formatDeployOutput(results []deployResult) string {
 	}
 
 	return buf.String()
+}
+
+// cachedBuildResult wraps a buildResult with the time it was built.
+type cachedBuildResult struct {
+	buildResult
+	builtAt time.Time
+}
+
+// lookupCachedBuild queries Valkey for an existing BuildState for the given agent.
+// Returns nil on any error (connection failure, key missing, parse error) so the
+// caller falls through to a fresh build.
+func lookupCachedBuild(valkeyURL string, ref *agentRef) *cachedBuildResult {
+	opts, err := redis.ParseURL(valkeyURL)
+	if err != nil {
+		return nil
+	}
+	opts.DialTimeout = 3 * time.Second
+	opts.ReadTimeout = 3 * time.Second
+	client := redis.NewClient(opts)
+	defer client.Close()
+
+	key := "agentspan:build:" + ref.Customer + ":" + ref.Cluster + ":" + ref.Namespace + ":" + ref.Name
+	data, err := client.Get(context.Background(), key).Bytes()
+	if err != nil {
+		return nil
+	}
+
+	var state struct {
+		FileHandleID string    `json:"file_handle_id"`
+		WorkflowID   string    `json:"workflow_id"`
+		BundleName   string    `json:"bundle_name"`
+		BuiltAt      time.Time `json:"built_at"`
+	}
+	if err := json.Unmarshal(data, &state); err != nil {
+		return nil
+	}
+	if state.FileHandleID == "" {
+		return nil
+	}
+	return &cachedBuildResult{
+		buildResult: buildResult{
+			fileHandleID: state.FileHandleID,
+			workflowID:   state.WorkflowID,
+			bundleName:   state.BundleName,
+		},
+		builtAt: state.BuiltAt,
+	}
 }
