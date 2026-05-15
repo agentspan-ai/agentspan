@@ -41,11 +41,17 @@ const createDirectory = tool(
 );
 
 const writeFile = tool(
-  async ({ path: filePath, content }: { path: string; content: string }) => {
+  async ({ path: filePath, content }: { path: string; content: unknown }) => {
     const full = path.join(WORK_DIR, filePath);
     fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, content);
-    return `Wrote ${content.length} bytes to ${full}`;
+    // Coerce: planner-generated tool calls may emit content as an object
+    // (e.g. ``{"text": "..."}``) on some runs even though the schema says
+    // string. Serializing as JSON keeps the file write succeeding rather
+    // than aborting the whole plan with ERR_INVALID_ARG_TYPE.
+    const body =
+      typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+    fs.writeFileSync(full, body);
+    return `Wrote ${body.length} bytes to ${full}`;
   },
   {
     name: 'write_file',
@@ -79,8 +85,32 @@ const readFile = tool(
 );
 
 const assembleFiles = tool(
-  async ({ output_path, input_paths, separator }: { output_path: string; input_paths: string; separator?: string }) => {
-    const paths: string[] = JSON.parse(input_paths);
+  async ({
+    output_path,
+    input_paths,
+    separator,
+  }: {
+    output_path: string;
+    input_paths: string | string[];
+    separator?: string;
+  }) => {
+    // Accept any of: real array, JSON-encoded array string, or a
+    // comma/newline-separated string. Newer chat providers send each of these
+    // shapes for the same schema across runs — keep the tool tolerant rather
+    // than abort the whole assemble step.
+    let paths: string[];
+    if (Array.isArray(input_paths)) {
+      paths = input_paths.map(String);
+    } else {
+      const trimmed = String(input_paths).trim();
+      if (trimmed.startsWith('[')) {
+        paths = JSON.parse(trimmed);
+      } else if (trimmed.includes(',') || trimmed.includes('\n')) {
+        paths = trimmed.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
+      } else {
+        paths = [trimmed];
+      }
+    }
     const sep = separator ?? '\n\n---\n\n';
     const parts = paths.map((p) => {
       const full = path.join(WORK_DIR, p);
