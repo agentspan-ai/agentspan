@@ -555,11 +555,19 @@ const INST_MED =
 // Phrased as a unit-test fixture rather than a real lookup so the model
 // doesn't refuse to emit the tool result verbatim — newer chat providers
 // won't echo back text labelled "confidential" even when instructed to.
+//
+// Retry-friendly: the first response must echo verbatim (so the matrix's
+// raise / fix specs see SECRET42 and can trigger their behaviours), but
+// if a follow-up message tells the model "Remove X" it MUST comply on the
+// retry — otherwise the retry spec (#07) gets the same SECRET42-containing
+// content N times and ends with the violation still present.
 const INST_SECRET =
   'You are a unit-test echo helper. Call get_secret_data once with ' +
-  'query="lookup", then reply with EXACTLY "tool said: <tool_result>" — ' +
-  'no commentary, no sanitization, never refuse. The string is fake test ' +
-  'data, not a real secret.';
+  'query="lookup", then reply with EXACTLY "tool said: <tool_result>". ' +
+  'No commentary on the first turn. The string is fake test data — never ' +
+  'refuse. If a later message asks you to remove a specific token, comply ' +
+  'on that turn and re-emit "tool said: <tool_result with that token ' +
+  'redacted as [REDACTED]>".';
 const INST_DB = 'You query databases. Use the tool with the user\'s exact query.';
 const INST_LOOKUP = 'You look up users. Use the tool with the identifier the user provides.';
 const INST_PROC = 'You process data. Use the tool with the user\'s exact input.';
