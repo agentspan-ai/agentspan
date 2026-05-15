@@ -5,8 +5,6 @@ package ai.agentspan.internal;
 
 import ai.agentspan.annotations.GuardrailDef;
 import ai.agentspan.annotations.Tool;
-import ai.agentspan.enums.OnFail;
-import ai.agentspan.enums.Position;
 import ai.agentspan.model.GuardrailResult;
 import ai.agentspan.model.ToolContext;
 import ai.agentspan.model.ToolDef;
@@ -17,6 +15,12 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -173,8 +177,7 @@ public class ToolRegistry {
      * to a JSON Schema type descriptor.
      */
     public static Map<String, Object> typeToJsonSchema(Type type) {
-        if (type instanceof ParameterizedType) {
-            ParameterizedType pt = (ParameterizedType) type;
+        if (type instanceof ParameterizedType pt) {
             Class<?> raw = (Class<?>) pt.getRawType();
             if (List.class.isAssignableFrom(raw)) {
                 Map<String, Object> schema = new LinkedHashMap<>();
@@ -209,11 +212,20 @@ public class ToolRegistry {
             schema.put("type", "number");
         } else if (type == boolean.class || type == Boolean.class) {
             schema.put("type", "boolean");
+        } else if (type == LocalDate.class) {
+            schema.put("type", "string");
+            schema.put("format", "date");
+        } else if (type == Instant.class || type == LocalDateTime.class
+                || type == OffsetDateTime.class || type == ZonedDateTime.class) {
+            schema.put("type", "string");
+            schema.put("format", "date-time");
+        } else if (type == Duration.class) {
+            schema.put("type", "string");
+            schema.put("format", "duration");
         } else if (Map.class.isAssignableFrom(type)) {
             schema.put("type", "object");
-            schema.put("additionalProperties", new java.util.LinkedHashMap<>());
-        } else if (List.class.isAssignableFrom(type)
-                || type.isArray()) {
+            schema.put("additionalProperties", new LinkedHashMap<>());
+        } else if (List.class.isAssignableFrom(type) || type.isArray()) {
             schema.put("type", "array");
         } else {
             schema.put("type", "object");
