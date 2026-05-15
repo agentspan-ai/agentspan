@@ -61,7 +61,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		if ref == nil {
 			return fmt.Errorf("agentspan.yaml not found or missing required metadata fields — run from the agent project directory")
 		}
-		agentName := fmt.Sprintf("%s__%s__%s__%s", ref.Customer, ref.Cluster, ref.Namespace, ref.Name)
+		agentName := fmt.Sprintf("%s-%s-%s-%s", ref.Customer, ref.Cluster, ref.Namespace, ref.Name)
 		bold := color.New(color.Bold)
 		bold.Printf("Starting agent: %s\n", agentName)
 
