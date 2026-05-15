@@ -30,8 +30,17 @@ type agentspanInvokeSpec struct {
 		Name      string `yaml:"name"`
 	} `yaml:"metadata"`
 	Spec struct {
-		Env []string `yaml:"env"`
+		Env       []string        `yaml:"env"`
+		Resources agentResources  `yaml:"resources"`
 	} `yaml:"spec"`
+}
+
+// agentResources mirrors the spec.resources block in agentspan.yaml.
+type agentResources struct {
+	CPU     string `yaml:"cpu"`
+	CPUTime string `yaml:"cpu_time"`
+	Memory  string `yaml:"memory"`
+	Storage string `yaml:"storage"`
 }
 
 // agentRef holds the full agent identity read from agentspan.yaml.
@@ -156,4 +165,22 @@ func readAgentRef(dir string) *agentRef {
 		Namespace: m.Namespace,
 		Name:      m.Name,
 	}
+}
+
+// readResources reads spec.resources from agentspan.yaml in dir.
+// Returns nil if the file is missing or spec.resources is empty.
+func readResources(dir string) *agentResources {
+	data, err := os.ReadFile(filepath.Join(dir, "agentspan.yaml"))
+	if err != nil {
+		return nil
+	}
+	var spec agentspanInvokeSpec
+	if yaml.Unmarshal(data, &spec) != nil {
+		return nil
+	}
+	r := spec.Spec.Resources
+	if r.CPU == "" && r.CPUTime == "" && r.Memory == "" && r.Storage == "" {
+		return nil
+	}
+	return &r
 }
