@@ -54,8 +54,16 @@ public class AgentConfigSerializer {
             agentMap.put("model", agent.getModel());
         }
 
-        // Strategy — only if sub-agents present
-        if (agent.getAgents() != null && !agent.getAgents().isEmpty()) {
+        // Strategy — emit when any of the multi-agent inputs is set: the legacy
+        // ``agents=[…]`` positional list OR PLAN_EXECUTE's named slots
+        // (``planner=`` / ``fallback=``). Without the slot check, a
+        // PLAN_EXECUTE coordinator built with ``.planner(...).fallback(...)``
+        // sent an empty agents list, no strategy field, and the server
+        // dispatched it as ``handoff`` (the default) — then rejected the
+        // named slots with HTTP 400.
+        boolean hasAgents = agent.getAgents() != null && !agent.getAgents().isEmpty();
+        boolean hasNamedSlots = agent.getPlanner() != null || agent.getFallback() != null;
+        if (hasAgents || hasNamedSlots) {
             agentMap.put("strategy", agent.getStrategy().toJsonValue());
         }
 
