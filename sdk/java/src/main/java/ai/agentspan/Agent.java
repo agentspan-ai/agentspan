@@ -78,6 +78,11 @@ public class Agent {
     private final List<String> allowedCommands;
     private final String stopWhenTaskName;
     private final Integer fallbackMaxTurns;
+    /** PLAN_EXECUTE named slots: planner (required) and fallback (optional).
+     *  The server rejects the legacy ``agents=[planner, fallback]`` positional
+     *  shape with HTTP 400 once strategy is PLAN_EXECUTE — set these instead. */
+    private final Agent planner;
+    private final Agent fallback;
     private final List<PrefillToolCall> prefillTools;
     private final boolean synthesize;
     private final boolean stateful;
@@ -124,6 +129,8 @@ public class Agent {
         this.allowedCommands = builder.allowedCommands != null ? new ArrayList<>(builder.allowedCommands) : new ArrayList<>();
         this.stopWhenTaskName = builder.stopWhenTaskName;
         this.fallbackMaxTurns = builder.fallbackMaxTurns;
+        this.planner = builder.planner;
+        this.fallback = builder.fallback;
         this.prefillTools = builder.prefillTools != null ? new ArrayList<>(builder.prefillTools) : new ArrayList<>();
         this.synthesize = builder.synthesize;
         this.stateful = builder.stateful;
@@ -208,6 +215,8 @@ public class Agent {
     public List<String> getAllowedCommands() { return allowedCommands; }
     public String getStopWhenTaskName() { return stopWhenTaskName; }
     public Integer getFallbackMaxTurns() { return fallbackMaxTurns; }
+    public Agent getPlanner() { return planner; }
+    public Agent getFallback() { return fallback; }
     public List<PrefillToolCall> getPrefillTools() { return prefillTools; }
     public boolean isSynthesize() { return synthesize; }
     public boolean isStateful() { return stateful; }
@@ -274,6 +283,8 @@ public class Agent {
         private List<String> allowedCommands;
         private String stopWhenTaskName;
         private Integer fallbackMaxTurns;
+        private Agent planner;
+        private Agent fallback;
         private List<PrefillToolCall> prefillTools;
         private boolean synthesize = true;
         private boolean stateful = false;
@@ -584,6 +595,26 @@ public class Agent {
         /** Max LLM turns for the fallback agent in PLAN_EXECUTE strategy. */
         public Builder fallbackMaxTurns(int fallbackMaxTurns) {
             this.fallbackMaxTurns = fallbackMaxTurns;
+            return this;
+        }
+
+        /**
+         * PLAN_EXECUTE planner sub-agent (required when ``strategy == PLAN_EXECUTE``).
+         * The server rejects ``agents=[planner, fallback]`` for this strategy with
+         * HTTP 400 — use this named slot instead.
+         */
+        public Builder planner(Agent planner) {
+            this.planner = planner;
+            return this;
+        }
+
+        /**
+         * PLAN_EXECUTE fallback sub-agent (optional). Used when the planner's
+         * output cannot be compiled into a sub-workflow, or when the compiled
+         * sub-workflow itself fails at runtime.
+         */
+        public Builder fallback(Agent fallback) {
+            this.fallback = fallback;
             return this;
         }
 

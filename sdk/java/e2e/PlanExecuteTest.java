@@ -484,7 +484,9 @@ class PlanExecuteTest extends BaseTest {
         Agent harness = Agent.builder()
             .name("test_java_report_gen")
             .model(MODEL)
-            .agents(planner, fallback)
+            .tools(tools)
+            .planner(planner)
+            .fallback(fallback)
             .strategy(Strategy.PLAN_EXECUTE)
             .fallbackMaxTurns(5)
             .build();
@@ -586,7 +588,9 @@ class PlanExecuteTest extends BaseTest {
         Agent harness = Agent.builder()
             .name("test_java_report_gen_maxtok")
             .model(MODEL)
-            .agents(planner, fallback)
+            .tools(tools)
+            .planner(planner)
+            .fallback(fallback)
             .strategy(Strategy.PLAN_EXECUTE)
             .fallbackMaxTurns(5)
             .build();

@@ -166,6 +166,17 @@ public class AgentConfigSerializer {
             agentMap.put("enablePlanning", true);
         }
 
+        // PLAN_EXECUTE named slots: planner (required) + fallback (optional).
+        // Both serialize as nested AgentConfig dicts. The server reads them
+        // in MultiAgentCompiler.compilePlanExecute; the parent's ``tools``
+        // list (serialized above) becomes the planner's allowed-tool set.
+        if (agent.getPlanner() != null) {
+            agentMap.put("planner", serializeAgent(agent.getPlanner()));
+        }
+        if (agent.getFallback() != null) {
+            agentMap.put("fallback", serializeAgent(agent.getFallback()));
+        }
+
         // Synthesize — only emit when explicitly disabled (true is the server default)
         if (!agent.isSynthesize()) {
             agentMap.put("synthesize", false);
