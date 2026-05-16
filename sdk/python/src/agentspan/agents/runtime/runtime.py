@@ -417,6 +417,20 @@ class AgentRuntime:
         with _workflow_credentials_lock:
             _workflow_credentials.pop(execution_id, None)
 
+    def _resolve_worker_domain(self, execution_id: str, run_id: Optional[str]) -> Optional[str]:
+        """Return the domain workers should poll for this execution.
+
+        A fresh stateful start uses ``run_id`` as the task domain.  If the
+        server returns an existing execution for an idempotency key, that
+        execution already has its original ``taskToDomain`` mapping, so the
+        freshly generated ``run_id`` would be wrong.  Prefer the server's
+        recorded domain and fall back to the generated one for brand-new runs
+        or older servers.
+        """
+        if not run_id:
+            return None
+        return self._extract_domain(execution_id) or run_id
+
     def _pre_deploy_nested_skills(self, agent: Agent) -> list:
         """Pre-deploy any skill agents nested inside agent_tool wrappers.
 
@@ -716,10 +730,12 @@ class AgentRuntime:
                     logger.debug("Starting workers for agent '%s'", agent.name)
                     self._worker_manager.start()
                     self._workers_started = True
-                elif new_workers:
-                    # Inject new workers into the running TaskHandler without
-                    # stopping existing ones.  This avoids the fork() deadlock
-                    # window caused by a full stop/restart cycle.
+                else:
+                    # New stateful runs can register the same task names under
+                    # a different domain. WorkerManager is domain-aware and
+                    # starts only missing (task_name, domain) pairs, so call it
+                    # even when the task-name set has not changed — this avoids
+                    # the fork() deadlock window of a full stop/restart cycle.
                     self._worker_manager.start()
 
         return wf
@@ -832,10 +848,12 @@ class AgentRuntime:
                     logger.debug("Starting workers for agent '%s'", agent.name)
                     self._worker_manager.start()
                     self._workers_started = True
-                elif new_workers:
-                    # Inject new workers into the running TaskHandler without
-                    # stopping existing ones.  This avoids the fork() deadlock
-                    # window caused by a full stop/restart cycle.
+                else:
+                    # New stateful runs can register the same task names under
+                    # a different domain. WorkerManager is domain-aware and
+                    # starts only missing (task_name, domain) pairs, so call it
+                    # even when the task-name set has not changed — this avoids
+                    # the fork() deadlock window of a full stop/restart cycle.
                     self._worker_manager.start()
 
     def _collect_worker_names(
@@ -942,8 +960,9 @@ class AgentRuntime:
         ):
             names.add(f"{agent.name}_router_fn")
 
-        # Handoff check (swarm with handoff conditions)
-        if agent.handoffs:
+        # Handoff check — needed for any SWARM parent (server always generates
+        # the task) or any agent with explicit handoff conditions.
+        if agent.handoffs or (agent.strategy == "swarm" and agent.agents):
             names.add(f"{agent.name}_handoff_check")
 
         # Swarm transfer workers — prefixed with SOURCE agent name
@@ -1127,8 +1146,9 @@ class AgentRuntime:
             if _server_needs(task_name):
                 self._register_router_worker(agent, domain=domain)
 
-        # 7. Handoff check (swarm with handoff conditions)
-        if agent.handoffs:
+        # 7. Handoff check — needed for any SWARM parent (server always
+        #    generates the task) or any agent with explicit handoff conditions.
+        if agent.handoffs or (agent.strategy == "swarm" and agent.agents):
             task_name = f"{agent.name}_handoff_check"
             if _server_needs(task_name):
                 self._register_handoff_worker(agent, domain=domain)
@@ -2545,8 +2565,10 @@ class AgentRuntime:
             run_id=run_id,
         )
 
-        self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
-        self._register_and_start_skill_workers(pre_deployed_skills, domain=run_id)
+        worker_domain = self._resolve_worker_domain(execution_id, run_id)
+
+        self._prepare_workers(agent, required_workers=required_workers, domain=worker_domain)
+        self._register_and_start_skill_workers(pre_deployed_skills, domain=worker_domain)
 
         self._register_workflow_credentials(execution_id, credentials)
 
@@ -3675,8 +3697,10 @@ class AgentRuntime:
             run_id=run_id,
         )
 
-        self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
-        self._register_and_start_skill_workers(pre_deployed_skills, domain=run_id)
+        worker_domain = self._resolve_worker_domain(execution_id, run_id)
+
+        self._prepare_workers(agent, required_workers=required_workers, domain=worker_domain)
+        self._register_and_start_skill_workers(pre_deployed_skills, domain=worker_domain)
 
         return AgentHandle(
             execution_id=execution_id, runtime=self, correlation_id=correlation_id, run_id=run_id
@@ -4070,8 +4094,10 @@ class AgentRuntime:
             run_id=run_id,
         )
 
-        self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
-        self._register_and_start_skill_workers(pre_deployed_skills, domain=run_id)
+        worker_domain = self._resolve_worker_domain(execution_id, run_id)
+
+        self._prepare_workers(agent, required_workers=required_workers, domain=worker_domain)
+        self._register_and_start_skill_workers(pre_deployed_skills, domain=worker_domain)
         self._register_workflow_credentials(execution_id, credentials)
 
         effective_timeout = timeout or (
@@ -4206,8 +4232,10 @@ class AgentRuntime:
             run_id=run_id,
         )
 
-        self._prepare_workers(agent, required_workers=required_workers, domain=run_id)
-        self._register_and_start_skill_workers(pre_deployed_skills, domain=run_id)
+        worker_domain = self._resolve_worker_domain(execution_id, run_id)
+
+        self._prepare_workers(agent, required_workers=required_workers, domain=worker_domain)
+        self._register_and_start_skill_workers(pre_deployed_skills, domain=worker_domain)
 
         return AgentHandle(
             execution_id=execution_id, runtime=self, correlation_id=correlation_id, run_id=run_id

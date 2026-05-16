@@ -201,72 +201,44 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
     }
 
     /**
-     * Compact tool message history to reduce payload size.
+     * Compact tool message history.
      *
-     * <p>Applies three optimizations:</p>
-     * <ol>
-     *   <li><b>Truncate old tool results:</b> Tool results older than the most recent
-     *       {@code RECENT_TOOL_RESULTS_TO_KEEP} are truncated to {@code TOOL_RESULT_TRUNCATE_LENGTH}
-     *       characters. The LLM already consumed these results in prior turns.</li>
-     *   <li><b>Collapse write-only tools:</b> Tools like {@code contextbook_write} produce
-     *       confirmation messages ("wrote X chars") that add no value in history.
-     *       Their results are replaced with a short acknowledgment.</li>
-     *   <li><b>Keep only latest read per key:</b> For tools like {@code contextbook_read},
-     *       only the most recent result per section argument is kept in full;
-     *       older reads of the same section are truncated.</li>
-     * </ol>
+     * <p><b>Tool result content is NEVER truncated.</b> An earlier version of
+     * this method truncated any tool result older than the 3-6 most recent to
+     * 500 chars (with "...[truncated]" suffix). That caused the agent to
+     * lose context — a 5KB ``glob_find`` result kept only ~500 chars of file
+     * names, so on the next turn the agent re-issued the same ``glob_find``
+     * with a different filter, then re-read the same files. Observed in
+     * workflow ``637d179b-e0b5-4efd-a33f-2b2811ccbc01`` where iter 14's
+     * ``glob_find`` result was clipped to ``...AgentspanAIMod...[truncated]``
+     * and the agent kept reissuing nearly-identical queries trying to see
+     * more.
+     *
+     * <p>Token-budget pressure is handled separately by {@code condenseIfNeeded}
+     * which drops ENTIRE old messages — a much cleaner shape than partial
+     * truncation, since the agent either has full context for a message or
+     * doesn't see it at all.
+     *
+     * <p>The only remaining transformation in this method is collapsing
+     * write-only tool confirmations ({@code contextbook_write},
+     * {@code contextbook_summary}) to a one-character ``[ok]`` acknowledgment.
+     * These results are pure ``"wrote N chars"`` confirmations that add no
+     * downstream value, and they're emitted by the agent itself so it can't
+     * lose information by forgetting them.
      */
-    private static final int RECENT_TOOL_RESULTS_TO_KEEP = 6;
-
-    private static final int TOOL_RESULT_TRUNCATE_LENGTH = 500;
     private static final Set<String> WRITE_ONLY_TOOLS = Set.of("contextbook_write", "contextbook_summary");
 
     void compactToolHistory(List<ChatMessage> messages) {
-        if (messages == null || messages.size() < 4) {
+        if (messages == null || messages.isEmpty()) {
             return;
         }
 
-        // 1. Find all tool response messages and their positions
-        List<Integer> toolResponseIndices = new ArrayList<>();
-        for (int i = 0; i < messages.size(); i++) {
-            ChatMessage msg = messages.get(i);
-            if (msg.getRole() == ChatMessage.Role.tool && msg.getToolCalls() != null) {
-                toolResponseIndices.add(i);
+        for (ChatMessage msg : messages) {
+            if (msg.getRole() != ChatMessage.Role.tool || msg.getToolCalls() == null) {
+                continue;
             }
-        }
-
-        if (toolResponseIndices.isEmpty()) {
-            return;
-        }
-
-        // 2. Track the latest contextbook_read per section argument for dedup
-        Map<String, Integer> latestReadBySection = new HashMap<>();
-        for (int idx : toolResponseIndices) {
-            ChatMessage msg = messages.get(idx);
-            for (ToolCall tc : msg.getToolCalls()) {
-                String name = tc.getName();
-                if (name != null && name.contains("contextbook_read")) {
-                    Object section = tc.getInputParameters() != null
-                            ? tc.getInputParameters().get("section")
-                            : null;
-                    String key = name + ":" + (section != null ? section.toString() : "toc");
-                    latestReadBySection.put(key, idx);
-                }
-            }
-        }
-
-        // 3. Compact: truncate old results, collapse writes, dedup reads
-        int recentCutoff = toolResponseIndices.size() - RECENT_TOOL_RESULTS_TO_KEEP;
-
-        for (int ri = 0; ri < toolResponseIndices.size(); ri++) {
-            int idx = toolResponseIndices.get(ri);
-            ChatMessage msg = messages.get(idx);
-            boolean isRecent = ri >= recentCutoff;
-
             for (ToolCall tc : msg.getToolCalls()) {
                 String name = tc.getName() != null ? tc.getName() : "";
-
-                // Collapse write-only tools — result is just a confirmation
                 if (WRITE_ONLY_TOOLS.stream().anyMatch(name::contains)) {
                     msg.setMessage("[ok]");
                     if (tc.getOutput() != null) {
@@ -274,42 +246,7 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
                         compactedOutput.put("result", "[ok]");
                         tc.setOutput(compactedOutput);
                     }
-                    continue;
                 }
-
-                // For contextbook_read: keep full only if it's the latest read for that section
-                if (name.contains("contextbook_read")) {
-                    Object section = tc.getInputParameters() != null
-                            ? tc.getInputParameters().get("section")
-                            : null;
-                    String key = name + ":" + (section != null ? section.toString() : "toc");
-                    Integer latestIdx = latestReadBySection.get(key);
-                    if (latestIdx != null && latestIdx != idx) {
-                        // Not the latest read of this section — truncate
-                        truncateToolResult(msg, tc);
-                        continue;
-                    }
-                }
-
-                // Truncate old tool results (not recent)
-                if (!isRecent) {
-                    truncateToolResult(msg, tc);
-                }
-            }
-        }
-    }
-
-    private void truncateToolResult(ChatMessage msg, ToolCall tc) {
-        String text = msg.getMessage();
-        if (text != null && text.length() > TOOL_RESULT_TRUNCATE_LENGTH) {
-            msg.setMessage(text.substring(0, TOOL_RESULT_TRUNCATE_LENGTH) + "...[truncated]");
-        }
-        if (tc.getOutput() != null) {
-            Object result = tc.getOutput().get("result");
-            if (result != null && result.toString().length() > TOOL_RESULT_TRUNCATE_LENGTH) {
-                Map<String, Object> output = new HashMap<>(tc.getOutput());
-                output.put("result", result.toString().substring(0, TOOL_RESULT_TRUNCATE_LENGTH) + "...[truncated]");
-                tc.setOutput(output);
             }
         }
     }

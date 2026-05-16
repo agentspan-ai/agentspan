@@ -274,7 +274,14 @@ jobs:
   # ── Java E2E Tests ─────────────────────────────────────────────────
   java-e2e:
     runs-on: ubuntu-latest
-    needs: [build-server, test]
+    # ``test`` was the job name in the separate ci-java-sdk.yml workflow.
+    # GitHub Actions ``needs:`` only resolves jobs in the same workflow, so
+    # listing it here was a dangling reference that invalidated ci.yml as a
+    # whole — every push to main produced a 0-job failure run with the
+    # workflow name displayed as ``.github/workflows/ci.yml`` instead of
+    # ``CI``. Depend only on ``build-server`` (the actual server-jar
+    # producer); the separate java-sdk workflow runs in parallel.
+    needs: [build-server]
     timeout-minutes: 45
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
