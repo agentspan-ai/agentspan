@@ -8,6 +8,9 @@ import ai.agentspan.internal.HttpApi;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -202,18 +205,76 @@ public class AgentHandle {
             output = java.util.Collections.singletonMap("result", output);
         }
 
-        // Extract token usage if available
+        // Token usage + tool calls: the server doesn't aggregate either on the
+        // workflow status response, but every LLM_CHAT_COMPLETE task carries
+        // tokenUsed/promptTokens/completionTokens in its outputData, and every
+        // tool-worker SIMPLE task in the workflow corresponds to one LLM tool
+        // call. Walk the workflow tasks once and aggregate both.
         TokenUsage tokenUsage = null;
-        Map<String, Object> usageMap = (Map<String, Object>) statusResponse.get("tokenUsage");
-        if (usageMap != null) {
-            tokenUsage = new TokenUsage(
-                toInt(usageMap.get("promptTokens")),
-                toInt(usageMap.get("completionTokens")),
-                toInt(usageMap.get("totalTokens"))
-            );
+        List<Map<String, Object>> toolCalls = new ArrayList<>();
+        try {
+            Map<String, Object> workflow = httpApi.getWorkflow(workflowId);
+            Object tasksRaw = workflow.get("tasks");
+            if (tasksRaw instanceof List) {
+                int promptT = 0, completionT = 0, totalT = 0;
+                boolean sawTokens = false;
+                for (Object taskObj : (List<Object>) tasksRaw) {
+                    if (!(taskObj instanceof Map)) continue;
+                    Map<String, Object> task = (Map<String, Object>) taskObj;
+                    String taskType = (String) task.get("taskType");
+                    Map<String, Object> outputData = (Map<String, Object>) task.get("outputData");
+
+                    // LLM task — aggregate tokens
+                    if ("LLM_CHAT_COMPLETE".equals(taskType) && outputData != null) {
+                        promptT     += toInt(outputData.get("promptTokens"));
+                        completionT += toInt(outputData.get("completionTokens"));
+                        totalT      += toInt(outputData.get("tokenUsed"));
+                        sawTokens = true;
+                        continue;
+                    }
+
+                    // Tool worker task — capture name, input args (stripping
+                    // internal Agentspan context), and output result.
+                    // Server uses SIMPLE for workers, but the taskType field on
+                    // the task instance is the worker name itself (e.g. "add").
+                    // We treat any non-system task whose name appears in the
+                    // task definition as a worker tool call.
+                    String refName = (String) task.get("referenceTaskName");
+                    if (refName != null
+                        && refName.startsWith("call_")
+                        && outputData != null) {
+                        Map<String, Object> tc = new LinkedHashMap<>();
+                        tc.put("name", taskType);
+                        Map<String, Object> inputData = (Map<String, Object>) task.get("inputData");
+                        if (inputData != null) {
+                            Map<String, Object> cleaned = new LinkedHashMap<>();
+                            for (Map.Entry<String, Object> e : inputData.entrySet()) {
+                                String k = e.getKey();
+                                if (k.startsWith("_")
+                                    || "method".equals(k)
+                                    || "__agentspan_ctx__".equals(k)
+                                    || "evaluatorType".equals(k)
+                                    || "expression".equals(k)
+                                    || "ctx".equals(k)
+                                    || "workerTag".equals(k)
+                                    || "agentConfig".equals(k)) continue;
+                                cleaned.put(k, e.getValue());
+                            }
+                            tc.put("args", cleaned);
+                        }
+                        tc.put("result", outputData.get("result"));
+                        toolCalls.add(tc);
+                    }
+                }
+                if (sawTokens) {
+                    tokenUsage = new TokenUsage(promptT, completionT, totalT);
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Could not extract tokens/toolCalls for {}: {}", workflowId, e.getMessage());
         }
 
-        return new AgentResult(output, workflowId, status, null, null, tokenUsage, error);
+        return new AgentResult(output, workflowId, status, toolCalls, null, tokenUsage, error);
     }
 
     private int toInt(Object value) {

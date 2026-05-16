@@ -8,6 +8,7 @@ using mock workflow objects. Does NOT require a running Conductor server.
 """
 
 import logging
+import threading
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -151,6 +152,57 @@ class TestExtractMessages:
         del wf_run.variables
         extracted = runtime._extract_messages(wf_run)
         assert extracted == []
+
+    def test_extracts_from_llm_task_input(self, runtime):
+        """Messages come from the last LLM_CHAT_COMPLETE task's input_data."""
+        from unittest.mock import MagicMock
+
+        msgs = [{"role": "user", "message": "Hi"}, {"role": "assistant", "message": "Hello!"}]
+        task = MagicMock()
+        task.task_type = "LLM_CHAT_COMPLETE"
+        task.input_data = {"messages": msgs, "model": "gpt-4o"}
+
+        wf_run = MockWorkflowRun(variables={}, tasks=[task])
+        extracted = runtime._extract_messages(wf_run)
+        assert extracted == msgs
+
+    def test_returns_last_llm_task_messages(self, runtime):
+        """Returns the LAST LLM task's messages (most complete history)."""
+        from unittest.mock import MagicMock
+
+        first_msgs = [{"role": "user", "message": "Hi"}]
+        last_msgs = [
+            {"role": "user", "message": "Hi"},
+            {"role": "assistant", "message": "Hello!"},
+            {"role": "user", "message": "Thanks"},
+        ]
+
+        task1 = MagicMock()
+        task1.task_type = "LLM_CHAT_COMPLETE"
+        task1.input_data = {"messages": first_msgs}
+
+        task2 = MagicMock()
+        task2.task_type = "LLM_CHAT_COMPLETE"
+        task2.input_data = {"messages": last_msgs}
+
+        wf_run = MockWorkflowRun(variables={}, tasks=[task1, task2])
+        extracted = runtime._extract_messages(wf_run)
+        assert extracted == last_msgs
+
+    def test_variables_takes_precedence_over_tasks(self, runtime):
+        """If variables.messages is set, prefer it over task input_data."""
+        from unittest.mock import MagicMock
+
+        var_msgs = [{"role": "user", "message": "From variables"}]
+        task_msgs = [{"role": "user", "message": "From task"}]
+
+        task = MagicMock()
+        task.task_type = "LLM_CHAT_COMPLETE"
+        task.input_data = {"messages": task_msgs}
+
+        wf_run = MockWorkflowRun(variables={"messages": var_msgs}, tasks=[task])
+        extracted = runtime._extract_messages(wf_run)
+        assert extracted == var_msgs
 
 
 class TestSingletonRuntime:
@@ -660,6 +712,74 @@ class TestHasStatefulTools:
         sub = Agent(name="sub_cc", model="claude-code/sonnet", tools=["Bash", "Write"])
         parent = Agent(name="parent", model="openai/gpt-4o", agents=[sub])
         assert _has_stateful_tools(parent) is False
+
+
+class TestStatefulWorkerDomains:
+    """Stateful workers must use the execution's real task domain."""
+
+    def test_resolve_worker_domain_prefers_server_domain(self):
+        from agentspan.agents.runtime.runtime import AgentRuntime
+
+        rt = AgentRuntime.__new__(AgentRuntime)
+        rt._extract_domain = lambda execution_id: "original-domain"
+
+        assert rt._resolve_worker_domain("wf-1", "fresh-domain") == "original-domain"
+
+    def test_resolve_worker_domain_falls_back_to_generated_run_id(self):
+        from agentspan.agents.runtime.runtime import AgentRuntime
+
+        rt = AgentRuntime.__new__(AgentRuntime)
+        rt._extract_domain = lambda execution_id: None
+
+        assert rt._resolve_worker_domain("wf-1", "fresh-domain") == "fresh-domain"
+
+    def test_resolve_worker_domain_returns_none_for_stateless_execution(self):
+        from agentspan.agents.runtime.runtime import AgentRuntime
+
+        rt = AgentRuntime.__new__(AgentRuntime)
+        rt._extract_domain = lambda execution_id: "should-not-be-used"
+
+        assert rt._resolve_worker_domain("wf-1", None) is None
+
+    def test_prepare_workers_starts_worker_manager_when_only_domain_changes(self):
+        """Same task name under a new domain still needs a new polling process."""
+        from types import SimpleNamespace
+
+        from agentspan.agents.runtime.runtime import AgentRuntime
+
+        class FakeWorkerManager:
+            def __init__(self):
+                self.starts = 0
+
+            def start(self):
+                self.starts += 1
+
+        rt = AgentRuntime.__new__(AgentRuntime)
+        rt._config = SimpleNamespace(
+            auto_register_integrations=False,
+            auto_start_workers=True,
+        )
+        rt._worker_start_lock = threading.Lock()
+        rt._registered_tool_names = {"write_architecture"}
+        rt._workers_started = True
+        rt._worker_manager = FakeWorkerManager()
+        rt._associate_templates_with_models = lambda agent: None
+        registered_domains = []
+        rt._register_workers = lambda agent, required_workers=None, domain=None: (
+            registered_domains.append(domain)
+        )
+        rt._has_worker_tools = lambda agent: True
+        rt._collect_worker_names = lambda agent, required_workers=None: {"write_architecture"}
+
+        agent = Agent(name="pipeline", model="openai/gpt-4o")
+        rt._prepare_workers(
+            agent,
+            required_workers={"write_architecture"},
+            domain="original-domain",
+        )
+
+        assert registered_domains == ["original-domain"]
+        assert rt._worker_manager.starts == 1
 
 
 # ── _extract_token_usage ────────────────────────────────────────────────

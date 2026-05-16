@@ -1,0 +1,322 @@
+// Copyright (c) 2025 Agentspan
+// Licensed under the MIT License.
+
+using System.Text.Json.Nodes;
+using Conductor.Client;
+using Conductor.Client.Authentication;
+
+namespace Agentspan;
+
+/// <summary>
+/// Main entry point for running Agentspan agents.
+/// </summary>
+/// <example>
+/// <code>
+/// await using var runtime = new AgentRuntime();
+/// var result = await runtime.RunAsync(agent, "Hello!");
+/// result.PrintResult();
+/// </code>
+/// </example>
+public sealed class AgentRuntime : IAsyncDisposable, IDisposable
+{
+    private readonly AgentHttpClient _http;
+    private readonly Configuration _conductorConfig;
+    private WorkerManager? _workers;
+
+    public AgentRuntime(AgentRuntimeOptions? options = null)
+    {
+        var serverUrl = options?.ServerUrl
+            ?? Environment.GetEnvironmentVariable("AGENTSPAN_SERVER_URL")
+            ?? "http://localhost:6767/api";
+        var authKey    = options?.AuthKey    ?? Environment.GetEnvironmentVariable("AGENTSPAN_AUTH_KEY");
+        var authSecret = options?.AuthSecret ?? Environment.GetEnvironmentVariable("AGENTSPAN_AUTH_SECRET");
+
+        _http = new AgentHttpClient(serverUrl, authKey, authSecret);
+
+        // Build conductor-csharp Configuration for worker polling.
+        // AuthenticationSettings is left null for OSS Conductor (no token exchange needed).
+        // For Orkes Cloud, set AGENTSPAN_AUTH_KEY + AGENTSPAN_AUTH_SECRET and the SDK will
+        // use OrkesAuthenticationSettings to obtain a JWT automatically.
+        _conductorConfig = new Configuration { BasePath = serverUrl };
+        if (!string.IsNullOrEmpty(authKey) && !string.IsNullOrEmpty(authSecret))
+            _conductorConfig.AuthenticationSettings = new OrkesAuthenticationSettings(authKey, authSecret);
+    }
+
+    // ── Deploy / Serve ────────────────────────────────────────
+
+    /// <summary>
+    /// Compile and register an agent's workflow on the server without executing it.
+    /// This is a CI/CD step: push agent definitions without starting workers.
+    /// </summary>
+    public DeploymentInfo[] Deploy(params Agent[] agents) => DeployAsync(agents).GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Compile and register agents on the server without executing them.
+    /// Returns one <see cref="DeploymentInfo"/> per agent.
+    /// </summary>
+    public async Task<DeploymentInfo[]> DeployAsync(params Agent[] agents)
+    {
+        var results = new DeploymentInfo[agents.Length];
+        for (int i = 0; i < agents.Length; i++)
+        {
+            var agentConfig = AgentConfigSerializer.SerializeAgent(agents[i]);
+            var registeredName = await _http.DeployAsync(agentConfig);
+            results[i] = new DeploymentInfo(RegisteredName: registeredName, AgentName: agents[i].Name);
+        }
+        return results;
+    }
+
+    /// <summary>
+    /// Register local tool workers and block until <paramref name="ct"/> is cancelled.
+    /// The workflow must already exist on the server (deployed via <see cref="DeployAsync"/>
+    /// or a prior <see cref="RunAsync"/> call in any process).
+    /// </summary>
+    public async Task ServeAsync(Agent agent, CancellationToken ct = default)
+        => await ServeAsync(ct, agent);
+
+    /// <summary>
+    /// Register local tool workers for multiple agents and block until cancelled.
+    /// </summary>
+    public async Task ServeAsync(CancellationToken ct = default, params Agent[] agents)
+    {
+        _workers ??= new WorkerManager(_http, _conductorConfig);
+        foreach (var agent in agents)
+            _workers.RegisterAgentTools(agent);
+        _workers.Start();
+
+        try { await Task.Delay(Timeout.Infinite, ct); }
+        catch (OperationCanceledException) { }
+        finally { await StopWorkersAsync(); }
+    }
+
+    // ── Plan (dry-run compile) ────────────────────────────────
+
+    /// <summary>
+    /// Compile an agent to a Conductor WorkflowDef without executing it.
+    /// Returns the raw server response including the workflow definition.
+    /// Useful for inspecting, debugging, or CI/CD validation.
+    /// </summary>
+    public JsonNode? Plan(Agent agent) => PlanAsync(agent).GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Compile an agent to a Conductor WorkflowDef without executing it.
+    /// Returns the raw server response including the workflow definition.
+    /// </summary>
+    public async Task<JsonNode?> PlanAsync(Agent agent, CancellationToken ct = default)
+    {
+        var agentConfig = AgentConfigSerializer.SerializeAgent(agent);
+        return await _http.CompileAsync(agentConfig, ct);
+    }
+
+    // ── Synchronous convenience wrappers ────────────────────
+
+    /// <summary>Run an agent synchronously (blocks until done).</summary>
+    public AgentResult Run(Agent agent, string prompt, string? sessionId = null, IEnumerable<string>? media = null)
+        => RunAsync(agent, prompt, sessionId, media: media).GetAwaiter().GetResult();
+
+    /// <summary>Run a pre-deployed agent by workflow name (synchronous).</summary>
+    public AgentResult Run(string workflowName, string prompt, string? sessionId = null)
+        => RunByNameAsync(workflowName, prompt, sessionId).GetAwaiter().GetResult();
+
+    /// <summary>Start an agent synchronously and return a handle.</summary>
+    public AgentHandle Start(Agent agent, string prompt, string? sessionId = null, IEnumerable<string>? media = null)
+        => StartAsync(agent, prompt, sessionId, media: media).GetAwaiter().GetResult();
+
+    /// <summary>Start a pre-deployed agent by workflow name (synchronous).</summary>
+    public AgentHandle Start(string workflowName, string prompt, string? sessionId = null)
+        => StartByNameAsync(workflowName, prompt, sessionId).GetAwaiter().GetResult();
+
+    // ── Async API ────────────────────────────────────────────
+
+    /// <summary>Run an agent and wait for the result.</summary>
+    public async Task<AgentResult> RunAsync(
+        Agent agent, string prompt, string? sessionId = null,
+        IEnumerable<string>? media = null, CancellationToken ct = default)
+    {
+        var handle = await StartInternalAsync(agent, prompt, sessionId, media, ct);
+        var result = await handle.WaitAsync(ct);
+        await StopWorkersAsync();
+        return result;
+    }
+
+    /// <summary>Run a pre-deployed agent by workflow name and wait for the result.</summary>
+    public async Task<AgentResult> RunByNameAsync(
+        string workflowName, string prompt, string? sessionId = null, CancellationToken ct = default)
+    {
+        var handle = await StartByNameAsync(workflowName, prompt, sessionId, ct);
+        return await handle.WaitAsync(ct);
+    }
+
+    /// <summary>Start an agent asynchronously and return a handle for streaming / HITL.</summary>
+    public async Task<AgentHandle> StartAsync(
+        Agent agent, string prompt, string? sessionId = null,
+        IEnumerable<string>? media = null, CancellationToken ct = default)
+    {
+        return await StartInternalAsync(agent, prompt, sessionId, media, ct);
+    }
+
+    /// <summary>Start a pre-deployed agent by workflow name (no agentConfig payload).</summary>
+    public async Task<AgentHandle> StartByNameAsync(
+        string workflowName, string prompt, string? sessionId = null, CancellationToken ct = default)
+    {
+        var executionId = await _http.StartWorkflowByNameAsync(workflowName, prompt, sessionId ?? "", ct);
+        return new AgentHandle(executionId, _http);
+    }
+
+    /// <summary>Stream events from an agent execution.</summary>
+    public async IAsyncEnumerable<AgentEvent> StreamAsync(
+        Agent agent, string prompt, string? sessionId = null,
+        IEnumerable<string>? media = null,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
+        var handle = await StartInternalAsync(agent, prompt, sessionId, media, ct);
+        await foreach (var evt in handle.StreamAsync(ct))
+            yield return evt;
+        await StopWorkersAsync();
+    }
+
+    // ── Resume ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Re-attach to an existing agent execution and re-register workers.
+    ///
+    /// Fetches the workflow from the server, extracts the worker domain from
+    /// its taskToDomain mapping (for stateful agents), and re-registers tool
+    /// workers under that domain. Works across process restarts — the workflow
+    /// is durable on the server.
+    /// </summary>
+    /// <param name="executionId">The execution ID from a previous StartAsync call.</param>
+    /// <param name="agent">The same Agent definition that was originally executed.</param>
+    public AgentHandle Resume(string executionId, Agent agent)
+        => ResumeAsync(executionId, agent).GetAwaiter().GetResult();
+
+    /// <summary>Async version of <see cref="Resume"/>.</summary>
+    public async Task<AgentHandle> ResumeAsync(string executionId, Agent agent, CancellationToken ct = default)
+    {
+        var domain = await ExtractDomainAsync(executionId, ct);
+
+        _workers ??= new WorkerManager(_http, _conductorConfig);
+        _workers.RegisterAgentTools(agent, domain);
+        _workers.Start();
+
+        return new AgentHandle(executionId, _http, domain);
+    }
+
+    private async Task<string?> ExtractDomainAsync(string executionId, CancellationToken ct)
+    {
+        try
+        {
+            var wf = await _http.GetWorkflowAsync(executionId, ct);
+            if (wf is null) return null;
+
+            var taskToDomain = wf["taskToDomain"];
+            if (taskToDomain is null) return null;
+
+            var domains = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (var kv in taskToDomain.AsObject())
+            {
+                var v = kv.Value?.GetValue<string>();
+                if (!string.IsNullOrEmpty(v))
+                    domains[v] = domains.TryGetValue(v, out var c) ? c + 1 : 1;
+            }
+
+            return domains.Count == 0 ? null
+                : domains.MaxBy(kv => kv.Value).Key;
+        }
+        catch { return null; }
+    }
+
+    // ── WMQ (Workflow Message Queue) ─────────────────────────
+
+    /// <summary>
+    /// Push a message into a running agent's Workflow Message Queue.
+    /// The agent must have a <see cref="WaitForMessageTool"/> to receive messages.
+    /// Requires conductor.workflow-message-queue.enabled=true on the server.
+    /// </summary>
+    /// <param name="executionId">The running workflow execution ID.</param>
+    /// <param name="message">Any JSON-serializable object. Strings are wrapped as {"message": value}.</param>
+    public async Task SendMessageAsync(string executionId, object message, CancellationToken ct = default)
+        => await _http.SendWorkflowMessageAsync(executionId, message, ct);
+
+    /// <summary>Push a message into a running agent's Workflow Message Queue (synchronous).</summary>
+    public void SendMessage(string executionId, object message)
+        => SendMessageAsync(executionId, message).GetAwaiter().GetResult();
+
+    // ── Status / respond by execution ID ────────────────────
+
+    /// <summary>Check the current status of an existing execution.</summary>
+    public async Task<AgentStatus> GetStatusAsync(string executionId, CancellationToken ct = default)
+    {
+        var node = await _http.GetStatusAsync(executionId, ct);
+        if (node is null) return new AgentStatus { ExecutionId = executionId };
+        return new AgentStatus
+        {
+            ExecutionId  = node["executionId"]?.GetValue<string>() ?? executionId,
+            IsComplete   = node["isComplete"]?.GetValue<bool>() ?? false,
+            IsRunning    = node["isRunning"]?.GetValue<bool>() ?? false,
+            IsWaiting    = node["isWaiting"]?.GetValue<bool>() ?? false,
+            StatusValue  = node["status"]?.GetValue<string>(),
+            Reason       = node["reason"]?.GetValue<string>(),
+            CurrentTask  = node["currentTask"]?.GetValue<string>(),
+            PendingTool  = node["pendingTool"] is not null
+                ? System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(
+                    node["pendingTool"]!.ToJsonString(), AgentspanJson.Options)
+                : null,
+        };
+    }
+
+    /// <summary>Check the current status of an existing execution (synchronous).</summary>
+    public AgentStatus GetStatus(string executionId)
+        => GetStatusAsync(executionId).GetAwaiter().GetResult();
+
+    /// <summary>Respond to a waiting HITL approval or HumanTool question.</summary>
+    public async Task RespondAsync(string executionId, object response, CancellationToken ct = default)
+        => await _http.RespondAsync(executionId, response, ct);
+
+    /// <summary>Respond to a waiting HITL approval or HumanTool question (synchronous).</summary>
+    public void Respond(string executionId, object response)
+        => RespondAsync(executionId, response).GetAwaiter().GetResult();
+
+    // ── Internal ─────────────────────────────────────────────
+
+    private async Task<AgentHandle> StartInternalAsync(
+        Agent agent, string prompt, string? sessionId,
+        IEnumerable<string>? media, CancellationToken ct)
+    {
+        // Fresh worker manager per run
+        _workers ??= new WorkerManager(_http, _conductorConfig);
+        _workers.RegisterAgentTools(agent);
+        _workers.Start();
+
+        var payload      = AgentConfigSerializer.Serialize(agent, prompt, sessionId ?? "", media);
+        var executionId  = await _http.StartAsync(payload, ct);
+        return new AgentHandle(executionId, _http);
+    }
+
+    private async Task StopWorkersAsync()
+    {
+        if (_workers is not null)
+        {
+            await _workers.DisposeAsync();
+            _workers = null;
+        }
+    }
+
+    // ── Disposal ─────────────────────────────────────────────
+
+    public async ValueTask DisposeAsync()
+    {
+        await StopWorkersAsync();
+        _http.Dispose();
+    }
+
+    public void Dispose() => DisposeAsync().AsTask().GetAwaiter().GetResult();
+}
+
+/// <summary>Configuration options for <see cref="AgentRuntime"/>.</summary>
+public sealed class AgentRuntimeOptions
+{
+    public string? ServerUrl  { get; set; }
+    public string? AuthKey    { get; set; }
+    public string? AuthSecret { get; set; }
+}

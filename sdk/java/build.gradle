@@ -1,7 +1,6 @@
 plugins {
     id 'java-library'
-    id 'maven-publish'
-    id 'signing'
+    id 'com.vanniktech.maven.publish' version '0.34.0'
 }
 
 group = 'ai.agentspan'
@@ -10,8 +9,6 @@ java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
     }
-    withSourcesJar()
-    withJavadocJar()
 }
 
 repositories {
@@ -29,6 +26,8 @@ dependencies {
     api platform("com.fasterxml.jackson:jackson-bom:${jacksonVersion}")
     api 'com.fasterxml.jackson.core:jackson-databind'
     api 'com.fasterxml.jackson.core:jackson-annotations'
+    api 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
+    api 'com.fasterxml.jackson.datatype:jackson-datatype-jdk8'
 
     implementation "org.slf4j:slf4j-api:${slf4jVersion}"
 
@@ -43,6 +42,14 @@ dependencies {
 compileJava.options.compilerArgs << '-parameters'
 compileTestJava.options.compilerArgs << '-parameters'
 
+sourceSets {
+    test {
+        java {
+            srcDirs += file('e2e')
+        }
+    }
+}
+
 test {
     useJUnitPlatform {
         // Exclude e2e tests by default; run with -Pe2e to include them
@@ -52,69 +59,40 @@ test {
     }
 }
 
-publishing {
-    publications {
-        mavenJava(MavenPublication) {
-            from components.java
-            groupId = 'ai.agentspan'
-            artifactId = 'java-sdk'
-            version = project.version
-
-            pom {
-                name = 'Agentspan Java SDK'
-                description = 'Java SDK for the Agentspan agent orchestration platform'
-                url = 'https://github.com/agentspan-ai/agentspan'
-                licenses {
-                    license {
-                        name = 'MIT License'
-                        url = 'https://opensource.org/licenses/MIT'
-                    }
-                }
-                developers {
-                    developer {
-                        organization = 'Agentspan'
-                        organizationUrl = 'https://agentspan.ai'
-                        name = 'Agentspan Development Team'
-                        email = 'developers@orkes.io'
-                    }
-                }
-                scm {
-                    connection = 'scm:git:git://github.com/agentspan-ai/agentspan.git'
-                    developerConnection = 'scm:git:ssh://github.com/agentspan-ai/agentspan.git'
-                    url = 'https://github.com/agentspan-ai/agentspan'
-                }
-            }
-        }
-    }
-    repositories {
-        if (project.hasProperty('mavenCentral')) {
-            maven {
-                name = 'mavenCentral'
-                url = project.version.toString().endsWith('-SNAPSHOT')
-                    ? 'https://ossrh-staging-api.central.sonatype.com/content/repositories/snapshots/'
-                    : 'https://ossrh-staging-api.central.sonatype.com/service/local/staging/deploy/maven2/'
-                credentials {
-                    username = project.findProperty('username')
-                    password = project.findProperty('password')
-                }
-            }
-        } else {
-            mavenLocal()
-        }
-    }
-}
-
-signing {
-    required = { project.hasProperty('mavenCentral') }
-    def signingKeyId = project.findProperty('signingKeyId')
-    def signingKey = project.findProperty('signingKey')
-    def signingPassword = project.findProperty('signingPassword')
-    if (signingKeyId && signingKey && signingPassword) {
-        useInMemoryPgpKeys(signingKeyId, signingKey, signingPassword)
-    }
-    sign publishing.publications.mavenJava
-}
-
 tasks.withType(Javadoc).configureEach {
     options.addStringOption('Xdoclint:none', '-quiet')
+}
+
+mavenPublishing {
+    publishToMavenCentral(true)
+    if (project.findProperty('signingInMemoryKey') != null) {
+        signAllPublications()
+    }
+
+    coordinates('ai.agentspan', 'java-sdk', project.version.toString())
+
+    pom {
+        name = 'Agentspan Java SDK'
+        description = 'Java SDK for the Agentspan agent orchestration platform'
+        url = 'https://github.com/agentspan-ai/agentspan'
+        licenses {
+            license {
+                name = 'MIT License'
+                url = 'https://opensource.org/licenses/MIT'
+            }
+        }
+        developers {
+            developer {
+                organization = 'Agentspan'
+                organizationUrl = 'https://agentspan.ai'
+                name = 'Agentspan Development Team'
+                email = 'developers@orkes.io'
+            }
+        }
+        scm {
+            connection = 'scm:git:git://github.com/agentspan-ai/agentspan.git'
+            developerConnection = 'scm:git:ssh://github.com/agentspan-ai/agentspan.git'
+            url = 'https://github.com/agentspan-ai/agentspan'
+        }
+    }
 }

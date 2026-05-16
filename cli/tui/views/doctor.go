@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -14,6 +15,8 @@ import (
 	"github.com/agentspan-ai/agentspan/cli/client"
 	"github.com/agentspan-ai/agentspan/cli/tui/ui"
 )
+
+var javaVersionRe = regexp.MustCompile(`version "(\d+[\d._]*)"`)
 
 // ─── Check Result ─────────────────────────────────────────────────────────────
 
@@ -227,17 +230,33 @@ func (m DoctorModel) runSystemChecks() tea.Cmd {
 	return func() tea.Msg {
 		var results []CheckResult
 
-		// Java check
-		out, err := exec.Command("java", "-version").CombinedOutput()
+		// Java check — prefer $JAVA_HOME/bin/java when set.
+		javaBin := "java"
+		if jh := os.Getenv("JAVA_HOME"); jh != "" {
+			p := filepath.Join(jh, "bin", "java")
+			if _, err := os.Stat(p); err == nil {
+				javaBin = p
+			}
+		}
+		out, err := exec.Command(javaBin, "-version").CombinedOutput()
 		if err != nil {
 			results = append(results, CheckResult{"Java", CheckFail, "not found (21+ required)"})
 		} else {
-			version := strings.TrimSpace(string(out))
-			if strings.Contains(version, "21") || strings.Contains(version, "22") ||
-				strings.Contains(version, "23") || strings.Contains(version, "24") {
-				results = append(results, CheckResult{"Java", CheckPass, version[:min(len(version), 40)]})
+			raw := strings.TrimSpace(string(out))
+			// Parse major version numerically so Java 26+ is not rejected.
+			version := ""
+			if ms := javaVersionRe.FindStringSubmatch(raw); len(ms) >= 2 {
+				version = ms[1]
+			}
+			major := version
+			if idx := strings.IndexAny(version, "._"); idx > 0 {
+				major = version[:idx]
+			}
+			majorNum := 0
+			if n, err := fmt.Sscanf(major, "%d", &majorNum); n == 1 && err == nil && majorNum >= 21 {
+				results = append(results, CheckResult{"Java", CheckPass, version})
 			} else {
-				results = append(results, CheckResult{"Java", CheckFail, "version 21+ required — " + version[:min(len(version), 30)]})
+				results = append(results, CheckResult{"Java", CheckFail, "21+ required — " + raw[:min(len(raw), 40)]})
 			}
 		}
 

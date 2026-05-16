@@ -23,6 +23,8 @@ public class ToolDef {
     private final Function<Map<String, Object>, Object> func;
     private final boolean approvalRequired;
     private final int timeoutSeconds;
+    private final int retryCount;
+    private final int retryDelaySeconds;
     private final String toolType;
     private final Map<String, Object> config;
     private final List<String> credentials;
@@ -38,6 +40,8 @@ public class ToolDef {
         this.func = builder.func;
         this.approvalRequired = builder.approvalRequired;
         this.timeoutSeconds = builder.timeoutSeconds;
+        this.retryCount = builder.retryCount;
+        this.retryDelaySeconds = builder.retryDelaySeconds;
         this.toolType = builder.toolType;
         this.config = builder.config;
         this.credentials = builder.credentials != null ? builder.credentials : new ArrayList<>();
@@ -52,6 +56,8 @@ public class ToolDef {
     public Function<Map<String, Object>, Object> getFunc() { return func; }
     public boolean isApprovalRequired() { return approvalRequired; }
     public int getTimeoutSeconds() { return timeoutSeconds; }
+    public int getRetryCount() { return retryCount; }
+    public int getRetryDelaySeconds() { return retryDelaySeconds; }
     public String getToolType() { return toolType; }
     public Map<String, Object> getConfig() { return config; }
     public List<String> getCredentials() { return credentials; }
@@ -70,6 +76,8 @@ public class ToolDef {
         private Function<Map<String, Object>, Object> func;
         private boolean approvalRequired = false;
         private int timeoutSeconds = 0;
+        private int retryCount = 2;
+        private int retryDelaySeconds = 2;
         private String toolType = "worker";
         private Map<String, Object> config;
         private List<String> credentials;
@@ -83,6 +91,8 @@ public class ToolDef {
         public Builder func(Function<Map<String, Object>, Object> func) { this.func = func; return this; }
         public Builder approvalRequired(boolean approvalRequired) { this.approvalRequired = approvalRequired; return this; }
         public Builder timeoutSeconds(int timeoutSeconds) { this.timeoutSeconds = timeoutSeconds; return this; }
+        public Builder retryCount(int retryCount) { this.retryCount = retryCount; return this; }
+        public Builder retryDelaySeconds(int retryDelaySeconds) { this.retryDelaySeconds = retryDelaySeconds; return this; }
         public Builder toolType(String toolType) { this.toolType = toolType; return this; }
         public Builder config(Map<String, Object> config) { this.config = config; return this; }
         public Builder credentials(List<String> credentials) { this.credentials = credentials; return this; }

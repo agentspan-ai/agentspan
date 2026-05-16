@@ -53,9 +53,11 @@ public class CredentialEnvSeeder implements ApplicationRunner {
     static final List<String> KNOWN_ENV_VARS = List.of(
             // Anthropic (Claude)
             "ANTHROPIC_API_KEY",
+            "ANTHROPIC_BASE_URL",
             // OpenAI (GPT-4, DALL-E, etc.)
             "OPENAI_API_KEY",
             "OPENAI_ORG_ID",
+            "OPENAI_BASE_URL",
             // Google Gemini / AI Studio / Vertex AI
             "GEMINI_API_KEY",
             "GOOGLE_API_KEY",
@@ -64,17 +66,22 @@ public class CredentialEnvSeeder implements ApplicationRunner {
             // Azure OpenAI
             "AZURE_OPENAI_API_KEY",
             "AZURE_OPENAI_ENDPOINT",
+            "AZURE_OPENAI_BASE_URL",
             "AZURE_OPENAI_DEPLOYMENT",
             // Mistral AI
             "MISTRAL_API_KEY",
+            "MISTRAL_BASE_URL",
             // Cohere
             "COHERE_API_KEY",
+            "COHERE_BASE_URL",
             // xAI / Grok
             "XAI_API_KEY",
+            "GROK_BASE_URL",
             // Groq
             "GROQ_API_KEY",
             // Perplexity
             "PERPLEXITY_API_KEY",
+            "PERPLEXITY_BASE_URL",
             // HuggingFace
             "HUGGINGFACE_API_KEY",
             "HUGGINGFACE_API_TOKEN",

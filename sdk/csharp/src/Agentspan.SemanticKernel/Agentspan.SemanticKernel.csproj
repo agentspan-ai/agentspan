@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Agentspan.SemanticKernel</RootNamespace>
+    <AssemblyName>Agentspan.SemanticKernel</AssemblyName>
+
+    <PackageId>Agentspan.SemanticKernel</PackageId>
+    <Version>0.1.0</Version>
+    <Description>Bridge Microsoft Semantic Kernel plugins into Agentspan agents.</Description>
+    <Authors>Agentspan</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/agentspan-ai/agentspan</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/agentspan-ai/agentspan</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>agents;ai;llm;semantic-kernel;agentspan</PackageTags>
+
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591;CS1573;SKEXP0001;SKEXP0010</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Agentspan\Agentspan.csproj" />
+    <PackageReference Include="Microsoft.SemanticKernel" Version="1.76.0" />
+  </ItemGroup>
+</Project>

@@ -86,6 +86,7 @@ class AgentConfigSerializer:
             "maxTurns": agent.max_turns,
             "timeoutSeconds": agent.timeout_seconds,
             "external": agent.external,
+            "synthesize": getattr(agent, "synthesize", True),
         }
 
         # Instructions
@@ -230,6 +231,10 @@ class AgentConfigSerializer:
             config["credentials"] = [
                 c if isinstance(c, str) else c.env_var for c in agent.credentials
             ]
+
+        # Masked fields — redacted in execution history and UI
+        if getattr(agent, "masked_fields", None):
+            config["maskedFields"] = list(agent.masked_fields)
 
         # Remove None values for cleaner JSON
         return {k: v for k, v in config.items() if v is not None}

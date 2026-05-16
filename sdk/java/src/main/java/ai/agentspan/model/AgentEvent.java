@@ -103,7 +103,7 @@ public class AgentEvent {
             cleanArgs,
             data.get("result"),
             data.get("output"),
-            (String) data.getOrDefault("workflowId", ""),
+            (String) data.getOrDefault("executionId", ""),
             (String) data.get("guardrailName"),
             (String) data.get("target")
         );

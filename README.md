@@ -25,11 +25,18 @@
   <a href="docs/python-sdk/api-reference.md">API Reference</a>
 </p>
 
+<p align="center">
+  <video src="assets/agentspan-readme-demo.mp4" controls muted playsinline width="100%"></video>
+</p>
+
 ---
 
 > ⭐ If you find Agentspan useful, [give us a star](https://github.com/agentspan-ai/agentspan) — it helps others find the project!
 
 ---
+
+https://github.com/user-attachments/assets/dd4b720d-d11c-42e8-93a6-875c5a740fd8
+
 
 **Agentspan** is a distributed, durable runtime for AI agents that survive crashes, scale across machines, and pause for human approval for days — not minutes.
 
@@ -46,9 +53,13 @@ irm https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.ps
 ## Install SDKs
 ```bash
 # Python
-pip install agentspan   # Python
-# Typescript
-npm install @agentspan-ai/sdk            # TypeScript
+pip install agentspan
+
+# TypeScript / JavaScript
+npm install @agentspan-ai/sdk
+
+# C# / .NET
+dotnet add package Agentspan
 ```
 
 ```bash

@@ -50,6 +50,8 @@ class CredentialEnvSeederTest {
         }
         storeProvider.delete(ANONYMOUS_USER_ID, "GH_TOKEN");
         storeProvider.delete(ANONYMOUS_USER_ID, "GITHUB_TOKEN");
+        storeProvider.delete(ANONYMOUS_USER_ID, "OPENAI_BASE_URL");
+        storeProvider.delete(ANONYMOUS_USER_ID, "ANTHROPIC_BASE_URL");
     }
 
     @Test
@@ -202,6 +204,26 @@ class CredentialEnvSeederTest {
         assertThatThrownBy(() -> seeder.run(new org.springframework.boot.DefaultApplicationArguments()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("DB connection lost");
+    }
+
+    @Test
+    void seeder_storesBaseUrlVars_inRealDb() throws Exception {
+        Function<String, String> envLookup = name -> switch (name) {
+            case "OPENAI_BASE_URL" -> "https://my-proxy.org/v1";
+            case "ANTHROPIC_BASE_URL" -> "https://anthropic-proxy.internal/v1";
+            default -> null;
+        };
+
+        CredentialEnvSeeder seeder = new CredentialEnvSeeder(storeProvider, envLookup);
+        var field = CredentialEnvSeeder.class.getDeclaredField("credentialsStore");
+        field.setAccessible(true);
+        field.set(seeder, "built-in");
+
+        seeder.run(new org.springframework.boot.DefaultApplicationArguments());
+
+        assertThat(storeProvider.get(ANONYMOUS_USER_ID, "OPENAI_BASE_URL")).isEqualTo("https://my-proxy.org/v1");
+        assertThat(storeProvider.get(ANONYMOUS_USER_ID, "ANTHROPIC_BASE_URL"))
+                .isEqualTo("https://anthropic-proxy.internal/v1");
     }
 
     @Test

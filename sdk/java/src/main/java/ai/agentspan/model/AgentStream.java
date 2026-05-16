@@ -74,14 +74,40 @@ public class AgentStream implements Iterable<AgentEvent>, AutoCloseable {
     }
 
     /**
-     * Approve a pending tool call that requires human approval.
+     * Approve a pending HUMAN task on the <b>top-level</b> workflow.
+     *
+     * <p>This targets the workflow id from {@link #getWorkflowId()} — i.e. the
+     * orchestrator/root execution. It is the right method when:
+     * <ul>
+     *   <li>You are running a single agent (HUMAN task lives at the top level).</li>
+     *   <li>Your sub-agent topology routes approvals to a HUMAN task at the top level.</li>
+     * </ul>
+     *
+     * <p>Under {@link ai.agentspan.enums.Strategy#HANDOFF}, {@code SEQUENTIAL}, or
+     * {@code PARALLEL} the HUMAN task usually lives in a <b>sub</b>-execution (the
+     * sub-agent's own workflow). In that case this method POSTs to the wrong
+     * workflow id and the server returns HTTP 500 ("No pending HUMAN task found"):
+     * use {@link #approve(AgentEvent)} with the {@code WAITING} event instead.
      */
     public void approve() {
         httpApi.respondToAgent(workflowId, true, null);
     }
 
     /**
-     * Reject a pending tool call with a reason.
+     * Approve the pending HUMAN task associated with the given {@code WAITING} event.
+     *
+     * <p>Reads the owning execution id from {@link AgentEvent#getWorkflowId()} —
+     * the sub-execution that emitted the event — and POSTs to it. Use this whenever
+     * the HUMAN task may live below the top level (handoff/sequential/parallel).
+     *
+     * @param event the WAITING event whose pending HUMAN task should be approved
+     */
+    public void approve(AgentEvent event) {
+        httpApi.respondToAgent(targetExecutionId(event), true, null);
+    }
+
+    /**
+     * Reject a pending HUMAN task on the <b>top-level</b> workflow with a reason.
      *
      * @param reason optional rejection reason
      */
@@ -90,16 +116,47 @@ public class AgentStream implements Iterable<AgentEvent>, AutoCloseable {
     }
 
     /**
-     * Send a message to a waiting agent (multi-turn conversation).
+     * Reject the pending HUMAN task associated with the given {@code WAITING} event.
+     *
+     * @param event  the WAITING event whose pending HUMAN task should be rejected
+     * @param reason optional rejection reason
+     */
+    public void reject(AgentEvent event, String reason) {
+        httpApi.respondToAgent(targetExecutionId(event), false, reason);
+    }
+
+    /**
+     * Send a message to the <b>top-level</b> waiting workflow (multi-turn conversation).
      *
      * @param message the message to send
      */
     public void send(String message) {
-        // Use the respond endpoint with a message payload
         java.util.Map<String, Object> body = new java.util.HashMap<>();
         body.put("message", message);
-        // Delegate to httpApi
-        httpApi.respondToAgent(workflowId, true, null);
+        httpApi.respondWithData(workflowId, body);
+    }
+
+    /**
+     * Send a message to the waiting execution associated with the given event.
+     *
+     * @param event   the WAITING event identifying the execution to send to
+     * @param message the message to send
+     */
+    public void send(AgentEvent event, String message) {
+        java.util.Map<String, Object> body = new java.util.HashMap<>();
+        body.put("message", message);
+        httpApi.respondWithData(targetExecutionId(event), body);
+    }
+
+    private static String targetExecutionId(AgentEvent event) {
+        if (event == null) {
+            throw new IllegalArgumentException("event must not be null");
+        }
+        String id = event.getWorkflowId();
+        if (id == null || id.isEmpty()) {
+            throw new IllegalArgumentException("event has no workflow id");
+        }
+        return id;
     }
 
     @Override

@@ -362,6 +362,8 @@ class Agent:
         base_url: Optional[str] = None,
         credentials: Optional[List[Any]] = None,
         stateful: bool = False,
+        synthesize: bool = True,
+        masked_fields: Optional[List[str]] = None,
     ) -> None:
         if not name or not isinstance(name, str):
             raise ValueError("Agent name must be a non-empty string")
@@ -407,12 +409,28 @@ class Agent:
 
         self.agents: List[Agent] = [_resolve_agent(a, self.model) for a in agents] if agents else []
 
-        # PARALLEL agents need a model for server compilation. Auto-inherit from
-        # first child that has one so users don't have to repeat it.
+        # PARALLEL parents need a model for the server-side aggregation step;
+        # without one, compilation fails with an opaque HTTP 400 ("Cannot
+        # compile external agent directly"). Auto-inherit from the first
+        # child that has a model so the common case
+        # ``Agent(agents=[a1, a2], strategy=PARALLEL)`` works without
+        # repeating ``model=`` on the parent. Picks the *first* match by
+        # design — children may have differing models for their own work,
+        # and the parent's model is only used for aggregation; the caller
+        # can pass an explicit ``model=`` to override. If no child has a
+        # model either, raise a clear error here rather than surfacing the
+        # opaque server 400 later.
         if strategy == Strategy.PARALLEL and not self.model and self.agents:
             inherited = next((a.model for a in self.agents if a.model), "")
             if inherited:
                 self.model = inherited
+            else:
+                raise ValueError(
+                    f"Strategy.PARALLEL agent '{name}' has no ``model=`` and "
+                    "no child agent has one to inherit from. Set ``model=`` "
+                    "on the parent (used for aggregation) or on at least "
+                    "one child."
+                )
         # Validate sub-agent name uniqueness
         if self.agents:
             seen: Dict[str, int] = {}
@@ -444,6 +462,7 @@ class Agent:
         self.introduction = introduction
         self.metadata: Dict[str, Any] = dict(metadata) if metadata else {}
         self.stateful = stateful
+        self.synthesize = synthesize
         self.planner = planner
         self.callbacks: List[Any] = list(callbacks) if callbacks else []
         self.before_agent_callback = before_agent_callback
@@ -506,6 +525,9 @@ class Agent:
             self.credentials: List[Any] = list(credentials)
         else:
             self.credentials = []
+
+        # Fields whose values are redacted in execution history and UI.
+        self.masked_fields: List[str] = list(masked_fields) if masked_fields else []
 
         # Propagate agent-level credentials to CLI/code tools so the
         # dispatch layer can resolve them per-tool (the dispatch only
