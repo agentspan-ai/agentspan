@@ -467,6 +467,66 @@ class TestOutputNormalization:
         assert result.output == {"result": None}
 
 
+class TestExtractFailedTaskReason:
+    """_extract_failed_task_reason returns the first FAILED task's reason for diagnosing issue #41."""
+
+    def _call(self, tasks):
+        from agentspan.agents.runtime.runtime import AgentRuntime
+        from unittest.mock import MagicMock
+
+        wf = MagicMock()
+        wf.tasks = tasks
+        return AgentRuntime._extract_failed_task_reason(wf)
+
+    def _task(self, status, ref="some_task", reason=None):
+        t = MagicMock()
+        t.status = status
+        t.reference_task_name = ref
+        t.reason_for_incompletion = reason
+        return t
+
+    def test_no_tasks_returns_none(self):
+        wf = MagicMock()
+        wf.tasks = []
+        from agentspan.agents.runtime.runtime import AgentRuntime
+
+        assert AgentRuntime._extract_failed_task_reason(wf) is None
+
+    def test_all_completed_returns_none(self):
+        tasks = [self._task("COMPLETED"), self._task("COMPLETED")]
+        assert self._call(tasks) is None
+
+    def test_failed_task_with_reason(self):
+        tasks = [
+            self._task("COMPLETED"),
+            self._task("FAILED", ref="manager_llm", reason="LLM API returned 429"),
+        ]
+        result = self._call(tasks)
+        assert "manager_llm" in result
+        assert "LLM API returned 429" in result
+
+    def test_failed_task_without_reason(self):
+        tasks = [self._task("FAILED", ref="calculate", reason=None)]
+        result = self._call(tasks)
+        assert "calculate" in result
+        assert result is not None
+
+    def test_returns_first_failed_task(self):
+        tasks = [
+            self._task("FAILED", ref="first_fail", reason="timeout"),
+            self._task("FAILED", ref="second_fail", reason="another error"),
+        ]
+        result = self._call(tasks)
+        assert "first_fail" in result
+        assert "second_fail" not in result
+
+    def test_no_tasks_attribute_returns_none(self):
+        from agentspan.agents.runtime.runtime import AgentRuntime
+
+        wf = MagicMock(spec=[])  # no .tasks attribute
+        assert AgentRuntime._extract_failed_task_reason(wf) is None
+
+
 class TestParallelOutputNormalization:
     """BUG-P2-02: Parallel strategy output normalized by server."""
 

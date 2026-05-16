@@ -60,6 +60,7 @@ class AgentSSEEventTest {
         AgentSSEEvent event = AgentSSEEvent.waiting("wf-1", pending);
 
         assertThat(event.getType()).isEqualTo("waiting");
+        assertThat(event.getExecutionId()).isEqualTo("wf-1");
         assertThat(event.getPendingTool()).isEqualTo(pending);
     }
 

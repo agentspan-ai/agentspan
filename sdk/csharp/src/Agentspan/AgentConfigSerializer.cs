@@ -17,6 +17,22 @@ internal static class AgentConfigSerializer
         if (media is not null)
             foreach (var url in media) mediaArr.Add(url);
 
+        // Framework shape-adapter agents go through a different wire envelope:
+        // {framework, rawConfig, prompt, sessionId}. The server routes these to
+        // OpenAINormalizer / GoogleADKNormalizer based on `framework`. Mirrors
+        // Java's HttpApi.startFrameworkAgent (POST /api/agent/start with framework).
+        if (agent.Framework is "openai" or "google_adk")
+        {
+            var env = new JsonObject
+            {
+                ["framework"] = agent.Framework,
+                ["rawConfig"] = SerializeAgent(agent),
+                ["prompt"]    = prompt,
+            };
+            if (!string.IsNullOrEmpty(sessionId)) env["sessionId"] = sessionId;
+            return env;
+        }
+
         return new JsonObject
         {
             ["agentConfig"] = SerializeAgent(agent),
@@ -28,6 +44,15 @@ internal static class AgentConfigSerializer
 
     internal static JsonObject SerializeAgent(Agent agent)
     {
+        // Framework shape-adapter path: server normalizers (OpenAINormalizer,
+        // GoogleADKNormalizer) consume a different wire shape than the default.
+        // Tools are emitted as {_worker_ref, description, parameters}; raw
+        // framework config (handoffs, sub_agents, output_type) is folded in.
+        if (agent.Framework is "openai" or "google_adk")
+        {
+            return SerializeFrameworkAgent(agent);
+        }
+
         var cfg = new JsonObject { ["name"] = agent.Name };
 
         if (agent.Model            is not null) cfg["model"]            = agent.Model;
@@ -151,6 +176,65 @@ internal static class AgentConfigSerializer
             cfg["callbacks"] = callbackArr;
 
         return cfg;
+    }
+
+    private static JsonObject SerializeFrameworkAgent(Agent agent)
+    {
+        var fw = agent.Framework!;
+        var map = new JsonObject { ["name"] = agent.Name };
+
+        if (!string.IsNullOrEmpty(agent.Model)) map["model"] = agent.Model;
+
+        // OpenAI uses `instructions`; ADK uses `instruction` (singular).
+        if (!string.IsNullOrEmpty(agent.Instructions))
+        {
+            map[fw == "google_adk" ? "instruction" : "instructions"] = agent.Instructions;
+        }
+
+        // Framework normalizers expect the `_worker_ref` shape:
+        //   { _worker_ref, description, parameters }
+        // The default tool shape (name + inputSchema + toolType) is silently
+        // dropped by these normalizers, so the LLM would see a paramless tool.
+        if (agent.Tools.Count > 0)
+        {
+            var tools = new JsonArray();
+            foreach (var t in agent.Tools)
+            {
+                // Agent-as-tool: emit `{_type: "AgentTool", name, description, agent}`
+                // so the framework normalizer compiles this as a SUB_WORKFLOW task.
+                if (t.ToolType == "agent_tool" && t.WrappedAgent is not null)
+                {
+                    tools.Add(new JsonObject
+                    {
+                        ["_type"]       = "AgentTool",
+                        ["name"]        = t.Name,
+                        ["description"] = t.Description ?? "",
+                        ["agent"]       = SerializeAgent(t.WrappedAgent),
+                    });
+                    continue;
+                }
+                var entry = new JsonObject
+                {
+                    ["_worker_ref"] = t.Name,
+                    ["description"] = t.Description ?? "",
+                };
+                // InputSchema is itself a JsonObject — clone via DeepClone to avoid
+                // re-parenting the same node (a JsonNode can only have one parent).
+                entry["parameters"] = t.InputSchema.DeepClone();
+                tools.Add(entry);
+            }
+            map["tools"] = tools;
+        }
+
+        if (agent.FrameworkConfig is not null)
+        {
+            foreach (var (k, v) in agent.FrameworkConfig)
+            {
+                map[k] = JsonNode.Parse(JsonSerializer.Serialize(v, AgentspanJson.Options));
+            }
+        }
+
+        return map;
     }
 
     private static JsonNode GenerateSchema(Type type)

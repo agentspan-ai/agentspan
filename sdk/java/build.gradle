@@ -26,6 +26,8 @@ dependencies {
     api platform("com.fasterxml.jackson:jackson-bom:${jacksonVersion}")
     api 'com.fasterxml.jackson.core:jackson-databind'
     api 'com.fasterxml.jackson.core:jackson-annotations'
+    api 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
+    api 'com.fasterxml.jackson.datatype:jackson-datatype-jdk8'
 
     implementation "org.slf4j:slf4j-api:${slf4jVersion}"
 
@@ -39,6 +41,14 @@ dependencies {
 
 compileJava.options.compilerArgs << '-parameters'
 compileTestJava.options.compilerArgs << '-parameters'
+
+sourceSets {
+    test {
+        java {
+            srcDirs += file('e2e')
+        }
+    }
+}
 
 test {
     useJUnitPlatform {

@@ -19,6 +19,15 @@ repositories {
 dependencies {
     implementation project(':')
     runtimeOnly 'org.slf4j:slf4j-simple:2.0.13'
+    // Required for ExampleLc4j* examples that use LangChain4j @Tool annotations
+    compileOnly 'dev.langchain4j:langchain4j:1.0.0'
+    runtimeOnly 'dev.langchain4j:langchain4j:1.0.0'
 }
 
 compileJava.options.compilerArgs << '-parameters'
+
+// Allow running individual examples via:
+//   ./gradlew :examples:run -PmainClass=ai.agentspan.examples.ExampleLc4j01BasicAgent
+application {
+    mainClass = project.findProperty('mainClass') ?: 'ai.agentspan.examples.Example01BasicAgent'
+}
