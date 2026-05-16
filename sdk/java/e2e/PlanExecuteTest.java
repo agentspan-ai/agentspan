@@ -41,7 +41,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 @Tag("e2e")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-class E2ePlanExecuteTest extends E2eBaseTest {
+class PlanExecuteTest extends BaseTest {
 
     static final Path WORK_DIR = Path.of(System.getProperty("java.io.tmpdir"), "plan-execute-test-java");
     static final int MIN_WORD_COUNT = 200;
