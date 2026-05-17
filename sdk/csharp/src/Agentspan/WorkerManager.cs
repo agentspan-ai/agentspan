@@ -362,6 +362,14 @@ internal sealed class WorkerManager : IAsyncDisposable
             RegisterGuardrails(tool.Guardrails, domain);
         RegisterCallbacks(agent, domain);
 
+        // Local code execution worker — the server adds an execute_code tool to
+        // the agent when LocalCodeExecution=true (or CodeExecution is set), but
+        // the SDK is responsible for polling and actually running the code.
+        // Without this, the LLM's execute_code calls would sit in SCHEDULED
+        // forever. Mirrors Java's AgentRuntime.prepareWorkers code-exec branch.
+        if (agent.LocalCodeExecution || agent.CodeExecution is not null)
+            RegisterLocalCodeExecutionWorker(agent, domain);
+
         if (agent.Strategy == Strategy.Swarm && agent.Agents.Count > 0)
             RegisterSwarmTransferWorkers(agent, domain);
 
@@ -378,6 +386,90 @@ internal sealed class WorkerManager : IAsyncDisposable
             if (tool.ToolType == "agent_tool" && tool.WrappedAgent is not null)
                 RegisterAgentTools(tool.WrappedAgent, domain);
         }
+    }
+
+    private void RegisterLocalCodeExecutionWorker(Agent agent, string? domain)
+    {
+        var taskName = $"{agent.Name}_execute_code";
+        var timeout  = agent.CodeExecution?.Timeout ?? 30;
+
+        _workers.Add(NewLoop(taskName, async (args, _) =>
+        {
+            string language = "python";
+            if (args.TryGetValue("language", out var lang) && lang.ValueKind == JsonValueKind.String)
+                language = lang.GetString() ?? "python";
+
+            string code = "";
+            if (args.TryGetValue("code", out var c) && c.ValueKind == JsonValueKind.String)
+                code = c.GetString() ?? "";
+
+            return await ExecuteLocalCodeAsync(language, code, timeout);
+        }, domain: domain));
+    }
+
+    private static async Task<object?> ExecuteLocalCodeAsync(string language, string code, int timeoutSeconds)
+    {
+        var result = new Dictionary<string, object?>();
+        string? tmpFile = null;
+        try
+        {
+            string interpreter = language.ToLowerInvariant() switch
+            {
+                "python" or "python3" => "python3",
+                "bash" or "sh"        => "bash",
+                "node" or "javascript" => "node",
+                _                      => language,
+            };
+            var ext = language.StartsWith("python", StringComparison.OrdinalIgnoreCase) ? ".py"
+                    : language.StartsWith("node",   StringComparison.OrdinalIgnoreCase)
+                      || language.StartsWith("javascript", StringComparison.OrdinalIgnoreCase) ? ".js"
+                    : ".sh";
+            tmpFile = Path.Combine(Path.GetTempPath(), $"agentspan_code_{Guid.NewGuid():N}{ext}");
+            await File.WriteAllTextAsync(tmpFile, code);
+
+            var psi = new System.Diagnostics.ProcessStartInfo(interpreter, tmpFile)
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError  = true,
+                UseShellExecute        = false,
+                CreateNoWindow         = true,
+            };
+            using var proc = System.Diagnostics.Process.Start(psi)
+                ?? throw new InvalidOperationException($"Failed to start {interpreter}");
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
+            try
+            {
+                await proc.WaitForExitAsync(cts.Token);
+                var output = (await proc.StandardOutput.ReadToEndAsync())
+                           + (await proc.StandardError.ReadToEndAsync());
+                result["output"]    = output;
+                result["exit_code"] = proc.ExitCode;
+                result["success"]   = proc.ExitCode == 0;
+                if (proc.ExitCode != 0)
+                    result["error"] = $"Process exited with code {proc.ExitCode}";
+            }
+            catch (OperationCanceledException)
+            {
+                try { proc.Kill(entireProcessTree: true); } catch { }
+                result["output"]    = "";
+                result["error"]     = $"Code execution timed out after {timeoutSeconds}s";
+                result["exit_code"] = -1;
+                result["success"]   = false;
+            }
+        }
+        catch (Exception e)
+        {
+            result["output"]    = "";
+            result["error"]     = e.Message;
+            result["exit_code"] = -1;
+            result["success"]   = false;
+        }
+        finally
+        {
+            if (tmpFile is not null) try { File.Delete(tmpFile); } catch { }
+        }
+        return result;
     }
 
     private void RegisterCallbacks(Agent agent, string? domain = null)
