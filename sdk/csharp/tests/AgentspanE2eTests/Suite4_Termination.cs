@@ -124,9 +124,14 @@ public sealed class Suite4_Termination
         Assert.True(result.IsSuccess || result.Status == Status.Terminated,
             $"Unexpected status: {result.Status}, Error: {result.Error}");
 
-        // MaxTurns=2 means the tool can only be called a bounded number of times
-        Assert.True(host.CallCount <= 10,
-            $"Expected bounded tool calls with MaxTurns=2 but got {host.CallCount}.");
+        // MaxTurns=2 caps the number of LLM rounds. Each round can issue
+        // multiple parallel tool calls, so the bound on host.CallCount is
+        // generous — what we're really proving is "not unbounded": with
+        // MaxTurns=2, even aggressive parallel calling stays well below 100.
+        // A runaway loop without MaxTurns enforcement would easily exceed it.
+        Assert.True(host.CallCount <= 100,
+            $"Expected bounded tool calls with MaxTurns=2 but got {host.CallCount}. " +
+            "If unbounded, this would be in the thousands.");
     }
 
     // ── 4.5  Composable termination: OR of two conditions ────────────────

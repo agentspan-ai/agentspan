@@ -245,11 +245,18 @@ public sealed class Suite10_CodeExecutionAndDeploy
                 "always use the execute_code tool.",
         };
 
+        // Use a script the LLM cannot shortcut from training: sys.version_info
+        // produces output only a real Python interpreter can supply, so the
+        // model is forced to call execute_code instead of answering inline.
+        // The sentinel "PYRUN_OK:3066" makes the assertion exact.
+        const string script =
+            "import sys; print('PYRUN_OK:' + str(42 * 73) + '/py' + str(sys.version_info.major))";
+
         await using var runtime = new AgentRuntime();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
         var result = await runtime.RunAsync(
             agent,
-            "Run this exact Python code using execute_code: print(42 * 73)",
+            "Use execute_code to run this exact Python (do NOT compute it yourself — call the tool): " + script,
             ct: cts.Token);
 
         Assert.True(result.IsSuccess,
@@ -257,8 +264,8 @@ public sealed class Suite10_CodeExecutionAndDeploy
 
         var execTasks = await FindExecuteCodeTasksAsync(result.ExecutionId);
         Assert.True(execTasks.Count >= 1, "[LocalPy] No execute_code tasks in workflow.");
-        Assert.True(execTasks.Any(t => (t["outputData"]?.ToString() ?? "").Contains("3066")),
-            "[LocalPy] '3066' not found in any execute_code task outputData.");
+        Assert.True(execTasks.Any(t => (t["outputData"]?.ToString() ?? "").Contains("PYRUN_OK:3066")),
+            "[LocalPy] 'PYRUN_OK:3066' not found in any execute_code task outputData.");
     }
 
     // ── 10.10  Runtime: short timeout kills long-running code ────────────
