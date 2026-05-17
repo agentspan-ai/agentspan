@@ -399,10 +399,21 @@ public sealed class Suite13_StatefulDomain
     {
         _fixture.RequireServer();
 
-        var statefulTool = ToolDefFactory.Create(
-            name:        "s13_per_tool_stateful",
-            description: "Per-tool stateful worker.",
-            handler:     (_, _) => Task.FromResult<object?>("ok")) with { Stateful = true };
+        // Build with init-only property directly — ToolDef is a sealed class
+        // (not a record), so `with` expressions aren't supported. Mirror what
+        // ToolDefFactory.Create does and set Stateful via object initializer.
+        var statefulTool = new ToolDef
+        {
+            Name        = "s13_per_tool_stateful",
+            Description = "Per-tool stateful worker.",
+            InputSchema = new System.Text.Json.Nodes.JsonObject
+            {
+                ["type"] = "object",
+                ["properties"] = new System.Text.Json.Nodes.JsonObject(),
+            },
+            Stateful    = true,
+            // No handler — plan-level test only; the SDK doesn't need to invoke it
+        };
         var plainTool = ToolDefFactory.Create(
             name:        "s13_per_tool_plain",
             description: "Plain worker.",
