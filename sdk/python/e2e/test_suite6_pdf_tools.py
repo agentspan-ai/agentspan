@@ -20,7 +20,12 @@ pytestmark = [
     pytest.mark.e2e,
 ]
 
-TIMEOUT = 120
+# PDF generation is LLM call + tool call + PDF rendering — three serial
+# stages where the bottom of the budget is the LLM (~30-60s on CI for the
+# big SAMPLE_MARKDOWN payload). 120s left zero headroom and the test hit
+# the wall with status=RUNNING on CI run 25972790281. Bump to 240s so a
+# single slow LLM hop doesn't fail the suite.
+TIMEOUT = 240
 
 # ── Sample Markdown ──────────────────────────────────────────────────────
 
