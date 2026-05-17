@@ -320,20 +320,17 @@ public sealed class Suite13_StatefulDomain
         Assert.Equal("s13_stateful_b", nameB);
     }
 
-    // ── 13.7  Runtime: concurrent stateful executions are independent ───
+    // ── 13.7  Runtime: concurrent stateful executions get isolated domains ──
     //
-    // Ports the spirit of Python suite14 test_concurrent_stateful_isolation.
-    // Python's stateful runtime explicitly threads taskToDomain into the start
-    // request; the C# SDK currently does not, so we verify what this SDK does
-    // guarantee today: two stateful runs, each on its own AgentRuntime, both
-    // complete with distinct execution IDs (i.e. no cross-execution
-    // interference at the workflow level).
-    //
-    // If/when the C# SDK starts populating taskToDomain on start, tighten this
-    // test to also assert disjoint domain UUIDs (the Python version does).
+    // Ports Python suite14 test_concurrent_stateful_isolation. Two stateful
+    // executions, each on its own runtime, must produce DIFFERENT execution
+    // IDs and DIFFERENT taskToDomain UUIDs. The SDK fix introducing this test
+    // generates a fresh runId UUID on start and forwards it to /api/agent/start
+    // (see AgentRuntime.StartInternalAsync) — the server uses runId as the
+    // worker domain for every task in the run.
 
     [SkippableFact]
-    public async Task TwoStatefulAgents_ConcurrentRuns_AreIndependent()
+    public async Task TwoStatefulAgents_ConcurrentRuns_HaveDisjointDomains()
     {
         _fixture.RequireServer();
 
@@ -365,6 +362,30 @@ public sealed class Suite13_StatefulDomain
         Assert.True(r1.IsSuccess, $"Run 1: {r1.Status} {r1.Error}");
         Assert.True(r2.IsSuccess, $"Run 2: {r2.Status} {r2.Error}");
         Assert.NotEqual(r1.ExecutionId, r2.ExecutionId);
+
+        var ttd1 = await GetTaskToDomainAsync(r1.ExecutionId);
+        var ttd2 = await GetTaskToDomainAsync(r2.ExecutionId);
+        Assert.NotEmpty(ttd1);
+        Assert.NotEmpty(ttd2);
+
+        var domains1 = new HashSet<string>(ttd1.Values);
+        var domains2 = new HashSet<string>(ttd2.Values);
+        Assert.False(domains1.Overlaps(domains2),
+            $"Concurrent stateful runs should have disjoint domains; Run1={string.Join(",", domains1)}, Run2={string.Join(",", domains2)}");
+    }
+
+    private async Task<Dictionary<string, string>> GetTaskToDomainAsync(string executionId)
+    {
+        var wf = await _fixture.FetchWorkflowAsync(executionId);
+        var ttd = wf?["taskToDomain"]?.AsObject();
+        var result = new Dictionary<string, string>();
+        if (ttd is null) return result;
+        foreach (var kv in ttd)
+        {
+            var value = kv.Value?.GetValue<string>() ?? "";
+            if (!string.IsNullOrEmpty(value)) result[kv.Key] = value;
+        }
+        return result;
     }
 }
 

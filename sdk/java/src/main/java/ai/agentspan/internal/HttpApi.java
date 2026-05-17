@@ -45,11 +45,33 @@ public class HttpApi {
      * @return server response containing workflowId
      */
     public Map<String, Object> startAgent(Map<String, Object> agentConfig, String prompt, String sessionId) {
+        return startAgent(agentConfig, prompt, sessionId, null);
+    }
+
+    /**
+     * Start an agent execution with an optional runId for stateful domain routing.
+     *
+     * <p>When {@code runId} is non-null/non-empty, the server uses it as the
+     * {@code taskToDomain} value for every worker task in the run. Workers
+     * registered locally under the same domain poll the per-execution queue,
+     * which isolates concurrent stateful runs from each other.
+     *
+     * @param agentConfig serialized agent configuration
+     * @param prompt      user prompt
+     * @param sessionId   optional session ID
+     * @param runId       optional per-execution UUID — set for stateful agents
+     * @return server response containing workflowId
+     */
+    public Map<String, Object> startAgent(
+            Map<String, Object> agentConfig, String prompt, String sessionId, String runId) {
         Map<String, Object> body = new HashMap<>();
         body.put("agentConfig", agentConfig);
         body.put("prompt", prompt);
         if (sessionId != null && !sessionId.isEmpty()) {
             body.put("sessionId", sessionId);
+        }
+        if (runId != null && !runId.isEmpty()) {
+            body.put("runId", runId);
         }
 
         return post("/api/agent/start", body);
@@ -118,8 +140,29 @@ public class HttpApi {
      */
     @SuppressWarnings("unchecked")
     public Map<String, Object> pollTask(String taskType) {
+        return pollTask(taskType, null);
+    }
+
+    /**
+     * Poll for a pending task of the given type, scoped to a worker domain.
+     *
+     * <p>When {@code domain} is non-null, the poll is sent with a
+     * {@code ?domain=...} query parameter so the server only returns tasks
+     * routed to that worker domain. This is the read-side complement of
+     * {@code startAgent(..., runId)} — stateful tasks routed to a per-execution
+     * domain are only visible to pollers registered under that same domain.
+     *
+     * @param taskType the task type to poll
+     * @param domain   optional worker domain (Conductor taskToDomain value)
+     * @return task data or null if no pending task
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> pollTask(String taskType, String domain) {
         try {
             String url = config.getServerUrl() + "/api/tasks/poll/" + taskType;
+            if (domain != null && !domain.isEmpty()) {
+                url += "?domain=" + java.net.URLEncoder.encode(domain, java.nio.charset.StandardCharsets.UTF_8);
+            }
             HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .timeout(Duration.ofSeconds(10))

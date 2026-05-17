@@ -154,7 +154,16 @@ public class AgentRuntime implements AutoCloseable {
      * @return a CompletableFuture that resolves to an AgentHandle
      */
     public CompletableFuture<AgentHandle> startAsync(Agent agent, String prompt) {
-        prepareWorkers(agent);
+        // Stateful agents get a per-execution domain UUID. The server uses it
+        // as taskToDomain for every worker task in this run; local workers are
+        // registered under the same domain so they poll the per-execution
+        // queue. Without this, concurrent stateful runs share a single domain
+        // queue and can dequeue each other's tasks.
+        // Mirrors Python runtime._has_stateful_tools + run_id = uuid.uuid4().
+        final String runId = hasStatefulTools(agent)
+            ? java.util.UUID.randomUUID().toString().replace("-", "")
+            : null;
+        prepareWorkers(agent, runId);
         workerManager.startAll();
 
         return CompletableFuture.supplyAsync(() -> {
@@ -163,12 +172,23 @@ public class AgentRuntime implements AutoCloseable {
 
             logger.debug("Starting agent '{}' with prompt: {}", agent.getName(), prompt);
 
-            Map<String, Object> response = httpApi.startAgent(agentConfig, prompt, sessionId);
+            Map<String, Object> response = httpApi.startAgent(agentConfig, prompt, sessionId, runId);
             String workflowId = extractWorkflowId(response);
 
             logger.info("Agent '{}' started with workflow ID: {}", agent.getName(), workflowId);
             return new AgentHandle(workflowId, httpApi);
         });
+    }
+
+    private static boolean hasStatefulTools(Agent agent) {
+        if (agent.isStateful()) return true;
+        if (agent.getAgents() != null) {
+            for (Agent sub : agent.getAgents()) {
+                if (hasStatefulTools(sub)) return true;
+            }
+        }
+        if (agent.getRouter() != null && hasStatefulTools(agent.getRouter())) return true;
+        return false;
     }
 
     /**
@@ -299,6 +319,24 @@ public class AgentRuntime implements AutoCloseable {
      *
      * @param agent the agent (root or sub-agent)
      */
+    /**
+     * Like {@link #prepareWorkers(Agent)} but registers every worker under the
+     * given per-execution domain. Used for stateful agents so concurrent
+     * runs don't share a worker queue.
+     */
+    public void prepareWorkers(Agent agent, String domain) {
+        if (domain == null || domain.isEmpty()) {
+            prepareWorkers(agent);
+            return;
+        }
+        workerManager.setCurrentDomain(domain);
+        try {
+            prepareWorkers(agent);
+        } finally {
+            workerManager.setCurrentDomain(null);
+        }
+    }
+
     public void prepareWorkers(Agent agent) {
         // Register tools for this agent
         for (ToolDef tool : agent.getTools()) {
