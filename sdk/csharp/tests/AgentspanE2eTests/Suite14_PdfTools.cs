@@ -10,6 +10,7 @@
 
 using System.Text.Json.Nodes;
 using Xunit;
+using Agentspan.Examples;
 
 namespace Agentspan.E2eTests;
 

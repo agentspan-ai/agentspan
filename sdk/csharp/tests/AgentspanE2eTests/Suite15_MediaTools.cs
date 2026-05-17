@@ -11,6 +11,7 @@
 // generation pipeline; gated by OPENAI_API_KEY availability.
 
 using Xunit;
+using Agentspan.Examples;
 
 namespace Agentspan.E2eTests;
 
