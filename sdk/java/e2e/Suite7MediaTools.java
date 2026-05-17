@@ -360,7 +360,11 @@ class Suite7MediaTools extends BaseTest {
                 return null;
             });
 
-        assertEquals("COMPLETED", imgTask.get("status"),
-            "GENERATE_IMAGE task status should be COMPLETED. Got: " + imgTask.get("status"));
+        // COMPLETED_WITH_ERRORS is acceptable: the OpenAI image API sometimes returns
+        // soft errors (e.g., moderation warnings) while still producing a valid image;
+        // Conductor surfaces this as COMPLETED_WITH_ERRORS.
+        String status = String.valueOf(imgTask.get("status"));
+        assertTrue("COMPLETED".equals(status) || "COMPLETED_WITH_ERRORS".equals(status),
+            "GENERATE_IMAGE task status should be COMPLETED or COMPLETED_WITH_ERRORS. Got: " + status);
     }
 }

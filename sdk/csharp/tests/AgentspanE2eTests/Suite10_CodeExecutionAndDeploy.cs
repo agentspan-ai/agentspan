@@ -237,9 +237,12 @@ public sealed class Suite10_CodeExecutionAndDeploy
             Model               = Settings.LlmModel,
             LocalCodeExecution  = true,
             AllowedLanguages    = ["python", "bash"],
+            MaxTurns            = 5,
             Instructions =
-                "You can execute code. When asked to compute something, " +
-                "write Python that prints the result and execute it using execute_code.",
+                "You can execute code using the execute_code tool. " +
+                "When asked to run Python code, you MUST call execute_code with " +
+                "language='python' and the EXACT code provided. Do not compute mentally — " +
+                "always use the execute_code tool.",
         };
 
         await using var runtime = new AgentRuntime();

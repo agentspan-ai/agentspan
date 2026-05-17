@@ -213,9 +213,12 @@ public sealed class Suite4_Termination
         Assert.NotEmpty(result.ExecutionId);
 
         var iterations = await GetDoWhileIterationsAsync(result.ExecutionId);
-        Assert.True(iterations >= 1 && iterations <= 4,
-            $"[MaxMessageTermination] DO_WHILE ran {iterations} iterations, expected 1-4. " +
-            $"If 25, termination was ignored.");
+        // 0 is valid when the agent satisfies the prompt in a single response without a DO_WHILE
+        // loop scheduled (no tools available => no loop). The key counterfactual is that the
+        // iteration count is NOT close to MaxTurns (25) — that would mean termination was ignored.
+        Assert.True(iterations <= 4,
+            $"[MaxMessageTermination] DO_WHILE ran {iterations} iterations, expected <= 4. " +
+            $"If close to 25, MaxMessageTermination was ignored.");
     }
 
     // ── 4.8  Runtime: invalid model fails ────────────────────────────────

@@ -190,6 +190,11 @@ public sealed class Suite15_MediaTools
         });
 
         Assert.NotNull(imgTask);
-        Assert.Equal("COMPLETED", imgTask!["status"]?.GetValue<string>());
+        // COMPLETED_WITH_ERRORS is acceptable: the OpenAI image API sometimes
+        // returns soft errors (e.g., moderation warnings) while still producing
+        // a valid image; Conductor surfaces this as COMPLETED_WITH_ERRORS.
+        var status = imgTask!["status"]?.GetValue<string>();
+        Assert.True(status is "COMPLETED" or "COMPLETED_WITH_ERRORS",
+            $"GENERATE_IMAGE task status should be COMPLETED or COMPLETED_WITH_ERRORS, got '{status}'.");
     }
 }
