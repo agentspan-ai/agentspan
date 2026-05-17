@@ -319,4 +319,76 @@ public sealed class Suite13_StatefulDomain
         Assert.Equal("s13_stateful_a", nameA);
         Assert.Equal("s13_stateful_b", nameB);
     }
+
+    // ── 13.7  Runtime: concurrent stateful executions get isolated domains ──
+    //
+    // Ports Python suite14 test_concurrent_stateful_isolation. Two stateful
+    // executions, each on its own runtime, must produce DIFFERENT execution
+    // IDs and DIFFERENT domain UUIDs (workflow.taskToDomain values must be
+    // disjoint).
+
+    [SkippableFact]
+    public async Task TwoStatefulAgents_ConcurrentRuns_HaveDisjointDomains()
+    {
+        _fixture.RequireServer();
+
+        static Agent MakeAgent(string suffix, IReadOnlyList<ToolDef> tools) => new($"s13_concurrent_{suffix}")
+        {
+            Model        = Settings.LlmModel,
+            Stateful     = true,
+            MaxTurns     = 3,
+            Instructions = "Call echo_tool with message='concurrent_test'. Respond with the tool result.",
+            Tools        = tools.ToList(),
+        };
+
+        var toolsA = ToolRegistry.FromInstance(new S13EchoToolHost());
+        var toolsB = ToolRegistry.FromInstance(new S13EchoToolHost());
+
+        AgentResult r1;
+        AgentResult r2;
+        using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120)))
+        await using (var rt1 = new AgentRuntime())
+        {
+            r1 = await rt1.RunAsync(MakeAgent("a", toolsA), "Run 1: call echo_tool", ct: cts.Token);
+        }
+        using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120)))
+        await using (var rt2 = new AgentRuntime())
+        {
+            r2 = await rt2.RunAsync(MakeAgent("b", toolsB), "Run 2: call echo_tool", ct: cts.Token);
+        }
+
+        Assert.True(r1.IsSuccess, $"Run 1: {r1.Status} {r1.Error}");
+        Assert.True(r2.IsSuccess, $"Run 2: {r2.Status} {r2.Error}");
+        Assert.NotEqual(r1.ExecutionId, r2.ExecutionId);
+
+        var ttd1 = await GetTaskToDomainAsync(r1.ExecutionId);
+        var ttd2 = await GetTaskToDomainAsync(r2.ExecutionId);
+        Assert.NotEmpty(ttd1);
+        Assert.NotEmpty(ttd2);
+
+        var domains1 = new HashSet<string>(ttd1.Values);
+        var domains2 = new HashSet<string>(ttd2.Values);
+        Assert.False(domains1.Overlaps(domains2),
+            $"Concurrent stateful runs should have disjoint domains; Run1={string.Join(",", domains1)}, Run2={string.Join(",", domains2)}");
+    }
+
+    private async Task<Dictionary<string, string>> GetTaskToDomainAsync(string executionId)
+    {
+        var wf = await _fixture.FetchWorkflowAsync(executionId);
+        var ttd = wf?["taskToDomain"]?.AsObject();
+        var result = new Dictionary<string, string>();
+        if (ttd is null) return result;
+        foreach (var kv in ttd)
+        {
+            var value = kv.Value?.GetValue<string>() ?? "";
+            if (!string.IsNullOrEmpty(value)) result[kv.Key] = value;
+        }
+        return result;
+    }
+}
+
+internal sealed class S13EchoToolHost
+{
+    [Tool("Echo back the given message.")]
+    public string EchoTool(string message) => $"echo:{message}";
 }

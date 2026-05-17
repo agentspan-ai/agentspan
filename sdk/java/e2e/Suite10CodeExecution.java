@@ -5,6 +5,8 @@
 import ai.agentspan.Agent;
 import ai.agentspan.AgentRuntime;
 import ai.agentspan.enums.AgentStatus;
+import ai.agentspan.execution.DockerCodeExecutor;
+import ai.agentspan.execution.ExecutionResult;
 import ai.agentspan.model.AgentResult;
 import org.junit.jupiter.api.*;
 
@@ -14,6 +16,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * Suite 9: Local Code Execution — plan-level and runtime tests for the
@@ -438,5 +441,90 @@ class Suite10CodeExecution extends BaseTest {
         }
         // If no execute_code task found, the agent may have failed before reaching the tool —
         // the terminal status assertion above is the primary counterfactual in that case.
+    }
+
+    // ── Docker executor tests ─────────────────────────────────────────────
+    //
+    // The Java SDK exposes DockerCodeExecutor as a standalone helper; it is
+    // not currently wired through Agent.builder() the way it is in Python.
+    // These tests exercise the executor directly so we still validate the
+    // Docker-sandboxed execution path for parity with Python's
+    // test_docker_python_execution / test_docker_network_disabled.
+
+    private static boolean dockerAvailable() {
+        try {
+            Process p = new ProcessBuilder("docker", "--version")
+                .redirectErrorStream(true).start();
+            boolean finished = p.waitFor(5, TimeUnit.SECONDS);
+            return finished && p.exitValue() == 0;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Direct DockerCodeExecutor run: a Python script prints a value that we can
+     * algorithmically check.
+     *
+     * Ports Python {@code test_docker_python_execution} at the executor level
+     * (the Java SDK doesn't yet thread CodeExecutionConfig into Agent.builder()).
+     *
+     * COUNTERFACTUAL: the assertion is on '3066' specifically — if the script
+     * silently doesn't run, stdout would be empty and the test would fail.
+     */
+    @Test
+    @Order(7)
+    @Timeout(value = 300, unit = TimeUnit.SECONDS)
+    void test_docker_executor_runs_python() {
+        assumeTrue(dockerAvailable(), "Docker is not available — skipping Docker executor test.");
+
+        DockerCodeExecutor executor = new DockerCodeExecutor("python:3.12-slim", "python", 30);
+        ExecutionResult result = executor.execute("print(42 * 73)");
+
+        assertEquals(0, result.getExitCode(),
+            "DockerCodeExecutor must exit 0 for valid Python. output=" + result.getOutput()
+            + " error=" + result.getError()
+            + ". COUNTERFACTUAL: a broken docker invocation would produce a non-zero exit code.");
+        assertTrue(result.getOutput().contains("3066"),
+            "DockerCodeExecutor stdout must contain '3066' (42*73). Got output='" + result.getOutput()
+            + "', error='" + result.getError() + "'"
+            + ". COUNTERFACTUAL: empty/wrong stdout means the script never ran in the container.");
+        assertFalse(result.isTimedOut(),
+            "DockerCodeExecutor must NOT time out for a one-line print. timedOut=true is wrong.");
+    }
+
+    /**
+     * Direct DockerCodeExecutor with default flags: the container runs with --network=none,
+     * so attempting an outbound HTTP request must fail.
+     *
+     * Ports Python {@code test_docker_network_disabled}.
+     *
+     * COUNTERFACTUAL: this MUST fail (exitCode != 0 or stderr mentions DNS/network). If
+     * the script succeeded, the --network none isolation would be broken.
+     */
+    @Test
+    @Order(8)
+    @Timeout(value = 300, unit = TimeUnit.SECONDS)
+    void test_docker_executor_network_disabled() {
+        assumeTrue(dockerAvailable(), "Docker is not available — skipping Docker network test.");
+
+        DockerCodeExecutor executor = new DockerCodeExecutor("python:3.12-slim", "python", 20);
+        String code =
+            "import urllib.request, sys\n"
+            + "try:\n"
+            + "    urllib.request.urlopen('http://example.com', timeout=5)\n"
+            + "    print('NET_OK')\n"
+            + "except Exception as e:\n"
+            + "    print('NET_FAIL:' + type(e).__name__, file=sys.stderr)\n"
+            + "    sys.exit(2)\n";
+        ExecutionResult result = executor.execute(code);
+
+        assertNotEquals(0, result.getExitCode(),
+            "DockerCodeExecutor with --network=none must REFUSE outbound HTTP. "
+            + "output=" + result.getOutput() + " error=" + result.getError()
+            + ". COUNTERFACTUAL: a zero exit code means network isolation isn't enforced.");
+        assertFalse(result.getOutput().contains("NET_OK"),
+            "stdout must NOT contain 'NET_OK' — the urlopen call must fail under --network=none. "
+            + "Got output='" + result.getOutput() + "'.");
     }
 }

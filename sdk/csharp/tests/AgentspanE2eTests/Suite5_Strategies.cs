@@ -219,4 +219,172 @@ public sealed class Suite5_Strategies
         var strategy = agentDef!["strategy"]?.GetValue<string>();
         Assert.Equal("router", strategy, ignoreCase: true);
     }
+
+    // ── 5.7  Runtime: sequential strategy executes both sub-agents ───────
+    //
+    // Ports Python suite9 test_sequential_execution. Validates SUB_WORKFLOW
+    // tasks for each child are COMPLETED.
+
+    [SkippableFact]
+    public async Task SequentialStrategy_RuntimeExecutesBothChildren()
+    {
+        _fixture.RequireServer();
+
+        var mathAgent = new Agent("s5_seq_math_rt")
+        {
+            Model        = Settings.LlmModel,
+            Instructions = "You do math. Always include the digits of the result in your final response.",
+        };
+        var textAgent = new Agent("s5_seq_text_rt")
+        {
+            Model        = Settings.LlmModel,
+            Instructions = "You manipulate text. Reverse the given word and include the reversed form in your response.",
+        };
+
+        var parent = new Agent("s5_seq_rt")
+        {
+            Model        = Settings.LlmModel,
+            Instructions =
+                "You orchestrate two agents sequentially. " +
+                "First delegate math to s5_seq_math_rt, then text to s5_seq_text_rt.",
+            Agents       = [mathAgent, textAgent],
+            Strategy     = Strategy.Sequential,
+        };
+
+        await using var runtime = new AgentRuntime();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(150));
+        var result = await runtime.RunAsync(
+            parent,
+            "First compute 3+4, then reverse the word hello",
+            ct: cts.Token);
+
+        Assert.True(result.IsSuccess,
+            $"[Sequential] Expected COMPLETED, got '{result.Status}'. Error: {result.Error}");
+
+        var (mathDone, textDone) = await CountChildrenCompletedAsync(result.ExecutionId, ["math", "text"]);
+        Assert.True(mathDone, "[Sequential] math sub-workflow not COMPLETED.");
+        Assert.True(textDone, "[Sequential] text sub-workflow not COMPLETED.");
+    }
+
+    // ── 5.8  Runtime: parallel strategy forks both children ──────────────
+    //
+    // Ports Python suite9 test_parallel_execution. Validates FORK task is
+    // present and both child sub-workflows COMPLETED.
+
+    [SkippableFact]
+    public async Task ParallelStrategy_RuntimeForksBothChildren()
+    {
+        _fixture.RequireServer();
+
+        var mathAgent = new Agent("s5_par_math_rt")
+        {
+            Model        = Settings.LlmModel,
+            Instructions = "You do math. State the numeric result clearly.",
+        };
+        var textAgent = new Agent("s5_par_text_rt")
+        {
+            Model        = Settings.LlmModel,
+            Instructions = "You manipulate text. Reverse the given word.",
+        };
+
+        var parent = new Agent("s5_par_rt")
+        {
+            Model        = Settings.LlmModel,
+            Instructions =
+                "Delegate math to s5_par_math_rt and text to s5_par_text_rt simultaneously.",
+            Agents       = [mathAgent, textAgent],
+            Strategy     = Strategy.Parallel,
+        };
+
+        await using var runtime = new AgentRuntime();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(150));
+        var result = await runtime.RunAsync(
+            parent,
+            "Compute 3+4 AND reverse the word hello",
+            ct: cts.Token);
+
+        Assert.True(result.IsSuccess,
+            $"[Parallel] Expected COMPLETED, got '{result.Status}'. Error: {result.Error}");
+
+        var wf = await _fixture.FetchWorkflowAsync(result.ExecutionId);
+        var tasks = wf?["tasks"]?.AsArray();
+        Assert.NotNull(tasks);
+        var hasFork = tasks!.Any(t =>
+        {
+            var tt = t?["taskType"]?.GetValue<string>() ?? "";
+            return tt == "FORK" || tt == "FORK_JOIN";
+        });
+        Assert.True(hasFork, "[Parallel] Expected FORK/FORK_JOIN task in workflow.");
+
+        var (mathDone, textDone) = await CountChildrenCompletedAsync(result.ExecutionId, ["math", "text"]);
+        Assert.True(mathDone, "[Parallel] math sub-workflow not COMPLETED.");
+        Assert.True(textDone, "[Parallel] text sub-workflow not COMPLETED.");
+    }
+
+    // ── 5.9  Runtime: handoff routes to at least one child ───────────────
+    //
+    // Ports Python suite9 test_handoff_execution. At least one SUB_WORKFLOW
+    // must be COMPLETED.
+
+    [SkippableFact]
+    public async Task HandoffStrategy_RuntimeRoutesToChild()
+    {
+        _fixture.RequireServer();
+
+        var mathAgent = new Agent("s5_hand_math_rt")
+        {
+            Model        = Settings.LlmModel,
+            Instructions = "You do math. State the numeric result.",
+        };
+        var textAgent = new Agent("s5_hand_text_rt")
+        {
+            Model        = Settings.LlmModel,
+            Instructions = "You manipulate text. Reverse the given word.",
+        };
+
+        var parent = new Agent("s5_hand_rt")
+        {
+            Model        = Settings.LlmModel,
+            Instructions =
+                "You route requests. If the user needs math, delegate to s5_hand_math_rt. " +
+                "If the user needs text manipulation, delegate to s5_hand_text_rt.",
+            Agents       = [mathAgent, textAgent],
+            Strategy     = Strategy.Handoff,
+        };
+
+        await using var runtime = new AgentRuntime();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(150));
+        var result = await runtime.RunAsync(parent, "I need to reverse the word hello", ct: cts.Token);
+
+        Assert.True(
+            result.Status is Status.Completed or Status.Failed or Status.Terminated,
+            $"[Handoff] Expected terminal status, got '{result.Status}'.");
+
+        var wf = await _fixture.FetchWorkflowAsync(result.ExecutionId);
+        var subWfs = wf?["tasks"]?.AsArray()
+            .Where(t => t?["taskType"]?.GetValue<string>() == "SUB_WORKFLOW")
+            .ToList() ?? [];
+        var completed = subWfs.Count(t => t?["status"]?.GetValue<string>() == "COMPLETED");
+        Assert.True(completed >= 1,
+            $"[Handoff] Expected >=1 COMPLETED SUB_WORKFLOW, got {completed}.");
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────
+
+    /// <summary>Walk SUB_WORKFLOW tasks; return (any ref matches first marker COMPLETED,
+    /// any ref matches second marker COMPLETED).</summary>
+    private async Task<(bool, bool)> CountChildrenCompletedAsync(string executionId, string[] markers)
+    {
+        var wf = await _fixture.FetchWorkflowAsync(executionId);
+        var subWfs = wf?["tasks"]?.AsArray()
+            .Where(t => t?["taskType"]?.GetValue<string>() == "SUB_WORKFLOW")
+            .ToList() ?? [];
+        bool first = subWfs.Any(t =>
+            t?["status"]?.GetValue<string>() == "COMPLETED" &&
+            (t["referenceTaskName"]?.GetValue<string>() ?? "").ToLowerInvariant().Contains(markers[0]));
+        bool second = subWfs.Any(t =>
+            t?["status"]?.GetValue<string>() == "COMPLETED" &&
+            (t["referenceTaskName"]?.GetValue<string>() ?? "").ToLowerInvariant().Contains(markers[1]));
+        return (first, second);
+    }
 }

@@ -222,6 +222,101 @@ public sealed class Suite10_CodeExecutionAndDeploy
             () => runtime.RunByNameAsync("s10_does_not_exist_xyz", "?"));
     }
 
+    // ── 10.9  Runtime: local Python execution produces expected output ───
+    //
+    // Ports Python suite10 test_local_python_execution. Asserts the
+    // execute_code task ran and the stdout contains '3066'.
+
+    [SkippableFact]
+    public async Task LocalPython_RuntimeProducesExpectedOutput()
+    {
+        _fixture.RequireServer();
+
+        var agent = new Agent("s10_local_py_rt")
+        {
+            Model               = Settings.LlmModel,
+            LocalCodeExecution  = true,
+            AllowedLanguages    = ["python", "bash"],
+            Instructions =
+                "You can execute code. When asked to compute something, " +
+                "write Python that prints the result and execute it using execute_code.",
+        };
+
+        await using var runtime = new AgentRuntime();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+        var result = await runtime.RunAsync(
+            agent,
+            "Run this exact Python code using execute_code: print(42 * 73)",
+            ct: cts.Token);
+
+        Assert.True(result.IsSuccess,
+            $"[LocalPy] Expected COMPLETED, got '{result.Status}'. Error: {result.Error}");
+
+        var execTasks = await FindExecuteCodeTasksAsync(result.ExecutionId);
+        Assert.True(execTasks.Count >= 1, "[LocalPy] No execute_code tasks in workflow.");
+        Assert.True(execTasks.Any(t => (t["outputData"]?.ToString() ?? "").Contains("3066")),
+            "[LocalPy] '3066' not found in any execute_code task outputData.");
+    }
+
+    // ── 10.10  Runtime: short timeout kills long-running code ────────────
+    //
+    // Ports Python suite10 test_local_timeout. Configures the executor with
+    // a 3-second timeout against a sleep(30) script and asserts the stdout
+    // never contains "done".
+
+    [SkippableFact]
+    public async Task LocalTimeout_KillsLongRunningCode()
+    {
+        _fixture.RequireServer();
+
+        var agent = new Agent("s10_local_timeout_rt")
+        {
+            Model              = Settings.LlmModel,
+            MaxTurns           = 2,
+            LocalCodeExecution = true,
+            CodeExecution      = new CodeExecutionConfig(
+                AllowedLanguages: ["python"],
+                Timeout: 3),
+            Instructions =
+                "You execute Python code. When asked to run code, execute it via execute_code " +
+                "exactly as provided. Do not modify the code.",
+        };
+
+        await using var runtime = new AgentRuntime();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(75));
+        var result = await runtime.RunAsync(
+            agent,
+            "Run this exact Python code using execute_code: import time; time.sleep(30); print(\"done\")",
+            ct: cts.Token);
+
+        // Agent may end with various terminal statuses; the assertion below is the real one.
+        Assert.NotEmpty(result.ExecutionId);
+
+        var execTasks = await FindExecuteCodeTasksAsync(result.ExecutionId);
+        foreach (var task in execTasks)
+        {
+            var output = task["outputData"]?.ToString() ?? "";
+            Assert.DoesNotContain("\"done\"", output);
+        }
+    }
+
+    private async Task<List<JsonNode>> FindExecuteCodeTasksAsync(string executionId)
+    {
+        var wf = await _fixture.FetchWorkflowAsync(executionId);
+        var tasks = wf?["tasks"]?.AsArray();
+        var matched = new List<JsonNode>();
+        if (tasks is null) return matched;
+        foreach (var t in tasks)
+        {
+            if (t is null) continue;
+            var ref_ = t["referenceTaskName"]?.GetValue<string>() ?? "";
+            var def  = t["taskDefName"]?.GetValue<string>() ?? "";
+            if (ref_.Contains("execute_code") || def.Contains("execute_code"))
+                matched.Add(t);
+        }
+        return matched;
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static List<Agent> DiscoverAgents(Assembly assembly, Func<Type, bool>? filter = null)

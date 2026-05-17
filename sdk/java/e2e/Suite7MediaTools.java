@@ -4,6 +4,7 @@
 
 import ai.agentspan.Agent;
 import ai.agentspan.AgentRuntime;
+import ai.agentspan.model.AgentResult;
 import ai.agentspan.model.ToolDef;
 import ai.agentspan.tools.MediaTools;
 import org.junit.jupiter.api.*;
@@ -14,6 +15,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * Suite 16: Media Tools — structural plan() assertions for {@link MediaTools}.
@@ -293,5 +295,72 @@ class Suite7MediaTools extends BaseTest {
             "Plan must not have generate_* toolType when no media tool was added. Got: "
             + tools.stream().map(t -> t.get("name") + "[" + t.get("toolType") + "]").collect(Collectors.toList())
             + ". COUNTERFACTUAL: if media types are always emitted, all plans would have them.");
+    }
+
+    /**
+     * Runtime: image generation via OpenAI provider completes end-to-end.
+     *
+     * Ports Python {@code test_image_openai} (suite7). Gated on OPENAI_API_KEY because
+     * the GENERATE_IMAGE task calls the real OpenAI image API. Validates:
+     *   - the workflow contains a COMPLETED GENERATE_IMAGE task
+     *   - the agent run terminates successfully
+     *
+     * COUNTERFACTUAL: a counterpart in this suite (test_no_media_tool_means_no_generate_in_plan)
+     * confirms the server does NOT spawn GENERATE_IMAGE when no image tool is attached, so
+     * this test failing means image generation routing is broken — not that GENERATE_IMAGE
+     * always appears.
+     */
+    @Test
+    @Order(7)
+    @SuppressWarnings("unchecked")
+    void test_image_generation_openai_runtime_completes() {
+        String apiKey = System.getenv("OPENAI_API_KEY");
+        assumeTrue(apiKey != null && !apiKey.isEmpty(),
+            "OPENAI_API_KEY not set — skipping live image generation test.");
+
+        ToolDef img = MediaTools.imageTool(
+            "generate_image",
+            "Generate an image from a text prompt.",
+            "openai",
+            "gpt-image-1");
+
+        Agent agent = Agent.builder()
+            .name("e2e_s16_image_openai_runtime")
+            .model(MODEL)
+            .instructions(
+                "You generate images. When the user asks for an image, call generate_image "
+                + "with the user's prompt.")
+            .tools(List.of(img))
+            .build();
+
+        AgentResult result = runtime.run(
+            agent,
+            "Generate an image of a single red apple on a white background.");
+
+        assertTrue(result.isSuccess(),
+            "Agent run did not succeed: status=" + result.getStatus()
+            + ", error=" + result.getError());
+
+        Map<String, Object> wf = getWorkflow(result.getWorkflowId());
+        List<Map<String, Object>> tasks = (List<Map<String, Object>>) wf.get("tasks");
+        assertNotNull(tasks, "Workflow has no tasks. wfId=" + result.getWorkflowId());
+
+        Map<String, Object> imgTask = tasks.stream()
+            .filter(t -> {
+                String tt = String.valueOf(t.getOrDefault("taskType", ""));
+                String tdn = String.valueOf(t.getOrDefault("taskDefName", ""));
+                return tt.contains("GENERATE_IMAGE") || tdn.contains("generate_image");
+            })
+            .findFirst()
+            .orElseGet(() -> {
+                fail("No GENERATE_IMAGE task found in workflow. Task types: "
+                    + tasks.stream().map(t -> t.get("taskType")).collect(Collectors.toList())
+                    + ". COUNTERFACTUAL: an image tool MUST cause the server to dispatch a "
+                    + "GENERATE_IMAGE system task.");
+                return null;
+            });
+
+        assertEquals("COMPLETED", imgTask.get("status"),
+            "GENERATE_IMAGE task status should be COMPLETED. Got: " + imgTask.get("status"));
     }
 }
