@@ -66,6 +66,12 @@ public sealed class ToolAttribute : Attribute
     public int TimeoutSeconds { get; set; }
     /// <summary>Credential names that will be resolved and injected as env vars.</summary>
     public string[] Credentials { get; set; } = [];
+    /// <summary>
+    /// Per-tool stateful flag. Marks this tool as requiring domain-routed
+    /// polling — the runtime will generate a runId and request a per-execution
+    /// worker domain on start. Mirrors Python's <c>@tool(stateful=True)</c>.
+    /// </summary>
+    public bool Stateful { get; set; }
 
     public ToolAttribute() { }
     public ToolAttribute(string description) { Description = description; }
@@ -83,6 +89,13 @@ public sealed class ToolDef
     public bool External { get; init; }
     public int? TimeoutSeconds { get; init; }
     public string[] Credentials { get; init; } = [];
+    /// <summary>
+    /// Per-tool stateful flag. When true, the runtime treats the parent agent as
+    /// stateful for the purpose of domain-routed polling — a fresh runId is
+    /// generated and the server assigns a worker domain to this task. Mirrors
+    /// Python's <c>@tool(stateful=True)</c>.
+    /// </summary>
+    public bool Stateful { get; init; }
     /// <summary>Tool type: "worker" (default), "agent_tool", "external", or media types.</summary>
     internal string? ToolType { get; init; }
     /// <summary>For agent_tool: the wrapped agent and its runtime config.</summary>
@@ -108,6 +121,7 @@ public sealed class ToolDef
         External                   = External,
         TimeoutSeconds             = TimeoutSeconds,
         Credentials                = Credentials,
+        Stateful                   = Stateful,
         ToolType                   = ToolType,
         WrappedAgent               = WrappedAgent,
         AgentToolRetryCount        = AgentToolRetryCount,
@@ -838,6 +852,7 @@ public static class ToolRegistry
                 ApprovalRequired = attr.ApprovalRequired,
                 TimeoutSeconds = attr.TimeoutSeconds > 0 ? attr.TimeoutSeconds : null,
                 Credentials = attr.Credentials,
+                Stateful = attr.Stateful,
                 Handler = BuildHandler(instance, method),
             });
         }

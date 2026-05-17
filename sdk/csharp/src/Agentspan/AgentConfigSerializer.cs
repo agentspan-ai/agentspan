@@ -263,8 +263,9 @@ internal static class AgentConfigSerializer
             ["toolType"]    = toolType,
         };
 
-        // Stateful routing: propagate agent.Stateful to worker tools
-        if (agentStateful && toolType is "worker" or "external")
+        // Stateful routing: emit stateful=true if the agent is stateful OR the
+        // tool itself is marked stateful (mirrors Python @tool(stateful=True)).
+        if ((agentStateful || tool.Stateful) && toolType is "worker" or "external")
             t["stateful"] = true;
 
         if (tool.ApprovalRequired)        t["approvalRequired"] = true;

@@ -182,6 +182,11 @@ public class AgentRuntime implements AutoCloseable {
 
     private static boolean hasStatefulTools(Agent agent) {
         if (agent.isStateful()) return true;
+        if (agent.getTools() != null) {
+            for (ToolDef t : agent.getTools()) {
+                if (t != null && t.isStateful()) return true;
+            }
+        }
         if (agent.getAgents() != null) {
             for (Agent sub : agent.getAgents()) {
                 if (hasStatefulTools(sub)) return true;

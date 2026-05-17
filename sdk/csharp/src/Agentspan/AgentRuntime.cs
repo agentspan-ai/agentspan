@@ -305,6 +305,8 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
     private static bool HasStatefulTools(Agent agent)
     {
         if (agent.Stateful) return true;
+        foreach (var t in agent.Tools)
+            if (t is not null && t.Stateful) return true;
         foreach (var sub in agent.Agents)
             if (HasStatefulTools(sub)) return true;
         if (agent.Router is not null && HasStatefulTools(agent.Router)) return true;

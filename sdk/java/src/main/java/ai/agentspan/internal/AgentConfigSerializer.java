@@ -375,7 +375,7 @@ public class AgentConfigSerializer {
         toolMap.put("name", tool.getName());
         toolMap.put("description", tool.getDescription());
         toolMap.put("inputSchema", tool.getInputSchema());
-        if (agentStateful) {
+        if (agentStateful || tool.isStateful()) {
             toolMap.put("stateful", true);
         }
         if ("worker".equals(tool.getToolType())) {
