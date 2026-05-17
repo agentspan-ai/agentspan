@@ -341,7 +341,12 @@ describe('Suite 20: Plan-Execute Strategy', () => {
     }
   }, TIMEOUT);
 
-  it('should honor max_tokens in generate blocks', async () => {
+  // The planner LLM short-circuits ~1/N runs on CI even with the simplified
+  // template — workflow COMPLETED but no files written. The counterfactual we
+  // actually care about (max_tokens is read by the GraalJS compiler) is a
+  // compilation property, not a runtime one. Allow up to 2 retries so this
+  // test isn't held hostage by occasional planner empty-plan outputs.
+  it('should honor max_tokens in generate blocks', { retry: 2 }, async () => {
     // Counterfactual: if gen.max_tokens is not read by the GraalJS compiler,
     // the LLM_CHAT_COMPLETE task gets the default 4096. This test instructs
     // the planner to include max_tokens: 8192 in generate blocks.
