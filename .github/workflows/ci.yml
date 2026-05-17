@@ -327,3 +327,56 @@ jobs:
           name: java-e2e-results
           path: sdk/java/build/reports/tests/test/
           retention-days: 14
+
+  # ── C# E2E Tests ───────────────────────────────────────────────────
+  # 101 tests across 13 suites at sdk/csharp/tests/AgentspanE2eTests.
+  # Previously runnable only via the manual ``ci-csharp-sdk-e2e.yml``
+  # workflow (``workflow_dispatch``), so regressions could land
+  # unnoticed. Mirrors the python-e2e / typescript-e2e / java-e2e jobs
+  # — same build-server prerequisite, same server-on-:6767 startup,
+  # same OPENAI_API_KEY env.
+  csharp-e2e:
+    runs-on: ubuntu-latest
+    needs: [build-server]
+    timeout-minutes: 45
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      AGENTSPAN_SERVER_URL: http://localhost:6767/api
+      AGENTSPAN_LLM_MODEL: openai/gpt-4o-mini
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'corretto'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Download server JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: server-jar
+          path: server/build/libs/
+
+      - name: Start server
+        run: |
+          java -jar server/build/libs/agentspan-runtime.jar --server.port=6767 &
+          for i in $(seq 1 30); do curl -sf http://localhost:6767/health && break; sleep 2; done
+
+      - name: Run C# e2e suites
+        working-directory: sdk/csharp
+        run: |
+          dotnet test tests/AgentspanE2eTests/AgentspanE2eTests.csproj \
+            --configuration Release \
+            --logger "console;verbosity=normal" \
+            --logger "trx;LogFileName=csharp-e2e.trx"
+
+      - name: Upload C# e2e results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: csharp-e2e-results
+          path: sdk/csharp/tests/AgentspanE2eTests/TestResults/*.trx
+          retention-days: 14
