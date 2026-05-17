@@ -108,6 +108,70 @@ jobs:
       - name: Run unit tests
         run: npx vitest run tests/unit/
 
+  # ── Java SDK Unit Tests ────────────────────────────────────────────
+  # Runs the Java SDK core + Spring auto-configuration unit tests in one
+  # job. `./gradlew test` excludes e2e tests by default (see build.gradle
+  # — excludeTags 'e2e' unless -Pe2e is set), so this is fast and needs
+  # no live server. The :spring:test target adds Spring Boot
+  # auto-configuration coverage for AgentConfig/AgentRuntime beans and
+  # `agentspan.*` property overrides.
+  java-sdk-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/java
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: gradle
+      - name: Run Java SDK + Spring unit tests
+        run: ./gradlew test :spring:test
+      - name: Upload Java SDK test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-sdk-test-reports
+          path: |
+            sdk/java/build/reports/tests/test/
+            sdk/java/spring/build/reports/tests/test/
+          retention-days: 7
+
+  # ── C# SDK Unit Tests ──────────────────────────────────────────────
+  # Builds the C# solution (Release) and runs the framework-adapter unit
+  # tests (OpenAI, GoogleADK, SemanticKernel). The AgentspanE2eTests
+  # project is excluded by name — those run in csharp-e2e against a live
+  # server.
+  csharp-sdk-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/csharp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build solution
+        run: dotnet build Agentspan.sln --configuration Release
+      - name: Run unit tests
+        run: |
+          dotnet test Agentspan.sln \
+            --configuration Release \
+            --no-build \
+            --filter "FullyQualifiedName!~AgentspanE2eTests" \
+            --logger "console;verbosity=normal" \
+            --logger "trx;LogFileName=test-results.trx"
+      - name: Upload C# SDK test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: csharp-sdk-test-results
+          path: sdk/csharp/tests/**/TestResults/*.trx
+          retention-days: 14
+
   # ── Build Server JAR (shared by e2e jobs) ──────────────────────────
   build-server:
     runs-on: ubuntu-latest
@@ -274,14 +338,7 @@ jobs:
   # ── Java E2E Tests ─────────────────────────────────────────────────
   java-e2e:
     runs-on: ubuntu-latest
-    # ``test`` was the job name in the separate ci-java-sdk.yml workflow.
-    # GitHub Actions ``needs:`` only resolves jobs in the same workflow, so
-    # listing it here was a dangling reference that invalidated ci.yml as a
-    # whole — every push to main produced a 0-job failure run with the
-    # workflow name displayed as ``.github/workflows/ci.yml`` instead of
-    # ``CI``. Depend only on ``build-server`` (the actual server-jar
-    # producer); the separate java-sdk workflow runs in parallel.
-    needs: [build-server]
+    needs: [build-server, java-sdk-tests]
     timeout-minutes: 45
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -337,7 +394,7 @@ jobs:
   # same OPENAI_API_KEY env.
   csharp-e2e:
     runs-on: ubuntu-latest
-    needs: [build-server]
+    needs: [build-server, csharp-sdk-tests]
     timeout-minutes: 45
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
