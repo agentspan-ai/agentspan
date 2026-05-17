@@ -1,14 +1,28 @@
 name: Jira Sync
+
+# Manual trigger only while the cross-visibility issue is resolved.
+#
+# This workflow calls a reusable workflow at
+# ``agentspan-ai/github-workflows/.github/workflows/jira-sync.yml@main``,
+# but that source repo is *private* and this one is *public*. GitHub
+# Actions does not allow a public repo to call a reusable workflow
+# from a private repo — the run is rejected at load time, producing a
+# 0-job failure on every trigger. 10 / 10 runs since PR #230 have failed
+# for this reason.
+#
+# Until either (a) ``agentspan-ai/github-workflows`` is made public or
+# (b) the workflow is inlined here, the prior ``pull_request`` /
+# ``issue_comment`` / ``release`` triggers were just noise on every PR.
+# Switch to ``workflow_dispatch`` so the failure surface goes away;
+# someone can still invoke it manually for testing once the access
+# issue is fixed.
 on:
-  pull_request:
-    types: [opened, closed]
-  issue_comment:
-    types: [created]
-  release:
-    types: [published]
+  workflow_dispatch:
+
 permissions:
   contents: write
   pull-requests: write
+
 jobs:
   jira:
     uses: agentspan-ai/github-workflows/.github/workflows/jira-sync.yml@main
