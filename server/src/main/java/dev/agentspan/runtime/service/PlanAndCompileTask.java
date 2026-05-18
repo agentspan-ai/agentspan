@@ -10,6 +10,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -334,7 +335,7 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
             // Implicit dependencies via Conductor template resolution work,
             // but requiring the explicit depends_on keeps the data flow
             // visible in the plan and lets the scheduler topo-sort correctly.
-            Set<String> refTargets = new java.util.LinkedHashSet<>();
+            Set<String> refTargets = new LinkedHashSet<>();
             Object opsForRefs = s.get("operations");
             if (opsForRefs instanceof List<?>) {
                 for (Object o : (List<?>) opsForRefs) {
