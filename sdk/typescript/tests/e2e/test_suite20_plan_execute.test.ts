@@ -274,7 +274,12 @@ describe('Suite 20: Plan-Execute Strategy', () => {
     fs.mkdirSync(WORK_DIR, { recursive: true });
   });
 
-  it('should generate a report via plan-execute strategy', async () => {
+  // Same LLM under-production flake class as the max_tokens variant below:
+  // gpt-4o-mini occasionally produces just under MIN_WORD_COUNT (e.g., 195/200)
+  // on the first try. The PAC compilation + plan execution is what the test
+  // actually validates — the word count gate is a downstream consequence.
+  // Allow 2 retries so the test isn't held hostage by a 5-word miss.
+  it('should generate a report via plan-execute strategy', { retry: 2 }, async () => {
     const planner = new Agent({
       name: 'ts_test_planner',
       model: MODEL,
