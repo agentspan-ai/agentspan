@@ -21,8 +21,8 @@ dependencies {
     // @Tool / @P annotations from LangChain4j are RUNTIME-retained; if the
     // dependency is only on the compile classpath, the JVM silently drops them
     // at class-load time and reflection-based tool extraction returns empty.
-    // Keep this on both classpaths. Used by ExampleLc4j*, ExampleOpenAi*, and
-    // ExampleAdk* (the bridges accept @dev.langchain4j.agent.tool.Tool or the
+    // Keep this on both classpaths. Used by examples in the langchain/, openai/,
+    // and adk/ subpackages (the bridges accept @dev.langchain4j.agent.tool.Tool or the
     // Agentspan-native @ai.agentspan.annotations.Tool annotation interchangeably).
     compileOnly 'dev.langchain4j:langchain4j:1.0.0'
     runtimeOnly 'dev.langchain4j:langchain4j:1.0.0'
@@ -32,9 +32,9 @@ dependencies {
 compileJava.options.compilerArgs << '-parameters'
 
 // Allow running individual examples via:
-//   ./gradlew :examples:run -PmainClass=ai.agentspan.examples.ExampleOpenAi01BasicAgent
-//   ./gradlew :examples:run -PmainClass=ai.agentspan.examples.ExampleAdk00HelloWorld
-//   ./gradlew :examples:run -PmainClass=ai.agentspan.examples.ExampleLc4j09MathCalculator
+//   ./gradlew :examples:run -PmainClass=ai.agentspan.examples.openai.Example01BasicAgent
+//   ./gradlew :examples:run -PmainClass=ai.agentspan.examples.adk.Example00HelloWorld
+//   ./gradlew :examples:run -PmainClass=ai.agentspan.examples.langchain.Example09MathCalculator
 application {
     mainClass = project.findProperty('mainClass') ?: 'ai.agentspan.examples.Example01BasicAgent'
 }
