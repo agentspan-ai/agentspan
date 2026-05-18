@@ -867,12 +867,17 @@ class PlanAndCompileTaskTest {
         Map<String, Object> wf = (Map<String, Object>) output.get("workflowDef");
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> top = (List<Map<String, Object>>) wf.get("tasks");
-        // Only the SIMPLE — no INLINE format / SWITCH guardrail gate.
-        long inlineCount =
-                top.stream().filter(t -> "INLINE".equals(t.get("type"))).count();
+        // Only the SIMPLE plus the per-step step_output wrap INLINE — no
+        // guardrail format INLINE or SWITCH gate. The step_output_* wrap
+        // is always emitted to normalise dict-vs-string worker returns into
+        // a canonical .output.result for downstream Refs.
+        long guardrailInlineCount = top.stream()
+                .filter(t -> "INLINE".equals(t.get("type")))
+                .filter(t -> !String.valueOf(t.get("taskReferenceName")).startsWith("step_output_"))
+                .count();
         long switchCount =
                 top.stream().filter(t -> "SWITCH".equals(t.get("type"))).count();
-        assertThat(inlineCount).as("no guardrails ⇒ no format INLINE").isZero();
+        assertThat(guardrailInlineCount).as("no guardrails ⇒ no format INLINE").isZero();
         assertThat(switchCount).as("no guardrails ⇒ no SWITCH gate").isZero();
         assertThat(top).anyMatch(t -> "SIMPLE".equals(t.get("type")) && "do_thing".equals(t.get("name")));
     }
@@ -1580,6 +1585,114 @@ class PlanAndCompileTaskTest {
         assertThat(subCount)
                 .as("validation block should route judge through SUB_WORKFLOW")
                 .isEqualTo(1);
+    }
+
+    // -----------------------------------------------------------------------
+    //  $ref — cross-step data flow (Ref helper on the SDK side)
+    // -----------------------------------------------------------------------
+
+    /**
+     * The happy path: step B reads {"$ref": "a"} from step A's output and the
+     * compiler rewrites it to ${<a_ref>.output.result}. Verifies the rewritten
+     * value is a Conductor template, not the literal $ref dict.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void testRefRewritesToConductorTemplate() {
+        String plan =
+                "{ \"steps\": ["
+                        + "  {\"id\": \"a\", \"operations\": [{\"tool\": \"producer\", \"args\": {\"x\": 1}}]},"
+                        + "  {\"id\": \"b\", \"depends_on\": [\"a\"], \"operations\": ["
+                        + "    {\"tool\": \"consumer\", \"args\": {\"input\": {\"$ref\": \"a\"}}}"
+                        + "  ]}"
+                        + "] }";
+        Map<String, Object> wf = compilePlan(plan);
+        List<Map<String, Object>> all = allTasks(wf);
+        Map<String, Object> consumer = all.stream()
+                .filter(t -> "consumer".equals(t.get("name")))
+                .findFirst()
+                .orElseThrow();
+        Object input = ((Map<String, Object>) consumer.get("inputParameters")).get("input");
+        assertThat(input)
+                .as("$ref must be replaced by a Conductor ${...} template, not left as {\"$ref\":...}")
+                .isInstanceOf(String.class);
+        // Sequential steps end with a step_output_<id> INLINE that normalises
+        // dict-vs-string returns; Ref resolves to its `.output.result`.
+        assertThat((String) input)
+                .startsWith("${step_output_")
+                .endsWith(".output.result}");
+    }
+
+    /** $ref to a step that doesn't exist in the plan is a hard compile error. */
+    @Test
+    void testRefToUnknownStepIsCompileError() {
+        String plan =
+                "{ \"steps\": ["
+                        + "  {\"id\": \"a\", \"operations\": ["
+                        + "    {\"tool\": \"consumer\", \"args\": {\"x\": {\"$ref\": \"missing\"}}}"
+                        + "  ]}"
+                        + "] }";
+        String err = compilePlanExpectError(plan);
+        assertThat(err).contains("$ref").contains("missing");
+    }
+
+    /** $ref to a step that exists but isn't in depends_on is a compile error. */
+    @Test
+    void testRefWithoutDependsOnIsCompileError() {
+        String plan =
+                "{ \"steps\": ["
+                        + "  {\"id\": \"a\", \"operations\": [{\"tool\": \"producer\", \"args\": {}}]},"
+                        + "  {\"id\": \"b\", \"operations\": ["
+                        // depends_on intentionally missing — must error.
+                        + "    {\"tool\": \"consumer\", \"args\": {\"input\": {\"$ref\": \"a\"}}}"
+                        + "  ]}"
+                        + "] }";
+        String err = compilePlanExpectError(plan);
+        assertThat(err).contains("$refs").contains("depends_on");
+    }
+
+    /** Self-Ref is meaningless and surfaces as a compile error instead of an infinite-template trap. */
+    @Test
+    void testSelfRefIsCompileError() {
+        String plan =
+                "{ \"steps\": ["
+                        + "  {\"id\": \"a\", \"depends_on\": [\"a\"], \"operations\": ["
+                        + "    {\"tool\": \"consumer\", \"args\": {\"x\": {\"$ref\": \"a\"}}}"
+                        + "  ]}"
+                        + "] }";
+        String err = compilePlanExpectError(plan);
+        assertThat(err).contains("self-referential").contains("a");
+    }
+
+    /**
+     * For a parallel step, $ref resolves to the FORK_JOIN aggregator INLINE
+     * (which carries an array of per-branch results), not to one specific
+     * branch's task.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void testRefToParallelStepUsesAggregator() {
+        String plan =
+                "{ \"steps\": ["
+                        + "  {\"id\": \"a\", \"parallel\": true, \"operations\": ["
+                        + "    {\"tool\": \"producer\", \"args\": {\"i\": 0}},"
+                        + "    {\"tool\": \"producer\", \"args\": {\"i\": 1}}"
+                        + "  ]},"
+                        + "  {\"id\": \"b\", \"depends_on\": [\"a\"], \"operations\": ["
+                        + "    {\"tool\": \"consumer\", \"args\": {\"all\": {\"$ref\": \"a\"}}}"
+                        + "  ]}"
+                        + "] }";
+        Map<String, Object> wf = compilePlan(plan);
+        List<Map<String, Object>> all = allTasks(wf);
+        Map<String, Object> consumer = all.stream()
+                .filter(t -> "consumer".equals(t.get("name")))
+                .findFirst()
+                .orElseThrow();
+        Object all_ = ((Map<String, Object>) consumer.get("inputParameters")).get("all");
+        assertThat(all_).isInstanceOf(String.class);
+        assertThat((String) all_)
+                .as("parallel-step $ref must point at the parallel_agg_<stepId> INLINE aggregator")
+                .contains("parallel_agg_a");
     }
 
     /** Quick JSON string-encode for inlining into a plan literal. */

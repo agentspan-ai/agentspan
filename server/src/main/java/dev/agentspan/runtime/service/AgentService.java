@@ -218,6 +218,11 @@ public class AgentService {
         if (request.getCredentials() != null && !request.getCredentials().isEmpty()) {
             input.put("credentials", request.getCredentials());
         }
+        // Static plan for PLAN_EXECUTE: SDK forwards Plan dict here; PAC's
+        // extract_json INLINE reads ${workflow.input.static_plan} as Case-0.
+        if (request.getStaticPlan() != null) {
+            input.put("static_plan", request.getStaticPlan());
+        }
         // Extract cwd from rawConfig for frameworks that pass it
         String cwd = ".";
         if (request.getRawConfig() != null && request.getRawConfig().get("cwd") instanceof String rawCwd) {

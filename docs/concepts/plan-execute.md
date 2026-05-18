@@ -121,6 +121,42 @@ plan = Plan(
 
 IDE autocomplete, Pylance type-checks, no escaping nightmares.
 
+## Output → input across steps with `Ref`
+
+Wire the **whole output** of one step into the args of a later step with `Ref("step_id")`. No JSON path, no field selection, no Conductor task-ref naming to memorise.
+
+```python
+from agentspan.agents import Op, Plan, Ref, Step
+
+plan = Plan(steps=[
+    Step("fetch", operations=[Op("fetch_data", args={"url": URL})]),
+    Step(
+        "summarize",
+        depends_on=["fetch"],
+        operations=[
+            # The whole dict returned by `fetch_data` becomes the value of
+            # the `document` arg passed to `summarize`. No `.result` suffix,
+            # no JSONPath — the SDK serialises Ref(...) to {"$ref": "fetch"}
+            # and the server rewrites it to the right Conductor template
+            # against an INLINE wrapper that normalises dict vs. wrapped
+            # worker returns.
+            Op("summarize", args={"document": Ref("fetch")}),
+        ],
+    ),
+])
+```
+
+Rules:
+
+- The referenced step must be declared in this step's `depends_on` — explicit beats implicit; the SDK compiler refuses plans that Ref a step they don't depend on.
+- The referenced step must exist in the plan.
+- Self-Refs (`Ref(stepId)` from inside `stepId`) are a compile error.
+- A step can Ref multiple upstream steps independently — `Op("report", args={"src": Ref("fetch"), "summary": Ref("summarize")})` works.
+- For a `parallel=True` step, `Ref("step_id")` resolves to the **array of branch results** (the FORK_JOIN aggregator's payload).
+- Refs work inside nested args (lists, nested dicts) — the serialiser walks the whole arg tree.
+
+See `examples/108_plan_execute_refs.py` for a three-step pipeline that pipes one step's record dict through two downstream steps without ever spelling out a JSONPath.
+
 ## Static plans — skip the planner LLM
 
 Pass a `Plan` (or a raw dict in the same shape) to `runtime.run` and PAC uses it directly:

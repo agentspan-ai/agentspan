@@ -40,6 +40,7 @@ from agentspan.agents.plans import (
     Generate,
     Op,
     Plan,
+    Ref,
     Step,
     Validation,
     coerce_plan,

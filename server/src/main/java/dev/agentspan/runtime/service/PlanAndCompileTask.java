@@ -205,6 +205,29 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
          */
         final Map<String, String> innerRefMap = new HashMap<>();
 
+        /**
+         * Per-step "primary output template" — the full Conductor expression
+         * a downstream {@code Ref("<stepId>")} resolves to. Populated by
+         * {@link #emitStepTasks} after a step's tasks are appended.
+         *
+         * <p>The value carries the right path component per task type, so
+         * users always see "the whole output of step X":
+         * <ul>
+         *   <li>SIMPLE worker (sequential step's last op) → {@code ${ref.output}}
+         *       — Python {@code @tool} dicts land at {@code .output} top-level;
+         *       there is no {@code .result} wrapping.</li>
+         *   <li>INLINE parallel aggregator → {@code ${ref.output.result}}
+         *       — INLINE wraps its script return under {@code result}.</li>
+         *   <li>SUB_WORKFLOW (agent_tool) → {@code ${ref.output}}
+         *       — the child workflow's {@code outputParameters} surface
+         *       at {@code .output} on the parent task.</li>
+         * </ul>
+         * Without this per-type discrimination, ``Ref("simple_step")``
+         * resolves to {@code null} (no {@code .result} key on the worker
+         * dict) — silently broken.
+         */
+        final Map<String, String> stepOutputRefs = new HashMap<>();
+
         String lastOpRef = null;
         String lastAggRef = null;
 
@@ -300,10 +323,36 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
                         liveDeps.add(ds);
                     } else {
                         result.warnings.add("Step " + id + " dropped unknown dep: " + ds);
+                        // continue (fall through to dropped-dep handling)
                     }
                 }
             }
             s.put("depends_on", liveDeps);
+
+            // Cross-step Ref validation: every {"$ref": "<step_id>"} must
+            // point at an existing step that's in *this* step's depends_on.
+            // Implicit dependencies via Conductor template resolution work,
+            // but requiring the explicit depends_on keeps the data flow
+            // visible in the plan and lets the scheduler topo-sort correctly.
+            Set<String> refTargets = new java.util.LinkedHashSet<>();
+            Object opsForRefs = s.get("operations");
+            if (opsForRefs instanceof List<?>) {
+                for (Object o : (List<?>) opsForRefs) {
+                    if (o instanceof Map<?, ?> opMap) {
+                        collectRefTargets(opMap, refTargets);
+                    }
+                }
+            }
+            for (String target : refTargets) {
+                if (!stepIds.contains(target)) {
+                    errors.add("Step " + id + " has $ref to unknown step '" + target + "'");
+                } else if (target.equals(id)) {
+                    errors.add("Step " + id + " has self-referential $ref to '" + target + "'");
+                } else if (!liveDeps.contains(target)) {
+                    errors.add("Step " + id + " $refs step '" + target
+                            + "' but does not declare it in depends_on");
+                }
+            }
         }
         if (!errors.isEmpty()) {
             result.error = "Plan validation: " + String.join("; ", errors);
@@ -434,6 +483,14 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
                 if (argsObj instanceof Map) {
                     sArgs.putAll((Map<String, Object>) argsObj);
                 }
+                // Rewrite {"$ref": "step_id"} markers to Conductor templates
+                // pointing at the upstream step's primary output ref. Must run
+                // BEFORE injectAmbient so a Ref-referenced step output can't
+                // accidentally collide with an ambient key.
+                String refErr = resolveRefs(sArgs, ctx);
+                if (refErr != null) {
+                    return "Step " + stepId + " op " + oi + ": " + refErr;
+                }
                 injectAmbient(sArgs);
                 String simpleRef = ctx.uid("s_" + stepId);
                 Map<String, Object> simpleTask = buildToolTask(tool, sArgs, simpleRef, ctx);
@@ -468,7 +525,20 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
                 int maxTokens = intOr(gen.get("max_tokens"), 4096);
                 String outputSchema = stringOr(gen.get("output_schema"), "{}");
                 String instructions = stringOr(gen.get("instructions"), "");
-                String contextStr = gen.get("context") == null ? null : String.valueOf(gen.get("context"));
+                // Resolve Ref({"$ref": ...}) in the generate-op's context
+                // first, so `gen.context = Ref("step_a")` becomes a Conductor
+                // template the LLM gets a real value injected into at run
+                // time, not the literal `{$ref=step_a}` string.
+                Object ctxRaw = gen.get("context");
+                if (ctxRaw != null) {
+                    // Wrap in a single-key map so resolveRefs can replace.
+                    Map<String, Object> wrap = new LinkedHashMap<>();
+                    wrap.put("_", ctxRaw);
+                    String refErr = resolveRefs(wrap, ctx);
+                    if (refErr != null) return "Step " + stepId + " op " + oi + ": " + refErr;
+                    ctxRaw = wrap.get("_");
+                }
+                String contextStr = ctxRaw == null ? null : String.valueOf(ctxRaw);
 
                 String llmRef = ctx.uid("llm_" + stepId);
                 String sysMsg = "Output ONLY valid JSON matching this shape: " + outputSchema
@@ -681,6 +751,9 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
             pAggTask.put("inputParameters", pAggInputs);
             tasks.add(pAggTask);
             ctx.lastOpRef = pAggRef;
+            // Parallel step's "primary output" is the aggregator INLINE,
+            // which wraps its array under `.output.result`.
+            ctx.stepOutputRefs.put(stepId, "${" + pAggRef + ".output.result}");
         } else {
             for (List<Map<String, Object>> b : branches) {
                 for (Map<String, Object> t : b) {
@@ -688,6 +761,45 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
                     ctx.lastOpRef = ctx.terminalRef(t);
                 }
             }
+            // Append a "step output" INLINE that normalises the last op's
+            // result into a canonical `.output.result` value, regardless of
+            // what the op was:
+            //   • dict-returning worker — outputData is the dict directly,
+            //     no `.result` wrapping (see _dispatch.py:493 in the Python
+            //     SDK). Without normalisation, `${ref.output.result}` is
+            //     undefined.
+            //   • string/scalar-returning worker — _dispatch.py wraps as
+            //     `{"result": <value>}`, so `.output.result` does exist.
+            //   • INLINE / SUB_WORKFLOW / HTTP / MCP — each task type has
+            //     its own conventional output shape; we don't want to bake
+            //     that into the Ref resolver.
+            // The INLINE picks the right one with a single fallback rule:
+            // "if the upstream task has a `.result` key, use it; otherwise
+            // use the whole `.output` map." Downstream `Ref("<stepId>")`
+            // always resolves to `${step_output_<stepId>.output.result}`
+            // which carries the user-visible payload.
+            String wrapRef = ctx.uid("step_output_" + stepId);
+            Map<String, Object> wrapInputs = new LinkedHashMap<>();
+            wrapInputs.put("evaluatorType", "graaljs");
+            wrapInputs.put("simpleResult", "${" + ctx.lastOpRef + ".output.result}");
+            wrapInputs.put("fullOutput", "${" + ctx.lastOpRef + ".output}");
+            wrapInputs.put(
+                    "expression",
+                    "(function(){"
+                            + " var r = $.simpleResult;"
+                            + " if (r !== null && r !== undefined && r !== '') return r;"
+                            + " return $.fullOutput;"
+                            + " })()");
+            Map<String, Object> wrapTask = new LinkedHashMap<>();
+            wrapTask.put("name", "INLINE_TASK");
+            wrapTask.put("taskReferenceName", wrapRef);
+            wrapTask.put("type", "INLINE");
+            wrapTask.put("inputParameters", wrapInputs);
+            tasks.add(wrapTask);
+            // The wrap INLINE is now the step's "primary output" — Refs
+            // resolve to `${wrapRef.output.result}`. Don't advance
+            // ctx.lastOpRef (its consumers want the raw last op's terminal).
+            ctx.stepOutputRefs.put(stepId, "${" + wrapRef + ".output.result}");
         }
         return null;
     }
@@ -1161,6 +1273,109 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
     // -----------------------------------------------------------------------
     //  Helpers
     // -----------------------------------------------------------------------
+
+    /**
+     * Recursively rewrite plan-level {@code {"$ref": "<step_id>"}} markers in
+     * a value tree into Conductor template strings that reach that step's
+     * primary output (whatever {@link CompileCtx#stepOutputRefs} recorded for
+     * it). Lets users wire the whole output of one step into the args of
+     * another without learning the internal task-ref naming scheme — the
+     * SDK-side {@code Ref("step_id")} helper serialises to this exact JSON
+     * shape.
+     *
+     * <p>A bare {@code {"$ref": ...}} dict is replaced with a single string;
+     * dicts that mix {@code $ref} with other keys are not unwrapped (treated
+     * as data). Lists and nested maps are traversed in place.
+     *
+     * @return null on success, or an error string when a Ref points at an
+     *     unknown step. Callers propagate the error as a plan-validation
+     *     failure so the workflow doesn't try to compile a Ref to a missing
+     *     producer.
+     */
+    @SuppressWarnings("unchecked")
+    private static String resolveRefs(Object node, CompileCtx ctx) {
+        if (node instanceof Map<?, ?> m) {
+            Map<String, Object> map = (Map<String, Object>) m;
+            // {"$ref": "step_id"} with no sibling keys → replaced by parent.
+            // Iterate entries; replace nested $ref objects in-place.
+            List<String> keys = new ArrayList<>(map.keySet());
+            for (String k : keys) {
+                Object v = map.get(k);
+                if (v instanceof Map<?, ?> vm) {
+                    Map<String, Object> child = (Map<String, Object>) vm;
+                    if (child.size() == 1 && child.containsKey("$ref")) {
+                        Object refTarget = child.get("$ref");
+                        if (!(refTarget instanceof String stepId) || stepId.isEmpty()) {
+                            return "$ref must be a non-empty string, got: " + refTarget;
+                        }
+                        String template = ctx.stepOutputRefs.get(stepId);
+                        if (template == null) {
+                            return "$ref points at unknown step: '" + stepId
+                                    + "' (must be in depends_on and exist in the plan)";
+                        }
+                        map.put(k, template);
+                        continue;
+                    }
+                    String err = resolveRefs(child, ctx);
+                    if (err != null) return err;
+                } else if (v instanceof List<?> vl) {
+                    String err = resolveRefs(vl, ctx);
+                    if (err != null) return err;
+                }
+            }
+            return null;
+        }
+        if (node instanceof List<?> list) {
+            List<Object> mutList = (List<Object>) list;
+            for (int i = 0; i < mutList.size(); i++) {
+                Object v = mutList.get(i);
+                if (v instanceof Map<?, ?> vm) {
+                    Map<String, Object> child = (Map<String, Object>) vm;
+                    if (child.size() == 1 && child.containsKey("$ref")) {
+                        Object refTarget = child.get("$ref");
+                        if (!(refTarget instanceof String stepId) || stepId.isEmpty()) {
+                            return "$ref must be a non-empty string, got: " + refTarget;
+                        }
+                        String template = ctx.stepOutputRefs.get(stepId);
+                        if (template == null) {
+                            return "$ref points at unknown step: '" + stepId + "'";
+                        }
+                        mutList.set(i, template);
+                        continue;
+                    }
+                    String err = resolveRefs(child, ctx);
+                    if (err != null) return err;
+                } else if (v instanceof List<?> vl) {
+                    String err = resolveRefs(vl, ctx);
+                    if (err != null) return err;
+                }
+            }
+            return null;
+        }
+        return null;
+    }
+
+    /**
+     * Walk a plan op's value tree and collect every {@code $ref} step id
+     * reference. Used at plan validation time so we can verify users only
+     * Ref steps they've declared in {@code depends_on}.
+     */
+    @SuppressWarnings("unchecked")
+    private static void collectRefTargets(Object node, Set<String> out) {
+        if (node instanceof Map<?, ?> m) {
+            Map<String, Object> map = (Map<String, Object>) m;
+            if (map.size() == 1 && map.containsKey("$ref")) {
+                Object t = map.get("$ref");
+                if (t instanceof String s && !s.isEmpty()) out.add(s);
+                return;
+            }
+            for (Object v : map.values()) collectRefTargets(v, out);
+            return;
+        }
+        if (node instanceof List<?> list) {
+            for (Object v : list) collectRefTargets(v, out);
+        }
+    }
 
     /**
      * Forced-override ambient inputs every emitted SIMPLE task receives.

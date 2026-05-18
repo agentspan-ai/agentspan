@@ -46,6 +46,63 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
 
 
+@dataclass(frozen=True)
+class Ref:
+    """A reference to a prior step's whole output.
+
+    Use ``Ref("step_id")`` anywhere a literal value would go in an ``Op.args``
+    or a ``Generate.context`` to wire one step's output into another step's
+    input — no JSON path, no field selection. The whole result map becomes
+    the value at that arg key.
+
+    The referenced step must be declared in this step's ``depends_on`` and
+    must exist in the plan; the server rejects the plan at compile time
+    otherwise (no silent broken refs).
+
+    Multi-dep / parallel composition is the obvious thing: ``Ref("a")`` and
+    ``Ref("b")`` resolve independently. For a parallel step, ``Ref("a")``
+    is the array of branch results.
+
+    Example::
+
+        plan = Plan(steps=[
+            Step("fetch", operations=[Op("fetch_data", args={"url": URL})]),
+            Step(
+                "summarize",
+                depends_on=["fetch"],
+                operations=[
+                    Op("summarize", args={"document": Ref("fetch")}),
+                ],
+            ),
+        ])
+    """
+
+    step_id: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.step_id, str) or not self.step_id:
+            raise ValueError(f"Ref step_id must be a non-empty string, got: {self.step_id!r}")
+
+    def to_dict(self) -> Dict[str, str]:
+        """Wire format the server's PAC consumes: ``{"$ref": "<step_id>"}``."""
+        return {"$ref": self.step_id}
+
+
+def _serialize_value(v: Any) -> Any:
+    """Walk an arg value tree and replace nested ``Ref`` objects with their
+    JSON wire form. Lists and dicts are traversed; scalars pass through.
+    """
+    if isinstance(v, Ref):
+        return v.to_dict()
+    if isinstance(v, dict):
+        return {k: _serialize_value(sub) for k, sub in v.items()}
+    if isinstance(v, list):
+        return [_serialize_value(item) for item in v]
+    if isinstance(v, tuple):
+        return [_serialize_value(item) for item in v]
+    return v
+
+
 @dataclass
 class Generate:
     """LLM-generated arguments for a tool call inside a plan step.
@@ -68,6 +125,11 @@ class Generate:
     instructions: str
     output_schema: str
     max_tokens: Optional[int] = None
+    context: Optional[Any] = None
+    """Optional extra text appended to the LLM's user message. Accepts a
+    plain string or a ``Ref(...)`` — when a ``Ref`` is passed, the server
+    substitutes the upstream step's output at run time, so the LLM sees
+    real values instead of the literal ``{"$ref":...}`` marker."""
 
     def to_dict(self) -> Dict[str, Any]:
         out: Dict[str, Any] = {
@@ -76,6 +138,8 @@ class Generate:
         }
         if self.max_tokens is not None:
             out["max_tokens"] = self.max_tokens
+        if self.context is not None:
+            out["context"] = _serialize_value(self.context)
         return out
 
 
@@ -106,7 +170,8 @@ class Op:
     def to_dict(self) -> Dict[str, Any]:
         out: Dict[str, Any] = {"tool": self.tool}
         if self.args is not None:
-            out["args"] = self.args
+            # Walk for Ref(...) values; literal data passes through unchanged.
+            out["args"] = _serialize_value(self.args)
         if self.generate is not None:
             out["generate"] = self.generate.to_dict()
         return out
@@ -168,7 +233,7 @@ class Validation:
     def to_dict(self) -> Dict[str, Any]:
         out: Dict[str, Any] = {"tool": self.tool}
         if self.args is not None:
-            out["args"] = self.args
+            out["args"] = _serialize_value(self.args)
         if self.success_condition is not None:
             out["success_condition"] = self.success_condition
         return out
@@ -188,7 +253,7 @@ class Action:
     def to_dict(self) -> Dict[str, Any]:
         out: Dict[str, Any] = {"tool": self.tool}
         if self.args is not None:
-            out["args"] = self.args
+            out["args"] = _serialize_value(self.args)
         return out
 
 

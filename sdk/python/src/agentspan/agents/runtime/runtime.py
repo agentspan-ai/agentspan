@@ -473,6 +473,7 @@ class AgentRuntime:
         credentials: Optional[List[str]] = None,
         context: Optional[Dict[str, Any]] = None,
         run_id: Optional[str] = None,
+        static_plan: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Start an agent via the server's /api/agent/start endpoint.
 
@@ -507,6 +508,11 @@ class AgentRuntime:
             payload["credentials"] = credentials
         if run_id:
             payload["runId"] = run_id
+        if static_plan is not None:
+            # Server's extract_json INLINE reads `workflow.input.static_plan`
+            # as the Case-0 plan source. Whatever the planner LLM emits is
+            # discarded when this is set.
+            payload["static_plan"] = static_plan
 
         url = self._agent_api_url("/start")
         resp = req_lib.post(url, json=payload, headers=self._agent_api_headers(), timeout=30)
@@ -2519,6 +2525,16 @@ class AgentRuntime:
                 **kwargs,
             )
 
+        # Static plan for Strategy.PLAN_EXECUTE harness — the SDK forwards
+        # the user-supplied Plan/dict into `workflow.input.static_plan`,
+        # which the server's extract_json picks up as the Case-0 source
+        # (wins over the planner LLM's output). See plan-execute.md.
+        plan_kwarg = kwargs.pop("plan", None)
+        static_plan: Optional[Dict[str, Any]] = None
+        if plan_kwarg is not None:
+            from agentspan.agents.plans import coerce_plan
+            static_plan = coerce_plan(plan_kwarg)
+
         if kwargs:
             logger.warning("Unrecognized keyword arguments: %s", ", ".join(kwargs.keys()))
 
@@ -2563,6 +2579,7 @@ class AgentRuntime:
             credentials=credentials,
             context=context,
             run_id=run_id,
+            static_plan=static_plan,
         )
 
         worker_domain = self._resolve_worker_domain(execution_id, run_id)
