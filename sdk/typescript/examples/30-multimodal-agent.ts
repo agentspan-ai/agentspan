@@ -13,16 +13,16 @@
  *
  * Requirements:
  *   - Conductor server with LLM support (OpenAI key configured)
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Example 1: Simple image analysis --------------------------------------
 
-const visionAgent = new Agent({
+export const visionAgent = new Agent({
   name: 'vision_analyst',
   model: llmModel,
   instructions:
@@ -67,7 +67,7 @@ const saveAnalysis = tool(
   },
 );
 
-const visionWithTools = new Agent({
+export const visionWithTools = new Agent({
   name: 'vision_researcher',
   model: llmModel,
   instructions:
@@ -78,7 +78,7 @@ const visionWithTools = new Agent({
 
 // -- Example 3: Multi-image comparison -------------------------------------
 
-const comparator = new Agent({
+export const comparator = new Agent({
   name: 'image_comparator',
   model: llmModel,
   instructions:
@@ -90,13 +90,13 @@ const comparator = new Agent({
 // -- Example 4: Multi-agent pipeline with vision ---------------------------
 // First agent describes the image, second generates a creative story
 
-const describer = new Agent({
+export const describer = new Agent({
   name: 'describer',
   model: llmModel,
   instructions: 'Describe the image in 2-3 vivid sentences.',
 });
 
-const storyteller = new Agent({
+export const storyteller = new Agent({
   name: 'storyteller',
   model: llmModel,
   instructions:
@@ -112,43 +112,56 @@ const creativePipeline = describer.pipe(storyteller);
 const SAMPLE_IMAGE = 'https://orkes.io/Home-Page-Prompt-to-Workflow-1.png';
 const SAMPLE_IMAGE_2 = 'https://orkes.io/icons/hero-section-workflow_updated.png';
 
-const runtime = new AgentRuntime();
-try {
-  // --- 1. Single image analysis ---
-  console.log('=== Single Image Analysis ===');
-  const result1 = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    // --- 1. Single image analysis ---
+    console.log('=== Single Image Analysis ===');
+    const result1 = await runtime.run(
     visionAgent,
     'What do you see in this image? Describe it in detail.',
     { media: [SAMPLE_IMAGE] },
-  );
-  result1.printResult();
+    );
+    result1.printResult();
 
-  // --- 2. Image analysis with tools ---
-  console.log('\n=== Image Analysis with Tools ===');
-  const result2 = await runtime.run(
+    // --- 2. Image analysis with tools ---
+    console.log('\n=== Image Analysis with Tools ===');
+    const result2 = await runtime.run(
     visionWithTools,
     'Analyze this image, search for similar ones, and save your findings.',
     { media: [SAMPLE_IMAGE] },
-  );
-  result2.printResult();
+    );
+    result2.printResult();
 
-  // --- 3. Compare multiple images ---
-  console.log('\n=== Multi-Image Comparison ===');
-  const result3 = await runtime.run(
+    // --- 3. Compare multiple images ---
+    console.log('\n=== Multi-Image Comparison ===');
+    const result3 = await runtime.run(
     comparator,
     'Compare these two images. What are the key differences?',
     { media: [SAMPLE_IMAGE, SAMPLE_IMAGE_2] },
-  );
-  result3.printResult();
+    );
+    result3.printResult();
 
-  // --- 4. Creative pipeline from image ---
-  console.log('\n=== Creative Pipeline (describe -> story) ===');
-  const result4 = await runtime.run(
+    // --- 4. Creative pipeline from image ---
+    console.log('\n=== Creative Pipeline (describe -> story) ===');
+    const result4 = await runtime.run(
     creativePipeline,
     'Create a story inspired by this image.',
     { media: [SAMPLE_IMAGE_2] },
-  );
-  result4.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result4.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(visionAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents vision_analyst
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(visionAgent);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

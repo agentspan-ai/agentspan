@@ -16,8 +16,8 @@ Supported vector databases:
 Requirements:
     - Conductor server with RAG system tasks enabled (--spring.profiles.active=rag)
     - A configured vector database (e.g., pgvector)
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
-    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api in .env or environment
+    - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, search_tool, index_tool
@@ -107,7 +107,7 @@ DOCUMENTS = [
             "completion via WAIT tasks. Configure event handlers with action types: "
             "complete_task, fail_task, or update_variables. Event payloads are matched "
             "by event name and optionally filtered by expression. For real-time updates, "
-            "use the streaming API (SSE) at /api/agent/stream/{workflowId}. Events "
+            "use the streaming API (SSE) at /api/agent/stream/{executionId}. Events "
             "include: tool_start, tool_end, llm_start, llm_end, agent_start, agent_end, "
             "and token events for incremental output."
         ),
@@ -190,7 +190,7 @@ if __name__ == "__main__":
         index_prompt = "\n".join(index_lines)
 
         result = runtime.run(rag_agent, index_prompt)
-        print(result.output)
+        result.print_result()
 
         # ── Phase 2: Search the indexed documents ────────────────────
         print("\n" + "=" * 60)
@@ -208,4 +208,13 @@ if __name__ == "__main__":
         for i, query in enumerate(queries, 1):
             print(f"\n--- Query {i}: {query}")
             result = runtime.run(rag_agent, query)
-            print(result.output)
+            result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(rag_agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.56_rag_agent
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(rag_agent)

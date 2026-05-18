@@ -11,7 +11,7 @@ Demonstrates:
 Requirements:
     - pip install google-adk
     - Conductor server with Google Gemini LLM integration configured
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=google_gemini/gemini-2.0-flash as environment variable
 """
 
@@ -102,9 +102,20 @@ coordinator = Agent(
     sub_agents=[analyst, visualizer],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
         coordinator,
         "Create a report on the sales_q4 dataset with visualization recommendations.",
-    )
-    result.print_result()
+        )
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(coordinator)
+        # CLI alternative:
+        # agentspan deploy --package examples.adk.07_output_key_state
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(coordinator)

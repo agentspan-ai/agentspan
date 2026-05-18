@@ -236,7 +236,7 @@ export function parseToml(input: string): ValidationConfig {
       parallel: (merged.parallel as boolean) ?? true,
       maxWorkers: (merged.maxWorkers as number) ?? 8,
       timeout: (merged.timeout as number) ?? 300,
-      serverUrl: (merged.serverUrl as string) ?? 'http://localhost:8080/api',
+      serverUrl: (merged.serverUrl as string) ?? 'http://localhost:6767/api',
       env: runEnvs[name] && Object.keys(runEnvs[name]).length > 0 ? runEnvs[name] : undefined,
     });
   }
@@ -253,7 +253,7 @@ export function parseToml(input: string): ValidationConfig {
       parallel: (merged.parallel as boolean) ?? true,
       maxWorkers: (merged.maxWorkers as number) ?? 8,
       timeout: (merged.timeout as number) ?? 300,
-      serverUrl: (merged.serverUrl as string) ?? 'http://localhost:8080/api',
+      serverUrl: (merged.serverUrl as string) ?? 'http://localhost:6767/api',
     });
   }
 

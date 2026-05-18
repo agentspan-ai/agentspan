@@ -14,7 +14,7 @@ own workflow and returns the result as a tool output.
 
 Requirements:
     - Conductor server with AgentTool support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -91,10 +91,22 @@ manager = Agent(
     tools=[agent_tool(researcher), calculate],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        manager,
-        "Research Python and Rust, then calculate how many use cases they "
-        "have combined.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
+            manager,
+            "Research Python and Rust, then calculate how many use cases they "
+            "have combined.",
+        )
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(manager)
+        # CLI alternative:
+        # agentspan deploy --package examples.45_agent_tool
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(manager)
+

@@ -5,12 +5,13 @@
 
 package dev.agentspan.runtime.normalizer;
 
-import dev.agentspan.runtime.model.AgentConfig;
-import org.springframework.stereotype.Component;
-
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import org.springframework.stereotype.Component;
+
+import dev.agentspan.runtime.model.AgentConfig;
 
 /**
  * Registry of {@link AgentConfigNormalizer} implementations, keyed by framework ID.
@@ -42,8 +43,7 @@ public class NormalizerRegistry {
         AgentConfigNormalizer normalizer = normalizers.get(framework);
         if (normalizer == null) {
             throw new IllegalArgumentException(
-                    "Unsupported agent framework: '" + framework
-                            + "'. Supported frameworks: " + normalizers.keySet());
+                    "Unsupported agent framework: '" + framework + "'. Supported frameworks: " + normalizers.keySet());
         }
         return normalizer.normalize(rawConfig);
     }

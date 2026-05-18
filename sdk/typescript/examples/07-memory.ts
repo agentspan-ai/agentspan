@@ -12,7 +12,7 @@ import {
   SemanticMemory,
   InMemoryStore,
   tool,
-} from '../src/index.js';
+} from '@agentspan-ai/sdk';
 
 const MODEL = process.env.AGENTSPAN_LLM_MODEL ?? 'openai/gpt-4o';
 
@@ -25,8 +25,6 @@ conversationMem.addSystemMessage('You are a helpful research assistant.');
 conversationMem.addUserMessage('I need help researching quantum computing.');
 conversationMem.addAssistantMessage('I can help with that! What specific aspect?');
 
-console.log('Conversation messages:', conversationMem.toChatMessages().length);
-
 // ── SemanticMemory with InMemoryStore ───────────────────
 
 const store = new InMemoryStore();
@@ -36,13 +34,6 @@ const semanticMem = new SemanticMemory({ store });
 semanticMem.add('Quantum computing uses qubits instead of classical bits.');
 semanticMem.add('Machine learning models can classify images with high accuracy.');
 semanticMem.add('Quantum error correction is essential for practical quantum computers.');
-
-// Search for relevant articles
-const results = semanticMem.search('quantum error', 2);
-console.log('\nSemantic search results:');
-for (const entry of results) {
-  console.log(`  - ${entry.content}`);
-}
 
 // ── Tool that queries semantic memory ───────────────────
 
@@ -66,7 +57,7 @@ const recallTool = tool(
 
 // ── Agent with memory ───────────────────────────────────
 
-const researchAgent = new Agent({
+export const researchAgent = new Agent({
   name: 'research_agent',
   model: MODEL,
   instructions: 'Use your memory and recall tool to answer questions.',
@@ -76,12 +67,32 @@ const researchAgent = new Agent({
 
 async function main() {
   const runtime = new AgentRuntime();
-  const result = await runtime.run(
+  try {
+    const result = await runtime.run(
     researchAgent,
     'What do we know about quantum error correction?',
-  );
-  result.printResult();
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(researchAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents research_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(researchAgent);
+  } finally {
+    await runtime.shutdown();
+  }
+}
+
+console.log('Conversation messages:', conversationMem.toChatMessages().length);
+
+const results = semanticMem.search('quantum error', 2);
+console.log('\nSemantic search results:');
+for (const entry of results) {
+  console.log(`  - ${entry.content}`);
 }
 
 main().catch(console.error);

@@ -12,12 +12,12 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, LLMGuardrail } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, LLMGuardrail } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- LLM-based safety guardrail -------------------------------------------
 
@@ -39,7 +39,7 @@ const safetyGuard = new LLMGuardrail({
 
 // -- Agent with LLM guardrail ---------------------------------------------
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'health_advisor',
   model: llmModel,
   instructions:
@@ -50,13 +50,26 @@ const agent = new Agent({
 
 // -- Run -------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
     agent,
     'What should I do about persistent headaches?',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents health_advisor
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

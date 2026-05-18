@@ -11,16 +11,16 @@
  *
  * Requirements:
  *   - Conductor server
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Phase 1: Data Analysis --------------------------------------------------
 
-const dataAnalyst = new Agent({
+export const dataAnalyst = new Agent({
   name: 'data_analyst_55',
   model: llmModel,
   instructions:
@@ -35,7 +35,7 @@ const dataAnalyst = new Agent({
 
 // -- Phase 2: Parallel Model Strategy Exploration ----------------------------
 
-const linearModeler = new Agent({
+export const linearModeler = new Agent({
   name: 'linear_modeler_55',
   model: llmModel,
   instructions:
@@ -48,7 +48,7 @@ const linearModeler = new Agent({
     'Keep it to 4-5 bullet points.',
 });
 
-const treeModeler = new Agent({
+export const treeModeler = new Agent({
   name: 'tree_modeler_55',
   model: llmModel,
   instructions:
@@ -61,7 +61,7 @@ const treeModeler = new Agent({
     'Keep it to 4-5 bullet points.',
 });
 
-const nnModeler = new Agent({
+export const nnModeler = new Agent({
   name: 'nn_modeler_55',
   model: llmModel,
   instructions:
@@ -74,7 +74,7 @@ const nnModeler = new Agent({
     'Keep it to 4-5 bullet points.',
 });
 
-const modelExploration = new Agent({
+export const modelExploration = new Agent({
   name: 'model_exploration_55',
   model: llmModel,
   agents: [linearModeler, treeModeler, nnModeler],
@@ -83,7 +83,7 @@ const modelExploration = new Agent({
 
 // -- Phase 3: Evaluation & Selection -----------------------------------------
 
-const evaluator = new Agent({
+export const evaluator = new Agent({
   name: 'evaluator_55',
   model: llmModel,
   instructions:
@@ -99,7 +99,7 @@ const evaluator = new Agent({
 
 // -- Phase 4: Iterative Refinement -------------------------------------------
 
-const optimizerR1 = new Agent({
+export const optimizerR1 = new Agent({
   name: 'optimizer_r1_55',
   model: llmModel,
   instructions:
@@ -110,7 +110,7 @@ const optimizerR1 = new Agent({
     '3. Predict the expected improvement',
 });
 
-const validatorR1 = new Agent({
+export const validatorR1 = new Agent({
   name: 'validator_r1_55',
   model: llmModel,
   instructions:
@@ -121,7 +121,7 @@ const validatorR1 = new Agent({
     'Provide brief, actionable feedback.',
 });
 
-const optimizerR2 = new Agent({
+export const optimizerR2 = new Agent({
   name: 'optimizer_r2_55',
   model: llmModel,
   instructions:
@@ -132,7 +132,7 @@ const optimizerR2 = new Agent({
     '3. Predict the expected improvement over the previous round',
 });
 
-const validatorR2 = new Agent({
+export const validatorR2 = new Agent({
   name: 'validator_r2_55',
   model: llmModel,
   instructions:
@@ -148,7 +148,7 @@ const refinementLoop = optimizerR1.pipe(validatorR1).pipe(optimizerR2).pipe(vali
 
 // -- Phase 5: Final Report ---------------------------------------------------
 
-const reporter = new Agent({
+export const reporter = new Agent({
   name: 'reporter_55',
   model: llmModel,
   instructions:
@@ -172,16 +172,29 @@ const mlPipeline = dataAnalyst
   .pipe(refinementLoop)
   .pipe(reporter);
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
     mlPipeline,
     'Build a model to predict California housing prices. The dataset has 20,640 samples ' +
     'with 8 features: MedInc, HouseAge, AveRooms, AveBedrms, Population, AveOccup, ' +
     'Latitude, Longitude. Target: MedianHouseValue (continuous, in $100k units). ' +
     'Metric: RMSE. Some features have skewed distributions.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(mlPipeline);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents data_analyst_55
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(mlPipeline);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

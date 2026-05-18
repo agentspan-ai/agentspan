@@ -24,7 +24,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // Domain data -- structured facts for each technology domain
@@ -320,7 +320,7 @@ const subAgentBuilder = new StateGraph(MessagesAnnotation)
   .addConditionalEdges('agent', toolsCondition)
   .addEdge('tools', 'agent');
 
-const subAgentGraph = subAgentBuilder.compile();
+const subAgentGraph = subAgentBuilder.compile({ name: "research_sub_agent" });
 
 // ---------------------------------------------------------------------------
 // Wrap sub-agent as a tool for the orchestrator
@@ -374,7 +374,7 @@ const orchBuilder = new StateGraph(MessagesAnnotation)
   .addConditionalEdges('orchestrator', toolsCondition)
   .addEdge('tools', 'orchestrator');
 
-const graph = orchBuilder.compile();
+const graph = orchBuilder.compile({ name: "research_orchestrator" });
 
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',
@@ -393,16 +393,25 @@ async function main() {
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(
-      graph,
-      'Produce comprehensive analyses for each of the following 25 technology domains ' +
-        'by calling deep_analyst once per domain, then summarise the cross-domain trends. ' +
-        'Domains: ' +
-        DOMAINS.join(', ') +
-        '.',
+    graph,
+    'Produce comprehensive analyses for each of the following 25 technology domains ' +
+    'by calling deep_analyst once per domain, then summarise the cross-domain trends. ' +
+    'Domains: ' +
+    DOMAINS.join(', ') +
+    '.',
     );
 
     console.log(`\nStatus: ${result.status}`);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(graph);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/langgraph --agents context_condensation
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(graph);
   } finally {
     await runtime.shutdown();
   }

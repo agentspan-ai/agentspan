@@ -15,7 +15,7 @@
  *   const result = await runtime.run(adkAgent, prompt, { credentials: ["GITHUB_TOKEN"] });
  *
  * Setup (one-time):
- *   agentspan credentials set --name GITHUB_TOKEN
+ *   agentspan credentials set GITHUB_TOKEN <your-github-token>
  *
  * Requirements:
  *   - Agentspan server running at AGENTSPAN_SERVER_URL
@@ -23,8 +23,8 @@
  *   - GITHUB_TOKEN stored via `agentspan credentials set`
  */
 
-import { Agent, AgentRuntime, tool, getCredential } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool, getCredential } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // Mirrors a Google ADK FunctionTool that checks for a credential
 const checkGithubAuth = tool(
@@ -49,7 +49,7 @@ const checkGithubAuth = tool(
   },
 );
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'google_adk_cred_agent',
   model: llmModel,
   tools: [checkGithubAuth],
@@ -59,13 +59,26 @@ const agent = new Agent({
 
 // -- Run ----------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
     agent,
     'Is GitHub authentication available?',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents google_adk_cred_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

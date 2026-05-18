@@ -10,16 +10,16 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Agents with introductions ---------------------------------------------
 
-const architect = new Agent({
+export const architect = new Agent({
   name: 'architect',
   model: llmModel,
   introduction:
@@ -31,7 +31,7 @@ const architect = new Agent({
     'and architectural patterns. Keep responses to 2-3 paragraphs.',
 });
 
-const securityEngineer = new Agent({
+export const securityEngineer = new Agent({
   name: 'security_engineer',
   model: llmModel,
   introduction:
@@ -42,7 +42,7 @@ const securityEngineer = new Agent({
     'vulnerabilities, and best practices. Keep responses to 2-3 paragraphs.',
 });
 
-const productManager = new Agent({
+export const productManager = new Agent({
   name: 'product_manager',
   model: llmModel,
   introduction:
@@ -58,7 +58,7 @@ const productManager = new Agent({
 
 // Introductions are automatically prepended to the conversation transcript
 // before the first turn, so each agent knows who's in the room.
-const designReview = new Agent({
+export const designReview = new Agent({
   name: 'design_review',
   model: llmModel,
   agents: [architect, securityEngineer, productManager],
@@ -68,14 +68,27 @@ const designReview = new Agent({
 
 // -- Run -------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
     designReview,
     'We need to design a new user authentication system for our SaaS platform. ' +
-      'Should we use OAuth 2.0, SAML, or build our own JWT-based system?',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    'Should we use OAuth 2.0, SAML, or build our own JWT-based system?',
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(designReview);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents design_review
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(designReview);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

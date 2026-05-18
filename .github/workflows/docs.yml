@@ -1,0 +1,48 @@
+name: Docs
+
+on:
+  pull_request:
+    paths:
+      - "AGENTS.md"
+      - "docs/**"
+      - "mkdocs.yml"
+      - "requirements-docs.txt"
+      - "serve-docs.sh"
+      - ".github/workflows/docs.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "AGENTS.md"
+      - "docs/**"
+      - "mkdocs.yml"
+      - "requirements-docs.txt"
+      - "serve-docs.sh"
+      - ".github/workflows/docs.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-source-docs:
+    name: Build source docs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install docs dependencies
+        run: python -m pip install -r requirements-docs.txt
+
+      - name: Build docs
+        run: mkdocs build --strict

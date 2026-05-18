@@ -130,12 +130,22 @@ def main():
 
     with AgentRuntime() as runtime:
         result = runtime.run(
-            coordinator,
-            "I'm client CLT-001. Review my portfolio and tell me if I should rebalance "
-            "given current market conditions. What would the tax impact be if I sold some AAPL?",
+        coordinator,
+        "I'm client CLT-001. Review my portfolio and tell me if I should rebalance "
+        "given current market conditions. What would the tax impact be if I sold some AAPL?",
         )
         print(f"Status: {result.status}")
-        print(f"Output: {result.output}")
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(coordinator)
+        # CLI alternative:
+        # agentspan deploy --package examples.adk.17_financial_advisor
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(coordinator)
+
 
 
 if __name__ == "__main__":

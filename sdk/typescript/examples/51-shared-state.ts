@@ -6,14 +6,13 @@
  *
  * Requirements:
  *   - Conductor server with state support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import type { ToolContext } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import type { ToolContext } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Tools -------------------------------------------------------------------
 
@@ -29,9 +28,13 @@ const addItem = tool(
   {
     name: 'add_item',
     description: 'Add an item to the shared shopping list.',
-    inputSchema: z.object({
-      item: z.string().describe('The item to add'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        item: { type: 'string', description: 'The item to add' },
+      },
+      required: ['item'],
+    },
   },
 );
 
@@ -43,7 +46,11 @@ const getList = tool(
   {
     name: 'get_list',
     description: 'Get the current shopping list from shared state.',
-    inputSchema: z.object({}),
+    inputSchema: {
+      type: 'object',
+      properties: {
+      },
+    },
   },
 );
 
@@ -57,13 +64,17 @@ const clearList = tool(
   {
     name: 'clear_list',
     description: 'Clear the shopping list.',
-    inputSchema: z.object({}),
+    inputSchema: {
+      type: 'object',
+      properties: {
+      },
+    },
   },
 );
 
 // -- Agent -------------------------------------------------------------------
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'shopping_assistant_51',
   model: llmModel,
   instructions:
@@ -77,13 +88,26 @@ const agent = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
     agent,
     'Add milk, eggs, and bread to my shopping list, then show me the list.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents shopping_assistant_51
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

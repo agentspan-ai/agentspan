@@ -11,7 +11,7 @@ Demonstrates:
 Requirements:
     - pip install openai-agents
     - Conductor server with OpenAI LLM integrations configured
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
     - AGENTSPAN_SECONDARY_LLM_MODEL=openai/gpt-4o as environment variable
 """
@@ -103,9 +103,20 @@ code_specialist = Agent(
 # Wire up handoffs
 triage.handoffs = [doc_specialist, code_specialist]
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
         triage,
         "I need a Python code example for authenticating with the API.",
-    )
-    result.print_result()
+        )
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(triage)
+        # CLI alternative:
+        # agentspan deploy --package examples.openai.10_multi_model
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(triage)

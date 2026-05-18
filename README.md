@@ -1,8 +1,8 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="assets/logo-light.svg">
-    <img src="assets/logo-light.svg" alt="Agentspan" width="400">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/agentspan-logo-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/agentspan-logo-light.png">
+    <img src="assets/agentspan-logo-light.png" alt="Agentspan" width="360">
   </picture>
 </p>
 
@@ -11,38 +11,64 @@
 <p align="center">
   <a href="https://pypi.org/project/agentspan/"><img src="https://img.shields.io/pypi/v/agentspan?color=blue" alt="PyPI"></a>
   <a href="https://pypi.org/project/agentspan/"><img src="https://img.shields.io/pypi/dm/agentspan?color=blue" alt="Downloads"></a>
-  <a href="https://github.com/agentspan/agentspan/stargazers"><img src="https://img.shields.io/github/stars/agentspan/agentspan?style=social" alt="Stars"></a>
-  <a href="https://github.com/agentspan/agentspan/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
-  <a href="https://discord.gg/agentspan"><img src="https://img.shields.io/discord/1234567890?label=Discord&logo=discord&color=5865F2" alt="Discord"></a>
-  <a href="https://github.com/agentspan/agentspan/actions"><img src="https://img.shields.io/github/actions/workflow/status/agentspan/agentspan/ci.yml?label=CI" alt="CI"></a>
+  <a href="https://github.com/agentspan-ai/agentspan/stargazers"><img src="https://img.shields.io/github/stars/agentspan-ai/agentspan?style=social" alt="Stars"></a>
+  <a href="https://github.com/agentspan-ai/agentspan/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
+  <a href="https://discord.com/invite/ajcA66JcKq"><img src="https://img.shields.io/discord/1488604882259939528?label=Discord&logo=discord&color=5865F2" alt="Discord"></a>
+  <a href="https://github.com/agentspan-ai/agentspan/actions"><img src="https://img.shields.io/github/actions/workflow/status/agentspan-ai/agentspan/ci.yml?label=CI" alt="CI"></a>
 </p>
 
 <p align="center">
-  <a href="https://docs.agentspan.dev">Docs</a> &bull;
+  <a href="https://agentspan.ai/docs">Docs</a> &bull;
   <a href="#quickstart">Quickstart</a> &bull;
   <a href="#examples">180+ Examples</a> &bull;
-  <a href="https://discord.gg/agentspan">Discord</a> &bull;
+  <a href="https://discord.com/invite/ajcA66JcKq">Discord</a> &bull;
   <a href="docs/python-sdk/api-reference.md">API Reference</a>
 </p>
 
+<p align="center">
+  <video src="assets/agentspan-readme-demo.mp4" controls muted playsinline width="100%"></video>
+</p>
+
 ---
+
+> ⭐ If you find Agentspan useful, [give us a star](https://github.com/agentspan-ai/agentspan) — it helps others find the project!
+
+---
+
+https://github.com/user-attachments/assets/dd4b720d-d11c-42e8-93a6-875c5a740fd8
+
 
 **Agentspan** is a distributed, durable runtime for AI agents that survive crashes, scale across machines, and pause for human approval for days — not minutes.
 
 ## Quickstart (60 seconds)
 
 ```bash
-# 1. Install
-npm install -g @agentspan/agentspan          # installs the CLI
-pip install agentspan                         # installs the Python SDK
-export OPENAI_API_KEY=sk-...                  # or any supported provider
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.sh | sh
 
-# 2. Start the server
-agentspan server start                        # runs on localhost:8080 with UI
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.ps1 | iex
+```
+
+## Install SDKs
+```bash
+# Python
+pip install agentspan
+
+# TypeScript / JavaScript
+npm install @agentspan-ai/sdk
+
+# C# / .NET
+dotnet add package Agentspan
+```
+
+```bash
+export OPENAI_API_KEY=sk-...   # or any supported provider
+agentspan server start         # runs on localhost:6767 with UI
 ```
 
 ```python
-# 3. Run your first agent (save as hello.py, run with: python hello.py)
+# hello.py — run with: python hello.py
 from agentspan.agents import Agent, AgentRuntime, tool
 
 @tool
@@ -57,16 +83,19 @@ with AgentRuntime() as runtime:
     result.print_result()
 ```
 
-That's it. The server auto-starts workers, compiles your agent to a durable workflow, and executes it. Open `http://localhost:8080` to see the visual workflow UI.
+Open `http://localhost:6767` to see the visual execution UI.
 
-<details><summary>Alternative install methods</summary>
+<details><summary>Alternative CLI install methods</summary>
 
 ```bash
-# CLI alternative (if you don't have npm)
-curl -fsSL https://raw.githubusercontent.com/agentspan/agentspan/main/cli/install.sh | sh
+# npm
+npm install -g @agentspan-ai/agentspan
 
-# Python SDK with uv
-uv pip install agentspan
+# Windows — CMD / double-click
+curl -fsSL https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.bat -o install.bat && install.bat
+
+# From source
+cd cli && go build -o agentspan .
 
 # Verify setup
 agentspan doctor
@@ -100,11 +129,11 @@ agentspan doctor
 
 ## Why Agentspan?
 
-Every other agent SDK runs agents in-memory. When the process dies, the agent dies. Agentspan compiles your agents to durable workflows that execute on a server — giving you reliability, observability, and distributed scaling out of the box.
+Agentspan is the execution layer, not the replacement. Use native Agentspan agents, or bring LangGraph, the OpenAI Agents SDK, or Google ADK — pass your existing agent to `runtime.run()` and it gains crash recovery, human-in-the-loop pauses, and full execution history. Your definitions stay unchanged.
 
 | | CrewAI | LangChain | AutoGen | OpenAI Agents | **Agentspan** |
 |---|---|---|---|---|---|
-| **Execution model** | In-memory | Checkpoints | In-memory | Client-side loop | **Server-side workflows** |
+| **Execution model** | In-memory | Checkpoints | In-memory | Client-side loop | **Server-side executions** |
 | **Crash recovery** | Manual replay | Checkpointer (Postgres) | None | None | **Automatic resume** |
 | **Tool scaling** | Single process | Single process | Distributed | Single process | **Distributed workers (any language)** |
 | **Human approval** | Stdin-blocking | `interrupt()` + checkpointer | Stdin-blocking | In-process | **Durable pause (days, any machine)** |
@@ -116,21 +145,21 @@ Every other agent SDK runs agents in-memory. When the process dies, the agent di
 
 <details><summary>What makes it different (detailed)</summary>
 
-1. **True durable execution** — Your agent compiles to a server-side workflow. Kill the process — the agent keeps running. Poll for results from anywhere.
+1. **True durable execution** — Your agent compiles to a server-side execution. Kill the process — the agent keeps running. Poll for results from anywhere.
 
-2. **Cross-process agent access** — Every agent has a workflow ID. Check status, stream events, approve tool calls, pause, resume, or cancel from any process, any machine.
+2. **Cross-process agent access** — Every agent has an execution ID. Check status, stream events, approve tool calls, pause, resume, or cancel from any process, any machine.
 
 3. **Distributed workers in any language** — Tools execute as distributed tasks. Write workers in Python, Java, Go, or any language. Scale each tool independently.
 
 4. **One primitive** — Everything is an `Agent`. Single agents, multi-agent teams, nested hierarchies — one class.
 
-5. **Real human-in-the-loop** — `@tool(approval_required=True)` pauses the workflow durably. Approve days later, from any machine.
+5. **Real human-in-the-loop** — `@tool(approval_required=True)` pauses the execution durably. Approve days later, from any machine.
 
 6. **Production guardrails** — Custom functions, regex, or LLM judges. Four failure modes: retry, raise, fix, or human escalation.
 
 7. **Server-side tools** — HTTP endpoints and MCP servers execute as server-side tasks. No worker needed. MCP auto-discovered at compile time.
 
-8. **Full observability** — OpenTelemetry, Prometheus, visual workflow UI, execution history, token/cost tracking.
+8. **Full observability** — Prometheus metrics, visual execution UI, execution history, token usage tracking. OpenTelemetry available (opt-in via config).
 
 9. **Framework compatible** — Works with Google ADK, OpenAI Agents SDK, LangChain, and LangGraph. [180+ examples](sdk/python/examples/).
 
@@ -196,11 +225,11 @@ Store API keys and secrets once on the server. Tools resolve them automatically 
 **Step 1: Store credentials on the server**
 
 ```bash
-agentspan credential store GITHUB_TOKEN ghp_xxxxxxxxxxxx
-agentspan credential store SEARCH_API_KEY xxx-your-key
+agentspan credentials set GITHUB_TOKEN ghp_xxxxxxxxxxxx
+agentspan credentials set SEARCH_API_KEY xxx-your-key
 ```
 
-Credentials are encrypted at rest (AES-256-GCM). List them with `agentspan credential list`.
+Credentials are encrypted at rest (AES-256-GCM). List them with `agentspan credentials list`.
 
 **Step 2: Declare which credentials a tool needs**
 
@@ -255,7 +284,7 @@ api = http_tool(
 github = mcp_tool(server_url="http://localhost:3001/mcp", credentials=["GITHUB_TOKEN"])
 ```
 
-No credentials leave the server unencrypted. Workers resolve them via scoped execution tokens that expire with the workflow. See the [11 credential examples](sdk/python/examples/) (`16_*.py` through `16k_*.py`) for every mode: isolated subprocess, in-process, CLI tools, HTTP headers, MCP, and framework passthrough.
+No credentials leave the server unencrypted. Workers resolve them via scoped execution tokens that expire with the execution. See the [11 credential examples](sdk/python/examples/) (`16_*.py` through `16k_*.py`) for every mode: isolated subprocess, in-process, CLI tools, HTTP headers, MCP, and framework passthrough.
 
 ### Multi-Agent Handoffs
 
@@ -402,7 +431,7 @@ weather_api = http_tool(
 )
 
 # MCP server tools (auto-discovered)
-github = mcp_tool(server_url="http://localhost:8080/mcp")
+github = mcp_tool(server_url="http://localhost:6767/mcp")
 
 agent = Agent(name="assistant", model="openai/gpt-4o", tools=[stripe, weather_api, github])
 
@@ -530,7 +559,7 @@ Execution order: `on_agent_start` → (`on_model_start` → LLM → `on_model_en
 | [`06_sequential_pipeline.py`](sdk/python/examples/06_sequential_pipeline.py) | `agent >> agent >> agent` |
 | [`07_parallel_agents.py`](sdk/python/examples/07_parallel_agents.py) | Fan-out / fan-in |
 | [`08_router_agent.py`](sdk/python/examples/08_router_agent.py) | LLM routing to specialists |
-| [`09_human_in_the_loop.py`](sdk/python/examples/09_human_in_the_loop.py) | Approval workflows |
+| [`09_human_in_the_loop.py`](sdk/python/examples/09_human_in_the_loop.py) | Approval patterns |
 | [`09b_hitl_with_feedback.py`](sdk/python/examples/09b_hitl_with_feedback.py) | Custom feedback (respond API) |
 | [`09c_hitl_streaming.py`](sdk/python/examples/09c_hitl_streaming.py) | Streaming + HITL approval |
 | [`10_guardrails.py`](sdk/python/examples/10_guardrails.py) | Output validation + retry |
@@ -625,77 +654,13 @@ pipeline = SequentialAgent(name="pipeline", sub_agents=[researcher, writer])
 
 ## Deployment
 
-### Development (SQLite — zero setup)
+| Environment | Guide |
+|---|---|
+| Local (dev) | `agentspan server start` — zero config, SQLite |
+| Single server | [Docker / Docker Compose](deployment/README.md) |
+| Production | [Kubernetes + Helm](deployment/README.md) |
 
-The default setup uses SQLite with WAL mode. No external database needed.
-
-```bash
-agentspan server start
-```
-
-Data is stored in `agent-runtime.db` in the working directory.
-
-### Production (PostgreSQL)
-
-For production workloads, use PostgreSQL for durability and concurrent access.
-
-**1. Start PostgreSQL with Docker Compose:**
-
-```bash
-cd deployment/docker-compose
-cp .env.example .env
-docker compose up -d postgres
-```
-
-This starts PostgreSQL 16 on port 5432 with:
-- User: `agentspan` (default)
-- Password: `changeme` (default)
-- Database: `agentspan` (default)
-
-**2. Start the server with the Postgres profile:**
-
-```bash
-SPRING_PROFILES_ACTIVE=postgres agentspan server start
-```
-
-Or configure the database connection directly:
-
-```bash
-export SPRING_DATASOURCE_URL=jdbc:postgresql://your-host:5432/conductor
-export SPRING_DATASOURCE_USERNAME=your_user
-export SPRING_DATASOURCE_PASSWORD=your_password
-export SPRING_PROFILES_ACTIVE=postgres
-agentspan server start
-```
-
-### Docker Deployment
-
-Run the Agentspan server and PostgreSQL together using the deployment Compose stack:
-
-```bash
-cd deployment/docker-compose
-cp .env.example .env
-docker compose up -d
-```
-
-Compose files:
-- `deployment/docker-compose/compose.yaml`
-- `deployment/docker-compose/.env.example`
-- `deployment/docker-compose/README.md`
-
-### Configuration Reference
-
-The server auto-enables LLM providers when their API key is set. No manual integration setup needed.
-
-| Setting | Env Var | Default |
-|---|---|---|
-| Server port | `SERVER_PORT` | `8080` |
-| Database backend | `SPRING_PROFILES_ACTIVE` | `default` (SQLite) |
-| SQLite path | `SPRING_DATASOURCE_URL` | `jdbc:sqlite:agent-runtime.db` |
-| Postgres URL | `SPRING_DATASOURCE_URL` | `jdbc:postgresql://localhost:5432/conductor` |
-| Postgres user | `SPRING_DATASOURCE_USERNAME` | `postgres` |
-| Postgres password | `SPRING_DATASOURCE_PASSWORD` | `postgres` |
-| Postgres pool size | `SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE` | `8` |
+Full deployment guide → **[deployment/README.md](deployment/README.md)**
 
 ## Project Structure
 
@@ -707,7 +672,7 @@ The server auto-enables LLM providers when their API key is set. No manual integ
 │   ├── k8s/              # Kubernetes manifests
 │   ├── helm/             # Helm chart
 │   └── docker-compose/   # Compose stack (single node)
-├── ui/                   # React workflow UI (served at localhost:8080)
+├── ui/                   # React execution UI (served at localhost:6767)
 ├── sdk/
 │   ├── python/           # Python SDK
 │   │   ├── src/agentspan/agents/
@@ -735,14 +700,14 @@ agentspan doctor           # Check system dependencies
 
 We're building Agentspan in the open and would love your help.
 
-- **[Discord](https://discord.gg/agentspan)** — Ask questions, share what you're building, get help
-- **[GitHub Issues](https://github.com/agentspan/agentspan/issues)** — Bug reports and feature requests
+- **[Discord](https://discord.com/invite/ajcA66JcKq)** — Ask questions, share what you're building, get help
+- **[GitHub Issues](https://github.com/agentspan-ai/agentspan/issues)** — Bug reports and feature requests
 - **[Contributing Guide](CONTRIBUTING.md)** — How to contribute code, docs, and examples
 
 ### Contributing
 
 ```bash
-git clone https://github.com/agentspan/agentspan.git
+git clone https://github.com/agentspan-ai/agentspan.git
 cd agentspan/sdk/python
 uv venv && source .venv/bin/activate
 uv pip install -e ".[dev]"
@@ -755,10 +720,10 @@ We welcome PRs of all sizes — from typo fixes to new examples to core features
 
 If Agentspan is useful to you, help others find it:
 
-- [Star this repo](https://github.com/agentspan/agentspan) — it helps more than you think
-- [Share on LinkedIn](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/agentspan/agentspan) — tell your network
-- [Share on X/Twitter](https://twitter.com/intent/tweet?text=Agentspan%20%E2%80%94%20AI%20agents%20that%20don%27t%20die%20when%20your%20process%20does.%20Durable%2C%20scalable%2C%20observable.&url=https://github.com/agentspan/agentspan) — spread the word
-- [Share on Reddit](https://www.reddit.com/submit?url=https://github.com/agentspan/agentspan&title=Agentspan%20%E2%80%94%20AI%20agents%20that%20survive%20crashes%2C%20scale%20across%20machines%2C%20and%20pause%20for%20human%20approval%20for%20days) — post in r/MachineLearning or r/LocalLLaMA
+- [Star this repo](https://github.com/agentspan-ai/agentspan) — it helps more than you think
+- [Share on LinkedIn](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/agentspan-ai/agentspan) — tell your network
+- [Share on X/Twitter](https://twitter.com/intent/tweet?text=Agentspan%20%E2%80%94%20AI%20agents%20that%20don%27t%20die%20when%20your%20process%20does.%20Durable%2C%20scalable%2C%20observable.&url=https://github.com/agentspan-ai/agentspan) — spread the word
+- [Share on Reddit](https://www.reddit.com/submit?url=https://github.com/agentspan-ai/agentspan&title=Agentspan%20%E2%80%94%20AI%20agents%20that%20survive%20crashes%2C%20scale%20across%20machines%2C%20and%20pause%20for%20human%20approval%20for%20days) — post in r/MachineLearning or r/LocalLLaMA
 
 ## API Reference
 

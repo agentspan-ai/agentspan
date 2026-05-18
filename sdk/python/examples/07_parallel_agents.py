@@ -8,7 +8,7 @@ on the same input and their results are aggregated.
 
 Requirements:
     - Conductor server with LLM support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -53,6 +53,18 @@ analysis = Agent(
     strategy=Strategy.PARALLEL,
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(analysis, "Launching an AI-powered healthcare diagnostic tool in the US market")
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(analysis, "Launching an AI-powered healthcare diagnostic tool in the US market")
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(analysis)
+        # CLI alternative:
+        # agentspan deploy --package examples.07_parallel_agents
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(analysis)
+

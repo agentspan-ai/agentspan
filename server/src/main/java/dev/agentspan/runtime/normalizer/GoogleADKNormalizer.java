@@ -5,12 +5,13 @@
 
 package dev.agentspan.runtime.normalizer;
 
-import dev.agentspan.runtime.model.*;
+import java.util.*;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import java.util.*;
+import dev.agentspan.runtime.model.*;
 
 /**
  * Normalizes Google ADK agent raw configs into the canonical {@link AgentConfig}.
@@ -105,11 +106,12 @@ public class GoogleADKNormalizer implements AgentConfigNormalizer {
         String agentType = getString(raw, "_type", "");
         List<Map<String, Object>> subAgents = getList(raw, "sub_agents");
         if (subAgents != null && !subAgents.isEmpty()) {
-            String strategy = switch (agentType) {
-                case "SequentialAgent" -> "sequential";
-                case "ParallelAgent" -> "parallel";
-                default -> "handoff";
-            };
+            String strategy =
+                    switch (agentType) {
+                        case "SequentialAgent" -> "sequential";
+                        case "ParallelAgent" -> "parallel";
+                        default -> "handoff";
+                    };
             config.setStrategy(strategy);
             List<AgentConfig> agents = new ArrayList<>();
             for (Map<String, Object> sa : subAgents) {
@@ -201,9 +203,9 @@ public class GoogleADKNormalizer implements AgentConfigNormalizer {
 
         // Callbacks: extract _worker_ref from ADK callback fields
         String[] callbackFields = {
-                "before_model_callback", "after_model_callback",
-                "before_tool_callback", "after_tool_callback",
-                "before_agent_callback", "after_agent_callback"
+            "before_model_callback", "after_model_callback",
+            "before_tool_callback", "after_tool_callback",
+            "before_agent_callback", "after_agent_callback"
         };
         List<CallbackConfig> callbacks = new ArrayList<>();
         for (String field : callbackFields) {
@@ -301,21 +303,24 @@ public class GoogleADKNormalizer implements AgentConfigNormalizer {
                 // Agent-as-tool: wrap a child agent as a callable tool
                 Map<String, Object> agentRaw = getMap(raw, "agent");
                 if (agentRaw == null) {
-                    log.warn("AgentTool '{}' has no embedded agent, skipping",
-                            getString(raw, "name", "unknown"));
+                    log.warn("AgentTool '{}' has no embedded agent, skipping", getString(raw, "name", "unknown"));
                     return null;
                 }
                 AgentConfig childAgent = normalize(agentRaw);
                 String toolName = getString(raw, "name", childAgent.getName());
-                String toolDesc = getString(raw, "description",
-                        "Invoke agent: " + childAgent.getName());
+                String toolDesc = getString(raw, "description", "Invoke agent: " + childAgent.getName());
 
                 Map<String, Object> inputSchema = new LinkedHashMap<>();
                 inputSchema.put("type", "object");
-                inputSchema.put("properties", Map.of(
-                        "request", Map.of("type", "string",
-                                "description", "The request or question to send to this agent")
-                ));
+                inputSchema.put(
+                        "properties",
+                        Map.of(
+                                "request",
+                                Map.of(
+                                        "type",
+                                        "string",
+                                        "description",
+                                        "The request or question to send to this agent")));
                 inputSchema.put("required", List.of("request"));
                 inputSchema.put("additionalProperties", false);
 

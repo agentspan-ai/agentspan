@@ -10,14 +10,14 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
 import { createServer } from 'http';
 import { execSync } from 'child_process';
-import { Agent, AgentRuntime, ServerlessCodeExecutor } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, ServerlessCodeExecutor } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Tiny mock execution server -----------------------------------------------
 
@@ -68,7 +68,7 @@ const serverlessExecutor = new ServerlessCodeExecutor({
   timeout: 15,
 });
 
-const serverlessCoder = new Agent({
+export const serverlessCoder = new Agent({
   name: 'serverless_coder',
   model: llmModel,
   tools: [serverlessExecutor.asTool('execute_code')],
@@ -82,15 +82,28 @@ const serverlessCoder = new Agent({
 
 // -- Run ----------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  console.log('--- Serverless Code Execution ---');
-  const result = await runtime.run(
-    serverlessCoder,
-    'Calculate 2**100 and print the result.',
-  );
-  result.printResult();
-} finally {
-  server.close();
-  await runtime.shutdown();
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('--- Serverless Code Execution ---');
+    const result = await runtime.run(
+      serverlessCoder,
+      'Calculate 2**100 and print the result.',
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(serverlessCoder);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents serverless_coder
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(serverlessCoder);
+  } finally {
+    server.close();
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

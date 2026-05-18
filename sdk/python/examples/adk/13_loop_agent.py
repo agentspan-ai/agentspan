@@ -56,7 +56,17 @@ def main():
     with AgentRuntime() as runtime:
         result = runtime.run(refinement_loop, "Write a haiku about autumn leaves")
         print(f"Status: {result.status}")
-        print(f"Output: {result.output}")
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(refinement_loop)
+        # CLI alternative:
+        # agentspan deploy --package examples.adk.13_loop_agent
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(refinement_loop)
+
 
 
 if __name__ == "__main__":

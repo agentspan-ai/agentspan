@@ -18,7 +18,7 @@
  * Requirements:
  *   - Agentspan server running at AGENTSPAN_SERVER_URL
  *   - AGENTSPAN_LLM_MODEL set (or defaults to openai/gpt-4o-mini)
- *   - STRIPE_SECRET_KEY stored: agentspan credentials set --name STRIPE_SECRET_KEY
+ *   - STRIPE_SECRET_KEY stored: agentspan credentials set STRIPE_SECRET_KEY <your-stripe-secret-key>
  */
 
 import {
@@ -27,8 +27,8 @@ import {
   CredentialNotFoundError,
   getCredential,
   tool,
-} from '../src/index.js';
-import { llmModel } from './settings.js';
+} from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Non-isolated tool: get Stripe customer balance ---------------------------
 
@@ -40,7 +40,7 @@ const getCustomerBalance = tool(
     } catch (err) {
       if (err instanceof CredentialNotFoundError) {
         return {
-          error: 'STRIPE_SECRET_KEY not configured -- run: agentspan credentials set --name STRIPE_SECRET_KEY',
+          error: 'STRIPE_SECRET_KEY not configured -- run: agentspan credentials set STRIPE_SECRET_KEY', <your-stripe-secret-key',>
         };
       }
       throw err;
@@ -142,7 +142,7 @@ const listRecentCharges = tool(
 
 // -- Agent definition ---------------------------------------------------------
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'billing_agent',
   model: llmModel,
   tools: [getCustomerBalance, listRecentCharges],
@@ -154,10 +154,23 @@ const agent = new Agent({
 
 // -- Run ----------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(agent, 'Show me the 3 most recent charges.');
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(agent, 'Show me the 3 most recent charges.');
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents billing_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

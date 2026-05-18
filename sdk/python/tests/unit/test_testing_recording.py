@@ -12,7 +12,7 @@ from agentspan.agents.testing.recording import record, replay
 def _make_result():
     return AgentResult(
         output="The weather is 72F",
-        workflow_id="wf-123",
+        execution_id="wf-123",
         correlation_id="corr-456",
         messages=[
             {"role": "user", "content": "Weather?"},
@@ -51,7 +51,7 @@ class TestRecordReplay:
         restored = replay(path)
 
         assert restored.output == original.output
-        assert restored.workflow_id == original.workflow_id
+        assert restored.execution_id == original.execution_id
         assert restored.correlation_id == original.correlation_id
         assert restored.status == original.status
         assert restored.finish_reason == original.finish_reason

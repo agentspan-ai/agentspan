@@ -7,14 +7,14 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'saas_analyst',
   model: llmModel,
   instructions:
@@ -23,31 +23,30 @@ const agent = new Agent({
 });
 
 // Start agent asynchronously (returns immediately)
+
 const runtime = new AgentRuntime();
 try {
-  const handle = await runtime.start(
+  const result = await runtime.run(
     agent,
     'What are the key metrics to track for a SaaS product?',
   );
-  console.log(`Agent started: ${handle.workflowId}`);
+  result.printResult();
 
-  // Poll for completion
-  let completed = false;
-  for (let i = 0; i < 30; i++) {
-    const status = await handle.getStatus();
-    console.log(`  [${i}s] Status: ${status.status} | Complete: ${status.isComplete}`);
-    if (status.isComplete) {
-      console.log(`\nResult: ${JSON.stringify(status.output)}`);
-      completed = true;
-      break;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-  }
+  // Production pattern:
+  // 1. Deploy once during CI/CD:
+  // await runtime.deploy(agent);
+  // CLI alternative:
+  // agentspan deploy --package sdk/typescript/examples --agents saas_analyst
+  //
+  // 2. In a separate long-lived worker process:
+  // await runtime.serve(agent);
 
-  if (!completed) {
-    console.log('\nAgent still running. Check the Conductor UI:');
-    console.log(`  http://localhost:8080/execution/${handle.workflowId}`);
-  }
+  // Async handle alternative:
+  // const handle = await runtime.start(
+  //   agent,
+  //   'What are the key metrics to track for a SaaS product?',
+  // );
+  // console.log(handle.executionId);
 } finally {
   await runtime.shutdown();
 }

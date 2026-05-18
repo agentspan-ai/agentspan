@@ -17,7 +17,7 @@
 
 import { LlmAgent, FunctionTool } from '@google/adk';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
@@ -80,7 +80,7 @@ const checkOrderStatus = new FunctionTool({
 
 // ── Agent with callbacks ────────────────────────────────────────────
 
-const agent = new LlmAgent({
+export const agent = new LlmAgent({
   name: 'customer_service_agent',
   model,
   instruction:
@@ -111,12 +111,21 @@ async function main() {
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(
-      agent,
-      'Look up customer C001 and check if order ORD-1001 has shipped. ' +
-        'If the customer is gold tier, apply a 10% discount.',
+    agent,
+    'Look up customer C001 and check if order ORD-1001 has shipped. ' +
+    'If the customer is gold tier, apply a 10% discount.',
     );
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents customer_service_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
   } finally {
     await runtime.shutdown();
   }

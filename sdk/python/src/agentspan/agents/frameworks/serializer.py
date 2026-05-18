@@ -38,10 +38,17 @@ def detect_framework(agent_obj: Any) -> Optional[str]:
     ``"langgraph"``, ``"langchain"``, ``"google_adk"``) or ``None`` for native
     Conductor Agents.
     """
-    # Native Agent — no normalization needed
+    # Skill framework detection — must be checked before native Agent check
+    # since skill agents are Agent instances with a _framework marker.
+    if hasattr(agent_obj, "_framework") and agent_obj._framework == "skill":
+        return "skill"
+
+    # Native Agent — check for claude-code model first
     from agentspan.agents.agent import Agent
 
     if isinstance(agent_obj, Agent):
+        # Native Agent instances are always native, even with claude-code models.
+        # The server handles claude-code model routing during execution.
         return None
 
     # Precise type-name check for LangGraph (avoid fragile module prefix matching
@@ -53,6 +60,10 @@ def detect_framework(agent_obj: Any) -> Optional[str]:
     # LangChain AgentExecutor
     if type_name == "AgentExecutor":
         return "langchain"
+
+    # Claude Agent SDK (claude-code-sdk package)
+    if type_name in ("ClaudeCodeOptions", "ClaudeAgentOptions"):
+        return "claude_agent_sdk"
 
     # Existing module-prefix fallback for openai and google_adk
     module = type(agent_obj).__module__ or ""
@@ -102,6 +113,12 @@ def serialize_agent(agent_obj: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
         from agentspan.agents.frameworks.langchain import serialize_langchain
 
         return serialize_langchain(agent_obj)
+    if framework == "claude_agent_sdk":
+        from agentspan.agents.frameworks.claude_agent_sdk import serialize_claude_agent_sdk
+
+        return serialize_claude_agent_sdk(agent_obj)
+    if framework == "skill":
+        return _serialize_skill(agent_obj)
 
     workers: List[WorkerInfo] = []
     seen: Set[int] = set()  # Prevent infinite recursion on circular refs
@@ -174,6 +191,17 @@ def serialize_agent(agent_obj: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
 
             # Pydantic v2 (instance, not class)
             if hasattr(obj, "model_dump") and not isinstance(obj, type):
+                model_fields = getattr(type(obj), "model_fields", None)
+                if model_fields is not None:
+                    # Serialize field-by-field so our `seen` set handles circular
+                    # references (e.g. ADK parent_agent back-reference) instead of
+                    # letting Pydantic truncate nested models mid-serialization.
+                    # Include _type so server-side normalizers can identify the class.
+                    d: Dict[str, Any] = {"_type": type(obj).__name__}
+                    for field_name in model_fields:
+                        val = getattr(obj, field_name, None)
+                        d[field_name] = _serialize(val)
+                    return d
                 try:
                     return _serialize(obj.model_dump())
                 except (ValueError, RecursionError):
@@ -409,3 +437,31 @@ def _extract_callable(func: Any) -> WorkerInfo:
         input_schema=input_schema,
         func=func,
     )
+
+
+def _serialize_skill(agent_obj: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
+    """Serialize a skill-based agent for server-side normalization.
+
+    Returns the raw skill config (which the server's SkillNormalizer expects)
+    and WorkerInfo instances for each skill worker (scripts + read_skill_file).
+    """
+    from agentspan.agents.skill import create_skill_workers
+
+    raw_config = agent_obj._framework_config
+
+    # Convert SkillWorkers to WorkerInfo for the framework worker registration path
+    skill_workers = create_skill_workers(agent_obj)
+    workers: List[WorkerInfo] = []
+    for sw in skill_workers:
+        workers.append(
+            WorkerInfo(
+                name=sw.name,
+                description=sw.description,
+                input_schema={"type": "object", "properties": {
+                    "command": {"type": "string", "description": "Arguments to pass"},
+                }},
+                func=sw.func,
+            )
+        )
+
+    return raw_config, workers

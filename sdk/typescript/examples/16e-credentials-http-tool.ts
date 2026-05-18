@@ -11,7 +11,7 @@
  * in the workflow definition.
  *
  * Setup (one-time):
- *   agentspan credentials set --name GITHUB_TOKEN
+ *   agentspan credentials set GITHUB_TOKEN <your-github-token>
  *
  * Requirements:
  *   - Agentspan server running at AGENTSPAN_SERVER_URL
@@ -19,8 +19,8 @@
  *   - GITHUB_TOKEN stored via `agentspan credentials set`
  */
 
-import { Agent, AgentRuntime, httpTool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, httpTool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // HTTP tool with credential-bearing headers.
 // ${GITHUB_TOKEN} is resolved server-side from the credential store.
@@ -36,7 +36,7 @@ const listRepos = httpTool({
   credentials: ['GITHUB_TOKEN'],
 });
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'github_http_agent',
   model: llmModel,
   tools: [listRepos],
@@ -45,10 +45,23 @@ const agent = new Agent({
 
 // -- Run ----------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(agent, 'List the repos for agentspan');
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(agent, 'List the repos for agentspan');
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents github_http_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

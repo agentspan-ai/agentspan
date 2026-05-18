@@ -5,14 +5,15 @@
 
 package dev.agentspan.runtime.model;
 
+import java.util.List;
+import java.util.Map;
+
 import com.fasterxml.jackson.annotation.JsonInclude;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.util.List;
-import java.util.Map;
 
 /**
  * Request DTO for POST /api/agent/start.
@@ -28,6 +29,7 @@ public class StartRequest {
     private String prompt;
     private String sessionId;
     private List<String> media;
+    private Map<String, Object> context;
     private String idempotencyKey;
     private List<String> credentials;
 
@@ -39,4 +41,16 @@ public class StartRequest {
 
     /** Per-call timeout override (seconds). Applied server-side to the workflow definition. */
     private Integer timeoutSeconds;
+
+    /**
+     * Per-execution isolation key for stateful agents.
+     *
+     * <p>When set, the server maps every worker tool task to this domain via
+     * {@code taskToDomain} in the {@link StartWorkflowRequest}.  The Python SDK
+     * registers the corresponding workers under the same domain so that Conductor
+     * routes tasks exclusively to the workers that belong to this execution,
+     * preventing cross-instance reply mixing when multiple concurrent instances of
+     * the same agent script are running.
+     */
+    private String runId;
 }

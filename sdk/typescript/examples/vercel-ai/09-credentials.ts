@@ -8,7 +8,7 @@
 
 import { tool as aiTool } from 'ai';
 import { z } from 'zod';
-import { Agent, AgentRuntime } from '../../src/index.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
 
 // ── Vercel AI SDK tool that uses a credential ────────────
 const fetchReport = aiTool({
@@ -29,7 +29,7 @@ const fetchReport = aiTool({
 });
 
 // ── Native Agent with credentials ────────────────────────
-const agent = new Agent({
+export const agent = new Agent({
   name: 'credentialed_agent',
   model: 'openai/gpt-4o-mini',
   instructions:
@@ -52,6 +52,15 @@ async function main() {
     const result = await runtime.run(agent, prompt);
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/vercel-ai --agents credentialed_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
   } finally {
     await runtime.shutdown();
   }

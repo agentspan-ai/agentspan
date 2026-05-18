@@ -18,7 +18,7 @@ How it works:
 
 Setup (one-time, via CLI):
     agentspan login                                     # authenticate
-    agentspan credentials set --name GITHUB_TOKEN       # enter token when prompted
+    agentspan credentials set GITHUB_TOKEN <your-github-token> # enter token when prompted
 
 Requirements:
     - Agentspan server running at AGENTSPAN_SERVER_URL
@@ -106,6 +106,16 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
             agent,
-            "List the 5 most recently updated repos for the 'agentspan' GitHub org.",
+            "List the 5 most recently updated repos for the 'agentspan-ai' GitHub org.",
         )
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.16_credentials_isolated_tool
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
+

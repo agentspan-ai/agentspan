@@ -10,7 +10,7 @@ Demonstrates:
     - Practical use case: research → writing → editing pipeline with supervisor control
 
 Requirements:
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
@@ -104,3 +104,12 @@ if __name__ == "__main__":
         result = runtime.run(graph, "The impact of large language models on software development")
         print(f"Status: {result.status}")
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.25_supervisor
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)

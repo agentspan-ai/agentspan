@@ -15,13 +15,12 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Data tools ---------------------------------------------------------------
 
@@ -48,9 +47,13 @@ const fetchUserData = tool(
   {
     name: 'fetch_user_data',
     description: 'Fetch user data from the database.',
-    inputSchema: z.object({
-      userId: z.string().describe("The user's identifier"),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        userId: { type: 'string', description: 'The user\'s identifier' },
+      },
+      required: ['userId'],
+    },
   },
 );
 
@@ -75,16 +78,20 @@ const redactSensitiveFields = tool(
   {
     name: 'redact_sensitive_fields',
     description: 'Redact sensitive fields from data before responding to users.',
-    inputSchema: z.object({
-      data: z.string().describe('JSON string of user data to redact'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        data: { type: 'string', description: 'JSON string of user data to redact' },
+      },
+      required: ['data'],
+    },
   },
 );
 
 // -- Pipeline agents ----------------------------------------------------------
 
 // Data collector fetches raw user data
-const collector = new Agent({
+export const collector = new Agent({
   name: 'data_collector',
   model: llmModel,
   instructions:
@@ -95,7 +102,7 @@ const collector = new Agent({
 });
 
 // Validator enforces data security policy
-const validator = new Agent({
+export const validator = new Agent({
   name: 'security_validator',
   model: llmModel,
   instructions:
@@ -107,7 +114,7 @@ const validator = new Agent({
 });
 
 // Responder formats the final answer
-const responder = new Agent({
+export const responder = new Agent({
   name: 'responder',
   model: llmModel,
   instructions:
@@ -120,13 +127,26 @@ const responder = new Agent({
 // Sequential pipeline enforces data flow: collect -> validate -> respond
 const pipeline = collector.pipe(validator).pipe(responder);
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
     pipeline,
     'Tell me everything about user U001 including their financial details.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(pipeline);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents data_collector
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(pipeline);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

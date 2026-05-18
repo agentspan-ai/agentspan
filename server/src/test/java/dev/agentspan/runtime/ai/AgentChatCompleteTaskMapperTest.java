@@ -5,6 +5,14 @@
 
 package dev.agentspan.runtime.ai;
 
+import static org.assertj.core.api.Assertions.*;
+
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import org.conductoross.conductor.ai.models.ChatCompletion;
 import org.conductoross.conductor.ai.models.ChatMessage;
 import org.conductoross.conductor.ai.models.ToolCall;
@@ -14,14 +22,6 @@ import org.junit.jupiter.api.Test;
 import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
 import com.netflix.conductor.model.TaskModel;
 import com.netflix.conductor.model.WorkflowModel;
-
-import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import static org.assertj.core.api.Assertions.*;
 
 /**
  * Tests for AgentChatCompleteTaskMapper.
@@ -48,8 +48,7 @@ class AgentChatCompleteTaskMapperTest {
         Map<String, Object> result = invokeExtractResult(outputData);
 
         assertThat(result).containsOnlyKeys("result");
-        assertThat(result.get("result")).isEqualTo(
-                "Afghanistan has a GDP of $20B and a population of 40M.");
+        assertThat(result.get("result")).isEqualTo("Afghanistan has a GDP of $20B and a population of 40M.");
     }
 
     @Test
@@ -139,13 +138,16 @@ class AgentChatCompleteTaskMapperTest {
         ChatMessage toolCallMsg = new ChatMessage();
         toolCallMsg.setRole(ChatMessage.Role.tool_call);
         toolCallMsg.setToolCalls(List.of(
-                ToolCall.builder().name("search").taskReferenceName("ref1").build()
-        ));
+                ToolCall.builder().name("search").taskReferenceName("ref1").build()));
         history.add(toolCallMsg);
 
         // tool response
-        history.add(new ChatMessage(ChatMessage.Role.tool,
-                ToolCall.builder().name("search").output(Map.of("result", "found")).build()));
+        history.add(new ChatMessage(
+                ChatMessage.Role.tool,
+                ToolCall.builder()
+                        .name("search")
+                        .output(Map.of("result", "found"))
+                        .build()));
 
         // assistant text
         history.add(new ChatMessage(ChatMessage.Role.assistant, "Based on the search..."));
@@ -169,16 +171,18 @@ class AgentChatCompleteTaskMapperTest {
         toolCallMsg.setToolCalls(List.of(
                 ToolCall.builder().name("tool_a").taskReferenceName("ref1").build(),
                 ToolCall.builder().name("tool_b").taskReferenceName("ref2").build(),
-                ToolCall.builder().name("tool_c").taskReferenceName("ref3").build()
-        ));
+                ToolCall.builder().name("tool_c").taskReferenceName("ref3").build()));
         history.add(toolCallMsg);
 
         // 3 tool responses
-        history.add(new ChatMessage(ChatMessage.Role.tool,
+        history.add(new ChatMessage(
+                ChatMessage.Role.tool,
                 ToolCall.builder().name("tool_a").output(Map.of("r", "a")).build()));
-        history.add(new ChatMessage(ChatMessage.Role.tool,
+        history.add(new ChatMessage(
+                ChatMessage.Role.tool,
                 ToolCall.builder().name("tool_b").output(Map.of("r", "b")).build()));
-        history.add(new ChatMessage(ChatMessage.Role.tool,
+        history.add(new ChatMessage(
+                ChatMessage.Role.tool,
                 ToolCall.builder().name("tool_c").output(Map.of("r", "c")).build()));
 
         var exchanges = mapper.groupExchanges(history);
@@ -197,13 +201,15 @@ class AgentChatCompleteTaskMapperTest {
         ChatMessage toolCallMsg = new ChatMessage();
         toolCallMsg.setRole(ChatMessage.Role.tool_call);
         toolCallMsg.setToolCalls(List.of(
-                ToolCall.builder().name("run_command").taskReferenceName("ref1").build()
-        ));
-        ChatMessage toolResp = new ChatMessage(ChatMessage.Role.tool,
-                ToolCall.builder().name("run_command").output(Map.of("status", "success")).build());
+                ToolCall.builder().name("run_command").taskReferenceName("ref1").build()));
+        ChatMessage toolResp = new ChatMessage(
+                ChatMessage.Role.tool,
+                ToolCall.builder()
+                        .name("run_command")
+                        .output(Map.of("status", "success"))
+                        .build());
         exchanges.add(new AgentChatCompleteTaskMapper.Exchange(
-                List.of(toolCallMsg, toolResp),
-                AgentChatCompleteTaskMapper.ExchangeType.TOOL_EXCHANGE));
+                List.of(toolCallMsg, toolResp), AgentChatCompleteTaskMapper.ExchangeType.TOOL_EXCHANGE));
 
         // An assistant text exchange
         exchanges.add(new AgentChatCompleteTaskMapper.Exchange(
@@ -241,8 +247,56 @@ class AgentChatCompleteTaskMapperTest {
     @Test
     void testTruncate() {
         assertThat(AgentChatCompleteTaskMapper.truncate("short", 10)).isEqualTo("short");
-        assertThat(AgentChatCompleteTaskMapper.truncate("a long string here", 6)).isEqualTo("a long...");
+        assertThat(AgentChatCompleteTaskMapper.truncate("a long string here", 6))
+                .isEqualTo("a long...");
         assertThat(AgentChatCompleteTaskMapper.truncate(null, 10)).isEqualTo("");
+    }
+
+    @Test
+    void testSanitizeMessages_dropsBlankTextOnlyMessages() {
+        ChatCompletion cc = new ChatCompletion();
+        cc.getMessages().add(new ChatMessage(ChatMessage.Role.system, "You are helpful."));
+        cc.getMessages().add(new ChatMessage(ChatMessage.Role.user, "   "));
+
+        mapper.sanitizeMessages(cc);
+
+        assertThat(cc.getMessages()).hasSize(1);
+        assertThat(cc.getMessages().get(0).getRole()).isEqualTo(ChatMessage.Role.system);
+    }
+
+    @Test
+    void testSanitizeMessages_keepsMediaOnlyUserMessage() {
+        ChatCompletion cc = new ChatCompletion();
+        ChatMessage user = new ChatMessage(ChatMessage.Role.user, "   ");
+        user.setMedia(List.of("https://example.com/cat.png"));
+        cc.getMessages().add(user);
+
+        mapper.sanitizeMessages(cc);
+
+        assertThat(cc.getMessages()).hasSize(1);
+        assertThat(cc.getMessages().get(0).getRole()).isEqualTo(ChatMessage.Role.user);
+        assertThat(cc.getMessages().get(0).getMessage()).isNull();
+        assertThat(cc.getMessages().get(0).getMedia()).containsExactly("https://example.com/cat.png");
+    }
+
+    @Test
+    void testValidateRunnableConversation_rejectsMissingUserInput() {
+        ChatCompletion cc = new ChatCompletion();
+        cc.getMessages().add(new ChatMessage(ChatMessage.Role.system, "You are helpful."));
+
+        assertThatThrownBy(() -> mapper.validateRunnableConversation(cc))
+                .isInstanceOf(com.netflix.conductor.core.exception.TerminateWorkflowException.class)
+                .hasMessageContaining("No non-empty user prompt or media");
+    }
+
+    @Test
+    void testValidateRunnableConversation_acceptsMediaOnlyUserInput() {
+        ChatCompletion cc = new ChatCompletion();
+        ChatMessage user = new ChatMessage(ChatMessage.Role.user, "");
+        user.setMedia(List.of("https://example.com/cat.png"));
+        cc.getMessages().add(user);
+
+        assertThatCode(() -> mapper.validateRunnableConversation(cc)).doesNotThrowAnyException();
     }
 
     // ── Token limit detection tests ─────────────────────────────────
@@ -533,14 +587,19 @@ class AgentChatCompleteTaskMapperTest {
         for (int i = 0; i < n; i++) {
             ChatMessage toolCallMsg = new ChatMessage();
             toolCallMsg.setRole(ChatMessage.Role.tool_call);
-            toolCallMsg.setToolCalls(List.of(
-                    ToolCall.builder().name("search").taskReferenceName("search_" + i).build()
-            ));
+            toolCallMsg.setToolCalls(List.of(ToolCall.builder()
+                    .name("search")
+                    .taskReferenceName("search_" + i)
+                    .build()));
             messages.add(toolCallMsg);
 
             String output = "Search result for query " + i + ": " + "x".repeat(280); // ~300 chars total
-            messages.add(new ChatMessage(ChatMessage.Role.tool,
-                    ToolCall.builder().name("search").output(Map.of("result", output)).build()));
+            messages.add(new ChatMessage(
+                    ChatMessage.Role.tool,
+                    ToolCall.builder()
+                            .name("search")
+                            .output(Map.of("result", output))
+                            .build()));
         }
         return messages;
     }
@@ -548,16 +607,14 @@ class AgentChatCompleteTaskMapperTest {
     // Use reflection to test private methods
     @SuppressWarnings("unchecked")
     private Map<String, Object> invokeExtractResult(Map<String, Object> outputData) throws Exception {
-        Method method = AgentChatCompleteTaskMapper.class.getDeclaredMethod(
-                "extractSubWorkflowResult", Map.class);
+        Method method = AgentChatCompleteTaskMapper.class.getDeclaredMethod("extractSubWorkflowResult", Map.class);
         method.setAccessible(true);
         return (Map<String, Object>) method.invoke(mapper, outputData);
     }
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> invokeExtractInput(Map<String, Object> inputData) throws Exception {
-        Method method = AgentChatCompleteTaskMapper.class.getDeclaredMethod(
-                "extractSubWorkflowInput", Map.class);
+        Method method = AgentChatCompleteTaskMapper.class.getDeclaredMethod("extractSubWorkflowInput", Map.class);
         method.setAccessible(true);
         return (Map<String, Object>) method.invoke(mapper, inputData);
     }

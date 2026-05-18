@@ -142,6 +142,27 @@ class TestMaxMessageTermination:
         with pytest.raises(ValueError, match="max_messages must be >= 1"):
             MaxMessageTermination(0)
 
+    def test_iteration_fallback_when_messages_empty(self):
+        """Falls back to iteration count when messages list is empty."""
+        cond = MaxMessageTermination(3)
+        # iteration >= max_messages → should terminate
+        ctx = {"result": "", "messages": [], "iteration": 3}
+        result = cond.should_terminate(ctx)
+        assert result.should_terminate is True
+
+        # iteration < max_messages → should not terminate
+        ctx = {"result": "", "messages": [], "iteration": 2}
+        result = cond.should_terminate(ctx)
+        assert result.should_terminate is False
+
+    def test_messages_takes_priority_over_iteration(self):
+        """When messages is populated, it takes priority over iteration."""
+        cond = MaxMessageTermination(3)
+        # messages count (5) >= max_messages, even though iteration is low
+        ctx = {"result": "", "messages": [{"role": "user"}] * 5, "iteration": 1}
+        result = cond.should_terminate(ctx)
+        assert result.should_terminate is True
+
     def test_non_list_messages(self):
         cond = MaxMessageTermination(5)
         ctx = {"result": "", "messages": "not a list", "iteration": 0}

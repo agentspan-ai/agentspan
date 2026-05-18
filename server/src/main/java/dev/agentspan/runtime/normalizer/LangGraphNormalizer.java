@@ -5,14 +5,15 @@
 
 package dev.agentspan.runtime.normalizer;
 
-import dev.agentspan.runtime.model.AgentConfig;
-import dev.agentspan.runtime.model.ToolConfig;
+import java.util.*;
+import java.util.LinkedHashMap;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import java.util.*;
-import java.util.LinkedHashMap;
+import dev.agentspan.runtime.model.AgentConfig;
+import dev.agentspan.runtime.model.ToolConfig;
 
 /**
  * Normalizes LangGraph rawConfig into an AgentConfig.
@@ -165,8 +166,11 @@ public class LangGraphNormalizer implements AgentConfigNormalizer {
                             subgraphConfigs = new LinkedHashMap<>();
                         }
                         subgraphConfigs.put(getString(node, "name", ""), subAgent);
-                        log.info("LangGraph '{}': subgraph node '{}' → sub-agent '{}'",
-                                name, getString(node, "name", ""), subAgent.getName());
+                        log.info(
+                                "LangGraph '{}': subgraph node '{}' → sub-agent '{}'",
+                                name,
+                                getString(node, "name", ""),
+                                subAgent.getName());
                         // Also register the subgraph's workers as parent tools
                         if (subAgent.getTools() != null) {
                             tools.addAll(subAgent.getTools());
@@ -202,8 +206,7 @@ public class LangGraphNormalizer implements AgentConfigNormalizer {
                 }
             }
             // Also add router workers from conditional edges
-            List<Map<String, Object>> conditionalEdges =
-                    (List<Map<String, Object>>) graph.get("conditional_edges");
+            List<Map<String, Object>> conditionalEdges = (List<Map<String, Object>>) graph.get("conditional_edges");
             if (conditionalEdges != null) {
                 for (Map<String, Object> ce : conditionalEdges) {
                     String routerRef = getString(ce, "_router_ref", "");
@@ -279,8 +282,7 @@ public class LangGraphNormalizer implements AgentConfigNormalizer {
     private ToolConfig normalizeAgentTool(Map<String, Object> raw) {
         Map<String, Object> agentRaw = getMap(raw, "agent");
         if (agentRaw == null) {
-            log.warn("AgentTool '{}' has no embedded agent config, skipping",
-                    getString(raw, "name", "unknown"));
+            log.warn("AgentTool '{}' has no embedded agent config, skipping", getString(raw, "name", "unknown"));
             return null;
         }
 
@@ -290,10 +292,11 @@ public class LangGraphNormalizer implements AgentConfigNormalizer {
 
         Map<String, Object> inputSchema = new LinkedHashMap<>();
         inputSchema.put("type", "object");
-        inputSchema.put("properties", Map.of(
-                "request", Map.of("type", "string",
-                        "description", "The request or question to send to this agent")
-        ));
+        inputSchema.put(
+                "properties",
+                Map.of(
+                        "request",
+                        Map.of("type", "string", "description", "The request or question to send to this agent")));
         inputSchema.put("required", List.of("request"));
         inputSchema.put("additionalProperties", false);
 

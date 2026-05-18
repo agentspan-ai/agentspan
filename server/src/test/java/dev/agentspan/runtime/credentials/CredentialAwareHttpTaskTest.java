@@ -4,17 +4,18 @@
  */
 package dev.agentspan.runtime.credentials;
 
-import dev.agentspan.runtime.AgentRuntime;
+import static org.assertj.core.api.Assertions.*;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
-
-import static org.assertj.core.api.Assertions.*;
+import dev.agentspan.runtime.AgentRuntime;
 
 /**
  * Integration test for CredentialAwareHttpTask — real DB, real credential store.
@@ -39,7 +40,7 @@ class CredentialAwareHttpTaskTest {
     @Test
     void resolveHeaders_substitutesPlaceholders() {
         Map<String, String> headers = new LinkedHashMap<>();
-        headers.put("Authorization", "Bearer ${MY_API_KEY}");
+        headers.put("Authorization", "Bearer #{MY_API_KEY}");
         headers.put("X-Static", "no-placeholder");
 
         Map<String, String> resolved = httpTask.resolveHeadersForUser(headers, USER_ID);
@@ -51,7 +52,7 @@ class CredentialAwareHttpTaskTest {
     @Test
     void resolveHeaders_unresolvedPlaceholder_replacedWithEmpty() {
         Map<String, String> headers = new LinkedHashMap<>();
-        headers.put("Authorization", "Bearer ${NONEXISTENT}");
+        headers.put("Authorization", "Bearer #{NONEXISTENT}");
 
         Map<String, String> resolved = httpTask.resolveHeadersForUser(headers, USER_ID);
 
@@ -73,7 +74,7 @@ class CredentialAwareHttpTaskTest {
         storeProvider.set(USER_ID, "TRICKY_KEY", "val$with$dollars");
 
         Map<String, String> headers = new LinkedHashMap<>();
-        headers.put("Auth", "${TRICKY_KEY}");
+        headers.put("Auth", "#{TRICKY_KEY}");
 
         Map<String, String> resolved = httpTask.resolveHeadersForUser(headers, USER_ID);
 
@@ -86,7 +87,7 @@ class CredentialAwareHttpTaskTest {
         storeProvider.set(USER_ID, "PASS", "secret123");
 
         Map<String, String> headers = new LinkedHashMap<>();
-        headers.put("Authorization", "Basic ${USER}:${PASS}");
+        headers.put("Authorization", "Basic #{USER}:#{PASS}");
 
         Map<String, String> resolved = httpTask.resolveHeadersForUser(headers, USER_ID);
 

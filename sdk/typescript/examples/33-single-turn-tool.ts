@@ -10,13 +10,12 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 const getWeather = tool(
   async (args: { city: string }) => {
@@ -25,13 +24,17 @@ const getWeather = tool(
   {
     name: 'get_weather',
     description: 'Get the current weather for a city.',
-    inputSchema: z.object({
-      city: z.string().describe('City name'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        city: { type: 'string', description: 'City name' },
+      },
+      required: ['city'],
+    },
   },
 );
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'weather_agent',
   model: llmModel,
   instructions: 'You are a weather assistant. Use the get_weather tool to answer.',
@@ -39,10 +42,23 @@ const agent = new Agent({
   maxTurns: 2, // 1 turn to call the tool, 1 turn to answer
 });
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(agent, "What's the weather in San Francisco?");
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(agent, "What's the weather in San Francisco?");
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents weather_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

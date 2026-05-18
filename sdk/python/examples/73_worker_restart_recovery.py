@@ -15,7 +15,7 @@ continues when a worker service comes back online.
 
 Requirements:
     - Agentspan server running
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in environment
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api in environment
     - AGENTSPAN_LLM_MODEL set (default: openai/gpt-4o-mini via settings.py)
     - Provider API key configured on the server (for example OPENAI_API_KEY)
 """
@@ -31,7 +31,7 @@ from pathlib import Path
 from agentspan.agents import Agent, AgentRuntime, tool
 from settings import settings
 
-DEFAULT_WORKFLOW_FILE = Path("/tmp/agentspan_worker_restart.workflow_id")
+DEFAULT_WORKFLOW_FILE = Path("/tmp/agentspan_worker_restart.execution_id")
 DEFAULT_WORKER_INFO_FILE = Path("/tmp/agentspan_worker_restart.worker.json")
 DEFAULT_ATTEMPT_FILE = Path("/tmp/agentspan_worker_restart.attempts.json")
 
@@ -119,11 +119,32 @@ def print_status(prefix: str, status: object) -> None:
     print(f"{prefix} status={status.status} complete={status.is_complete} attempts={attempt_summary}")
 
 
+def run_once() -> None:
+    with AgentRuntime() as runtime:
+        result = runtime.run(agent, "Validate change CHG-901 for production release.")
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.73_worker_restart_recovery
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
+        #
+        # Advanced recovery demo:
+        # python 73_worker_restart_recovery.py deploy
+        # python 73_worker_restart_recovery.py serve
+        # python 73_worker_restart_recovery.py start
+        # python 73_worker_restart_recovery.py kill-worker
+
+
 def deploy_agent() -> None:
     with AgentRuntime() as runtime:
         results = runtime.deploy(agent)
         for info in results:
-            print(f"Deployed: {info.agent_name} -> {info.workflow_name}")
+            print(f"Deployed: {info.agent_name} -> {info.registered_name}")
 
 
 def serve_workers(worker_info_file: Path) -> None:
@@ -162,15 +183,15 @@ def start_workflow(workflow_file: Path, timeout_seconds: int) -> None:
 
     with AgentRuntime() as runtime:
         handle = runtime.start(WORKFLOW_NAME, "Validate change CHG-901 for production release.")
-        save_text(workflow_file, handle.workflow_id)
+        save_text(workflow_file, handle.execution_id)
 
-        print(f"Workflow ID: {handle.workflow_id}")
+        print(f"Execution ID: {handle.execution_id}")
         print(f"Saved workflow ID to: {workflow_file}")
         print(f"Attempt state file: {DEFAULT_ATTEMPT_FILE}")
         print("Polling workflow status...")
 
         for second in range(timeout_seconds + 1):
-            status = runtime.get_status(handle.workflow_id)
+            status = runtime.get_status(handle.execution_id)
             print_status(f"  [{second:02d}s]", status)
             if status.is_complete:
                 print("\nFinal output:")
@@ -181,10 +202,10 @@ def start_workflow(workflow_file: Path, timeout_seconds: int) -> None:
         print("\nTimed out waiting for completion.")
 
 
-def show_status(workflow_id: str, timeout_seconds: int) -> None:
+def show_status(execution_id: str, timeout_seconds: int) -> None:
     with AgentRuntime() as runtime:
         for second in range(timeout_seconds + 1):
-            status = runtime.get_status(workflow_id)
+            status = runtime.get_status(execution_id)
             print_status(f"  [{second:02d}s]", status)
             if status.is_complete:
                 print("\nFinal output:")
@@ -219,7 +240,7 @@ def parse_args() -> argparse.Namespace:
         "--file",
         type=Path,
         default=DEFAULT_WORKFLOW_FILE,
-        help="Path to store workflow_id.",
+        help="Path to store execution_id.",
     )
     start.add_argument(
         "--timeout-seconds",
@@ -237,12 +258,12 @@ def parse_args() -> argparse.Namespace:
     )
 
     status = sub.add_parser("status", help="Poll workflow status and show attempt history.")
-    status.add_argument("--workflow-id", default="", help="Workflow ID (overrides --file).")
+    status.add_argument("--execution-id", default="", help="Execution ID (overrides --file).")
     status.add_argument(
         "--file",
         type=Path,
         default=DEFAULT_WORKFLOW_FILE,
-        help="Path containing saved workflow_id.",
+        help="Path containing saved execution_id.",
     )
     status.add_argument(
         "--timeout-seconds",
@@ -255,16 +276,19 @@ def parse_args() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
-    args = parse_args()
+    if len(sys.argv) == 1:
+        run_once()
+    else:
+        args = parse_args()
 
-    if args.command == "deploy":
-        deploy_agent()
-    elif args.command == "serve":
-        serve_workers(args.worker_info_file)
-    elif args.command == "start":
-        start_workflow(args.file, args.timeout_seconds)
-    elif args.command == "kill-worker":
-        kill_worker(args.worker_info_file)
-    elif args.command == "status":
-        workflow_id = args.workflow_id or load_text(args.file)
-        show_status(workflow_id, args.timeout_seconds)
+        if args.command == "deploy":
+            deploy_agent()
+        elif args.command == "serve":
+            serve_workers(args.worker_info_file)
+        elif args.command == "start":
+            start_workflow(args.file, args.timeout_seconds)
+        elif args.command == "kill-worker":
+            kill_worker(args.worker_info_file)
+        elif args.command == "status":
+            execution_id = args.execution_id or load_text(args.file)
+            show_status(execution_id, args.timeout_seconds)

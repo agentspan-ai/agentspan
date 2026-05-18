@@ -1,11 +1,12 @@
 package dev.agentspan.runtime.auth;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
+
 import java.time.Instant;
 import java.util.UUID;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 
 class RequestContextHolderTest {
 
@@ -23,10 +24,10 @@ class RequestContextHolderTest {
     void setAndGet_roundTrips() {
         User user = new User(UUID.randomUUID().toString(), "Alice", "alice@test.com", "alice");
         RequestContext ctx = RequestContext.builder()
-            .requestId(UUID.randomUUID().toString())
-            .user(user)
-            .createdAt(Instant.now())
-            .build();
+                .requestId(UUID.randomUUID().toString())
+                .user(user)
+                .createdAt(Instant.now())
+                .build();
 
         RequestContextHolder.set(ctx);
 
@@ -38,7 +39,10 @@ class RequestContextHolderTest {
     void clear_removesContext() {
         User user = new User(UUID.randomUUID().toString(), "Bob", "bob@test.com", "bob");
         RequestContextHolder.set(RequestContext.builder()
-            .requestId("r1").user(user).createdAt(Instant.now()).build());
+                .requestId("r1")
+                .user(user)
+                .createdAt(Instant.now())
+                .build());
 
         RequestContextHolder.clear();
 
@@ -49,7 +53,10 @@ class RequestContextHolderTest {
     void getRequiredUser_returnsUser_whenSet() {
         User user = new User("u1", "Carol", "carol@test.com", "carol");
         RequestContextHolder.set(RequestContext.builder()
-            .requestId("r1").user(user).createdAt(Instant.now()).build());
+                .requestId("r1")
+                .user(user)
+                .createdAt(Instant.now())
+                .build());
 
         User result = RequestContextHolder.getRequiredUser();
         assertThat(result.getId()).isEqualTo("u1");
@@ -57,9 +64,8 @@ class RequestContextHolderTest {
 
     @Test
     void getRequiredUser_throws_whenNotSet() {
-        org.assertj.core.api.Assertions.assertThatThrownBy(
-            () -> RequestContextHolder.getRequiredUser())
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("No RequestContext");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> RequestContextHolder.getRequiredUser())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("No RequestContext");
     }
 }

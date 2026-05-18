@@ -1,5 +1,10 @@
 package dev.agentspan.runtime.auth;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.util.Map;
+import java.util.Optional;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -7,12 +12,8 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+
 import dev.agentspan.runtime.AgentRuntime;
-
-import java.util.Map;
-import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(classes = AgentRuntime.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @ActiveProfiles("test")
@@ -61,8 +62,7 @@ class ApiKeyRepositoryTest {
         apiKeyRepository.findUserByKey(rawKey);
 
         String lastUsed = jdbc.queryForObject(
-            "SELECT last_used_at FROM api_keys WHERE label = 'test_ts-key'",
-            Map.of(), String.class);
+                "SELECT last_used_at FROM api_keys WHERE label = 'test_ts-key'", Map.of(), String.class);
         assertThat(lastUsed).isNotNull();
     }
 }

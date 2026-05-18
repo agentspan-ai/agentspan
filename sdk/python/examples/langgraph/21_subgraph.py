@@ -10,7 +10,7 @@ Demonstrates:
     - Practical use case: document processing pipeline with a nested analysis subgraph
 
 Requirements:
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
@@ -121,13 +121,20 @@ graph = parent_builder.compile(name="document_pipeline_with_subgraph")
 
 if __name__ == "__main__":
     sample_doc = (
-        "LangGraph makes it easy to build stateful, multi-actor applications with LLMs. "
-        "The framework provides first-class support for persistence, streaming, and human-in-the-loop "
-        "workflows. Developers love its flexibility and the ability to compose complex pipelines "
-        "using simple Python functions."
+        "Quantum computing uses quantum bits (qubits) that can exist in superposition, "
+        "enabling parallel computation. Unlike classical bits, qubits leverage entanglement "
+        "and interference to solve certain problems exponentially faster."
     )
-
     with AgentRuntime() as runtime:
         result = runtime.run(graph, sample_doc)
         print(f"Status: {result.status}")
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.21_subgraph
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)

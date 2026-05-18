@@ -305,7 +305,6 @@ pdf_generator = Agent(
 
 pipeline = researcher >> analyst >> pdf_generator
 
-# ── Run ───────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     print("Starting Tech Trend Analyzer: Python vs Rust")
@@ -314,10 +313,17 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
             pipeline,
-            (
-                "Compare Python and Rust: which has stronger developer mindshare and "
-                "ecosystem momentum right now? Use real HackerNews data and package "
-                "download statistics to support your analysis."
-            ),
+            "Compare Python and Rust: which has stronger developer mindshare and "
+            "ecosystem momentum right now? Use real HackerNews data and package "
+            "download statistics to support your analysis.",
         )
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(pipeline)
+        # CLI alternative:
+        # agentspan deploy --package examples.38_tech_trends
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(pipeline)

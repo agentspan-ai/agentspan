@@ -9,7 +9,7 @@ import { useQueryState } from "react-router-use-location-state";
 import { NodeData } from "reaflow";
 import { ExecutionTask, TaskStatus } from "types";
 import {
-  RUN_WORKFLOW_URL,
+  RUN_AGENT_URL,
   SCHEDULER_DEFINITION_URL,
 } from "utils/constants/route";
 import { featureFlags, FEATURES } from "utils/flags";
@@ -188,7 +188,7 @@ export const useExecutionMachine = () => {
   };
 
   const rerunExecutionWithLatestDefinitions = () => {
-    navigate(RUN_WORKFLOW_URL, { state: { execution } });
+    navigate(RUN_AGENT_URL, { state: { execution } });
   };
 
   const createSheduleWithLatestDefinitions = () => {

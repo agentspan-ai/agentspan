@@ -17,7 +17,7 @@ export const restartExecution = async (
   event: any,
 ) => {
   const { options = {} } = event as RestartExecutionEvent;
-  const url = `/workflow/${executionId}/restart${toMaybeQueryString(options)}`;
+  const url = `agent/executions/${executionId}/restart${toMaybeQueryString(options)}`;
 
   try {
     const result = await fetchWithContext(
@@ -53,7 +53,7 @@ export const retryExecution = async (
     ...defaultRetryOptions,
   };
 
-  const url = `/workflow/${executionId}/retry${toMaybeQueryString(
+  const url = `agent/executions/${executionId}/retry${toMaybeQueryString(
     retryOptions,
   )}`;
 
@@ -79,7 +79,7 @@ export const terminateExecution = async ({
   executionId,
   authHeaders,
 }: ExecutionMachineContext) => {
-  const url = `/workflow/${executionId}${maybeTriggerFailureWorkflow()}`;
+  const url = `agent/executions/${executionId}${maybeTriggerFailureWorkflow()}`;
   try {
     const result = await fetchWithContext(
       url,
@@ -103,7 +103,7 @@ export const resumeExecution = async ({
   executionId,
   authHeaders,
 }: ExecutionMachineContext) => {
-  const url = `/workflow/${executionId}/resume`;
+  const url = `agent/${executionId}/resume`;
   try {
     const result = await fetchWithContext(
       url,
@@ -127,7 +127,7 @@ export const pauseExecution = async ({
   executionId,
   authHeaders,
 }: ExecutionMachineContext) => {
-  const url = `/workflow/${executionId}/pause`;
+  const url = `agent/${executionId}/pause`;
   try {
     const result = await fetchWithContext(
       url,
@@ -151,7 +151,7 @@ export const updateVariables = async (
   { executionId, authHeaders }: ExecutionMachineContext,
   event: UpdateVariablesEvent,
 ) => {
-  const url = `/workflow/${executionId}/variables`;
+  const url = `agent/executions/${executionId}/variables`;
 
   try {
     const result = await fetchWithContext(

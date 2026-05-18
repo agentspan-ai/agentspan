@@ -2,7 +2,7 @@
 
 These examples demonstrate running agents written with [Google's Agent Development Kit (ADK)](https://github.com/google/adk-python) (`google-adk`) on the Conductor agent runtime.
 
-The agents are defined using standard ADK classes — the Conductor runtime auto-detects the framework, serializes the agent generically, and the server normalizes the config into a Conductor workflow. **Zero translation code in the SDK.**
+The agents are defined using standard ADK classes — the Conductor runtime auto-detects the framework, serializes the agent generically, and the server normalizes the config into a Conductor agent execution. **Zero translation code in the SDK.**
 
 ## Prerequisites
 
@@ -19,7 +19,7 @@ Export environment variables:
 
 ```bash
 export AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini
-export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+export AGENTSPAN_SERVER_URL=http://localhost:6767/api
 export GOOGLE_GEMINI_API_KEY=your-key
 ```
 
@@ -32,7 +32,7 @@ export GOOGLE_GEMINI_API_KEY=your-key
 | 03 | [03_structured_output.py](03_structured_output.py) | **Structured Output** | Pydantic `output_schema` for enforced JSON responses. Combined with `generate_content_config`. |
 | 04 | [04_sub_agents.py](04_sub_agents.py) | **Sub-Agents** | Multi-agent orchestration with coordinator → specialist routing via `sub_agents`. |
 | 05 | [05_generation_config.py](05_generation_config.py) | **Generation Config** | `generate_content_config` for temperature and output token control. Creative vs. factual agents. |
-| 06 | [06_streaming.py](06_streaming.py) | **Streaming** | Real-time SSE event streaming via `runtime.stream()`. Shows tool_call, tool_result, and done events. |
+| 06 | [06_streaming.py](06_streaming.py) | **Streaming** | Default `runtime.run()` flow with a commented `runtime.stream()` alternative for SSE events. |
 | 07 | [07_output_key_state.py](07_output_key_state.py) | **Output Key & State** | `output_key` for storing agent results in session state. Multi-agent data passing. |
 | 08 | [08_instruction_templating.py](08_instruction_templating.py) | **Instruction Templating** | ADK's `{variable}` syntax in instructions for dynamic context injection from state. |
 | 09 | [09_multi_tool_agent.py](09_multi_tool_agent.py) | **Multi-Tool Agent** | Complex tool orchestration with 4 tools (search, inventory, shipping, coupons). Best-practice dict returns. |
@@ -50,7 +50,7 @@ export GOOGLE_GEMINI_API_KEY=your-key
 | `output_key` (state management) | 07 |
 | `instruction` templating (`{var}`) | 08 |
 | `description` (for agent routing) | 04, 10 |
-| Streaming (`runtime.stream()`) | 06 |
+| Streaming (`runtime.stream()`, commented alternative) | 06 |
 | Multi-tool orchestration | 09 |
 | Hierarchical sub-agents (3 levels) | 10 |
 
@@ -66,7 +66,7 @@ Generic serializer → JSON dict + callable extraction
 Server GoogleADKNormalizer → AgentConfig → Conductor WorkflowDef
   │
   ▼
-Conductor runtime executes the workflow
+Conductor runtime executes the agent
 ```
 
 ## Key ADK Differences from OpenAI

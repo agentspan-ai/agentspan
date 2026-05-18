@@ -13,8 +13,8 @@ import {
   tool,
   httpTool,
   getCredential,
-} from '../src/index.js';
-import type { ToolContext } from '../src/index.js';
+} from '@agentspan-ai/sdk';
+import type { ToolContext } from '@agentspan-ai/sdk';
 
 const MODEL = process.env.AGENTSPAN_LLM_MODEL ?? 'openai/gpt-4o';
 
@@ -89,7 +89,7 @@ const searchApi = httpTool({
 });
 
 // -- Agent using all credential patterns --
-const agent = new Agent({
+export const agent = new Agent({
   name: 'credentialed_agent',
   model: MODEL,
   instructions: 'Use tools to research topics. All tools have proper credentials.',
@@ -99,9 +99,21 @@ const agent = new Agent({
 
 async function main() {
   const runtime = new AgentRuntime();
-  const result = await runtime.run(agent, 'Research quantum computing trends.');
-  result.printResult();
-  await runtime.shutdown();
+  try {
+    const result = await runtime.run(agent, 'Research quantum computing trends.');
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents credentialed_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+  } finally {
+    await runtime.shutdown();
+  }
 }
 
 main().catch(console.error);

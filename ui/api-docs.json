@@ -1,0 +1,3338 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "OpenAPI definition",
+    "version": "v0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:6767",
+      "description": "Generated server url"
+    }
+  ],
+  "paths": {
+    "/api/agent/{executionId}/resume": {
+      "put": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "resumeAgent",
+        "parameters": [
+          {
+            "name": "executionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/agent/{executionId}/pause": {
+      "put": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "pauseAgent",
+        "parameters": [
+          {
+            "name": "executionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/agent/executions/bulk/resume": {
+      "put": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "bulkResume",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/agent/executions/bulk/pause": {
+      "put": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "bulkPause",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/agent/{executionId}/tasks": {
+      "post": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "injectTask",
+        "parameters": [
+          {
+            "name": "executionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InjectTaskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/InjectTaskResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/{executionId}/respond": {
+      "post": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "respondToAgent",
+        "parameters": [
+          {
+            "name": "executionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/agent/tasks/{executionId}/{refTaskName}/{status}": {
+      "post": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "updateTaskStatus",
+        "parameters": [
+          {
+            "name": "executionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "refTaskName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workerid",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "agent-ui"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/agent/start": {
+      "post": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "startAgent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/executions/{executionId}/retry": {
+      "post": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "retryExecution",
+        "parameters": [
+          {
+            "name": "executionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "resumeSubworkflowTasks",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/agent/executions/{executionId}/restart": {
+      "post": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "restartExecution",
+        "parameters": [
+          {
+            "name": "executionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "useLatestDefinitions",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/agent/executions/{executionId}/rerun": {
+      "post": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "rerunExecution",
+        "parameters": [
+          {
+            "name": "executionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RerunWorkflowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/executions/bulk/terminate": {
+      "post": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "bulkTerminate",
+        "parameters": [
+          {
+            "name": "reason",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/agent/executions/bulk/retry": {
+      "post": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "bulkRetry",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/agent/executions/bulk/restart": {
+      "post": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "bulkRestart",
+        "parameters": [
+          {
+            "name": "useLatestDefinitions",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/agent/execution": {
+      "post": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "createTrackingExecution",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTrackingWorkflowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateTrackingWorkflowResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/events/{executionId}": {
+      "post": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "pushFrameworkEvent",
+        "parameters": [
+          {
+            "name": "executionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/agent/deploy": {
+      "post": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "deployAgent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/compile": {
+      "post": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "compileAgent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompileResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/{name}": {
+      "get": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "getAgentDef",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "deleteAgent",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/agent/{executionId}/status": {
+      "get": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "getAgentStatus",
+        "parameters": [
+          {
+            "name": "executionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/tasks/{taskId}/log": {
+      "get": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "getTaskLogs",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TaskExecLog"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/stream/{executionId}": {
+      "get": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "streamAgent",
+        "parameters": [
+          {
+            "name": "executionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Last-Event-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/SseEmitter"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/list": {
+      "get": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "listAgents",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/executions": {
+      "get": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "searchAgentExecutions",
+        "parameters": [
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "startTime:DESC"
+            }
+          },
+          {
+            "name": "freeText",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agentName",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sessionId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/executions/{executionId}": {
+      "get": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "getExecutionDetail",
+        "parameters": [
+          {
+            "name": "executionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentExecutionDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "terminateExecution",
+        "parameters": [
+          {
+            "name": "executionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "reason",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/agent/executions/{executionId}/tasks": {
+      "get": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "getExecutionTasks",
+        "parameters": [
+          {
+            "name": "executionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "count",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 15
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Task"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/executions/{executionId}/full": {
+      "get": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "getFullExecution",
+        "parameters": [
+          {
+            "name": "executionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/Workflow"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/executions/search": {
+      "get": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "searchExecutionsRaw",
+        "parameters": [
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "startTime:DESC"
+            }
+          },
+          {
+            "name": "freeText",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResultWorkflowSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/execution/{executionId}": {
+      "get": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "getExecution",
+        "parameters": [
+          {
+            "name": "executionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRun"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/definitions/{name}": {
+      "get": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "getAgentDefinition",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowDef"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/{executionId}/cancel": {
+      "delete": {
+        "tags": [
+          "agent-controller"
+        ],
+        "operationId": "cancelAgent",
+        "parameters": [
+          {
+            "name": "executionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "reason",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/credentials/{name}": {
+      "get": {
+        "tags": [
+          "credential-controller"
+        ],
+        "operationId": "getCredential",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "credential-controller"
+        ],
+        "operationId": "updateCredential",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "credential-controller"
+        ],
+        "operationId": "deleteCredential",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/credentials/bindings/{key}": {
+      "put": {
+        "tags": [
+          "credential-controller"
+        ],
+        "operationId": "setBinding",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "credential-controller"
+        ],
+        "operationId": "deleteBinding",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/credentials": {
+      "get": {
+        "tags": [
+          "credential-controller"
+        ],
+        "operationId": "listCredentials",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "credential-controller"
+        ],
+        "operationId": "createCredential",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/credentials/resolve": {
+      "post": {
+        "tags": [
+          "credential-controller"
+        ],
+        "operationId": "resolve",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/credentials/bindings": {
+      "get": {
+        "tags": [
+          "credential-controller"
+        ],
+        "operationId": "listBindings",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ResolveRequest": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "InjectTaskRequest": {
+        "type": "object",
+        "properties": {
+          "taskDefName": {
+            "type": "string"
+          },
+          "referenceTaskName": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "inputData": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "status": {
+            "type": "string"
+          },
+          "subWorkflowParam": {
+            "$ref": "#/components/schemas/SubWorkflowParam"
+          }
+        }
+      },
+      "SubWorkflowParam": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "executionId": {
+            "type": "string"
+          }
+        }
+      },
+      "InjectTaskResponse": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "string"
+          }
+        }
+      },
+      "AgentConfig": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "instructions": {
+            "type": "object"
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolConfig"
+            }
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentConfig"
+            }
+          },
+          "strategy": {
+            "type": "string"
+          },
+          "router": {
+            "type": "object"
+          },
+          "outputType": {
+            "$ref": "#/components/schemas/OutputTypeConfig"
+          },
+          "guardrails": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GuardrailConfig"
+            }
+          },
+          "memory": {
+            "$ref": "#/components/schemas/MemoryConfig"
+          },
+          "maxTurns": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxTokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "timeoutSeconds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "temperature": {
+            "type": "number",
+            "format": "double"
+          },
+          "stopWhen": {
+            "$ref": "#/components/schemas/WorkerRef"
+          },
+          "termination": {
+            "$ref": "#/components/schemas/TerminationConfig"
+          },
+          "handoffs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HandoffConfig"
+            }
+          },
+          "callbacks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CallbackConfig"
+            }
+          },
+          "allowedTransitions": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "introduction": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "codeExecution": {
+            "$ref": "#/components/schemas/CodeExecutionConfig"
+          },
+          "cliConfig": {
+            "$ref": "#/components/schemas/CliConfig"
+          },
+          "includeContents": {
+            "type": "string"
+          },
+          "thinkingConfig": {
+            "$ref": "#/components/schemas/ThinkingConfig"
+          },
+          "planner": {
+            "type": "boolean"
+          },
+          "requiredTools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "gate": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "credentials": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "external": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CallbackConfig": {
+        "type": "object",
+        "properties": {
+          "position": {
+            "type": "string"
+          },
+          "taskName": {
+            "type": "string"
+          }
+        }
+      },
+      "CliConfig": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "allowedCommands": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "timeout": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "allowShell": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CodeExecutionConfig": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "allowedLanguages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "allowedCommands": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "timeout": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "GuardrailConfig": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "guardrailType": {
+            "type": "string"
+          },
+          "position": {
+            "type": "string"
+          },
+          "onFail": {
+            "type": "string"
+          },
+          "maxRetries": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "patterns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "mode": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "policy": {
+            "type": "string"
+          },
+          "maxTokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "taskName": {
+            "type": "string"
+          }
+        }
+      },
+      "HandoffConfig": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "toolName": {
+            "type": "string"
+          },
+          "resultContains": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "taskName": {
+            "type": "string"
+          }
+        }
+      },
+      "MemoryConfig": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object"
+              }
+            }
+          },
+          "maxMessages": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "OutputTypeConfig": {
+        "type": "object",
+        "properties": {
+          "schema": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "className": {
+            "type": "string"
+          }
+        }
+      },
+      "StartRequest": {
+        "type": "object",
+        "properties": {
+          "agentConfig": {
+            "$ref": "#/components/schemas/AgentConfig"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "media": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "credentials": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "framework": {
+            "type": "string"
+          },
+          "rawConfig": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "timeoutSeconds": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "TerminationConfig": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "caseSensitive": {
+            "type": "boolean"
+          },
+          "stopMessage": {
+            "type": "string"
+          },
+          "maxMessages": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxTotalTokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxPromptTokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxCompletionTokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "conditions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TerminationConfig"
+            }
+          }
+        }
+      },
+      "ThinkingConfig": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "budgetTokens": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ToolConfig": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "inputSchema": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "outputSchema": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "toolType": {
+            "type": "string"
+          },
+          "approvalRequired": {
+            "type": "boolean"
+          },
+          "timeoutSeconds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "config": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "guardrails": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GuardrailConfig"
+            }
+          }
+        }
+      },
+      "WorkerRef": {
+        "type": "object",
+        "properties": {
+          "taskName": {
+            "type": "string"
+          }
+        }
+      },
+      "StartResponse": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string"
+          },
+          "agentName": {
+            "type": "string"
+          },
+          "requiredWorkers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RerunWorkflowRequest": {
+        "type": "object",
+        "properties": {
+          "reRunFromWorkflowId": {
+            "type": "string"
+          },
+          "workflowInput": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "reRunFromTaskId": {
+            "type": "string"
+          },
+          "taskInput": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateTrackingWorkflowRequest": {
+        "type": "object",
+        "properties": {
+          "workflowName": {
+            "type": "string"
+          },
+          "input": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "CreateTrackingWorkflowResponse": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string"
+          }
+        }
+      },
+      "CompileResponse": {
+        "type": "object",
+        "properties": {
+          "workflowDef": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "requiredWorkers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "TaskExecLog": {
+        "type": "object",
+        "properties": {
+          "log": {
+            "type": "string"
+          },
+          "taskId": {
+            "type": "string"
+          },
+          "createdTime": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "SseEmitter": {
+        "type": "object",
+        "properties": {
+          "timeout": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "AgentSummary": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "type": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updateTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "description": {
+            "type": "string"
+          },
+          "checksum": {
+            "type": "string"
+          }
+        }
+      },
+      "AgentExecutionDetail": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string"
+          },
+          "agentName": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "status": {
+            "type": "string"
+          },
+          "input": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "output": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "currentTask": {
+            "$ref": "#/components/schemas/CurrentTask"
+          }
+        }
+      },
+      "CurrentTask": {
+        "type": "object",
+        "properties": {
+          "taskRefName": {
+            "type": "string"
+          },
+          "taskType": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "inputData": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "outputData": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "CacheConfig": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "ttlInSecond": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ExecutionMetadata": {
+        "type": "object",
+        "properties": {
+          "serverSendTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "clientReceiveTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "executionStartTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "executionEndTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "clientSendTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pollNetworkLatency": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updateNetworkLatency": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "additionalContext": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "executionDuration": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "additionalContextMap": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "empty": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SchemaDef": {
+        "required": [
+          "name",
+          "type",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "ownerApp": {
+            "type": "string"
+          },
+          "createTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updateTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "updatedBy": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "JSON",
+              "AVRO",
+              "PROTOBUF"
+            ]
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "externalRef": {
+            "type": "string"
+          }
+        }
+      },
+      "StateChangeEvent": {
+        "required": [
+          "type"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "SubWorkflowParams": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "taskToDomain": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "idempotencyStrategy": {
+            "type": "string",
+            "enum": [
+              "FAIL",
+              "RETURN_EXISTING",
+              "FAIL_ON_RUNNING"
+            ]
+          },
+          "priority": {
+            "type": "object"
+          },
+          "workflowDefinition": {
+            "type": "object"
+          }
+        }
+      },
+      "Task": {
+        "type": "object",
+        "properties": {
+          "taskType": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "IN_PROGRESS",
+              "CANCELED",
+              "FAILED",
+              "FAILED_WITH_TERMINAL_ERROR",
+              "COMPLETED",
+              "COMPLETED_WITH_ERRORS",
+              "SCHEDULED",
+              "TIMED_OUT",
+              "SKIPPED"
+            ]
+          },
+          "inputData": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "referenceTaskName": {
+            "type": "string"
+          },
+          "retryCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "pollCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "taskDefName": {
+            "type": "string"
+          },
+          "scheduledTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "startTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "endTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updateTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "startDelayInSeconds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "retriedTaskId": {
+            "type": "string"
+          },
+          "retried": {
+            "type": "boolean"
+          },
+          "executed": {
+            "type": "boolean"
+          },
+          "callbackFromWorker": {
+            "type": "boolean"
+          },
+          "responseTimeoutSeconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "workflowInstanceId": {
+            "type": "string"
+          },
+          "workflowType": {
+            "type": "string"
+          },
+          "taskId": {
+            "type": "string"
+          },
+          "reasonForIncompletion": {
+            "type": "string"
+          },
+          "callbackAfterSeconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "workerId": {
+            "type": "string"
+          },
+          "outputData": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "workflowTask": {
+            "$ref": "#/components/schemas/WorkflowTask"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "rateLimitPerFrequency": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "rateLimitFrequencyInSeconds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "externalInputPayloadStoragePath": {
+            "type": "string"
+          },
+          "externalOutputPayloadStoragePath": {
+            "type": "string"
+          },
+          "workflowPriority": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "executionNameSpace": {
+            "type": "string"
+          },
+          "isolationGroupId": {
+            "type": "string"
+          },
+          "iteration": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "subWorkflowId": {
+            "type": "string"
+          },
+          "subworkflowChanged": {
+            "type": "boolean"
+          },
+          "firstStartTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "executionMetadata": {
+            "$ref": "#/components/schemas/ExecutionMetadata"
+          },
+          "parentTaskId": {
+            "type": "string"
+          },
+          "taskDefinition": {
+            "$ref": "#/components/schemas/TaskDef"
+          },
+          "queueWaitTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "loopOverTask": {
+            "type": "boolean"
+          },
+          "orCreateExecutionMetadata": {
+            "$ref": "#/components/schemas/ExecutionMetadata"
+          },
+          "executionMetadataIfHasData": {
+            "$ref": "#/components/schemas/ExecutionMetadata"
+          }
+        }
+      },
+      "TaskDef": {
+        "required": [
+          "name",
+          "timeoutSeconds",
+          "totalTimeoutSeconds"
+        ],
+        "type": "object",
+        "properties": {
+          "ownerApp": {
+            "type": "string"
+          },
+          "createTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updateTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "updatedBy": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "retryCount": {
+            "minimum": 0,
+            "type": "integer",
+            "format": "int32"
+          },
+          "timeoutSeconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "inputKeys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "outputKeys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "timeoutPolicy": {
+            "type": "string",
+            "enum": [
+              "RETRY",
+              "TIME_OUT_WF",
+              "ALERT_ONLY"
+            ]
+          },
+          "retryLogic": {
+            "type": "string",
+            "enum": [
+              "FIXED",
+              "EXPONENTIAL_BACKOFF",
+              "LINEAR_BACKOFF"
+            ]
+          },
+          "retryDelaySeconds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "responseTimeoutSeconds": {
+            "minimum": 1,
+            "type": "integer",
+            "format": "int64"
+          },
+          "concurrentExecLimit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "inputTemplate": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "rateLimitPerFrequency": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "rateLimitFrequencyInSeconds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "isolationGroupId": {
+            "type": "string"
+          },
+          "executionNameSpace": {
+            "type": "string"
+          },
+          "ownerEmail": {
+            "type": "string"
+          },
+          "pollTimeoutSeconds": {
+            "minimum": 0,
+            "type": "integer",
+            "format": "int32"
+          },
+          "backoffScaleFactor": {
+            "minimum": 1,
+            "type": "integer",
+            "format": "int32"
+          },
+          "baseType": {
+            "type": "string"
+          },
+          "totalTimeoutSeconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "taskStatusListenerEnabled": {
+            "type": "boolean"
+          },
+          "inputSchema": {
+            "$ref": "#/components/schemas/SchemaDef"
+          },
+          "outputSchema": {
+            "$ref": "#/components/schemas/SchemaDef"
+          },
+          "enforceSchema": {
+            "type": "boolean"
+          }
+        }
+      },
+      "WorkflowTask": {
+        "required": [
+          "name",
+          "taskReferenceName"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "taskReferenceName": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "inputParameters": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "type": {
+            "type": "string"
+          },
+          "dynamicTaskNameParam": {
+            "type": "string"
+          },
+          "caseValueParam": {
+            "type": "string",
+            "deprecated": true
+          },
+          "caseExpression": {
+            "type": "string",
+            "deprecated": true
+          },
+          "scriptExpression": {
+            "type": "string"
+          },
+          "decisionCases": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/WorkflowTask"
+              }
+            }
+          },
+          "dynamicForkJoinTasksParam": {
+            "type": "string",
+            "deprecated": true
+          },
+          "dynamicForkTasksParam": {
+            "type": "string"
+          },
+          "dynamicForkTasksInputParamName": {
+            "type": "string"
+          },
+          "defaultCase": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowTask"
+            }
+          },
+          "forkTasks": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/WorkflowTask"
+              }
+            }
+          },
+          "startDelay": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "subWorkflowParam": {
+            "$ref": "#/components/schemas/SubWorkflowParams"
+          },
+          "joinOn": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sink": {
+            "type": "string"
+          },
+          "optional": {
+            "type": "boolean"
+          },
+          "taskDefinition": {
+            "$ref": "#/components/schemas/TaskDef"
+          },
+          "rateLimited": {
+            "type": "boolean"
+          },
+          "defaultExclusiveJoinTask": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "asyncComplete": {
+            "type": "boolean"
+          },
+          "loopCondition": {
+            "type": "string"
+          },
+          "loopOver": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowTask"
+            }
+          },
+          "items": {
+            "type": "string"
+          },
+          "retryCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "evaluatorType": {
+            "type": "string"
+          },
+          "expression": {
+            "type": "string"
+          },
+          "onStateChange": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/StateChangeEvent"
+              }
+            }
+          },
+          "joinStatus": {
+            "type": "string"
+          },
+          "cacheConfig": {
+            "$ref": "#/components/schemas/CacheConfig"
+          },
+          "permissive": {
+            "type": "boolean"
+          },
+          "joinMode": {
+            "type": "string",
+            "enum": [
+              "SYNC",
+              "ASYNC"
+            ]
+          },
+          "workflowTaskType": {
+            "type": "string",
+            "writeOnly": true,
+            "enum": [
+              "SIMPLE",
+              "DYNAMIC",
+              "FORK_JOIN",
+              "FORK_JOIN_DYNAMIC",
+              "DECISION",
+              "SWITCH",
+              "JOIN",
+              "DO_WHILE",
+              "SUB_WORKFLOW",
+              "START_WORKFLOW",
+              "EVENT",
+              "WAIT",
+              "HUMAN",
+              "USER_DEFINED",
+              "HTTP",
+              "LAMBDA",
+              "INLINE",
+              "EXCLUSIVE_JOIN",
+              "TERMINATE",
+              "KAFKA_PUBLISH",
+              "JSON_JQ_TRANSFORM",
+              "SET_VARIABLE",
+              "NOOP",
+              "LLM_TEXT_COMPLETE",
+              "LLM_CHAT_COMPLETE",
+              "LLM_INDEX_TEXT",
+              "LLM_SEARCH_INDEX",
+              "LLM_GENERATE_EMBEDDINGS",
+              "LLM_STORE_EMBEDDINGS",
+              "LLM_GET_EMBEDDINGS",
+              "LIST_MCP_TOOLS",
+              "CALL_MCP_TOOL"
+            ]
+          }
+        }
+      },
+      "RateLimitConfig": {
+        "type": "object",
+        "properties": {
+          "rateLimitKey": {
+            "type": "string"
+          },
+          "concurrentExecLimit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "policy": {
+            "type": "string",
+            "enum": [
+              "QUEUE",
+              "REJECT"
+            ]
+          }
+        }
+      },
+      "Workflow": {
+        "type": "object",
+        "properties": {
+          "ownerApp": {
+            "type": "string"
+          },
+          "createTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updateTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "updatedBy": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "RUNNING",
+              "COMPLETED",
+              "FAILED",
+              "TIMED_OUT",
+              "TERMINATED",
+              "PAUSED"
+            ]
+          },
+          "endTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "workflowId": {
+            "type": "string"
+          },
+          "parentWorkflowId": {
+            "type": "string"
+          },
+          "parentWorkflowTaskId": {
+            "type": "string"
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Task"
+            }
+          },
+          "input": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "output": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "reRunFromWorkflowId": {
+            "type": "string"
+          },
+          "reasonForIncompletion": {
+            "type": "string"
+          },
+          "event": {
+            "type": "string"
+          },
+          "taskToDomain": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "failedReferenceTaskNames": {
+            "uniqueItems": true,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "workflowDefinition": {
+            "$ref": "#/components/schemas/WorkflowDef"
+          },
+          "externalInputPayloadStoragePath": {
+            "type": "string"
+          },
+          "externalOutputPayloadStoragePath": {
+            "type": "string"
+          },
+          "priority": {
+            "maximum": 99,
+            "minimum": 0,
+            "type": "integer",
+            "format": "int32"
+          },
+          "variables": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "lastRetriedTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "failedTaskNames": {
+            "uniqueItems": true,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Workflow"
+            }
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "rateLimitKey": {
+            "type": "string"
+          },
+          "rateLimited": {
+            "type": "boolean"
+          },
+          "workflowName": {
+            "type": "string"
+          },
+          "workflowVersion": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "startTime": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "WorkflowDef": {
+        "required": [
+          "name",
+          "tasks",
+          "timeoutSeconds"
+        ],
+        "type": "object",
+        "properties": {
+          "ownerApp": {
+            "type": "string"
+          },
+          "createTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updateTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "updatedBy": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowTask"
+            }
+          },
+          "inputParameters": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "outputParameters": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "failureWorkflow": {
+            "type": "string"
+          },
+          "schemaVersion": {
+            "maximum": 2,
+            "minimum": 2,
+            "type": "integer",
+            "format": "int32"
+          },
+          "restartable": {
+            "type": "boolean"
+          },
+          "workflowStatusListenerEnabled": {
+            "type": "boolean"
+          },
+          "ownerEmail": {
+            "type": "string"
+          },
+          "timeoutPolicy": {
+            "type": "string",
+            "enum": [
+              "TIME_OUT_WF",
+              "ALERT_ONLY"
+            ]
+          },
+          "timeoutSeconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "variables": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "inputTemplate": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "workflowStatusListenerSink": {
+            "type": "string"
+          },
+          "rateLimitConfig": {
+            "$ref": "#/components/schemas/RateLimitConfig"
+          },
+          "inputSchema": {
+            "$ref": "#/components/schemas/SchemaDef"
+          },
+          "outputSchema": {
+            "$ref": "#/components/schemas/SchemaDef"
+          },
+          "enforceSchema": {
+            "type": "boolean"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "cacheConfig": {
+            "$ref": "#/components/schemas/CacheConfig"
+          },
+          "maskedFields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SearchResultWorkflowSummary": {
+        "type": "object",
+        "properties": {
+          "totalHits": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowSummary"
+            }
+          }
+        }
+      },
+      "WorkflowSummary": {
+        "type": "object",
+        "properties": {
+          "workflowType": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "workflowId": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "startTime": {
+            "type": "string"
+          },
+          "updateTime": {
+            "type": "string"
+          },
+          "endTime": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "RUNNING",
+              "COMPLETED",
+              "FAILED",
+              "TIMED_OUT",
+              "TERMINATED",
+              "PAUSED"
+            ]
+          },
+          "input": {
+            "type": "string"
+          },
+          "output": {
+            "type": "string"
+          },
+          "reasonForIncompletion": {
+            "type": "string"
+          },
+          "executionTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "event": {
+            "type": "string"
+          },
+          "failedReferenceTaskNames": {
+            "type": "string"
+          },
+          "externalInputPayloadStoragePath": {
+            "type": "string"
+          },
+          "externalOutputPayloadStoragePath": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "failedTaskNames": {
+            "uniqueItems": true,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "taskToDomain": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "outputSize": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "inputSize": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "AgentRun": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string"
+          },
+          "agentName": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "status": {
+            "type": "string"
+          },
+          "startTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "endTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "input": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "output": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "tokenUsage": {
+            "$ref": "#/components/schemas/TokenUsage"
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskDetail"
+            }
+          }
+        }
+      },
+      "TaskDetail": {
+        "type": "object",
+        "properties": {
+          "taskType": {
+            "type": "string"
+          },
+          "referenceTaskName": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "subWorkflowId": {
+            "type": "string"
+          },
+          "outputData": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "TokenUsage": {
+        "type": "object",
+        "properties": {
+          "promptTokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "completionTokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalTokens": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      }
+    }
+  }
+}

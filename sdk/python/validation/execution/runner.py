@@ -26,7 +26,7 @@ def check_server_health(server_url: str | None = None) -> bool:
     try:
         import urllib.request
 
-        url = server_url or os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:8080/api")
+        url = server_url or os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:6767/api")
         base = url.rstrip("/api").rstrip("/")
         health_url = f"{base}/health"
         req = urllib.request.Request(health_url, method="GET")

@@ -7,13 +7,12 @@
  *
  * Requirements:
  *   - Conductor server with callback support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, CallbackHandler, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, CallbackHandler, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Handler 1: Timing -------------------------------------------------------
 
@@ -61,15 +60,19 @@ const lookupWeather = tool(
   {
     name: 'lookup_weather',
     description: 'Get the current weather for a city.',
-    inputSchema: z.object({
-      city: z.string().describe('Name of the city'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        city: { type: 'string', description: 'Name of the city' },
+      },
+      required: ['city'],
+    },
   },
 );
 
 // -- Agent with chained handlers ---------------------------------------------
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'lifecycle_agent_53',
   model: llmModel,
   instructions: 'You are a helpful assistant. Use lookup_weather for weather queries.',
@@ -79,10 +82,23 @@ const agent = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(agent, "What's the weather like in Tokyo?");
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(agent, "What's the weather like in Tokyo?");
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents lifecycle_agent_53
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

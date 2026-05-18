@@ -11,7 +11,7 @@ import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // Mock document store
@@ -195,6 +195,7 @@ const graph = createReactAgent({
     '3) Summarize the key points, ' +
     '4) Classify sentiment. ' +
     'Combine findings into a structured report.',
+  name: "document_analysis_agent",
 });
 
 // Add agentspan metadata for extraction
@@ -216,6 +217,15 @@ async function main() {
     const result = await runtime.run(graph, PROMPT);
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(graph);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/langgraph --agents document_analysis
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(graph);
   } finally {
     await runtime.shutdown();
   }

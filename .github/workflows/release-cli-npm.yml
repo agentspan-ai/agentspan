@@ -1,15 +1,12 @@
-name: Release CLI - npm
+name: Publish CLI to npm
 
 on:
+  release:
+    types: [created]
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to publish (e.g. 1.0.0)"
-        required: true
-        type: string
-  workflow_call:
-    inputs:
-      version:
+        description: "Version (e.g. 0.0.10)"
         required: true
         type: string
 
@@ -30,12 +27,24 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: "22"
           registry-url: "https://registry.npmjs.org"
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            TAG="${{ github.event.release.tag_name }}"
+            VERSION="${TAG#v}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Publishing version: ${VERSION}"
 
       - name: Update package.json version
         run: |
-          VERSION="${{ inputs.version }}"
+          VERSION="${{ steps.version.outputs.version }}"
           npm version $VERSION --no-git-tag-version --allow-same-version
 
       - name: Publish to npm

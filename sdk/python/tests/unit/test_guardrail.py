@@ -364,7 +364,7 @@ class TestLLMGuardrailEvaluate:
         guard = LLMGuardrail(model="openai/gpt-4o-mini", policy="Be safe.")
 
         # Simulate litellm import failure inside _evaluate
-        with patch("agentspan.agents.guardrail.LLMGuardrail._evaluate") as mock_eval:
+        with patch.object(LLMGuardrail, "_evaluate") as mock_eval:
             mock_eval.return_value = GuardrailResult(
                 passed=False, message="LLMGuardrail requires the 'litellm' package."
             )

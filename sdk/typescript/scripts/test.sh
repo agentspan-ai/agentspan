@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-echo "=== @agentspan/sdk Test Runner ==="
+echo "=== @agentspan-ai/sdk Test Runner ==="
 echo ""
 
 # ── Unit Tests ────────────────────────────────────────────
@@ -53,7 +53,7 @@ if [ "${AGENTSPAN_SERVER_URL:-}" != "" ]; then
   fi
 else
   echo "Skipping validation (AGENTSPAN_SERVER_URL not set)"
-  echo "To run: AGENTSPAN_SERVER_URL=http://localhost:8080/api OPENAI_API_KEY=sk-... ./scripts/test.sh"
+  echo "To run: AGENTSPAN_SERVER_URL=http://localhost:6767/api OPENAI_API_KEY=sk-... ./scripts/test.sh"
 fi
 
 echo "=== Done ==="

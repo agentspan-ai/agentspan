@@ -14,12 +14,12 @@
  *
  * Requirements:
  *   - Conductor server with OpenAI integration configured
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, imageTool, audioTool, videoTool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, imageTool, audioTool, videoTool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Media generation tools (server-side, no worker needed) -------------------
 
@@ -47,7 +47,7 @@ const genVideo = videoTool({
 
 // -- Orchestrator Agent -------------------------------------------------------
 
-const mediaAgent = new Agent({
+export const mediaAgent = new Agent({
   name: 'media_generator',
   model: llmModel,
   tools: [genImage, genAudio, genVideo],
@@ -63,18 +63,30 @@ const mediaAgent = new Agent({
 
 // -- Run ----------------------------------------------------------------------
 
-console.log('Media Generation Agent');
-console.log('='.repeat(60));
-
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('Media Generation Agent');
+    console.log('='.repeat(60));
+    const result = await runtime.run(
     mediaAgent,
     'Create an image of a serene Japanese garden with a koi pond ' +
     'at sunset, cherry blossoms falling gently. Use vivid style. ' +
     'Use that image to generate a video with audio narration describing the image.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(mediaAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents media_generator
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(mediaAgent);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

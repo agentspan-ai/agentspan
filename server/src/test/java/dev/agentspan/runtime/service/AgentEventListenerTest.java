@@ -5,40 +5,56 @@
 
 package dev.agentspan.runtime.service;
 
-import com.netflix.conductor.model.TaskModel;
-import com.netflix.conductor.model.WorkflowModel;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import dev.agentspan.runtime.model.AgentSSEEvent;
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 import java.util.Map;
 
-import static org.assertj.core.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+
+import com.netflix.conductor.model.TaskModel;
+import com.netflix.conductor.model.WorkflowModel;
+
+import dev.agentspan.runtime.model.AgentSSEEvent;
+
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 class AgentEventListenerTest {
 
     private AgentStreamRegistry streamRegistry;
+    private MeterRegistry meterRegistry;
     private AgentEventListener listener;
 
     @BeforeEach
     void setUp() {
         streamRegistry = mock(AgentStreamRegistry.class);
-        listener = new AgentEventListener(streamRegistry);
+        meterRegistry = new SimpleMeterRegistry();
+        listener = new AgentEventListener(streamRegistry, meterRegistry);
     }
 
-    private TaskModel makeTask(String workflowId, String taskType, String refName) {
+    private TaskModel makeTask(String executionId, String taskType, String refName) {
         TaskModel task = new TaskModel();
-        task.setWorkflowInstanceId(workflowId);
+        task.setWorkflowInstanceId(executionId);
         task.setTaskType(taskType);
         task.setReferenceTaskName(refName);
         return task;
     }
 
-    private WorkflowModel makeWorkflow(String workflowId) {
+    private WorkflowModel makeWorkflow(String executionId) {
+        return makeWorkflow(executionId, null);
+    }
+
+    private WorkflowModel makeWorkflow(String executionId, String workflowName) {
         WorkflowModel wf = new WorkflowModel();
-        wf.setWorkflowId(workflowId);
+        wf.setWorkflowId(executionId);
+        if (workflowName != null) {
+            var def = new com.netflix.conductor.common.metadata.workflow.WorkflowDef();
+            def.setName(workflowName);
+            wf.setWorkflowDefinition(def);
+        }
         return wf;
     }
 
@@ -386,12 +402,134 @@ class AgentEventListenerTest {
         verify(streamRegistry, never()).send(anyString(), any());
     }
 
+    // ── AI Metrics ───────────────────────────────────────────────────
+
+    @Test
+    void onWorkflowCompleted_recordsAIMetrics() {
+        TaskModel llmTask = makeTask("wf-1", "LLM_CHAT_COMPLETE", "agent_llm__1");
+        llmTask.setInputData(Map.of("llmProvider", "openai", "model", "gpt-4o"));
+        llmTask.setOutputData(Map.of("promptTokens", 100, "completionTokens", 50, "tokenUsed", 150));
+
+        TaskModel toolTask = makeTask("wf-1", "SIMPLE", "get_weather");
+        toolTask.setOutputData(Map.of("result", "sunny"));
+
+        TaskModel llmTask2 = makeTask("wf-1", "LLM_CHAT_COMPLETE", "agent_llm__2");
+        llmTask2.setInputData(Map.of("llmProvider", "openai", "model", "gpt-4o"));
+        llmTask2.setOutputData(Map.of("promptTokens", 200, "completionTokens", 80, "tokenUsed", 280));
+
+        WorkflowModel wf = makeWorkflow("wf-1", "my_agent");
+        wf.setTasks(java.util.List.of(llmTask, toolTask, llmTask2));
+
+        listener.onWorkflowCompletedIfEnabled(wf);
+
+        // 2 LLM requests
+        assertThat(meterRegistry
+                        .counter(
+                                "agentspan.ai.requests",
+                                "agent",
+                                "my_agent",
+                                "model",
+                                "gpt-4o",
+                                "provider",
+                                "openai",
+                                "task_type",
+                                "chat")
+                        .count())
+                .isEqualTo(2.0);
+        // Prompt tokens: 100 + 200 = 300
+        assertThat(meterRegistry
+                        .counter(
+                                "agentspan.ai.tokens",
+                                "agent",
+                                "my_agent",
+                                "model",
+                                "gpt-4o",
+                                "provider",
+                                "openai",
+                                "task_type",
+                                "chat",
+                                "token_type",
+                                "prompt")
+                        .count())
+                .isEqualTo(300.0);
+        // Completion tokens: 50 + 80 = 130
+        assertThat(meterRegistry
+                        .counter(
+                                "agentspan.ai.tokens",
+                                "agent",
+                                "my_agent",
+                                "model",
+                                "gpt-4o",
+                                "provider",
+                                "openai",
+                                "task_type",
+                                "chat",
+                                "token_type",
+                                "completion")
+                        .count())
+                .isEqualTo(130.0);
+        // Total tokens: 150 + 280 = 430
+        assertThat(meterRegistry
+                        .counter(
+                                "agentspan.ai.tokens",
+                                "agent",
+                                "my_agent",
+                                "model",
+                                "gpt-4o",
+                                "provider",
+                                "openai",
+                                "task_type",
+                                "chat",
+                                "token_type",
+                                "total")
+                        .count())
+                .isEqualTo(430.0);
+    }
+
+    @Test
+    void onWorkflowCompleted_imageGenRecordsMetrics() {
+        TaskModel imgTask = makeTask("wf-1", "GENERATE_IMAGE", "img_gen");
+        imgTask.setInputData(Map.of("llmProvider", "openai", "model", "dall-e-3"));
+        imgTask.setOutputData(Map.of("promptTokens", 20, "completionTokens", 0));
+
+        WorkflowModel wf = makeWorkflow("wf-1", "creative_agent");
+        wf.setTasks(java.util.List.of(imgTask));
+
+        listener.onWorkflowCompletedIfEnabled(wf);
+
+        assertThat(meterRegistry
+                        .counter(
+                                "agentspan.ai.requests",
+                                "agent",
+                                "creative_agent",
+                                "model",
+                                "dall-e-3",
+                                "provider",
+                                "openai",
+                                "task_type",
+                                "image")
+                        .count())
+                .isEqualTo(1.0);
+    }
+
+    @Test
+    void onWorkflowCompleted_noAiTasks_noMetrics() {
+        TaskModel toolTask = makeTask("wf-1", "SIMPLE", "search_tool");
+        toolTask.setOutputData(Map.of("result", "value"));
+
+        WorkflowModel wf = makeWorkflow("wf-1", "tool_only_agent");
+        wf.setTasks(java.util.List.of(toolTask));
+
+        listener.onWorkflowCompletedIfEnabled(wf);
+
+        assertThat(meterRegistry.find("agentspan.ai.requests").counters()).isEmpty();
+    }
+
     // ── Error handling ───────────────────────────────────────────────
 
     @Test
     void emitSwallowsExceptions() {
-        doThrow(new RuntimeException("send failed"))
-                .when(streamRegistry).send(anyString(), any());
+        doThrow(new RuntimeException("send failed")).when(streamRegistry).send(anyString(), any());
 
         TaskModel task = makeTask("wf-1", "LLM_CHAT_COMPLETE", "llm");
 

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agentspan/agentspan/cli/config"
+	"github.com/agentspan-ai/agentspan/cli/config"
 )
 
 func TestCredentialsSetSimple(t *testing.T) {
@@ -28,7 +28,7 @@ func TestCredentialsSetSimple(t *testing.T) {
 
 	saveTestConfig(t, srv.URL)
 
-	if err := runCredentialsSet("GITHUB_TOKEN", "ghp_xxx", ""); err != nil {
+	if err := runCredentialsSet("GITHUB_TOKEN", "ghp_xxx"); err != nil {
 		t.Fatalf("runCredentialsSet: %v", err)
 	}
 
@@ -59,8 +59,9 @@ func TestCredentialsSetWithStoreName(t *testing.T) {
 
 	saveTestConfig(t, srv.URL)
 
-	// storeName overrides: value is first arg, storeName is the name sent
-	if err := runCredentialsSet("ghp_xxx", "", "github-prod"); err != nil {
+	// With --name, the RunE handler resolves: name=storeName, value=args[0]
+	// Simulate what RunE does: name="github-prod", value="ghp_xxx"
+	if err := runCredentialsSet("github-prod", "ghp_xxx"); err != nil {
 		t.Fatalf("runCredentialsSet: %v", err)
 	}
 

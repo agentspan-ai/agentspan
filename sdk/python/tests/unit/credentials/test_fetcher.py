@@ -19,46 +19,36 @@ from agentspan.agents.runtime.credentials.types import (
 
 
 def _make_fetcher():
-    return WorkerCredentialFetcher(server_url="http://localhost:8080/api")
+    return WorkerCredentialFetcher(server_url="http://localhost:6767/api")
 
 
 class TestFetchWithoutToken:
-    """Local dev path: no execution token, read from os.environ."""
+    """No execution token — must fail with CredentialNotFoundError."""
 
-    def test_empty_token_returns_env_vars(self):
+    def test_empty_token_raises(self):
         fetcher = _make_fetcher()
-        with patch.dict(os.environ, {"GITHUB_TOKEN": "ghp_local"}):
-            result = fetcher.fetch("", ["GITHUB_TOKEN"])
-        assert result["GITHUB_TOKEN"] == "ghp_local"
+        with pytest.raises(CredentialNotFoundError):
+            fetcher.fetch("", ["GITHUB_TOKEN"])
 
-    def test_none_token_returns_env_vars(self):
+    def test_none_token_raises(self):
         fetcher = _make_fetcher()
-        with patch.dict(os.environ, {"GITHUB_TOKEN": "ghp_local"}):
-            result = fetcher.fetch(None, ["GITHUB_TOKEN"])
-        assert result["GITHUB_TOKEN"] == "ghp_local"
+        with pytest.raises(CredentialNotFoundError):
+            fetcher.fetch(None, ["GITHUB_TOKEN"])
 
-    def test_missing_env_returns_partial(self):
-        """Missing env vars are silently omitted (local dev convenience)."""
+    def test_none_token_error_lists_names(self):
         fetcher = _make_fetcher()
-        result = fetcher.fetch("", ["_NONEXISTENT_KEY_12345"])
-        assert result == {}
+        with pytest.raises(CredentialNotFoundError, match="GITHUB_TOKEN"):
+            fetcher.fetch(None, ["GITHUB_TOKEN"])
 
     def test_empty_names_returns_empty(self):
         fetcher = _make_fetcher()
         result = fetcher.fetch(None, [])
         assert result == {}
 
-    def test_multiple_env_vars_returned(self):
+    def test_multiple_names_in_error(self):
         fetcher = _make_fetcher()
-        with patch.dict(os.environ, {"KEY_A": "val_a", "KEY_B": "val_b"}):
-            result = fetcher.fetch(None, ["KEY_A", "KEY_B"])
-        assert result == {"KEY_A": "val_a", "KEY_B": "val_b"}
-
-    def test_partial_env_returns_found_only(self):
-        fetcher = _make_fetcher()
-        with patch.dict(os.environ, {"KEY_A": "val_a"}):
-            result = fetcher.fetch(None, ["KEY_A", "KEY_MISSING"])
-        assert result == {"KEY_A": "val_a"}
+        with pytest.raises(CredentialNotFoundError):
+            fetcher.fetch(None, ["KEY_A", "KEY_B"])
 
 
 class TestFetchUnreachableServer:

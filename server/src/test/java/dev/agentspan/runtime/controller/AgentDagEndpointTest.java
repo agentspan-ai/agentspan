@@ -5,24 +5,23 @@
 
 package dev.agentspan.runtime.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.agentspan.runtime.AgentRuntime;
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.test.context.ActiveProfiles;
+import static org.assertj.core.api.Assertions.*;
 
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.util.Map;
 
-import static org.assertj.core.api.Assertions.*;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.test.context.ActiveProfiles;
 
-@SpringBootTest(
-        classes = AgentRuntime.class,
-        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT
-)
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import dev.agentspan.runtime.AgentRuntime;
+
+@SpringBootTest(classes = AgentRuntime.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
 class AgentDagEndpointTest {
 
@@ -32,33 +31,29 @@ class AgentDagEndpointTest {
     private int port;
 
     @Test
-    void createTrackingWorkflow_returns200WithWorkflowId() throws Exception {
-        Map<String, Object> body = Map.of(
-                "workflowName", "test-sub-agent",
-                "input", Map.of("prompt", "do the thing")
-        );
+    void createTrackingExecution_returns200WithExecutionId() throws Exception {
+        Map<String, Object> body = Map.of("workflowName", "test-sub-agent", "input", Map.of("prompt", "do the thing"));
 
-        HttpURLConnection conn = post("/api/agent/workflow", body);
+        HttpURLConnection conn = post("/api/agent/execution", body);
         assertThat(conn.getResponseCode()).isEqualTo(200);
 
         Map<?, ?> resp = MAPPER.readValue(conn.getInputStream(), Map.class);
-        assertThat(resp.get("workflowId")).isNotNull().asString().isNotBlank();
+        assertThat(resp.get("executionId")).isNotNull().asString().isNotBlank();
     }
 
     @Test
     void injectTask_returns200WithTaskId() throws Exception {
         // First create a tracking workflow to inject into
-        String workflowId = createTrackingWorkflow();
+        String executionId = createTrackingExecution();
 
         Map<String, Object> body = Map.of(
                 "taskDefName", "Bash",
                 "referenceTaskName", "bash_ref_1",
                 "type", "SIMPLE",
                 "inputData", Map.of("command", "ls"),
-                "status", "IN_PROGRESS"
-        );
+                "status", "IN_PROGRESS");
 
-        HttpURLConnection conn = post("/api/agent/" + workflowId + "/tasks", body);
+        HttpURLConnection conn = post("/api/agent/" + executionId + "/tasks", body);
         assertThat(conn.getResponseCode()).isEqualTo(200);
 
         Map<?, ?> resp = MAPPER.readValue(conn.getInputStream(), Map.class);
@@ -70,8 +65,7 @@ class AgentDagEndpointTest {
         Map<String, Object> body = Map.of(
                 "taskDefName", "Bash",
                 "referenceTaskName", "bash_ref_1",
-                "type", "SIMPLE"
-        );
+                "type", "SIMPLE");
 
         HttpURLConnection conn = post("/api/agent/nonexistent-workflow-id-xyz/tasks", body);
         assertThat(conn.getResponseCode()).isEqualTo(404);
@@ -79,14 +73,11 @@ class AgentDagEndpointTest {
 
     // ── helpers ─────────────────────────────────────────────────────────────
 
-    private String createTrackingWorkflow() throws Exception {
-        Map<String, Object> body = Map.of(
-                "workflowName", "test-sub-agent",
-                "input", Map.of("prompt", "run")
-        );
-        HttpURLConnection conn = post("/api/agent/workflow", body);
+    private String createTrackingExecution() throws Exception {
+        Map<String, Object> body = Map.of("workflowName", "test-sub-agent", "input", Map.of("prompt", "run"));
+        HttpURLConnection conn = post("/api/agent/execution", body);
         Map<?, ?> resp = MAPPER.readValue(conn.getInputStream(), Map.class);
-        return (String) resp.get("workflowId");
+        return (String) resp.get("executionId");
     }
 
     private HttpURLConnection post(String path, Map<String, Object> body) throws Exception {

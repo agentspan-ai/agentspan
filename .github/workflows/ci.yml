@@ -1,0 +1,439 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Java Server Tests ──────────────────────────────────────────────
+  server-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'corretto'
+      - name: Run server tests
+        run: ./gradlew build
+      - name: Upload test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-test-reports
+          path: server/build/reports/tests/test/
+          retention-days: 7
+      - name: Server Test Report
+        uses: mikepenz/action-junit-report@v5
+        if: always()
+        with:
+          check_name: 'Server Tests'
+          check_title_template: '{{SUITE_NAME}} | {{TEST_NAME}} | {{CLASS_NAME}}'
+          report_paths: 'server/build/test-results/test/TEST-*.xml'
+          check_retries: true
+          fail_on_failure: true
+          detailed_summary: true
+          include_passed: false
+          flaky_summary: true
+
+  # ── Go CLI Tests ─────────────────────────────────────────────────
+  cli-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+      - name: Run CLI tests
+        run: go test ./... -count=1 -race
+
+  # ── Go CLI Tests (Windows) ───────────────────────────────────────
+  cli-tests-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'corretto'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+      - name: Run CLI tests
+        run: go test ./... -count=1
+
+  # ── Python SDK Unit Tests ──────────────────────────────────────────
+  python-unit-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install dependencies
+        run: uv sync --extra dev --group dev
+      - name: Run unit tests
+        run: uv run pytest tests/unit/ -q --tb=short
+
+  # ── TypeScript SDK Unit Tests ──────────────────────────────────────
+  typescript-unit-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/typescript
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Run unit tests
+        run: npx vitest run tests/unit/
+
+  # ── Java SDK Unit Tests ────────────────────────────────────────────
+  # Runs the Java SDK core + Spring auto-configuration unit tests in one
+  # job. `./gradlew test` excludes e2e tests by default (see build.gradle
+  # — excludeTags 'e2e' unless -Pe2e is set), so this is fast and needs
+  # no live server. The :spring:test target adds Spring Boot
+  # auto-configuration coverage for AgentConfig/AgentRuntime beans and
+  # `agentspan.*` property overrides.
+  java-sdk-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/java
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: gradle
+      - name: Run Java SDK + Spring unit tests
+        run: ./gradlew test :spring:test
+      - name: Upload Java SDK test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-sdk-test-reports
+          path: |
+            sdk/java/build/reports/tests/test/
+            sdk/java/spring/build/reports/tests/test/
+          retention-days: 7
+
+  # ── C# SDK Unit Tests ──────────────────────────────────────────────
+  # Builds the C# solution (Release) and runs the framework-adapter unit
+  # tests (OpenAI, GoogleADK, SemanticKernel). The AgentspanE2eTests
+  # project is excluded by name — those run in csharp-e2e against a live
+  # server.
+  csharp-sdk-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/csharp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build solution
+        run: dotnet build Agentspan.sln --configuration Release
+      - name: Run unit tests
+        run: |
+          dotnet test Agentspan.sln \
+            --configuration Release \
+            --no-build \
+            --filter "FullyQualifiedName!~AgentspanE2eTests" \
+            --logger "console;verbosity=normal" \
+            --logger "trx;LogFileName=test-results.trx"
+      - name: Upload C# SDK test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: csharp-sdk-test-results
+          path: sdk/csharp/tests/**/TestResults/*.trx
+          retention-days: 14
+
+  # ── Build Server JAR (shared by e2e jobs) ──────────────────────────
+  build-server:
+    runs-on: ubuntu-latest
+    needs: [server-tests]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'corretto'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+      - name: Build server JAR with UI
+        working-directory: server
+        run: ./gradlew bootJar -PbuildUI=true -x test
+      - name: Upload server JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-jar
+          path: server/build/libs/agentspan-runtime.jar
+          retention-days: 1
+
+  # ── Python E2E Tests ───────────────────────────────────────────────
+  python-e2e:
+    runs-on: ubuntu-latest
+    needs: [build-server, python-unit-tests]
+    timeout-minutes: 45
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      AGENTSPAN_SERVER_URL: http://localhost:6767/api
+      AGENTSPAN_CLI_PATH: ../../cli/agentspan
+      AGENTSPAN_AUTO_START_SERVER: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'corretto'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Download server JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: server-jar
+          path: server/build/libs/
+
+      - name: Build CLI
+        working-directory: cli
+        run: go build -o agentspan .
+
+      - name: Install Python SDK + testing deps
+        working-directory: sdk/python
+        run: uv sync --extra dev --extra testing --group dev
+
+      - name: Install mcp-testkit
+        working-directory: sdk/python
+        run: uv pip install mcp-testkit
+
+      - name: Start mcp-testkit
+        run: |
+          mcp-testkit --transport http --port 3001 &
+          sleep 2
+
+      - name: Start server
+        run: |
+          java -jar server/build/libs/agentspan-runtime.jar --server.port=6767 &
+          for i in $(seq 1 30); do curl -sf http://localhost:6767/health && break; sleep 2; done
+
+      - name: Run Python e2e suites 1-13
+        working-directory: sdk/python
+        run: |
+          uv run pytest e2e/ -v --tb=short \
+            --junitxml=../../e2e-results/junit.xml \
+            -n 1
+
+      - name: Generate Python HTML report
+        if: always()
+        working-directory: sdk/python
+        run: uv run python e2e/report_generator.py ../../e2e-results/junit.xml ../../e2e-results/report.html
+
+      - name: Upload Python e2e results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-e2e-results
+          path: e2e-results/
+          retention-days: 14
+
+  # ── TypeScript E2E Tests ───────────────────────────────────────────
+  typescript-e2e:
+    runs-on: ubuntu-latest
+    needs: [build-server, typescript-unit-tests]
+    timeout-minutes: 45
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      AGENTSPAN_SERVER_URL: http://localhost:6767/api
+      AGENTSPAN_CLI_PATH: ../../cli/agentspan
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'corretto'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Download server JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: server-jar
+          path: server/build/libs/
+
+      - name: Build CLI
+        working-directory: cli
+        run: go build -o agentspan .
+
+      - name: Install mcp-testkit
+        run: pip install mcp-testkit
+
+      - name: Start mcp-testkit
+        run: |
+          mcp-testkit --transport http --port 3001 &
+          sleep 2
+
+      - name: Start server
+        run: |
+          java -jar server/build/libs/agentspan-runtime.jar --server.port=6767 &
+          for i in $(seq 1 30); do curl -sf http://localhost:6767/health && break; sleep 2; done
+
+      - name: Install TypeScript SDK
+        working-directory: sdk/typescript
+        run: npm ci && npm run build
+
+      - name: Run TypeScript e2e suites 1-13
+        working-directory: sdk/typescript
+        run: npx vitest run tests/e2e/ --reporter=verbose --reporter=junit --outputFile.junit=../../e2e-results/junit-ts.xml
+
+      - name: Generate TypeScript HTML report
+        if: always()
+        working-directory: sdk/typescript
+        run: npx tsx tests/e2e/generate-report.ts ../../e2e-results/junit-ts.xml ../../e2e-results/report-ts.html
+
+      - name: Upload TypeScript e2e results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: typescript-e2e-results
+          path: e2e-results/
+          retention-days: 14
+
+  # ── Java E2E Tests ─────────────────────────────────────────────────
+  java-e2e:
+    runs-on: ubuntu-latest
+    needs: [build-server, java-sdk-tests]
+    timeout-minutes: 45
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      AGENTSPAN_SERVER_URL: http://localhost:6767/api
+      AGENTSPAN_LLM_MODEL: openai/gpt-4o-mini
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: gradle
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Download server JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: server-jar
+          path: server/build/libs/
+
+      - name: Install mcp-testkit
+        run: pip install mcp-testkit
+
+      - name: Start mcp-testkit
+        run: |
+          mcp-testkit --transport http --port 3001 &
+          sleep 2
+
+      - name: Start server
+        run: |
+          java -jar server/build/libs/agentspan-runtime.jar --server.port=6767 &
+          for i in $(seq 1 30); do curl -sf http://localhost:6767/health && break; sleep 2; done
+
+      - name: Run Java e2e suites
+        working-directory: sdk/java
+        run: ./gradlew test -Pe2e
+
+      - name: Upload Java e2e results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-e2e-results
+          path: sdk/java/build/reports/tests/test/
+          retention-days: 14
+
+  # ── C# E2E Tests ───────────────────────────────────────────────────
+  # 101 tests across 13 suites at sdk/csharp/tests/AgentspanE2eTests.
+  # Previously runnable only via the manual ``ci-csharp-sdk-e2e.yml``
+  # workflow (``workflow_dispatch``), so regressions could land
+  # unnoticed. Mirrors the python-e2e / typescript-e2e / java-e2e jobs
+  # — same build-server prerequisite, same server-on-:6767 startup,
+  # same OPENAI_API_KEY env.
+  csharp-e2e:
+    runs-on: ubuntu-latest
+    needs: [build-server, csharp-sdk-tests]
+    timeout-minutes: 45
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      AGENTSPAN_SERVER_URL: http://localhost:6767/api
+      AGENTSPAN_LLM_MODEL: openai/gpt-4o-mini
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'corretto'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Download server JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: server-jar
+          path: server/build/libs/
+
+      - name: Start server
+        run: |
+          java -jar server/build/libs/agentspan-runtime.jar --server.port=6767 &
+          for i in $(seq 1 30); do curl -sf http://localhost:6767/health && break; sleep 2; done
+
+      - name: Run C# e2e suites
+        working-directory: sdk/csharp
+        run: |
+          dotnet test tests/AgentspanE2eTests/AgentspanE2eTests.csproj \
+            --configuration Release \
+            --logger "console;verbosity=normal" \
+            --logger "trx;LogFileName=csharp-e2e.trx"
+
+      - name: Upload C# e2e results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: csharp-e2e-results
+          path: sdk/csharp/tests/AgentspanE2eTests/TestResults/*.trx
+          retention-days: 14

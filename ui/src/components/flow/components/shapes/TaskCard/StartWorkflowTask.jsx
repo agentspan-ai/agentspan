@@ -40,7 +40,7 @@ const StartWorkflowTask = ({ nodeData }) => {
           }}
         >
           <Link
-            href={`${window.location.origin}/workflowDef/${startWorkflow?.name}`}
+            href={`${window.location.origin}/agentDef/${startWorkflow?.name}`}
             sx={{ color: "cyan" }}
             target="_blank"
             rel="noreferrer"

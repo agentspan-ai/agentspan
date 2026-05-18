@@ -215,7 +215,7 @@ export default function AdvancedSearch({
         if (error) {
           getErrors(error as Response).then((result) => {
             if (result?.["workflowName"] === "must not be empty") {
-              setErrorMessage({ message: "Workflow name should not be empty" });
+              setErrorMessage({ message: "Agent name should not be empty" });
             } else {
               setErrorMessage(result);
             }
@@ -380,7 +380,7 @@ export default function AdvancedSearch({
                   title: "Search",
                   content: (
                     <Box>
-                      Search workflow execution by query parameters. Then hit
+                      Search agent executions by query parameters. Then hit
                       ENTER, and now you can click SEARCH.
                       <Box
                         sx={{

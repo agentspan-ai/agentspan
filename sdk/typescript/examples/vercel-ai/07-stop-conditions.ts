@@ -15,7 +15,7 @@ import {
   AgentRuntime,
   MaxMessage,
   TextMention,
-} from '../../src/index.js';
+} from '@agentspan-ai/sdk';
 
 // ── Tool state ───────────────────────────────────────────
 let analysisStepCount = 0;
@@ -51,7 +51,7 @@ const summarize = aiTool({
 const termination = new TextMention('ANALYSIS COMPLETE').or(new MaxMessage(10));
 
 // ── Native Agent with AI SDK tools and termination ───────
-const agent = new Agent({
+export const agent = new Agent({
   name: 'stop_conditions_agent',
   model: 'openai/gpt-4o-mini',
   instructions:
@@ -75,6 +75,15 @@ async function main() {
     console.log('Status:', result.status);
     console.log('Tool calls:', result.toolCalls.length);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/vercel-ai --agents stop_conditions_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
   } finally {
     await runtime.shutdown();
   }

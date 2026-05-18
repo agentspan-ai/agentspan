@@ -10,14 +10,14 @@
 import { MemorySaver } from '@langchain/langgraph';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // Build the graph with checkpointer
 // ---------------------------------------------------------------------------
 const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
 const checkpointer = new MemorySaver();
-const graph = createReactAgent({ llm, tools: [], checkpointer });
+const graph = createReactAgent({ llm, tools: [], checkpointer, name: "memory_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
@@ -33,12 +33,21 @@ async function main() {
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(
-      graph,
-      'My name is Bob. Tell me something interesting about my name.',
-      { sessionId: 'agentspan-session-001' },
+    graph,
+    'My name is Bob. Tell me something interesting about my name.',
+    { sessionId: 'agentspan-session-001' },
     );
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(graph);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/langgraph --agents memory
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(graph);
   } finally {
     await runtime.shutdown();
   }

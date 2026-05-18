@@ -4,8 +4,8 @@
 package cmd
 
 import (
-	"github.com/agentspan/agentspan/cli/client"
-	"github.com/agentspan/agentspan/cli/config"
+	"github.com/agentspan-ai/agentspan/cli/client"
+	"github.com/agentspan-ai/agentspan/cli/config"
 )
 
 func getConfig() *config.Config {

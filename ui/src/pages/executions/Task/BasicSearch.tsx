@@ -169,7 +169,7 @@ export const BasicSearch = ({
       >
         <ConductorInput
           fullWidth
-          label="Workflow name"
+          label="Agent name"
           onTextInputChange={setWorkflowName}
           value={workflowName}
         />

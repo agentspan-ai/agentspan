@@ -36,8 +36,7 @@ public class ModelParser {
         int slashIdx = modelString.indexOf('/');
         if (slashIdx <= 0 || slashIdx >= modelString.length() - 1) {
             throw new IllegalArgumentException(
-                "Invalid model format: '" + modelString + "'. Expected 'provider/model'."
-            );
+                    "Invalid model format: '" + modelString + "'. Expected 'provider/model'.");
         }
 
         String provider = modelString.substring(0, slashIdx);

@@ -9,7 +9,7 @@ const style = {
 export default function ExecutionSummary({ execution }) {
   // To accommodate unexecuted tasks, read type & name out of workflowTask
   const data = [
-    { label: "Workflow id", value: execution.workflowId },
+    { label: "Execution id", value: execution.workflowId },
     { label: "Status", value: execution.status, type: "status" },
     { label: "Version", value: execution.workflowVersion },
     { label: "Start time", value: execution.startTime, type: "date" },
@@ -23,7 +23,7 @@ export default function ExecutionSummary({ execution }) {
 
   if (execution.parentWorkflowId) {
     data.push({
-      label: "Parent workflow id",
+      label: "Parent execution id",
       value: (
         <NavLink newTab path={`/execution/${execution.parentWorkflowId}`}>
           {execution.parentWorkflowId}

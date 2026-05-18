@@ -15,7 +15,7 @@
 
 import { Agent, tool, setTracingDisabled } from '@openai/agents';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 setTracingDisabled(true);
 
@@ -68,7 +68,7 @@ const generateCodeSample = tool({
 
 // ── Fast, cheap model for initial triage ────────────────────────────
 
-const triage = new Agent({
+export const triage = new Agent({
   name: 'triage',
   instructions:
     'You are a documentation triage agent. Determine what the user needs ' +
@@ -83,7 +83,7 @@ const triage = new Agent({
 
 // ── More capable model for doc lookups ──────────────────────────────
 
-const docSpecialist = new Agent({
+export const docSpecialist = new Agent({
   name: 'doc_specialist',
   instructions:
     'You are a documentation specialist. Search the docs and provide ' +
@@ -95,7 +95,7 @@ const docSpecialist = new Agent({
 
 // ── Code-focused model for code generation ──────────────────────────
 
-const codeSpecialist = new Agent({
+export const codeSpecialist = new Agent({
   name: 'code_specialist',
   instructions:
     'You are a code example specialist. Generate clean, well-commented ' +
@@ -117,6 +117,15 @@ async function main() {
     const result = await runtime.run(triage, prompt);
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(triage);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/openai --agents triage
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(triage);
   } finally {
     await runtime.shutdown();
   }

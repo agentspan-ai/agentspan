@@ -5,12 +5,13 @@
 
 package dev.agentspan.runtime.normalizer;
 
-import dev.agentspan.runtime.model.*;
+import java.util.*;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import java.util.*;
+import dev.agentspan.runtime.model.*;
 
 /**
  * Normalizes OpenAI Agent SDK raw configs into the canonical {@link AgentConfig}.
@@ -83,9 +84,7 @@ public class OpenAINormalizer implements AgentConfigNormalizer {
         if (outputType == null) outputType = raw.get("outputType");
         if (outputType instanceof Map) {
             Map<String, Object> otMap = (Map<String, Object>) outputType;
-            config.setOutputType(OutputTypeConfig.builder()
-                    .schema(otMap)
-                    .build());
+            config.setOutputType(OutputTypeConfig.builder().schema(otMap).build());
         }
 
         // Guardrails
@@ -180,21 +179,24 @@ public class OpenAINormalizer implements AgentConfigNormalizer {
                 // Agent-as-tool: wrap a child agent as a callable tool (SUB_WORKFLOW)
                 Map<String, Object> agentRaw = getMap(raw, "agent");
                 if (agentRaw == null) {
-                    log.warn("AgentTool '{}' has no embedded agent, skipping",
-                            getString(raw, "name", "unknown"));
+                    log.warn("AgentTool '{}' has no embedded agent, skipping", getString(raw, "name", "unknown"));
                     return null;
                 }
                 AgentConfig childAgent = normalize(agentRaw);
                 String toolName = getString(raw, "name", childAgent.getName());
-                String toolDesc = getString(raw, "description",
-                        "Invoke agent: " + childAgent.getName());
+                String toolDesc = getString(raw, "description", "Invoke agent: " + childAgent.getName());
 
                 Map<String, Object> inputSchema = new LinkedHashMap<>();
                 inputSchema.put("type", "object");
-                inputSchema.put("properties", Map.of(
-                        "request", Map.of("type", "string",
-                                "description", "The request or question to send to this agent")
-                ));
+                inputSchema.put(
+                        "properties",
+                        Map.of(
+                                "request",
+                                Map.of(
+                                        "type",
+                                        "string",
+                                        "description",
+                                        "The request or question to send to this agent")));
                 inputSchema.put("required", List.of("request"));
                 inputSchema.put("additionalProperties", false);
 
@@ -226,9 +228,7 @@ public class OpenAINormalizer implements AgentConfigNormalizer {
     }
 
     private void addGuardrails(
-            List<GuardrailConfig> guardrails,
-            List<Map<String, Object>> rawGuardrails,
-            String defaultPosition) {
+            List<GuardrailConfig> guardrails, List<Map<String, Object>> rawGuardrails, String defaultPosition) {
         if (rawGuardrails == null || rawGuardrails.isEmpty()) {
             return;
         }

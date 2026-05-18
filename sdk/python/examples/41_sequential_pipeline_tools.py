@@ -14,7 +14,7 @@ composing them into an ordered sequence using the >> operator.
 
 Requirements:
     - Conductor server with LLM support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -197,10 +197,22 @@ producer = Agent(
 # Full pipeline using >> operator: concept → script → visuals → audio → assembly
 pipeline = concept_developer >> scriptwriter >> visual_director >> audio_designer >> producer
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        pipeline,
-        "Create a 3-scene short film about a robot discovering music "
-        "for the first time in a post-apocalyptic world.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
+            pipeline,
+            "Create a 3-scene short film about a robot discovering music "
+            "for the first time in a post-apocalyptic world.",
+        )
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(pipeline)
+        # CLI alternative:
+        # agentspan deploy --package examples.41_sequential_pipeline_tools
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(pipeline)
+

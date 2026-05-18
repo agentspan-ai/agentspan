@@ -18,16 +18,16 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Discussion participants --------------------------------------------------
 
-const optimist = new Agent({
+export const optimist = new Agent({
   name: 'optimist',
   model: llmModel,
   instructions:
@@ -36,7 +36,7 @@ const optimist = new Agent({
     "Acknowledge the other side's points before making your case.",
 });
 
-const skeptic = new Agent({
+export const skeptic = new Agent({
   name: 'skeptic',
   model: llmModel,
   instructions:
@@ -46,7 +46,7 @@ const skeptic = new Agent({
     "Acknowledge the other side's points before making your case.",
 });
 
-const summarizer = new Agent({
+export const summarizer = new Agent({
   name: 'summarizer',
   model: llmModel,
   instructions:
@@ -59,7 +59,7 @@ const summarizer = new Agent({
 
 // -- Round-robin discussion: 6 turns (3 rounds of back-and-forth) -------------
 
-const discussion = new Agent({
+export const discussion = new Agent({
   name: 'discussion',
   model: llmModel,
   agents: [optimist, skeptic],
@@ -72,13 +72,26 @@ const pipeline = discussion.pipe(summarizer);
 
 // -- Run ----------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
     pipeline,
     'Should AI agents be allowed to autonomously make financial decisions for individuals?',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(pipeline);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents discussion
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(pipeline);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

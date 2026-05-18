@@ -12,17 +12,17 @@ import (
 var streamLastEventID string
 
 var streamCmd = &cobra.Command{
-	Use:   "stream <workflow-id>",
+	Use:   "stream <execution-id>",
 	Short: "Stream events from a running agent",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := getConfig()
 		c := newClient(cfg)
 
-		workflowID := args[0]
-		fmt.Printf("Streaming events for %s...\n\n", workflowID)
+		executionID := args[0]
+		fmt.Printf("Streaming events for %s...\n\n", executionID)
 
-		return streamWorkflow(c, workflowID)
+		return streamExecution(c, executionID, streamLastEventID)
 	},
 }
 

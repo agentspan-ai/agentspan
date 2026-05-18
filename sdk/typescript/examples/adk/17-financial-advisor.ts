@@ -13,7 +13,7 @@
 
 import { LlmAgent, FunctionTool } from '@google/adk';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
@@ -126,7 +126,7 @@ const estimateTaxImpact = new FunctionTool({
 
 // ── Sub-agents ────────────────────────────────────────────────────
 
-const portfolioAnalyst = new LlmAgent({
+export const portfolioAnalyst = new LlmAgent({
   name: 'portfolio_analyst',
   model,
   description: 'Analyzes client portfolios and calculates returns.',
@@ -134,7 +134,7 @@ const portfolioAnalyst = new LlmAgent({
   tools: [getPortfolio, calculateReturns],
 });
 
-const marketResearcher = new LlmAgent({
+export const marketResearcher = new LlmAgent({
   name: 'market_researcher',
   model,
   description: 'Researches market conditions and economic indicators.',
@@ -142,7 +142,7 @@ const marketResearcher = new LlmAgent({
   tools: [getMarketData, getEconomicIndicators],
 });
 
-const taxAdvisor = new LlmAgent({
+export const taxAdvisor = new LlmAgent({
   name: 'tax_advisor',
   model,
   description: 'Advises on tax implications of investment decisions.',
@@ -152,7 +152,7 @@ const taxAdvisor = new LlmAgent({
 
 // ── Coordinator ───────────────────────────────────────────────────
 
-const coordinator = new LlmAgent({
+export const coordinator = new LlmAgent({
   name: 'financial_advisor',
   model,
   instruction:
@@ -168,12 +168,21 @@ async function main() {
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(
-      coordinator,
-      "I'm client CLT-001. Review my portfolio and tell me if I should rebalance " +
-        'given current market conditions. What would the tax impact be if I sold some AAPL?',
+    coordinator,
+    "I'm client CLT-001. Review my portfolio and tell me if I should rebalance " +
+    'given current market conditions. What would the tax impact be if I sold some AAPL?',
     );
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(coordinator);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents financial_advisor
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(coordinator);
   } finally {
     await runtime.shutdown();
   }

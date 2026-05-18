@@ -12,13 +12,13 @@
  */
 
 import { LlmAgent } from '@google/adk';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
 // ── Precise agent -- low temperature for factual responses ──────────
 
-const factualAgent = new LlmAgent({
+export const factualAgent = new LlmAgent({
   name: 'fact_checker',
   model,
   instruction:
@@ -31,7 +31,7 @@ const factualAgent = new LlmAgent({
 
 // ── Creative agent -- high temperature for creative writing ─────────
 
-const creativeAgent = new LlmAgent({
+export const creativeAgent = new LlmAgent({
   name: 'storyteller',
   model,
   instruction:
@@ -54,11 +54,20 @@ async function main() {
 
     console.log('\n--- Creative Agent (temp=0.9) ---');
     const creativeResult = await runtime.run(
-      creativeAgent,
-      'Write a two-sentence story about a cat who discovered a hidden library.',
+    creativeAgent,
+    'Write a two-sentence story about a cat who discovered a hidden library.',
     );
     console.log('Status:', creativeResult.status);
     creativeResult.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(factualAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents fact_checker
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(factualAgent);
   } finally {
     await runtime.shutdown();
   }

@@ -92,12 +92,22 @@ def main():
 
     with AgentRuntime() as runtime:
         result = runtime.run(
-            agent,
-            "I'm customer ACC-001. Can you check my billing history and tell me my current plan? "
-            "I'm thinking about downgrading to the basic plan.",
+        agent,
+        "I'm customer ACC-001. Can you check my billing history and tell me my current plan? "
+        "I'm thinking about downgrading to the basic plan.",
         )
         print(f"Status: {result.status}")
-        print(f"Output: {result.output}")
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.adk.16_customer_service
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
+
 
 
 if __name__ == "__main__":

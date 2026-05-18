@@ -12,13 +12,15 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, UserProxyAgent } from '../src/index.js';
-import type { AgentHandle } from '../src/index.js';
-import { llmModel } from './settings.js';
+import * as readline from 'node:readline/promises';
+import { stdin, stdout } from 'node:process';
+import { Agent, AgentRuntime, UserProxyAgent } from '@agentspan-ai/sdk';
+import type { AgentHandle } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Human proxy -----------------------------------------------------------
 
@@ -29,7 +31,7 @@ const human = new UserProxyAgent({
 
 // -- AI assistant ----------------------------------------------------------
 
-const assistant = new Agent({
+export const assistant = new Agent({
   name: 'assistant',
   model: llmModel,
   instructions:
@@ -39,7 +41,7 @@ const assistant = new Agent({
 
 // -- Round-robin conversation: human and assistant take turns ---------------
 
-const conversation = new Agent({
+export const conversation = new Agent({
   name: 'pair_programming',
   model: llmModel,
   agents: [human, assistant],
@@ -47,70 +49,68 @@ const conversation = new Agent({
   maxTurns: 4, // 2 exchanges (human, assistant, human, assistant)
 });
 
+// -- Helpers ----------------------------------------------------------------
+
+async function promptHuman(
+  rl: readline.Interface,
+  pendingTool: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const schema = (pendingTool.response_schema ?? {}) as Record<string, unknown>;
+  const props = (schema.properties ?? {}) as Record<string, Record<string, unknown>>;
+  const response: Record<string, unknown> = {};
+  for (const [field, fs] of Object.entries(props)) {
+    const desc = (fs.description || fs.title || field) as string;
+    if (fs.type === 'boolean') {
+      const val = await rl.question(`  ${desc} (y/n): `);
+      response[field] = ['y', 'yes'].includes(val.trim().toLowerCase());
+    } else {
+      response[field] = await rl.question(`  ${desc}: `);
+    }
+  }
+  return response;
+}
+
 // -- Run -------------------------------------------------------------------
 
+const rl = readline.createInterface({ input: stdin, output: stdout });
 const runtime = new AgentRuntime();
 try {
-  // Start async to interact with human tasks
-  const handle: AgentHandle = await runtime.start(
+  const handle = await runtime.start(
     conversation,
     "Let's write a Python function to sort a list of dictionaries by a key.",
   );
-  console.log(`Conversation started: ${handle.workflowId}`);
+  console.log(`Started: ${handle.executionId}\n`);
 
-  // Simulate human responses
-  const humanMessages = [
-    'The function should accept a list of dicts and a key name. ' +
-      'It should handle missing keys gracefully.',
-    'Looks good! Can you add type hints and a docstring?',
-  ];
-
-  for (let i = 0; i < humanMessages.length; i++) {
-    const msg = humanMessages[i];
-
-    // Wait for human task
-    let completed = false;
-    let waiting = false;
-    for (let attempt = 0; attempt < 30; attempt++) {
+  for await (const event of handle.stream()) {
+    if (event.type === 'thinking') {
+      console.log(`  [thinking] ${event.content}`);
+    } else if (event.type === 'tool_call') {
+      console.log(`  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`);
+    } else if (event.type === 'tool_result') {
+      console.log(`  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result).slice(0, 100)}`);
+    } else if (event.type === 'waiting') {
       const status = await handle.getStatus();
-      if (status.isComplete) {
-        completed = true;
-        break;
-      }
-      if (status.isWaiting) {
-        waiting = true;
-        break;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    }
-
-    if (completed) break;
-
-    if (waiting) {
-      console.log(`\n[Human turn ${i + 1}]: ${msg}`);
-      await handle.respond({ message: msg });
+      const pt = (status.pendingTool ?? {}) as Record<string, unknown>;
+      console.log('\n--- Human input required ---');
+      const response = await promptHuman(rl, pt);
+      await handle.respond(response);
+      console.log();
+    } else if (event.type === 'done') {
+      console.log(`\nDone: ${JSON.stringify(event.output)}`);
     }
   }
 
-  // Wait for completion
-  for (let attempt = 0; attempt < 30; attempt++) {
-    const status = await handle.getStatus();
-    if (status.isComplete) {
-      console.log(`\nFinal conversation:\n${JSON.stringify(status.output)}`);
-      break;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-  }
-} catch (err: unknown) {
-  // UserProxyAgent may require server-side support for model-less sub-agents.
-  // If the server returns 400 due to missing model, log it gracefully.
-  const errStr = String(err);
-  if (errStr.includes('Model string cannot be null') || errStr.includes('400')) {
-    console.log('[EXPECTED] Server requires model on all sub-agents.');
-    console.log('UserProxyAgent structure is correct -- server support pending.');
-  } else {
-    throw err;
-  }
+  // Non-interactive alternative (no HITL, will block on human tasks):
+  // const result = await runtime.run(assistant, 'Write a Python function to sort a list of dictionaries by a key.');
+  // result.printResult();
+
+  // Production pattern:
+  // 1. Deploy once during CI/CD:
+  // await runtime.deploy(conversation);
+  //
+  // 2. In a separate long-lived worker process:
+  // await runtime.serve(conversation);
 } finally {
+  rl.close();
   await runtime.shutdown();
 }

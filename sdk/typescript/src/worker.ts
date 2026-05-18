@@ -1,6 +1,13 @@
-import type { ToolContext } from './types.js';
-import { AgentAPIError } from './errors.js';
-import { extractExecutionToken, setCredentialContext, clearCredentialContext } from './credentials.js';
+import { createConductorClient, TaskManager, NonRetryableException } from "@io-orkes/conductor-javascript";
+import type { ConductorWorker, Task, TaskResult } from "@io-orkes/conductor-javascript";
+import type { ToolContext } from "./types.js";
+import { TerminalToolError } from "./errors.js";
+import {
+  extractExecutionToken,
+  resolveCredentials,
+  injectCredentials,
+  runWithCredentialContext,
+} from "./credentials.js";
 
 // ── Type coercion (base spec §14.1) ─────────────────────
 
@@ -10,20 +17,20 @@ import { extractExecutionToken, setCredentialContext, clearCredentialContext } f
  */
 export function coerceValue(value: unknown, targetType?: string): unknown {
   // Rule 1: null/empty or unknown target → return unchanged
-  if (value == null || targetType == null || targetType === '') {
+  if (value == null || targetType == null || targetType === "") {
     return value;
   }
 
   const t = targetType.toLowerCase();
 
   // Rule 3: type match short-circuit
-  if (t === 'string' && typeof value === 'string') return value;
-  if (t === 'number' && typeof value === 'number') return value;
-  if (t === 'boolean' && typeof value === 'boolean') return value;
-  if ((t === 'object' || t === 'array') && typeof value === 'object') return value;
+  if (t === "string" && typeof value === "string") return value;
+  if (t === "number" && typeof value === "number") return value;
+  if (t === "boolean" && typeof value === "boolean") return value;
+  if ((t === "object" || t === "array") && typeof value === "object") return value;
 
   // Rule 4: String → object/array via JSON.parse
-  if (typeof value === 'string' && (t === 'object' || t === 'array')) {
+  if (typeof value === "string" && (t === "object" || t === "array")) {
     try {
       return JSON.parse(value);
     } catch {
@@ -32,7 +39,7 @@ export function coerceValue(value: unknown, targetType?: string): unknown {
   }
 
   // Rule 5: object/array → string via JSON.stringify
-  if (typeof value === 'object' && t === 'string') {
+  if (typeof value === "object" && t === "string") {
     try {
       return JSON.stringify(value);
     } catch {
@@ -41,17 +48,17 @@ export function coerceValue(value: unknown, targetType?: string): unknown {
   }
 
   // Rule 6: String → number
-  if (typeof value === 'string' && t === 'number') {
+  if (typeof value === "string" && t === "number") {
     const n = Number(value);
     if (Number.isNaN(n)) return value;
     return n;
   }
 
   // Rule 6: String → boolean
-  if (typeof value === 'string' && t === 'boolean') {
+  if (typeof value === "string" && t === "boolean") {
     const lower = value.toLowerCase();
-    if (lower === 'true' || lower === '1' || lower === 'yes') return true;
-    if (lower === 'false' || lower === '0' || lower === 'no') return false;
+    if (lower === "true" || lower === "1" || lower === "yes") return true;
+    if (lower === "false" || lower === "0" || lower === "no") return false;
     return value;
   }
 
@@ -118,14 +125,14 @@ export function resetAllCircuitBreakers(): void {
  * Reads `__agentspan_ctx__` from inputData and builds a ToolContext.
  */
 export function extractToolContext(inputData: Record<string, unknown>): ToolContext | null {
-  const ctx = inputData['__agentspan_ctx__'];
-  if (ctx == null || typeof ctx !== 'object') return null;
+  const ctx = inputData["__agentspan_ctx__"];
+  if (ctx == null || typeof ctx !== "object") return null;
 
   const raw = ctx as Record<string, unknown>;
   return {
-    sessionId: (raw.sessionId as string) ?? '',
-    workflowId: (raw.workflowId as string) ?? '',
-    agentName: (raw.agentName as string) ?? '',
+    sessionId: (raw.sessionId as string) ?? "",
+    executionId: (raw.executionId as string) ?? "",
+    agentName: (raw.agentName as string) ?? "",
     metadata: (raw.metadata as Record<string, unknown>) ?? {},
     dependencies: (raw.dependencies as Record<string, unknown>) ?? {},
     // Mutable copy of state
@@ -165,7 +172,7 @@ export function appendStateUpdates(
   result: unknown,
   stateUpdates: Record<string, unknown>,
 ): unknown {
-  if (result != null && typeof result === 'object' && !Array.isArray(result)) {
+  if (result != null && typeof result === "object" && !Array.isArray(result)) {
     return { ...(result as Record<string, unknown>), _state_updates: stateUpdates };
   }
   return { result, _state_updates: stateUpdates };
@@ -176,7 +183,7 @@ function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (a == null || b == null) return false;
   if (typeof a !== typeof b) return false;
-  if (typeof a !== 'object') return false;
+  if (typeof a !== "object") return false;
 
   const aObj = a as Record<string, unknown>;
   const bObj = b as Record<string, unknown>;
@@ -198,9 +205,9 @@ function deepEqual(a: unknown, b: unknown): boolean {
  */
 export function stripInternalKeys(inputData: Record<string, unknown>): Record<string, unknown> {
   const cleaned = { ...inputData };
-  delete cleaned['_agent_state'];
-  delete cleaned['method'];
-  delete cleaned['__agentspan_ctx__'];
+  delete cleaned["_agent_state"];
+  delete cleaned["method"];
+  delete cleaned["__agentspan_ctx__"];
   return cleaned;
 }
 
@@ -208,281 +215,198 @@ export function stripInternalKeys(inputData: Record<string, unknown>): Record<st
 
 export type WorkerHandler = (inputData: Record<string, unknown>) => Promise<unknown>;
 
-interface QueuedWorker {
+interface PendingWorker {
   taskName: string;
   handler: WorkerHandler;
-}
-
-interface TaskData {
-  taskId: string;
-  workflowInstanceId: string;
-  inputData?: Record<string, unknown>;
-  taskType?: string;
+  credentials?: string[];
+  domain?: string;
 }
 
 /**
- * Raw fetch-based task polling worker manager.
- * NO dependency on @io-orkes/conductor-javascript.
+ * Manages Conductor worker processes for tool functions.
+ *
+ * Thin lifecycle wrapper around conductor-javascript's {@link TaskManager},
+ * mirroring the Python SDK's ``WorkerManager`` pattern.  Workers are
+ * collected via {@link addWorker} and started/stopped as a group.
+ *
+ * All agentspan-specific middleware (ToolContext extraction, credential
+ * injection, state capture, circuit breaker, error mapping) runs inside
+ * each worker's ``execute()`` callback.
  */
 export class WorkerManager {
   readonly serverUrl: string;
   readonly headers: Record<string, string>;
   readonly pollIntervalMs: number;
 
-  private workers: QueuedWorker[] = [];
-  private pollers: ReturnType<typeof setInterval>[] = [];
-  private workerId: string;
+  private pendingWorkers: PendingWorker[] = [];
+  private taskManager: TaskManager | null = null;
 
-  constructor(
-    serverUrl: string,
-    headers: Record<string, string>,
-    pollIntervalMs: number = 100,
-  ) {
+  constructor(serverUrl: string, headers: Record<string, string>, pollIntervalMs: number = 100) {
     this.serverUrl = serverUrl;
     this.headers = headers;
     this.pollIntervalMs = pollIntervalMs;
-    this.workerId = `ts-worker-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
   /**
    * Queue a worker for the given task name.
    * Replaces any existing worker with the same task name.
    */
-  addWorker(taskName: string, handler: WorkerHandler): void {
-    const idx = this.workers.findIndex((w) => w.taskName === taskName);
+  addWorker(taskName: string, handler: WorkerHandler, credentials?: string[], domain?: string): void {
+    // Track (taskName, domain) pairs — same name under different domains are distinct workers
+    const idx = this.pendingWorkers.findIndex((w) => w.taskName === taskName && w.domain === domain);
     if (idx >= 0) {
-      this.workers[idx] = { taskName, handler };
+      this.pendingWorkers[idx] = { taskName, handler, credentials, domain };
     } else {
-      this.workers.push({ taskName, handler });
+      this.pendingWorkers.push({ taskName, handler, credentials, domain });
     }
   }
 
   /**
-   * Register a task definition with the server.
+   * Create conductor client, build workers, start polling.
    */
-  async registerTaskDef(
-    taskName: string,
-    config?: { timeoutSeconds?: number },
-  ): Promise<void> {
-    const taskDef = {
-      name: taskName,
-      retryCount: 2,
-      retryLogic: 'LINEAR_BACKOFF',
-      retryDelaySeconds: 2,
-      timeoutSeconds: config?.timeoutSeconds ?? 120,
-      responseTimeoutSeconds: config?.timeoutSeconds ?? 120,
-    };
+  async startPolling(): Promise<void> {
+    await this.stopPolling();
+    if (this.pendingWorkers.length === 0) return;
 
-    const url = `${this.serverUrl}/metadata/taskdefs`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        ...this.headers,
-        'Content-Type': 'application/json',
+    // Conductor SDK reads CONDUCTOR_SERVER_URL env var with priority over
+    // config.serverUrl.  Override it so the SDK uses our configured URL
+    // (from AgentConfig, which reads AGENTSPAN_SERVER_URL).
+    const baseUrl = this.serverUrl.replace(/\/api\/?$/, "");
+    process.env.CONDUCTOR_SERVER_URL = baseUrl;
+
+    const authHeaders = this.headers;
+
+    const client = await createConductorClient(
+      { serverUrl: baseUrl, disableHttp2: true },
+      (url: string | URL | Request, init?: RequestInit) => {
+        // Conductor SDK passes Request objects — inject auth headers.
+        if (url instanceof Request) {
+          const h = new Headers(url.headers);
+          for (const [k, v] of Object.entries(authHeaders)) h.set(k, v);
+          return globalThis.fetch(new Request(url, { headers: h }));
+        }
+        const h = new Headers(init?.headers);
+        for (const [k, v] of Object.entries(authHeaders)) h.set(k, v);
+        return globalThis.fetch(url, { ...init, headers: h });
       },
-      body: JSON.stringify([taskDef]),
+    );
+
+    const workers = this.pendingWorkers.map((pw) => this._wrapWorker(pw));
+    this.taskManager = new TaskManager(client, workers, {
+      options: { pollInterval: this.pollIntervalMs },
     });
+    this.taskManager.startPolling();
+  }
 
-    if (!response.ok) {
-      const body = await response.text();
-      throw new AgentAPIError(
-        `Failed to register task def '${taskName}': ${response.status}`,
-        response.status,
-        body,
-      );
+  /**
+   * Stop the TaskManager.
+   */
+  async stopPolling(): Promise<void> {
+    if (this.taskManager) {
+      await this.taskManager.stopPolling();
+      this.taskManager = null;
     }
   }
 
   /**
-   * Start polling for all queued workers.
-   * Stops any existing pollers first to prevent duplicates.
+   * Wrap an agentspan handler into a {@link ConductorWorker}.
+   *
+   * Runs the full middleware chain: circuit breaker, ToolContext extraction,
+   * credential injection, state capture, error mapping.
    */
-  startPolling(): void {
-    this.stopPolling();
-    for (const worker of this.workers) {
-      const poller = setInterval(async () => {
-        await this._pollAndExecute(worker);
-      }, this.pollIntervalMs);
-      this.pollers.push(poller);
-    }
-  }
+  private _wrapWorker(pw: PendingWorker): ConductorWorker {
+    const mgr = this;
+    return {
+      taskDefName: pw.taskName,
+      pollInterval: this.pollIntervalMs,
+      concurrency: 1,
+      leaseExtendEnabled: true,
+      ...(pw.domain ? { domain: pw.domain } : {}),
 
-  /**
-   * Stop all polling intervals.
-   */
-  stopPolling(): void {
-    for (const poller of this.pollers) {
-      clearInterval(poller);
-    }
-    this.pollers = [];
-  }
+      async execute(
+        task: Task,
+      ): Promise<Omit<TaskResult, "workflowInstanceId" | "taskId">> {
+        // Circuit breaker
+        if (isCircuitBreakerOpen(pw.taskName)) {
+          throw new NonRetryableException(`Circuit breaker open for ${pw.taskName}`);
+        }
 
-  /**
-   * Poll for a single task of the given type.
-   */
-  async pollTask(taskType: string): Promise<TaskData | null> {
-    const url = `${this.serverUrl}/tasks/poll/${taskType}?workerid=${encodeURIComponent(this.workerId)}`;
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: this.headers,
-    });
+        const inputData = (task.inputData as Record<string, unknown>) ?? {};
 
-    if (response.status === 204 || response.status === 404) {
-      return null;
-    }
+        // ToolContext extraction + state snapshot
+        const toolContext = extractToolContext(inputData);
+        const stateSnapshot = toolContext ? { ...toolContext.state } : {};
 
-    if (!response.ok) {
-      const body = await response.text();
-      throw new AgentAPIError(
-        `Failed to poll task '${taskType}': ${response.status}`,
-        response.status,
-        body,
-      );
-    }
+        // Strip internal keys, inject runtime context
+        const cleaned = stripInternalKeys(inputData);
+        cleaned["__workflowInstanceId__"] = task.workflowInstanceId;
+        if (toolContext) cleaned["__toolContext__"] = toolContext;
 
-    const text = await response.text();
-    if (!text || text.trim() === '') return null;
+        // Credential setup
+        const execToken = extractExecutionToken(inputData);
 
-    try {
-      return JSON.parse(text) as TaskData;
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * Report successful task completion.
-   */
-  async reportSuccess(
-    taskId: string,
-    workflowInstanceId: string,
-    outputData: unknown,
-  ): Promise<void> {
-    const url = `${this.serverUrl}/tasks`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        ...this.headers,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        taskId,
-        workflowInstanceId,
-        status: 'COMPLETED',
-        outputData,
-      }),
-    });
-
-    if (!response.ok) {
-      const body = await response.text();
-      throw new AgentAPIError(
-        `Failed to report success for task '${taskId}': ${response.status}`,
-        response.status,
-        body,
-      );
-    }
-  }
-
-  /**
-   * Report task failure.
-   */
-  async reportFailure(
-    taskId: string,
-    workflowInstanceId: string,
-    error: Error,
-  ): Promise<void> {
-    const url = `${this.serverUrl}/tasks`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        ...this.headers,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        taskId,
-        workflowInstanceId,
-        status: 'FAILED',
-        reasonForIncompletion: error.message,
-      }),
-    });
-
-    if (!response.ok) {
-      const body = await response.text();
-      throw new AgentAPIError(
-        `Failed to report failure for task '${taskId}': ${response.status}`,
-        response.status,
-        body,
-      );
-    }
-  }
-
-  /**
-   * Internal: poll a single task and execute its handler.
-   */
-  private async _pollAndExecute(worker: QueuedWorker): Promise<void> {
-    try {
-      // Check circuit breaker
-      if (isCircuitBreakerOpen(worker.taskName)) {
-        return;
-      }
-
-      const task = await this.pollTask(worker.taskName);
-      if (!task) return;
-
-      const inputData = task.inputData ?? {};
-
-      // Extract ToolContext
-      const toolContext = extractToolContext(inputData);
-
-      // Snapshot state for mutation capture
-      const stateSnapshot = toolContext
-        ? { ...toolContext.state }
-        : {};
-
-      // Strip internal keys
-      const cleanedInput = stripInternalKeys(inputData);
-
-      // Inject workflowInstanceId so framework passthrough workers can push events
-      cleanedInput['__workflowInstanceId__'] = task.workflowInstanceId;
-
-      // If ToolContext has state, inject it into the handler context
-      if (toolContext) {
-        cleanedInput['__toolContext__'] = toolContext;
-      }
-
-      // Set up credential context so getCredential() works inside handlers
-      const executionToken = extractExecutionToken(inputData);
-      if (executionToken) {
-        setCredentialContext(this.serverUrl, this.headers, executionToken);
-      }
-
-      try {
-        let result = await worker.handler(cleanedInput);
-
-        // Capture state mutations
-        if (toolContext) {
-          const updates = captureStateMutations(stateSnapshot, toolContext.state);
-          if (updates) {
-            result = appendStateUpdates(result, updates);
+        let cleanupCreds: (() => void) | null = null;
+        if (pw.credentials?.length) {
+          if (!execToken) {
+            throw new NonRetryableException(
+              `Required credentials not found: ${pw.credentials.join(", ")}. ` +
+                `No execution token available.`,
+            );
+          }
+          try {
+            const resolved = await resolveCredentials(
+              mgr.serverUrl,
+              mgr.headers,
+              execToken,
+              pw.credentials,
+            );
+            cleanupCreds = injectCredentials(mgr.serverUrl, mgr.headers, execToken, resolved);
+          } catch (err) {
+            throw new NonRetryableException(
+              `Credential resolution failed for ${pw.taskName}: ${err instanceof Error ? err.message : String(err)}`,
+            );
           }
         }
 
-        recordSuccess(worker.taskName);
-        await this.reportSuccess(task.taskId, task.workflowInstanceId, result);
-      } catch (error) {
-        recordFailure(worker.taskName);
-        await this.reportFailure(
-          task.taskId,
-          task.workflowInstanceId,
-          error instanceof Error ? error : new Error(String(error)),
-        );
-      } finally {
-        if (executionToken) {
-          clearCredentialContext();
+        const runHandler = async (): Promise<
+          Omit<TaskResult, "workflowInstanceId" | "taskId">
+        > => {
+          try {
+            let result = await pw.handler(cleaned);
+
+            // State mutation capture
+            if (toolContext) {
+              const updates = captureStateMutations(stateSnapshot, toolContext.state);
+              if (updates) result = appendStateUpdates(result, updates);
+            }
+
+            // Wrap primitives — conductor expects outputData as an object
+            const outputData =
+              result != null && typeof result === "object" && !Array.isArray(result)
+                ? (result as Record<string, unknown>)
+                : { result };
+
+            recordSuccess(pw.taskName);
+            return { status: "COMPLETED", outputData };
+          } catch (error) {
+            recordFailure(pw.taskName);
+            if (error instanceof TerminalToolError) {
+              throw new NonRetryableException(error.message);
+            }
+            throw error;
+          } finally {
+            cleanupCreds?.();
+          }
+        };
+
+        // Scope credential context per-async-call so concurrent workers do not
+        // share (and clobber) module-level state. Runs even without an exec
+        // token so handlers see a consistent context shape.
+        if (execToken) {
+          return runWithCredentialContext(mgr.serverUrl, mgr.headers, execToken, runHandler);
         }
-      }
-    } catch {
-      // Swallow poll-level errors to keep the polling loop alive
-    }
+        return runHandler();
+      },
+    };
   }
 }

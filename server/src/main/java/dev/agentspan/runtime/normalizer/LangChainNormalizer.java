@@ -5,13 +5,14 @@
 
 package dev.agentspan.runtime.normalizer;
 
-import dev.agentspan.runtime.model.AgentConfig;
-import dev.agentspan.runtime.model.ToolConfig;
+import java.util.*;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import java.util.*;
+import dev.agentspan.runtime.model.AgentConfig;
+import dev.agentspan.runtime.model.ToolConfig;
 
 /**
  * Normalizes LangChain AgentExecutor rawConfig into a passthrough AgentConfig.
@@ -41,10 +42,10 @@ public class LangChainNormalizer implements AgentConfigNormalizer {
         config.setMetadata(metadata);
 
         ToolConfig worker = ToolConfig.builder()
-            .name(workerName)
-            .description("LangChain passthrough worker")
-            .toolType("worker")
-            .build();
+                .name(workerName)
+                .description("LangChain passthrough worker")
+                .toolType("worker")
+                .build();
         config.setTools(List.of(worker));
 
         return config;

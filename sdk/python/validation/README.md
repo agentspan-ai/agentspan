@@ -128,7 +128,7 @@ Each run creates `validation/output/run_{timestamp}_{id}/` containing:
 
 ## Wishlist
 
-- Validates end to end state of workflow creation by LLM Model is correct
+- Validates end to end state of agent creation by LLM Model is correct
 
 ### Judge Quality TODOs
 

@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 @pytest.fixture
 def graph_with_checkpointer():
-    pytest.importorskip("langgraph")
+    pytest.importorskip("langgraph.prebuilt", reason="langgraph.prebuilt not installed")
     from langgraph.prebuilt import create_react_agent
     from langgraph.checkpoint.memory import MemorySaver
     from langchain_core.messages import AIMessage

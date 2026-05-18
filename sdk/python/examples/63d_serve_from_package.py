@@ -16,7 +16,7 @@ explicitly list every agent when serving a large codebase.
 
 Requirements:
     - Conductor server running
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api in .env or environment
     - A Python package with Agent instances at module level
 """
 
@@ -51,11 +51,17 @@ monitoring_agent = Agent(
     instructions="You monitor system health.",
 )
 
-with AgentRuntime() as runtime:
-    # Serve an explicit agent + auto-discover from a package
-    # runtime.serve(monitoring_agent, packages=["myapp.agents"])
 
-    # For this example, just serve the explicit agent
-    print("Serving monitoring agent. Press Ctrl+C to stop.")
-    print("Uncomment the packages= line to also serve discovered agents.")
-    runtime.serve(monitoring_agent)
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(monitoring_agent, "Is everything healthy? Run a full check.")
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(monitoring_agent, *discover_agents(["myapp.agents"]))
+        # CLI alternative:
+        # agentspan deploy --package examples.63d_serve_from_package
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(monitoring_agent, packages=["myapp.agents"])

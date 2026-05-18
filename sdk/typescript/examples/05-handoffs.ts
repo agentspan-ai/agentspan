@@ -6,13 +6,12 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Sub-agent tools --------------------------------------------------------
 
@@ -23,9 +22,13 @@ const checkBalance = tool(
   {
     name: 'check_balance',
     description: 'Check the balance of a bank account.',
-    inputSchema: z.object({
-      accountId: z.string().describe('The account ID to check'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        accountId: { type: 'string', description: 'The account ID to check' },
+      },
+      required: ['accountId'],
+    },
   },
 );
 
@@ -36,9 +39,13 @@ const lookupOrder = tool(
   {
     name: 'lookup_order',
     description: 'Look up the status of an order.',
-    inputSchema: z.object({
-      orderId: z.string().describe('The order ID to look up'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        orderId: { type: 'string', description: 'The order ID to look up' },
+      },
+      required: ['orderId'],
+    },
   },
 );
 
@@ -49,29 +56,33 @@ const getPricing = tool(
   {
     name: 'get_pricing',
     description: 'Get pricing information for a product.',
-    inputSchema: z.object({
-      product: z.string().describe('The product to get pricing for'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        product: { type: 'string', description: 'The product to get pricing for' },
+      },
+      required: ['product'],
+    },
   },
 );
 
 // -- Specialist agents -------------------------------------------------------
 
-const billingAgent = new Agent({
+export const billingAgent = new Agent({
   name: 'billing',
   model: llmModel,
   instructions: 'You handle billing questions: balances, payments, invoices.',
   tools: [checkBalance],
 });
 
-const technicalAgent = new Agent({
+export const technicalAgent = new Agent({
   name: 'technical',
   model: llmModel,
   instructions: 'You handle technical questions: order status, shipping, returns.',
   tools: [lookupOrder],
 });
 
-const salesAgent = new Agent({
+export const salesAgent = new Agent({
   name: 'sales',
   model: llmModel,
   instructions: 'You handle sales questions: pricing, products, promotions.',
@@ -80,7 +91,7 @@ const salesAgent = new Agent({
 
 // -- Orchestrator with handoffs -----------------------------------------------
 
-const support = new Agent({
+export const support = new Agent({
   name: 'support',
   model: llmModel,
   instructions:
@@ -89,13 +100,26 @@ const support = new Agent({
   strategy: 'handoff',
 });
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
     support,
     "What's the balance on account ACC-123?",
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(support);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents support
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(support);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

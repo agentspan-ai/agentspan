@@ -9,8 +9,7 @@ Demonstrates:
     - OpenAI agent tools can read credentials from os.environ
 
 Setup (one-time):
-    agentspan credentials set --name GITHUB_TOKEN
-
+    agentspan credentials set GITHUB_TOKEN <your-github-token>
 Requirements:
     - Agentspan server running at AGENTSPAN_SERVER_URL
     - AGENTSPAN_LLM_MODEL set (or defaults to openai/gpt-5.4)
@@ -55,3 +54,13 @@ if __name__ == "__main__":
             credentials=["GITHUB_TOKEN"],
         )
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.16j_credentials_openai_sdk
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
+

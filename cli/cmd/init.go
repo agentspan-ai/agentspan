@@ -66,7 +66,7 @@ var initCmd = &cobra.Command{
 
 		color.Green("Created %s", filename)
 		fmt.Println("\nEdit the file to add tools, instructions, and other settings.")
-		fmt.Printf("Run with: agentspan agent run --name %s \"your prompt here\"\n", name)
+		fmt.Printf("Run with: agentspan agent run --config %s.%s \"your prompt here\"\n", name, ext)
 		return nil
 	},
 }

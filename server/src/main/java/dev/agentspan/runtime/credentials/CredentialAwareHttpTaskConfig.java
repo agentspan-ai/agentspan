@@ -4,11 +4,12 @@
  */
 package dev.agentspan.runtime.credentials;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.netflix.conductor.tasks.http.providers.RestTemplateProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.netflix.conductor.tasks.http.providers.RestTemplateProvider;
 
 /**
  * Registers {@link CredentialAwareHttpTask} as the primary HTTP system task,
@@ -27,7 +28,6 @@ public class CredentialAwareHttpTaskConfig {
             ObjectMapper objectMapper,
             ExecutionTokenService tokenService,
             CredentialResolutionService resolutionService) {
-        return new CredentialAwareHttpTask(
-            restTemplateProvider, objectMapper, tokenService, resolutionService);
+        return new CredentialAwareHttpTask(restTemplateProvider, objectMapper, tokenService, resolutionService);
     }
 }

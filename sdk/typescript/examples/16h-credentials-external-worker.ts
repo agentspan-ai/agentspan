@@ -17,7 +17,7 @@
  * demonstrate both patterns in one file.
  *
  * Setup (one-time):
- *   agentspan credentials set --name GITHUB_TOKEN
+ *   agentspan credentials set GITHUB_TOKEN <your-github-token>
  *
  * Requirements:
  *   - Agentspan server running at AGENTSPAN_SERVER_URL
@@ -30,8 +30,8 @@ import {
   tool,
   resolveCredentials,
   extractExecutionToken,
-} from '../src/index.js';
-import { llmModel } from './settings.js';
+} from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Agent side: declare external tool with credentials -----------------------
 
@@ -55,7 +55,7 @@ const githubLookup = tool(
   },
 );
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'external_cred_agent',
   model: llmModel,
   tools: [githubLookup],
@@ -73,7 +73,7 @@ async function externalWorkerExample(taskInput: Record<string, unknown>) {
     return;
   }
 
-  const serverUrl = process.env.AGENTSPAN_SERVER_URL ?? 'http://localhost:8080/api';
+  const serverUrl = process.env.AGENTSPAN_SERVER_URL ?? 'http://localhost:6767/api';
 
   // resolveCredentials calls the server to get credential values
   const creds = await resolveCredentials(serverUrl, {}, executionToken, ['GITHUB_TOKEN']);
@@ -106,7 +106,8 @@ async function externalWorkerExample(taskInput: Record<string, unknown>) {
   }
 }
 
-// -- Demo output (no runtime.run -- this is a pattern demonstration) ----------
+// Suppress unused variable warning
+void externalWorkerExample;
 
 console.log('Note: This example demonstrates the pattern for external workers.');
 console.log('The external worker (externalWorkerExample) would run in a separate process.');
@@ -123,6 +124,3 @@ console.log('External worker pattern:');
 console.log("  const token = extractExecutionToken(taskInput);");
 console.log("  const creds = await resolveCredentials(serverUrl, {}, token, ['GITHUB_TOKEN']);");
 console.log("  const value = creds.GITHUB_TOKEN;");
-
-// Suppress unused variable warning
-void externalWorkerExample;

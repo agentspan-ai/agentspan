@@ -14,12 +14,12 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, tool, RegexGuardrail } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool, RegexGuardrail } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Block mode: reject responses with PII ----------------------------------
 
@@ -66,7 +66,7 @@ const getUserProfile = tool(
   },
 );
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'hr_assistant',
   model: llmModel,
   tools: [getUserProfile],
@@ -78,56 +78,69 @@ const agent = new Agent({
 
 // -- Run -------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  // -- Scenario 1: Guardrail TRIGGERS -- PII in tool output -----------------
-  console.log('='.repeat(60));
-  console.log('  Scenario 1: Request PII -- guardrails trigger');
-  console.log('='.repeat(60));
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    // -- Scenario 1: Guardrail TRIGGERS -- PII in tool output -----------------
+    console.log('='.repeat(60));
+    console.log('  Scenario 1: Request PII -- guardrails trigger');
+    console.log('='.repeat(60));
 
-  const result = await runtime.run(
+    const result = await runtime.run(
     agent,
     'Tell me everything about user U-001.',
-  );
-  result.printResult();
+    );
+    result.printResult();
 
-  const output = JSON.stringify(result.output);
-  if (output.includes('alice.johnson@example.com')) {
+    const output = JSON.stringify(result.output);
+    if (output.includes('alice.johnson@example.com')) {
     console.log('[FAIL] Email leaked!');
-  } else {
+    } else {
     console.log('[OK] Email was blocked by RegexGuardrail');
-  }
+    }
 
-  if (output.includes('123-45-6789')) {
+    if (output.includes('123-45-6789')) {
     console.log('[FAIL] SSN leaked!');
-  } else {
+    } else {
     console.log('[OK] SSN was blocked by RegexGuardrail');
-  }
+    }
 
-  // -- Scenario 2: Guardrail does NOT trigger -- no PII ---------------------
-  console.log('\n' + '='.repeat(60));
-  console.log('  Scenario 2: Non-PII question -- guardrails pass');
-  console.log('='.repeat(60));
+    // -- Scenario 2: Guardrail does NOT trigger -- no PII ---------------------
+    console.log('\n' + '='.repeat(60));
+    console.log('  Scenario 2: Non-PII question -- guardrails pass');
+    console.log('='.repeat(60));
 
-  // New agent without PII-returning tool
-  const cleanAgent = new Agent({
+    // New agent without PII-returning tool
+    const cleanAgent = new Agent({
     name: 'dept_assistant',
     model: llmModel,
     instructions: 'You are an HR assistant. Answer questions about departments.',
     guardrails: [noEmails, noSsn],
-  });
+    });
 
-  const result2 = await runtime.run(
+    const result2 = await runtime.run(
     cleanAgent,
     'What departments exist at the company?',
-  );
-  result2.printResult();
+    );
+    result2.printResult();
 
-  if (result2.status === 'COMPLETED') {
+    if (result2.status === 'COMPLETED') {
     console.log('[OK] Clean response passed guardrails successfully');
-  } else {
+    } else {
     console.log(`[WARN] Unexpected status: ${result2.status}`);
+    }
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents hr_assistant
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+  } finally {
+    await runtime.shutdown();
   }
-} finally {
-  await runtime.shutdown();
 }
+
+main().catch(console.error);

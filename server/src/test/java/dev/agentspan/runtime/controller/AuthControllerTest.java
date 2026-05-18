@@ -4,24 +4,26 @@
  */
 package dev.agentspan.runtime.controller;
 
-import dev.agentspan.runtime.auth.UserRepository;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.*;
+
+import java.security.SecureRandom;
+import java.util.Map;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
 
-import java.security.SecureRandom;
-import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.*;
+import dev.agentspan.runtime.auth.UserRepository;
+import dev.agentspan.runtime.credentials.ExecutionTokenService;
 
 @ExtendWith(MockitoExtension.class)
 class AuthControllerTest {
 
-    @Mock private UserRepository userRepository;
+    @Mock
+    private UserRepository userRepository;
 
     private AuthController controller;
 
@@ -36,8 +38,8 @@ class AuthControllerTest {
     @Test
     void login_validCredentials_returnsToken() {
         when(userRepository.checkPassword("alice", "secret")).thenReturn(true);
-        when(userRepository.findByUsername("alice")).thenReturn(
-            java.util.Optional.of(new dev.agentspan.runtime.auth.User("u1", "Alice", null, "alice")));
+        when(userRepository.findByUsername("alice"))
+                .thenReturn(java.util.Optional.of(new dev.agentspan.runtime.auth.User("u1", "Alice", null, "alice")));
 
         ResponseEntity<?> response = controller.login(Map.of("username", "alice", "password", "secret"));
 

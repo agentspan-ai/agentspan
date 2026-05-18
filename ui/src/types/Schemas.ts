@@ -31,7 +31,7 @@ export const taskReferenceName = {
   title: "Task Reference Name",
   minLength: 2,
   description:
-    "A unique task reference name for this task in the entire workflow",
+    "A unique task reference name for this task in the entire agent",
 };
 
 export const inputParameters = {
@@ -731,7 +731,7 @@ export const setVariableTaskSchema = {
 export const terminateWorkflowSchema = {
   $id: "/properties/tasks/terminateWorkflowSchema",
   type: "object",
-  description: "Terminate workflow",
+  description: "Terminate agent",
   default: {
     name: "terminate_workflow_schema_ref",
     taskReferenceName: "terminate_workflow_schema_ref",
@@ -892,7 +892,7 @@ export const sendgridSchema = {
 export const subWorkflowTaskSchema = {
   $id: "/properties/tasks/subWorkflowTask",
   type: "object",
-  description: "sub workflow variable",
+  description: "sub agent variable",
   default: {
     name: "sub_workflow_ref",
     taskReferenceName: "sub_workflow_ref",
@@ -944,7 +944,7 @@ export const subWorkflowTaskSchema = {
 export const startWorkflowTaskSchema = {
   $id: "/properties/tasks/starkWorkflow",
   type: "object",
-  description: "Start Workflow",
+  description: "Start Agent",
   default: {
     name: "start_workflow",
     taskReferenceName: "start_workflow_ref",
@@ -1442,7 +1442,7 @@ export const updateTaskSchema = {
 export const getWorkflowSchema = {
   $id: "/properties/tasks/getWorkflowSchema",
   type: "object",
-  description: "Get Workflow",
+  description: "Get Agent",
   default: {
     name: "get_workflow_task_ref",
     taskReferenceName: "get_workflow_task_ref",
@@ -1573,8 +1573,8 @@ export const parseDocumentTaskSchema = {
 export const tasksItemsSchema = {
   $id: "/properties/tasks",
   type: "array",
-  title: "Workflow Tasks",
-  description: "This list holds the tasks for your workflow.",
+  title: "Agent Tasks",
+  description: "This list holds the tasks for your agent.",
   default: [],
   items: {
     $id: "/properties/tasks/items",
@@ -1690,14 +1690,14 @@ export const workflowSchema = {
       description: WORKFLOW_NAME_ERROR_MESSAGE,
       maxLength: 100,
       pattern: regexToString(WORKFLOW_NAME_REGEX),
-      title: "Workflow Name",
+      title: "Agent Name",
       type: "string",
     },
     description: {
       $id: "/properties/description",
       type: "string",
-      title: "Workflow Description",
-      description: "An brief description of your workflow for reference.",
+      title: "Agent Description",
+      description: "A brief description of your agent for reference.",
       default: "",
     },
     version: {
@@ -1714,7 +1714,7 @@ export const workflowSchema = {
     inputParameters: {
       $id: "/properties/inputParameters",
       type: "array",
-      title: "Workflow Input Parameters",
+      title: "Agent Input Parameters",
       description: "An explanation about the purpose of this instance.",
       default: [],
       examples: [[]],
@@ -1742,8 +1742,8 @@ export const workflowSchema = {
     restartable: {
       $id: "/properties/restartable",
       type: "boolean",
-      title: "Workflow restartable",
-      description: "Specify if the workflow is restartable.",
+      title: "Agent restartable",
+      description: "Specify if the agent is restartable.",
       default: true,
     },
     workflowStatusListenerEnabled: {
@@ -1778,8 +1778,8 @@ export const workflowSchema = {
     failureWorkflow: {
       $id: "/properties/failureWorkflow",
       type: "string",
-      title: "Failure Workflow Name",
-      description: "Failure Workflow",
+      title: "Failure Agent Name",
+      description: "Failure Agent",
       default: "",
     },
   },

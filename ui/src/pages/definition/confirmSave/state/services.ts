@@ -11,7 +11,7 @@ export const createWorkflow = async (
 ) => {
   try {
     return await fetchWithContext(
-      "/metadata/workflow",
+      "/metadata/workflow", // TODO: migrate to agent API
       {},
       {
         method: "POST",
@@ -41,7 +41,7 @@ export const updateWorkflow = async (
   const queryParams = isNewVersion ? "?newVersion=true" : "";
   try {
     return await fetchWithContext(
-      `/metadata/workflow${queryParams}`,
+      `/metadata/workflow${queryParams}`, // TODO: migrate to agent API
       {},
       {
         method: "PUT",
@@ -67,7 +67,7 @@ export const refetchAllDefinitionsOfCurrentWorkflow = async ({
   authHeaders: headers,
   workflowName,
 }: SaveWorkflowMachineContext) => {
-  const url = `/metadata/workflow?name=${encodeURIComponent(workflowName)}`;
+  const url = `/metadata/workflow?name=${encodeURIComponent(workflowName)}`; // TODO: migrate to agent API
   try {
     const result: WorkflowDef[] = await fetchWithContext(
       url,

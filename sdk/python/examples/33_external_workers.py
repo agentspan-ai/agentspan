@@ -17,7 +17,7 @@ This is useful when:
 Requirements:
     - Conductor server with LLM support
     - The referenced workers must be running somewhere
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -84,8 +84,6 @@ support_agent = Agent(
 )
 
 
-# ── Run ──────────────────────────────────────────────────────────────
-
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         print("=== External Worker Tools ===")
@@ -98,3 +96,13 @@ if __name__ == "__main__":
             "and process the cancellation.",
         )
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(support_agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.33_external_workers
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(support_agent)
+

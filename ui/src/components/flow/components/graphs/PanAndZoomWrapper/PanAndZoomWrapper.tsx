@@ -1,5 +1,5 @@
 import { Box } from "@mui/material";
-import { Handler } from "@use-gesture/core/types";
+import { Handler } from "@use-gesture/react";
 import { useDrag, usePinch, useWheel } from "@use-gesture/react";
 import { useSelector } from "@xstate/react";
 import { FlowEvents } from "components/flow/state";
@@ -272,7 +272,7 @@ const PanAndZoomWrapper: FunctionComponent<PanAndZoomWrapperProps> = ({
             resetPosition,
             isInconsistent,
             fitToScreen,
-            printScreen: () => printScreen(workflowName || "workflow_diagram"),
+            printScreen: () => printScreen(workflowName || "agent_diagram"),
           }}
           togglePan={handleTogglePan}
           panEnabled={panEnabled}

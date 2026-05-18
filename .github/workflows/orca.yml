@@ -1,0 +1,100 @@
+name: Orca Security Scans
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_key:
+        description: Orca Shift Left project key
+        required: false
+        default: agentspan
+        type: string
+
+permissions:
+  contents: read
+  security-events: write
+
+env:
+  ORCA_PROJECT_KEY: ${{ vars.ORCA_PROJECT_KEY || github.event.inputs.project_key || 'agentspan' }}
+
+jobs:
+  image-scan:
+    name: Orca Image Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build server image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: server/Dockerfile
+          push: false
+          load: true
+          tags: |
+            agentspan/server:orca-scan
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Install Orca CLI
+        run: curl -sfL 'https://raw.githubusercontent.com/orcasecurity/orca-cli/main/install.sh' | bash
+
+      - id: orca-image-scan
+        name: Orca Scan - Server Image
+        continue-on-error: true
+        env:
+          ORCA_SECURITY_API_TOKEN: ${{ secrets.ORCA_SECURITY_API_TOKEN }}
+        run: orca-cli -p "${ORCA_PROJECT_KEY}" image scan agentspan/server:orca-scan
+
+  sast:
+    name: Orca SAST
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Orca SAST Scan
+        id: orca-sast-scan
+        continue-on-error: true
+        uses: orcasecurity/shiftleft-sast-action@v1
+        with:
+          api_token: ${{ secrets.ORCA_SECURITY_API_TOKEN }}
+          project_key: ${{ env.ORCA_PROJECT_KEY }}
+          path: .
+          format: sarif
+          output: results/sast
+
+      - name: Upload Orca SAST SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: ${{ always() && steps.orca-sast-scan.outputs.exit_code != 1 }}
+        with:
+          sarif_file: results/sast/sast.sarif
+
+  fs-scan:
+    name: Orca FS Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Orca FS Scan
+        id: orca-fs-scan
+        continue-on-error: true
+        uses: orcasecurity/shiftleft-fs-action@v1
+        with:
+          api_token: ${{ secrets.ORCA_SECURITY_API_TOKEN }}
+          project_key: ${{ env.ORCA_PROJECT_KEY }}
+          path: .
+          format: sarif
+          output: results/fs
+          security_checks: vulns,secret
+
+      - name: Upload Orca FS SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: ${{ always() && steps.orca-fs-scan.outputs.exit_code != 1 }}
+        with:
+          sarif_file: results/fs/file_system.sarif

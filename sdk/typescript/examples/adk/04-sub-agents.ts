@@ -13,7 +13,7 @@
 
 import { LlmAgent, FunctionTool } from '@google/adk';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
@@ -74,7 +74,7 @@ const getTravelAdvisory = new FunctionTool({
 
 // ── Specialist agents ────────────────────────────────────────────────
 
-const flightAgent = new LlmAgent({
+export const flightAgent = new LlmAgent({
   name: 'flight_specialist',
   model,
   description: 'Handles flight searches and booking inquiries.',
@@ -84,7 +84,7 @@ const flightAgent = new LlmAgent({
   tools: [searchFlights],
 });
 
-const hotelAgent = new LlmAgent({
+export const hotelAgent = new LlmAgent({
   name: 'hotel_specialist',
   model,
   description: 'Handles hotel searches and accommodation inquiries.',
@@ -94,7 +94,7 @@ const hotelAgent = new LlmAgent({
   tools: [searchHotels],
 });
 
-const advisoryAgent = new LlmAgent({
+export const advisoryAgent = new LlmAgent({
   name: 'travel_advisory_specialist',
   model,
   description: 'Provides travel advisories, visa requirements, and safety information.',
@@ -106,7 +106,7 @@ const advisoryAgent = new LlmAgent({
 
 // ── Coordinator agent ────────────────────────────────────────────────
 
-const coordinator = new LlmAgent({
+export const coordinator = new LlmAgent({
   name: 'travel_coordinator',
   model,
   instruction:
@@ -124,12 +124,21 @@ async function main() {
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(
-      coordinator,
-      'I want to plan a trip to Japan. I need a flight from San Francisco ' +
-        'on 2025-04-15 and a hotel for 5 nights. Also, what\'s the travel advisory?',
+    coordinator,
+    'I want to plan a trip to Japan. I need a flight from San Francisco ' +
+    'on 2025-04-15 and a hotel for 5 nights. Also, what\'s the travel advisory?',
     );
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(coordinator);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents travel_coordinator
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(coordinator);
   } finally {
     await runtime.shutdown();
   }

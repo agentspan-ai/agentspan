@@ -1,6 +1,6 @@
 # Local vs Server Compilation Comparison
 
-Server: http://localhost:8080/api
+Server: http://localhost:6767/api
 
 **Total: 44 | Match: 44 | Mismatch: 0 | Errors: 0**
 

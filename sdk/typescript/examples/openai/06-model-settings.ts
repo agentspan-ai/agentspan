@@ -14,13 +14,13 @@
  */
 
 import { Agent, setTracingDisabled } from '@openai/agents';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 setTracingDisabled(true);
 
 // ── Creative agent with high temperature ────────────────────────────
 
-const creativeAgent = new Agent({
+export const creativeAgent = new Agent({
   name: 'creative_writer',
   instructions:
     'You are a creative writing assistant. Write with vivid imagery ' +
@@ -34,7 +34,7 @@ const creativeAgent = new Agent({
 
 // ── Precise agent with low temperature ──────────────────────────────
 
-const preciseAgent = new Agent({
+export const preciseAgent = new Agent({
   name: 'code_reviewer',
   instructions:
     'You are a precise code reviewer. Analyze code snippets for bugs, ' +
@@ -52,19 +52,28 @@ async function main() {
   try {
     console.log('--- Creative Agent (temp=0.9) ---');
     const creativeResult = await runtime.run(
-      creativeAgent,
-      'Write a two-sentence story about a robot learning to paint.',
+    creativeAgent,
+    'Write a two-sentence story about a robot learning to paint.',
     );
     console.log('Status:', creativeResult.status);
     creativeResult.printResult();
 
     console.log('\n--- Precise Agent (temp=0.1) ---');
     const preciseResult = await runtime.run(
-      preciseAgent,
-      'Review this Python code: `data = eval(user_input)`',
+    preciseAgent,
+    'Review this Python code: `data = eval(user_input)`',
     );
     console.log('Status:', preciseResult.status);
     preciseResult.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(creativeAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/openai --agents creative_writer
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(creativeAgent);
   } finally {
     await runtime.shutdown();
   }

@@ -68,20 +68,22 @@ export const exportObjToFile = ({
   type = "application/json",
 }: ExportableObject) => {
   const a = window.document.createElement("a");
-
-  a.href = window.URL.createObjectURL(
+  const url = window.URL.createObjectURL(
     new Blob([JSON.stringify(data, null, 2)], {
       type,
     }),
   );
+
+  a.href = url;
   a.download = fileName;
 
   // Append anchor to body.
   document.body.appendChild(a);
   a.click();
 
-  // Remove anchor from body
+  // Cleanup
   document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
 };
 
 const statusColor = {

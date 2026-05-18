@@ -5,7 +5,10 @@
 
 package dev.agentspan.runtime.model;
 
+import java.util.List;
+
 import com.fasterxml.jackson.annotation.JsonInclude;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -21,6 +24,10 @@ import lombok.NoArgsConstructor;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class StartResponse {
 
-    private String workflowId;
-    private String workflowName;
+    private String executionId;
+
+    private String agentName;
+
+    /** SIMPLE task names the SDK must register workers for. */
+    private List<String> requiredWorkers;
 }

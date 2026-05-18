@@ -8,9 +8,6 @@ import { ActorRef, EventObject } from "xstate";
 import {
   CODE_TAB,
   DEPENDENCIES_TAB,
-  RUN_TAB,
-  TASK_TAB,
-  WORKFLOW_TAB,
 } from "../state/constants";
 import { WorkflowDefinitionEvents } from "../state/types";
 import CustomTooltip from "./CustomTooltip";
@@ -96,43 +93,11 @@ export const EditorTabs = ({
         }}
       >
         <Tab
-          value={WORKFLOW_TAB}
-          label={
-            <WorkflowTabContent
-              id="workflow-metadata-tab"
-              ref={workflowTabRef}
-            />
-          }
-          onClick={() => changeTab(WORKFLOW_TAB)}
-          disabled={
-            (
-              definitionActor as ActorRefWithChildren<WorkflowDefinitionEvents>
-            ).children?.get("flowMachine") == null
-          }
-        />
-        <Tab
-          value={TASK_TAB}
-          id="task-tab"
-          label="Task"
-          onClick={() => changeTab(TASK_TAB)}
-          disabled={
-            (
-              definitionActor as ActorRefWithChildren<WorkflowDefinitionEvents>
-            ).children?.get("flowMachine") == null
-          }
-        />
-        <Tab
           value={CODE_TAB}
           id="code-tab"
           data-cy="workflow-definition-code-tab"
           label="Code"
           onClick={() => changeTab(CODE_TAB)}
-        />
-        <Tab
-          value={RUN_TAB}
-          id="run-tab"
-          label={<div ref={runTabRef}>Run</div>}
-          onClick={() => changeTab(RUN_TAB)}
         />
         {isPlayground ? (
           <Tab

@@ -2,7 +2,7 @@ import ConfirmChoiceDialog from "components/ConfirmChoiceDialog";
 import { ActorRef } from "xstate";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { ConfirmLocalCopyDialog } from "../ConfirmLocalCopyDialog/ConfirmLocalCopyDialog";
-import { ConfirmWorkflowOverride } from "../confirmSave";
+import { ConfirmAgentOverride } from "../confirmSave";
 
 interface ConfirmationDialogsProps {
   isConfirmReset: boolean;
@@ -35,7 +35,7 @@ export const ConfirmationDialogs = ({
         <ConfirmChoiceDialog
           handleConfirmationValue={onResetConfirmation}
           message={
-            "You will lose all changes made in the editor. Please confirm resetting workflow to its original state."
+            "You will lose all changes made in the editor. Please confirm resetting this agent definition to its original state."
           }
         />
       )}
@@ -43,7 +43,7 @@ export const ConfirmationDialogs = ({
         <ConfirmChoiceDialog
           handleConfirmationValue={onDeleteConfirmation}
           message={
-            "Are you sure you want to delete this version of the workflow definition? Change cannot be undone."
+            "Are you sure you want to delete this version of the agent definition? This cannot be undone."
           }
         />
       )}
@@ -59,7 +59,7 @@ export const ConfirmationDialogs = ({
         <ConfirmLocalCopyDialog localCopyActor={localCopyActor} />
       )}
       {isSaveRequest && saveChangesActor && (
-        <ConfirmWorkflowOverride saveChangesActor={saveChangesActor} />
+        <ConfirmAgentOverride saveChangesActor={saveChangesActor} />
       )}
     </>
   );

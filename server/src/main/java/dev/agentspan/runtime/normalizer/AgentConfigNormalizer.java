@@ -5,9 +5,9 @@
 
 package dev.agentspan.runtime.normalizer;
 
-import dev.agentspan.runtime.model.AgentConfig;
-
 import java.util.Map;
+
+import dev.agentspan.runtime.model.AgentConfig;
 
 /**
  * Normalizes a framework-specific raw agent config into the canonical {@link AgentConfig}.

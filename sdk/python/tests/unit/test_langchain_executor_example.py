@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 @pytest.fixture
 def agent_executor():
     """Build a minimal AgentExecutor-like object (mock with real type name)."""
-    pytest.importorskip("langchain")
+    pytest.importorskip("langchain_core", reason="langchain_core not installed")
 
     # Build a MagicMock whose type name is "AgentExecutor" so that
     # detect_framework() recognises it as a LangChain executor.
@@ -80,7 +80,7 @@ class TestLangChainWorkerInvocation:
 
         pushed = []
         with patch("agentspan.agents.frameworks.langchain._push_event_nonblocking",
-                   side_effect=lambda wf_id, event, *a: pushed.append(event)):
+                   side_effect=lambda exec_id, event, *a: pushed.append(event)):
             run_id = uuid4()
             handler = AgentspanCallbackHandler("wf-1", "http://localhost:8080", "k", "s")
             handler.on_tool_start({"name": "calculator"}, "6*7", run_id=run_id)
@@ -97,7 +97,7 @@ class TestLangChainWorkerInvocation:
 
         pushed = []
         with patch("agentspan.agents.frameworks.langchain._push_event_nonblocking",
-                   side_effect=lambda wf_id, event, *a: pushed.append(event)):
+                   side_effect=lambda exec_id, event, *a: pushed.append(event)):
             run_id = uuid4()
             handler = AgentspanCallbackHandler("wf-1", "http://localhost:8080", "k", "s")
             handler.on_tool_start({"name": "calculator"}, "6*7", run_id=run_id)

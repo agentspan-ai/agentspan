@@ -17,7 +17,7 @@ user-facing responses, ensuring PII never reaches the final output.
 
 Requirements:
     - Conductor server with LLM support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -117,19 +117,32 @@ responder = Agent(
     name="responder",
     model=settings.llm_model,
     instructions=(
-        "You are a customer service agent. Use the validated, redacted data "
-        "to answer the user's question. NEVER reveal redacted information. "
-        "If data shows ***REDACTED***, explain that the information is "
-        "restricted for security reasons."
+        "You are a customer service agent. The previous agent has already "
+        "validated and redacted sensitive fields. Present ALL fields from the "
+        "validated data: share non-redacted values normally, and for any field "
+        "marked ***REDACTED***, state that it is restricted for security reasons. "
+        "Do not refuse to answer — the data has already been made safe."
     ),
 )
 
 # Sequential pipeline enforces data flow: collect → validate → respond
 pipeline = collector >> validator >> responder
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        pipeline,
-        "Tell me everything about user U001 including their financial details.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
+            pipeline,
+            "Tell me everything about user U001 including their financial details.",
+        )
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(pipeline)
+        # CLI alternative:
+        # agentspan deploy --package examples.43_data_security_pipeline
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(pipeline)
+

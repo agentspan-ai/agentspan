@@ -66,7 +66,7 @@ import {
 } from "../rowColorHelpers";
 import BulkActionModule from "./BulkActionModule";
 
-const INTRO_CONTENT = `Schedulers help you automate workflow execution using cron expressions. Set up recurring workflows with precise timing control, perfect for batch processing, periodic data syncs, or any time-based automation needs.
+const INTRO_CONTENT = `Schedulers help you automate agent execution using cron expressions. Set up recurring agent runs with precise timing control, perfect for batch processing, periodic data syncs, or any time-based automation needs.
 
 Read more:
 * [Developer Guides: Scheduling Workflows](https://orkes.io/content/developer-guides/scheduling-workflows)
@@ -75,7 +75,7 @@ Read more:
 
 const getNameAndVersion = (workflow: IStartWorkflowRequest | undefined) => {
   if (!workflow) {
-    return "Undefined Workflow";
+    return "Undefined Agent";
   }
   return workflow.version !== undefined
     ? `${workflow.name} - Version: ${workflow.version}`
@@ -164,7 +164,7 @@ const columns = [
   {
     id: "startWorkflowRequest",
     name: "startWorkflowRequest",
-    label: "Workflow",
+    label: "Agent",
     sortable: true,
     grow: 1.5,
     searchableFunc: (workflow: IStartWorkflowRequest) =>
@@ -177,7 +177,7 @@ const columns = [
       }
     },
     sortFunction: customSortForWorkflowColumn,
-    tooltip: "The workflow associated with the schedule",
+    tooltip: "The agent associated with the schedule",
   },
   {
     id: "createTime",
@@ -238,11 +238,11 @@ const columns = [
     id: "workflowExecutionsLink",
     name: "name",
     selector: (row: IScheduleDto) => row.name,
-    label: "Workflow executions",
+    label: "Executions",
     searchable: false,
     grow: 1,
     sortable: false,
-    tooltip: "The workflow executions associated with the schedule",
+    tooltip: "The executions associated with the schedule",
     renderer: (name: string, rec: IScheduleDto) => (
       <NavLink
         style={{
@@ -250,7 +250,7 @@ const columns = [
         }}
         path={`/executions?freeText=${rec.name}&workflowType=${rec?.startWorkflowRequest?.name}`}
       >
-        Workflow query
+        Execution query
       </NavLink>
     ),
   },
@@ -610,7 +610,7 @@ export default function ScheduleDefinitions() {
   return (
     <>
       <Helmet>
-        <title>Workflow Scheduler Definitions</title>
+        <title>Agent Scheduler Definitions</title>
       </Helmet>
       {errorMessage && (
         <SnackbarMessage
@@ -689,7 +689,7 @@ export default function ScheduleDefinitions() {
         />
       )}
       <SectionHeader
-        title="Workflow Scheduler Definitions"
+        title="Agent Scheduler Definitions"
         _deprecate_marginTop={0}
         actions={
           <SectionHeaderActions

@@ -12,12 +12,12 @@
  * Requirements:
  *   - Conductor server with LLM support
  *   - OPENAI_API_KEY=sk-... as environment variable
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { AgentRuntime, GPTAssistantAgent } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { AgentRuntime, GPTAssistantAgent } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Example 1: Create assistant on the fly --------------------------------
 
@@ -44,21 +44,34 @@ const dataAnalyst = new GPTAssistantAgent({
 
 // -- Run -------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  console.log('--- GPT Assistant with Code Interpreter ---');
-  console.log(`Using assistant ID: ${assistantId}`);
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('--- GPT Assistant with Code Interpreter ---');
+    console.log(`Using assistant ID: ${assistantId}`);
 
-  if (assistantId === 'asst_placeholder') {
+    if (assistantId === 'asst_placeholder') {
     console.log('(Skipping run -- set OPENAI_ASSISTANT_ID to use a real assistant)');
     console.log('[OK] GPTAssistantAgent structure validated');
-  } else {
+    } else {
     const result = await runtime.run(
-      dataAnalyst,
-      'Calculate the standard deviation of these numbers: 4, 8, 15, 16, 23, 42',
+    dataAnalyst,
+    'Calculate the standard deviation of these numbers: 4, 8, 15, 16, 23, 42',
     );
     result.printResult();
+    }
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(dataAnalyst);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents data_analyst
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(dataAnalyst);
+  } finally {
+    await runtime.shutdown();
   }
-} finally {
-  await runtime.shutdown();
 }
+
+main().catch(console.error);

@@ -6,13 +6,12 @@
  *
  * Requirements:
  *   - Conductor server with callback support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Callback functions ------------------------------------------------------
 
@@ -46,15 +45,19 @@ const getFacts = tool(
   {
     name: 'get_facts',
     description: 'Get interesting facts about a topic.',
-    inputSchema: z.object({
-      topic: z.string().describe('The topic to get facts about'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        topic: { type: 'string', description: 'The topic to get facts about' },
+      },
+      required: ['topic'],
+    },
   },
 );
 
 // -- Agent with callbacks ----------------------------------------------------
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'monitored_agent_47',
   model: llmModel,
   instructions: 'You are a helpful assistant. Use get_facts when asked about topics.',
@@ -65,10 +68,23 @@ const agent = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(agent, 'Tell me interesting facts about AI and space.');
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(agent, 'Tell me interesting facts about AI and space.');
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents monitored_agent_47
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

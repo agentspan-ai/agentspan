@@ -6,16 +6,16 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Specialist analysts -----------------------------------------------------
 
-const marketAnalyst = new Agent({
+export const marketAnalyst = new Agent({
   name: 'market_analyst',
   model: llmModel,
   instructions:
@@ -23,7 +23,7 @@ const marketAnalyst = new Agent({
     'market size, growth trends, key players, and opportunities.',
 });
 
-const riskAnalyst = new Agent({
+export const riskAnalyst = new Agent({
   name: 'risk_analyst',
   model: llmModel,
   instructions:
@@ -31,7 +31,7 @@ const riskAnalyst = new Agent({
     'regulatory risks, technical risks, competitive threats, and mitigation strategies.',
 });
 
-const complianceChecker = new Agent({
+export const complianceChecker = new Agent({
   name: 'compliance',
   model: llmModel,
   instructions:
@@ -41,20 +41,33 @@ const complianceChecker = new Agent({
 
 // -- Parallel analysis -------------------------------------------------------
 
-const analysis = new Agent({
+export const analysis = new Agent({
   name: 'analysis',
   model: llmModel,
   agents: [marketAnalyst, riskAnalyst, complianceChecker],
   strategy: 'parallel',
 });
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
     analysis,
     'Launching an AI-powered healthcare diagnostic tool in the US market',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(analysis);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents analysis
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(analysis);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

@@ -95,7 +95,7 @@ Examples:
 
 			statusStr := ex.Status
 			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
-				truncate(ex.WorkflowID, 12), ex.AgentName, statusStr, startTime, duration)
+				ex.ExecutionID, ex.AgentName, statusStr, startTime, duration)
 		}
 		w.Flush()
 

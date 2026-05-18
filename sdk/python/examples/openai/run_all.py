@@ -60,7 +60,7 @@ _cfg = AgentConfig.from_env()
 @dataclass
 class ExampleResult:
     name: str
-    workflow_id: str = ""
+    execution_id: str = ""
     status: str = ""
     passed: bool = False
     checks: List[str] = field(default_factory=list)
@@ -72,11 +72,11 @@ class ExampleResult:
 results: List[ExampleResult] = []
 
 
-def _get_workflow_detail(runtime: AgentRuntime, workflow_id: str) -> Dict[str, Any]:
+def _get_workflow_detail(runtime: AgentRuntime, execution_id: str) -> Dict[str, Any]:
     """Fetch full workflow execution from Conductor API."""
     import requests
 
-    url = _cfg.server_url.replace("/api", "") + f"/api/workflow/{workflow_id}"
+    url = _cfg.server_url.replace("/api", "") + f"/api/workflow/{execution_id}"
     headers: Dict[str, str] = {}
     if _cfg.auth_key:
         headers["X-Auth-Key"] = _cfg.auth_key
@@ -135,7 +135,7 @@ def ex01_basic_agent(runtime: AgentRuntime) -> ExampleResult:
         model=settings.llm_model,
     )
     result = runtime.run(agent, "Say hello and tell me a fun fact about the Python programming language.")
-    r.workflow_id = result.workflow_id
+    r.execution_id = result.execution_id
     r.status = result.status
 
     # Check: completed
@@ -151,7 +151,7 @@ def ex01_basic_agent(runtime: AgentRuntime) -> ExampleResult:
         r.failures.append("no output text")
 
     # Check: no tool calls (basic agent)
-    wf = _get_workflow_detail(runtime, result.workflow_id)
+    wf = _get_workflow_detail(runtime, result.execution_id)
     simple_tasks = [t for t in wf.get("tasks", [])
                     if t.get("taskType") == "SIMPLE" and "format_report" not in t.get("referenceTaskName", "")]
     # Should only have LLM task(s), no SIMPLE worker tasks
@@ -208,7 +208,7 @@ def ex02_function_tools(runtime: AgentRuntime) -> ExampleResult:
         agent,
         "What's the weather in San Francisco? Also, what's the population there and what's the square root of that number (just the digits)?",
     )
-    r.workflow_id = result.workflow_id
+    r.execution_id = result.execution_id
     r.status = result.status
 
     if result.status == "COMPLETED":
@@ -217,7 +217,7 @@ def ex02_function_tools(runtime: AgentRuntime) -> ExampleResult:
         r.failures.append(f"expected COMPLETED, got {result.status}")
 
     # Verify tool calls happened
-    wf = _get_workflow_detail(runtime, result.workflow_id)
+    wf = _get_workflow_detail(runtime, result.execution_id)
     task_refs = " ".join(_task_names(wf))
     types = _task_types(wf)
 
@@ -266,7 +266,7 @@ def ex03_structured_output(runtime: AgentRuntime) -> ExampleResult:
         model_settings=ModelSettings(temperature=0.3, max_tokens=1000),
     )
     result = runtime.run(agent, "Recommend 3 sci-fi movies that explore the concept of artificial intelligence.")
-    r.workflow_id = result.workflow_id
+    r.execution_id = result.execution_id
     r.status = result.status
 
     if result.status == "COMPLETED":
@@ -337,7 +337,7 @@ def ex04_handoffs(runtime: AgentRuntime) -> ExampleResult:
     )
 
     result = runtime.run(triage_agent, "I'd like a refund for order ORD-002, the product arrived damaged.")
-    r.workflow_id = result.workflow_id
+    r.execution_id = result.execution_id
     r.status = result.status
 
     if result.status == "COMPLETED":
@@ -346,7 +346,7 @@ def ex04_handoffs(runtime: AgentRuntime) -> ExampleResult:
         r.failures.append(f"expected COMPLETED, got {result.status}")
 
     # Verify handoff happened (SUB_WORKFLOW tasks indicate sub-agents)
-    wf = _get_workflow_detail(runtime, result.workflow_id)
+    wf = _get_workflow_detail(runtime, result.execution_id)
     types = _task_types(wf)
     task_refs = " ".join(_task_names(wf))
 
@@ -421,7 +421,7 @@ def ex05_guardrails(runtime: AgentRuntime) -> ExampleResult:
 
     # Normal request — should pass guardrails
     result = runtime.run(agent, "What's the balance on account ACC-100?")
-    r.workflow_id = result.workflow_id
+    r.execution_id = result.execution_id
     r.status = result.status
 
     if result.status == "COMPLETED":
@@ -435,7 +435,7 @@ def ex05_guardrails(runtime: AgentRuntime) -> ExampleResult:
         r.failures.append("no output text")
 
     # Verify guardrail workers were registered (check workflow has guardrail-related tasks or workers)
-    wf = _get_workflow_detail(runtime, result.workflow_id)
+    wf = _get_workflow_detail(runtime, result.execution_id)
     task_refs = " ".join(_task_names(wf))
     types = _task_types(wf)
 
@@ -478,7 +478,7 @@ def ex06_model_settings(runtime: AgentRuntime) -> ExampleResult:
     result2 = runtime.run(precise_agent, "Review this Python code: `data = eval(user_input)`")
 
     # Use the second workflow as primary
-    r.workflow_id = f"{result1.workflow_id}, {result2.workflow_id}"
+    r.execution_id = f"{result1.execution_id}, {result2.execution_id}"
     r.status = f"{result1.status}, {result2.status}"
 
     if result1.status == "COMPLETED":
@@ -502,9 +502,9 @@ def ex06_model_settings(runtime: AgentRuntime) -> ExampleResult:
         r.failures.append("precise agent no output")
 
     # Verify temperature was applied by checking workflow input/LLM config
-    for wf_id, label, expected_temp in [(result1.workflow_id, "creative", 0.9), (result2.workflow_id, "precise", 0.1)]:
+    for execution_id, label, expected_temp in [(result1.execution_id, "creative", 0.9), (result2.execution_id, "precise", 0.1)]:
         try:
-            wf = _get_workflow_detail(runtime, wf_id)
+            wf = _get_workflow_detail(runtime, execution_id)
             llm_tasks = _find_tasks_by_type(wf, "LLM_CHAT_COMPLETE")
             if llm_tasks:
                 temp = llm_tasks[0].get("inputData", {}).get("temperature")
@@ -552,19 +552,19 @@ def ex07_streaming(runtime: AgentRuntime) -> ExampleResult:
         event_types.add(event.type)
 
     # Get workflow ID from the last event or events
-    wf_id = ""
+    execution_id = ""
     for ev in reversed(events):
-        if hasattr(ev, "workflow_id") and ev.workflow_id:
-            wf_id = ev.workflow_id
+        if hasattr(ev, "execution_id") and ev.execution_id:
+            execution_id = ev.execution_id
             break
     # Fallback: check output attr
-    if not wf_id:
+    if not execution_id:
         for ev in events:
             if hasattr(ev, "output") and ev.output:
-                wf_id = getattr(ev, "workflow_id", "") or ""
+                execution_id = getattr(ev, "execution_id", "") or ""
                 break
 
-    r.workflow_id = wf_id or "streaming (no wf_id in events)"
+    r.execution_id = execution_id or "streaming (no execution_id in events)"
 
     if events:
         r.checks.append(f"received {len(events)} events")
@@ -634,7 +634,7 @@ def ex08_agent_as_tool(runtime: AgentRuntime) -> ExampleResult:
         manager,
         "Analyze this review: 'The new laptop is excellent! The display is amazing and the battery life is wonderful. However, the keyboard feels terrible.'",
     )
-    r.workflow_id = result.workflow_id
+    r.execution_id = result.execution_id
     r.status = result.status
 
     if result.status == "COMPLETED":
@@ -648,7 +648,7 @@ def ex08_agent_as_tool(runtime: AgentRuntime) -> ExampleResult:
         r.failures.append("no output text")
 
     # Check for tool/sub-agent execution
-    wf = _get_workflow_detail(runtime, result.workflow_id)
+    wf = _get_workflow_detail(runtime, result.execution_id)
     types = _task_types(wf)
 
     for tool_name in ["sentiment_analyzer", "keyword_extractor"]:
@@ -690,7 +690,7 @@ def ex09_dynamic_instructions(runtime: AgentRuntime) -> ExampleResult:
     )
 
     result = runtime.run(agent, "Show me my todo list and add 'Prepare demo for Friday' as high priority.")
-    r.workflow_id = result.workflow_id
+    r.execution_id = result.execution_id
     r.status = result.status
 
     if result.status == "COMPLETED":
@@ -704,7 +704,7 @@ def ex09_dynamic_instructions(runtime: AgentRuntime) -> ExampleResult:
         r.failures.append("no output text")
 
     # Check tool calls
-    wf = _get_workflow_detail(runtime, result.workflow_id)
+    wf = _get_workflow_detail(runtime, result.execution_id)
 
     for tool_name in ["get_todo_list", "add_todo"]:
         if _tool_was_called(wf, tool_name):
@@ -749,7 +749,7 @@ def ex10_multi_model(runtime: AgentRuntime) -> ExampleResult:
     )
 
     result = runtime.run(triage, "I need a Python code example for authenticating with the API.")
-    r.workflow_id = result.workflow_id
+    r.execution_id = result.execution_id
     r.status = result.status
 
     if result.status == "COMPLETED":
@@ -763,7 +763,7 @@ def ex10_multi_model(runtime: AgentRuntime) -> ExampleResult:
         r.failures.append("no output text")
 
     # Check for multi-agent / handoff evidence
-    wf = _get_workflow_detail(runtime, result.workflow_id)
+    wf = _get_workflow_detail(runtime, result.execution_id)
     types = _task_types(wf)
     llm_tasks = _find_tasks_by_type(wf, "LLM_CHAT_COMPLETE")
 
@@ -825,7 +825,7 @@ def print_report(results: List[ExampleResult]) -> None:
     for r in results:
         icon = "PASS" if r.passed else ("ERROR" if r.error else "FAIL")
         print(f"\n  [{icon}] {r.name}  ({r.duration_s:.1f}s)")
-        print(f"         workflow: {r.workflow_id}")
+        print(f"         workflow: {r.execution_id}")
         print(f"         status:   {r.status}")
 
         if r.checks:

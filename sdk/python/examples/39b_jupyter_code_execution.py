@@ -11,7 +11,7 @@ step by step.
 Requirements:
     - Conductor server with LLM support
     - pip install jupyter_client ipykernel
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:6767/api
 """
 
 from agentspan.agents import Agent, AgentRuntime, CodeExecutionConfig
@@ -36,12 +36,24 @@ jupyter_coder = Agent(
     ),
 )
 
-with AgentRuntime() as runtime:
-    print("--- Jupyter Kernel Code Execution ---")
-    result = runtime.run(
-        jupyter_coder,
-        "Compute the first 10 Fibonacci numbers using a loop, store them in a "
-        "list called 'fibs', and print them. Then in a second execution, print "
-        "the sum of 'fibs' (it should still exist from the first call).",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        print("--- Jupyter Kernel Code Execution ---")
+        result = runtime.run(
+            jupyter_coder,
+            "Compute the first 10 Fibonacci numbers using a loop, store them in a "
+            "list called 'fibs', and print them. Then in a second execution, print "
+            "the sum of 'fibs' (it should still exist from the first call).",
+        )
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(jupyter_coder)
+        # CLI alternative:
+        # agentspan deploy --package examples.39b_jupyter_code_execution
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(jupyter_coder)
+

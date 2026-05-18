@@ -7,7 +7,7 @@ These tests require a running Conductor server with LLM and streaming support.
 Skip with: pytest -m "not integration"
 
 Requirements:
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - LLM provider configured (OpenAI by default)
     - Optionally: export AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini
 """
@@ -283,14 +283,14 @@ class TestSimpleAgentStreaming:
         assert done is not None
         assert done.output is not None
 
-    def test_simple_agent_has_workflow_id(self, runtime, model):
-        """Stream exposes a valid workflow_id."""
+    def test_simple_agent_has_execution_id(self, runtime, model):
+        """Stream exposes a valid execution_id."""
         agent = Agent(
             name=_unique_name("e2e_simple_wf"),
             model=model,
         )
         stream = runtime.stream(agent, "Say hello.")
-        assert stream.workflow_id != ""
+        assert stream.execution_id != ""
         collect_all_events(stream)
 
     def test_simple_agent_get_result(self, runtime, model):
@@ -908,7 +908,7 @@ class TestAgentStreamAPI:
         collect_all_events(stream)
         result = stream.get_result()
         assert result is not None
-        assert result.workflow_id != ""
+        assert result.execution_id != ""
 
     def test_stream_get_result_without_iteration(self, runtime, model):
         """get_result() drains the stream if not yet iterated."""
@@ -919,11 +919,11 @@ class TestAgentStreamAPI:
         assert result is not None
         assert result.output is not None
 
-    def test_stream_workflow_id(self, runtime, model):
-        """AgentStream.workflow_id is set immediately."""
+    def test_stream_execution_id(self, runtime, model):
+        """AgentStream.execution_id is set immediately."""
         agent = Agent(name=_unique_name("e2e_api_wfid"), model=model)
         stream = runtime.stream(agent, "Say hi.")
-        assert stream.workflow_id != ""
+        assert stream.execution_id != ""
         collect_all_events(stream)
 
     def test_stream_handle_attribute(self, runtime, model):
@@ -931,7 +931,7 @@ class TestAgentStreamAPI:
         agent = Agent(name=_unique_name("e2e_api_handle"), model=model)
         stream = runtime.stream(agent, "Say hi.")
         assert stream.handle is not None
-        assert stream.handle.workflow_id == stream.workflow_id
+        assert stream.handle.execution_id == stream.execution_id
         collect_all_events(stream)
 
     def test_stream_repr(self, runtime, model):

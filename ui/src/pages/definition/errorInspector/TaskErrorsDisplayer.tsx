@@ -8,7 +8,7 @@ import AccordionDetails from "@mui/material/AccordionDetails";
 import Collapse from "@mui/material/Collapse";
 import ListItemButton from "@mui/material/ListItemButton";
 import { AccordionErrorSummary } from "./AccordionErrorSummary";
-import { get } from "lodash";
+import get from "lodash/get";
 import { CaretRight, CaretDown, WarningCircle } from "@phosphor-icons/react";
 
 const TaskSingleError: FunctionComponent<ValidationError> = ({

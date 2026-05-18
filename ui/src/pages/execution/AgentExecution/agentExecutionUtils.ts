@@ -7,6 +7,7 @@ import {
   EventType,
   ExecutionMetrics,
   FinishReason,
+  TaskAttempt,
   TokenUsage,
 } from "./types";
 
@@ -209,8 +210,61 @@ function toMs(value: string | number | undefined | null): number {
 /** Maps task status to a tri-state success flag: true=completed, false=failed, undefined=in-progress */
 function taskSuccess(status: string): boolean | undefined {
   if (status === "COMPLETED") return true;
-  if (status === "FAILED") return false;
+  if (status === "FAILED" || status === "TIMED_OUT") return false;
   return undefined; // IN_PROGRESS → caller shows spinner
+}
+
+/**
+ * Deduplicate retried tasks: when Conductor retries a timed-out/failed task,
+ * BOTH the original attempt AND the retry appear in the task list with the same
+ * referenceTaskName but increasing retryCount. Keep only the latest attempt
+ * (highest retryCount) and return a map of referenceTaskName → total attempts.
+ */
+function deduplicateRetriedTasks(tasks: ExecutionTask[]): {
+  tasks: ExecutionTask[];
+  attemptCounts: Map<string, number>;
+  attemptGroups: Map<string, ExecutionTask[]>;
+} {
+  const byRef = new Map<string, ExecutionTask[]>();
+  for (const t of tasks) {
+    const ref = t.referenceTaskName;
+    if (!byRef.has(ref)) byRef.set(ref, []);
+    byRef.get(ref)!.push(t);
+  }
+  const deduped: ExecutionTask[] = [];
+  const attemptCounts = new Map<string, number>();
+  const attemptGroups = new Map<string, ExecutionTask[]>();
+  for (const [ref, group] of byRef) {
+    if (group.length > 1) {
+      attemptCounts.set(ref, group.length);
+      // Sort ascending by retryCount so attempt[0]=oldest, last=latest
+      group.sort((a, b) => (a.retryCount ?? 0) - (b.retryCount ?? 0));
+      attemptGroups.set(ref, group);
+    }
+    // Keep the latest attempt (last after ascending sort)
+    deduped.push(group[group.length - 1]);
+  }
+  return { tasks: deduped, attemptCounts, attemptGroups };
+}
+
+function buildAllAttempts(
+  refName: string,
+  attemptGroups: Map<string, ExecutionTask[]>,
+): TaskAttempt[] | undefined {
+  const group = attemptGroups.get(refName);
+  if (!group || group.length <= 1) return undefined;
+  return group.map((t): TaskAttempt => ({
+    taskId: t.taskId ?? "",
+    retryCount: t.retryCount ?? 0,
+    status: t.status,
+    startTime: t.startTime ?? undefined,
+    endTime: t.endTime ?? undefined,
+    durationMs: t.endTime && t.startTime ? t.endTime - t.startTime : 0,
+    workerId: (t as any).workerId ?? undefined,
+    reasonForIncompletion: t.reasonForIncompletion ?? undefined,
+    inputData: t.inputData as Record<string, unknown> | undefined,
+    outputData: t.outputData as Record<string, unknown> | undefined,
+  }));
 }
 
 function mapTaskStatus(status: string): AgentStatus {
@@ -439,9 +493,13 @@ function transformChainWorkflowToAgentRun(execution: WorkflowExecution): AgentRu
     if (typeof candidate === "string" && (candidate as string).length > 0) chainOutput = candidate as string;
   }
 
+  const chainModel = (agentDef?.model as string | undefined) ??
+    tasks.find(t => t.taskType === "LLM_CHAT_COMPLETE")?.inputData?.model as string | undefined;
+
   return {
     id: execution.workflowId,
     agentName: (execution as any).workflowName ?? execution.workflowType ?? "agent",
+    model: chainModel,
     turns,
     status: mapWorkflowStatus(execution.status),
     agentDef,
@@ -532,16 +590,19 @@ export function transformWorkflowExecutionToAgentRun(
       const agentTasks = iterTasks.filter(isAgentSubWorkflow);
 
       // LLM tasks directly in this iteration (tool-calling agent pattern)
-      const iterLlmTasks = iterTasks.filter(
-        (t) => t.taskType === "LLM_CHAT_COMPLETE",
+      // Dedup retried tasks so timed-out attempts don't appear as parallel forks
+      const { tasks: iterLlmTasks } = deduplicateRetriedTasks(
+        iterTasks.filter((t) => t.taskType === "LLM_CHAT_COMPLETE"),
       );
 
       // Tool worker tasks — any non-infra, non-subworkflow, non-LLM task
-      const toolWorkerTasks = iterTasks.filter(
-        (t) =>
-          !ITER_INFRA.has(t.taskType) &&
-          t.taskType !== "SUB_WORKFLOW" &&
-          t.taskType !== "LLM_CHAT_COMPLETE",
+      const { tasks: toolWorkerTasks, attemptCounts: toolAttemptCounts, attemptGroups: toolAttemptGroups } = deduplicateRetriedTasks(
+        iterTasks.filter(
+          (t) =>
+            !ITER_INFRA.has(t.taskType) &&
+            t.taskType !== "SUB_WORKFLOW" &&
+            t.taskType !== "LLM_CHAT_COMPLETE",
+        ),
       );
 
       // SWARM self-calls: iterations where the agent IS the root agent itself
@@ -687,6 +748,7 @@ export function transformWorkflowExecutionToAgentRun(
         if (condensed) events.push(condensed);
 
         const model = llmTask.inputData?.model as string | undefined;
+        const llmBaseUrl = llmTask.inputData?.baseUrl as string | undefined;
         const finishReason =
           ((llmTask.outputData?.finishReason as string) ?? "stop").toLowerCase();
         const result = llmTask.outputData?.result;
@@ -712,6 +774,7 @@ export function transformWorkflowExecutionToAgentRun(
           type: EventType.THINKING,
           timestamp: llmTask.startTime ?? 0,
           toolName: model,
+          baseUrl: llmBaseUrl,
           summary: `${model ?? "LLM"} · ${messages.length} messages${tools.length ? ` · ${tools.length} tools` : ""}`,
           detail: {
             input: {
@@ -864,6 +927,8 @@ export function transformWorkflowExecutionToAgentRun(
               workerId: (toolTask as any).workerId ?? undefined,
               reasonForIncompletion: toolTask.reasonForIncompletion ?? undefined,
               retryCount: toolTask.retryCount,
+              totalAttempts: toolAttemptCounts.get(toolTask.referenceTaskName),
+              allAttempts: buildAllAttempts(toolTask.referenceTaskName, toolAttemptGroups),
               pollCount: toolTask.pollCount,
               seq: toolTask.seq,
               queueWaitTime: toolTask.queueWaitTime,
@@ -886,6 +951,7 @@ export function transformWorkflowExecutionToAgentRun(
               }
             })();
 
+        const toolTotalAttempts = toolAttemptCounts.get(toolTask.referenceTaskName);
         events.push({
           id: `${toolTask.taskId}-tool`,
           type: EventType.TOOL_CALL,
@@ -907,6 +973,8 @@ export function transformWorkflowExecutionToAgentRun(
             workerId: (toolTask as any).workerId ?? undefined,
             reasonForIncompletion: toolTask.reasonForIncompletion ?? undefined,
             retryCount: toolTask.retryCount,
+            totalAttempts: toolTotalAttempts,
+            allAttempts: buildAllAttempts(toolTask.referenceTaskName, toolAttemptGroups),
             pollCount: toolTask.pollCount,
             seq: toolTask.seq,
             queueWaitTime: toolTask.queueWaitTime,
@@ -969,72 +1037,106 @@ export function transformWorkflowExecutionToAgentRun(
     })
     .filter((t) => t.events.length > 0 || t.subAgents.length > 0);
 
-  // Root-level parallel SUB_WORKFLOWs (FORK/JOIN pattern without DO_WHILE iterations).
-  // These represent parallel agent execution: FORK → [SUB_WORKFLOW...] → JOIN → aggregate.
+  // Build sub-agents from root-level SUB_WORKFLOW tasks (merged into root events turn below).
   const rootSubWorkflows = rootActiveTasks.filter(isAgentSubWorkflow);
-  if (rootSubWorkflows.length > 0) {
-    const subAgents: AgentRunData[] = rootSubWorkflows.map((task) => {
-      const agentName =
-        extractAgentName(task.referenceTaskName)
-        ?? task.inputData?.subWorkflowName as string
-        ?? task.workflowTask?.name
-        ?? task.referenceTaskName;
-      const subWfId = task.outputData?.subWorkflowId as string | undefined;
-      const dur = task.endTime && task.startTime ? task.endTime - task.startTime : 0;
-      const outputStr =
-        typeof task.outputData?.result === "string"
-          ? task.outputData.result
-          : undefined;
-      const failReason = task.reasonForIncompletion ?? undefined;
+  const rootSubAgents: AgentRunData[] = rootSubWorkflows.map((task) => {
+    const agentName =
+      extractAgentName(task.referenceTaskName)
+      ?? task.inputData?.subWorkflowName as string
+      ?? task.workflowTask?.name
+      ?? task.referenceTaskName;
+    const subWfId = task.outputData?.subWorkflowId as string | undefined;
+    const dur = task.endTime && task.startTime ? task.endTime - task.startTime : 0;
 
-      return {
-        id: subWfId ?? task.taskId,
-        subWorkflowId: subWfId,
-        agentName,
-        turns: [],
-        status: mapWorkflowStatus(task.status as any),
-        totalTokens: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-        totalDurationMs: dur,
-        output: outputStr,
-        failureReason: failReason,
-      } as AgentRunData;
-    });
+    // Extract input from workflowInput (Claude Code / agent-as-tool pattern)
+    const wfInput = task.inputData?.workflowInput as Record<string, unknown> | undefined;
+    const agentInput =
+      (wfInput?.prompt as string | undefined) ??
+      (wfInput?.description as string | undefined) ??
+      undefined;
 
-    const completed = subAgents.filter((s) => s.status === AgentStatus.COMPLETED).length;
-    const failed = subAgents.filter((s) => s.status === AgentStatus.FAILED).length;
-    const running = subAgents.length - completed - failed;
-    const ts = failed > 0 ? AgentStatus.FAILED : running > 0 ? AgentStatus.RUNNING : AgentStatus.COMPLETED;
-    const subTimestamps = rootSubWorkflows
-      .flatMap((t) => [t.startTime, t.endTime])
-      .filter((v): v is number => v != null && v > 0);
+    // Extract output: try result, then tool_response content blocks
+    let outputStr: string | undefined;
+    const directResult = task.outputData?.result;
+    if (typeof directResult === "string" && directResult.length > 0) {
+      outputStr = directResult;
+    } else {
+      const toolResp = task.outputData?.tool_response as Record<string, unknown> | undefined;
+      if (toolResp) {
+        const content = toolResp.content as Array<Record<string, unknown>> | undefined;
+        if (Array.isArray(content)) {
+          const textBlock = content.find(c => c.type === "text");
+          if (textBlock && typeof (textBlock as any).text === "string") {
+            outputStr = (textBlock as any).text;
+          }
+        }
+        if (!outputStr && typeof toolResp.result === "string") {
+          outputStr = toolResp.result as string;
+        }
+      }
+    }
 
-    turns.push({
-      turnNumber: turns.length + 1,
-      events: [],
-      status: ts,
-      durationMs: subTimestamps.length
-        ? Math.max(...subTimestamps) - Math.min(...subTimestamps)
-        : 0,
-      tokens: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-      subAgents,
-      strategy: subAgents.length > 1 ? AgentStrategy.PARALLEL : AgentStrategy.SINGLE,
-    });
-  }
+    const failReason = task.reasonForIncompletion ?? undefined;
+
+    const subTurns: AgentTurn[] = outputStr ? [{
+      turnNumber: 1,
+      status: mapTaskStatus(task.status),
+      durationMs: dur,
+      tokens: ZERO_TOKENS,
+      subAgents: [],
+      events: [{
+        id: `${task.taskId}-msg`,
+        type: EventType.MESSAGE,
+        timestamp: task.startTime ?? 0,
+        summary: outputStr.slice(0, 120) + (outputStr.length > 120 ? "..." : ""),
+        detail: outputStr,
+        durationMs: dur,
+      }, {
+        id: `${task.taskId}-done`,
+        type: EventType.DONE,
+        timestamp: task.endTime ?? 0,
+        summary: "Agent completed",
+        success: task.status === "COMPLETED",
+      }],
+    }] : [];
+
+    return {
+      id: subWfId ?? task.taskId,
+      subWorkflowId: subWfId,
+      agentName,
+      turns: subTurns,
+      status: mapWorkflowStatus(task.status as any),
+      totalTokens: ZERO_TOKENS,
+      totalDurationMs: dur,
+      input: agentInput,
+      output: outputStr,
+      failureReason: failReason,
+    } as AgentRunData;
+  });
 
   // Build events + turn for root-level tasks (outside DO_WHILE).
-  // This handles: simple single-LLM agents (greeter, triage_router_wf)
-  // and final synthesis tasks (triage_final, customer_service_triage_final).
+  // This handles: simple single-LLM agents (greeter, triage_router_wf),
+  // final synthesis tasks, and Claude Code agent tool calls + sub-agents.
+  // Sub-agents are included in the same turn to preserve execution order.
+  // Dedup retried tasks so timed-out attempts don't duplicate events.
+  const { tasks: dedupedRootTasks, attemptCounts: rootAttemptCounts, attemptGroups: rootAttemptGroups } =
+    deduplicateRetriedTasks(rootActiveTasks);
   let finalOutput: string | undefined;
-  if (rootActiveTasks.length > 0) {
+  if (dedupedRootTasks.length > 0) {
     const rootEvents: AgentEvent[] = [];
     let rootPrompt = 0, rootCompletion = 0;
 
-    for (const task of rootActiveTasks) {
+    for (const task of dedupedRootTasks) {
+      // Skip the framework task (_fw_task) — it represents the agent itself, not a tool call.
+      // Its outputData is used for the final agent output below.
+      if (task.referenceTaskName === "_fw_task") continue;
+
       if (task.taskType === "LLM_CHAT_COMPLETE") {
         const condensed = maybeCondensationEvent(task);
         if (condensed) rootEvents.push(condensed);
 
         const model = task.inputData?.model as string | undefined;
+        const rootBaseUrl = task.inputData?.baseUrl as string | undefined;
         const finishReason = ((task.outputData?.finishReason as string) ?? "stop").toLowerCase();
         const result = task.outputData?.result;
         const promptTokens = (task.outputData?.promptTokens as number) || 0;
@@ -1052,6 +1154,7 @@ export function transformWorkflowExecutionToAgentRun(
           id: `${task.taskId}-llm`,
           type: EventType.THINKING,
           toolName: model,
+          baseUrl: rootBaseUrl,
           timestamp: task.startTime ?? 0,
           summary: `${model ?? "LLM"} · ${messages.length} messages${tools.length ? ` · ${tools.length} tools` : ""}`,
           detail: {
@@ -1151,6 +1254,8 @@ export function transformWorkflowExecutionToAgentRun(
                 workerId: (task as any).workerId ?? undefined,
                 reasonForIncompletion: task.reasonForIncompletion ?? undefined,
                 retryCount: task.retryCount,
+                totalAttempts: rootAttemptCounts.get(task.referenceTaskName),
+                allAttempts: buildAllAttempts(task.referenceTaskName, rootAttemptGroups),
                 pollCount: task.pollCount,
                 seq: task.seq,
                 queueWaitTime: task.queueWaitTime,
@@ -1161,7 +1266,7 @@ export function transformWorkflowExecutionToAgentRun(
       }
     }
 
-    if (rootEvents.length > 0) {
+    if (rootEvents.length > 0 || rootSubAgents.length > 0) {
       const rootTimestamps = rootActiveTasks
         .flatMap((t) => [t.startTime, t.endTime])
         .filter((v): v is number => v != null && v > 0);
@@ -1173,8 +1278,17 @@ export function transformWorkflowExecutionToAgentRun(
           ? Math.max(...rootTimestamps) - Math.min(...rootTimestamps)
           : 0,
         tokens: { promptTokens: rootPrompt, completionTokens: rootCompletion, totalTokens: rootPrompt + rootCompletion },
-        subAgents: [],
+        subAgents: rootSubAgents,
       });
+    }
+  }
+
+  // Check the framework task (_fw_task) for output — Claude Code agent pattern
+  if (!finalOutput) {
+    const fwTask = rootActiveTasks.find(t => t.referenceTaskName === "_fw_task");
+    const fwResult = fwTask?.outputData?.result;
+    if (typeof fwResult === "string" && fwResult.length > 0) {
+      finalOutput = fwResult;
     }
   }
 
@@ -1221,9 +1335,15 @@ export function transformWorkflowExecutionToAgentRun(
 
   const agentDef = (execution.workflowDefinition?.metadata?.agentDef as Record<string, unknown> | undefined);
 
+  // Extract model from agentDef metadata or from first LLM task
+  const agentModel =
+    (agentDef?.model as string | undefined) ??
+    tasks.find(t => t.taskType === "LLM_CHAT_COMPLETE")?.inputData?.model as string | undefined;
+
   return {
     id: execution.workflowId,
     agentName: (execution as any).workflowName ?? execution.workflowType ?? "agent",
+    model: agentModel,
     turns,
     status: mapWorkflowStatus(execution.status),
     agentDef,
@@ -1267,7 +1387,7 @@ const SKIP_TASK_TYPES = new Set([
  *   - Invocation               → TOOL_CALL
  *   - Result                   → TOOL_RESULT
  */
-function taskToEvents(task: ExecutionTask): AgentEvent[] {
+function taskToEvents(task: ExecutionTask, attemptCounts?: Map<string, number>, attemptGroups?: Map<string, ExecutionTask[]>): AgentEvent[] {
   const events: AgentEvent[] = [];
   const durationMs =
     task.endTime && task.startTime ? task.endTime - task.startTime : 0;
@@ -1282,6 +1402,7 @@ function taskToEvents(task: ExecutionTask): AgentEvent[] {
         | undefined
     ) ?? [];
     const model = task.inputData?.model as string | undefined;
+    const taskBaseUrl = task.inputData?.baseUrl as string | undefined;
     const result = task.outputData?.result;
     const finishReason = (task.outputData?.finishReason as string | undefined)
       ?.toLowerCase() ?? "stop";
@@ -1298,6 +1419,7 @@ function taskToEvents(task: ExecutionTask): AgentEvent[] {
       id: `${task.taskId}-invoke`,
       type: EventType.THINKING,
       toolName: model,
+      baseUrl: taskBaseUrl,
       timestamp: task.startTime ?? 0,
       summary: `${model ?? "LLM"} · ${messages.length} messages${tools.length ? ` · ${tools.length} tools` : ""}`,
       detail: {
@@ -1398,6 +1520,8 @@ function taskToEvents(task: ExecutionTask): AgentEvent[] {
           workerId: (task as any).workerId ?? undefined,
           reasonForIncompletion: task.reasonForIncompletion ?? undefined,
           retryCount: task.retryCount,
+          totalAttempts: attemptCounts?.get(task.referenceTaskName),
+          allAttempts: attemptGroups ? buildAllAttempts(task.referenceTaskName, attemptGroups) : undefined,
           pollCount: task.pollCount,
           seq: task.seq,
           queueWaitTime: task.queueWaitTime,
@@ -1428,6 +1552,8 @@ function taskToEvents(task: ExecutionTask): AgentEvent[] {
           workerId: (task as any).workerId ?? (task as any).workerTask?.workerId ?? undefined,
           reasonForIncompletion: task.reasonForIncompletion ?? undefined,
           retryCount: task.retryCount,
+          totalAttempts: attemptCounts?.get(task.referenceTaskName),
+          allAttempts: attemptGroups ? buildAllAttempts(task.referenceTaskName, attemptGroups) : undefined,
           pollCount: task.pollCount,
           seq: task.seq,
           queueWaitTime: task.queueWaitTime,
@@ -1459,7 +1585,9 @@ export function transformSubWorkflowToAgentRun(
   }
 
   // Simple agent: group tasks into turns split at each LLM_CHAT_COMPLETE boundary
-  const activeTasks = tasks.filter((t) => !SKIP_TASK_TYPES.has(t.taskType));
+  // Dedup retried tasks so timed-out attempts don't appear as separate events
+  const { tasks: activeTasks, attemptCounts: subAttemptCounts, attemptGroups: subAttemptGroups } =
+    deduplicateRetriedTasks(tasks.filter((t) => !SKIP_TASK_TYPES.has(t.taskType)));
 
   // Split into turn buckets at each LLM_CHAT_COMPLETE task
   const turnBuckets: ExecutionTask[][] = [];
@@ -1475,7 +1603,7 @@ export function transformSubWorkflowToAgentRun(
   if (turnBuckets.length === 0) turnBuckets.push(activeTasks);
 
   const turns: AgentTurn[] = turnBuckets.map((bucketTasks, idx): AgentTurn => {
-    const events: AgentEvent[] = bucketTasks.flatMap(taskToEvents);
+    const events: AgentEvent[] = bucketTasks.flatMap(t => taskToEvents(t, subAttemptCounts, subAttemptGroups));
     const llmTask = bucketTasks.find((t) => t.taskType === "LLM_CHAT_COMPLETE");
     const promptTokens = (llmTask?.outputData?.promptTokens as number) || 0;
     const completionTokens =
@@ -1540,6 +1668,24 @@ export function transformSubWorkflowToAgentRun(
     return undefined;
   })();
 
+  // Fall back to execution-level output if no task had a result
+  let subOutput = lastResult;
+  if (!subOutput && subExecution.output) {
+    const wfOut = subExecution.output;
+    const candidate = wfOut.result ?? wfOut.output ?? wfOut.message;
+    if (typeof candidate === "string" && candidate.length > 0) {
+      subOutput = candidate;
+    }
+  }
+
+  // Extract initial prompt from execution input
+  const subExecInput = subExecution.input as any;
+  const subInput: string | undefined =
+    typeof subExecInput === "string" ? subExecInput || undefined
+    : typeof subExecInput === "object" && subExecInput !== null
+      ? (subExecInput.prompt || subExecInput.conversation || subExecInput.message || undefined)
+    : undefined;
+
   const subAgentDef = (subExecution.workflowDefinition?.metadata?.agentDef as Record<string, unknown> | undefined);
 
   return {
@@ -1557,6 +1703,7 @@ export function transformSubWorkflowToAgentRun(
     totalDurationMs: subDuration,
     finishReason: subFinishReason,
     strategy: AgentStrategy.SINGLE,
-    output: lastResult,
+    input: subInput,
+    output: subOutput,
   };
 }

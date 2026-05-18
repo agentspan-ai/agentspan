@@ -15,7 +15,7 @@ no manual executor setup needed.
 
 Requirements:
     - Conductor server with LLM support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -81,19 +81,29 @@ config_coder = Agent(
 #     instructions="You write Python code that runs in a sandboxed Docker container.",
 # )
 
-# ── Run ─────────────────────────────────────────────────────────────
 
-with AgentRuntime() as runtime:
-    print("--- Simple Code Execution ---")
-    result = runtime.run(
-        simple_coder,
-        "Write a Python function to find the first 10 prime numbers and print them.",
-    )
-    result.print_result()
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        print("--- Simple Code Execution ---")
+        result = runtime.run(
+            simple_coder,
+            "Write a Python function to find the first 10 prime numbers and print them.",
+        )
+        result.print_result()
 
-    print("\n--- Restricted Code Execution ---")
-    result = runtime.run(
-        restricted_coder,
-        "List the files in the current directory using bash.",
-    )
-    result.print_result()
+        print("\n--- Restricted Code Execution ---")
+        result = runtime.run(
+            restricted_coder,
+            "List the files in the current directory using bash.",
+        )
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(simple_coder)
+        # CLI alternative:
+        # agentspan deploy --package examples.39_local_code_execution
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(simple_coder)
+

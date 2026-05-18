@@ -93,17 +93,17 @@ Extracts from stdout (produced by `AgentResult.print_result()`):
 
 | Field | Regex / Method |
 |-------|---------------|
-| Workflow ID | `Workflow ID: (\S+)` |
+| Execution ID | `Execution ID: (\S+)` |
 | Tool calls | `Tool calls: (\d+)` |
 | Tokens | `Tokens: (\d+) total \((\d+) prompt, (\d+) completion\)` |
 | Agent output | Text between `╘═+╛` banner and next metadata line |
-| Errors | `workflow FAILED` in stdout/stderr, tracebacks, non-zero exit |
+| Errors | `execution FAILED` in stdout/stderr, tracebacks, non-zero exit |
 
 ### Status determination
 
 | Condition | Status |
 |-----------|--------|
-| `workflow FAILED` in output | FAILED |
+| `execution FAILED` in output | FAILED |
 | exit_code == 0 and no errors | COMPLETED |
 | Subprocess timed out | TIMEOUT |
 | Non-zero exit code | FAILED |

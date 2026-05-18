@@ -11,7 +11,7 @@ import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // Tool definitions
@@ -149,6 +149,7 @@ const graph = createReactAgent({
     'You are an expert software engineer assistant. ' +
     'Use your tools to write, explain, and debug code. ' +
     'Always provide clear, well-commented solutions.',
+  name: "code_agent",
 });
 
 // Add agentspan metadata for extraction
@@ -170,6 +171,15 @@ async function main() {
     const result = await runtime.run(graph, PROMPT);
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(graph);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/langgraph --agents code_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(graph);
   } finally {
     await runtime.shutdown();
   }

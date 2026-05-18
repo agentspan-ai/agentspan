@@ -6,12 +6,12 @@
  *
  * Requirements:
  *   - Conductor server running
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - gh CLI authenticated
  *   - Git configured with push access to the repo
  */
 
-import { Agent, AgentRuntime, OnTextMention } from '../src/index.js';
+import { Agent, AgentRuntime, OnTextMention } from '@agentspan-ai/sdk';
 import { randomBytes } from 'crypto';
 
 const REPO = 'agentspan/codingexamples';
@@ -19,7 +19,7 @@ const WORK_DIR = `/tmp/codingexamples-${randomBytes(4).toString('hex')}`;
 
 // -- GitHub Agent ------------------------------------------------------------
 
-const githubAgent = new Agent({
+export const githubAgent = new Agent({
   name: 'github_agent',
   model: 'anthropic/claude-sonnet-4-20250514',
   instructions:
@@ -43,7 +43,7 @@ const githubAgent = new Agent({
 
 // -- Coder -------------------------------------------------------------------
 
-const coder = new Agent({
+export const coder = new Agent({
   name: 'coder',
   model: 'anthropic/claude-sonnet-4-20250514',
   instructions:
@@ -63,7 +63,7 @@ const coder = new Agent({
 
 // -- QA Tester ---------------------------------------------------------------
 
-const qaTester = new Agent({
+export const qaTester = new Agent({
   name: 'qa_tester',
   model: 'anthropic/claude-sonnet-4-20250514',
   instructions:
@@ -81,7 +81,7 @@ const qaTester = new Agent({
 
 // -- Coding Team: swarm coordinator ------------------------------------------
 
-const codingTeam = new Agent({
+export const codingTeam = new Agent({
   name: 'coding_team',
   model: 'anthropic/claude-sonnet-4-20250514',
   instructions:
@@ -110,35 +110,47 @@ const prompt =
   'Pick an open issue from the GitHub repository, implement the ' +
   'feature or fix the bug, get it reviewed by QA, and create a PR.';
 
-console.log('='.repeat(60));
-console.log('  GitHub Coding Agent (Simplified)');
-console.log(`  Repo: ${REPO}`);
-console.log(`  Work dir: ${WORK_DIR}`);
-console.log('  coding_team -> github_agent <-> coder <-> qa_tester (swarm)');
-console.log('  Tools: built-in code execution (any language)');
-console.log('='.repeat(60));
-console.log(`\nPrompt: ${prompt}\n`);
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('='.repeat(60));
+    console.log('  GitHub Coding Agent (Simplified)');
+    console.log(`  Repo: ${REPO}`);
+    console.log(`  Work dir: ${WORK_DIR}`);
+    console.log('  coding_team -> github_agent <-> coder <-> qa_tester (swarm)');
+    console.log('  Tools: built-in code execution (any language)');
+    console.log('='.repeat(60));
+    console.log(`\nPrompt: ${prompt}\n`);
+    const result = await runtime.run(codingTeam, prompt);
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(codingTeam, prompt);
-
-  const output = result.output;
-  const skipKeys = new Set(['finishReason', 'rejectionReason', 'is_transfer', 'transfer_to']);
-  if (output && typeof output === 'object' && !Array.isArray(output)) {
+    const output = result.output;
+    const skipKeys = new Set(['finishReason', 'rejectionReason', 'is_transfer', 'transfer_to']);
+    if (output && typeof output === 'object' && !Array.isArray(output)) {
     for (const [key, text] of Object.entries(output as Record<string, string>)) {
-      if (skipKeys.has(key) || !text) continue;
-      console.log(`\n${'─'.repeat(60)}`);
-      console.log(`  [${key}]`);
-      console.log('─'.repeat(60));
-      console.log(text);
+    if (skipKeys.has(key) || !text) continue;
+    console.log(`\n${'─'.repeat(60)}`);
+    console.log(`  [${key}]`);
+    console.log('─'.repeat(60));
+    console.log(text);
     }
-  } else {
+    } else {
     console.log(output);
-  }
+    }
 
-  console.log(`\nFinish reason: ${result.finishReason}`);
-  console.log(`Workflow ID: ${result.workflowId}`);
-} finally {
-  await runtime.shutdown();
+    console.log(`\nFinish reason: ${result.finishReason}`);
+    console.log(`Execution ID: ${result.executionId}`);
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(codingTeam);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents coding_team
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(codingTeam);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

@@ -4,14 +4,15 @@
  */
 package dev.agentspan.runtime.credentials;
 
-import dev.agentspan.runtime.AgentRuntime;
+import static dev.agentspan.runtime.credentials.CredentialEnvSeeder.ANONYMOUS_USER_ID;
+import static org.assertj.core.api.Assertions.assertThat;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
-import static dev.agentspan.runtime.credentials.CredentialEnvSeeder.ANONYMOUS_USER_ID;
-import static org.assertj.core.api.Assertions.assertThat;
+import dev.agentspan.runtime.AgentRuntime;
 
 /**
  * Integration test that verifies CredentialEnvSeeder can store credentials

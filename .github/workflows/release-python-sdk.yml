@@ -1,18 +1,21 @@
-name: Release Python SDK
+name: Publish Python SDK to PyPI
 
 on:
+  release:
+    types: [created]
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to release (must match pyproject.toml)"
+        description: "Version (must match pyproject.toml)"
         required: true
         type: string
 
 permissions:
+  contents: read
   id-token: write
 
 jobs:
-  publish:
+  publish-pypi:
     runs-on: ubuntu-latest
     environment: pypi
     defaults:
@@ -21,23 +24,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Verify version matches pyproject.toml
-        run: |
-          TOML_VERSION=$(python3 -c "
-          import re, pathlib
-          text = pathlib.Path('pyproject.toml').read_text()
-          m = re.search(r'^version\s*=\s*\"([^\"]+)\"', text, re.MULTILINE)
-          print(m.group(1))
-          ")
-          if [ "$TOML_VERSION" != "${{ inputs.version }}" ]; then
-            echo "::error::Version mismatch: input=${{ inputs.version }}, pyproject.toml=$TOML_VERSION"
-            exit 1
-          fi
-          echo "Version verified: $TOML_VERSION"
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            TAG="${{ github.event.release.tag_name }}"
+            VERSION="${TAG#v}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Publishing version: ${VERSION}"
+
+      - name: Update pyproject.toml version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          sed -i "s/^version = .*/version = \"${VERSION}\"/" pyproject.toml
 
       - name: Install build tools
         run: pip install build

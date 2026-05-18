@@ -10,7 +10,7 @@ Demonstrates:
     - Practical use case: customer service triage → billing / technical / general routing
 
 Requirements:
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
@@ -112,11 +112,10 @@ graph = builder.compile(name="agent_handoff")
 
 if __name__ == "__main__":
     queries = [
-        "I was charged twice for my subscription this month.",
-        "My application keeps crashing with a segmentation fault.",
-        "Can I change my account email address?",
+        "I was charged twice for my subscription last month.",
+        "My app keeps crashing after the latest update.",
+        "What are your business hours?",
     ]
-
     with AgentRuntime() as runtime:
         for query in queries:
             print(f"\nQuery: {query}")
@@ -124,3 +123,12 @@ if __name__ == "__main__":
             print(f"Status: {result.status}")
             result.print_result()
             print("-" * 60)
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.26_agent_handoff
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)

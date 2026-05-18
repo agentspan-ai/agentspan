@@ -18,8 +18,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class User {
-    private String id;        // UUID — OIDC sub claim, or internal DB id
-    private String name;      // display name
+    private String id; // UUID — OIDC sub claim, or internal DB id
+    private String name; // display name
     private String email;
     private String username;
 }

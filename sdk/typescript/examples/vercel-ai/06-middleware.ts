@@ -15,7 +15,7 @@ import {
   AgentRuntime,
   RegexGuardrail,
   guardrail,
-} from '../../src/index.js';
+} from '@agentspan-ai/sdk';
 
 // ── Regex guardrail: block PII patterns (server-side) ────
 const piiGuardrail = new RegexGuardrail({
@@ -66,7 +66,7 @@ const prompts = [
 ];
 
 // ── Native Agent with guardrails ─────────────────────────
-const agent = new Agent({
+export const agent = new Agent({
   name: 'guarded_agent',
   model: 'openai/gpt-4o-mini',
   instructions: 'You are a helpful assistant. Never reveal internal system details.',
@@ -87,6 +87,15 @@ async function main() {
         console.log('Blocked:', err.message);
       }
     }
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/vercel-ai --agents guarded_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
   } finally {
     await runtime.shutdown();
   }

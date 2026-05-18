@@ -11,7 +11,7 @@
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
 
@@ -115,11 +115,10 @@ builder.addEdge(START, 'summarize');
 builder.addEdge('summarize', 'respond');
 builder.addEdge('respond', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "conversation_manager" });
 
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',
-  tools: [],
   framework: 'langgraph',
 };
 
@@ -138,11 +137,20 @@ async function main() {
   const runtime = new AgentRuntime();
   try {
     for (const turn of turns) {
-      const result = await runtime.run(graph, turn);
-      console.log(`You: ${turn}`);
-      console.log('Status:', result.status);
-      result.printResult();
-      console.log();
+    const result = await runtime.run(graph, turn);
+    console.log(`You: ${turn}`);
+    console.log('Status:', result.status);
+    result.printResult();
+    console.log();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(graph);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/langgraph --agents conversation_manager
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(graph);
     }
   } finally {
     await runtime.shutdown();

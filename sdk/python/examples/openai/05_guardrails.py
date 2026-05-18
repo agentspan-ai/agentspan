@@ -12,7 +12,7 @@ Demonstrates:
 Requirements:
     - pip install openai-agents
     - Conductor server with OpenAI LLM integration configured
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -119,7 +119,18 @@ agent = Agent(
     ],
 )
 
-with AgentRuntime() as runtime:
-    # This should pass guardrails
-    result = runtime.run(agent, "What's the balance on account ACC-100?")
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # This should pass guardrails
+        result = runtime.run(agent, "What's the balance on account ACC-100?")
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.openai.05_guardrails
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)

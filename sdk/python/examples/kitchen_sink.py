@@ -19,10 +19,24 @@ Demonstrates:
     - Extended thinking, planner mode, required_tools, include_contents
     - GPTAssistantAgent, agent_tool(), scatter_gather()
 
+MCP Test Server Setup (mcp-testkit):
+    pip install mcp-testkit
+
+    # Start without auth:
+    mcp-testkit --transport http
+
+    # Or start with auth (requires storing the secret as a credential):
+    mcp-testkit --transport http --auth <secret>
+
+    # Store credentials via CLI or Agentspan UI:
+    agentspan credentials set MCP_AUTH_TOKEN <secret>
+    agentspan credentials set SEARCH_API_KEY <key>
+
 Requirements:
     - Conductor server with LLM support
     - AGENTSPAN_SERVER_URL, AGENTSPAN_LLM_MODEL env vars
-    - For full execution: Docker, MCP server, credential store configured
+    - mcp-testkit running on http://localhost:3001 (for MCP/HTTP tools)
+    - For full execution: Docker, credential store configured
 """
 
 import asyncio
@@ -192,15 +206,15 @@ intake_router = Agent(
 
 
 # -- Native tool with ToolContext injection + file-based credentials --
-@tool(credentials=[CredentialFile(env_var="RESEARCH_API_KEY")])
+@tool(credentials=[CredentialFile(env_var="RESEARCH_API_KEY", relative_path=".research/api_key")])
 def research_database(query: str, ctx: ToolContext = None) -> dict:
     """Search internal research database."""
     session = ctx.session_id if ctx else "unknown"
-    workflow = ctx.workflow_id if ctx else "unknown"
+    workflow = ctx.execution_id if ctx else "unknown"
     return {
         "query": query,
         "session_id": session,
-        "workflow_id": workflow,
+        "execution_id": workflow,
         "results": MOCK_RESEARCH_DATA.get("quantum_computing", {}),
     }
 
@@ -234,6 +248,7 @@ mcp_fact_checker = mcp_tool(
     name="fact_checker",
     description="Verify factual claims using knowledge base.",
     tool_names=["verify_claim", "check_source"],
+    headers={"Authorization": "Bearer ${MCP_AUTH_TOKEN}"},
     credentials=["MCP_AUTH_TOKEN"],
 )
 
@@ -406,7 +421,6 @@ def fact_validator(content: str) -> GuardrailResult:
 # -- External guardrail (remote worker, on_fail=RAISE) --
 compliance_guardrail = Guardrail(
     name="compliance_check",
-    external=True,
     position=Position.OUTPUT,
     on_fail=OnFail.RAISE,
 )
@@ -584,7 +598,6 @@ formatter = Agent(
 # External agent — runs as remote SUB_WORKFLOW (#88)
 external_publisher = Agent(
     name="external_publisher",
-    external=True,
     instructions="Publish to the CMS platform.",
 )
 
@@ -715,7 +728,7 @@ analytics_agent = Agent(
     include_contents="default",  # #68
     output_type=ArticleReport,  # #30
     required_tools=["index_article"],  # #70
-    code_execution_config=CodeExecutionConfig(  # #58
+    code_execution=CodeExecutionConfig(  # #58
         enabled=True,
         allowed_languages=["python", "shell"],
         allowed_commands=["python3", "pip"],
@@ -726,6 +739,7 @@ analytics_agent = Agent(
         allowed_commands=["git", "gh"],
         timeout=30,
     ),
+    credentials=["GITHUB_TOKEN", "GH_TOKEN"],
     metadata={"stage": "analytics", "version": "1.0"},
     planner=True,  # #69
 )
@@ -777,71 +791,22 @@ if __name__ == "__main__":
         print("[tracing] OpenTelemetry tracing is enabled")
 
     with AgentRuntime() as runtime:
-
-        # ── Feature #49: deploy (compile + register) ─────────────
-        print("=== Deploy ===")
-        deployments = runtime.deploy(full_pipeline)
-        for dep in deployments:
-            print(f"  Deployed: {dep.workflow_name} ({dep.agent_name})")
-
-        # ── Feature #51: plan (dry-run, no prompt) ───────────────
-        print("\n=== Plan (dry-run) ===")
-        execution_plan = runtime.plan(full_pipeline)
-        print("  Plan compiled successfully")
-
-        # ── Feature #43: stream (sync SSE with HITL) ─────────────
-        print("\n=== Stream Execution ===")
-        agent_stream = runtime.stream(full_pipeline, PROMPT)
-        print(f"  Workflow: {agent_stream.workflow_id}\n")
-
-        hitl_demo_state = {"approved": 0, "rejected": 0, "feedback": 0}
-
-        for event in agent_stream:
-            if event.type == EventType.THINKING:
-                print(f"  [thinking] {event.content[:80]}...")
-            elif event.type == EventType.TOOL_CALL:
-                print(f"  [tool_call] {event.tool_name}({event.args})")
-            elif event.type == EventType.TOOL_RESULT:
-                print(
-                    f"  [tool_result] {event.tool_name} -> {str(event.result)[:80]}..."
-                )
-            elif event.type == EventType.HANDOFF:
-                print(f"  [handoff] -> {event.target}")
-            elif event.type == EventType.GUARDRAIL_PASS:
-                print(f"  [guardrail_pass] {event.guardrail_name}")
-            elif event.type == EventType.GUARDRAIL_FAIL:
-                print(
-                    f"  [guardrail_fail] {event.guardrail_name}: {event.content}"
-                )
-            elif event.type == EventType.MESSAGE:
-                print(f"  [message] {event.content[:80]}...")
-            elif event.type == EventType.WAITING:
-                print("\n  --- HITL: Approval required ---")
-                # Demo all 3 HITL modes (#40, #41, #42):
-                if hitl_demo_state["feedback"] == 0:
-                    # #42: send feedback first
-                    agent_stream.send(
-                        "Please add more details about quantum error correction."
-                    )
-                    hitl_demo_state["feedback"] += 1
-                    print("  Sent feedback (revision request)\n")
-                elif hitl_demo_state["rejected"] == 0:
-                    # #41: reject once
-                    agent_stream.reject("Title needs improvement")
-                    hitl_demo_state["rejected"] += 1
-                    print("  Rejected (title needs work)\n")
-                else:
-                    # #40: approve
-                    agent_stream.approve()
-                    hitl_demo_state["approved"] += 1
-                    print("  Approved\n")
-            elif event.type == EventType.ERROR:
-                print(f"  [error] {event.content}")
-            elif event.type == EventType.DONE:
-                print("\n  [done] Pipeline complete")
-
-        result = agent_stream.get_result()
+        result = runtime.run(full_pipeline, PROMPT)
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(full_pipeline)
+        # CLI alternative:
+        # agentspan deploy --package examples.kitchen_sink
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(full_pipeline)
+        #
+        # Additional execution-mode alternatives:
+        # runtime.plan(full_pipeline)
+        # agent_stream = runtime.stream(full_pipeline, PROMPT)
+        # handle = runtime.start(full_pipeline, PROMPT)
 
         # ── Feature #64: Token tracking ──────────────────────────
         if result.token_usage:
@@ -853,31 +818,6 @@ if __name__ == "__main__":
         print(f"\nCallback events: {len(callback_log.events)}")
         for ev in callback_log.events[:5]:
             print(f"  {ev['type']}: {ev}")
-
-        # ── Feature #48: start + polling ─────────────────────────
-        print("\n=== Start + Polling ===")
-        handle = runtime.start(full_pipeline, PROMPT)
-        print(f"  Started: {handle.workflow_id}")
-        status = handle.get_status()
-        print(f"  Status: {status.status}, Running: {status.is_running}")
-        if status.reason:
-            print(f"  Reason: {status.reason}")
-
-        # ── Feature #44: async streaming ─────────────────────────
-        print("\n=== Async Streaming ===")
-
-        async def demo_async_stream():
-            async_stream = await runtime.stream_async(full_pipeline, PROMPT)
-            async for event in async_stream:
-                if event.type == EventType.DONE:
-                    print("  [async done] Pipeline complete")
-                    break
-                elif event.type == EventType.WAITING:
-                    await async_stream.approve()
-            async_result = await async_stream.get_result()
-            print(f"  Async result status: {async_result.status}")
-
-        asyncio.run(demo_async_stream())
 
         # ── Feature #46/47: top-level convenience APIs ───────────
         print("\n=== Top-Level Convenience API ===")

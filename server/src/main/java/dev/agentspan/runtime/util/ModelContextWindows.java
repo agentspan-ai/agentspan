@@ -43,50 +43,50 @@ public class ModelContextWindows {
 
     static {
         // OpenAI  (source: developers.openai.com/api/docs/models — March 2026)
-        DEFAULTS.put("gpt-5.4",         1_050_000);
-        DEFAULTS.put("gpt-5.2",           400_000);
-        DEFAULTS.put("gpt-5-mini",        400_000);
-        DEFAULTS.put("gpt-4.1-mini",    1_047_576);
-        DEFAULTS.put("gpt-4.1-nano",    1_047_576);
-        DEFAULTS.put("gpt-4.1",         1_047_576);
-        DEFAULTS.put("o4-mini",            200_000);
-        DEFAULTS.put("o3-mini",            200_000);
-        DEFAULTS.put("o3",                 200_000);
-        DEFAULTS.put("o1-mini",            128_000);
-        DEFAULTS.put("o1",                 200_000);
-        DEFAULTS.put("gpt-4o-mini",        128_000);
-        DEFAULTS.put("gpt-4o",             128_000);
-        DEFAULTS.put("gpt-4-turbo",        128_000);
-        DEFAULTS.put("gpt-3.5-turbo",       16_385);
+        DEFAULTS.put("gpt-5.4", 1_050_000);
+        DEFAULTS.put("gpt-5.2", 400_000);
+        DEFAULTS.put("gpt-5-mini", 400_000);
+        DEFAULTS.put("gpt-4.1-mini", 1_047_576);
+        DEFAULTS.put("gpt-4.1-nano", 1_047_576);
+        DEFAULTS.put("gpt-4.1", 1_047_576);
+        DEFAULTS.put("o4-mini", 200_000);
+        DEFAULTS.put("o3-mini", 200_000);
+        DEFAULTS.put("o3", 200_000);
+        DEFAULTS.put("o1-mini", 128_000);
+        DEFAULTS.put("o1", 200_000);
+        DEFAULTS.put("gpt-4o-mini", 128_000);
+        DEFAULTS.put("gpt-4o", 128_000);
+        DEFAULTS.put("gpt-4-turbo", 128_000);
+        DEFAULTS.put("gpt-3.5-turbo", 16_385);
 
         // Anthropic  (source: platform.claude.com/docs/en/about-claude/models/overview — March 2026)
-        DEFAULTS.put("claude-opus-4-6",   1_000_000);
+        DEFAULTS.put("claude-opus-4-6", 1_000_000);
         DEFAULTS.put("claude-sonnet-4-6", 1_000_000);
         DEFAULTS.put("claude-sonnet-4-5", 1_000_000);
         DEFAULTS.put("claude-sonnet-4-0", 1_000_000);
-        DEFAULTS.put("claude-opus-4-5",     200_000);
-        DEFAULTS.put("claude-opus-4-1",     200_000);
-        DEFAULTS.put("claude-opus-4-0",     200_000);
-        DEFAULTS.put("claude-haiku-4-5",    200_000);
-        DEFAULTS.put("claude-3",            200_000);
-        DEFAULTS.put("claude",              200_000); // catch-all
+        DEFAULTS.put("claude-opus-4-5", 200_000);
+        DEFAULTS.put("claude-opus-4-1", 200_000);
+        DEFAULTS.put("claude-opus-4-0", 200_000);
+        DEFAULTS.put("claude-haiku-4-5", 200_000);
+        DEFAULTS.put("claude-3", 200_000);
+        DEFAULTS.put("claude", 200_000); // catch-all
 
         // Google Gemini  (source: ai.google.dev/gemini-api/docs/models — March 2026)
-        DEFAULTS.put("gemini-3.1-pro",          1_048_576);
-        DEFAULTS.put("gemini-3.1-flash-lite",   1_048_576);
-        DEFAULTS.put("gemini-3-flash",          1_048_576);
-        DEFAULTS.put("gemini-3",                1_048_576);
-        DEFAULTS.put("gemini-2.5-pro",          1_048_576);
-        DEFAULTS.put("gemini-2.5-flash-lite",   1_048_576);
-        DEFAULTS.put("gemini-2.5-flash",        1_048_576);
-        DEFAULTS.put("gemini-2.5",              1_048_576);
-        DEFAULTS.put("gemini-2.0-flash-lite",   1_048_576);
-        DEFAULTS.put("gemini-2.0-flash",        1_048_576);
-        DEFAULTS.put("gemini-2.0",              1_048_576);
-        DEFAULTS.put("gemini-1.5-pro",          1_048_576);
-        DEFAULTS.put("gemini-1.5-flash",        1_048_576);
-        DEFAULTS.put("gemini-1.5",              1_048_576);
-        DEFAULTS.put("gemini",                  1_048_576); // catch-all
+        DEFAULTS.put("gemini-3.1-pro", 1_048_576);
+        DEFAULTS.put("gemini-3.1-flash-lite", 1_048_576);
+        DEFAULTS.put("gemini-3-flash", 1_048_576);
+        DEFAULTS.put("gemini-3", 1_048_576);
+        DEFAULTS.put("gemini-2.5-pro", 1_048_576);
+        DEFAULTS.put("gemini-2.5-flash-lite", 1_048_576);
+        DEFAULTS.put("gemini-2.5-flash", 1_048_576);
+        DEFAULTS.put("gemini-2.5", 1_048_576);
+        DEFAULTS.put("gemini-2.0-flash-lite", 1_048_576);
+        DEFAULTS.put("gemini-2.0-flash", 1_048_576);
+        DEFAULTS.put("gemini-2.0", 1_048_576);
+        DEFAULTS.put("gemini-1.5-pro", 1_048_576);
+        DEFAULTS.put("gemini-1.5-flash", 1_048_576);
+        DEFAULTS.put("gemini-1.5", 1_048_576);
+        DEFAULTS.put("gemini", 1_048_576); // catch-all
     }
 
     public ModelContextWindows(Environment environment) {

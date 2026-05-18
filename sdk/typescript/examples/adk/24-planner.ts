@@ -17,7 +17,7 @@
 
 import { LlmAgent, FunctionTool } from '@google/adk';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
@@ -70,7 +70,7 @@ const writeSection = new FunctionTool({
 
 // ── Agent with planner (via thinkingConfig) ──────────────────────────
 
-const agent = new LlmAgent({
+export const agent = new LlmAgent({
   name: 'research_writer',
   model,
   instruction:
@@ -92,12 +92,21 @@ async function main() {
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(
-      agent,
-      'Write a brief report on the current state of renewable energy ' +
-        'and climate change solutions.',
+    agent,
+    'Write a brief report on the current state of renewable energy ' +
+    'and climate change solutions.',
     );
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents research_writer
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
   } finally {
     await runtime.shutdown();
   }

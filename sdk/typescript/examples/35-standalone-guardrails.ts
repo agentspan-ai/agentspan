@@ -13,16 +13,16 @@
  * Requirements:
  *   Part 1 (standalone): none -- no server, no LLM, no workers.
  *   Part 2 (as workers): Conductor server
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { guardrail } from '../src/index.js';
-import type { GuardrailResult, GuardrailDef } from '../src/index.js';
+import { guardrail } from '@agentspan-ai/sdk';
+import type { GuardrailResult, GuardrailDef } from '@agentspan-ai/sdk';
 
 // -- Define guardrails -------------------------------------------------------
 
-const noPii = guardrail(
+export const noPii = guardrail(
   (content: string): GuardrailResult => {
     const ccPattern = /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/;
     const ssnPattern = /\b\d{3}-\d{2}-\d{4}\b/;
@@ -38,7 +38,7 @@ const noPii = guardrail(
   { name: 'no_pii' },
 );
 
-const noProfanity = guardrail(
+export const noProfanity = guardrail(
   (content: string): GuardrailResult => {
     const banned = new Set(['damn', 'hell', 'crap']);
     const words = new Set(content.toLowerCase().split(/\s+/));
@@ -54,7 +54,7 @@ const noProfanity = guardrail(
   { name: 'no_profanity' },
 );
 
-const wordLimit = guardrail(
+export const wordLimit = guardrail(
   (content: string): GuardrailResult => {
     const count = content.split(/\s+/).filter(Boolean).length;
     if (count > 100) {

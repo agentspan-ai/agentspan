@@ -4,26 +4,27 @@
  */
 package dev.agentspan.runtime.service;
 
-import com.netflix.conductor.model.WorkflowModel;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import static org.mockito.Mockito.*;
+
+import java.security.SecureRandom;
+import java.util.List;
+import java.util.Map;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.security.SecureRandom;
-import java.util.List;
-import java.util.Map;
+import com.netflix.conductor.model.WorkflowModel;
 
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
+import dev.agentspan.runtime.credentials.ExecutionTokenService;
 
 @ExtendWith(MockitoExtension.class)
 class AgentEventListenerTokenRevocationTest {
 
-    @Mock private AgentStreamRegistry streamRegistry;
+    @Mock
+    private AgentStreamRegistry streamRegistry;
 
     private ExecutionTokenService tokenService;
     private AgentEventListener listener;
@@ -44,8 +45,7 @@ class AgentEventListenerTokenRevocationTest {
         WorkflowModel workflow = new WorkflowModel();
         workflow.setWorkflowId("wf-1");
         workflow.setStatus(WorkflowModel.Status.TERMINATED);
-        workflow.setVariables(Map.of("__agentspan_ctx__",
-            Map.of("execution_token", token)));
+        workflow.setVariables(Map.of("__agentspan_ctx__", Map.of("execution_token", token)));
 
         listener.onWorkflowTerminatedIfEnabled(workflow);
 
@@ -61,8 +61,7 @@ class AgentEventListenerTokenRevocationTest {
         workflow.setWorkflowId("wf-2");
         workflow.setStatus(WorkflowModel.Status.COMPLETED);
         workflow.setOutput(Map.of());
-        workflow.setVariables(Map.of("__agentspan_ctx__",
-            Map.of("execution_token", token)));
+        workflow.setVariables(Map.of("__agentspan_ctx__", Map.of("execution_token", token)));
 
         listener.onWorkflowCompletedIfEnabled(workflow);
 

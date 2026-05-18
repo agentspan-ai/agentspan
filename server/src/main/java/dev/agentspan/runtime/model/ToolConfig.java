@@ -5,14 +5,15 @@
 
 package dev.agentspan.runtime.model;
 
+import java.util.List;
+import java.util.Map;
+
 import com.fasterxml.jackson.annotation.JsonInclude;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.util.List;
-import java.util.Map;
 
 /**
  * Tool definition DTO.
@@ -46,4 +47,11 @@ public class ToolConfig {
 
     /** Tool-level guardrails. */
     private List<GuardrailConfig> guardrails;
+
+    /**
+     * When {@code true}, this tool's worker is registered under a per-execution
+     * domain so concurrent executions of the same agent cannot steal each other's
+     * task results.  Matches {@code @tool(stateful=True)} in the Python SDK.
+     */
+    private boolean stateful;
 }

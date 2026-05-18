@@ -11,13 +11,14 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import * as readline from 'node:readline/promises';
+import { stdin, stdout } from 'node:process';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 const checkService = tool(
   async (args: { serviceName: string }) => {
@@ -26,9 +27,13 @@ const checkService = tool(
   {
     name: 'check_service',
     description: 'Check the health of a service.',
-    inputSchema: z.object({
-      serviceName: z.string().describe('Name of the service to check'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        serviceName: { type: 'string', description: 'Name of the service to check' },
+      },
+      required: ['serviceName'],
+    },
   },
 );
 
@@ -39,9 +44,13 @@ const restartService = tool(
   {
     name: 'restart_service',
     description: 'Restart a service. Safe operation, no approval needed.',
-    inputSchema: z.object({
-      serviceName: z.string().describe('Name of the service to restart'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        serviceName: { type: 'string', description: 'Name of the service to restart' },
+      },
+      required: ['serviceName'],
+    },
   },
 );
 
@@ -56,15 +65,19 @@ const deleteServiceData = tool(
   {
     name: 'delete_service_data',
     description: 'Delete service data. Destructive — requires human approval.',
-    inputSchema: z.object({
-      serviceName: z.string().describe('Name of the service'),
-      dataType: z.string().describe('Type of data to delete'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        serviceName: { type: 'string', description: 'Name of the service' },
+        dataType: { type: 'string', description: 'Type of data to delete' },
+      },
+      required: ['serviceName', 'dataType'],
+    },
     approvalRequired: true,
   },
 );
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'ops_agent',
   model: llmModel,
   tools: [checkService, restartService, deleteServiceData],
@@ -74,66 +87,68 @@ const agent = new Agent({
     'deleting data if explicitly asked.',
 });
 
-const runtime = new AgentRuntime();
-try {
-  // stream() starts the workflow and returns an AgentStream —
-  // iterable for events, with HITL controls built in.
-  const streamHandle = await runtime.stream(
-    agent,
-    'The payments service is down. Check it, restart it, and clear its stale cache data.',
-  );
-  console.log(`Workflow started: ${streamHandle.workflowId}\n`);
-
-  for await (const event of streamHandle) {
-    switch (event.type) {
-      case 'thinking':
-        console.log(`  [thinking] ${event.content}`);
-        break;
-
-      case 'tool_call':
-        console.log(
-          `  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`,
-        );
-        break;
-
-      case 'tool_result':
-        console.log(
-          `  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result)}`,
-        );
-        break;
-
-      case 'waiting':
-        console.log(`\n--- Approval required ---`);
-        // Auto-approve since we can't do interactive stdin
-        console.log('  Auto-approving for demo...');
-        await streamHandle.approve();
-        console.log('  Approved!\n');
-        break;
-
-      case 'guardrail_pass':
-        console.log(`  [guardrail] ${event.guardrailName} passed`);
-        break;
-
-      case 'guardrail_fail':
-        console.log(
-          `  [guardrail] ${event.guardrailName} FAILED: ${event.content}`,
-        );
-        break;
-
-      case 'error':
-        console.log(`  [error] ${event.content}`);
-        break;
-
-      case 'done':
-        console.log(`\n  [done] ${JSON.stringify(event.output)}`);
-        break;
+async function promptHuman(
+  rl: readline.Interface,
+  pendingTool: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const schema = (pendingTool.response_schema ?? {}) as Record<string, unknown>;
+  const props = (schema.properties ?? {}) as Record<string, Record<string, unknown>>;
+  const response: Record<string, unknown> = {};
+  for (const [field, fs] of Object.entries(props)) {
+    const desc = (fs.description || fs.title || field) as string;
+    if (fs.type === 'boolean') {
+      const val = await rl.question(`  ${desc} (y/n): `);
+      response[field] = ['y', 'yes'].includes(val.trim().toLowerCase());
+    } else {
+      response[field] = await rl.question(`  ${desc}: `);
     }
   }
-
-  // After iteration, the full result is available
-  const final = await streamHandle.getResult();
-  console.log(`\nTool calls made: ${final.toolCalls.length}`);
-  console.log(`Status: ${final.status}`);
-} finally {
-  await runtime.shutdown();
+  return response;
 }
+
+async function main() {
+  const rl = readline.createInterface({ input: stdin, output: stdout });
+  const runtime = new AgentRuntime();
+  try {
+    const handle = await runtime.start(
+      agent,
+      'The payments service is down. Check it, restart it, and clear its stale cache data.',
+    );
+    console.log(`Started: ${handle.executionId}\n`);
+
+    for await (const event of handle.stream()) {
+      if (event.type === 'thinking') {
+        console.log(`  [thinking] ${event.content}`);
+      } else if (event.type === 'tool_call') {
+        console.log(`  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`);
+      } else if (event.type === 'tool_result') {
+        console.log(`  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result).slice(0, 100)}`);
+      } else if (event.type === 'waiting') {
+        const status = await handle.getStatus();
+        const pt = (status.pendingTool ?? {}) as Record<string, unknown>;
+        console.log('\n--- Human input required ---');
+        const response = await promptHuman(rl, pt);
+        await handle.respond(response);
+        console.log();
+      } else if (event.type === 'done') {
+        console.log(`\nDone: ${JSON.stringify(event.output)}`);
+      }
+    }
+
+    // Non-interactive alternative (no HITL, will block on human tasks):
+    // const result = await runtime.run(agent, 'The payments service is down. Check it and restart it.');
+    // result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+  } finally {
+    rl.close();
+    await runtime.shutdown();
+  }
+}
+
+main().catch(console.error);

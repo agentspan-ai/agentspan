@@ -13,13 +13,12 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, pdfTool, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, pdfTool, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Researcher tools (HackerNews + Wikipedia) --------------------------------
 
@@ -53,10 +52,14 @@ const searchHackernews = tool(
     description:
       'Search HackerNews for stories about a technology topic. ' +
       'Returns recent stories with title, points, comment count, author, and story ID.',
-    inputSchema: z.object({
-      query: z.string().describe('Search query'),
-      maxResults: z.number().optional().describe('Max results (1-20, default 8)'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search query' },
+        maxResults: { type: 'number', description: 'Max results (1-20, default 8)' },
+      },
+      required: ['query'],
+    },
   },
 );
 
@@ -90,9 +93,13 @@ const getHnStoryComments = tool(
     description:
       'Fetch the top comments for a HackerNews story by its numeric ID. ' +
       'Returns the story title, score, and up to 8 top-level comment excerpts.',
-    inputSchema: z.object({
-      storyId: z.string().describe('HN story ID'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        storyId: { type: 'string', description: 'HN story ID' },
+      },
+      required: ['storyId'],
+    },
   },
 );
 
@@ -121,9 +128,13 @@ const getWikipediaSummary = tool(
     description:
       'Fetch the Wikipedia introduction paragraph for a technology or topic. ' +
       'Returns the page title, a short description, and the first ~800 chars of the extract.',
-    inputSchema: z.object({
-      topic: z.string().describe('The topic to look up'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        topic: { type: 'string', description: 'The topic to look up' },
+      },
+      required: ['topic'],
+    },
   },
 );
 
@@ -154,9 +165,13 @@ const fetchPypiDownloads = tool(
     description:
       'Fetch recent PyPI download statistics for a Python package. ' +
       'Returns last-day, last-week, and last-month download counts.',
-    inputSchema: z.object({
-      package: z.string().describe('PyPI package name'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        package: { type: 'string', description: 'PyPI package name' },
+      },
+      required: ['package'],
+    },
   },
 );
 
@@ -182,9 +197,13 @@ const fetchNpmDownloads = tool(
     description:
       'Fetch last-month download count for an npm package. ' +
       'Use for JavaScript/TypeScript ecosystem packages.',
-    inputSchema: z.object({
-      package: z.string().describe('npm package name'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        package: { type: 'string', description: 'npm package name' },
+      },
+      required: ['package'],
+    },
   },
 );
 
@@ -223,19 +242,23 @@ const compareNumbers = tool(
     description:
       'Compute ratio and percentage difference between two numeric values. ' +
       'Useful for comparing HN story counts, download figures, etc.',
-    inputSchema: z.object({
-      labelA: z.string().describe('Label for value A'),
-      valueA: z.number().describe('Numeric value A'),
-      labelB: z.string().describe('Label for value B'),
-      valueB: z.number().describe('Numeric value B'),
-      metric: z.string().describe('Name of the metric being compared'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        labelA: { type: 'string', description: 'Label for value A' },
+        valueA: { type: 'number', description: 'Numeric value A' },
+        labelB: { type: 'string', description: 'Label for value B' },
+        valueB: { type: 'number', description: 'Numeric value B' },
+        metric: { type: 'string', description: 'Name of the metric being compared' },
+      },
+      required: ['labelA', 'valueA', 'labelB', 'valueB', 'metric'],
+    },
   },
 );
 
 // -- Agent definitions --------------------------------------------------------
 
-const researcher = new Agent({
+export const researcher = new Agent({
   name: 'hn_researcher',
   model: llmModel,
   tools: [searchHackernews, getHnStoryComments, getWikipediaSummary],
@@ -264,7 +287,7 @@ const researcher = new Agent({
     'Include REAL numbers and titles -- no placeholders.',
 });
 
-const analyst = new Agent({
+export const analyst = new Agent({
   name: 'hn_analyst',
   model: llmModel,
   tools: [fetchPypiDownloads, fetchNpmDownloads, compareNumbers],
@@ -299,7 +322,7 @@ const analyst = new Agent({
 
 // -- PDF generator agent ------------------------------------------------------
 
-const pdfGenerator = new Agent({
+export const pdfGenerator = new Agent({
   name: 'pdf_report_generator',
   model: llmModel,
   tools: [pdfTool()],
@@ -317,18 +340,30 @@ const pipeline = researcher.pipe(analyst).pipe(pdfGenerator);
 
 // -- Run ----------------------------------------------------------------------
 
-console.log('Starting Tech Trend Analyzer: Python vs Rust');
-console.log('='.repeat(60));
-
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('Starting Tech Trend Analyzer: Python vs Rust');
+    console.log('='.repeat(60));
+    const result = await runtime.run(
     pipeline,
     'Compare Python and Rust: which has stronger developer mindshare and ' +
     'ecosystem momentum right now? Use real HackerNews data and package ' +
     'download statistics to support your analysis.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(pipeline);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents hn_researcher
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(pipeline);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

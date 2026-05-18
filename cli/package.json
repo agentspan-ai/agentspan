@@ -1,5 +1,5 @@
 {
-  "name": "@agentspan/agentspan",
+  "name": "@agentspan-ai/agentspan",
   "version": "0.0.0",
   "description": "CLI for AgentSpan - Build, run, and manage AI agents",
   "main": "index.js",
@@ -11,7 +11,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/agentspan/agentspan.git"
+    "url": "git+https://github.com/agentspan-ai/agentspan.git"
   },
   "keywords": [
     "agentspan",
@@ -23,11 +23,11 @@
     "cli"
   ],
   "author": "AgentSpan",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "bugs": {
-    "url": "https://github.com/agentspan/agentspan/issues"
+    "url": "https://github.com/agentspan-ai/agentspan/issues"
   },
-  "homepage": "https://github.com/agentspan/agentspan#readme",
+  "homepage": "https://github.com/agentspan-ai/agentspan#readme",
   "os": [
     "darwin",
     "linux",

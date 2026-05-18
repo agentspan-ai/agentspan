@@ -10,7 +10,7 @@
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
 import { SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // System prompt (Socratic tutor persona)
@@ -36,6 +36,7 @@ const graph = createReactAgent({
   llm,
   tools: [],
   prompt: new SystemMessage(TUTOR_SYSTEM_PROMPT),
+  name: "socratic_tutor",
 });
 
 // Add agentspan metadata for extraction
@@ -57,6 +58,15 @@ async function main() {
     const result = await runtime.run(graph, PROMPT);
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(graph);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/langgraph --agents system_prompt
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(graph);
   } finally {
     await runtime.shutdown();
   }

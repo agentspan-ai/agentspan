@@ -760,7 +760,7 @@ Note: Signal disposition INLINE tasks run **inside** the FORK_JOIN_DYNAMIC (step
 When `AgentService.signal()` receives a signal with `priority="urgent"`:
 
 ```java
-public SignalReceipt signal(String workflowId, SignalRequest request) {
+public SignalReceipt signal(String executionId, SignalRequest request) {
     // ... validation, store signal, emit SSE ...
 
     if ("urgent".equals(request.getPriority())) {
@@ -769,10 +769,10 @@ public SignalReceipt signal(String workflowId, SignalRequest request) {
         // so concurrent urgent signals are serialized.
         Map<String, Object> vars = new LinkedHashMap<>();
         vars.put("_urgent_pause_requested", true);
-        workflowExecutor.updateVariables(workflowId, vars);
+        workflowExecutor.updateVariables(executionId, vars);
     }
 
-    return new SignalReceipt(signalId, workflowId, "queued");
+    return new SignalReceipt(signalId, executionId, "queued");
 }
 ```
 
@@ -787,29 +787,29 @@ In `AgentEventListener.onTaskCompleted()`:
 ```java
 @Override
 public void onTaskCompleted(TaskModel task) {
-    String workflowId = task.getWorkflowInstanceId();
+    String executionId = task.getWorkflowInstanceId();
 
     // Check for urgent pause flag
-    WorkflowModel workflow = workflowExecutor.getWorkflow(workflowId);
+    WorkflowModel workflow = workflowExecutor.getWorkflow(executionId);
     Object pauseFlag = workflow.getVariables().get("_urgent_pause_requested");
 
     if (Boolean.TRUE.equals(pauseFlag)) {
         // Clear flag FIRST, then pause. This order prevents a second
         // onTaskCompleted from double-pausing if the clear+pause are
         // not atomic (see 6.4 Race Condition Analysis).
-        workflowExecutor.updateVariables(workflowId,
+        workflowExecutor.updateVariables(executionId,
             Map.of("_urgent_pause_requested", false));
 
         // Pause workflow — it will resume after a short delay
-        workflowExecutor.pauseWorkflow(workflowId);
+        workflowExecutor.pauseWorkflow(executionId);
 
         // Schedule auto-resume (100ms for variable propagation)
         scheduler.schedule(() -> {
             try {
-                workflowExecutor.resumeWorkflow(workflowId);
+                workflowExecutor.resumeWorkflow(executionId);
             } catch (Exception e) {
                 // Workflow may have completed/terminated between pause and resume
-                logger.debug("Auto-resume failed for {}: {}", workflowId, e.getMessage());
+                logger.debug("Auto-resume failed for {}: {}", executionId, e.getMessage());
             }
         }, 100, TimeUnit.MILLISECONDS);
     }
@@ -873,7 +873,7 @@ def signal_tool(
         input_schema={
             "type": "object",
             "properties": {
-                "target": {"type": "string", "description": "Workflow ID (UUID) or agent name"},
+                "target": {"type": "string", "description": "Execution ID (UUID) or agent name"},
                 "message": {"type": "string", "description": "Message to send to the agent"},
                 "priority": {"type": "string", "enum": ["normal", "urgent"], "default": "normal"},
             },
@@ -907,7 +907,7 @@ Map.entry("signal", "HTTP")  // Default type; overridden by enrichment signalCfg
 
 `signal_tool()` is compiled into the enrichment script using the same `httpCfg[n]` pattern as other HTTP tools. At compile time, `ToolCompiler` generates an `httpCfg` entry whose URL is determined at runtime based on the `target` parameter.
 
-However, because the target can be either a UUID (direct workflow ID) or an agent name (needs name-based endpoint), the enrichment script needs a special `signalCfg` block (separate from `httpCfg`) that dynamically selects the URL:
+However, because the target can be either a UUID (direct execution ID) or an agent name (needs name-based endpoint), the enrichment script needs a special `signalCfg` block (separate from `httpCfg`) that dynamically selects the URL:
 
 ```javascript
 var signalCfg = {BAKED_SIGNAL_CFG_JSON};  // e.g. {'signal_agent': {serverBaseUrl: '...', sender: 'supervisor'}}
@@ -950,7 +950,7 @@ GET /agent/resolve?name={agentName}&status=RUNNING,PAUSED
 
 Response:
 {
-  "workflowIds": ["uuid-1", "uuid-2"],
+  "executionIds": ["uuid-1", "uuid-2"],
   "count": 2
 }
 ```
@@ -965,21 +965,21 @@ For the `POST /agent/signal?agentName=...` endpoint, the server resolves interna
 
 ```java
 // In AgentSSEEvent or equivalent
-public static AgentSSEEvent signalReceived(String workflowId, String signalId,
+public static AgentSSEEvent signalReceived(String executionId, String signalId,
         String message, String sender, String priority) {
-    return new AgentSSEEvent("signal_received", workflowId, signalId,
+    return new AgentSSEEvent("signal_received", executionId, signalId,
         message, sender, priority, null, null);
 }
 
-public static AgentSSEEvent signalAccepted(String workflowId, String signalId,
+public static AgentSSEEvent signalAccepted(String executionId, String signalId,
         String message, String sender, String agentName) {
-    return new AgentSSEEvent("signal_accepted", workflowId, signalId,
+    return new AgentSSEEvent("signal_accepted", executionId, signalId,
         message, sender, null, agentName, null);
 }
 
-public static AgentSSEEvent signalRejected(String workflowId, String signalId,
+public static AgentSSEEvent signalRejected(String executionId, String signalId,
         String message, String sender, String agentName, String reason) {
-    return new AgentSSEEvent("signal_rejected", workflowId, signalId,
+    return new AgentSSEEvent("signal_rejected", executionId, signalId,
         message, sender, null, agentName, reason);
 }
 ```
@@ -1022,13 +1022,13 @@ SIGNAL_REJECTED = "signal_rejected"
 @dataclass
 class SignalReceipt:
     signal_id: str
-    workflow_id: str
+    execution_id: str
     status: str  # "queued"
 
 @dataclass
 class SignalStatus:
     signal_id: str
-    workflow_id: str
+    execution_id: str
     delivered: bool
     disposition: str  # "pending" | "accepted" | "rejected" | "accepted_implicit"
     rejection_reason: Optional[str] = None
@@ -1043,15 +1043,15 @@ class AgentHandle:
     def signal(self, message: str, *, priority: str = "normal",
                data: dict = None, sender: str = None,
                propagate: bool = True) -> SignalReceipt:
-        """Send a signal to this running workflow."""
+        """Send a signal to this running execution."""
         return self._runtime.signal(
-            workflow_id=self.workflow_id, message=message,
+            execution_id=self.execution_id, message=message,
             priority=priority, data=data, sender=sender,
             propagate=propagate)
 
     async def signal_async(self, message: str, **kwargs) -> SignalReceipt:
         return await self._runtime.signal_async(
-            workflow_id=self.workflow_id, message=message, **kwargs)
+            execution_id=self.execution_id, message=message, **kwargs)
 ```
 
 ### 9.3 AgentStream / AsyncAgentStream Extensions
@@ -1070,18 +1070,18 @@ class AsyncAgentStream:
 
 ```python
 class AgentRuntime:
-    def signal(self, *, workflow_id: str = None, agent_name: str = None,
+    def signal(self, *, execution_id: str = None, agent_name: str = None,
                message: str, priority: str = "normal", data: dict = None,
                sender: str = None, propagate: bool = True,
                correlation_id: str = None, session_id: str = None) -> SignalReceipt:
-        """Send a signal to a running workflow."""
-        # ... HTTP POST to /agent/{wfId}/signal or /agent/signal?agentName=...
+        """Send a signal to a running execution."""
+        # ... HTTP POST to /agent/{executionId}/signal or /agent/signal?agentName=...
 
-    def broadcast(self, *, workflow_ids: List[str], message: str,
+    def broadcast(self, *, execution_ids: List[str], message: str,
                   priority: str = "normal", **kwargs) -> List[SignalReceipt]:
-        """Send the same signal to multiple workflows."""
-        return [self.signal(workflow_id=wf, message=message, priority=priority, **kwargs)
-                for wf in workflow_ids]
+        """Send the same signal to multiple executions."""
+        return [self.signal(execution_id=wf, message=message, priority=priority, **kwargs)
+                for wf in execution_ids]
 
     def get_signal_status(self, signal_id: str) -> SignalStatus:
         """Poll for signal disposition."""
@@ -1127,7 +1127,7 @@ Serialized in AgentConfig as:
 ### 10.1 Send Signal
 
 ```
-POST /agent/{workflowId}/signal
+POST /agent/{executionId}/signal
 
 Request:
 {
@@ -1141,7 +1141,7 @@ Request:
 Response: 202 Accepted
 {
   "signalId": "uuid-...",
-  "workflowId": "uuid-...",
+  "executionId": "uuid-...",
   "status": "queued"
 }
 ```
@@ -1161,8 +1161,8 @@ Request:
 Response: 202 Accepted
 {
   "receipts": [
-    {"signalId": "uuid-1", "workflowId": "uuid-a", "status": "queued"},
-    {"signalId": "uuid-2", "workflowId": "uuid-b", "status": "queued"}
+    {"signalId": "uuid-1", "executionId": "uuid-a", "status": "queued"},
+    {"signalId": "uuid-2", "executionId": "uuid-b", "status": "queued"}
   ]
 }
 ```
@@ -1175,19 +1175,19 @@ GET /agent/signal/{signalId}/status
 Response: 200 OK
 {
   "signalId": "uuid-...",
-  "workflowId": "uuid-...",
+  "executionId": "uuid-...",
   "delivered": true,
   "disposition": "accepted",
   "rejectionReason": null
 }
 ```
 
-**Implementation:** The server must locate the signal across three variable lists. Since the signalId is a UUID and the request does not include a workflowId, the server has two options:
+**Implementation:** The server must locate the signal across three variable lists. Since the signalId is a UUID and the request does not include an executionId, the server has two options:
 
-1. **Maintain a `signalId → workflowId` lookup** (in-memory map or Redis) populated by `AgentService.signal()` at send time. This avoids scanning all workflows.
-2. **Require `workflowId` as a query parameter** — simpler, but requires the sender to store the workflowId from the `SignalReceipt`.
+1. **Maintain a `signalId → executionId` lookup** (in-memory map or Redis) populated by `AgentService.signal()` at send time. This avoids scanning all workflows.
+2. **Require `executionId` as a query parameter** — simpler, but requires the sender to store the executionId from the `SignalReceipt`.
 
-Option 1 is recommended (the receipt already includes `workflowId`, so the caller can provide it as a hint for faster lookup). Once the workflow is located, the server searches `_pending_signals`, `_processing_signals`, and `_processed_signals` in order:
+Option 1 is recommended (the receipt already includes `executionId`, so the caller can provide it as a hint for faster lookup). Once the workflow is located, the server searches `_pending_signals`, `_processing_signals`, and `_processed_signals` in order:
 - Found in `_pending_signals` → `{delivered: false, disposition: "pending"}`
 - Found in `_processing_signals` → `{delivered: true, disposition: "pending"}`
 - Found in `_processed_signals` → `{delivered: true, disposition: signal.disposition, rejectionReason: signal.rejectionReason}`
@@ -1202,7 +1202,7 @@ GET /agent/resolve?name=researcher&status=RUNNING,PAUSED
 
 Response: 200 OK
 {
-  "workflowIds": ["uuid-1", "uuid-2"],
+  "executionIds": ["uuid-1", "uuid-2"],
   "count": 2
 }
 ```
@@ -1210,7 +1210,7 @@ Response: 200 OK
 ### 10.5 Get Pending Signals (for Framework Workers)
 
 ```
-GET /agent/{workflowId}/signals/pending
+GET /agent/{executionId}/signals/pending
 
 Response: 200 OK
 {
@@ -1316,7 +1316,7 @@ Framework workers (Python SDK) can poll for pending signals:
 ```python
 # Inside framework passthrough worker
 while running:
-    signals = runtime._fetch_pending_signals(workflow_id)
+    signals = runtime._fetch_pending_signals(execution_id)
     if signals:
         for sig in signals:
             # Inject into framework's conversation/state
@@ -1324,7 +1324,7 @@ while running:
     # ... continue framework execution ...
 ```
 
-The `GET /agent/{workflowId}/signals/pending` endpoint supports this.
+The `GET /agent/{executionId}/signals/pending` endpoint supports this.
 
 ### 12.3 Future Improvement
 
@@ -1339,7 +1339,7 @@ A future version could compile framework agents with a DO_WHILE wrapper that per
 | Error | HTTP Status | When |
 |---|---|---|
 | `WorkflowNotActiveError` | 409 Conflict | Workflow is COMPLETED, FAILED, TERMINATED, or TIMED_OUT |
-| `WorkflowNotFoundError` | 404 Not Found | Workflow ID doesn't exist |
+| `WorkflowNotFoundError` | 404 Not Found | Execution ID doesn't exist |
 | `NoRunningWorkflowError` | 404 Not Found | Agent name search returns no running workflows |
 | `PayloadTooLargeError` | 413 | Signal payload exceeds 64KB |
 | `SignalLimitExceededError` | 429 | Workflow has received 100+ signals |
@@ -1371,7 +1371,7 @@ All INLINE scripts should follow defensive coding: null-check all inputs, use `|
 - Accept/reject INLINE scripts produce correct variable updates
 - Implicit acceptance cleanup works
 - Urgent pause flag is set and cleared
-- Name resolution returns correct workflow IDs
+- Name resolution returns correct execution IDs
 - Propagation finds active sub-workflows
 
 ### 14.2 Integration Tests
@@ -1494,11 +1494,11 @@ Two concurrent `signal()` calls to the same workflow can race:
 ```java
 private final ConcurrentHashMap<String, Object> workflowLocks = new ConcurrentHashMap<>();
 
-public SignalReceipt signal(String workflowId, SignalRequest request) {
-    // Validate workflow is active (FR-1.4)
-    WorkflowModel workflow = workflowExecutor.getWorkflow(workflowId);
-    if (workflow == null) throw new WorkflowNotFoundError(workflowId);
-    if (workflow.getStatus().isTerminal()) throw new WorkflowNotActiveError(workflowId, workflow.getStatus());
+public SignalReceipt signal(String executionId, SignalRequest request) {
+    // Validate execution is active (FR-1.4)
+    WorkflowModel workflow = workflowExecutor.getWorkflow(executionId);
+    if (workflow == null) throw new WorkflowNotFoundError(executionId);
+    if (workflow.getStatus().isTerminal()) throw new WorkflowNotActiveError(executionId, workflow.getStatus());
 
     // Validate payload (FR-17.3)
     if (request.getMessage().length() > 4096) throw new PayloadTooLargeError("message exceeds 4096 chars");
@@ -1506,15 +1506,15 @@ public SignalReceipt signal(String workflowId, SignalRequest request) {
 
     String signalId = UUID.randomUUID().toString();
 
-    Object lock = workflowLocks.computeIfAbsent(workflowId, k -> new Object());
+    Object lock = workflowLocks.computeIfAbsent(executionId, k -> new Object());
     synchronized (lock) {
         Map<String, Object> vars = workflow.getVariables();
 
         // 1. Check limits (FR-17.1, FR-17.2)
         Map<String, Object> counts = (Map<String, Object>) vars.getOrDefault("_signal_counts",
             Map.of("lifetime", 0, "pending", 0));
-        if ((int) counts.get("lifetime") >= 100) throw new SignalLimitExceededError(workflowId);
-        if ((int) counts.get("pending") >= 10) throw new TooManyPendingSignalsError(workflowId);
+        if ((int) counts.get("lifetime") >= 100) throw new SignalLimitExceededError(executionId);
+        if ((int) counts.get("pending") >= 10) throw new TooManyPendingSignalsError(executionId);
 
         // 2. Build signal object
         Map<String, Object> signal = new LinkedHashMap<>();
@@ -1547,25 +1547,25 @@ public SignalReceipt signal(String workflowId, SignalRequest request) {
         update.put("_pending_signals", pending);
         update.put("_signal_data", signalData);
         update.put("_signal_counts", newCounts);
-        workflowExecutor.updateVariables(workflowId, update);
+        workflowExecutor.updateVariables(executionId, update);
     }
 
     // 7. If urgent: set _urgent_pause flag (outside lock — idempotent write)
     if ("urgent".equals(request.getPriority())) {
-        workflowExecutor.updateVariables(workflowId,
+        workflowExecutor.updateVariables(executionId,
             Map.of("_urgent_pause_requested", true));
     }
 
     // 8. Emit SSE event
-    agentStreamRegistry.emit(workflowId, AgentSSEEvent.signalReceived(
-        workflowId, signalId, request.getMessage(), request.getSender(), request.getPriority()));
+    agentStreamRegistry.emit(executionId, AgentSSEEvent.signalReceived(
+        executionId, signalId, request.getMessage(), request.getSender(), request.getPriority()));
 
     // 9. Propagate to sub-workflows (Section 4.3)
     if (Boolean.TRUE.equals(request.getPropagate())) {
-        propagateToSubWorkflows(workflowId, request, signalId);
+        propagateToSubWorkflows(executionId, request, signalId);
     }
 
-    return new SignalReceipt(signalId, workflowId, "queued");
+    return new SignalReceipt(signalId, executionId, "queued");
 }
 ```
 

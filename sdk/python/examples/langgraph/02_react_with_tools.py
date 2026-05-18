@@ -9,7 +9,7 @@ Demonstrates:
     - Calculator, string operations, and date utilities
 
 Requirements:
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
@@ -60,9 +60,18 @@ graph = create_agent(
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            graph,
-            "What is the square root of 256? Also, how many words are in 'the quick brown fox'? "
-            "And what is today's date?",
+        graph,
+        "What is the square root of 256? Also, how many words are in 'the quick brown fox'? "
+        "And what is today's date?",
         )
         print(f"Status: {result.status}")
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.02_react_with_tools
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)

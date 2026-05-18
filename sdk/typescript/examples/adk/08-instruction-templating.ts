@@ -13,7 +13,7 @@
 
 import { LlmAgent, FunctionTool } from '@google/adk';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
@@ -75,7 +75,7 @@ const searchTutorials = new FunctionTool({
 
 // The {user_name} and {expertise_level} placeholders get replaced
 // from session state when the agent runs in ADK.
-const agent = new LlmAgent({
+export const agent = new LlmAgent({
   name: 'adaptive_tutor',
   model,
   instruction:
@@ -92,11 +92,20 @@ async function main() {
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(
-      agent,
-      'I want to learn Python. What tutorials do you recommend?',
+    agent,
+    'I want to learn Python. What tutorials do you recommend?',
     );
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents adaptive_tutor
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
   } finally {
     await runtime.shutdown();
   }

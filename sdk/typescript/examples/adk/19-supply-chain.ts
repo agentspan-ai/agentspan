@@ -13,7 +13,7 @@
 
 import { LlmAgent, FunctionTool } from '@google/adk';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
@@ -127,7 +127,7 @@ const getDemandForecast = new FunctionTool({
 
 // ── Sub-agents ────────────────────────────────────────────────────
 
-const inventoryAgent = new LlmAgent({
+export const inventoryAgent = new LlmAgent({
   name: 'inventory_manager',
   model,
   description: 'Manages inventory levels and supplier relationships.',
@@ -135,7 +135,7 @@ const inventoryAgent = new LlmAgent({
   tools: [getInventoryLevels, checkSupplierStatus],
 });
 
-const logisticsAgent = new LlmAgent({
+export const logisticsAgent = new LlmAgent({
   name: 'logistics_coordinator',
   model,
   description: 'Handles shipping routes and shipment tracking.',
@@ -143,7 +143,7 @@ const logisticsAgent = new LlmAgent({
   tools: [getShippingRoutes, getPendingShipments],
 });
 
-const demandAgent = new LlmAgent({
+export const demandAgent = new LlmAgent({
   name: 'demand_planner',
   model,
   description: 'Forecasts product demand.',
@@ -153,7 +153,7 @@ const demandAgent = new LlmAgent({
 
 // ── Coordinator ───────────────────────────────────────────────────
 
-const coordinator = new LlmAgent({
+export const coordinator = new LlmAgent({
   name: 'supply_chain_coordinator',
   model,
   instruction:
@@ -169,12 +169,21 @@ async function main() {
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(
-      coordinator,
-      'Give me a full supply chain status report. Check both warehouses, ' +
-        'identify any items below reorder points, and recommend restocking actions.',
+    coordinator,
+    'Give me a full supply chain status report. Check both warehouses, ' +
+    'identify any items below reorder points, and recommend restocking actions.',
     );
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(coordinator);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents supply_chain_coordinator
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(coordinator);
   } finally {
     await runtime.shutdown();
   }

@@ -44,7 +44,7 @@ export enum RichAddMenuTabs {
   ALERTING_TAB = "Alerting",
   WORKERS_TAB = "Workers",
   AI_AGENTS_TAB = "AI Tasks",
-  SUB_WORKFLOWS_TAB = "Sub Workflows",
+  SUB_WORKFLOWS_TAB = "Sub Agents",
   INTEGRATIONS_TAB = "Integrations",
 }
 

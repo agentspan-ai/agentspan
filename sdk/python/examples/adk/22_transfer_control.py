@@ -18,7 +18,7 @@ Architecture:
 Requirements:
     - pip install google-adk
     - Conductor server with transfer control support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=google_gemini/gemini-2.0-flash as environment variable
 """
 
@@ -72,9 +72,20 @@ coordinator = LlmAgent(
     sub_agents=[specialist_a, specialist_b, specialist_c],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
         coordinator,
         "Research the current state of renewable energy adoption worldwide.",
-    )
-    result.print_result()
+        )
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(coordinator)
+        # CLI alternative:
+        # agentspan deploy --package examples.adk.22_transfer_control
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(coordinator)

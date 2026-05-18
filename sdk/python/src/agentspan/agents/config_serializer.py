@@ -41,13 +41,52 @@ class AgentConfigSerializer:
     def _serialize_agent(self, agent: "Agent") -> dict:
         from agentspan.agents.agent import PromptTemplate
 
+        # Skill agents — emit the raw skill config so the server's
+        # SkillNormalizer can compile sub-agents (e.g. gilfoyle, dinesh)
+        # and tools (scripts, read_skill_file) into the workflow.
+        if getattr(agent, "_framework", None) == "skill":
+            raw_config = getattr(agent, "_framework_config", {})
+            return {
+                "name": agent.name,
+                "model": agent.model or None,
+                "_framework": "skill",
+                **raw_config,
+            }
+
+        # Claude-code agents emit a passthrough stub — all config is consumed
+        # by the worker closure, not sent to the server.
+        if getattr(agent, "is_claude_code", False):
+            stub: Dict[str, Any] = {
+                "name": agent.name,
+                "model": agent.model,
+                "metadata": {"_framework_passthrough": True},
+                "tools": [
+                    {
+                        "name": agent.name,
+                        "toolType": "worker",
+                        "description": "Claude Agent SDK passthrough worker",
+                    }
+                ],
+            }
+            # Credentials must still be sent so the server includes them
+            # in the execution token for the passthrough worker to resolve.
+            if hasattr(agent, "credentials") and agent.credentials:
+                from agentspan.agents.runtime.credentials.types import CredentialFile
+
+                stub["credentials"] = [
+                    c if isinstance(c, str) else c.env_var for c in agent.credentials
+                ]
+            return stub
+
         config: Dict[str, Any] = {
             "name": agent.name,
             "model": agent.model or None,
+            "baseUrl": getattr(agent, "base_url", None),
             "strategy": agent.strategy if agent.agents else None,
             "maxTurns": agent.max_turns,
             "timeoutSeconds": agent.timeout_seconds,
             "external": agent.external,
+            "synthesize": getattr(agent, "synthesize", True),
         }
 
         # Instructions
@@ -65,7 +104,8 @@ class AgentConfigSerializer:
 
         # Tools
         if agent.tools:
-            config["tools"] = [self._serialize_tool(t) for t in agent.tools]
+            agent_stateful = getattr(agent, "stateful", False)
+            config["tools"] = [self._serialize_tool(t, agent_stateful=agent_stateful) for t in agent.tools]
 
         # Sub-agents (recursive)
         if agent.agents:
@@ -187,15 +227,19 @@ class AgentConfigSerializer:
         # Agent-level credentials
         if hasattr(agent, "credentials") and agent.credentials:
             from agentspan.agents.runtime.credentials.types import CredentialFile
+
             config["credentials"] = [
-                c if isinstance(c, str) else c.env_var
-                for c in agent.credentials
+                c if isinstance(c, str) else c.env_var for c in agent.credentials
             ]
+
+        # Masked fields — redacted in execution history and UI
+        if getattr(agent, "masked_fields", None):
+            config["maskedFields"] = list(agent.masked_fields)
 
         # Remove None values for cleaner JSON
         return {k: v for k, v in config.items() if v is not None}
 
-    def _serialize_tool(self, tool_obj: Any) -> dict:
+    def _serialize_tool(self, tool_obj: Any, *, agent_stateful: bool = False) -> dict:
         """Serialize a tool to a ToolConfig dict."""
         from agentspan.agents.tool import get_tool_def
 
@@ -212,6 +256,9 @@ class AgentConfigSerializer:
 
         if td.approval_required:
             result["approvalRequired"] = True
+
+        if agent_stateful or getattr(td, "stateful", False):
+            result["stateful"] = True
 
         if td.timeout_seconds is not None:
             result["timeoutSeconds"] = td.timeout_seconds
@@ -232,10 +279,7 @@ class AgentConfigSerializer:
         # Credentials — must be in config so the server includes them in
         # the execution token's declared_names (bounds credential resolution).
         if td.credentials:
-            cred_names = [
-                c if isinstance(c, str) else c.env_var
-                for c in td.credentials
-            ]
+            cred_names = [c if isinstance(c, str) else c.env_var for c in td.credentials]
             if "config" not in result:
                 result["config"] = {}
             result["config"]["credentials"] = cred_names

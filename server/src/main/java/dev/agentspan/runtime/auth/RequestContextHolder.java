@@ -36,9 +36,8 @@ public final class RequestContextHolder {
      * Use in service code where authentication is guaranteed by the filter.
      */
     public static User getRequiredUser() {
-        return get()
-            .map(RequestContext::getUser)
-            .orElseThrow(() -> new IllegalStateException(
-                "No RequestContext on this thread — auth filter may not have run"));
+        return get().map(RequestContext::getUser)
+                .orElseThrow(() ->
+                        new IllegalStateException("No RequestContext on this thread — auth filter may not have run"));
     }
 }

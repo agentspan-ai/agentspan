@@ -146,7 +146,7 @@ class TestMakeCodeExecutionTool:
             timeout=10,
         )
         assert hasattr(tool_fn, "_tool_def")
-        assert tool_fn._tool_def.name == "execute_code"
+        assert tool_fn._tool_def.name == "execute_code"  # No prefix when agent_name=""
 
     def test_tool_description_includes_languages(self):
         executor = LocalCodeExecutor(language="python", timeout=10)
@@ -252,7 +252,7 @@ class TestAgentCodeExecution:
     def test_local_code_execution_flag_attaches_tool(self):
         a = Agent(name="coder", model="openai/gpt-4o", local_code_execution=True)
         assert len(a.tools) == 1
-        assert a.tools[0]._tool_def.name == "execute_code"
+        assert a.tools[0]._tool_def.name == "coder_execute_code"
 
     def test_local_code_execution_false_no_tool(self):
         a = Agent(name="coder", model="openai/gpt-4o", local_code_execution=False)
@@ -319,7 +319,7 @@ class TestAgentCodeExecution:
         assert len(a.tools) == 2
         tool_names = [t._tool_def.name for t in a.tools]
         assert "my_tool" in tool_names
-        assert "execute_code" in tool_names
+        assert any(n.endswith("_execute_code") for n in tool_names)
 
     def test_decorator_with_code_execution(self):
         @agent(model="openai/gpt-4o", local_code_execution=True, allowed_commands=["pip"])

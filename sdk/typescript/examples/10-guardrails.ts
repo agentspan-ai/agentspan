@@ -19,11 +19,10 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
 import {
   Agent,
   AgentRuntime,
@@ -31,9 +30,9 @@ import {
   LLMGuardrail,
   guardrail,
   tool,
-} from '../src/index.js';
-import type { GuardrailResult } from '../src/index.js';
-import { llmModel } from './settings.js';
+} from '@agentspan-ai/sdk';
+import type { GuardrailResult } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // ── Tools ─────────────────────────────────────────────────
 
@@ -49,9 +48,13 @@ const getOrderStatus = tool(
   {
     name: 'get_order_status',
     description: 'Look up the current status of an order.',
-    inputSchema: z.object({
-      orderId: z.string().describe('The order ID to look up'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        orderId: { type: 'string', description: 'The order ID to look up' },
+      },
+      required: ['orderId'],
+    },
   },
 );
 
@@ -70,9 +73,13 @@ const getCustomerInfo = tool(
   {
     name: 'get_customer_info',
     description: 'Retrieve customer details including payment info on file.',
-    inputSchema: z.object({
-      customerId: z.string().describe('The customer ID to look up'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        customerId: { type: 'string', description: 'The customer ID to look up' },
+      },
+      required: ['customerId'],
+    },
   },
 );
 
@@ -130,7 +137,7 @@ const noPii = guardrail(
 
 // ── Agent ─────────────────────────────────────────────────
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'support_agent',
   model: llmModel,
   tools: [getOrderStatus, getCustomerInfo],
@@ -150,24 +157,37 @@ const agent = new Agent({
 
 // ── Run ───────────────────────────────────────────────────
 
-const runtime = new AgentRuntime();
-try {
-  // This prompt triggers both tools:
-  //   1. get_order_status("ORD-42")   → safe data, passes guardrail
-  //   2. get_customer_info("CUST-7")  → contains credit card, trips guardrail
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    // This prompt triggers both tools:
+    //   1. get_order_status("ORD-42")   → safe data, passes guardrail
+    //   2. get_customer_info("CUST-7")  → contains credit card, trips guardrail
+    const result = await runtime.run(
     agent,
     'I need a full summary: What\'s the status of order ORD-42, ' +
     'and what\'s the profile for customer CUST-7?',
-  );
-  result.printResult();
+    );
+    result.printResult();
 
-  // Verify the guardrail worked — no raw card number in the output
-  if (result.output && String(result.output).includes('4532-0150-1234-5678')) {
+    // Verify the guardrail worked — no raw card number in the output
+    if (result.output && String(result.output).includes('4532-0150-1234-5678')) {
     console.log('[WARN] PII leaked through the guardrail!');
-  } else {
+    } else {
     console.log('[OK] PII was redacted from the final output.');
+    }
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents support_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+  } finally {
+    await runtime.shutdown();
   }
-} finally {
-  await runtime.shutdown();
 }
+
+main().catch(console.error);

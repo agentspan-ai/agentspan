@@ -4,13 +4,14 @@
  */
 package dev.agentspan.runtime.model.credentials;
 
+import java.util.Map;
+
 import lombok.Builder;
 import lombok.Data;
-import java.util.Map;
 
 /** Response body for POST /api/credentials/resolve */
 @Data
 @Builder
 public class ResolveResponse {
-    private Map<String, String> credentials;  // name → plaintext value
+    private Map<String, String> credentials; // name → plaintext value
 }

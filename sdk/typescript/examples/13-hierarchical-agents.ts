@@ -15,16 +15,16 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, OnTextMention } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // ── Level 3: Individual specialists ─────────────────────────
 
-const backendDev = new Agent({
+export const backendDev = new Agent({
   name: 'backend_dev',
   model: llmModel,
   instructions:
@@ -32,7 +32,7 @@ const backendDev = new Agent({
     'architecture. Provide technical recommendations with code examples.',
 });
 
-const frontendDev = new Agent({
+export const frontendDev = new Agent({
   name: 'frontend_dev',
   model: llmModel,
   instructions:
@@ -40,7 +40,7 @@ const frontendDev = new Agent({
     'and client-side architecture. Provide recommendations with code examples.',
 });
 
-const contentWriter = new Agent({
+export const contentWriter = new Agent({
   name: 'content_writer',
   model: llmModel,
   instructions:
@@ -48,7 +48,7 @@ const contentWriter = new Agent({
     'and marketing materials. Write engaging, clear content.',
 });
 
-const seoSpecialist = new Agent({
+export const seoSpecialist = new Agent({
   name: 'seo_specialist',
   model: llmModel,
   instructions:
@@ -58,7 +58,7 @@ const seoSpecialist = new Agent({
 
 // ── Level 2: Team leads (handoff to specialists) ───────────
 
-const engineeringLead = new Agent({
+export const engineeringLead = new Agent({
   name: 'engineering_lead',
   model: llmModel,
   instructions:
@@ -69,7 +69,7 @@ const engineeringLead = new Agent({
   strategy: 'handoff',
 });
 
-const marketingLead = new Agent({
+export const marketingLead = new Agent({
   name: 'marketing_lead',
   model: llmModel,
   instructions:
@@ -82,29 +82,45 @@ const marketingLead = new Agent({
 
 // ── Level 1: CEO orchestrator (handoff to leads) ───────────
 
-const ceo = new Agent({
+export const ceo = new Agent({
   name: 'ceo',
   model: llmModel,
   instructions:
     'You are the CEO. Route requests to the right department: ' +
     'engineering_lead for technical/development questions, ' +
-    'marketing_lead for marketing/content/SEO questions. ' +
-    'Delegate the entire request to the appropriate lead.',
+    'marketing_lead for marketing/content/SEO questions.',
   agents: [engineeringLead, marketingLead],
-  strategy: 'handoff',
+  handoffs: [
+    new OnTextMention({ text: 'engineering_lead', target: 'engineering_lead' }),
+    new OnTextMention({ text: 'marketing_lead', target: 'marketing_lead' }),
+  ],
+  strategy: 'swarm',
 });
 
 // ── Run ───────────────────────────────────────────────────
 
-const runtime = new AgentRuntime();
-try {
-  console.log('--- Technical question (CEO -> Engineering -> Backend) ---');
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('--- Technical question (CEO -> Engineering -> Backend) ---');
+    const result = await runtime.run(
     ceo,
     'Design a REST API for a user management system with authentication ' +
-    'and then come up with a marketing campaign for the system',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    'and then ask marketing team to come up with a marketing campaign for the system with details on how to run these campaign',
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(ceo);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents ceo
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(ceo);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

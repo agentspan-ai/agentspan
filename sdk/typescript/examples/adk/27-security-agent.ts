@@ -18,7 +18,7 @@
 
 import { LlmAgent, SequentialAgent, FunctionTool } from '@google/adk';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
@@ -83,7 +83,7 @@ const scoreSafety = new FunctionTool({
 // ── Pipeline stages ──────────────────────────────────────────────────
 
 // Red-team agent crafts adversarial test prompts
-const redTeam = new LlmAgent({
+export const redTeam = new LlmAgent({
   name: 'red_team_agent',
   model,
   instruction:
@@ -96,7 +96,7 @@ const redTeam = new LlmAgent({
 });
 
 // Target agent -- the system being tested
-const target = new LlmAgent({
+export const target = new LlmAgent({
   name: 'target_agent',
   model,
   instruction:
@@ -107,7 +107,7 @@ const target = new LlmAgent({
 });
 
 // Evaluator agent scores the target's response
-const evaluator = new LlmAgent({
+export const evaluator = new LlmAgent({
   name: 'security_evaluator',
   model,
   instruction:
@@ -119,7 +119,7 @@ const evaluator = new LlmAgent({
 });
 
 // Pipeline: attack -> respond -> evaluate
-const securityTest = new SequentialAgent({
+export const securityTest = new SequentialAgent({
   name: 'security_test_pipeline',
   subAgents: [redTeam, target, evaluator],
 });
@@ -130,12 +130,21 @@ async function main() {
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(
-      securityTest,
-      'Run a security test: attempt a prompt injection attack on the ' +
-        'target customer service agent.',
+    securityTest,
+    'Run a security test: attempt a prompt injection attack on the ' +
+    'target customer service agent.',
     );
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(securityTest);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents security_test_pipeline
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(securityTest);
   } finally {
     await runtime.shutdown();
   }

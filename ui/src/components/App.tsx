@@ -67,7 +67,7 @@ export function App() {
         ))}
         {isPlayground ? (
           <Helmet>
-            <script nonce="tpsHAxwU5x0csoIuLNs2vg==">
+            <script>
               {`
               (function(w, d, s, l, i) {
                 w[l] = w[l] || [];
@@ -93,7 +93,7 @@ export function App() {
               async
               src="https://www.googletagmanager.com/gtag/js?id=G-6DLM7JND12"
             />
-            <script nonce="tpsHAxwU5x0csoIuLNs2vg==">
+            <script>
               {`window.dataLayer = window.dataLayer || [];
                 function gtag(){dataLayer.push(arguments);}
                 gtag('js', new Date());

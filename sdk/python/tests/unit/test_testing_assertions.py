@@ -37,7 +37,7 @@ def _make_result(
 ):
     return AgentResult(
         output=output,
-        workflow_id="test-wf",
+        execution_id="test-wf",
         tool_calls=tool_calls or [],
         status=status,
         events=events or [],

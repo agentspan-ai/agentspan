@@ -1,12 +1,6 @@
 import { MenuItemType } from "components/Sidebar/types";
 import { flattenMenu, searchResultExtractor } from "./helpers";
 
-const taskDefinitions = [
-  { name: "something", description: "somthing ready" },
-  { name: "eac_sca", description: "cool value" },
-  { name: "najeeb_test", description: "breeze is cold" },
-];
-
 const workflowDefinitions = [
   {
     updateTime: 1692226077142,
@@ -86,26 +80,12 @@ describe("Check SearchResultExtractor function", () => {
     const searchTerm = "test";
     const expectedResult = [
       {
-        title: "Task Definitions",
-        route: "/taskDef",
+        title: "Agents",
+        route: "/agentDef",
         sub: [
           {
-            route: "/taskDef",
-            title: "View all task definitions",
-          },
-          {
-            route: "/taskDef/najeeb_test",
-            title: "najeeb_test",
-          },
-        ],
-      },
-      {
-        title: "Workflows",
-        route: "/workflowDef",
-        sub: [
-          {
-            route: "/workflowDef",
-            title: "View all workflow definitions",
+            route: "/agentDef",
+            title: "View all agent definitions",
           },
         ],
       },
@@ -119,20 +99,9 @@ describe("Check SearchResultExtractor function", () => {
           },
         ],
       },
-      {
-        title: "Events",
-        route: "/eventHandlerDef",
-        sub: [
-          {
-            route: "/eventHandlerDef",
-            title: "View all events",
-          },
-        ],
-      },
     ];
 
     const validation = searchResultExtractor({
-      taskDefinitions,
       searchTerm,
     });
     expect(expectedResult).toEqual(validation);
@@ -142,26 +111,16 @@ describe("Check SearchResultExtractor function", () => {
     const searchTerm = "workflow_cool";
     const expected = [
       {
-        title: "Workflows",
-        route: "/workflowDef",
+        title: "Agents",
+        route: "/agentDef",
         sub: [
           {
-            route: "/workflowDef",
-            title: "View all workflow definitions",
+            route: "/agentDef",
+            title: "View all agent definitions",
           },
           {
-            route: "/workflowDef/workflow_cool",
+            route: "/agentDef/workflow_cool",
             title: "workflow_cool",
-          },
-        ],
-      },
-      {
-        title: "Task Definitions",
-        route: "/taskDef",
-        sub: [
-          {
-            route: "/taskDef",
-            title: "View all task definitions",
           },
         ],
       },
@@ -175,20 +134,9 @@ describe("Check SearchResultExtractor function", () => {
           },
         ],
       },
-      {
-        title: "Events",
-        route: "/eventHandlerDef",
-        sub: [
-          {
-            route: "/eventHandlerDef",
-            title: "View all events",
-          },
-        ],
-      },
     ];
 
     const validation = searchResultExtractor({
-      taskDefinitions,
       workflowDefinitions,
       scheduler,
       searchTerm,
@@ -200,28 +148,17 @@ describe("Check SearchResultExtractor function", () => {
   it("Should return empty array when no matches", () => {
     const searchTerm = "hduauduhaehfahhaehfaehihiufhaihahfhaehfahehaiu";
     const validation = searchResultExtractor({
-      taskDefinitions,
       searchTerm,
     });
 
     const viewAllAsResults = [
       {
-        title: "Workflows",
-        route: "/workflowDef",
+        title: "Agents",
+        route: "/agentDef",
         sub: [
           {
-            route: "/workflowDef",
-            title: "View all workflow definitions",
-          },
-        ],
-      },
-      {
-        title: "Task Definitions",
-        route: "/taskDef",
-        sub: [
-          {
-            route: "/taskDef",
-            title: "View all task definitions",
+            route: "/agentDef",
+            title: "View all agent definitions",
           },
         ],
       },
@@ -235,16 +172,6 @@ describe("Check SearchResultExtractor function", () => {
           },
         ],
       },
-      {
-        title: "Events",
-        route: "/eventHandlerDef",
-        sub: [
-          {
-            route: "/eventHandlerDef",
-            title: "View all events",
-          },
-        ],
-      },
     ];
 
     expect(viewAllAsResults).toEqual(validation);
@@ -253,7 +180,6 @@ describe("Check SearchResultExtractor function", () => {
   it("Should return null", () => {
     const searchTerm = "";
     const validation = searchResultExtractor({
-      taskDefinitions,
       searchTerm,
     });
 

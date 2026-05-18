@@ -13,10 +13,10 @@ import {
   AgentRuntime,
   tool as agentspanTool,
   getToolDef,
-} from '../../src/index.js';
+} from '@agentspan-ai/sdk';
 
 // ── Agentspan native tool ────────────────────────────────
-const nativeSearchTool = agentspanTool(
+export const nativeSearchTool = agentspanTool(
   async (args: { query: string }) => ({
     results: [`Result for: ${args.query}`],
   }),
@@ -45,12 +45,8 @@ const calculatorTool = aiTool({
   },
 });
 
-// ── Show normalized tool definitions ─────────────────────
-console.log('Native tool def:', getToolDef(nativeSearchTool).name);
-console.log('Vercel tool def:', getToolDef(calculatorTool).name);
-
 // ── Native Agent mixing both tool formats ────────────────
-const agent = new Agent({
+export const agent = new Agent({
   name: 'mixed_tools_agent',
   model: 'openai/gpt-4o-mini',
   instructions: 'You are a helpful assistant. Use the available tools to answer.',
@@ -66,9 +62,22 @@ async function main() {
     const result = await runtime.run(agent, prompt);
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/vercel-ai --agents mixed_tools_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
   } finally {
     await runtime.shutdown();
   }
 }
+
+// Show normalized tool definitions
+console.log('Native tool def:', getToolDef(nativeSearchTool).name);
+console.log('Vercel tool def:', getToolDef(calculatorTool).name);
 
 main().catch(console.error);

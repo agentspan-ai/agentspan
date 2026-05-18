@@ -8,8 +8,9 @@ using mock workflow objects. Does NOT require a running Conductor server.
 """
 
 import logging
+import threading
 import uuid
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -39,13 +40,13 @@ class MockWorkflowRun:
     """Mock workflow run result."""
 
     def __init__(
-        self, output=None, variables=None, tasks=None, status="COMPLETED", workflow_id="test-wf-123"
+        self, output=None, variables=None, tasks=None, status="COMPLETED", execution_id="test-wf-123"
     ):
         self.output = output
         self.variables = variables or {}
         self.tasks = tasks or []
         self.status = status
-        self.workflow_id = workflow_id
+        self.execution_id = execution_id
 
 
 class TestExtractOutput:
@@ -152,6 +153,57 @@ class TestExtractMessages:
         extracted = runtime._extract_messages(wf_run)
         assert extracted == []
 
+    def test_extracts_from_llm_task_input(self, runtime):
+        """Messages come from the last LLM_CHAT_COMPLETE task's input_data."""
+        from unittest.mock import MagicMock
+
+        msgs = [{"role": "user", "message": "Hi"}, {"role": "assistant", "message": "Hello!"}]
+        task = MagicMock()
+        task.task_type = "LLM_CHAT_COMPLETE"
+        task.input_data = {"messages": msgs, "model": "gpt-4o"}
+
+        wf_run = MockWorkflowRun(variables={}, tasks=[task])
+        extracted = runtime._extract_messages(wf_run)
+        assert extracted == msgs
+
+    def test_returns_last_llm_task_messages(self, runtime):
+        """Returns the LAST LLM task's messages (most complete history)."""
+        from unittest.mock import MagicMock
+
+        first_msgs = [{"role": "user", "message": "Hi"}]
+        last_msgs = [
+            {"role": "user", "message": "Hi"},
+            {"role": "assistant", "message": "Hello!"},
+            {"role": "user", "message": "Thanks"},
+        ]
+
+        task1 = MagicMock()
+        task1.task_type = "LLM_CHAT_COMPLETE"
+        task1.input_data = {"messages": first_msgs}
+
+        task2 = MagicMock()
+        task2.task_type = "LLM_CHAT_COMPLETE"
+        task2.input_data = {"messages": last_msgs}
+
+        wf_run = MockWorkflowRun(variables={}, tasks=[task1, task2])
+        extracted = runtime._extract_messages(wf_run)
+        assert extracted == last_msgs
+
+    def test_variables_takes_precedence_over_tasks(self, runtime):
+        """If variables.messages is set, prefer it over task input_data."""
+        from unittest.mock import MagicMock
+
+        var_msgs = [{"role": "user", "message": "From variables"}]
+        task_msgs = [{"role": "user", "message": "From task"}]
+
+        task = MagicMock()
+        task.task_type = "LLM_CHAT_COMPLETE"
+        task.input_data = {"messages": task_msgs}
+
+        wf_run = MockWorkflowRun(variables={"messages": var_msgs}, tasks=[task])
+        extracted = runtime._extract_messages(wf_run)
+        assert extracted == var_msgs
+
 
 class TestSingletonRuntime:
     """Test that run.py uses a singleton runtime."""
@@ -165,9 +217,10 @@ class TestSingletonRuntime:
 
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                rt1 = _get_default_runtime()
-                rt2 = _get_default_runtime()
-                assert rt1 is rt2
+                with patch("agentspan.agents.runtime.server.ensure_server_running"):
+                    rt1 = _get_default_runtime()
+                    rt2 = _get_default_runtime()
+                    assert rt1 is rt2
 
         # Cleanup
         run_module._default_runtime = None
@@ -216,7 +269,7 @@ class TestAgentRuntimeInit:
                     api_secret="explicit-secret",
                 )
                 assert rt._config.server_url == "http://explicit/api"
-                assert rt._config.auth_key == "explicit-key"
+                assert rt._config.api_key == "explicit-key"
                 assert rt._config.auth_secret == "explicit-secret"
 
     def test_config_object(self):
@@ -277,7 +330,7 @@ class TestAgentConfig:
         from agentspan.agents.runtime.config import AgentConfig
 
         config = AgentConfig()
-        assert config.server_url == "http://localhost:8080/api"
+        assert config.server_url == "http://localhost:6767/api"
         assert config.llm_retry_count == 3
         assert config.worker_poll_interval_ms == 100
 
@@ -317,10 +370,10 @@ class TestCorrelationId:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value="wf-123")
+        runtime._start_via_server = MagicMock(return_value=("wf-123", None, []))
         runtime._poll_status_until_complete = MagicMock(
             return_value=AgentStatus(
-                workflow_id="wf-123",
+                execution_id="wf-123",
                 is_complete=True,
                 output="Hello",
                 status="COMPLETED",
@@ -339,7 +392,7 @@ class TestCorrelationId:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value="wf-456")
+        runtime._start_via_server = MagicMock(return_value=("wf-456", None, []))
 
         handle = runtime.start(agent, "Hello")
 
@@ -347,7 +400,7 @@ class TestCorrelationId:
         # Should be a valid UUID
         parsed = uuid.UUID(handle.correlation_id)
         assert str(parsed) == handle.correlation_id
-        assert handle.workflow_id == "wf-456"
+        assert handle.execution_id == "wf-456"
 
 
 class TestRuntimeRespond:
@@ -402,10 +455,10 @@ class TestMediaParameter:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value="wf-media")
+        runtime._start_via_server = MagicMock(return_value=("wf-media", None, []))
         runtime._poll_status_until_complete = MagicMock(
             return_value=AgentStatus(
-                workflow_id="wf-media",
+                execution_id="wf-media",
                 is_complete=True,
                 output="I see a cat",
                 status="COMPLETED",
@@ -428,10 +481,10 @@ class TestMediaParameter:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value="wf-nomedia")
+        runtime._start_via_server = MagicMock(return_value=("wf-nomedia", None, []))
         runtime._poll_status_until_complete = MagicMock(
             return_value=AgentStatus(
-                workflow_id="wf-nomedia",
+                execution_id="wf-nomedia",
                 is_complete=True,
                 output="Hello",
                 status="COMPLETED",
@@ -448,7 +501,7 @@ class TestMediaParameter:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value="wf-media-start")
+        runtime._start_via_server = MagicMock(return_value=("wf-media-start", None, []))
 
         handle = runtime.start(
             agent,
@@ -461,7 +514,7 @@ class TestMediaParameter:
             "https://example.com/photo.png",
             "https://example.com/photo2.png",
         ]
-        assert handle.workflow_id == "wf-media-start"
+        assert handle.execution_id == "wf-media-start"
 
 
 # ── Lifecycle methods ───────────────────────────────────────────────────
@@ -501,7 +554,7 @@ class TestRuntimeLifecycle:
 
     def test_resume_delegates(self, runtime):
         runtime._workflow_client.resume_workflow = MagicMock()
-        runtime.resume("wf-1")
+        runtime._resume_workflow("wf-1")
         runtime._workflow_client.resume_workflow.assert_called_once_with("wf-1")
 
     def test_cancel_delegates(self, runtime):
@@ -512,9 +565,9 @@ class TestRuntimeLifecycle:
         )
 
     def test_send_message_delegates(self, runtime):
-        runtime.respond = MagicMock()
+        runtime._workflow_client.send_message = MagicMock()
         runtime.send_message("wf-1", "hello")
-        runtime.respond.assert_called_once_with("wf-1", {"message": "hello"})
+        runtime._workflow_client.send_message.assert_called_once_with("wf-1", {"message": "hello"})
 
     def test_context_manager(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
@@ -589,6 +642,144 @@ class TestHasWorkerTools:
         sub = Agent(name="sub", model="openai/gpt-4o", tools=[inner_tool])
         parent = Agent(name="parent", model="openai/gpt-4o", agents=[sub])
         assert runtime._has_worker_tools(parent) is True
+
+
+# ── _has_stateful_tools ─────────────────────────────────────────────────
+
+
+class TestHasStatefulTools:
+    """Test _has_stateful_tools() helper.
+
+    Regression: agents with string tool names (e.g. claude-code built-ins like
+    "Read", "Glob") must not crash with TypeError — strings are never stateful.
+    """
+
+    def test_string_tools_do_not_raise(self):
+        """Agents with string tool lists must not raise TypeError."""
+        from agentspan.agents.runtime.runtime import _has_stateful_tools
+
+        agent = Agent(name="cc", model="claude-code/sonnet", tools=["Read", "Glob", "Grep"])
+        # Must not raise, must return False (strings are never stateful)
+        assert _has_stateful_tools(agent) is False
+
+    def test_no_tools_returns_false(self):
+        from agentspan.agents.runtime.runtime import _has_stateful_tools
+
+        agent = Agent(name="plain", model="openai/gpt-4o")
+        assert _has_stateful_tools(agent) is False
+
+    def test_tool_def_stateful_true_returns_true(self):
+        from agentspan.agents.runtime.runtime import _has_stateful_tools
+        from agentspan.agents.tool import tool
+
+        @tool(stateful=True)
+        def stateful_tool(x: str) -> str:
+            """Stateful."""
+            return x
+
+        agent = Agent(name="stateful", model="openai/gpt-4o", tools=[stateful_tool])
+        assert _has_stateful_tools(agent) is True
+
+    def test_tool_def_stateful_false_returns_false(self):
+        from agentspan.agents.runtime.runtime import _has_stateful_tools
+        from agentspan.agents.tool import tool
+
+        @tool
+        def plain_tool(x: str) -> str:
+            """Plain."""
+            return x
+
+        agent = Agent(name="plain_tool", model="openai/gpt-4o", tools=[plain_tool])
+        assert _has_stateful_tools(agent) is False
+
+    def test_mixed_strings_and_tool_defs_not_stateful(self):
+        """A mix of strings and non-stateful @tool functions returns False."""
+        from agentspan.agents.runtime.runtime import _has_stateful_tools
+        from agentspan.agents.tool import tool
+
+        @tool
+        def helper(x: str) -> str:
+            """Helper."""
+            return x
+
+        agent = Agent(name="mixed", model="openai/gpt-4o", tools=[helper])
+        assert _has_stateful_tools(agent) is False
+
+    def test_sub_agent_with_string_tools_does_not_raise(self):
+        """String tools in sub-agents must also not raise."""
+        from agentspan.agents.runtime.runtime import _has_stateful_tools
+
+        sub = Agent(name="sub_cc", model="claude-code/sonnet", tools=["Bash", "Write"])
+        parent = Agent(name="parent", model="openai/gpt-4o", agents=[sub])
+        assert _has_stateful_tools(parent) is False
+
+
+class TestStatefulWorkerDomains:
+    """Stateful workers must use the execution's real task domain."""
+
+    def test_resolve_worker_domain_prefers_server_domain(self):
+        from agentspan.agents.runtime.runtime import AgentRuntime
+
+        rt = AgentRuntime.__new__(AgentRuntime)
+        rt._extract_domain = lambda execution_id: "original-domain"
+
+        assert rt._resolve_worker_domain("wf-1", "fresh-domain") == "original-domain"
+
+    def test_resolve_worker_domain_falls_back_to_generated_run_id(self):
+        from agentspan.agents.runtime.runtime import AgentRuntime
+
+        rt = AgentRuntime.__new__(AgentRuntime)
+        rt._extract_domain = lambda execution_id: None
+
+        assert rt._resolve_worker_domain("wf-1", "fresh-domain") == "fresh-domain"
+
+    def test_resolve_worker_domain_returns_none_for_stateless_execution(self):
+        from agentspan.agents.runtime.runtime import AgentRuntime
+
+        rt = AgentRuntime.__new__(AgentRuntime)
+        rt._extract_domain = lambda execution_id: "should-not-be-used"
+
+        assert rt._resolve_worker_domain("wf-1", None) is None
+
+    def test_prepare_workers_starts_worker_manager_when_only_domain_changes(self):
+        """Same task name under a new domain still needs a new polling process."""
+        from types import SimpleNamespace
+
+        from agentspan.agents.runtime.runtime import AgentRuntime
+
+        class FakeWorkerManager:
+            def __init__(self):
+                self.starts = 0
+
+            def start(self):
+                self.starts += 1
+
+        rt = AgentRuntime.__new__(AgentRuntime)
+        rt._config = SimpleNamespace(
+            auto_register_integrations=False,
+            auto_start_workers=True,
+        )
+        rt._worker_start_lock = threading.Lock()
+        rt._registered_tool_names = {"write_architecture"}
+        rt._workers_started = True
+        rt._worker_manager = FakeWorkerManager()
+        rt._associate_templates_with_models = lambda agent: None
+        registered_domains = []
+        rt._register_workers = lambda agent, required_workers=None, domain=None: (
+            registered_domains.append(domain)
+        )
+        rt._has_worker_tools = lambda agent: True
+        rt._collect_worker_names = lambda agent, required_workers=None: {"write_architecture"}
+
+        agent = Agent(name="pipeline", model="openai/gpt-4o")
+        rt._prepare_workers(
+            agent,
+            required_workers={"write_architecture"},
+            domain="original-domain",
+        )
+
+        assert registered_domains == ["original-domain"]
+        assert rt._worker_manager.starts == 1
 
 
 # ── _extract_token_usage ────────────────────────────────────────────────
@@ -801,17 +992,21 @@ class TestRuntimePlan:
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
 
-    def test_plan_returns_workflow_def(self, runtime):
+    def test_plan_returns_raw_server_response(self, runtime):
         agent = Agent(name="test", model="openai/gpt-4o")
-        mock_wf = MagicMock()
-        mock_wf.to_workflow_def.return_value = {"name": "test_wf", "tasks": []}
+        server_response = {
+            "workflowDef": {"name": "test_wf", "tasks": []},
+            "requiredWorkers": [],
+        }
 
-        # plan() calls _compile_agent() which calls _compile_via_server() (HTTP)
-        runtime._compile_agent = MagicMock(return_value=mock_wf)
-        result = runtime.plan(agent)
+        # plan() POSTs directly to /agent/compile and returns the raw response
+        mock_post = _mock_requests_post(server_response)
+        with patch("requests.post", mock_post):
+            result = runtime.plan(agent)
 
-        mock_wf.to_workflow_def.assert_called_once()
-        runtime._compile_agent.assert_called_once_with(agent)
+        assert "workflowDef" in result
+        assert result["workflowDef"]["name"] == "test_wf"
+        assert result["requiredWorkers"] == []
 
     def test_compile_via_server_wraps_config_in_start_request(self, runtime):
         """_compile_via_server sends agentConfig wrapped in a StartRequest payload."""
@@ -847,10 +1042,10 @@ class TestRuntimeRunGuardrails:
 
     def _setup_run(self, runtime, output="Hello", status="COMPLETED"):
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value="wf-guard")
+        runtime._start_via_server = MagicMock(return_value=("wf-guard", None, []))
         runtime._poll_status_until_complete = MagicMock(
             return_value=AgentStatus(
-                workflow_id="wf-guard",
+                execution_id="wf-guard",
                 is_complete=True,
                 output=output,
                 status=status,
@@ -1047,10 +1242,55 @@ class TestRuntimeRunGuardrails:
         agent = Agent(name="test", model="openai/gpt-4o", guardrails=[guard])
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value="wf-123")
+        runtime._start_via_server = MagicMock(return_value=("wf-123", None, []))
 
         with pytest.raises(ValueError, match="Input guardrail"):
             runtime.start(agent, "bad prompt")
+
+
+class TestExecutionInputValidation:
+    """Validate that execution requires prompt, media, or context."""
+
+    @pytest.fixture()
+    def runtime(self):
+        with patch("conductor.client.orkes_clients.OrkesClients"):
+            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
+                from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
+
+                config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
+                return AgentRuntime(config=config)
+
+    def test_run_rejects_blank_input_without_media_or_context(self, runtime):
+        agent = Agent(name="test", model="openai/gpt-4o")
+        runtime._start_via_server = MagicMock()
+
+        with pytest.raises(ValueError, match="non-empty prompt"):
+            runtime.run(agent, "   ")
+
+        runtime._start_via_server.assert_not_called()
+
+    def test_start_allows_blank_prompt_with_context(self, runtime):
+        agent = Agent(name="test", model="openai/gpt-4o")
+        runtime._prepare_workers = MagicMock()
+        runtime._start_via_server = MagicMock(return_value=("wf-ctx", None, []))
+
+        handle = runtime.start(agent, "   ", context={"repo": "acme"})
+
+        assert handle.execution_id == "wf-ctx"
+        call_kwargs = runtime._start_via_server.call_args
+        assert call_kwargs[1]["context"] == {"repo": "acme"}
+
+    def test_start_allows_blank_prompt_with_media(self, runtime):
+        agent = Agent(name="test", model="openai/gpt-4o")
+        runtime._prepare_workers = MagicMock()
+        runtime._start_via_server = MagicMock(return_value=("wf-media", None, []))
+
+        handle = runtime.start(agent, "   ", media=["https://example.com/cat.png"])
+
+        assert handle.execution_id == "wf-media"
+        call_kwargs = runtime._start_via_server.call_args
+        assert call_kwargs[1]["media"] == ["https://example.com/cat.png"]
 
 
 class TestRunPopulatesToolCalls:
@@ -1071,10 +1311,10 @@ class TestRunPopulatesToolCalls:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value="wf-tools")
+        runtime._start_via_server = MagicMock(return_value=("wf-tools", None, []))
         runtime._poll_status_until_complete = MagicMock(
             return_value=AgentStatus(
-                workflow_id="wf-tools",
+                execution_id="wf-tools",
                 is_complete=True,
                 output={"result": "done", "finishReason": "STOP"},
                 status="COMPLETED",
@@ -1109,16 +1349,19 @@ class TestRunPopulatesToolCalls:
         assert result.token_usage is not None
         assert result.token_usage.total_tokens == 150
         assert len(result.messages) > 0
+        runtime._workflow_client.get_workflow.assert_called_once_with(
+            "wf-tools", include_tasks=True
+        )
 
     def test_run_without_tool_calls(self, runtime):
         """run() works when workflow has no tool tasks."""
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value="wf-notool")
+        runtime._start_via_server = MagicMock(return_value=("wf-notool", None, []))
         runtime._poll_status_until_complete = MagicMock(
             return_value=AgentStatus(
-                workflow_id="wf-notool",
+                execution_id="wf-notool",
                 is_complete=True,
                 output={"result": "Hello!", "finishReason": "STOP"},
                 status="COMPLETED",
@@ -1134,6 +1377,52 @@ class TestRunPopulatesToolCalls:
 
         assert result.tool_calls == []
         assert result.token_usage is None
+        runtime._workflow_client.get_workflow.assert_called_once_with(
+            "wf-notool", include_tasks=True
+        )
+
+    @pytest.mark.asyncio
+    async def test_run_async_populates_tool_calls(self, runtime):
+        """run_async() fetches workflow execution using the workflow_id argument."""
+        agent = Agent(name="test", model="openai/gpt-4o")
+
+        runtime._prepare_workers = MagicMock()
+        runtime._start_via_server_async = AsyncMock(return_value=("wf-async-tools", None, []))
+        runtime._poll_status_until_complete_async = AsyncMock(
+            return_value=AgentStatus(
+                execution_id="wf-async-tools",
+                is_complete=True,
+                output={"result": "done", "finishReason": "STOP"},
+                status="COMPLETED",
+            )
+        )
+
+        tool_task = MagicMock()
+        tool_task.task_type = "get_weather"
+        tool_task.reference_task_name = "call_async__0"
+        tool_task.input_data = {"city": "NYC"}
+        tool_task.output_data = {"temp": 72}
+
+        wf = MagicMock()
+        wf.tasks = [tool_task]
+        wf.variables = {"messages": [{"role": "user", "content": "hi"}]}
+        runtime._workflow_client.get_workflow = MagicMock(return_value=wf)
+
+        with patch.object(
+            runtime,
+            "_fetch_agent_workflow",
+            return_value={
+                "tokenUsage": {"promptTokens": 100, "completionTokens": 50, "totalTokens": 150},
+                "tasks": [],
+            },
+        ):
+            result = await runtime.run_async(agent, "What's the weather?")
+
+        assert len(result.tool_calls) == 1
+        assert result.tool_calls[0]["name"] == "get_weather"
+        runtime._workflow_client.get_workflow.assert_called_once_with(
+            "wf-async-tools", include_tasks=True
+        )
 
 
 class TestHasWorkerTools:
@@ -1146,7 +1435,8 @@ class TestHasWorkerTools:
                 from agentspan.agents.runtime.config import AgentConfig
                 from agentspan.agents.runtime.runtime import AgentRuntime
 
-                rt = AgentRuntime(config=AgentConfig(auto_start_workers=False))
+                config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
+                rt = AgentRuntime(config=config)
                 yield rt
 
     def test_regex_guardrail_only_no_workers(self, runtime):
@@ -1239,7 +1529,7 @@ class TestRuntimeStream:
 
         # Mock start() internals
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value="wf-stream-1")
+        runtime._start_via_server = MagicMock(return_value=("wf-stream-1", None, []))
 
         # Mock get_workflow to return completed on first poll
         completed_wf = MagicMock()
@@ -1252,12 +1542,15 @@ class TestRuntimeStream:
         done_events = [e for e in events if e.type == EventType.DONE]
         assert len(done_events) == 1
         assert done_events[0].output == "Final answer"
+        runtime._workflow_client.get_workflow.assert_called_once_with(
+            "wf-stream-1", include_tasks=True
+        )
 
     def test_stream_yields_thinking_event(self, runtime):
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value="wf-stream-2")
+        runtime._start_via_server = MagicMock(return_value=("wf-stream-2", None, []))
 
         # First poll: LLM task running
         running_wf = MagicMock()
@@ -1288,7 +1581,7 @@ class TestRuntimeStream:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value="wf-stream-err")
+        runtime._start_via_server = MagicMock(return_value=("wf-stream-err", None, []))
 
         failed_wf = MagicMock()
         failed_wf.status = "FAILED"
@@ -1305,7 +1598,7 @@ class TestRuntimeStream:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value="wf-stream-wait")
+        runtime._start_via_server = MagicMock(return_value=("wf-stream-wait", None, []))
 
         # First poll: paused
         paused_wf = MagicMock()
@@ -1330,7 +1623,7 @@ class TestRuntimeStream:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value="wf-stream-exc")
+        runtime._start_via_server = MagicMock(return_value=("wf-stream-exc", None, []))
 
         runtime._workflow_client.get_workflow = MagicMock(
             side_effect=RuntimeError("connection lost")
@@ -1345,7 +1638,7 @@ class TestRuntimeStream:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value="wf-stream-tool")
+        runtime._start_via_server = MagicMock(return_value=("wf-stream-tool", None, []))
 
         # Create a dispatch task with function field
         dispatch_task = MagicMock()
@@ -1377,7 +1670,7 @@ class TestRuntimeStream:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         runtime._prepare_workers = MagicMock()
-        runtime._start_via_server = MagicMock(return_value="wf-stream-handoff")
+        runtime._start_via_server = MagicMock(return_value=("wf-stream-handoff", None, []))
 
         sub_task = MagicMock()
         sub_task.task_id = "t-sub"
@@ -1581,20 +1874,32 @@ class TestStartViaServer:
                 config = AgentConfig(server_url="http://fake:8080")
                 return AgentRuntime(config=config)
 
-    def test_start_via_server_returns_workflow_id(self, runtime):
-        """_start_via_server returns the workflowId from the server response."""
+    def test_start_via_server_returns_execution_id(self, runtime):
+        """_start_via_server returns (executionId, requiredWorkers) tuple."""
         agent = Agent(name="test", model="openai/gpt-4o")
 
-        with patch("requests.post", _mock_requests_post({"workflowId": "wf-server-1"})):
-            wf_id = runtime._start_via_server(agent, "hello")
+        with patch("requests.post", _mock_requests_post({"executionId": "wf-server-1"})):
+            exec_id, required_workers, _ = runtime._start_via_server(agent, "hello")
 
-        assert wf_id == "wf-server-1"
+        assert exec_id == "wf-server-1"
+        assert required_workers is None
+
+    def test_start_via_server_returns_required_workers(self, runtime):
+        """_start_via_server extracts requiredWorkers from server response."""
+        agent = Agent(name="test", model="openai/gpt-4o")
+
+        resp = {"executionId": "wf-server-2", "requiredWorkers": ["agent_termination", "my_tool"]}
+        with patch("requests.post", _mock_requests_post(resp)):
+            exec_id, required_workers, _ = runtime._start_via_server(agent, "hello")
+
+        assert exec_id == "wf-server-2"
+        assert required_workers == {"agent_termination", "my_tool"}
 
     def test_start_via_server_sends_prompt(self, runtime):
         """_start_via_server includes the prompt in the payload."""
         agent = Agent(name="test", model="openai/gpt-4o")
 
-        mock_post = _mock_requests_post({"workflowId": "wf-1"})
+        mock_post = _mock_requests_post({"executionId": "wf-1"})
         with patch("requests.post", mock_post):
             runtime._start_via_server(agent, "test prompt")
 
@@ -1606,7 +1911,7 @@ class TestStartViaServer:
         """_start_via_server includes media in the payload."""
         agent = Agent(name="test", model="openai/gpt-4o")
 
-        mock_post = _mock_requests_post({"workflowId": "wf-1"})
+        mock_post = _mock_requests_post({"executionId": "wf-1"})
         with patch("requests.post", mock_post):
             runtime._start_via_server(agent, "describe", media=["https://img.png"])
 
@@ -1614,11 +1919,23 @@ class TestStartViaServer:
         payload = call_kwargs[1]["json"]
         assert payload["media"] == ["https://img.png"]
 
+    def test_start_via_server_passes_context(self, runtime):
+        """_start_via_server includes context in the payload."""
+        agent = Agent(name="test", model="openai/gpt-4o")
+
+        mock_post = _mock_requests_post({"executionId": "wf-1"})
+        with patch("requests.post", mock_post):
+            runtime._start_via_server(agent, "describe", context={"repo": "acme"})
+
+        call_kwargs = mock_post.call_args
+        payload = call_kwargs[1]["json"]
+        assert payload["context"] == {"repo": "acme"}
+
     def test_start_via_server_passes_idempotency_key(self, runtime):
         """Idempotency key is included in the payload when provided."""
         agent = Agent(name="test", model="openai/gpt-4o")
 
-        mock_post = _mock_requests_post({"workflowId": "wf-1"})
+        mock_post = _mock_requests_post({"executionId": "wf-1"})
         with patch("requests.post", mock_post):
             runtime._start_via_server(agent, "hi", idempotency_key="idem-123")
 
@@ -1630,7 +1947,7 @@ class TestStartViaServer:
         """Idempotency key is not in the payload when not provided."""
         agent = Agent(name="test", model="openai/gpt-4o")
 
-        mock_post = _mock_requests_post({"workflowId": "wf-1"})
+        mock_post = _mock_requests_post({"executionId": "wf-1"})
         with patch("requests.post", mock_post):
             runtime._start_via_server(agent, "hi")
 
@@ -1654,7 +1971,7 @@ class TestStartFrameworkViaServer:
 
     def test_start_framework_via_server_passes_credentials(self, runtime):
         """Framework start payload includes request-level credentials."""
-        mock_post = _mock_requests_post({"workflowId": "wf-fw-1"})
+        mock_post = _mock_requests_post({"executionId": "wf-fw-1"})
         with patch("requests.post", mock_post):
             runtime._start_framework_via_server(
                 framework="openai",
@@ -1665,6 +1982,20 @@ class TestStartFrameworkViaServer:
 
         payload = mock_post.call_args[1]["json"]
         assert payload["credentials"] == ["OPENAI_API_KEY"]
+
+    def test_start_framework_via_server_passes_context(self, runtime):
+        """Framework start payload includes context."""
+        mock_post = _mock_requests_post({"executionId": "wf-fw-1"})
+        with patch("requests.post", mock_post):
+            runtime._start_framework_via_server(
+                framework="openai",
+                raw_config={"name": "fw_agent"},
+                prompt="hello",
+                context={"repo": "acme"},
+            )
+
+        payload = mock_post.call_args[1]["json"]
+        assert payload["context"] == {"repo": "acme"}
 
 
 class TestFrameworkCredentials:
@@ -1689,11 +2020,11 @@ class TestFrameworkCredentials:
 
         fake_framework_agent = object()
 
-        def _status_with_registry_check(workflow_id, timeout=None):
+        def _status_with_registry_check(execution_id, timeout=None):
             with _workflow_credentials_lock:
-                assert _workflow_credentials[workflow_id] == ["FW_API_KEY"]
+                assert _workflow_credentials[execution_id] == ["FW_API_KEY"]
             return AgentStatus(
-                workflow_id=workflow_id,
+                execution_id=execution_id,
                 is_complete=True,
                 status="COMPLETED",
                 output={"result": "ok"},
@@ -1719,7 +2050,7 @@ class TestFrameworkCredentials:
                                 credentials=["FW_API_KEY"],
                             )
 
-        assert result.workflow_id == "wf-framework-1"
+        assert result.execution_id == "wf-framework-1"
         assert mock_start.call_args.kwargs["credentials"] == ["FW_API_KEY"]
         with _workflow_credentials_lock:
             assert "wf-framework-1" not in _workflow_credentials
@@ -1742,7 +2073,7 @@ class TestPollStatusUntilComplete:
     def test_returns_on_completed(self, mock_sleep, runtime):
         """Returns immediately when workflow is COMPLETED."""
         completed = AgentStatus(
-            workflow_id="wf-1",
+            execution_id="wf-1",
             is_complete=True,
             status="COMPLETED",
             output="done",
@@ -1759,7 +2090,7 @@ class TestPollStatusUntilComplete:
     def test_returns_on_failed(self, mock_sleep, runtime):
         """Returns immediately when workflow is FAILED."""
         failed = AgentStatus(
-            workflow_id="wf-1",
+            execution_id="wf-1",
             is_complete=True,
             status="FAILED",
         )
@@ -1774,7 +2105,7 @@ class TestPollStatusUntilComplete:
     def test_returns_on_terminated(self, mock_sleep, runtime):
         """Returns when workflow is TERMINATED."""
         terminated = AgentStatus(
-            workflow_id="wf-1",
+            execution_id="wf-1",
             is_complete=True,
             status="TERMINATED",
         )
@@ -1787,13 +2118,13 @@ class TestPollStatusUntilComplete:
     def test_polls_until_complete(self, mock_sleep, runtime):
         """Polls multiple times until workflow reaches terminal state."""
         running = AgentStatus(
-            workflow_id="wf-1",
+            execution_id="wf-1",
             is_complete=False,
             is_running=True,
             status="RUNNING",
         )
         completed = AgentStatus(
-            workflow_id="wf-1",
+            execution_id="wf-1",
             is_complete=True,
             status="COMPLETED",
             output="done",
@@ -1813,7 +2144,7 @@ class TestPollStatusUntilComplete:
     def test_timeout_returns_current_state(self, mock_sleep, runtime):
         """When poll times out, returns current workflow state."""
         running = AgentStatus(
-            workflow_id="wf-1",
+            execution_id="wf-1",
             is_complete=False,
             is_running=True,
             status="RUNNING",
@@ -1830,7 +2161,7 @@ class TestPollStatusUntilComplete:
     def test_returns_on_timed_out_status(self, mock_sleep, runtime):
         """TIMED_OUT is a terminal state."""
         timed_out = AgentStatus(
-            workflow_id="wf-1",
+            execution_id="wf-1",
             is_complete=True,
             status="TIMED_OUT",
         )
@@ -1868,6 +2199,11 @@ class TestResolvePrompt:
         """Plain string prompt is returned as-is."""
         rt, _ = runtime
         assert rt._resolve_prompt("Hello world") == "Hello world"
+
+    def test_none_resolves_to_empty_string(self, runtime):
+        """None prompt resolves to an empty string instead of literal 'None'."""
+        rt, _ = runtime
+        assert rt._resolve_prompt(None) == ""
 
     def test_template_resolved(self, runtime):
         """PromptTemplate fetches and substitutes variables."""
@@ -2287,7 +2623,7 @@ class TestTimeoutParameter:
         """run(timeout=5) sends timeoutSeconds: 5 in the start payload."""
         agent = Agent(name="test", model="openai/gpt-4o")
 
-        mock_post = _mock_requests_post({"workflowId": "wf-1"})
+        mock_post = _mock_requests_post({"executionId": "wf-1"})
         with patch("requests.post", mock_post):
             runtime._start_via_server(agent, "hello", timeout=5)
 
@@ -2298,7 +2634,7 @@ class TestTimeoutParameter:
         """run() with no timeout does not include timeoutSeconds in payload."""
         agent = Agent(name="test", model="openai/gpt-4o")
 
-        mock_post = _mock_requests_post({"workflowId": "wf-1"})
+        mock_post = _mock_requests_post({"executionId": "wf-1"})
         with patch("requests.post", mock_post):
             runtime._start_via_server(agent, "hello")
 
@@ -2309,7 +2645,7 @@ class TestTimeoutParameter:
     def test_poll_uses_agent_timeout_seconds(self, mock_sleep, runtime):
         """Agent(timeout_seconds=60) + run() → polling uses 60s."""
         running = AgentStatus(
-            workflow_id="wf-1",
+            execution_id="wf-1",
             is_complete=False,
             is_running=True,
             status="RUNNING",
@@ -2326,7 +2662,7 @@ class TestTimeoutParameter:
     def test_poll_defaults_to_300s_without_timeout(self, mock_sleep, runtime):
         """Polling defaults to 300s when no timeout is specified."""
         completed = AgentStatus(
-            workflow_id="wf-1",
+            execution_id="wf-1",
             is_complete=True,
             status="COMPLETED",
             output="done",
@@ -2360,10 +2696,10 @@ class TestUnrecognizedKwargs:
         # Patch the framework detection to return None (native agent)
         with patch("agentspan.agents.frameworks.serializer.detect_framework", return_value=None):
             with patch.object(runtime, "_prepare_workers"):
-                with patch.object(runtime, "_start_via_server", return_value="wf-1"):
+                with patch.object(runtime, "_start_via_server", return_value=("wf-1", None, [])):
                     with patch.object(runtime, "_poll_status_until_complete") as mock_poll:
                         mock_poll.return_value = AgentStatus(
-                            workflow_id="wf-1",
+                            execution_id="wf-1",
                             is_complete=True,
                             status="COMPLETED",
                             output={"result": "ok"},
@@ -2460,10 +2796,10 @@ class TestSSEFallbackWarnsOnce:
 
         call_count = 0
 
-        def mock_stream_sse(workflow_id):
+        def mock_stream_sse(execution_id):
             raise SSEUnavailableError("no SSE")
 
-        def mock_stream_polling(workflow_id):
+        def mock_stream_polling(execution_id):
             yield from []
 
         with patch.object(runtime, "_stream_sse", side_effect=mock_stream_sse):

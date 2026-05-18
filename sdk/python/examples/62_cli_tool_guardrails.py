@@ -25,7 +25,7 @@ This example uses two guardrails:
 
 Requirements:
     - Conductor server with LLM support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, CliConfig, OnFail, RegexGuardrail
@@ -87,6 +87,17 @@ if __name__ == "__main__":
     print("=" * 60)
     print(f"\nPrompt: {prompt}\n")
 
+
     with AgentRuntime() as runtime:
         result = runtime.run(ops_agent, prompt)
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(ops_agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.62_cli_tool_guardrails
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(ops_agent)
+

@@ -9,7 +9,7 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -19,8 +19,8 @@ import {
   tool,
   SemanticMemory,
   InMemoryStore,
-} from '../src/index.js';
-import { llmModel } from './settings.js';
+} from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Build up a knowledge base ---------------------------------------------
 
@@ -56,7 +56,7 @@ const getCustomerContext = tool(
 
 // -- Agent with memory-backed context --------------------------------------
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'memory_agent',
   model: llmModel,
   tools: [getCustomerContext],
@@ -68,33 +68,46 @@ const agent = new Agent({
 
 // -- Run -------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  console.log('--- Query 1: Billing question ---');
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('--- Query 1: Billing question ---');
+    const result = await runtime.run(
     agent,
     'I have a question about my billing -- is there an issue with my account?',
-  );
-  result.printResult();
+    );
+    result.printResult();
 
-  console.log('\n--- Query 2: Plan question ---');
-  const result2 = await runtime.run(
+    console.log('\n--- Query 2: Plan question ---');
+    const result2 = await runtime.run(
     agent,
     'What plan am I on and when did I sign up?',
-  );
-  result2.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result2.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents memory_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+  } finally {
+    await runtime.shutdown();
+  }
+
+    // // -- Direct memory operations ------------------------------------------------
+
+    // console.log('\n--- Memory contents ---');
+    // for (const entry of memory.listAll()) {
+    // console.log(`  [${entry.id.slice(0, 8)}] ${entry.content}`);
+    // }
+
+    // console.log('\n--- Search for "billing" ---');
+    // for (const entry of memory.search('billing invoice')) {
+    // console.log(`  -> ${entry.content}`);
+    // }
 }
 
-// -- Direct memory operations ------------------------------------------------
-
-console.log('\n--- Memory contents ---');
-for (const entry of memory.listAll()) {
-  console.log(`  [${entry.id.slice(0, 8)}] ${entry.content}`);
-}
-
-console.log('\n--- Search for "billing" ---');
-for (const entry of memory.search('billing invoice')) {
-  console.log(`  -> ${entry.content}`);
-}
+main().catch(console.error);

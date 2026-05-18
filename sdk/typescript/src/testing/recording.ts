@@ -1,9 +1,9 @@
-import type { AgentResult, AgentEvent } from '../types.js';
-import { Agent } from '../agent.js';
-import { makeAgentResult } from '../result.js';
-import { mockRun, type MockRunOptions } from './mock.js';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+import type { AgentResult, AgentEvent } from "../types.js";
+import { Agent } from "../agent.js";
+import { makeAgentResult } from "../result.js";
+import { mockRun, type MockRunOptions } from "./mock.js";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 /**
  * Fixture format stored on disk.
@@ -14,7 +14,7 @@ export interface RecordingFixture {
   events: AgentEvent[];
   result: {
     output: Record<string, unknown>;
-    workflowId: string;
+    executionId: string;
     status: string;
     finishReason: string;
     error?: string;
@@ -49,7 +49,7 @@ export async function record(
     events: result.events,
     result: {
       output: result.output,
-      workflowId: result.workflowId,
+      executionId: result.executionId,
       status: result.status,
       finishReason: result.finishReason,
       error: result.error,
@@ -65,7 +65,7 @@ export async function record(
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  fs.writeFileSync(fixturePath, JSON.stringify(fixture, null, 2), 'utf-8');
+  fs.writeFileSync(fixturePath, JSON.stringify(fixture, null, 2), "utf-8");
 
   return result;
 }
@@ -74,12 +74,12 @@ export async function record(
  * Load a JSON fixture and reconstruct an AgentResult.
  */
 export function replay(fixturePath: string): AgentResult {
-  const content = fs.readFileSync(fixturePath, 'utf-8');
+  const content = fs.readFileSync(fixturePath, "utf-8");
   const fixture = JSON.parse(content) as RecordingFixture;
 
   return makeAgentResult({
     output: fixture.result.output,
-    workflowId: fixture.result.workflowId,
+    executionId: fixture.result.executionId,
     status: fixture.result.status,
     finishReason: fixture.result.finishReason,
     error: fixture.result.error,

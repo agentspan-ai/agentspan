@@ -14,13 +14,11 @@ Modes:
 
 Requirements:
     - Conductor server with LLM support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
-import time
-
-from agentspan.agents import Agent, AgentRuntime, Strategy
+from agentspan.agents import Agent, AgentRuntime, EventType, Strategy
 from settings import settings
 from agentspan.agents.ext import UserProxyAgent
 
@@ -52,40 +50,53 @@ conversation = Agent(
     max_turns=4,  # 2 exchanges (human, assistant, human, assistant)
 )
 
-with AgentRuntime() as runtime:
-    # Start async to interact with human tasks
-    handle = runtime.start(
-        conversation,
-        "Let's write a Python function to sort a list of dictionaries by a key.",
-    )
-    print(f"Conversation started: {handle.workflow_id}")
 
-    # Simulate human responses
-    human_messages = [
-        "The function should accept a list of dicts and a key name. "
-        "It should handle missing keys gracefully.",
-        "Looks good! Can you add type hints and a docstring?",
-    ]
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        handle = runtime.start(
+            conversation,
+            "Let's write a Python function to sort a list of dictionaries by a key.",
+        )
+        print(f"Started: {handle.execution_id}\n")
 
-    for i, msg in enumerate(human_messages):
-        # Wait for human task
-        for _ in range(30):
-            status = handle.get_status()
-            if status.is_waiting or status.is_complete:
-                break
-            time.sleep(1)
+        for event in handle.stream():
+            if event.type == EventType.THINKING:
+                print(f"  [thinking] {event.content}")
 
-        if status.is_complete:
-            break
+            elif event.type == EventType.TOOL_CALL:
+                print(f"  [tool_call] {event.tool_name}({event.args})")
 
-        if status.is_waiting:
-            print(f"\n[Human turn {i + 1}]: {msg}")
-            handle.respond({"message": msg})
+            elif event.type == EventType.TOOL_RESULT:
+                print(f"  [tool_result] {event.tool_name} -> {str(event.result)[:100]}")
 
-    # Wait for completion
-    for _ in range(30):
-        status = handle.get_status()
-        if status.is_complete:
-            print(f"\nFinal conversation:\n{status.output}")
-            break
-        time.sleep(1)
+            elif event.type == EventType.WAITING:
+                status = handle.get_status()
+                pt = status.pending_tool or {}
+                schema = pt.get("response_schema", {})
+                props = schema.get("properties", {})
+                print("\n--- Human input required ---")
+                response = {}
+                for field, fs in props.items():
+                    desc = fs.get("description") or fs.get("title", field)
+                    if fs.get("type") == "boolean":
+                        val = input(f"  {desc} (y/n): ").strip().lower()
+                        response[field] = val in ("y", "yes")
+                    else:
+                        response[field] = input(f"  {desc}: ").strip()
+                handle.respond(response)
+                print()
+
+            elif event.type == EventType.DONE:
+                print(f"\nDone: {event.output}")
+
+        # Non-interactive alternative (no HITL, will block on human tasks):
+        # result = runtime.run(assistant, "Write a Python function to sort a list of dictionaries by a key.")
+        # result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(conversation)
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(conversation)
+

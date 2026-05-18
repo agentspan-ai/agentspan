@@ -10,13 +10,6 @@ export const persistSearchTerm = assign<
   maxSearchResults: (_, { count }) => count,
 });
 
-export const persistTaskNames = assign<
-  SearchMachineContext,
-  DoneInvokeEvent<{ name: string; description?: string }[]>
->({
-  taskDefinitions: (_, { data }) => data,
-});
-
 export const persistWorkflowNames = assign<
   SearchMachineContext,
   DoneInvokeEvent<WorkflowDef[]>
@@ -29,13 +22,6 @@ export const persistScheduleNames = assign<
   DoneInvokeEvent<string[]>
 >({
   schedulers: (_, { data }) => data,
-});
-
-export const persistEventNames = assign<
-  SearchMachineContext,
-  DoneInvokeEvent<string[]>
->({
-  events: (_, { data }) => data,
 });
 
 export const persistErrorMessage = assign<

@@ -10,8 +10,7 @@ Demonstrates:
 
 Setup (one-time, via CLI):
     agentspan login
-    agentspan credentials set --name GH_TOKEN
-
+    agentspan credentials set GH_TOKEN <your-gh-token>
 Requirements:
     - Agentspan server running at AGENTSPAN_SERVER_URL
     - AGENTSPAN_LLM_MODEL set (or defaults to openai/gpt-5.4)
@@ -43,3 +42,13 @@ if __name__ == "__main__":
             "List the 5 most recently updated repos for the 'agentspan'",
         )
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.16d_credentials_gh_cli
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
+

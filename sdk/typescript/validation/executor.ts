@@ -19,11 +19,11 @@ export interface ExecutionResult {
   output: string;
   events: AgentEvent[];
   toolCalls: number;
-  workflowId?: string;
+  executionId?: string;
 }
 
 // Regex patterns for parsing stdout
-const WORKFLOW_ID_RE = /(?:Workflow ID|Workflow): (\S+)/;
+const EXECUTION_ID_RE = /(?:Execution ID|Execution|Workflow ID|Workflow): (\S+)/;
 const TOOL_CALLS_RE = /Tool [Cc]alls: (\d+)/;
 const STATUS_RE = /Status: (\S+)/;
 // Output block: matches "[OK] Agent Result" format with "Output: { ... }" section
@@ -39,12 +39,12 @@ const OUTPUT_LINE_RE = /(?:Output|Result):\s*(.+)/;
 function parseStdout(stdout: string): {
   output: string;
   toolCalls: number;
-  workflowId?: string;
+  executionId?: string;
   statusFromOutput?: string;
 } {
   let output = '';
   let toolCalls = 0;
-  let workflowId: string | undefined;
+  let executionId: string | undefined;
   let statusFromOutput: string | undefined;
 
   // Extract agent output block — try multi-line JSON first, then single line
@@ -76,8 +76,8 @@ function parseStdout(stdout: string): {
   }
 
   // Extract metadata
-  const wfMatch = WORKFLOW_ID_RE.exec(stdout);
-  if (wfMatch) workflowId = wfMatch[1];
+  const wfMatch = EXECUTION_ID_RE.exec(stdout);
+  if (wfMatch) executionId = wfMatch[1];
 
   const tcMatch = TOOL_CALLS_RE.exec(stdout);
   if (tcMatch) toolCalls = parseInt(tcMatch[1], 10);
@@ -85,7 +85,7 @@ function parseStdout(stdout: string): {
   const statusMatch = STATUS_RE.exec(stdout);
   if (statusMatch) statusFromOutput = statusMatch[1];
 
-  return { output, toolCalls, workflowId, statusFromOutput };
+  return { output, toolCalls, executionId, statusFromOutput };
 }
 
 /**
@@ -270,7 +270,7 @@ export async function executeExample(
         output: parsed.output,
         events,
         toolCalls: parsed.toolCalls,
-        workflowId: parsed.workflowId,
+        executionId: parsed.executionId,
       });
     });
 

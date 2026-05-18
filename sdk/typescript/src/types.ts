@@ -4,62 +4,62 @@
  * Multi-agent orchestration strategy.
  */
 export type Strategy =
-  | 'handoff'
-  | 'sequential'
-  | 'parallel'
-  | 'router'
-  | 'round_robin'
-  | 'random'
-  | 'swarm'
-  | 'manual';
+  | "handoff"
+  | "sequential"
+  | "parallel"
+  | "router"
+  | "round_robin"
+  | "random"
+  | "swarm"
+  | "manual";
 
 /**
  * Agent event types emitted during execution.
  */
 export type EventType =
-  | 'thinking'
-  | 'tool_call'
-  | 'tool_result'
-  | 'guardrail_pass'
-  | 'guardrail_fail'
-  | 'waiting'
-  | 'handoff'
-  | 'message'
-  | 'error'
-  | 'done';
+  | "thinking"
+  | "tool_call"
+  | "tool_result"
+  | "guardrail_pass"
+  | "guardrail_fail"
+  | "waiting"
+  | "handoff"
+  | "message"
+  | "error"
+  | "done";
 
 /**
  * Terminal workflow status.
  */
-export type Status = 'COMPLETED' | 'FAILED' | 'TERMINATED' | 'TIMED_OUT';
+export type Status = "COMPLETED" | "FAILED" | "TERMINATED" | "TIMED_OUT";
 
 /**
  * Reason the agent finished execution.
  */
 export type FinishReason =
-  | 'stop'
-  | 'length'
-  | 'tool_calls'
-  | 'error'
-  | 'cancelled'
-  | 'timeout'
-  | 'guardrail'
-  | 'rejected';
+  | "stop"
+  | "length"
+  | "tool_calls"
+  | "error"
+  | "cancelled"
+  | "timeout"
+  | "guardrail"
+  | "rejected";
 
 /**
  * Guardrail failure handling strategy.
  */
-export type OnFail = 'retry' | 'raise' | 'fix' | 'human';
+export type OnFail = "retry" | "raise" | "fix" | "human";
 
 /**
  * Guardrail position — applied to input or output.
  */
-export type Position = 'input' | 'output';
+export type Position = "input" | "output";
 
 /**
  * Guardrail type determining execution strategy.
  */
-export type GuardrailType = 'regex' | 'llm' | 'custom' | 'external';
+export type GuardrailType = "regex" | "llm" | "custom" | "external";
 
 /**
  * Complete guardrail definition for serialization and worker registration.
@@ -75,7 +75,7 @@ export interface GuardrailDef {
   func?: ((content: string) => GuardrailResult | Promise<GuardrailResult>) | null;
   // Regex guardrail fields
   patterns?: string[];
-  mode?: 'block' | 'allow';
+  mode?: "block" | "allow";
   message?: string;
   // LLM guardrail fields
   model?: string;
@@ -87,27 +87,23 @@ export interface GuardrailDef {
  * Tool execution type determining where/how the tool runs.
  */
 export type ToolType =
-  | 'worker'
-  | 'http'
-  | 'api'
-  | 'mcp'
-  | 'agent_tool'
-  | 'human'
-  | 'generate_image'
-  | 'generate_audio'
-  | 'generate_video'
-  | 'generate_pdf'
-  | 'rag_search'
-  | 'rag_index';
+  | "worker"
+  | "http"
+  | "api"
+  | "mcp"
+  | "agent_tool"
+  | "human"
+  | "generate_image"
+  | "generate_audio"
+  | "generate_video"
+  | "generate_pdf"
+  | "rag_search"
+  | "rag_index";
 
 /**
  * Supported framework identifiers for auto-detection.
  */
-export type FrameworkId =
-  | 'langgraph'
-  | 'langchain'
-  | 'openai'
-  | 'google_adk';
+export type FrameworkId = "langgraph" | "langchain" | "openai" | "google_adk" | "skill";
 
 // ── Data interfaces ──────────────────────────────────────
 
@@ -126,7 +122,7 @@ export interface TokenUsage {
  */
 export interface ToolContext {
   sessionId: string;
-  workflowId: string;
+  executionId: string;
   agentName: string;
   metadata: Record<string, unknown>;
   dependencies: Record<string, unknown>;
@@ -155,7 +151,7 @@ export interface AgentEvent {
   result?: unknown;
   target?: string;
   output?: unknown;
-  workflowId?: string;
+  executionId?: string;
   guardrailName?: string;
   timestamp?: number;
 }
@@ -164,7 +160,7 @@ export interface AgentEvent {
  * Live status of a running agent workflow.
  */
 export interface AgentStatus {
-  workflowId: string;
+  executionId: string;
   isComplete: boolean;
   isRunning: boolean;
   isWaiting: boolean;
@@ -180,7 +176,7 @@ export interface AgentStatus {
  * Information returned after deploying an agent workflow.
  */
 export interface DeploymentInfo {
-  workflowName: string;
+  executionId: string;
   agentName: string;
   /** Included in deploy() response — the compiled workflow definition. */
   workflowDef?: object;
@@ -233,8 +229,16 @@ export interface RunOptions {
   idempotencyKey?: string;
   timeoutSeconds?: number;
   credentials?: string[];
+  /** Initial context dict to pass to the agent pipeline. */
+  context?: Record<string, unknown>;
   /** AbortSignal for cancellation/timeout. */
   signal?: AbortSignal;
+  /**
+   * LLM model hint for framework agents where automatic detection fails.
+   * Accepts a model string ('openai/gpt-4o-mini') or an LLM object (e.g. ChatOpenAI instance).
+   * Required for LangGraph agents that don't use the @agentspan-ai/sdk/langgraph wrapper.
+   */
+  model?: unknown;
 }
 
 // ── Tool definition ──────────────────────────────────────
@@ -259,6 +263,8 @@ export interface ToolDef {
   credentials?: (string | CredentialFile)[];
   guardrails?: unknown[];
   config?: Record<string, unknown>;
+  /** Stateful tool — worker registers under execution's domain for isolation. */
+  stateful?: boolean;
 }
 
 // ── Agent result ─────────────────────────────────────────
@@ -274,7 +280,7 @@ export interface ToolDef {
  */
 export interface AgentResult {
   output: Record<string, unknown>;
-  workflowId: string;
+  executionId: string;
   correlationId?: string;
   messages: unknown[];
   toolCalls: unknown[];
@@ -296,7 +302,7 @@ export interface AgentResult {
  */
 export function createAgentResult(data: {
   output: Record<string, unknown>;
-  workflowId: string;
+  executionId: string;
   correlationId?: string;
   messages?: unknown[];
   toolCalls?: unknown[];
@@ -310,7 +316,7 @@ export function createAgentResult(data: {
 }): AgentResult {
   const result: AgentResult = {
     output: data.output,
-    workflowId: data.workflowId,
+    executionId: data.executionId,
     correlationId: data.correlationId,
     messages: data.messages ?? [],
     toolCalls: data.toolCalls ?? [],
@@ -323,20 +329,20 @@ export function createAgentResult(data: {
     subResults: data.subResults,
 
     get isSuccess(): boolean {
-      return data.status === 'COMPLETED';
+      return data.status === "COMPLETED";
     },
 
     get isFailed(): boolean {
-      return data.status === 'FAILED' || data.status === 'TIMED_OUT';
+      return data.status === "FAILED" || data.status === "TIMED_OUT";
     },
 
     get isRejected(): boolean {
-      return data.finishReason === 'rejected';
+      return data.finishReason === "rejected";
     },
 
     printResult(): void {
-      const statusIcon = result.isSuccess ? '[OK]' : '[FAIL]';
-      console.log(`${statusIcon} Agent Result (${result.workflowId})`);
+      const statusIcon = result.isSuccess ? "[OK]" : "[FAIL]";
+      console.log(`${statusIcon} Agent Result (${result.executionId})`);
       console.log(`  Status: ${result.status}`);
       console.log(`  Finish Reason: ${result.finishReason}`);
       if (result.error) {
@@ -372,16 +378,16 @@ export function normalizeOutput(
   status: Status,
   errorMessage?: string,
 ): Record<string, unknown> {
-  if (typeof raw === 'string') {
+  if (typeof raw === "string") {
     return { result: raw };
   }
   if (raw == null) {
-    if (status === 'COMPLETED') {
+    if (status === "COMPLETED") {
       return { result: null };
     }
-    return { error: errorMessage ?? 'Unknown error' };
+    return { error: errorMessage ?? "Unknown error" };
   }
-  if (typeof raw === 'object' && !Array.isArray(raw)) {
+  if (typeof raw === "object" && !Array.isArray(raw)) {
     return raw as Record<string, unknown>;
   }
   // For arrays or other non-object types, wrap
@@ -395,7 +401,7 @@ export function normalizeOutput(
 export function stripInternalEventKeys(event: AgentEvent): AgentEvent {
   if (!event.args) return event;
   const cleaned = { ...event.args };
-  delete cleaned['_agent_state'];
-  delete cleaned['method'];
+  delete cleaned["_agent_state"];
+  delete cleaned["method"];
   return { ...event, args: cleaned };
 }

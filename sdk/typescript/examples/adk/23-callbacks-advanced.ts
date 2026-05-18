@@ -13,7 +13,7 @@
 
 import { LlmAgent } from '@google/adk';
 import type { BeforeModelCallback, AfterModelCallback } from '@google/adk';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
@@ -47,7 +47,7 @@ const inspectAfterModel: AfterModelCallback = ({ context, response }) => {
 
 // ── Agent with callbacks ──────────────────────────────────────────
 
-const agent = new LlmAgent({
+export const agent = new LlmAgent({
   name: 'monitored_assistant',
   model,
   instruction:
@@ -63,11 +63,20 @@ async function main() {
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(
-      agent,
-      'Explain the difference between supervised and unsupervised machine learning.',
+    agent,
+    'Explain the difference between supervised and unsupervised machine learning.',
     );
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents monitored_assistant
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
   } finally {
     await runtime.shutdown();
   }

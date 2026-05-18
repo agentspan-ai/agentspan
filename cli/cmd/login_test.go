@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/agentspan/agentspan/cli/config"
+	"github.com/agentspan-ai/agentspan/cli/config"
 )
 
 func TestLogoutClearsAPIKey(t *testing.T) {

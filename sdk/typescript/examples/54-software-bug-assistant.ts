@@ -8,14 +8,13 @@
  *
  * Requirements:
  *   - Conductor server with AgentTool + MCP support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  *   - GH_TOKEN in environment (optional, for GitHub MCP)
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, agentTool, tool, mcpTool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, agentTool, tool, mcpTool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- In-memory ticket store --------------------------------------------------
 
@@ -66,7 +65,11 @@ const getCurrentDate = tool(
   {
     name: 'get_current_date',
     description: "Get today's date.",
-    inputSchema: z.object({}),
+    inputSchema: {
+      type: 'object',
+      properties: {
+      },
+    },
   },
 );
 
@@ -83,9 +86,13 @@ const searchTickets = tool(
   {
     name: 'search_tickets',
     description: 'Search the internal bug ticket database for Conductor issues.',
-    inputSchema: z.object({
-      query: z.string().describe('Search term to match against ticket titles and descriptions'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search term to match against ticket titles and descriptions' },
+      },
+      required: ['query'],
+    },
   },
 );
 
@@ -107,11 +114,15 @@ const createTicket = tool(
   {
     name: 'create_ticket',
     description: 'Create a new bug ticket in the internal tracker.',
-    inputSchema: z.object({
-      title: z.string().describe('Short title for the bug'),
-      description: z.string().describe('Detailed description of the issue'),
-      priority: z.string().optional().describe('Priority level (low, medium, high, critical)'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Short title for the bug' },
+        description: { type: 'string', description: 'Detailed description of the issue' },
+        priority: { type: 'string', description: 'Priority level (low, medium, high, critical)' },
+      },
+      required: ['title', 'description'],
+    },
   },
 );
 
@@ -128,11 +139,15 @@ const updateTicket = tool(
   {
     name: 'update_ticket',
     description: "Update an existing bug ticket's status or priority.",
-    inputSchema: z.object({
-      ticketId: z.string().describe('The ticket ID (e.g. COND-001)'),
-      status: z.string().optional().describe('New status (open, in_progress, resolved, closed)'),
-      priority: z.string().optional().describe('New priority (low, medium, high, critical)'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticketId: { type: 'string', description: 'The ticket ID (e.g. COND-001)' },
+        status: { type: 'string', description: 'New status (open, in_progress, resolved, closed)' },
+        priority: { type: 'string', description: 'New priority (low, medium, high, critical)' },
+      },
+      required: ['ticketId'],
+    },
   },
 );
 
@@ -176,13 +191,17 @@ const searchWebTool = tool(
   {
     name: 'search_web',
     description: 'Search the web for information about a Conductor bug or workflow issue.',
-    inputSchema: z.object({
-      query: z.string().describe('The search query'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'The search query' },
+      },
+      required: ['query'],
+    },
   },
 );
 
-const searchAgent = new Agent({
+export const searchAgent = new Agent({
   name: 'search_agent_54',
   model: llmModel,
   instructions:
@@ -217,7 +236,7 @@ const github = mcpTool({
 
 // -- Root agent --------------------------------------------------------------
 
-const softwareAssistant = new Agent({
+export const softwareAssistant = new Agent({
   name: 'software_assistant_54',
   model: llmModel,
   instructions:
@@ -246,16 +265,29 @@ const softwareAssistant = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
     softwareAssistant,
     'Review the latest open issues and PRs on conductor-oss/conductor. ' +
     'Check if any of them relate to our internal tickets. ' +
     'Pay attention to the DO_WHILE fix (PR #820) and the scheduler ' +
     'persistence PRs. Give me a triage summary.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(softwareAssistant);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents software_assistant_54
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(softwareAssistant);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

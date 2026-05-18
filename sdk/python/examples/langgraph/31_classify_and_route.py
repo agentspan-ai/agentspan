@@ -10,7 +10,7 @@ Demonstrates:
     - Practical use case: smart help desk that routes to the right department
 
 Requirements:
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
@@ -123,15 +123,21 @@ graph = builder.compile(name="classify_and_route_agent")
 
 if __name__ == "__main__":
     questions = [
-        "What is photosynthesis?",
-        "When did World War II end?",
-        "Who has won the most Grand Slam tennis titles?",
-        "What is Kubernetes?",
-        "How do I make a perfect risotto?",
+        "What causes a solar eclipse?",
+        "Who won the FIFA World Cup in 2022?",
+        "How do I make a simple pasta carbonara?",
     ]
-
     with AgentRuntime() as runtime:
         for q in questions:
             print(f"\nQ: {q}")
             result = runtime.run(graph, q)
             result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.31_classify_and_route
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)

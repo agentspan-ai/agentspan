@@ -4,11 +4,11 @@
  */
 package dev.agentspan.runtime.credentials;
 
+import java.util.Optional;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-
-import java.util.Optional;
 
 /**
  * Single authority for credential resolution across all call paths.
@@ -32,8 +32,7 @@ public class CredentialResolutionService {
     private final CredentialStoreProvider storeProvider;
     private final CredentialBindingService bindingService;
 
-    public CredentialResolutionService(CredentialStoreProvider storeProvider,
-                                       CredentialBindingService bindingService) {
+    public CredentialResolutionService(CredentialStoreProvider storeProvider, CredentialBindingService bindingService) {
         this.storeProvider = storeProvider;
         this.bindingService = bindingService;
     }

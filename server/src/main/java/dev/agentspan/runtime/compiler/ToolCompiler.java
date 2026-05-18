@@ -5,6 +5,17 @@
 
 package dev.agentspan.runtime.compiler;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
 
 import dev.agentspan.runtime.model.GuardrailConfig;
@@ -14,17 +25,6 @@ import dev.agentspan.runtime.util.ModelParser;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 /**
  * Compiles tool definitions into Conductor workflow task structures.
@@ -45,13 +45,42 @@ public class ToolCompiler {
     public static class ToolCallRoutingResult {
         private WorkflowTask routerTask;
         private List<String> toolGuardrailRetryRefs;
-        private List<String[]> toolGuardrailRefs;  // [refName, isInline]
+        private List<String[]> toolGuardrailRefs; // [refName, isInline]
+    }
+
+    /**
+     * Replace {@code ${NAME}} credential placeholders with {@code #{NAME}} in a
+     * headers map so that Conductor's {@code ParametersUtils} does not consume them.
+     * The {@code #} prefix is invisible to Conductor's expression engine and is later
+     * resolved by credential-aware task handlers.
+     */
+    private static Map<String, Object> escapeCredentialPlaceholders(Map<?, ?> headers) {
+        Map<String, Object> escaped = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> e : headers.entrySet()) {
+            String v = String.valueOf(e.getValue());
+            escaped.put(String.valueOf(e.getKey()), v.replace("${", "#{"));
+        }
+        return escaped;
+    }
+
+    /**
+     * Return a copy of {@code cfg} with credential placeholders in its {@code headers}
+     * entry escaped from {@code ${NAME}} to {@code #{NAME}}.
+     */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> escapeHeadersInConfig(Map<String, Object> cfg) {
+        Object headers = cfg.get("headers");
+        if (!(headers instanceof Map<?, ?>)) {
+            return cfg;
+        }
+        Map<String, Object> result = new LinkedHashMap<>(cfg);
+        result.put("headers", escapeCredentialPlaceholders((Map<?, ?>) headers));
+        return result;
     }
 
     /** Tool types whose execution is handled server-side (not by a worker). */
-    private static final Set<String> MEDIA_TOOL_TYPES = Set.of(
-            "generate_image", "generate_audio", "generate_video", "generate_pdf"
-    );
+    private static final Set<String> MEDIA_TOOL_TYPES =
+            Set.of("generate_image", "generate_audio", "generate_video", "generate_pdf");
 
     /** RAG tool types that map to Conductor RAG system tasks. */
     private static final Set<String> RAG_TOOL_TYPES = Set.of("rag_index", "rag_search");
@@ -60,7 +89,7 @@ public class ToolCompiler {
     private static final Map<String, String> TYPE_MAP = Map.ofEntries(
             Map.entry("worker", "SIMPLE"),
             Map.entry("http", "HTTP"),
-            Map.entry("api", "HTTP"),               // API tools execute as HTTP tasks
+            Map.entry("api", "HTTP"), // API tools execute as HTTP tasks
             Map.entry("mcp", "CALL_MCP_TOOL"),
             Map.entry("agent_tool", "SUB_WORKFLOW"),
             Map.entry("human", "HUMAN"),
@@ -68,8 +97,8 @@ public class ToolCompiler {
             Map.entry("generate_audio", "GENERATE_AUDIO"),
             Map.entry("generate_video", "GENERATE_VIDEO"),
             Map.entry("rag_index", "LLM_INDEX_TEXT"),
-            Map.entry("rag_search", "LLM_SEARCH_INDEX")
-    );
+            Map.entry("rag_search", "LLM_SEARCH_INDEX"),
+            Map.entry("pull_workflow_messages", "PULL_WORKFLOW_MESSAGES"));
 
     // ── Public API ───────────────────────────────────────────────────────
 
@@ -149,8 +178,7 @@ public class ToolCompiler {
      * @param model       model string (e.g. "openai/gpt-4o") for approval normalization
      * @return the configured SwitchTask
      */
-    public WorkflowTask buildToolCallRouting(String agentName, String llmRef,
-                                             boolean hasApproval, String model) {
+    public WorkflowTask buildToolCallRouting(String agentName, String llmRef, boolean hasApproval, String model) {
         return buildToolCallRouting(agentName, llmRef, null, hasApproval, model);
     }
 
@@ -166,9 +194,8 @@ public class ToolCompiler {
      * @param model       model string for approval normalization
      * @return the configured SwitchTask
      */
-    public WorkflowTask buildToolCallRouting(String agentName, String llmRef,
-                                             List<ToolConfig> tools,
-                                             boolean hasApproval, String model) {
+    public WorkflowTask buildToolCallRouting(
+            String agentName, String llmRef, List<ToolConfig> tools, boolean hasApproval, String model) {
         return buildToolCallRoutingWithResult(agentName, llmRef, tools, hasApproval, model)
                 .getRouterTask();
     }
@@ -180,14 +207,13 @@ public class ToolCompiler {
      * @return A {@link ToolCallRoutingResult} containing the router task and any
      *         tool guardrail metadata for wiring into the DoWhile loop.
      */
-    public ToolCallRoutingResult buildToolCallRoutingWithResult(String agentName, String llmRef,
-                                                                 List<ToolConfig> tools,
-                                                                 boolean hasApproval, String model) {
+    public ToolCallRoutingResult buildToolCallRoutingWithResult(
+            String agentName, String llmRef, List<ToolConfig> tools, boolean hasApproval, String model) {
+        agentName = AgentCompiler.toRef(agentName);
         List<String> retryRefs = new ArrayList<>();
         List<String[]> guardrailRefs = new ArrayList<>();
 
-        String switchExpr = "$.toolCalls != null && $.toolCalls.length > 0 "
-                + "? 'tool_call' : 'none'";
+        String switchExpr = "$.toolCalls != null && $.toolCalls.length > 0 " + "? 'tool_call' : 'none'";
 
         WorkflowTask switchTask = new WorkflowTask();
         switchTask.setName("SWITCH");
@@ -202,9 +228,8 @@ public class ToolCompiler {
 
         // "tool_call" case
         List<ToolConfig> effectiveTools = tools != null ? tools : Collections.emptyList();
-        List<WorkflowTask> toolCallTasks = buildToolCallCase(
-                agentName, llmRef, hasApproval, model, effectiveTools,
-                retryRefs, guardrailRefs);
+        List<WorkflowTask> toolCallTasks =
+                buildToolCallCase(agentName, llmRef, hasApproval, model, effectiveTools, retryRefs, guardrailRefs);
         Map<String, List<WorkflowTask>> decisionCases = new LinkedHashMap<>();
         decisionCases.put("tool_call", toolCallTasks);
         switchTask.setDecisionCases(decisionCases);
@@ -212,8 +237,8 @@ public class ToolCompiler {
         // default case: empty (final answer, no-op)
         switchTask.setDefaultCase(Collections.emptyList());
 
-        logger.debug("Built tool call routing switch for agent '{}' (toolGuardrails={})",
-                agentName, guardrailRefs.size());
+        logger.debug(
+                "Built tool call routing switch for agent '{}' (toolGuardrails={})", agentName, guardrailRefs.size());
         return new ToolCallRoutingResult(switchTask, retryRefs, guardrailRefs);
     }
 
@@ -231,8 +256,8 @@ public class ToolCompiler {
      * @param prefix    optional prefix for task reference names
      * @return {@code Object[]{WorkflowTask enrichTask, String outputRef}}
      */
-    public Object[] buildEnrichTask(String agentName, String llmRef,
-                                    List<ToolConfig> tools, String prefix) {
+    public Object[] buildEnrichTask(String agentName, String llmRef, List<ToolConfig> tools, String prefix) {
+        agentName = AgentCompiler.toRef(agentName);
         String p = (prefix != null && !prefix.isEmpty()) ? prefix : "";
 
         // Build config maps from tool definitions at compile time
@@ -243,11 +268,22 @@ public class ToolCompiler {
         Map<String, Object> ragConfig = new LinkedHashMap<>();
         Map<String, Object> cliConfig = new LinkedHashMap<>();
         Map<String, Object> humanConfig = new LinkedHashMap<>();
+        Map<String, Object> wmqConfig = new LinkedHashMap<>();
 
         if (tools != null) {
-            Set<String> serverSideTypes = Set.of("http", "mcp", "agent_tool", "cli",
-                    "generate_image", "generate_audio", "generate_video", "generate_pdf",
-                    "rag_index", "rag_search", "human");
+            Set<String> serverSideTypes = Set.of(
+                    "http",
+                    "mcp",
+                    "agent_tool",
+                    "cli",
+                    "generate_image",
+                    "generate_audio",
+                    "generate_video",
+                    "generate_pdf",
+                    "rag_index",
+                    "rag_search",
+                    "human",
+                    "pull_workflow_messages");
 
             for (ToolConfig tool : tools) {
                 String toolType = tool.getToolType() != null ? tool.getToolType() : "worker";
@@ -255,12 +291,10 @@ public class ToolCompiler {
                     continue;
                 }
 
-                Map<String, Object> cfg = tool.getConfig() != null
-                        ? tool.getConfig()
-                        : Collections.emptyMap();
+                Map<String, Object> cfg = tool.getConfig() != null ? tool.getConfig() : Collections.emptyMap();
 
                 if ("http".equals(toolType)) {
-                    httpConfig.put(tool.getName(), cfg);
+                    httpConfig.put(tool.getName(), escapeHeadersInConfig(cfg));
                 } else if ("cli".equals(toolType)) {
                     Map<String, Object> cliEntry = new LinkedHashMap<>();
                     cliEntry.put("allowedCommands", cfg.getOrDefault("allowedCommands", Collections.emptyList()));
@@ -268,17 +302,22 @@ public class ToolCompiler {
                 } else if ("mcp".equals(toolType)) {
                     Map<String, Object> mcpEntry = new LinkedHashMap<>();
                     mcpEntry.put("mcpServer", cfg.getOrDefault("server_url", ""));
-                    mcpEntry.put("headers", cfg.getOrDefault("headers", Collections.emptyMap()));
+                    Object mcpHeaders = cfg.getOrDefault("headers", Collections.emptyMap());
+                    mcpEntry.put(
+                            "headers",
+                            mcpHeaders instanceof Map<?, ?>
+                                    ? escapeCredentialPlaceholders((Map<?, ?>) mcpHeaders)
+                                    : mcpHeaders);
                     mcpConfig.put(tool.getName(), mcpEntry);
                 } else if ("agent_tool".equals(toolType)) {
                     // workflowName is set by AgentService.registerAgentToolWorkflows()
-                    String workflowName = (String) cfg.getOrDefault("workflowName",
-                            tool.getName() + "_agent_wf");
+                    String workflowName = (String) cfg.getOrDefault("workflowName", tool.getName() + "_agent_wf");
                     Map<String, Object> atEntry = new LinkedHashMap<>();
                     atEntry.put("workflowName", workflowName);
                     // Pass through retry/resilience overrides from SDK config
                     if (cfg.containsKey("retryCount")) atEntry.put("retryCount", cfg.get("retryCount"));
-                    if (cfg.containsKey("retryDelaySeconds")) atEntry.put("retryDelaySeconds", cfg.get("retryDelaySeconds"));
+                    if (cfg.containsKey("retryDelaySeconds"))
+                        atEntry.put("retryDelaySeconds", cfg.get("retryDelaySeconds"));
                     if (cfg.containsKey("optional")) atEntry.put("optional", cfg.get("optional"));
                     agentToolConfig.put(tool.getName(), atEntry);
                 } else if (MEDIA_TOOL_TYPES.contains(toolType)) {
@@ -304,6 +343,10 @@ public class ToolCompiler {
                     humanEntry.put("displayName", agentName + " — " + tool.getName());
                     humanEntry.put("description", tool.getDescription());
                     humanConfig.put(tool.getName(), humanEntry);
+                } else if ("pull_workflow_messages".equals(toolType)) {
+                    Map<String, Object> wmqEntry = new LinkedHashMap<>();
+                    wmqEntry.put("batchSize", cfg.getOrDefault("batchSize", 1));
+                    wmqConfig.put(tool.getName(), wmqEntry);
                 }
             }
         }
@@ -315,8 +358,10 @@ public class ToolCompiler {
         String ragJson = JavaScriptBuilder.toJson(ragConfig);
         String cliJson = JavaScriptBuilder.toJson(cliConfig);
         String humanJson = JavaScriptBuilder.toJson(humanConfig);
+        String wmqJson = JavaScriptBuilder.toJson(wmqConfig);
 
-        String script = JavaScriptBuilder.enrichToolsScript(httpJson, mcpJson, mediaJson, agentToolJson, ragJson, cliJson, humanJson);
+        String script = JavaScriptBuilder.enrichToolsScript(
+                httpJson, mcpJson, mediaJson, agentToolJson, ragJson, cliJson, humanJson, wmqJson);
 
         String enrichRef = agentName + "_" + p + "enrich_tools";
 
@@ -330,12 +375,13 @@ public class ToolCompiler {
         enrichInput.put("toolCalls", "${" + llmRef + ".output.toolCalls}");
         enrichInput.put("agentState", "${workflow.variables._agent_state}");
         enrichInput.put("agentspanCtx", "${workflow.input.__agentspan_ctx__}");
+        enrichInput.put("userPrompt", "${workflow.input.prompt}");
         enrichTask.setInputParameters(enrichInput);
 
         // InlineTask output is at output.result.*
         String outputRef = "${" + enrichRef + ".output.result.dynamicTasks}";
 
-        return new Object[]{enrichTask, outputRef};
+        return new Object[] {enrichTask, outputRef};
     }
 
     /**
@@ -351,6 +397,7 @@ public class ToolCompiler {
      * @return the configured FORK_JOIN_DYNAMIC WorkflowTask (with JOIN as a child)
      */
     public WorkflowTask buildDynamicFork(String agentName, String toolCallsRef, String prefix) {
+        agentName = AgentCompiler.toRef(agentName);
         String p = (prefix != null && !prefix.isEmpty()) ? prefix : "";
 
         // Fork task
@@ -373,13 +420,13 @@ public class ToolCompiler {
         join.setType("JOIN");
 
         // Wire join as the join task for the fork
-        fork.getDefaultCase();  // ensure initialized
+        fork.getDefaultCase(); // ensure initialized
         // The fork and join are returned together; caller adds both to the task list.
         // By convention, Conductor expects fork followed by join in the task list.
         // We set the join on the fork so the server knows the join reference.
 
-        logger.debug("Built dynamic fork '{}' with join '{}'",
-                fork.getTaskReferenceName(), join.getTaskReferenceName());
+        logger.debug(
+                "Built dynamic fork '{}' with join '{}'", fork.getTaskReferenceName(), join.getTaskReferenceName());
 
         // Return both fork and join as a single fork task with defaultCase containing join
         // Actually, for FORK_JOIN_DYNAMIC, fork and join must be sequential in the parent list.
@@ -405,8 +452,7 @@ public class ToolCompiler {
      * @param prefix    optional prefix for task reference names
      * @return ordered list of WorkflowTasks (enrich, fork, join)
      */
-    public List<WorkflowTask> buildForkChain(String agentName, String llmRef,
-                                             List<ToolConfig> tools, String prefix) {
+    public List<WorkflowTask> buildForkChain(String agentName, String llmRef, List<ToolConfig> tools, String prefix) {
         String p = (prefix != null && !prefix.isEmpty()) ? prefix + "_" : "";
 
         Object[] enrichResult = buildEnrichTask(agentName, llmRef, tools, p);
@@ -451,13 +497,15 @@ public class ToolCompiler {
      * @param maxTools  maximum number of tools to select
      * @return {@code Object[]{List<WorkflowTask> tasks, String toolsRef}}
      */
-    public Object[] buildToolFilter(String agentName, List<Map<String, Object>> toolSpecs,
-                                    String provider, String model, int maxTools) {
+    public Object[] buildToolFilter(
+            String agentName, List<Map<String, Object>> toolSpecs, String provider, String model, int maxTools) {
+        agentName = AgentCompiler.toRef(agentName);
         // Build tool catalog for the FilterLLM prompt
         StringBuilder catalogBuilder = new StringBuilder();
         for (Map<String, Object> spec : toolSpecs) {
             String name = (String) spec.get("name");
-            String desc = spec.get("description") != null ? spec.get("description").toString() : "";
+            String desc =
+                    spec.get("description") != null ? spec.get("description").toString() : "";
             catalogBuilder.append("- ").append(name).append(": ").append(desc).append("\n");
         }
         String catalogText = catalogBuilder.toString();
@@ -519,7 +567,7 @@ public class ToolCompiler {
         tasks.add(filterLlm);
         tasks.add(filterInline);
 
-        return new Object[]{tasks, toolsRef};
+        return new Object[] {tasks, toolsRef};
     }
 
     // ── MCP Discovery ────────────────────────────────────────────────────
@@ -533,8 +581,7 @@ public class ToolCompiler {
         private final String mcpConfigRef;
         private final String apiConfigRef;
 
-        public DiscoveryResult(List<WorkflowTask> preTasks, String toolsRef,
-                               String mcpConfigRef, String apiConfigRef) {
+        public DiscoveryResult(List<WorkflowTask> preTasks, String toolsRef, String mcpConfigRef, String apiConfigRef) {
             this.preTasks = preTasks;
             this.toolsRef = toolsRef;
             this.mcpConfigRef = mcpConfigRef;
@@ -546,10 +593,21 @@ public class ToolCompiler {
             this(preTasks, toolsRef, mcpConfigRef, null);
         }
 
-        public List<WorkflowTask> getPreTasks() { return preTasks; }
-        public String getToolsRef() { return toolsRef; }
-        public String getMcpConfigRef() { return mcpConfigRef; }
-        public String getApiConfigRef() { return apiConfigRef; }
+        public List<WorkflowTask> getPreTasks() {
+            return preTasks;
+        }
+
+        public String getToolsRef() {
+            return toolsRef;
+        }
+
+        public String getMcpConfigRef() {
+            return mcpConfigRef;
+        }
+
+        public String getApiConfigRef() {
+            return apiConfigRef;
+        }
     }
 
     /** @deprecated Use {@link DiscoveryResult} instead. */
@@ -578,9 +636,8 @@ public class ToolCompiler {
      * @return discovery result with pre-tasks, tools ref, and mcpConfig ref
      */
     public DiscoveryResult buildMcpDiscoveryTasks(
-            String agentName, List<ToolConfig> mcpTools,
-            List<Map<String, Object>> staticToolSpecs, String model) {
-
+            String agentName, List<ToolConfig> mcpTools, List<Map<String, Object>> staticToolSpecs, String model) {
+        agentName = AgentCompiler.toRef(agentName);
         List<WorkflowTask> preTasks = new ArrayList<>();
 
         // ── 1. LIST_MCP_TOOLS tasks (one per unique server) ──────────
@@ -593,7 +650,10 @@ public class ToolCompiler {
             if (!serverUrl.isEmpty() && !serverMap.containsKey(serverUrl)) {
                 Map<String, Object> serverInfo = new LinkedHashMap<>();
                 serverInfo.put("serverUrl", serverUrl);
-                serverInfo.put("headers", cfg.getOrDefault("headers", Collections.emptyMap()));
+                Object mcpDiscH = cfg.getOrDefault("headers", Collections.emptyMap());
+                serverInfo.put(
+                        "headers",
+                        mcpDiscH instanceof Map<?, ?> ? escapeCredentialPlaceholders((Map<?, ?>) mcpDiscH) : mcpDiscH);
                 serverMap.put(serverUrl, serverInfo);
             }
             Object mt = cfg.get("max_tools");
@@ -621,6 +681,7 @@ public class ToolCompiler {
             if (headers != null && !((Map<?, ?>) headers).isEmpty()) {
                 listInputs.put("headers", headers);
             }
+            listInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
             listTask.setInputParameters(listInputs);
             preTasks.add(listTask);
         }
@@ -629,8 +690,8 @@ public class ToolCompiler {
         String prepareRef = agentName + "_mcp_prepare";
         String staticSpecsJson = JavaScriptBuilder.toJson(staticToolSpecs);
         String serversJson = JavaScriptBuilder.toJson(servers);
-        String prepareScript = JavaScriptBuilder.mcpPrepareScript(
-                staticSpecsJson, servers.size(), serversJson, maxTools);
+        String prepareScript =
+                JavaScriptBuilder.mcpPrepareScript(staticSpecsJson, servers.size(), serversJson, maxTools);
 
         WorkflowTask prepareTask = new WorkflowTask();
         prepareTask.setTaskReferenceName(prepareRef);
@@ -640,8 +701,7 @@ public class ToolCompiler {
         prepareInputs.put("evaluatorType", "graaljs");
         prepareInputs.put("expression", prepareScript);
         for (int i = 0; i < listTaskRefs.size(); i++) {
-            prepareInputs.put("discovered_" + i,
-                    "${" + listTaskRefs.get(i) + ".output.tools}");
+            prepareInputs.put("discovered_" + i, "${" + listTaskRefs.get(i) + ".output.tools}");
         }
         prepareTask.setInputParameters(prepareInputs);
         preTasks.add(prepareTask);
@@ -659,8 +719,7 @@ public class ToolCompiler {
         thresholdSwitch.setInputParameters(switchInputs);
 
         // "filter" case: catalog → filter LLM → filter inline
-        List<WorkflowTask> filterTasks = buildDynamicFilterChain(
-                agentName, prepareRef, model, maxTools);
+        List<WorkflowTask> filterTasks = buildDynamicFilterChain(agentName, prepareRef, model, maxTools);
 
         Map<String, List<WorkflowTask>> switchCases = new LinkedHashMap<>();
         switchCases.put("filter", filterTasks);
@@ -685,14 +744,10 @@ public class ToolCompiler {
         Map<String, Object> resolveInputs = new LinkedHashMap<>();
         resolveInputs.put("evaluatorType", "graaljs");
         resolveInputs.put("expression", JavaScriptBuilder.mcpResolveScript());
-        resolveInputs.put("filtered_tools",
-                "${" + filterInlineRef + ".output.result.tools}");
-        resolveInputs.put("prepared_tools",
-                "${" + prepareRef + ".output.result.tools}");
-        resolveInputs.put("mcpConfig",
-                "${" + prepareRef + ".output.result.mcpConfig}");
-        resolveInputs.put("apiConfig",
-                "${" + prepareRef + ".output.result.apiConfig}");
+        resolveInputs.put("filtered_tools", "${" + filterInlineRef + ".output.result.tools}");
+        resolveInputs.put("prepared_tools", "${" + prepareRef + ".output.result.tools}");
+        resolveInputs.put("mcpConfig", "${" + prepareRef + ".output.result.mcpConfig}");
+        resolveInputs.put("apiConfig", "${" + prepareRef + ".output.result.apiConfig}");
         resolveTask.setInputParameters(resolveInputs);
         preTasks.add(resolveTask);
 
@@ -700,8 +755,11 @@ public class ToolCompiler {
         String mcpConfigRef = "${" + resolveRef + ".output.result.mcpConfig}";
         String apiConfigRef = "${" + resolveRef + ".output.result.apiConfig}";
 
-        logger.debug("Built MCP discovery tasks for agent '{}': {} servers, threshold={}",
-                agentName, servers.size(), maxTools);
+        logger.debug(
+                "Built MCP discovery tasks for agent '{}': {} servers, threshold={}",
+                agentName,
+                servers.size(),
+                maxTools);
 
         return new DiscoveryResult(preTasks, toolsRef, mcpConfigRef, apiConfigRef);
     }
@@ -726,9 +784,8 @@ public class ToolCompiler {
      * @return discovery result with pre-tasks, tools ref, and apiConfig ref
      */
     public DiscoveryResult buildApiDiscoveryTasks(
-            String agentName, List<ToolConfig> apiTools,
-            List<Map<String, Object>> staticToolSpecs, String model) {
-
+            String agentName, List<ToolConfig> apiTools, List<Map<String, Object>> staticToolSpecs, String model) {
+        agentName = AgentCompiler.toRef(agentName);
         List<WorkflowTask> preTasks = new ArrayList<>();
 
         // ── 1. LIST_API_TOOLS tasks (one per unique spec_url) ──────────
@@ -737,12 +794,16 @@ public class ToolCompiler {
         int maxTools = 32; // default threshold
         for (ToolConfig tool : apiTools) {
             Map<String, Object> cfg = tool.getConfig() != null ? tool.getConfig() : Collections.emptyMap();
-            String specUrl = (String) cfg.getOrDefault("url",
-                    cfg.getOrDefault("spec_url", ""));
+            String specUrl = (String) cfg.getOrDefault("url", cfg.getOrDefault("spec_url", ""));
             if (!specUrl.isEmpty() && !specMap.containsKey(specUrl)) {
                 Map<String, Object> specInfo = new LinkedHashMap<>();
                 specInfo.put("specUrl", specUrl);
-                specInfo.put("headers", cfg.getOrDefault("headers", Collections.emptyMap()));
+                Object apiHeaders = cfg.getOrDefault("headers", Collections.emptyMap());
+                specInfo.put(
+                        "headers",
+                        apiHeaders instanceof Map<?, ?>
+                                ? escapeCredentialPlaceholders((Map<?, ?>) apiHeaders)
+                                : apiHeaders);
                 specMap.put(specUrl, specInfo);
             }
             Object mt = cfg.get("max_tools");
@@ -778,6 +839,8 @@ public class ToolCompiler {
             }
             Map<String, Object> fetchInputs = new LinkedHashMap<>();
             fetchInputs.put("http_request", httpReq);
+            // Forward execution token so CredentialAwareHttpTask can resolve #{NAME} headers
+            fetchInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
             fetchTask.setInputParameters(fetchInputs);
             preTasks.add(fetchTask);
 
@@ -811,8 +874,7 @@ public class ToolCompiler {
         prepareInputs.put("evaluatorType", "graaljs");
         prepareInputs.put("expression", prepareScript);
         for (int i = 0; i < listTaskRefs.size(); i++) {
-            prepareInputs.put("api_discovered_" + i,
-                    "${" + listTaskRefs.get(i) + ".output.result}");
+            prepareInputs.put("api_discovered_" + i, "${" + listTaskRefs.get(i) + ".output.result}");
         }
         prepareTask.setInputParameters(prepareInputs);
         preTasks.add(prepareTask);
@@ -830,8 +892,7 @@ public class ToolCompiler {
         thresholdSwitch.setInputParameters(switchInputs);
 
         // "filter" case: catalog → filter LLM → filter inline
-        List<WorkflowTask> filterTasks = buildApiDynamicFilterChain(
-                agentName, prepareRef, model, maxTools);
+        List<WorkflowTask> filterTasks = buildApiDynamicFilterChain(agentName, prepareRef, model, maxTools);
 
         Map<String, List<WorkflowTask>> switchCases = new LinkedHashMap<>();
         switchCases.put("filter", filterTasks);
@@ -856,22 +917,21 @@ public class ToolCompiler {
         Map<String, Object> resolveInputs = new LinkedHashMap<>();
         resolveInputs.put("evaluatorType", "graaljs");
         resolveInputs.put("expression", JavaScriptBuilder.mcpResolveScript());
-        resolveInputs.put("filtered_tools",
-                "${" + filterInlineRef + ".output.result.tools}");
-        resolveInputs.put("prepared_tools",
-                "${" + prepareRef + ".output.result.tools}");
-        resolveInputs.put("mcpConfig",
-                "${" + prepareRef + ".output.result.mcpConfig}");
-        resolveInputs.put("apiConfig",
-                "${" + prepareRef + ".output.result.apiConfig}");
+        resolveInputs.put("filtered_tools", "${" + filterInlineRef + ".output.result.tools}");
+        resolveInputs.put("prepared_tools", "${" + prepareRef + ".output.result.tools}");
+        resolveInputs.put("mcpConfig", "${" + prepareRef + ".output.result.mcpConfig}");
+        resolveInputs.put("apiConfig", "${" + prepareRef + ".output.result.apiConfig}");
         resolveTask.setInputParameters(resolveInputs);
         preTasks.add(resolveTask);
 
         String toolsRef = "${" + resolveRef + ".output.result.tools}";
         String apiConfigRef = "${" + resolveRef + ".output.result.apiConfig}";
 
-        logger.debug("Built API discovery tasks for agent '{}': {} spec URLs, threshold={}",
-                agentName, apiServers.size(), maxTools);
+        logger.debug(
+                "Built API discovery tasks for agent '{}': {} spec URLs, threshold={}",
+                agentName,
+                apiServers.size(),
+                maxTools);
 
         return new DiscoveryResult(preTasks, toolsRef, null, apiConfigRef);
     }
@@ -891,9 +951,13 @@ public class ToolCompiler {
      * @return discovery result with pre-tasks, tools ref, mcpConfig ref, and apiConfig ref
      */
     public DiscoveryResult buildDiscoveryTasks(
-            String agentName, List<ToolConfig> mcpTools, List<ToolConfig> apiTools,
-            List<Map<String, Object>> staticToolSpecs, String model) {
+            String agentName,
+            List<ToolConfig> mcpTools,
+            List<ToolConfig> apiTools,
+            List<Map<String, Object>> staticToolSpecs,
+            String model) {
 
+        agentName = AgentCompiler.toRef(agentName);
         List<WorkflowTask> preTasks = new ArrayList<>();
         int maxTools = 32;
 
@@ -905,7 +969,9 @@ public class ToolCompiler {
             if (!serverUrl.isEmpty() && !mcpServerMap.containsKey(serverUrl)) {
                 Map<String, Object> serverInfo = new LinkedHashMap<>();
                 serverInfo.put("serverUrl", serverUrl);
-                serverInfo.put("headers", cfg.getOrDefault("headers", Collections.emptyMap()));
+                Object mcpH = cfg.getOrDefault("headers", Collections.emptyMap());
+                serverInfo.put(
+                        "headers", mcpH instanceof Map<?, ?> ? escapeCredentialPlaceholders((Map<?, ?>) mcpH) : mcpH);
                 mcpServerMap.put(serverUrl, serverInfo);
             }
             Object mt = cfg.get("max_tools");
@@ -931,6 +997,7 @@ public class ToolCompiler {
             if (headers != null && !((Map<?, ?>) headers).isEmpty()) {
                 listInputs.put("headers", headers);
             }
+            listInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
             listTask.setInputParameters(listInputs);
             preTasks.add(listTask);
         }
@@ -939,12 +1006,13 @@ public class ToolCompiler {
         Map<String, Map<String, Object>> apiSpecMap = new LinkedHashMap<>();
         for (ToolConfig tool : apiTools) {
             Map<String, Object> cfg = tool.getConfig() != null ? tool.getConfig() : Collections.emptyMap();
-            String specUrl = (String) cfg.getOrDefault("url",
-                    cfg.getOrDefault("spec_url", ""));
+            String specUrl = (String) cfg.getOrDefault("url", cfg.getOrDefault("spec_url", ""));
             if (!specUrl.isEmpty() && !apiSpecMap.containsKey(specUrl)) {
                 Map<String, Object> specInfo = new LinkedHashMap<>();
                 specInfo.put("specUrl", specUrl);
-                specInfo.put("headers", cfg.getOrDefault("headers", Collections.emptyMap()));
+                Object apiH = cfg.getOrDefault("headers", Collections.emptyMap());
+                specInfo.put(
+                        "headers", apiH instanceof Map<?, ?> ? escapeCredentialPlaceholders((Map<?, ?>) apiH) : apiH);
                 apiSpecMap.put(specUrl, specInfo);
             }
             Object mt = cfg.get("max_tools");
@@ -978,6 +1046,7 @@ public class ToolCompiler {
             }
             Map<String, Object> fetchInputs = new LinkedHashMap<>();
             fetchInputs.put("http_request", httpReq);
+            fetchInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
             fetchTask.setInputParameters(fetchInputs);
             preTasks.add(fetchTask);
 
@@ -1001,8 +1070,7 @@ public class ToolCompiler {
         String mcpServersJson = JavaScriptBuilder.toJson(mcpServers);
         String apiServersJson = JavaScriptBuilder.toJson(apiServers);
         String prepareScript = JavaScriptBuilder.apiPrepareScript(
-                staticSpecsJson, mcpServers.size(), mcpServersJson,
-                apiServers.size(), apiServersJson, maxTools);
+                staticSpecsJson, mcpServers.size(), mcpServersJson, apiServers.size(), apiServersJson, maxTools);
 
         WorkflowTask prepareTask = new WorkflowTask();
         prepareTask.setTaskReferenceName(prepareRef);
@@ -1012,12 +1080,10 @@ public class ToolCompiler {
         prepareInputs.put("evaluatorType", "graaljs");
         prepareInputs.put("expression", prepareScript);
         for (int i = 0; i < mcpListRefs.size(); i++) {
-            prepareInputs.put("mcp_discovered_" + i,
-                    "${" + mcpListRefs.get(i) + ".output.tools}");
+            prepareInputs.put("mcp_discovered_" + i, "${" + mcpListRefs.get(i) + ".output.tools}");
         }
         for (int i = 0; i < apiListRefs.size(); i++) {
-            prepareInputs.put("api_discovered_" + i,
-                    "${" + apiListRefs.get(i) + ".output}");
+            prepareInputs.put("api_discovered_" + i, "${" + apiListRefs.get(i) + ".output}");
         }
         prepareTask.setInputParameters(prepareInputs);
         preTasks.add(prepareTask);
@@ -1034,8 +1100,7 @@ public class ToolCompiler {
         switchInputs.put("needsFilter", "${" + prepareRef + ".output.result.needsFilter}");
         thresholdSwitch.setInputParameters(switchInputs);
 
-        List<WorkflowTask> filterTasks = buildDynamicFilterChain(
-                agentName, prepareRef, model, maxTools);
+        List<WorkflowTask> filterTasks = buildDynamicFilterChain(agentName, prepareRef, model, maxTools);
 
         Map<String, List<WorkflowTask>> switchCases = new LinkedHashMap<>();
         switchCases.put("filter", filterTasks);
@@ -1059,14 +1124,10 @@ public class ToolCompiler {
         Map<String, Object> resolveInputs = new LinkedHashMap<>();
         resolveInputs.put("evaluatorType", "graaljs");
         resolveInputs.put("expression", JavaScriptBuilder.mcpResolveScript());
-        resolveInputs.put("filtered_tools",
-                "${" + filterInlineRef + ".output.result.tools}");
-        resolveInputs.put("prepared_tools",
-                "${" + prepareRef + ".output.result.tools}");
-        resolveInputs.put("mcpConfig",
-                "${" + prepareRef + ".output.result.mcpConfig}");
-        resolveInputs.put("apiConfig",
-                "${" + prepareRef + ".output.result.apiConfig}");
+        resolveInputs.put("filtered_tools", "${" + filterInlineRef + ".output.result.tools}");
+        resolveInputs.put("prepared_tools", "${" + prepareRef + ".output.result.tools}");
+        resolveInputs.put("mcpConfig", "${" + prepareRef + ".output.result.mcpConfig}");
+        resolveInputs.put("apiConfig", "${" + prepareRef + ".output.result.apiConfig}");
         resolveTask.setInputParameters(resolveInputs);
         preTasks.add(resolveTask);
 
@@ -1074,8 +1135,12 @@ public class ToolCompiler {
         String mcpConfigRef = "${" + resolveRef + ".output.result.mcpConfig}";
         String apiConfigRef = "${" + resolveRef + ".output.result.apiConfig}";
 
-        logger.debug("Built combined discovery tasks for agent '{}': {} MCP servers, {} API specs, threshold={}",
-                agentName, mcpServers.size(), apiServers.size(), maxTools);
+        logger.debug(
+                "Built combined discovery tasks for agent '{}': {} MCP servers, {} API specs, threshold={}",
+                agentName,
+                mcpServers.size(),
+                apiServers.size(),
+                maxTools);
 
         return new DiscoveryResult(preTasks, toolsRef, mcpConfigRef, apiConfigRef);
     }
@@ -1114,17 +1179,17 @@ public class ToolCompiler {
             filterLlmInputs.put("model", parsed.getModel());
         }
 
-        String systemPrompt =
-            "You are a tool selection assistant. Given a user query and a catalog "
-            + "of available tools, select the most relevant tools the AI agent will "
-            + "need. Select at most " + maxTools + " tools.\n\n"
-            + "TOOL CATALOG:\n${" + catalogRef + ".output.result.catalog}\n\n"
-            + "Respond with ONLY a JSON object: {\"selected_tools\": [\"tool_name_1\", \"tool_name_2\", ...]}";
+        String systemPrompt = "You are a tool selection assistant. Given a user query and a catalog "
+                + "of available tools, select the most relevant tools the AI agent will "
+                + "need. Select at most " + maxTools + " tools.\n\n"
+                + "TOOL CATALOG:\n${" + catalogRef + ".output.result.catalog}\n\n"
+                + "Respond with ONLY a JSON object: {\"selected_tools\": [\"tool_name_1\", \"tool_name_2\", ...]}";
 
-        filterLlmInputs.put("messages", List.of(
-            Map.of("role", "system", "message", systemPrompt),
-            Map.of("role", "user", "message", "${workflow.input.prompt}")
-        ));
+        filterLlmInputs.put(
+                "messages",
+                List.of(
+                        Map.of("role", "system", "message", systemPrompt),
+                        Map.of("role", "user", "message", "${workflow.input.prompt}")));
         filterLlmInputs.put("temperature", 0);
         filterLlmInputs.put("jsonOutput", true);
         filterLlm.setInputParameters(filterLlmInputs);
@@ -1180,17 +1245,17 @@ public class ToolCompiler {
             filterLlmInputs.put("model", parsed.getModel());
         }
 
-        String systemPrompt =
-            "You are a tool selection assistant. Given a user query and a catalog "
-            + "of available tools, select the most relevant tools the AI agent will "
-            + "need. Select at most " + maxTools + " tools.\n\n"
-            + "TOOL CATALOG:\n${" + catalogRef + ".output.result.catalog}\n\n"
-            + "Respond with ONLY a JSON object: {\"selected_tools\": [\"tool_name_1\", \"tool_name_2\", ...]}";
+        String systemPrompt = "You are a tool selection assistant. Given a user query and a catalog "
+                + "of available tools, select the most relevant tools the AI agent will "
+                + "need. Select at most " + maxTools + " tools.\n\n"
+                + "TOOL CATALOG:\n${" + catalogRef + ".output.result.catalog}\n\n"
+                + "Respond with ONLY a JSON object: {\"selected_tools\": [\"tool_name_1\", \"tool_name_2\", ...]}";
 
-        filterLlmInputs.put("messages", List.of(
-            Map.of("role", "system", "message", systemPrompt),
-            Map.of("role", "user", "message", "${workflow.input.prompt}")
-        ));
+        filterLlmInputs.put(
+                "messages",
+                List.of(
+                        Map.of("role", "system", "message", systemPrompt),
+                        Map.of("role", "user", "message", "${workflow.input.prompt}")));
         filterLlmInputs.put("temperature", 0);
         filterLlmInputs.put("jsonOutput", true);
         filterLlm.setInputParameters(filterLlmInputs);
@@ -1218,23 +1283,31 @@ public class ToolCompiler {
      * <p>Like {@link #buildToolCallRouting} but the enrichment task reads
      * {@code mcpConfig} from a runtime reference instead of baking it in.</p>
      */
-    public WorkflowTask buildToolCallRoutingDynamic(String agentName, String llmRef,
-                                                     List<ToolConfig> tools,
-                                                     boolean hasApproval, String model,
-                                                     String mcpConfigRef) {
-        return buildToolCallRoutingDynamicWithResult(agentName, llmRef, tools,
-                hasApproval, model, mcpConfigRef, null).getRouterTask();
+    public WorkflowTask buildToolCallRoutingDynamic(
+            String agentName,
+            String llmRef,
+            List<ToolConfig> tools,
+            boolean hasApproval,
+            String model,
+            String mcpConfigRef) {
+        return buildToolCallRoutingDynamicWithResult(agentName, llmRef, tools, hasApproval, model, mcpConfigRef, null)
+                .getRouterTask();
     }
 
     /**
      * Build tool call routing with dynamic MCP and API config.
      */
-    public WorkflowTask buildToolCallRoutingDynamic(String agentName, String llmRef,
-                                                     List<ToolConfig> tools,
-                                                     boolean hasApproval, String model,
-                                                     String mcpConfigRef, String apiConfigRef) {
-        return buildToolCallRoutingDynamicWithResult(agentName, llmRef, tools,
-                hasApproval, model, mcpConfigRef, apiConfigRef).getRouterTask();
+    public WorkflowTask buildToolCallRoutingDynamic(
+            String agentName,
+            String llmRef,
+            List<ToolConfig> tools,
+            boolean hasApproval,
+            String model,
+            String mcpConfigRef,
+            String apiConfigRef) {
+        return buildToolCallRoutingDynamicWithResult(
+                        agentName, llmRef, tools, hasApproval, model, mcpConfigRef, apiConfigRef)
+                .getRouterTask();
     }
 
     /**
@@ -1243,25 +1316,31 @@ public class ToolCompiler {
      */
     @Deprecated
     public ToolCallRoutingResult buildToolCallRoutingDynamicWithResult(
-            String agentName, String llmRef, List<ToolConfig> tools,
-            boolean hasApproval, String model, String mcpConfigRef) {
-        return buildToolCallRoutingDynamicWithResult(agentName, llmRef, tools,
-                hasApproval, model, mcpConfigRef, null);
+            String agentName,
+            String llmRef,
+            List<ToolConfig> tools,
+            boolean hasApproval,
+            String model,
+            String mcpConfigRef) {
+        return buildToolCallRoutingDynamicWithResult(agentName, llmRef, tools, hasApproval, model, mcpConfigRef, null);
     }
 
     /**
      * Build tool call routing with dynamic MCP and API config, returning guardrail metadata.
      */
     public ToolCallRoutingResult buildToolCallRoutingDynamicWithResult(
-            String agentName, String llmRef, List<ToolConfig> tools,
-            boolean hasApproval, String model, String mcpConfigRef,
+            String agentName,
+            String llmRef,
+            List<ToolConfig> tools,
+            boolean hasApproval,
+            String model,
+            String mcpConfigRef,
             String apiConfigRef) {
-
+        agentName = AgentCompiler.toRef(agentName);
         List<String> retryRefs = new ArrayList<>();
         List<String[]> guardrailRefs = new ArrayList<>();
 
-        String switchExpr = "$.toolCalls != null && $.toolCalls.length > 0 "
-                + "? 'tool_call' : 'none'";
+        String switchExpr = "$.toolCalls != null && $.toolCalls.length > 0 " + "? 'tool_call' : 'none'";
 
         WorkflowTask switchTask = new WorkflowTask();
         switchTask.setName("SWITCH");
@@ -1278,19 +1357,16 @@ public class ToolCompiler {
         List<WorkflowTask> toolCallTasks = new ArrayList<>();
 
         // Tool guardrails (before approval, before fork)
-        List<GuardrailConfig> toolGuardrails = collectToolGuardrails(
-                tools != null ? tools : Collections.emptyList());
+        List<GuardrailConfig> toolGuardrails = collectToolGuardrails(tools != null ? tools : Collections.emptyList());
         if (!toolGuardrails.isEmpty()) {
-            toolCallTasks.addAll(buildToolGuardrailGate(
-                    agentName, llmRef, toolGuardrails, retryRefs, guardrailRefs));
+            toolCallTasks.addAll(buildToolGuardrailGate(agentName, llmRef, toolGuardrails, retryRefs, guardrailRefs));
         }
 
         if (hasApproval) {
-            toolCallTasks.addAll(buildToolCallWithApprovalDynamic(
-                    agentName, llmRef, model, tools, mcpConfigRef, apiConfigRef));
+            toolCallTasks.addAll(
+                    buildToolCallWithApprovalDynamic(agentName, llmRef, model, tools, mcpConfigRef, apiConfigRef));
         } else {
-            toolCallTasks.addAll(buildForkChainDynamic(
-                    agentName, llmRef, tools, "", mcpConfigRef, apiConfigRef));
+            toolCallTasks.addAll(buildForkChainDynamic(agentName, llmRef, tools, "", mcpConfigRef, apiConfigRef));
         }
 
         Map<String, List<WorkflowTask>> decisionCases = new LinkedHashMap<>();
@@ -1304,18 +1380,21 @@ public class ToolCompiler {
     /**
      * Build fork chain with dynamic MCP config.
      */
-    public List<WorkflowTask> buildForkChainDynamic(String agentName, String llmRef,
-                                                     List<ToolConfig> tools, String prefix,
-                                                     String mcpConfigRef) {
+    public List<WorkflowTask> buildForkChainDynamic(
+            String agentName, String llmRef, List<ToolConfig> tools, String prefix, String mcpConfigRef) {
         return buildForkChainDynamic(agentName, llmRef, tools, prefix, mcpConfigRef, null);
     }
 
     /**
      * Build fork chain with dynamic MCP and API config.
      */
-    public List<WorkflowTask> buildForkChainDynamic(String agentName, String llmRef,
-                                                     List<ToolConfig> tools, String prefix,
-                                                     String mcpConfigRef, String apiConfigRef) {
+    public List<WorkflowTask> buildForkChainDynamic(
+            String agentName,
+            String llmRef,
+            List<ToolConfig> tools,
+            String prefix,
+            String mcpConfigRef,
+            String apiConfigRef) {
         String p = (prefix != null && !prefix.isEmpty()) ? prefix + "_" : "";
 
         Object[] enrichResult = buildEnrichTaskDynamic(agentName, llmRef, tools, p, mcpConfigRef, apiConfigRef);
@@ -1341,41 +1420,45 @@ public class ToolCompiler {
     /**
      * Build enrich task with dynamic MCP config from a runtime reference.
      */
-    public Object[] buildEnrichTaskDynamic(String agentName, String llmRef,
-                                            List<ToolConfig> tools, String p,
-                                            String mcpConfigRef) {
+    public Object[] buildEnrichTaskDynamic(
+            String agentName, String llmRef, List<ToolConfig> tools, String p, String mcpConfigRef) {
         return buildEnrichTaskDynamic(agentName, llmRef, tools, p, mcpConfigRef, null);
     }
 
     /**
      * Build enrich task with dynamic MCP and API config from runtime references.
      */
-    public Object[] buildEnrichTaskDynamic(String agentName, String llmRef,
-                                            List<ToolConfig> tools, String p,
-                                            String mcpConfigRef, String apiConfigRef) {
+    public Object[] buildEnrichTaskDynamic(
+            String agentName,
+            String llmRef,
+            List<ToolConfig> tools,
+            String p,
+            String mcpConfigRef,
+            String apiConfigRef) {
+        agentName = AgentCompiler.toRef(agentName);
         // Build static configs (HTTP, media, agent_tool, RAG) at compile time — same as buildEnrichTask
         Map<String, Object> httpConfig = new LinkedHashMap<>();
         Map<String, Object> mediaConfig = new LinkedHashMap<>();
         Map<String, Object> agentToolConfig = new LinkedHashMap<>();
         Map<String, Object> ragConfig = new LinkedHashMap<>();
         Map<String, Object> humanConfig = new LinkedHashMap<>();
+        Map<String, Object> wmqConfig = new LinkedHashMap<>();
 
         if (tools != null) {
             for (ToolConfig tool : tools) {
                 String toolType = tool.getToolType() != null ? tool.getToolType() : "worker";
-                Map<String, Object> cfg = tool.getConfig() != null
-                        ? tool.getConfig() : Collections.emptyMap();
+                Map<String, Object> cfg = tool.getConfig() != null ? tool.getConfig() : Collections.emptyMap();
 
                 if ("http".equals(toolType)) {
-                    httpConfig.put(tool.getName(), cfg);
+                    httpConfig.put(tool.getName(), escapeHeadersInConfig(cfg));
                 } else if ("agent_tool".equals(toolType)) {
-                    String workflowName = (String) cfg.getOrDefault("workflowName",
-                            tool.getName() + "_agent_wf");
+                    String workflowName = (String) cfg.getOrDefault("workflowName", tool.getName() + "_agent_wf");
                     Map<String, Object> atEntry = new LinkedHashMap<>();
                     atEntry.put("workflowName", workflowName);
                     // Pass through retry/resilience overrides from SDK config
                     if (cfg.containsKey("retryCount")) atEntry.put("retryCount", cfg.get("retryCount"));
-                    if (cfg.containsKey("retryDelaySeconds")) atEntry.put("retryDelaySeconds", cfg.get("retryDelaySeconds"));
+                    if (cfg.containsKey("retryDelaySeconds"))
+                        atEntry.put("retryDelaySeconds", cfg.get("retryDelaySeconds"));
                     if (cfg.containsKey("optional")) atEntry.put("optional", cfg.get("optional"));
                     agentToolConfig.put(tool.getName(), atEntry);
                 } else if (MEDIA_TOOL_TYPES.contains(toolType)) {
@@ -1401,6 +1484,10 @@ public class ToolCompiler {
                     humanEntry.put("displayName", agentName + " — " + tool.getName());
                     humanEntry.put("description", tool.getDescription());
                     humanConfig.put(tool.getName(), humanEntry);
+                } else if ("pull_workflow_messages".equals(toolType)) {
+                    Map<String, Object> wmqEntry = new LinkedHashMap<>();
+                    wmqEntry.put("batchSize", cfg.getOrDefault("batchSize", 1));
+                    wmqConfig.put(tool.getName(), wmqEntry);
                 }
                 // MCP config comes from runtime — skip here
             }
@@ -1411,7 +1498,9 @@ public class ToolCompiler {
         String agentToolJson = JavaScriptBuilder.toJson(agentToolConfig);
         String ragJson = JavaScriptBuilder.toJson(ragConfig);
         String humanJson = JavaScriptBuilder.toJson(humanConfig);
-        String script = JavaScriptBuilder.enrichToolsScriptDynamic(httpJson, mediaJson, agentToolJson, ragJson, humanJson);
+        String wmqJson = JavaScriptBuilder.toJson(wmqConfig);
+        String script = JavaScriptBuilder.enrichToolsScriptDynamic(
+                httpJson, mediaJson, agentToolJson, ragJson, humanJson, wmqJson);
 
         String enrichRef = agentName + "_" + p + "enrich_tools";
 
@@ -1429,19 +1518,23 @@ public class ToolCompiler {
         }
         enrichInput.put("agentState", "${workflow.variables._agent_state}");
         enrichInput.put("agentspanCtx", "${workflow.input.__agentspan_ctx__}");
+        enrichInput.put("userPrompt", "${workflow.input.prompt}");
         enrichTask.setInputParameters(enrichInput);
 
         String outputRef = "${" + enrichRef + ".output.result.dynamicTasks}";
-        return new Object[]{enrichTask, outputRef};
+        return new Object[] {enrichTask, outputRef};
     }
 
     /**
      * Build tool-call case with approval gate using dynamic MCP and API config.
      */
-    private List<WorkflowTask> buildToolCallWithApprovalDynamic(String agentName, String llmRef,
-                                                                  String model, List<ToolConfig> tools,
-                                                                  String mcpConfigRef,
-                                                                  String apiConfigRef) {
+    private List<WorkflowTask> buildToolCallWithApprovalDynamic(
+            String agentName,
+            String llmRef,
+            String model,
+            List<ToolConfig> tools,
+            String mcpConfigRef,
+            String apiConfigRef) {
         // Reuse the same approval logic but with dynamic fork chains
         // (simplified: delegate to existing approval logic, replacing fork chain builders)
 
@@ -1462,15 +1555,16 @@ public class ToolCompiler {
         checkTask.setType("INLINE");
         Map<String, Object> checkInputs = new LinkedHashMap<>();
         checkInputs.put("evaluatorType", "graaljs");
-        checkInputs.put("expression",
-            "(function() {"
-            + "var approvalTools = " + approvalJson + ";"
-            + "var tcs = $.tool_calls || [];"
-            + "for (var i = 0; i < tcs.length; i++) {"
-            + "  if (approvalTools[tcs[i].name]) return {needs_approval: true};"
-            + "}"
-            + "return {needs_approval: false};"
-            + "})()");
+        checkInputs.put(
+                "expression",
+                "(function() {"
+                        + "var approvalTools = " + approvalJson + ";"
+                        + "var tcs = $.tool_calls || [];"
+                        + "for (var i = 0; i < tcs.length; i++) {"
+                        + "  if (approvalTools[tcs[i].name]) return {needs_approval: true};"
+                        + "}"
+                        + "return {needs_approval: false};"
+                        + "})()");
         checkInputs.put("tool_calls", "${" + llmRef + ".output.toolCalls}");
         checkTask.setInputParameters(checkInputs);
 
@@ -1486,12 +1580,13 @@ public class ToolCompiler {
         Map<String, List<WorkflowTask>> gateCases = new LinkedHashMap<>();
 
         // needs_approval case: same as buildToolCallWithApproval but with dynamic fork chains
-        List<WorkflowTask> approvalCaseTasks = buildApprovalCaseTasksDynamic(
-                agentName, llmRef, model, tools, mcpConfigRef, apiConfigRef);
+        List<WorkflowTask> approvalCaseTasks =
+                buildApprovalCaseTasksDynamic(agentName, llmRef, model, tools, mcpConfigRef, apiConfigRef);
         gateCases.put("needs_approval", approvalCaseTasks);
         approvalSwitch.setDecisionCases(gateCases);
 
-        List<WorkflowTask> directChain = buildForkChainDynamic(agentName, llmRef, tools, "direct", mcpConfigRef, apiConfigRef);
+        List<WorkflowTask> directChain =
+                buildForkChainDynamic(agentName, llmRef, tools, "direct", mcpConfigRef, apiConfigRef);
         approvalSwitch.setDefaultCase(directChain);
 
         return List.of(checkTask, approvalSwitch);
@@ -1500,16 +1595,18 @@ public class ToolCompiler {
     /**
      * Build the approval case tasks with dynamic MCP and API config (human task -> validate -> normalize -> check -> route).
      */
-    private List<WorkflowTask> buildApprovalCaseTasksDynamic(String agentName, String llmRef,
-                                                               String model, List<ToolConfig> tools,
-                                                               String mcpConfigRef,
-                                                               String apiConfigRef) {
+    private List<WorkflowTask> buildApprovalCaseTasksDynamic(
+            String agentName,
+            String llmRef,
+            String model,
+            List<ToolConfig> tools,
+            String mcpConfigRef,
+            String apiConfigRef) {
         String humanRef = agentName + "_approval_human";
-        HumanTaskBuilder.Pipeline pipeline = HumanTaskBuilder
-            .create(humanRef, agentName + " Tool Approval")
-            .contextInput("tool_calls", "${" + llmRef + ".output.toolCalls}")
-            .approvalValidation(model)
-            .build();
+        HumanTaskBuilder.Pipeline pipeline = HumanTaskBuilder.create(humanRef, agentName + " Tool Approval")
+                .contextInput("tool_calls", "${" + llmRef + ".output.toolCalls}")
+                .approvalValidation(model)
+                .build();
 
         List<WorkflowTask> tasks = new ArrayList<>(pipeline.getTasks());
 
@@ -1520,26 +1617,25 @@ public class ToolCompiler {
         approvalRoute.setTaskReferenceName(agentName + "_approval_route");
         approvalRoute.setEvaluatorType("graaljs");
         approvalRoute.setExpression("$.approved == true ? 'approved' : 'rejected'");
-        approvalRoute.setInputParameters(Map.of("approved",
-            "${" + outputRef + ".approved}"));
+        approvalRoute.setInputParameters(Map.of("approved", "${" + outputRef + ".approved}"));
 
-        List<WorkflowTask> approvedChain = buildForkChainDynamic(agentName, llmRef, tools, "approved", mcpConfigRef, apiConfigRef);
+        List<WorkflowTask> approvedChain =
+                buildForkChainDynamic(agentName, llmRef, tools, "approved", mcpConfigRef, apiConfigRef);
         approvalRoute.setDecisionCases(Map.of("approved", approvedChain));
 
         WorkflowTask setRejectionOutput = new WorkflowTask();
         setRejectionOutput.setType("SET_VARIABLE");
         setRejectionOutput.setTaskReferenceName(agentName + "_approval_reject_output");
         setRejectionOutput.setInputParameters(Map.of(
-            "rejectedToolCall", "${" + outputRef + ".rejected_tool}",
-            "rejectionReason", "${" + outputRef + ".reason}",
-            "finishReason", "rejected"));
+                "rejectedToolCall", "${" + outputRef + ".rejected_tool}",
+                "rejectionReason", "${" + outputRef + ".reason}",
+                "finishReason", "rejected"));
 
         WorkflowTask rejectTerminate = new WorkflowTask();
         rejectTerminate.setType("TERMINATE");
         rejectTerminate.setTaskReferenceName(agentName + "_approval_reject");
-        rejectTerminate.setInputParameters(Map.of(
-            "terminationReason", "${" + outputRef + ".reason}",
-            "terminationStatus", "COMPLETED"));
+        rejectTerminate.setInputParameters(
+                Map.of("terminationReason", "${" + outputRef + ".reason}", "terminationStatus", "COMPLETED"));
         approvalRoute.setDefaultCase(List.of(setRejectionOutput, rejectTerminate));
         tasks.add(approvalRoute);
 
@@ -1563,6 +1659,7 @@ public class ToolCompiler {
      * @return list of two tasks: [mergeInline, setVariable]
      */
     public List<WorkflowTask> buildStateMergeTasks(String agentName, String joinRef, String prefix) {
+        agentName = AgentCompiler.toRef(agentName);
         String p = (prefix != null && !prefix.isEmpty()) ? prefix : "";
 
         // 1. INLINE merge task
@@ -1583,9 +1680,7 @@ public class ToolCompiler {
         WorkflowTask setTask = new WorkflowTask();
         setTask.setType("SET_VARIABLE");
         setTask.setTaskReferenceName(setRef);
-        setTask.setInputParameters(Map.of(
-            "_agent_state", "${" + mergeRef + ".output.result.mergedState}"
-        ));
+        setTask.setInputParameters(Map.of("_agent_state", "${" + mergeRef + ".output.result.mergedState}"));
 
         return List.of(mergeTask, setTask);
     }
@@ -1602,18 +1697,20 @@ public class ToolCompiler {
      * @param outRetryRefs     mutable list — tool guardrail retry refs are appended here
      * @param outGuardrailRefs mutable list — tool guardrail refs are appended here
      */
-    private List<WorkflowTask> buildToolCallCase(String agentName, String llmRef,
-                                                  boolean hasApproval, String model,
-                                                  List<ToolConfig> tools,
-                                                  List<String> outRetryRefs,
-                                                  List<String[]> outGuardrailRefs) {
+    private List<WorkflowTask> buildToolCallCase(
+            String agentName,
+            String llmRef,
+            boolean hasApproval,
+            String model,
+            List<ToolConfig> tools,
+            List<String> outRetryRefs,
+            List<String[]> outGuardrailRefs) {
         List<WorkflowTask> tasks = new ArrayList<>();
 
         // Tool guardrails (before approval, before fork)
         List<GuardrailConfig> toolGuardrails = collectToolGuardrails(tools);
         if (!toolGuardrails.isEmpty()) {
-            tasks.addAll(buildToolGuardrailGate(
-                    agentName, llmRef, toolGuardrails, outRetryRefs, outGuardrailRefs));
+            tasks.addAll(buildToolGuardrailGate(agentName, llmRef, toolGuardrails, outRetryRefs, outGuardrailRefs));
         }
 
         // Existing approval + fork chain
@@ -1644,9 +1741,11 @@ public class ToolCompiler {
      * @return ordered list of tasks to prepend to the tool_call case
      */
     private List<WorkflowTask> buildToolGuardrailGate(
-            String agentName, String llmRef,
+            String agentName,
+            String llmRef,
             List<GuardrailConfig> toolGuardrails,
-            List<String> outRetryRefs, List<String[]> outGuardrailRefs) {
+            List<String> outRetryRefs,
+            List<String[]> outGuardrailRefs) {
 
         List<WorkflowTask> tasks = new ArrayList<>();
 
@@ -1674,16 +1773,14 @@ public class ToolCompiler {
             GuardrailCompiler.GuardrailTaskResult gr = guardrailResults.get(idx);
             String suffix = guardrailResults.size() > 1 ? "_tg_" + idx : "_tg";
             GuardrailCompiler.GuardrailRoutingResult routing = gc.compileGuardrailRouting(
-                    toolGuardrails.get(idx), gr.getRefName(), contentRef,
-                    agentName, suffix, gr.isInline());
+                    toolGuardrails.get(idx), gr.getRefName(), contentRef, agentName, suffix, gr.isInline());
             tasks.addAll(gr.getTasks());
             tasks.add(routing.getSwitchTask());
-            outGuardrailRefs.add(new String[]{gr.getRefName(), String.valueOf(gr.isInline())});
+            outGuardrailRefs.add(new String[] {gr.getRefName(), String.valueOf(gr.isInline())});
             outRetryRefs.add(routing.getRetryRef());
         }
 
-        logger.debug("Built tool guardrail gate for agent '{}' with {} guardrails",
-                agentName, toolGuardrails.size());
+        logger.debug("Built tool guardrail gate for agent '{}' with {} guardrails", agentName, toolGuardrails.size());
         return tasks;
     }
 
@@ -1693,8 +1790,8 @@ public class ToolCompiler {
      *   "needs_approval": HumanTask → validate → normalize → approval_check → route
      *   default: enrich → DynamicFork+Join
      */
-    private List<WorkflowTask> buildToolCallWithApproval(String agentName, String llmRef,
-                                                          String model, List<ToolConfig> tools) {
+    private List<WorkflowTask> buildToolCallWithApproval(
+            String agentName, String llmRef, String model, List<ToolConfig> tools) {
         // 1. check_approval INLINE task (server-side JS)
         StringBuilder approvalJson = new StringBuilder("{");
         boolean first = true;
@@ -1713,15 +1810,16 @@ public class ToolCompiler {
         checkTask.setType("INLINE");
         Map<String, Object> checkInputs = new LinkedHashMap<>();
         checkInputs.put("evaluatorType", "graaljs");
-        checkInputs.put("expression",
-            "(function() {"
-            + "var approvalTools = " + approvalJson + ";"
-            + "var tcs = $.tool_calls || [];"
-            + "for (var i = 0; i < tcs.length; i++) {"
-            + "  if (approvalTools[tcs[i].name]) return {needs_approval: true};"
-            + "}"
-            + "return {needs_approval: false};"
-            + "})()");
+        checkInputs.put(
+                "expression",
+                "(function() {"
+                        + "var approvalTools = " + approvalJson + ";"
+                        + "var tcs = $.tool_calls || [];"
+                        + "for (var i = 0; i < tcs.length; i++) {"
+                        + "  if (approvalTools[tcs[i].name]) return {needs_approval: true};"
+                        + "}"
+                        + "return {needs_approval: false};"
+                        + "})()");
         checkInputs.put("tool_calls", "${" + llmRef + ".output.toolCalls}");
         checkTask.setInputParameters(checkInputs);
 
@@ -1739,13 +1837,12 @@ public class ToolCompiler {
 
         // ── "needs_approval" case ──
         String humanRef = agentName + "_approval_human";
-        HumanTaskBuilder.Pipeline pipeline = HumanTaskBuilder
-            .create(humanRef, agentName + " Tool Approval")
-            .responseSchema(HumanTaskBuilder.approvalResponseSchema())
-            .responseUiSchema(HumanTaskBuilder.approvalResponseUiSchema())
-            .contextInput("tool_calls", "${" + llmRef + ".output.toolCalls}")
-            .approvalValidation(model)
-            .build();
+        HumanTaskBuilder.Pipeline pipeline = HumanTaskBuilder.create(humanRef, agentName + " Tool Approval")
+                .responseSchema(HumanTaskBuilder.approvalResponseSchema())
+                .responseUiSchema(HumanTaskBuilder.approvalResponseUiSchema())
+                .contextInput("tool_calls", "${" + llmRef + ".output.toolCalls}")
+                .approvalValidation(model)
+                .build();
 
         List<WorkflowTask> approvalCaseTasks = new ArrayList<>(pipeline.getTasks());
         String outputRef = pipeline.getOutputRef();
@@ -1756,8 +1853,7 @@ public class ToolCompiler {
         approvalRoute.setTaskReferenceName(agentName + "_approval_route");
         approvalRoute.setEvaluatorType("graaljs");
         approvalRoute.setExpression("$.approved == true ? 'approved' : 'rejected'");
-        approvalRoute.setInputParameters(Map.of("approved",
-            "${" + outputRef + ".approved}"));
+        approvalRoute.setInputParameters(Map.of("approved", "${" + outputRef + ".approved}"));
 
         // "approved" case: store human feedback, then execute tools
         List<WorkflowTask> approvedTasks = new ArrayList<>();
@@ -1778,8 +1874,7 @@ public class ToolCompiler {
         WorkflowTask storeHumanFeedback = new WorkflowTask();
         storeHumanFeedback.setType("SET_VARIABLE");
         storeHumanFeedback.setTaskReferenceName(agentName + "_approval_store_feedback");
-        storeHumanFeedback.setInputParameters(Map.of(
-            "_human_feedback", "${" + formatFeedbackRef + ".output.result}"));
+        storeHumanFeedback.setInputParameters(Map.of("_human_feedback", "${" + formatFeedbackRef + ".output.result}"));
         approvedTasks.add(storeHumanFeedback);
 
         approvedTasks.addAll(buildForkChain(agentName, llmRef, tools, "approved"));
@@ -1792,16 +1887,15 @@ public class ToolCompiler {
         setRejectionOutput2.setType("SET_VARIABLE");
         setRejectionOutput2.setTaskReferenceName(agentName + "_approval_reject_output");
         setRejectionOutput2.setInputParameters(Map.of(
-            "rejectedToolCall", "${" + outputRef + ".rejected_tool}",
-            "rejectionReason", "${" + outputRef + ".reason}",
-            "finishReason", "rejected"));
+                "rejectedToolCall", "${" + outputRef + ".rejected_tool}",
+                "rejectionReason", "${" + outputRef + ".reason}",
+                "finishReason", "rejected"));
 
         WorkflowTask rejectTerminate = new WorkflowTask();
         rejectTerminate.setType("TERMINATE");
         rejectTerminate.setTaskReferenceName(agentName + "_approval_reject");
-        rejectTerminate.setInputParameters(Map.of(
-            "terminationReason", "${" + outputRef + ".reason}",
-            "terminationStatus", "COMPLETED"));
+        rejectTerminate.setInputParameters(
+                Map.of("terminationReason", "${" + outputRef + ".reason}", "terminationStatus", "COMPLETED"));
         approvalRoute.setDefaultCase(List.of(setRejectionOutput2, rejectTerminate));
         approvalCaseTasks.add(approvalRoute);
 

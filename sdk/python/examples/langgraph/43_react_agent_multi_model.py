@@ -9,7 +9,7 @@ Demonstrates:
     - Same code, different model — no Agentspan-specific changes needed
 
 Requirements:
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - ANTHROPIC_API_KEY for ChatAnthropic
 """
 
@@ -63,10 +63,19 @@ graph = create_react_agent(llm, tools=[get_today, days_between, day_of_week], na
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            graph,
-            "What day of the week is today? "
-            "How many days until New Year's Day 2026? "
-            "What day of the week will that be?",
+        graph,
+        "What day of the week is today? "
+        "How many days until New Year's Day 2026? "
+        "What day of the week will that be?",
         )
         print(f"Status: {result.status}")
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.43_react_agent_multi_model
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)

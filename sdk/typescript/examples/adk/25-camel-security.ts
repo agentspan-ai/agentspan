@@ -16,7 +16,7 @@
 
 import { LlmAgent, SequentialAgent, FunctionTool } from '@google/adk';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
@@ -75,7 +75,7 @@ const redactSensitiveFields = new FunctionTool({
 // ── Pipeline stages ──────────────────────────────────────────────────
 
 // Data collector fetches raw user data
-const collector = new LlmAgent({
+export const collector = new LlmAgent({
   name: 'data_collector',
   model,
   instruction:
@@ -86,7 +86,7 @@ const collector = new LlmAgent({
 });
 
 // Validator enforces data security policy
-const validator = new LlmAgent({
+export const validator = new LlmAgent({
   name: 'security_validator',
   model,
   instruction:
@@ -98,7 +98,7 @@ const validator = new LlmAgent({
 });
 
 // Responder formats the final answer
-const responder = new LlmAgent({
+export const responder = new LlmAgent({
   name: 'responder',
   model,
   instruction:
@@ -109,7 +109,7 @@ const responder = new LlmAgent({
 });
 
 // Sequential pipeline enforces data flow: collect -> validate -> respond
-const pipeline = new SequentialAgent({
+export const pipeline = new SequentialAgent({
   name: 'secure_data_pipeline',
   subAgents: [collector, validator, responder],
 });
@@ -120,11 +120,20 @@ async function main() {
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(
-      pipeline,
-      'Tell me everything about user U001 including their financial details.',
+    pipeline,
+    'Tell me everything about user U001 including their financial details.',
     );
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(pipeline);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents secure_data_pipeline
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(pipeline);
   } finally {
     await runtime.shutdown();
   }

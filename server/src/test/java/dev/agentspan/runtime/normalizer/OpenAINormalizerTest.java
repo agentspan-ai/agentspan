@@ -5,15 +5,16 @@
 
 package dev.agentspan.runtime.normalizer;
 
-import dev.agentspan.runtime.model.AgentConfig;
-import dev.agentspan.runtime.model.ToolConfig;
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+
+import dev.agentspan.runtime.model.AgentConfig;
+import dev.agentspan.runtime.model.ToolConfig;
 
 class OpenAINormalizerTest {
 
@@ -26,10 +27,7 @@ class OpenAINormalizerTest {
 
     @Test
     void normalizeSupportsCamelCaseFieldVariants() {
-        Map<String, Object> schema = Map.of(
-            "type", "object",
-            "properties", Map.of("answer", Map.of("type", "string"))
-        );
+        Map<String, Object> schema = Map.of("type", "object", "properties", Map.of("answer", Map.of("type", "string")));
 
         Map<String, Object> raw = new LinkedHashMap<>();
         raw.put("name", "camel_case_agent");
@@ -68,16 +66,16 @@ class OpenAINormalizerTest {
 
         assertThat(config.getGuardrails()).hasSize(2);
         assertThat(config.getGuardrails())
-            .anySatisfy(g -> {
-                assertThat(g.getName()).isEqualTo("check_for_pii");
-                assertThat(g.getPosition()).isEqualTo("input");
-                assertThat(g.getTaskName()).isEqualTo("check_for_pii");
-            })
-            .anySatisfy(g -> {
-                assertThat(g.getName()).isEqualTo("check_output_safety");
-                assertThat(g.getPosition()).isEqualTo("output");
-                assertThat(g.getTaskName()).isEqualTo("check_output_safety");
-            });
+                .anySatisfy(g -> {
+                    assertThat(g.getName()).isEqualTo("check_for_pii");
+                    assertThat(g.getPosition()).isEqualTo("input");
+                    assertThat(g.getTaskName()).isEqualTo("check_for_pii");
+                })
+                .anySatisfy(g -> {
+                    assertThat(g.getName()).isEqualTo("check_output_safety");
+                    assertThat(g.getPosition()).isEqualTo("output");
+                    assertThat(g.getTaskName()).isEqualTo("check_output_safety");
+                });
     }
 
     @Test
@@ -90,12 +88,13 @@ class OpenAINormalizerTest {
 
         Map<String, Object> raw = new LinkedHashMap<>();
         raw.put("name", "manager");
-        raw.put("tools", List.of(Map.of(
-            "_type", "AgentTool",
-            "name", "sentiment_analyzer",
-            "description", "Analyze sentiment with a specialist agent.",
-            "agent", childAgent
-        )));
+        raw.put(
+                "tools",
+                List.of(Map.of(
+                        "_type", "AgentTool",
+                        "name", "sentiment_analyzer",
+                        "description", "Analyze sentiment with a specialist agent.",
+                        "agent", childAgent)));
 
         AgentConfig config = normalizer.normalize(raw);
 

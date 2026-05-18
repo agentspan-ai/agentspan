@@ -1,5 +1,5 @@
 import { Box, Typography, useTheme } from "@mui/material";
-import { alpha } from "@mui/material/styles";
+
 import ClipboardCopy from "components/ClipboardCopy";
 import { FEATURES, featureFlags } from "utils";
 
@@ -25,7 +25,6 @@ export function SidebarVersionBlock({
   return (
     <Box
       sx={{
-        backgroundColor: alpha(theme.palette.action.hover, 0.05),
         borderRadius: 1,
         p: 2,
       }}

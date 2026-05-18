@@ -1,0 +1,67 @@
+name: Release Server + CLI Artifacts
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release when run manually (e.g. 0.0.10)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  # ── Determine version ────────────────────────────────────────────
+  prepare:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (startsWith(github.event.release.tag_name, 'v') && !contains(github.event.release.tag_name, '-'))
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            TAG="${{ github.event.release.tag_name }}"
+            VERSION="${TAG#v}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Releasing version: ${VERSION}"
+
+  # ── Server ───────────────────────────────────────────────────────
+  server-s3:
+    needs: [prepare]
+    uses: ./.github/workflows/release-server-s3.yml
+    with:
+      version: ${{ needs.prepare.outputs.version }}
+    secrets: inherit
+
+  server-docker:
+    needs: [prepare]
+    uses: ./.github/workflows/release-server-docker.yml
+    with:
+      version: ${{ needs.prepare.outputs.version }}
+    secrets: inherit
+
+  # ── CLI ──────────────────────────────────────────────────────────
+  cli-github:
+    needs: [prepare]
+    uses: ./.github/workflows/release-cli-github.yml
+    with:
+      version: ${{ needs.prepare.outputs.version }}
+    secrets: inherit
+
+  cli-homebrew:
+    needs: [prepare, cli-github]
+    uses: ./.github/workflows/release-cli-homebrew.yml
+    with:
+      version: ${{ needs.prepare.outputs.version }}
+    secrets: inherit

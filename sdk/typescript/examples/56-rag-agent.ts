@@ -8,12 +8,12 @@
  * Requirements:
  *   - Conductor server with RAG system tasks enabled
  *   - A configured vector database (e.g., pgvector)
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, searchTool, indexTool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, searchTool, indexTool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Knowledge base content to index -----------------------------------------
 
@@ -91,7 +91,7 @@ const DOCUMENTS = [
       'completion via WAIT tasks. Configure event handlers with action types: ' +
       'complete_task, fail_task, or update_variables. Event payloads are matched ' +
       'by event name and optionally filtered by expression. For real-time updates, ' +
-      'use the streaming API (SSE) at /api/agent/stream/{workflowId}. Events ' +
+      'use the streaming API (SSE) at /api/agent/stream/{executionId}. Events ' +
       'include: tool_start, tool_end, llm_start, llm_end, agent_start, agent_end, ' +
       'and token events for incremental output.',
   },
@@ -135,7 +135,7 @@ const kbIndex = indexTool({
 
 // -- Agent -------------------------------------------------------------------
 
-const ragAgent = new Agent({
+export const ragAgent = new Agent({
   name: 'rag_assistant',
   model: llmModel,
   instructions:
@@ -155,41 +155,54 @@ const ragAgent = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  // Phase 1: Index all documents into the vector database
-  console.log('='.repeat(60));
-  console.log('PHASE 1: Indexing documents into vector database');
-  console.log('='.repeat(60));
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    // Phase 1: Index all documents into the vector database
+    console.log('='.repeat(60));
+    console.log('PHASE 1: Indexing documents into vector database');
+    console.log('='.repeat(60));
 
-  const indexLines = ['Please index the following documents into the knowledge base:\n'];
-  for (const doc of DOCUMENTS) {
-    indexLines.push(`DocID: ${doc.docId}`);
-    indexLines.push(`Text: ${doc.text}\n`);
-  }
-  const indexPrompt = indexLines.join('\n');
+    const indexLines = ['Please index the following documents into the knowledge base:\n'];
+    for (const doc of DOCUMENTS) {
+      indexLines.push(`DocID: ${doc.docId}`);
+      indexLines.push(`Text: ${doc.text}\n`);
+    }
+    const indexPrompt = indexLines.join('\n');
 
-  const indexResult = await runtime.run(ragAgent, indexPrompt);
-  console.log(indexResult.output);
+    const indexResult = await runtime.run(ragAgent, indexPrompt);
+    indexResult.printResult();
 
-  // Phase 2: Search the indexed documents
-  console.log('\n' + '='.repeat(60));
-  console.log('PHASE 2: Searching the knowledge base');
-  console.log('='.repeat(60));
+    // Phase 2: Search the indexed documents
+    console.log('\n' + '='.repeat(60));
+    console.log('PHASE 2: Searching the knowledge base');
+    console.log('='.repeat(60));
 
-  const queries = [
+    const queries = [
     'How do I authenticate my API requests? What are the rate limits?',
     'What retry policies are available for failed tasks?',
     'How do I set up vector search with PostgreSQL?',
     'What multi-agent patterns does the framework support?',
     'How do guardrails work and what happens when validation fails?',
-  ];
+    ];
 
-  for (let i = 0; i < queries.length; i++) {
-    console.log(`\n--- Query ${i + 1}: ${queries[i]}`);
-    const result = await runtime.run(ragAgent, queries[i]);
-    console.log(result.output);
+    for (let i = 0; i < queries.length; i++) {
+      console.log(`\n--- Query ${i + 1}: ${queries[i]}`);
+      const result = await runtime.run(ragAgent, queries[i]);
+      result.printResult();
+    }
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(ragAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents rag_assistant
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(ragAgent);
+  } finally {
+    await runtime.shutdown();
   }
-} finally {
-  await runtime.shutdown();
 }
+
+main().catch(console.error);

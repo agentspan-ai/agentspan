@@ -19,7 +19,7 @@
 
 import { LlmAgent, FunctionTool } from '@google/adk';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
@@ -64,7 +64,7 @@ const clearList = new FunctionTool({
 
 // ── Agent ────────────────────────────────────────────────────────────
 
-const agent = new LlmAgent({
+export const agent = new LlmAgent({
   name: 'shopping_assistant',
   model,
   instruction:
@@ -79,11 +79,20 @@ async function main() {
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(
-      agent,
-      'Add milk, eggs, and bread to my shopping list, then show me the list.',
+    agent,
+    'Add milk, eggs, and bread to my shopping list, then show me the list.',
     );
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents shopping_assistant
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
   } finally {
     await runtime.shutdown();
   }

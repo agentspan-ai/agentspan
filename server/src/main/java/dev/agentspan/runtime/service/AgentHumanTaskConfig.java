@@ -5,11 +5,11 @@
 
 package dev.agentspan.runtime.service;
 
+import static com.netflix.conductor.common.metadata.tasks.TaskType.TASK_TYPE_HUMAN;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
-
-import static com.netflix.conductor.common.metadata.tasks.TaskType.TASK_TYPE_HUMAN;
 
 /**
  * Registers {@link AgentHumanTask} as the primary HUMAN task implementation,

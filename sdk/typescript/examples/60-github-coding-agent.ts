@@ -9,13 +9,12 @@
  *
  * Requirements:
  *   - Conductor server running
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - gh CLI authenticated
  *   - Git configured with push access to the repo
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, OnTextMention, tool } from '../src/index.js';
+import { Agent, AgentRuntime, OnTextMention, tool } from '@agentspan-ai/sdk';
 import { execSync } from 'child_process';
 import { randomBytes } from 'crypto';
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'fs';
@@ -41,10 +40,13 @@ const listGithubIssues = tool(
   {
     name: 'list_github_issues',
     description: 'List GitHub issues from the repository.',
-    inputSchema: z.object({
-      state: z.string().optional().describe("Issue state filter -- 'open', 'closed', or 'all'"),
-      limit: z.number().optional().describe('Maximum number of issues to return'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        state: { type: 'string', description: 'Issue state filter -- \'open\', \'closed\', or \'all\'' },
+        limit: { type: 'number', description: 'Maximum number of issues to return' },
+      },
+    },
   },
 );
 
@@ -63,9 +65,13 @@ const getGithubIssue = tool(
   {
     name: 'get_github_issue',
     description: 'Get details of a specific GitHub issue.',
-    inputSchema: z.object({
-      issueNumber: z.number().describe('The issue number to fetch'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        issueNumber: { type: 'number', description: 'The issue number to fetch' },
+      },
+      required: ['issueNumber'],
+    },
   },
 );
 
@@ -84,7 +90,11 @@ const cloneRepo = tool(
   {
     name: 'clone_repo',
     description: 'Clone the GitHub repository to a unique /tmp directory.',
-    inputSchema: z.object({}),
+    inputSchema: {
+      type: 'object',
+      properties: {
+      },
+    },
   },
 );
 
@@ -104,9 +114,13 @@ const gitCreateBranch = tool(
   {
     name: 'git_create_branch',
     description: 'Create and checkout a new git branch.',
-    inputSchema: z.object({
-      branchName: z.string().describe('Name for the new branch'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        branchName: { type: 'string', description: 'Name for the new branch' },
+      },
+      required: ['branchName'],
+    },
   },
 );
 
@@ -120,10 +134,14 @@ const writeFile = tool(
   {
     name: 'write_file',
     description: 'Write content to a file in the cloned repo.',
-    inputSchema: z.object({
-      path: z.string().describe("Relative path within the repo (e.g. 'src/utils.py')"),
-      content: z.string().describe('The file content to write'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Relative path within the repo (e.g. \'src/utils.py\')' },
+        content: { type: 'string', description: 'The file content to write' },
+      },
+      required: ['path', 'content'],
+    },
   },
 );
 
@@ -136,9 +154,13 @@ const readFile = tool(
   {
     name: 'read_file',
     description: 'Read a file from the cloned repo.',
-    inputSchema: z.object({
-      path: z.string().describe("Relative path within the repo (e.g. 'src/utils.py')"),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Relative path within the repo (e.g. \'src/utils.py\')' },
+      },
+      required: ['path'],
+    },
   },
 );
 
@@ -159,9 +181,12 @@ const listFiles = tool(
   {
     name: 'list_files',
     description: 'List files in a directory of the cloned repo.',
-    inputSchema: z.object({
-      path: z.string().optional().describe('Relative directory path (default: repo root)'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Relative directory path (default: repo root)' },
+      },
+    },
   },
 );
 
@@ -179,9 +204,13 @@ const gitCommitAndPush = tool(
   {
     name: 'git_commit_and_push',
     description: 'Stage all changes, commit, and push to the remote.',
-    inputSchema: z.object({
-      message: z.string().describe('The commit message'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string', description: 'The commit message' },
+      },
+      required: ['message'],
+    },
   },
 );
 
@@ -204,11 +233,15 @@ const createPullRequest = tool(
   {
     name: 'create_pull_request',
     description: 'Create a GitHub pull request.',
-    inputSchema: z.object({
-      title: z.string().describe('PR title'),
-      body: z.string().describe('PR description/body in markdown'),
-      issueNumber: z.number().optional().describe('Issue number to link (0 to skip)'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'PR title' },
+        body: { type: 'string', description: 'PR description/body in markdown' },
+        issueNumber: { type: 'number', description: 'Issue number to link (0 to skip)' },
+      },
+      required: ['title', 'body'],
+    },
   },
 );
 
@@ -223,7 +256,7 @@ const qaTools = [readFile, listFiles];
 
 // -- GitHub Agent ------------------------------------------------------------
 
-const githubAgent = new Agent({
+export const githubAgent = new Agent({
   name: 'github_agent',
   model: 'anthropic/claude-sonnet-4-20250514',
   instructions:
@@ -248,7 +281,7 @@ const githubAgent = new Agent({
 
 // -- Coder -------------------------------------------------------------------
 
-const coderAgent = new Agent({
+export const coderAgent = new Agent({
   name: 'coder',
   model: 'anthropic/claude-sonnet-4-20250514',
   instructions:
@@ -268,7 +301,7 @@ const coderAgent = new Agent({
 
 // -- QA Tester ---------------------------------------------------------------
 
-const qaTester = new Agent({
+export const qaTester = new Agent({
   name: 'qa_tester',
   model: 'anthropic/claude-sonnet-4-20250514',
   instructions:
@@ -288,7 +321,7 @@ const qaTester = new Agent({
 
 // -- Coding Team: swarm coordinator ------------------------------------------
 
-const codingTeam = new Agent({
+export const codingTeam = new Agent({
   name: 'coding_team',
   model: 'anthropic/claude-sonnet-4-20250514',
   instructions:
@@ -317,34 +350,46 @@ const prompt =
   'Pick an open issue from the GitHub repository, implement the ' +
   'feature or fix the bug, get it reviewed by QA, and create a PR.';
 
-console.log('='.repeat(60));
-console.log('  GitHub Coding Agent + QA Tester');
-console.log(`  Repo: ${REPO}`);
-console.log(`  Work dir: ${WORK_DIR}`);
-console.log('  coding_team -> github_agent <-> coder <-> qa_tester (swarm)');
-console.log('='.repeat(60));
-console.log(`\nPrompt: ${prompt}\n`);
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('='.repeat(60));
+    console.log('  GitHub Coding Agent + QA Tester');
+    console.log(`  Repo: ${REPO}`);
+    console.log(`  Work dir: ${WORK_DIR}`);
+    console.log('  coding_team -> github_agent <-> coder <-> qa_tester (swarm)');
+    console.log('='.repeat(60));
+    console.log(`\nPrompt: ${prompt}\n`);
+    const result = await runtime.run(codingTeam, prompt);
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(codingTeam, prompt);
-
-  const output = result.output;
-  const skipKeys = new Set(['finishReason', 'rejectionReason', 'is_transfer', 'transfer_to']);
-  if (output && typeof output === 'object' && !Array.isArray(output)) {
+    const output = result.output;
+    const skipKeys = new Set(['finishReason', 'rejectionReason', 'is_transfer', 'transfer_to']);
+    if (output && typeof output === 'object' && !Array.isArray(output)) {
     for (const [key, text] of Object.entries(output as Record<string, string>)) {
-      if (skipKeys.has(key) || !text) continue;
-      console.log(`\n${'─'.repeat(60)}`);
-      console.log(`  [${key}]`);
-      console.log('─'.repeat(60));
-      console.log(text);
+    if (skipKeys.has(key) || !text) continue;
+    console.log(`\n${'─'.repeat(60)}`);
+    console.log(`  [${key}]`);
+    console.log('─'.repeat(60));
+    console.log(text);
     }
-  } else {
+    } else {
     console.log(output);
-  }
+    }
 
-  console.log(`\nFinish reason: ${result.finishReason}`);
-  console.log(`Workflow ID: ${result.workflowId}`);
-} finally {
-  await runtime.shutdown();
+    console.log(`\nFinish reason: ${result.finishReason}`);
+    console.log(`Execution ID: ${result.executionId}`);
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(codingTeam);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents coding_team
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(codingTeam);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

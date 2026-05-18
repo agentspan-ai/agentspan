@@ -16,7 +16,7 @@
 
 import { LlmAgent, SequentialAgent, FunctionTool } from '@google/adk';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
@@ -135,7 +135,7 @@ const assembleProduction = new FunctionTool({
 
 // ── Pipeline stages ──────────────────────────────────────────────────
 
-const conceptDeveloper = new LlmAgent({
+export const conceptDeveloper = new LlmAgent({
   name: 'concept_developer',
   model,
   instruction:
@@ -145,7 +145,7 @@ const conceptDeveloper = new LlmAgent({
   tools: [createConcept],
 });
 
-const scriptwriter = new LlmAgent({
+export const scriptwriter = new LlmAgent({
   name: 'scriptwriter',
   model,
   instruction:
@@ -155,7 +155,7 @@ const scriptwriter = new LlmAgent({
   tools: [writeScene],
 });
 
-const visualDirector = new LlmAgent({
+export const visualDirector = new LlmAgent({
   name: 'visual_director',
   model,
   instruction:
@@ -165,7 +165,7 @@ const visualDirector = new LlmAgent({
   tools: [describeVisual],
 });
 
-const audioDesigner = new LlmAgent({
+export const audioDesigner = new LlmAgent({
   name: 'audio_designer',
   model,
   instruction:
@@ -175,7 +175,7 @@ const audioDesigner = new LlmAgent({
   tools: [specifyAudio],
 });
 
-const producer = new LlmAgent({
+export const producer = new LlmAgent({
   name: 'producer',
   model,
   instruction:
@@ -186,7 +186,7 @@ const producer = new LlmAgent({
 });
 
 // Full pipeline: concept -> script -> visuals -> audio -> assembly
-const moviePipeline = new SequentialAgent({
+export const moviePipeline = new SequentialAgent({
   name: 'short_movie_pipeline',
   subAgents: [conceptDeveloper, scriptwriter, visualDirector, audioDesigner, producer],
 });
@@ -197,12 +197,21 @@ async function main() {
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(
-      moviePipeline,
-      'Create a 3-scene short film about a robot discovering music ' +
-        'for the first time in a post-apocalyptic world.',
+    moviePipeline,
+    'Create a 3-scene short film about a robot discovering music ' +
+    'for the first time in a post-apocalyptic world.',
     );
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(moviePipeline);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents short_movie_pipeline
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(moviePipeline);
   } finally {
     await runtime.shutdown();
   }

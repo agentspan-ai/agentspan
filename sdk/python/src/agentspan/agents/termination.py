@@ -168,6 +168,10 @@ class MaxMessageTermination(TerminationCondition):
     def should_terminate(self, context: Dict[str, Any]) -> TerminationResult:
         messages = context.get("messages", [])
         count = len(messages) if isinstance(messages, list) else 0
+        # Fall back to iteration count when messages list is not populated
+        # (e.g., in Conductor workflow context where iteration tracks LLM turns).
+        if count == 0:
+            count = context.get("iteration", 0)
         if count >= self.max_messages:
             return TerminationResult(
                 should_terminate=True,

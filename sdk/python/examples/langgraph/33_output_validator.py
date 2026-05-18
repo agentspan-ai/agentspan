@@ -10,7 +10,7 @@ Demonstrates:
     - Practical use case: ensuring the LLM always returns valid JSON
 
 Requirements:
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
@@ -117,3 +117,12 @@ if __name__ == "__main__":
         result = runtime.run(graph, "Create a fictional software engineer from Japan")
         print(f"Status: {result.status}")
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.33_output_validator
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)

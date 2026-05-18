@@ -8,12 +8,12 @@
  * Requirements:
  *   - Conductor server with LLM support
  *   - Docker installed and daemon running
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, DockerCodeExecutor } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, DockerCodeExecutor } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 const dockerExecutor = new DockerCodeExecutor({
   image: 'python:3.12-slim',
@@ -21,7 +21,7 @@ const dockerExecutor = new DockerCodeExecutor({
   memoryLimit: '256m',
 });
 
-const dockerCoder = new Agent({
+export const dockerCoder = new Agent({
   name: 'docker_coder',
   model: llmModel,
   tools: [dockerExecutor.asTool('execute_code')],
@@ -33,14 +33,27 @@ const dockerCoder = new Agent({
     'You have no network access. Write self-contained code.',
 });
 
-const runtime = new AgentRuntime();
-try {
-  console.log('--- Docker Sandboxed Code Execution ---');
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('--- Docker Sandboxed Code Execution ---');
+    const result = await runtime.run(
     dockerCoder,
     "Print Python's version and the container's hostname.",
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(dockerCoder);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents docker_coder
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(dockerCoder);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

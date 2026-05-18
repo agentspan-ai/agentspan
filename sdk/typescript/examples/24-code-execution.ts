@@ -12,7 +12,7 @@
  * Requirements:
  *   - Conductor server with LLM support
  *   - Docker (for DockerCodeExecutor example)
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -21,14 +21,14 @@ import {
   AgentRuntime,
   LocalCodeExecutor,
   DockerCodeExecutor,
-} from '../src/index.js';
-import { llmModel } from './settings.js';
+} from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Example 1: Local code execution ---------------------------------------
 
 const localExecutor = new LocalCodeExecutor({ timeout: 10 });
 
-const coder = new Agent({
+export const coder = new Agent({
   name: 'local_coder',
   model: llmModel,
   tools: [localExecutor.asTool()],
@@ -45,7 +45,7 @@ const dockerExecutor = new DockerCodeExecutor({
   memoryLimit: '256m',
 });
 
-const sandboxedCoder = new Agent({
+export const sandboxedCoder = new Agent({
   name: 'sandboxed_coder',
   model: llmModel,
   tools: [dockerExecutor.asTool('run_sandboxed')],
@@ -56,14 +56,27 @@ const sandboxedCoder = new Agent({
 
 // -- Run -------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  console.log('--- Local Code Execution ---');
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('--- Local Code Execution ---');
+    const result = await runtime.run(
     coder,
     'Write a Python function to find the first 10 Fibonacci numbers and print them.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(coder);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents local_coder
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(coder);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

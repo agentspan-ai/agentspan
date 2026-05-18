@@ -18,7 +18,7 @@ import {
   setTracingDisabled,
 } from '@openai/agents';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 setTracingDisabled(true);
 
@@ -47,7 +47,7 @@ const searchKnowledgeBase = tool({
 
 // ── Agent ───────────────────────────────────────────────────────────
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'support_agent',
   instructions:
     'You are a customer support agent. Use the knowledge base to answer ' +
@@ -62,15 +62,28 @@ const prompt = "What's your return policy for electronics?";
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    const agentStream = await runtime.stream(agent, prompt);
-
-    for await (const event of agentStream) {
-      console.log('Event:', event.type);
-    }
-
-    const result = await agentStream.getResult();
-    console.log('Status:', result.status);
+    const result = await runtime.run(agent, prompt);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/openai --agents support_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+
+    // Streaming alternative:
+    // const agentStream = await runtime.stream(agent, prompt);
+
+    // for await (const event of agentStream) {
+    // console.log('Event:', event.type);
+    // }
+
+    // const result = await agentStream.getResult();
+    // console.log('Status:', result.status);
+    // result.printResult();
   } finally {
     await runtime.shutdown();
   }

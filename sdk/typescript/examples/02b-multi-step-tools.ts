@@ -16,13 +16,12 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 const lookupCustomer = tool(
   async (args: { email: string }) => {
@@ -35,9 +34,13 @@ const lookupCustomer = tool(
   {
     name: 'lookup_customer',
     description: 'Look up a customer by email address.',
-    inputSchema: z.object({
-      email: z.string().describe('Customer email address'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email: { type: 'string', description: 'Customer email address' },
+      },
+      required: ['email'],
+    },
   },
 );
 
@@ -56,10 +59,14 @@ const getTransactions = tool(
   {
     name: 'get_transactions',
     description: 'Get recent transactions for a customer.',
-    inputSchema: z.object({
-      customer_id: z.string().describe('Customer ID'),
-      limit: z.number().describe('Maximum number of transactions to return'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        customer_id: { type: 'string', description: 'Customer ID' },
+        limit: { type: 'number', description: 'Maximum number of transactions to return' },
+      },
+      required: ['customer_id', 'limit'],
+    },
   },
 );
 
@@ -71,9 +78,13 @@ const calculateTotal = tool(
   {
     name: 'calculate_total',
     description: 'Calculate the sum of a list of amounts.',
-    inputSchema: z.object({
-      amounts: z.array(z.number()).describe('List of amounts to sum'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        amounts: { type: 'array', items: { type: 'number' }, description: 'List of amounts to sum' },
+      },
+      required: ['amounts'],
+    },
   },
 );
 
@@ -84,15 +95,19 @@ const sendSummaryEmail = tool(
   {
     name: 'send_summary_email',
     description: 'Send a summary email to a customer.',
-    inputSchema: z.object({
-      to: z.string().describe('Recipient email address'),
-      subject: z.string().describe('Email subject'),
-      body: z.string().describe('Email body'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to: { type: 'string', description: 'Recipient email address' },
+        subject: { type: 'string', description: 'Email subject' },
+        body: { type: 'string', description: 'Email body' },
+      },
+      required: ['to', 'subject', 'body'],
+    },
   },
 );
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'account_analyst',
   model: llmModel,
   tools: [lookupCustomer, getTransactions, calculateTotal, sendSummaryEmail],
@@ -102,14 +117,27 @@ const agent = new Agent({
     'Use the tools step by step.',
 });
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
     agent,
     'How much has alice@example.com spent recently? ' +
-      'Get her last 3 transactions and give me the total.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    'Get her last 3 transactions and give me the total.',
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents account_analyst
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

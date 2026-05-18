@@ -11,7 +11,7 @@
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
 
@@ -168,11 +168,10 @@ builder.addEdge('ship', 'deliver');
 builder.addEdge('deliver', 'summarize');
 builder.addEdge('summarize', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "order_state_machine" });
 
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',
-  tools: [],
   framework: 'langgraph',
 };
 
@@ -183,20 +182,29 @@ async function main() {
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(
-      graph,
-      JSON.stringify({
-        order_id: 'ORD-2025-001',
-        items: ['Python Book', 'Mechanical Keyboard', 'USB-C Hub'],
-        customer: 'Alice Smith',
-        shipping_address: '123 Main St, San Francisco, CA 94105',
-        current_status: 'NEW',
-        status_history: [],
-        tracking_number: '',
-        summary: '',
-      }),
+    graph,
+    JSON.stringify({
+    order_id: 'ORD-2025-001',
+    items: ['Python Book', 'Mechanical Keyboard', 'USB-C Hub'],
+    customer: 'Alice Smith',
+    shipping_address: '123 Main St, San Francisco, CA 94105',
+    current_status: 'NEW',
+    status_history: [],
+    tracking_number: '',
+    summary: '',
+    }),
     );
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(graph);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/langgraph --agents state_machine
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(graph);
   } finally {
     await runtime.shutdown();
   }

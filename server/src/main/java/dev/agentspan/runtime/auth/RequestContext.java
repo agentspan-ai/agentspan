@@ -4,11 +4,12 @@
  */
 package dev.agentspan.runtime.auth;
 
+import java.time.Instant;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import java.time.Instant;
 
 /**
  * Per-request context stored in ThreadLocal for the duration of each request.
@@ -19,9 +20,9 @@ import java.time.Instant;
 @NoArgsConstructor
 @AllArgsConstructor
 public class RequestContext {
-    private String  requestId;      // UUID per HTTP request
-    private String  workflowId;     // populated when request is workflow-scoped
-    private String  executionToken; // minted execution token, if present
-    private User    user;
+    private String requestId; // UUID per HTTP request
+    private String executionId; // populated when request is execution-scoped
+    private String executionToken; // minted execution token, if present
+    private User user;
     private Instant createdAt;
 }

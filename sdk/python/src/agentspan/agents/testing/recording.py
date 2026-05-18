@@ -40,8 +40,8 @@ def _event_to_dict(event: AgentEvent) -> Dict[str, Any]:
         d["target"] = event.target
     if event.output is not None:
         d["output"] = event.output
-    if event.workflow_id:
-        d["workflow_id"] = event.workflow_id
+    if event.execution_id:
+        d["execution_id"] = event.execution_id
     if event.guardrail_name is not None:
         d["guardrail_name"] = event.guardrail_name
     return d
@@ -57,7 +57,7 @@ def _dict_to_event(d: Dict[str, Any]) -> AgentEvent:
         result=d.get("result"),
         target=d.get("target"),
         output=d.get("output"),
-        workflow_id=d.get("workflow_id", ""),
+        execution_id=d.get("execution_id", ""),
         guardrail_name=d.get("guardrail_name"),
     )
 
@@ -66,7 +66,7 @@ def _result_to_dict(result: AgentResult) -> Dict[str, Any]:
     """Serialize an :class:`AgentResult` to a JSON-compatible dict."""
     d: Dict[str, Any] = {
         "output": result.output,
-        "workflow_id": result.workflow_id,
+        "execution_id": result.execution_id,
         "messages": result.messages,
         "tool_calls": result.tool_calls,
         "status": result.status,
@@ -99,7 +99,7 @@ def _dict_to_result(d: Dict[str, Any]) -> AgentResult:
 
     return AgentResult(
         output=d.get("output"),
-        workflow_id=d.get("workflow_id", ""),
+        execution_id=d.get("execution_id", ""),
         correlation_id=d.get("correlation_id"),
         messages=d.get("messages", []),
         tool_calls=d.get("tool_calls", []),

@@ -4,23 +4,27 @@
  */
 package dev.agentspan.runtime.credentials;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.netflix.conductor.core.execution.WorkflowExecutor;
 import com.netflix.conductor.model.TaskModel;
 import com.netflix.conductor.model.WorkflowModel;
 import com.netflix.conductor.tasks.http.HttpTask;
 import com.netflix.conductor.tasks.http.providers.RestTemplateProvider;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
- * Extends Conductor's HttpTask to resolve ${NAME} credential placeholders
- * in HTTP headers before execution.
+ * Extends Conductor's HttpTask to resolve credential placeholders in HTTP
+ * headers before execution.  Placeholders arrive as {@code #{NAME}} because
+ * {@link dev.agentspan.runtime.compiler.ToolCompiler} converts the SDK's
+ * {@code ${NAME}} syntax so that Conductor's own {@code ${...}} parameter
+ * resolution does not consume them.
  *
  * <p>Resolution uses {@link CredentialResolutionService} with the userId from
  * the execution token in {@code __agentspan_ctx__}. Resolved values exist
@@ -29,7 +33,7 @@ import java.util.regex.Pattern;
 public class CredentialAwareHttpTask extends HttpTask {
 
     private static final Logger log = LoggerFactory.getLogger(CredentialAwareHttpTask.class);
-    private static final Pattern PLACEHOLDER = Pattern.compile("\\$\\{(\\w+)}");
+    private static final Pattern PLACEHOLDER = Pattern.compile("#\\{(\\w+)}");
 
     private final ExecutionTokenService tokenService;
     private final CredentialResolutionService resolutionService;
@@ -51,23 +55,32 @@ public class CredentialAwareHttpTask extends HttpTask {
         Object httpRequest = input.get("http_request");
         Object ctx = input.get("__agentspan_ctx__");
 
-        if (httpRequest instanceof Map<?,?> reqMap && ctx != null) {
+        Map<String, String> originalHeaders = null;
+
+        if (httpRequest instanceof Map<?, ?> reqMap && ctx != null) {
             Object headers = reqMap.get("headers");
-            if (headers instanceof Map<?,?> headerMap && containsPlaceholders(headerMap)) {
+            if (headers instanceof Map<?, ?> headerMap && containsPlaceholders(headerMap)) {
                 String userId = extractUserId(ctx);
                 if (userId != null) {
-                    Map<String, String> resolved = resolveHeadersForUser(
-                        (Map<String, String>) headerMap, userId);
+                    originalHeaders = new LinkedHashMap<>((Map<String, String>) headerMap);
+                    Map<String, String> resolved = resolveHeadersForUser((Map<String, String>) headerMap, userId);
                     ((Map<String, Object>) reqMap).put("headers", resolved);
                 }
             }
         }
 
-        super.start(workflow, task, executor);
+        try {
+            super.start(workflow, task, executor);
+        } finally {
+            // Restore placeholder headers so resolved secrets are never persisted.
+            if (originalHeaders != null && httpRequest instanceof Map<?, ?> reqMap) {
+                ((Map<String, Object>) reqMap).put("headers", originalHeaders);
+            }
+        }
     }
 
     /**
-     * Resolve ${NAME} placeholders in header values using the credential store.
+     * Resolve #{NAME} placeholders in header values using the credential store.
      * Package-private for testing.
      */
     Map<String, String> resolveHeadersForUser(Map<String, String> headers, String userId) {
@@ -79,8 +92,7 @@ public class CredentialAwareHttpTask extends HttpTask {
             while (m.find()) {
                 String credName = m.group(1);
                 String credValue = resolutionService.resolve(userId, credName);
-                m.appendReplacement(sb, Matcher.quoteReplacement(
-                    credValue != null ? credValue : ""));
+                m.appendReplacement(sb, Matcher.quoteReplacement(credValue != null ? credValue : ""));
             }
             m.appendTail(sb);
             result.put(entry.getKey(), sb.toString());
@@ -90,7 +102,7 @@ public class CredentialAwareHttpTask extends HttpTask {
 
     private String extractUserId(Object ctx) {
         String token = null;
-        if (ctx instanceof Map<?,?> ctxMap) {
+        if (ctx instanceof Map<?, ?> ctxMap) {
             token = (String) ctxMap.get("execution_token");
         } else if (ctx instanceof String s) {
             token = s;
@@ -104,7 +116,7 @@ public class CredentialAwareHttpTask extends HttpTask {
         }
     }
 
-    private boolean containsPlaceholders(Map<?,?> headers) {
+    private boolean containsPlaceholders(Map<?, ?> headers) {
         for (Object v : headers.values()) {
             if (v != null && PLACEHOLDER.matcher(String.valueOf(v)).find()) return true;
         }

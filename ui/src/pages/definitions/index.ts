@@ -1,6 +1,7 @@
-import EventHandler from "./EventHandler";
 import Schedules from "./Scheduler/Schedules";
-import Task from "./Task";
-import Workflow from "./Workflow";
+import Agent from "./Agent";
 
-export { EventHandler, Schedules, Task, Workflow };
+export { Schedules, Agent };
+
+/** @deprecated Use Agent instead */
+export const Workflow = Agent;

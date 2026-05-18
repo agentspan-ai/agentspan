@@ -4,15 +4,16 @@
  */
 package dev.agentspan.runtime.auth;
 
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.stereotype.Repository;
-
 import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.stereotype.Repository;
 
 /**
  * Spring JDBC repository for the users table.
@@ -32,17 +33,12 @@ public class UserRepository {
     public Optional<User> findByUsername(String username) {
         try {
             User user = jdbc.queryForObject(
-                "SELECT id, name, email, username FROM users WHERE username = :u",
-                Map.of("u", username),
-                (rs, row) -> new User(
-                    rs.getString("id"),
-                    rs.getString("name"),
-                    rs.getString("email"),
-                    rs.getString("username")
-                )
-            );
+                    "SELECT id, name, email, username FROM users WHERE username = :u",
+                    Map.of("u", username),
+                    (rs, row) -> new User(
+                            rs.getString("id"), rs.getString("name"), rs.getString("email"), rs.getString("username")));
             return Optional.ofNullable(user);
-        } catch (org.springframework.dao.EmptyResultDataAccessException e) {
+        } catch (EmptyResultDataAccessException e) {
             return Optional.empty();
         }
     }
@@ -50,17 +46,12 @@ public class UserRepository {
     public Optional<User> findById(String id) {
         try {
             User user = jdbc.queryForObject(
-                "SELECT id, name, email, username FROM users WHERE id = :id",
-                Map.of("id", id),
-                (rs, row) -> new User(
-                    rs.getString("id"),
-                    rs.getString("name"),
-                    rs.getString("email"),
-                    rs.getString("username")
-                )
-            );
+                    "SELECT id, name, email, username FROM users WHERE id = :id",
+                    Map.of("id", id),
+                    (rs, row) -> new User(
+                            rs.getString("id"), rs.getString("name"), rs.getString("email"), rs.getString("username")));
             return Optional.ofNullable(user);
-        } catch (org.springframework.dao.EmptyResultDataAccessException e) {
+        } catch (EmptyResultDataAccessException e) {
             return Optional.empty();
         }
     }
@@ -74,11 +65,21 @@ public class UserRepository {
         String hash = plainPassword != null ? BCRYPT.encode(plainPassword) : null;
         String now = Instant.now().toString();
         jdbc.update(
-            "INSERT INTO users (id, name, email, username, password_hash, created_at) " +
-            "VALUES (:id, :name, :email, :u, :hash, :now)",
-            Map.of("id", id, "name", name, "email", email != null ? email : "",
-                   "u", username, "hash", hash != null ? hash : "", "now", now)
-        );
+                "INSERT INTO users (id, name, email, username, password_hash, created_at) "
+                        + "VALUES (:id, :name, :email, :u, :hash, :now)",
+                Map.of(
+                        "id",
+                        id,
+                        "name",
+                        name,
+                        "email",
+                        email != null ? email : "",
+                        "u",
+                        username,
+                        "hash",
+                        hash != null ? hash : "",
+                        "now",
+                        now));
         return new User(id, name, email, username);
     }
 
@@ -89,10 +90,9 @@ public class UserRepository {
     public boolean checkPassword(String username, String plainPassword) {
         try {
             String hash = jdbc.queryForObject(
-                "SELECT password_hash FROM users WHERE username = :u",
-                Map.of("u", username), String.class);
+                    "SELECT password_hash FROM users WHERE username = :u", Map.of("u", username), String.class);
             return hash != null && BCRYPT.matches(plainPassword, hash);
-        } catch (org.springframework.dao.EmptyResultDataAccessException e) {
+        } catch (EmptyResultDataAccessException e) {
             return false;
         }
     }

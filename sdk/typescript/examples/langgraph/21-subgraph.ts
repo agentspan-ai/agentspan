@@ -11,7 +11,7 @@
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
 
@@ -82,7 +82,7 @@ analysisBuilder.addEdge(START, 'sentiment_node');
 analysisBuilder.addEdge('sentiment_node', 'keywords_node');
 analysisBuilder.addEdge('keywords_node', 'summarize');
 analysisBuilder.addEdge('summarize', END);
-const analysisSubgraph = analysisBuilder.compile();
+const analysisSubgraph = analysisBuilder.compile({ name: "analysis_subgraph" });
 
 // ---------------------------------------------------------------------------
 // Parent graph state schema
@@ -156,12 +156,11 @@ parentBuilder.addEdge('prepare', 'analysis');
 parentBuilder.addEdge('analysis', 'build_report');
 parentBuilder.addEdge('build_report', END);
 
-const graph = parentBuilder.compile();
+const graph = parentBuilder.compile({ name: "document_pipeline_with_subgraph" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',
-  tools: [],
   framework: 'langgraph',
 };
 
@@ -180,6 +179,15 @@ async function main() {
     const result = await runtime.run(graph, PROMPT);
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(graph);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/langgraph --agents subgraph
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(graph);
   } finally {
     await runtime.shutdown();
   }

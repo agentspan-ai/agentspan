@@ -5,24 +5,23 @@
 
 package dev.agentspan.runtime.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.agentspan.runtime.AgentRuntime;
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.test.context.ActiveProfiles;
+import static org.assertj.core.api.Assertions.*;
 
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.util.Map;
 
-import static org.assertj.core.api.Assertions.*;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.test.context.ActiveProfiles;
 
-@SpringBootTest(
-        classes = AgentRuntime.class,
-        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT
-)
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import dev.agentspan.runtime.AgentRuntime;
+
+@SpringBootTest(classes = AgentRuntime.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
 class EventPushEndpointTest {
 
@@ -31,8 +30,8 @@ class EventPushEndpointTest {
     @LocalServerPort
     private int port;
 
-    private int postEvent(String workflowId, Map<String, Object> body) throws Exception {
-        URI uri = URI.create("http://localhost:" + port + "/api/agent/events/" + workflowId);
+    private int postEvent(String executionId, Map<String, Object> body) throws Exception {
+        URI uri = URI.create("http://localhost:" + port + "/api/agent/events/" + executionId);
         HttpURLConnection conn = (HttpURLConnection) uri.toURL().openConnection();
         conn.setRequestMethod("POST");
         conn.setRequestProperty("Content-Type", "application/json");
@@ -45,20 +44,22 @@ class EventPushEndpointTest {
 
     @Test
     void pushThinkingEventReturns200() throws Exception {
-        int status = postEvent("wf-test-123", Map.of(
-            "type", "thinking",
-            "content", "Processing node agent"
-        ));
+        int status = postEvent(
+                "wf-test-123",
+                Map.of(
+                        "type", "thinking",
+                        "content", "Processing node agent"));
         assertThat(status).isEqualTo(200);
     }
 
     @Test
     void pushToolCallEventReturns200() throws Exception {
-        int status = postEvent("wf-test-456", Map.of(
-            "type", "tool_call",
-            "toolName", "search",
-            "args", Map.of("query", "test")
-        ));
+        int status = postEvent(
+                "wf-test-456",
+                Map.of(
+                        "type", "tool_call",
+                        "toolName", "search",
+                        "args", Map.of("query", "test")));
         assertThat(status).isEqualTo(200);
     }
 

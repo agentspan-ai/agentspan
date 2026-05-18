@@ -14,7 +14,7 @@ import IdempotencyForm from "pages/runWorkflow/IdempotencyForm";
 import { IdempotencyStrategyEnum } from "pages/runWorkflow/types";
 import { useMemo } from "react";
 import { TaskType } from "types";
-import { WORKFLOW_DEFINITION_URL } from "utils/constants/route";
+import { AGENT_DEFINITION_URL } from "utils/constants/route";
 import { updateField } from "utils/fieldHelpers";
 import { useAuthHeaders } from "utils/query";
 import {
@@ -122,7 +122,7 @@ export const SubWorkflowOperatorForm = ({
     <Box width="100%">
       <TaskFormSection
         accordionAdditionalProps={{ defaultExpanded: true }}
-        title="Sub Workflow Parameters"
+        title="Sub Agent Parameters"
       >
         <Grid
           container
@@ -154,7 +154,7 @@ export const SubWorkflowOperatorForm = ({
                   }}
                   value={task.subWorkflowParam?.name}
                   otherOptions={options}
-                  label="Workflow name"
+                  label="Agent name"
                 />
               </Grid>
               <Grid
@@ -202,7 +202,7 @@ export const SubWorkflowOperatorForm = ({
                   sx={{ fontSize: "12px" }}
                   onClick={() => {
                     window.open(
-                      `${WORKFLOW_DEFINITION_URL.BASE}/${encodeURIComponent(
+                      `${AGENT_DEFINITION_URL.BASE}/${encodeURIComponent(
                         task?.subWorkflowParam?.name ?? "",
                       )}`,
                     );
@@ -221,7 +221,7 @@ export const SubWorkflowOperatorForm = ({
               <Grid container sx={{ width: "100%" }} spacing={2}>
                 <Grid size={{ sm: 12, md: 9 }}>
                   <ConductorObjectOrStringInput
-                    valueLabel="Workflow definition"
+                    valueLabel="Agent definition"
                     value={task?.subWorkflowParam?.workflowDefinition ?? ""}
                     onChangeValue={(val) => {
                       onChange(

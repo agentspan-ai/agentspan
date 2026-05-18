@@ -1,6 +1,6 @@
 import { Theme } from "@mui/material";
 import { baseLabelStyle } from "components/v1/theme/styles";
-import { isEmpty as _isEmpty } from "lodash";
+import _isEmpty from "lodash/isEmpty";
 import { greyText2, lightGrey } from "theme/tokens/colors";
 
 export const disabledInputStyle = {

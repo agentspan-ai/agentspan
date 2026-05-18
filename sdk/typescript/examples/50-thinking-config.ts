@@ -6,13 +6,12 @@
  *
  * Requirements:
  *   - Conductor server with thinking config support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Tool --------------------------------------------------------------------
 
@@ -28,15 +27,19 @@ const calculate = tool(
   {
     name: 'calculate',
     description: 'Evaluate a mathematical expression.',
-    inputSchema: z.object({
-      expression: z.string().describe("A math expression to evaluate (e.g., '2 + 3 * 4')"),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        expression: { type: 'string', description: 'A math expression to evaluate (e.g., \'2 + 3 * 4\')' },
+      },
+      required: ['expression'],
+    },
   },
 );
 
 // -- Agent -------------------------------------------------------------------
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'deep_thinker_50',
   model: llmModel,
   instructions:
@@ -48,14 +51,27 @@ const agent = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
     agent,
     'If a train travels 120 km in 2 hours, then speeds up by 50% for ' +
     'the next 3 hours, what is the total distance traveled?',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents deep_thinker_50
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

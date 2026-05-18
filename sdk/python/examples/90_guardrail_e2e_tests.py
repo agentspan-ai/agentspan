@@ -51,8 +51,8 @@ Usage:
 
 Requirements:
     - Conductor server running
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
-    - AGENT_LLM_MODEL in .env or environment
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api in .env or environment
+    - AGENTSPAN_LLM_MODEL in .env or environment
 """
 
 import sys
@@ -85,7 +85,7 @@ class TestResult:
     num: int
     test_id: str
     passed: bool
-    workflow_id: str = ""
+    execution_id: str = ""
     details: str = ""
 
 
@@ -106,7 +106,7 @@ class TestRunner:
     ) -> TestResult:
         output = str(result.output) if result.output else ""
         status = result.status if hasattr(result, "status") else "UNKNOWN"
-        wf_id = getattr(result, "workflow_id", "") or ""
+        execution_id = getattr(result, "execution_id", "") or ""
         failures = []
 
         if expect_status and status != expect_status:
@@ -120,11 +120,11 @@ class TestRunner:
 
         passed = len(failures) == 0
         details = "; ".join(failures) if failures else "OK"
-        tr = TestResult(num, test_id, passed, wf_id, details)
+        tr = TestResult(num, test_id, passed, execution_id, details)
         self.results.append(tr)
 
         mark = "PASS" if passed else "FAIL"
-        print(f"  [{mark}] #{num:2d} {test_id}: {details}  wf={wf_id}")
+        print(f"  [{mark}] #{num:2d} {test_id}: {details}  wf={execution_id}")
         return tr
 
     def skip(self, num: int, test_id: str, reason: str):
@@ -145,7 +145,7 @@ class TestRunner:
 
         # Matrix table
         print("\n  ╔════╤══════════════╤════════╤════════╤════════╤══════════════════════════════════════╗")
-        print("  ║ #  │ Position     │ Type   │ OnFail │ Result │ Workflow ID                          ║")
+        print("  ║ #  │ Position     │ Type   │ OnFail │ Result │ Execution ID                         ║")
         print("  ╠════╪══════════════╪════════╪════════╪════════╪══════════════════════════════════════╣")
 
         positions = ["Agent OUT"] * 9 + ["Tool INPUT"] * 9 + ["Tool OUTPUT"] * 9
@@ -162,7 +162,7 @@ class TestRunner:
                 mark = "PASS"
             else:
                 mark = "FAIL"
-            wf = r.workflow_id[:36] if r.workflow_id else "—"
+            wf = r.execution_id[:36] if r.execution_id else "—"
             sep = "╟" if (i + 1) % 9 == 0 and i < 26 else "║"
             print(f"  ║ {r.num:2d} │ {pos:12s} │ {typ:6s} │ {onf:6s} │ {mark:6s} │ {wf:36s} ║")
             if (i + 1) % 9 == 0 and i < 26:

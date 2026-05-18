@@ -12,17 +12,17 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, LocalCodeExecutor } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, LocalCodeExecutor } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Example 1: Simple flag --------------------------------------------------
 // Just set codeExecutionConfig with enabled: true
 
-const simpleCoder = new Agent({
+export const simpleCoder = new Agent({
   name: 'simple_coder',
   model: llmModel,
   codeExecutionConfig: {
@@ -34,7 +34,7 @@ const simpleCoder = new Agent({
 // -- Example 2: With restrictions --------------------------------------------
 // Allow Python + Bash, but only permit pip and ls commands.
 
-const restrictedCoder = new Agent({
+export const restrictedCoder = new Agent({
   name: 'restricted_coder',
   model: llmModel,
   codeExecutionConfig: {
@@ -53,7 +53,7 @@ const restrictedCoder = new Agent({
 const executor = new LocalCodeExecutor({ timeout: 60 });
 const codeTool = executor.asTool('execute_code');
 
-const configCoder = new Agent({
+export const configCoder = new Agent({
   name: 'config_coder',
   model: llmModel,
   tools: [codeTool],
@@ -68,21 +68,34 @@ const configCoder = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  console.log('--- Simple Code Execution ---');
-  const result1 = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('--- Simple Code Execution ---');
+    const result1 = await runtime.run(
     simpleCoder,
     'Write a Python function to find the first 10 prime numbers and print them.',
-  );
-  result1.printResult();
+    );
+    result1.printResult();
 
-  console.log('\n--- Restricted Code Execution ---');
-  const result2 = await runtime.run(
+    console.log('\n--- Restricted Code Execution ---');
+    const result2 = await runtime.run(
     restrictedCoder,
     'List the files in the current directory using bash.',
-  );
-  result2.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result2.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(simpleCoder);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents simple_coder
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(simpleCoder);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

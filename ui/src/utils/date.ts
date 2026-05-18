@@ -26,7 +26,7 @@ import {
   utcToZonedTime,
   zonedTimeToUtc,
 } from "date-fns-tz";
-import { isNil as _isNil } from "lodash";
+import _isNil from "lodash/isNil";
 import _isEmpty from "lodash/isEmpty";
 
 export function durationRenderer(durationMs: number) {

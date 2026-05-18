@@ -19,13 +19,13 @@
  */
 
 import { LlmAgent } from '@google/adk';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
 // ── Specialist agents with transfer restrictions ────────────────────
 
-const specialistA = new LlmAgent({
+export const specialistA = new LlmAgent({
   name: 'data_collector',
   model,
   instruction:
@@ -35,7 +35,7 @@ const specialistA = new LlmAgent({
   disallowTransferToParent: true,
 });
 
-const specialistB = new LlmAgent({
+export const specialistB = new LlmAgent({
   name: 'analyst',
   model,
   instruction:
@@ -43,7 +43,7 @@ const specialistB = new LlmAgent({
     'a concise analysis with insights. You can transfer to any agent.',
 });
 
-const specialistC = new LlmAgent({
+export const specialistC = new LlmAgent({
   name: 'summarizer',
   model,
   instruction:
@@ -55,7 +55,7 @@ const specialistC = new LlmAgent({
 
 // ── Coordinator ───────────────────────────────────────────────────
 
-const coordinator = new LlmAgent({
+export const coordinator = new LlmAgent({
   name: 'research_coordinator',
   model,
   instruction:
@@ -73,11 +73,20 @@ async function main() {
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(
-      coordinator,
-      'Research the current state of renewable energy adoption worldwide.',
+    coordinator,
+    'Research the current state of renewable energy adoption worldwide.',
     );
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(coordinator);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents research_coordinator
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(coordinator);
   } finally {
     await runtime.shutdown();
   }

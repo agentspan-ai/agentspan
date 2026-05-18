@@ -277,18 +277,24 @@ def _needs_context(func):
         return False
 
 
-def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
+def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None, credential_names=None):
     """Create a Conductor worker wrapper for a @tool function.
 
     The wrapper accepts a ``Task`` object so it can extract metadata
-    (workflow ID) for ``ToolContext`` injection, then maps the task's
+    (execution ID) for ``ToolContext`` injection, then maps the task's
     ``inputParameters`` to the tool function's arguments.
     On failure the exception propagates so Conductor marks the task FAILED.
 
     If *guardrails* are provided, they wrap the tool execution:
     - Pre-execution guardrails check the input parameters.
     - Post-execution guardrails check the tool result.
+
+    If *credential_names* are provided (e.g. for framework-extracted tools),
+    they are captured in the closure and used as the primary source of
+    credential names at invocation time.
     """
+    # Capture credential names in closure for framework-extracted tools
+    _closure_cred_names = list(credential_names) if credential_names else []
     # Store tool_def in module-level registry so it's accessible across
     # spawn-mode multiprocessing boundaries (closures are not picklable).
     if tool_def is not None:
@@ -305,7 +311,7 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
     from conductor.client.http.models import Task, TaskResult
     from conductor.client.http.models.task_result_status import TaskResultStatus
 
-    def _execute(kwargs, wf_id="", agent_state=None):
+    def _execute(kwargs, execution_id="", agent_state=None):
         """Core execution logic shared by both Task-based and kwargs-based paths."""
         # Circuit breaker: disable tool after N consecutive failures
         if _tool_error_counts.get(tool_name, 0) >= _CIRCUIT_BREAKER_THRESHOLD:
@@ -320,7 +326,7 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
 
             state = dict(agent_state) if agent_state else {}
             ctx = ToolContext(
-                workflow_id=wf_id,
+                execution_id=execution_id,
                 agent_name=_current_context.get("agent_name", ""),
                 session_id=_current_context.get("session_id", ""),
                 metadata=_current_context.get("metadata", {}),
@@ -402,23 +408,28 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
             agent_state = task.input_data.pop("_agent_state", None) or {}
 
             # ── Credential fetching ───────────────────────────────────────
-            # Look up tool_def from multiple sources:
-            # 1. Module-level registry (works with fork, not spawn)
-            # 2. Closure variable tool_def (works with fork)
-            # 3. _tool_def attribute on tool_func (works everywhere)
-            _td = _tool_def_registry.get(tool_name) or tool_def
-            raw_credentials = list(getattr(_td, "credentials", [])) if _td else _get_credential_names_from_tool(tool_func)
-            # Normalize: CredentialFile → env_var string, keep strings as-is
-            from agentspan.agents.runtime.credentials.types import CredentialFile
-            credential_names = [
-                c.env_var if isinstance(c, CredentialFile) else c
-                for c in raw_credentials
-                if isinstance(c, (str, CredentialFile))
-            ]
-            # Fallback: workflow-level credentials (for framework-extracted tools)
-            if not credential_names and task.workflow_instance_id:
-                with _workflow_credentials_lock:
-                    credential_names = list(_workflow_credentials.get(task.workflow_instance_id, []))
+            # Priority order for credential names:
+            # 1. Closure-captured credentials (framework-extracted tools via
+            #    _register_framework_workers → make_tool_worker(credential_names=...))
+            # 2. tool_def from registry or closure (native @tool decorated)
+            # 3. _tool_def attribute on tool_func
+            # 4. Workflow-level fallback (_workflow_credentials dict)
+            if _closure_cred_names:
+                credential_names = list(_closure_cred_names)
+            else:
+                _td = _tool_def_registry.get(tool_name) or tool_def
+                raw_credentials = list(getattr(_td, "credentials", [])) if _td else _get_credential_names_from_tool(tool_func)
+                # Normalize: CredentialFile → env_var string, keep strings as-is
+                from agentspan.agents.runtime.credentials.types import CredentialFile
+                credential_names = [
+                    c.env_var if isinstance(c, CredentialFile) else c
+                    for c in raw_credentials
+                    if isinstance(c, (str, CredentialFile))
+                ]
+                # Fallback: workflow-level credentials (for framework-extracted tools)
+                if not credential_names and task.workflow_instance_id:
+                    with _workflow_credentials_lock:
+                        credential_names = list(_workflow_credentials.get(task.workflow_instance_id, []))
             resolved_credentials = {}
             if credential_names:
                 token = _extract_execution_token(task)
@@ -426,10 +437,9 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
                 try:
                     resolved_credentials = fetcher.fetch(token, credential_names)
                 except Exception as cred_err:
-                    # Credential errors are configuration issues, not tool failures.
-                    # Don't count toward circuit breaker — just fail the task.
+                    # Credential errors are configuration issues — non-retryable.
                     logger.error("Credential resolution failed for tool '%s': %s", tool_name, cred_err)
-                    task_result.status = TaskResultStatus.FAILED
+                    task_result.status = TaskResultStatus.FAILED_WITH_TERMINAL_ERROR
                     task_result.reason_for_incompletion = str(cred_err)
                     return task_result
 
@@ -469,7 +479,7 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
             try:
                 result = _execute(
                     fn_kwargs,
-                    wf_id=task.workflow_instance_id or "",
+                    execution_id=task.workflow_instance_id or "",
                     agent_state=agent_state,
                 )
             finally:
@@ -491,7 +501,12 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
             logger.error(
                 "Tool '%s' failed (count=%d): %s", tool_name, _tool_error_counts[tool_name], e
             )
-            task_result.status = TaskResultStatus.FAILED
+            from agentspan.agents.cli_config import TerminalToolError
+
+            if isinstance(e, TerminalToolError):
+                task_result.status = TaskResultStatus.FAILED_WITH_TERMINAL_ERROR
+            else:
+                task_result.status = TaskResultStatus.FAILED
             task_result.reason_for_incompletion = str(e)
             return task_result
 

@@ -39,6 +39,7 @@ import {
   DeleteRequestEvent,
   DONT_SHOW_IMPORT_SUCCESSFUL_DIALOG_TUTORIAL_AGAIN,
   HandleLeftPanelExpandedEvent,
+  ImportSummary,
   HandleSaveAndCreateNewEvent,
   HandleSaveAndRunEvent,
   LeftPaneTabs,
@@ -61,7 +62,6 @@ import { JsonSchema } from "@jsonforms/core";
 import { crumbsToTask } from "components/flow/nodes";
 import _isEmpty from "lodash/isEmpty";
 import { CommonTaskDef } from "types/TaskType";
-import { ImportSummary } from "utils/cloudTemplates";
 import { SWITCH_CASE_PREFIX } from "utils/constants/switch";
 import {
   LocalCopyMachineEventTypes,
@@ -73,7 +73,7 @@ import {
   FormMachineActionTypes,
   TaskFormEvents,
 } from "../EditorPanel/TaskFormTab/state";
-import { RunMachineEvents, RunMachineEventsTypes } from "../RunWorkflow/state";
+import { RunMachineEvents, RunMachineEventsTypes } from "../RunAgent/state";
 import {
   WorkflowMetadataEvents,
   WorkflowMetadataMachineEventTypes,
@@ -261,6 +261,22 @@ export const changeToTaskTab = assign({
   openedTab: TASK_TAB,
   previousTab: ({ openedTab }: DefinitionMachineContext, _event) => openedTab,
 });
+
+export const highlightSelectedTaskInCode = sendTo(
+  "codeMachine",
+  (_context: DefinitionMachineContext, event: any) => {
+    const crumbs = event?.node?.data?.crumbs;
+    const lastCrumb = crumbs && crumbs.length > 0 ? _last(crumbs) : null;
+    const ref = (lastCrumb as any)?.ref || "";
+    return {
+      type: "HIGHLIGHT_TEXT_REFERENCE",
+      reference: {
+        textReference: `"taskReferenceName": "${ref}"`,
+        referenceReason: "info" as const,
+      },
+    };
+  },
+);
 
 export const changeToPreviousTab = assign<DefinitionMachineContext>({
   openedTab: ({ previousTab, openedTab }: DefinitionMachineContext) =>

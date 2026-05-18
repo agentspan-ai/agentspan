@@ -10,13 +10,22 @@ Demonstrates:
 Requirements:
     - Conductor server running
     - 63d_serve_from_package.py running in another terminal
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api in .env or environment
 """
 
 from agentspan.agents import AgentRuntime
 
-with AgentRuntime() as runtime:
-    print("Running monitoring agent by name...")
-    result = runtime.run("monitoring", "Is everything healthy? Run a full check.")
-    print(f"Workflow ID: {result.workflow_id}")
-    print(f"Output: {result.output}")
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run("monitoring", "Is everything healthy? Run a full check.")
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(...)
+        # CLI alternative:
+        # agentspan deploy --package examples.63e_run_monitoring
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(...)

@@ -1,14 +1,14 @@
-import { toJsonSchema } from './tool.js';
-import { Agent, PromptTemplate } from './agent.js';
+import { toJsonSchema } from "./tool.js";
+import { Agent, PromptTemplate } from "./agent.js";
 import type {
   CallbackHandler,
   TerminationCondition,
   HandoffCondition,
   GateCondition,
   ConversationMemory,
-} from './agent.js';
-import { normalizeToolInput, isZodSchema } from './tool.js';
-import type { ToolDef } from './types.js';
+} from "./agent.js";
+import { normalizeToolInput, isZodSchema } from "./tool.js";
+import type { ToolDef } from "./types.js";
 
 // ── Wire format types ─────────────────────────────────────
 
@@ -16,12 +16,12 @@ import type { ToolDef } from './types.js';
  * Callback method → wire position mapping.
  */
 const CALLBACK_POSITION_MAP: Record<string, string> = {
-  onAgentStart: 'before_agent',
-  onAgentEnd: 'after_agent',
-  onModelStart: 'before_model',
-  onModelEnd: 'after_model',
-  onToolStart: 'before_tool',
-  onToolEnd: 'after_tool',
+  onAgentStart: "before_agent",
+  onAgentEnd: "after_agent",
+  onModelStart: "before_model",
+  onModelEnd: "after_model",
+  onToolStart: "before_tool",
+  onToolEnd: "after_tool",
 };
 
 // ── Helpers ───────────────────────────────────────────────
@@ -54,14 +54,14 @@ function serializeOutputType(
     const desc = (outputType as any).description;
     return {
       schema,
-      className: typeof desc === 'string' && desc.length > 0 ? desc : 'Output',
+      className: typeof desc === "string" && desc.length > 0 ? desc : "Output",
     };
   }
 
   // Already JSON Schema
   return {
     schema: outputType as object,
-    className: 'Output',
+    className: "Output",
   };
 }
 
@@ -81,15 +81,11 @@ export class AgentConfigSerializer {
   /**
    * Produce full POST /agent/start payload.
    */
-  serialize(
-    agent: Agent,
-    prompt?: string,
-    options?: SerializeOptions,
-  ): Record<string, unknown> {
+  serialize(agent: Agent, prompt?: string, options?: SerializeOptions): Record<string, unknown> {
     const payload: Record<string, unknown> = {
       agentConfig: this.serializeAgent(agent),
-      prompt: prompt ?? '',
-      sessionId: options?.sessionId ?? '',
+      prompt: prompt ?? "",
+      sessionId: options?.sessionId ?? "",
       media: options?.media ?? [],
     };
 
@@ -105,12 +101,45 @@ export class AgentConfigSerializer {
    * All keys are camelCase. Null/undefined values are omitted.
    */
   serializeAgent(agent: Agent): Record<string, unknown> {
+    // Skill agents — emit the raw skill config so the server's
+    // SkillNormalizer can compile sub-agents and tools into the workflow.
+    const agentAny = agent as unknown as Record<string, unknown>;
+    if (agentAny._framework === "skill") {
+      const rawConfig = (agentAny._framework_config ?? {}) as Record<string, unknown>;
+      return {
+        name: agent.name,
+        model: agent.model || undefined,
+        _framework: "skill",
+        ...rawConfig,
+      };
+    }
+
+    // Claude-code agents emit a passthrough stub — all config is consumed
+    // by the worker closure, not sent to the server.
+    if (agent.isClaudeCode) {
+      return {
+        name: agent.name,
+        model: agent.model,
+        metadata: { _framework_passthrough: true },
+        tools: [
+          {
+            name: agent.name,
+            toolType: "worker",
+            description: "Claude Agent SDK passthrough worker",
+          },
+        ],
+      };
+    }
+
     const config: Record<string, unknown> = {
       name: agent.name,
     };
 
     // Model
     if (agent.model) config.model = agent.model;
+
+    // Base URL (per-agent LLM provider endpoint override)
+    if (agent.baseUrl) config.baseUrl = agent.baseUrl;
 
     // Instructions: string as-is, PromptTemplate → wire format, function → call it
     if (agent.instructions !== undefined && agent.instructions !== null) {
@@ -119,7 +148,7 @@ export class AgentConfigSerializer {
 
     // Tools
     if (agent.tools.length > 0) {
-      config.tools = agent.tools.map((t) => this.serializeTool(normalizeToolInput(t)));
+      config.tools = agent.tools.map((t) => this.serializeTool(normalizeToolInput(t), agent.stateful));
     }
 
     // Sub-agents (recursive)
@@ -150,12 +179,13 @@ export class AgentConfigSerializer {
       config.memory = this.serializeMemory(agent.memory);
     }
 
-    // Scalar fields
-    if (agent.maxTurns !== 25) config.maxTurns = agent.maxTurns;
+    // Scalar fields — always emit maxTurns, timeoutSeconds, external (match Python)
+    config.maxTurns = agent.maxTurns;
     if (agent.maxTokens !== undefined) config.maxTokens = agent.maxTokens;
     if (agent.temperature !== undefined) config.temperature = agent.temperature;
-    if (agent.timeoutSeconds !== 0) config.timeoutSeconds = agent.timeoutSeconds;
-    if (agent.external) config.external = agent.external;
+    config.timeoutSeconds = agent.timeoutSeconds;
+    config.external = agent.external;
+    if (agent.stateful) config.stateful = true;
 
     // stopWhen
     if (agent.stopWhen) {
@@ -233,7 +263,7 @@ export class AgentConfigSerializer {
   /**
    * Serialize a ToolDef to ToolConfig JSON.
    */
-  serializeTool(toolDef: ToolDef): Record<string, unknown> {
+  serializeTool(toolDef: ToolDef, agentStateful?: boolean): Record<string, unknown> {
     const config: Record<string, unknown> = {
       name: toolDef.name,
       description: toolDef.description,
@@ -248,16 +278,15 @@ export class AgentConfigSerializer {
     if (toolDef.timeoutSeconds !== undefined) {
       config.timeoutSeconds = toolDef.timeoutSeconds;
     }
+    if (agentStateful || toolDef.stateful) config.stateful = true;
 
     // Handle guardrails
     if (toolDef.guardrails && toolDef.guardrails.length > 0) {
-      config.guardrails = toolDef.guardrails.map((g) =>
-        this.serializeGuardrail(g),
-      );
+      config.guardrails = toolDef.guardrails.map((g) => this.serializeGuardrail(g));
     }
 
     // Handle agent_tool special case
-    if (toolDef.toolType === 'agent_tool' && toolDef.config) {
+    if (toolDef.toolType === "agent_tool" && toolDef.config) {
       const toolConfig = { ...toolDef.config };
       const agentRef = toolConfig.agent;
       delete toolConfig.agent;
@@ -283,13 +312,13 @@ export class AgentConfigSerializer {
    * Normalizes RegexGuardrail/LLMGuardrail instances via toGuardrailDef().
    */
   serializeGuardrail(guard: unknown): Record<string, unknown> {
-    if (guard == null || typeof guard !== 'object') {
+    if (guard == null || typeof guard !== "object") {
       return {};
     }
 
     // Normalize class instances (RegexGuardrail, LLMGuardrail) via toGuardrailDef()
     let g = guard as Record<string, unknown>;
-    if (typeof g.toGuardrailDef === 'function') {
+    if (typeof g.toGuardrailDef === "function") {
       g = (g.toGuardrailDef as () => Record<string, unknown>)();
     }
 
@@ -317,7 +346,7 @@ export class AgentConfigSerializer {
    */
   serializeTermination(cond: TerminationCondition): Record<string, unknown> {
     // Use toJSON if available
-    if (typeof cond.toJSON === 'function') {
+    if (typeof cond.toJSON === "function") {
       return cond.toJSON() as Record<string, unknown>;
     }
 
@@ -329,7 +358,7 @@ export class AgentConfigSerializer {
    * Serialize a handoff condition.
    */
   serializeHandoff(handoff: HandoffCondition): Record<string, unknown> {
-    if (typeof handoff.toJSON === 'function') {
+    if (typeof handoff.toJSON === "function") {
       return handoff.toJSON() as Record<string, unknown>;
     }
     return handoff as unknown as Record<string, unknown>;
@@ -340,13 +369,13 @@ export class AgentConfigSerializer {
   private serializeInstructions(
     instructions: string | PromptTemplate | ((...args: unknown[]) => string),
   ): unknown {
-    if (typeof instructions === 'string') {
+    if (typeof instructions === "string") {
       return instructions;
     }
 
     if (instructions instanceof PromptTemplate) {
       const tmpl: Record<string, unknown> = {
-        type: 'prompt_template',
+        type: "prompt_template",
         name: instructions.name,
       };
       if (instructions.variables) tmpl.variables = instructions.variables;
@@ -354,7 +383,7 @@ export class AgentConfigSerializer {
       return tmpl;
     }
 
-    if (typeof instructions === 'function') {
+    if (typeof instructions === "function") {
       return instructions();
     }
 
@@ -368,15 +397,13 @@ export class AgentConfigSerializer {
     if (router instanceof Agent) {
       return this.serializeAgent(router);
     }
-    if (typeof router === 'function') {
+    if (typeof router === "function") {
       return { taskName: `${agentName}_router_fn` };
     }
     return router;
   }
 
-  private serializeMemory(
-    memory: ConversationMemory,
-  ): Record<string, unknown> {
+  private serializeMemory(memory: ConversationMemory): Record<string, unknown> {
     const result: Record<string, unknown> = {
       messages: memory.toChatMessages(),
     };
@@ -393,12 +420,8 @@ export class AgentConfigSerializer {
     const result: Record<string, unknown>[] = [];
 
     for (const handler of callbacks) {
-      for (const [methodName, wirePosition] of Object.entries(
-        CALLBACK_POSITION_MAP,
-      )) {
-        if (
-          typeof (handler as Record<string, unknown>)[methodName] === 'function'
-        ) {
+      for (const [methodName, wirePosition] of Object.entries(CALLBACK_POSITION_MAP)) {
+        if (typeof (handler as Record<string, unknown>)[methodName] === "function") {
           result.push({
             position: wirePosition,
             taskName: `${agentName}_${wirePosition}`,
@@ -410,15 +433,12 @@ export class AgentConfigSerializer {
     return result;
   }
 
-  private serializeGate(
-    gate: GateCondition,
-    agentName: string,
-  ): Record<string, unknown> {
+  private serializeGate(gate: GateCondition, agentName: string): Record<string, unknown> {
     // TextGate: has type 'text_contains' or text + caseSensitive
-    if (gate.type === 'text_contains' || (gate.text !== undefined && gate.fn === undefined)) {
+    if (gate.type === "text_contains" || (gate.text !== undefined && gate.fn === undefined)) {
       return {
-        type: 'text_contains',
-        text: gate.text ?? '',
+        type: "text_contains",
+        text: gate.text ?? "",
         ...(gate.caseSensitive !== undefined && {
           caseSensitive: gate.caseSensitive,
         }),
@@ -426,7 +446,7 @@ export class AgentConfigSerializer {
     }
 
     // If it has toJSON, use it
-    if (typeof gate.toJSON === 'function') {
+    if (typeof gate.toJSON === "function") {
       return gate.toJSON() as Record<string, unknown>;
     }
 

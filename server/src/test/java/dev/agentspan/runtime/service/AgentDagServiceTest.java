@@ -5,13 +5,13 @@
 
 package dev.agentspan.runtime.service;
 
-import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
-import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
-import com.netflix.conductor.core.exception.NotFoundException;
-import com.netflix.conductor.dao.ExecutionDAO;
-import com.netflix.conductor.model.TaskModel;
-import com.netflix.conductor.model.WorkflowModel;
-import dev.agentspan.runtime.model.*;
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -19,12 +19,14 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
+import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
+import com.netflix.conductor.core.exception.NotFoundException;
+import com.netflix.conductor.dao.ExecutionDAO;
+import com.netflix.conductor.model.TaskModel;
+import com.netflix.conductor.model.WorkflowModel;
 
-import static org.assertj.core.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import dev.agentspan.runtime.model.*;
 
 @ExtendWith(MockitoExtension.class)
 class AgentDagServiceTest {
@@ -96,7 +98,7 @@ class AgentDagServiceTest {
         InjectTaskRequest.SubWorkflowParam swp = new InjectTaskRequest.SubWorkflowParam();
         swp.setName("my-sub-workflow");
         swp.setVersion(1);
-        swp.setWorkflowId("sub-wf-id-999");
+        swp.setExecutionId("sub-wf-id-999");
         req.setSubWorkflowParam(swp);
 
         service.injectTask("wf-2", req);
@@ -131,29 +133,47 @@ class AgentDagServiceTest {
 
         assertThatThrownBy(() -> service.injectTask("bad-id", req))
                 .isInstanceOf(NotFoundException.class)
-                .hasMessageContaining("Workflow not found");
+                .hasMessageContaining("Execution not found");
     }
 
     // ── createTrackingWorkflow ───────────────────────────────────────────────
 
     @Test
-    void createTrackingWorkflow_callsCreateWorkflowWithRunningStatus() {
+    void createTrackingWorkflow_createsWorkflowViaDAO() {
         CreateTrackingWorkflowRequest req = new CreateTrackingWorkflowRequest();
         req.setWorkflowName("my-sub-agent");
         req.setInput(Map.of("prompt", "run the build"));
 
         CreateTrackingWorkflowResponse resp = service.createTrackingWorkflow(req);
 
-        assertThat(resp.getWorkflowId()).isNotBlank();
+        assertThat(resp.getExecutionId()).isNotBlank();
 
         ArgumentCaptor<WorkflowModel> captor = ArgumentCaptor.forClass(WorkflowModel.class);
         verify(executionDAO).createWorkflow(captor.capture());
         WorkflowModel created = captor.getValue();
 
-        assertThat(created.getStatus()).isEqualTo(WorkflowModel.Status.RUNNING);
-        assertThat(created.getWorkflowName()).isEqualTo("my-sub-agent");
+        assertThat(created.getWorkflowDefinition().getName()).isEqualTo("my-sub-agent");
         assertThat(created.getInput()).containsEntry("prompt", "run the build");
-        assertThat(created.getWorkflowId()).isEqualTo(resp.getWorkflowId());
+        assertThat(created.getStatus()).isEqualTo(WorkflowModel.Status.RUNNING);
+    }
+
+    @Test
+    void createTrackingWorkflow_setsParentLinkage() {
+        CreateTrackingWorkflowRequest req = new CreateTrackingWorkflowRequest();
+        req.setWorkflowName("child-agent");
+        req.setInput(Map.of());
+        req.setParentWorkflowId("parent-wf-123");
+        req.setParentWorkflowTaskId("parent-task-456");
+
+        CreateTrackingWorkflowResponse resp = service.createTrackingWorkflow(req);
+        assertThat(resp.getExecutionId()).isNotBlank();
+
+        ArgumentCaptor<WorkflowModel> captor = ArgumentCaptor.forClass(WorkflowModel.class);
+        verify(executionDAO).createWorkflow(captor.capture());
+        WorkflowModel created = captor.getValue();
+
+        assertThat(created.getParentWorkflowId()).isEqualTo("parent-wf-123");
+        assertThat(created.getParentWorkflowTaskId()).isEqualTo("parent-task-456");
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────

@@ -16,7 +16,7 @@
 
 import { LlmAgent, SequentialAgent, FunctionTool } from '@google/adk';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
@@ -79,7 +79,7 @@ const sanitizeResponse = new FunctionTool({
 // ── Pipeline stages ──────────────────────────────────────────────────
 
 // Main assistant generates responses
-const assistant = new LlmAgent({
+export const assistant = new LlmAgent({
   name: 'helpful_assistant',
   model,
   instruction:
@@ -89,7 +89,7 @@ const assistant = new LlmAgent({
 });
 
 // Safety checker scans the response
-const safetyChecker = new LlmAgent({
+export const safetyChecker = new LlmAgent({
   name: 'safety_checker',
   model,
   instruction:
@@ -101,7 +101,7 @@ const safetyChecker = new LlmAgent({
 });
 
 // Pipeline: generate -> check -> deliver
-const safePipeline = new SequentialAgent({
+export const safePipeline = new SequentialAgent({
   name: 'safe_assistant',
   subAgents: [assistant, safetyChecker],
 });
@@ -112,12 +112,21 @@ async function main() {
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(
-      safePipeline,
-      'What are the contact details for our support team? ' +
-        'Include email support@company.com and phone 555-123-4567.',
+    safePipeline,
+    'What are the contact details for our support team? ' +
+    'Include email support@company.com and phone 555-123-4567.',
     );
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(safePipeline);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents safe_assistant
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(safePipeline);
   } finally {
     await runtime.shutdown();
   }

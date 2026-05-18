@@ -10,7 +10,7 @@ Demonstrates:
     - Practical use case: project breakdown and task execution
 
 Requirements:
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
@@ -120,8 +120,17 @@ graph = builder.compile(name="planner_agent")
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            graph,
-            "Launch a new open-source Python library for data validation.",
+        graph,
+        "Launch a new open-source Python library for data validation.",
         )
         print(f"Status: {result.status}")
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.20_planner_agent
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)

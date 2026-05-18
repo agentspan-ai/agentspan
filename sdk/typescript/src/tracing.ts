@@ -4,7 +4,7 @@
  */
 export function isTracingEnabled(): boolean {
   return (
-    typeof process !== 'undefined' &&
+    typeof process !== "undefined" &&
     process.env != null &&
     (!!process.env.OTEL_EXPORTER_OTLP_ENDPOINT || !!process.env.OTEL_SERVICE_NAME)
   );

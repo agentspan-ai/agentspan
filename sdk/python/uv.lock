@@ -15,7 +15,9 @@ source = { editable = "." }
 dependencies = [
     { name = "cloudpickle" },
     { name = "conductor-python" },
+    { name = "google-adk" },
     { name = "httpx" },
+    { name = "openai-agents" },
 ]
 
 [package.optional-dependencies]
@@ -24,10 +26,12 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
+    { name = "pytest-xdist" },
     { name = "ruff" },
 ]
 testing = [
-    { name = "litellm" },
+    { name = "anthropic" },
+    { name = "openai" },
 ]
 validation = [
     { name = "google-adk" },
@@ -40,6 +44,7 @@ validation = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "claude-code-sdk" },
     { name = "langchain" },
     { name = "langchain-core" },
     { name = "langchain-openai" },
@@ -50,19 +55,23 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anthropic", marker = "extra == 'testing'", specifier = ">=0.30" },
     { name = "cloudpickle", specifier = ">=2.0" },
-    { name = "conductor-python", specifier = ">=1.3.6" },
+    { name = "conductor-python", specifier = ">=1.3.11" },
+    { name = "google-adk", specifier = ">=1.27.1" },
     { name = "google-adk", marker = "extra == 'validation'", specifier = ">=1.18.0" },
     { name = "httpx", specifier = ">=0.24" },
     { name = "jinja2", marker = "extra == 'validation'", specifier = ">=3.1" },
-    { name = "litellm", marker = "extra == 'testing'", specifier = ">=1.0" },
     { name = "litellm", marker = "extra == 'validation'", specifier = ">=1.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
+    { name = "openai", marker = "extra == 'testing'", specifier = ">=1.0" },
     { name = "openai", marker = "extra == 'validation'", specifier = ">=1.0" },
+    { name = "openai-agents", specifier = ">=0.12.2" },
     { name = "openai-agents", marker = "extra == 'validation'", specifier = ">=0.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
+    { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.0" },
     { name = "rich", marker = "extra == 'validation'", specifier = ">=13.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
 ]
@@ -70,6 +79,7 @@ provides-extras = ["dev", "testing", "validation"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "claude-code-sdk", specifier = ">=0.0.20" },
     { name = "langchain", specifier = ">=0.3.28" },
     { name = "langchain-core", specifier = ">=0.3.83" },
     { name = "langchain-openai", specifier = ">=0.3.35" },
@@ -260,6 +270,25 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/ee/67/531ea369ba64dcff5ec9c3402f9f51bf748cec26dde048a2f973a4eea7f5/annotated_types-0.7.0.tar.gz", hash = "sha256:aff07c09a53a08bc8cfccb9c85b05f1aa9a2a6f23728d790723543408344ce89", size = 16081, upload-time = "2024-05-20T21:33:25.928Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/78/b6/6307fbef88d9b5ee7421e68d78a9f162e0da4900bc5f5793f6d3d0e34fb8/annotated_types-0.7.0-py3-none-any.whl", hash = "sha256:1f02e8b43a8fbbc3f3e0d4f0f4bfc8131bcb4eebe8849b8e5c773f3a1c582a53", size = 13643, upload-time = "2024-05-20T21:33:24.1Z" },
+]
+
+[[package]]
+name = "anthropic"
+version = "0.91.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "distro" },
+    { name = "docstring-parser" },
+    { name = "httpx" },
+    { name = "jiter" },
+    { name = "pydantic" },
+    { name = "sniffio" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c7/b5/f39ae52ce035490217203581b9bfca8ca853c3a497961d0e5a2f091d0233/anthropic-0.91.0.tar.gz", hash = "sha256:a6afd894d55c26504e3d33909fb3f174d0db7d63369bfe9bb387da3e2806076a", size = 599272, upload-time = "2026-04-07T18:41:17.202Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ea/1e/7f06da237fde2d7f760a1b61a554c0e780dffe1d264e5aacd0287a7a142b/anthropic-0.91.0-py3-none-any.whl", hash = "sha256:b8672878642774198aa6272f40eb526b9ca11c2a72d4a935d867d445c7371f68", size = 481829, upload-time = "2026-04-07T18:41:15.326Z" },
 ]
 
 [[package]]
@@ -505,6 +534,20 @@ wheels = [
 ]
 
 [[package]]
+name = "claude-code-sdk"
+version = "0.0.25"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "mcp" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ec/0d/0f4a71415826578a5ace16817c52df84d76ffbda5cdad02f520a2b963bde/claude_code_sdk-0.0.25.tar.gz", hash = "sha256:0d9e1eba432d4fe8a2f75f06ec9bb4c310f39b1d55246e7e4b2c69bfdd69eab3", size = 41273, upload-time = "2025-09-29T20:14:51.882Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f5/41/c934058080f3233bbc95bc9abac5e0191bf336ad5f69a33b5f54a4737e88/claude_code_sdk-0.0.25-py3-none-any.whl", hash = "sha256:3d6a4ef958182f311d6050776d2675d9b39650a2db221c582a0a5156472dcee3", size = 31031, upload-time = "2025-09-29T20:14:50.687Z" },
+]
+
+[[package]]
 name = "click"
 version = "8.3.1"
 source = { registry = "https://pypi.org/simple" }
@@ -536,7 +579,7 @@ wheels = [
 
 [[package]]
 name = "conductor-python"
-version = "1.3.6"
+version = "1.3.11"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "astor" },
@@ -552,9 +595,9 @@ dependencies = [
     { name = "six" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8a/45/e8dad9f5171d180090809015ab0d3cbd4c111a7200845bcf5680b3ddd9d8/conductor_python-1.3.6.tar.gz", hash = "sha256:67bb3621ba2513751f7a918661f32be6e10d428e064c117d5bd1722c7bbafd99", size = 241986, upload-time = "2026-03-17T16:16:39.908Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/82/f5/cea2d12c2a18a872d33e95e352d8db7f34906b74bb5d9fd516b035e25c86/conductor_python-1.3.11.tar.gz", hash = "sha256:3e1b92206680f0ea2eb04067d01581c11fa58766be2b434c1143ca52138e33a0", size = 253409, upload-time = "2026-04-21T02:37:30.836Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/64/62/353ce370b910acbc40434acf2ff95333cb21df3054787053025b4aa07c32/conductor_python-1.3.6-py3-none-any.whl", hash = "sha256:e6a238a1448c3a0284a27226182babafe3c155f2d4107997795cb538b6a1a2dd", size = 391810, upload-time = "2026-03-17T16:16:41.146Z" },
+    { url = "https://files.pythonhosted.org/packages/52/fc/36221040700169da342d800f5922b9689c862a0b6a6b819c3cd38fa66047/conductor_python-1.3.11-py3-none-any.whl", hash = "sha256:c22dfe2fddf5aeec6d285ca6cd5960967f9376bb16dcb70062327cffa3ea9b87", size = 404572, upload-time = "2026-04-21T02:37:32.316Z" },
 ]
 
 [[package]]
@@ -784,6 +827,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8a/0e/97c33bf5009bdbac74fd2beace167cab3f978feb69cc36f1ef79360d6c4e/exceptiongroup-1.3.1-py3-none-any.whl", hash = "sha256:a7a39a3bd276781e98394987d3a5701d0c4edffb633bb7a5144577f82c773598", size = 16740, upload-time = "2025-11-21T23:01:53.443Z" },
+]
+
+[[package]]
+name = "execnet"
+version = "2.1.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/bf/89/780e11f9588d9e7128a3f87788354c7946a9cbb1401ad38a48c4db9a4f07/execnet-2.1.2.tar.gz", hash = "sha256:63d83bfdd9a23e35b9c6a3261412324f964c2ec8dcd8d3c6916ee9373e0befcd", size = 166622, upload-time = "2025-11-12T09:56:37.75Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ab/84/02fc1827e8cdded4aa65baef11296a9bbe595c474f0d6d758af082d849fd/execnet-2.1.2-py3-none-any.whl", hash = "sha256:67fba928dd5a544b783f6056f449e5e3931a5c378b128bc18501f7ea79e296ec", size = 40708, upload-time = "2025-11-12T09:56:36.333Z" },
 ]
 
 [[package]]
@@ -3577,6 +3629,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/5e/f7/c933acc76f5208b3b00089573cf6a2bc26dc80a8aece8f52bb7d6b1855ca/pytest_cov-7.0.0.tar.gz", hash = "sha256:33c97eda2e049a0c5298e91f519302a1334c26ac65c1a483d6206fd458361af1", size = 54328, upload-time = "2025-09-09T10:57:02.113Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ee/49/1377b49de7d0c1ce41292161ea0f721913fa8722c19fb9c1e3aa0367eecb/pytest_cov-7.0.0-py3-none-any.whl", hash = "sha256:3b8e9558b16cc1479da72058bdecf8073661c7f57f7d3c5f22a1c23507f2d861", size = 22424, upload-time = "2025-09-09T10:57:00.695Z" },
+]
+
+[[package]]
+name = "pytest-xdist"
+version = "3.8.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "execnet" },
+    { name = "pytest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/78/b4/439b179d1ff526791eb921115fca8e44e596a13efeda518b9d845a619450/pytest_xdist-3.8.0.tar.gz", hash = "sha256:7e578125ec9bc6050861aa93f2d59f1d8d085595d6551c2c90b6f4fad8d3a9f1", size = 88069, upload-time = "2025-07-01T13:30:59.346Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ca/31/d4e37e9e550c2b92a9cbc2e4d0b7420a27224968580b5a447f420847c975/pytest_xdist-3.8.0-py3-none-any.whl", hash = "sha256:202ca578cfeb7370784a8c33d6d05bc6e13b4f25b5053c30a152269fd10f0b88", size = 46396, upload-time = "2025-07-01T13:30:56.632Z" },
 ]
 
 [[package]]

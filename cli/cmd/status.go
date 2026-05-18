@@ -24,12 +24,14 @@ var statusCmd = &cobra.Command{
 		}
 
 		bold := color.New(color.Bold)
-		bold.Printf("Execution: %s\n", detail.WorkflowID)
+		bold.Printf("Execution: %s\n", detail.ExecutionID)
 		fmt.Printf("  Agent:   %s (v%d)\n", detail.AgentName, detail.Version)
 
 		statusColor := color.FgWhite
 		switch detail.Status {
 		case "RUNNING":
+			statusColor = color.FgYellow
+		case "PAUSED":
 			statusColor = color.FgYellow
 		case "COMPLETED":
 			statusColor = color.FgGreen

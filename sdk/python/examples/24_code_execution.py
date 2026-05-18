@@ -16,7 +16,7 @@ Requirements:
     - Conductor server with LLM support
     - Docker (for DockerCodeExecutor example)
     - pip install jupyter_client ipykernel (for JupyterCodeExecutor)
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -76,12 +76,22 @@ sandboxed_coder = Agent(
 #     ),
 # )
 
-# ── Run ─────────────────────────────────────────────────────────────
 
-with AgentRuntime() as runtime:
-    print("--- Local Code Execution ---")
-    result = runtime.run(
-        coder,
-        "Write a Python function to find the first 10 Fibonacci numbers and print them.",
-    )
-    result.print_result()
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        print("--- Local Code Execution ---")
+        result = runtime.run(
+            coder,
+            "Write a Python function to find the first 10 Fibonacci numbers and print them.",
+        )
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(coder)
+        # CLI alternative:
+        # agentspan deploy --package examples.24_code_execution
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(coder)
+

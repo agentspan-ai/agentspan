@@ -11,7 +11,7 @@ Demonstrates:
 Requirements:
     - pip install openai-agents
     - Conductor server with OpenAI LLM integration configured
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -70,6 +70,17 @@ agent = Agent(
     tools=[get_todo_list, add_todo],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(agent, "Show me my todo list and add 'Prepare demo for Friday' as high priority.")
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(agent, "Show me my todo list and add 'Prepare demo for Friday' as high priority.")
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.openai.09_dynamic_instructions
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)

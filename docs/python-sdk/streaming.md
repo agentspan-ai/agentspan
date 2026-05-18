@@ -25,7 +25,7 @@ Agent streaming is 95%+ server-to-client. The only client-to-server interaction 
 ### Scalability
 
 - **Tomcat NIO**: 5,000–10,000 concurrent SSE connections per server instance (no thread per connection).
-- **Memory**: Each event buffer ≈ 40 KB (200 events). At 10K concurrent workflows → ~400 MB.
+- **Memory**: Each event buffer ≈ 40 KB (200 events). At 10K concurrent executions → ~400 MB.
 - **Future**: If needed, swap Tomcat for Spring WebFlux + Netty for 50K+ connections per instance. Multi-instance deployments can use sticky sessions by workflow ID or a shared event bus (Redis Streams, Kafka).
 
 ## Architecture
@@ -35,7 +35,7 @@ Python SDK (client)                   Java Runtime (embedded Conductor)
 ───────────────────                   ────────────────────────────────
 
 POST /api/agent/start          →      compile + register + startWorkflow()
-  ← {"workflowId": "abc-123"}            │
+  ← {"executionId": "abc-123"}            │
                                           ↓
 GET /api/agent/stream/abc-123  →      SseEmitter registered in AgentStreamRegistry
   ← SSE: thinking                         │
@@ -63,29 +63,29 @@ POST /api/agent/abc-123/respond →
 | `guardrail_fail` | Guardrail task completed with `passed: false` | `guardrailName`, `content` (message) |
 | `handoff` | `SUB_WORKFLOW` task scheduled | `target` (agent name) |
 | `waiting` | `HUMAN` task enters `IN_PROGRESS` | `pendingTool` (tool name, parameters) |
-| `error` | Task failed or workflow terminated | `content` (reason), `toolName` (task ref) |
-| `done` | Workflow completed | `output` (final result) |
+| `error` | Task failed or execution terminated | `content` (reason), `toolName` (task ref) |
+| `done` | Execution completed | `output` (final result) |
 
-Every event includes: `id` (monotonic sequence), `type`, `workflowId`, `timestamp`.
+Every event includes: `id` (monotonic sequence), `type`, `executionId`, `timestamp`.
 
 ## SSE Wire Format
 
 ```
 id:1
 event:thinking
-data:{"id":1,"type":"thinking","workflowId":"abc-123","content":"my_agent_llm","timestamp":1709721234000}
+data:{"id":1,"type":"thinking","executionId":"abc-123","content":"my_agent_llm","timestamp":1709721234000}
 
 id:2
 event:tool_call
-data:{"id":2,"type":"tool_call","workflowId":"abc-123","toolName":"get_weather","args":{"city":"NYC"},"timestamp":1709721234567}
+data:{"id":2,"type":"tool_call","executionId":"abc-123","toolName":"get_weather","args":{"city":"NYC"},"timestamp":1709721234567}
 
 id:3
 event:tool_result
-data:{"id":3,"type":"tool_result","workflowId":"abc-123","toolName":"get_weather","result":"72F sunny","timestamp":1709721235123}
+data:{"id":3,"type":"tool_result","executionId":"abc-123","toolName":"get_weather","result":"72F sunny","timestamp":1709721235123}
 
 id:4
 event:done
-data:{"id":4,"type":"done","workflowId":"abc-123","output":{"result":"The weather in NYC is 72F and sunny.","finishReason":"STOP"},"timestamp":1709721236000}
+data:{"id":4,"type":"done","executionId":"abc-123","output":{"result":"The weather in NYC is 72F and sunny.","finishReason":"STOP"},"timestamp":1709721236000}
 ```
 
 Heartbeats are sent as SSE comments (`: heartbeat\n\n`) every 15 seconds to prevent proxy idle timeouts.
@@ -105,20 +105,20 @@ Manages the lifecycle of SSE connections and event buffers.
 **File:** `runtime/.../service/AgentStreamRegistry.java`
 
 **Data structures:**
-- `ConcurrentHashMap<workflowId, CopyOnWriteArrayList<SseEmitter>>` — connected clients per workflow. Multiple clients can watch the same workflow.
-- `ConcurrentHashMap<workflowId, BoundedEventBuffer>` — ring buffer (200 events) per workflow for reconnection replay.
-- `ConcurrentHashMap<childWfId, parentWfId>` — aliases for sub-workflow event forwarding in multi-agent workflows.
-- `ConcurrentHashMap<workflowId, AtomicLong>` — monotonic event ID sequence per workflow.
+- `ConcurrentHashMap<executionId, CopyOnWriteArrayList<SseEmitter>>` — connected clients per execution. Multiple clients can watch the same execution.
+- `ConcurrentHashMap<executionId, BoundedEventBuffer>` — ring buffer (200 events) per execution for reconnection replay.
+- `ConcurrentHashMap<childWfId, parentWfId>` — aliases for sub-agent event forwarding in multi-agent executions.
+- `ConcurrentHashMap<executionId, AtomicLong>` — monotonic event ID sequence per execution.
 
 **Key operations:**
-- `register(workflowId, lastEventId)` — creates `SseEmitter(0L)` (no timeout), replays missed events if `lastEventId` is provided.
-- `send(workflowId, event)` — resolves aliases, assigns sequence ID, buffers event, broadcasts to all connected emitters.
-- `complete(workflowId)` — completes all emitters, schedules buffer cleanup after 5 minutes.
-- `registerAlias(childWfId, parentWfId)` — forwards child workflow events to parent's stream.
+- `register(executionId, lastEventId)` — creates `SseEmitter(0L)` (no timeout), replays missed events if `lastEventId` is provided.
+- `send(executionId, event)` — resolves aliases, assigns sequence ID, buffers event, broadcasts to all connected emitters.
+- `complete(executionId)` — completes all emitters, schedules buffer cleanup after 5 minutes.
+- `registerAlias(childWfId, parentWfId)` — forwards child execution events to parent's stream.
 
 **Scheduled tasks:**
 - Heartbeat: every 15 seconds, sends `: heartbeat` comment to all open connections.
-- Cleanup: every 60 seconds, removes event buffers for workflows that completed >5 minutes ago.
+- Cleanup: every 60 seconds, removes event buffers for executions that completed >5 minutes ago.
 
 ### AgentEventListener (service)
 
@@ -154,25 +154,25 @@ Implements both `TaskStatusListener` and `WorkflowStatusListener`. Annotated `@C
 Three new endpoints added to the existing `/api/agent` controller:
 
 ```
-GET  /api/agent/stream/{workflowId}      SSE event stream
-POST /api/agent/{workflowId}/respond      HITL response
-GET  /api/agent/{workflowId}/status       Polling fallback
+GET  /api/agent/stream/{executionId}      SSE event stream
+POST /api/agent/{executionId}/respond      HITL response
+GET  /api/agent/{executionId}/status       Polling fallback
 ```
 
 **Stream endpoint:** Returns `SseEmitter`. Supports `Last-Event-ID` header for reconnection. No `produces` annotation — `SseEmitter` handles content-type negotiation internally (adding `produces = "text/event-stream"` causes `HttpMediaTypeNotAcceptableException` with Conductor's `ApplicationExceptionMapper`).
 
 **Respond endpoint:** Finds the pending `HUMAN` task in the workflow, constructs a `TaskResult`, and calls `executionService.updateTask()`. Accepts JSON body with arbitrary output fields (e.g., `{"approved": true}`, `{"approved": false, "reason": "..."}`, `{"message": "..."}`).
 
-**Status endpoint:** Lightweight polling fallback. Returns workflow status, output (if complete), and pending tool info (if waiting for HITL).
+**Status endpoint:** Lightweight polling fallback. Returns execution status, output (if complete), and pending tool info (if waiting for HITL).
 
 ### AgentService (service)
 
 **File:** `runtime/.../service/AgentService.java`
 
 Three new methods:
-- `openStream(workflowId, lastEventId)` — delegates to `AgentStreamRegistry.register()`.
-- `respond(workflowId, output)` — finds pending HUMAN task via `executionService.getExecutionStatus()`, creates `TaskResult`, calls `executionService.updateTask()`.
-- `getStatus(workflowId)` — returns `{workflowId, status, isComplete, isRunning, isWaiting, output, pendingTool}`.
+- `openStream(executionId, lastEventId)` — delegates to `AgentStreamRegistry.register()`.
+- `respond(executionId, output)` — finds pending HUMAN task via `executionService.getExecutionStatus()`, creates `TaskResult`, calls `executionService.updateTask()`.
+- `getStatus(executionId)` — returns `{executionId, status, isComplete, isRunning, isWaiting, output, pendingTool}`.
 
 ### Configuration
 
@@ -194,11 +194,11 @@ Setting these to `agent` disables Conductor's default stub listeners (which have
 
 Three new methods on `AgentRuntime`:
 
-**`_stream_sse(workflow_id)`** — Core SSE consumer. Opens a streaming HTTP GET to `/api/agent/stream/{workflowId}` using the `requests` library. Auto-reconnects with `Last-Event-ID` header on connection drops. Yields `AgentEvent` objects. Terminates on `done` or `error` events.
+**`_stream_sse(execution_id)`** — Core SSE consumer. Opens a streaming HTTP GET to `/api/agent/stream/{executionId}` using the `requests` library. Auto-reconnects with `Last-Event-ID` header on connection drops. Yields `AgentEvent` objects. Terminates on `done` or `error` events.
 
 ```python
 # Connection setup
-url = f"{server_url}/agent/stream/{workflow_id}"
+url = f"{server_url}/agent/stream/{execution_id}"
 headers = {"Accept": "text/event-stream"}
 requests.get(url, headers=headers, stream=True, timeout=(5, None))
 ```
@@ -210,7 +210,7 @@ requests.get(url, headers=headers, stream=True, timeout=(5, None))
 
 **`_parse_sse(lines)`** — Static method. Parses the SSE wire format from an iterator of lines. Handles `event:`, `id:`, `data:` fields and `:comment` lines (heartbeats). Yields dicts of `{event, id, data}`.
 
-**`_sse_to_agent_event(sse_event, workflow_id)`** — Static method. Converts a parsed SSE event dict into an `AgentEvent` dataclass, mapping camelCase JSON fields to Python attributes.
+**`_sse_to_agent_event(sse_event, execution_id)`** — Static method. Converts a parsed SSE event dict into an `AgentEvent` dataclass, mapping camelCase JSON fields to Python attributes.
 
 ### Graceful Fallback
 
@@ -219,7 +219,7 @@ The `stream()` method tries SSE first and falls back to the existing polling imp
 ```python
 if self._config.streaming_enabled:
     try:
-        yield from self._stream_sse(handle.workflow_id)
+        yield from self._stream_sse(handle.execution_id)
         return
     except _SSEUnavailableError:
         logger.info("SSE unavailable, falling back to polling")
@@ -244,7 +244,7 @@ streaming_enabled: bool = True  # default
 ```python
 class AgentHandle:
     def stream(self) -> Iterator[AgentEvent]:
-        return self._runtime._stream_sse(self.workflow_id)
+        return self._runtime._stream_sse(self.execution_id)
 ```
 
 ## Reconnection Protocol
@@ -256,7 +256,7 @@ SSE has built-in reconnection support via the `Last-Event-ID` mechanism:
 3. On connection drop, client reconnects with `Last-Event-ID: N` header.
 4. Server replays all buffered events with ID > N before resuming live events.
 
-The server retains event buffers for 5 minutes after workflow completion, allowing late reconnections.
+The server retains event buffers for 5 minutes after execution completion, allowing late reconnections.
 
 ```
 Client                         Server
@@ -275,15 +275,15 @@ Client                         Server
   │←── stream ends ──────────────│
 ```
 
-## Sub-Workflow Event Forwarding
+## Sub-Agent Event Forwarding
 
-Multi-agent workflows use sub-workflows for agent handoffs. Events from child workflows are forwarded to the parent's SSE stream via aliases:
+Multi-agent executions use sub-workflows for agent handoffs. Events from child executions are forwarded to the parent's SSE stream via aliases:
 
 1. When a `SUB_WORKFLOW` task is scheduled, `AgentEventListener` calls `streamRegistry.registerAlias(childWfId, parentWfId)`.
-2. When events are emitted for the child workflow ID, `AgentStreamRegistry.send()` resolves the alias and routes to the parent's emitters and buffer.
-3. Aliases are cleaned up when the parent workflow completes.
+2. When events are emitted for the child execution ID, `AgentStreamRegistry.send()` resolves the alias and routes to the parent's emitters and buffer.
+3. Aliases are cleaned up when the parent execution completes.
 
-This means a client connected to the parent workflow's stream receives events from all child agent executions transparently.
+This means a client connected to the parent execution's stream receives events from all child agent executions transparently.
 
 ## HITL (Human-in-the-Loop) Flow
 
@@ -329,5 +329,5 @@ The `waiting` event includes `pendingTool` with the tool name and parameters, so
 ## Future Work
 
 - **LLM token streaming**: Requires intercepting the Conductor AI module's chat completion call to stream tokens as they arrive (currently the `LLM_CHAT_COMPLETE` task completes atomically).
-- **Multi-instance event bus**: For horizontal scaling, replace in-memory buffers with Redis Streams or Kafka so any server instance can serve any workflow's SSE stream.
+- **Multi-instance event bus**: For horizontal scaling, replace in-memory buffers with Redis Streams or Kafka so any server instance can serve any execution's SSE stream.
 - **Typed HITL responses**: Schema-validated response types beyond the current free-form JSON.

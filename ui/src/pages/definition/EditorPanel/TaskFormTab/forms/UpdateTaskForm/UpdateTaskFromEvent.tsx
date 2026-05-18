@@ -58,7 +58,7 @@ export const UpdateTaskFormEvent = ({
       >
         <FormControlLabel
           control={<Radio />}
-          label="Workflow Id + Task Ref Name"
+          label="Execution Id + Task Ref Name"
           value="workflow-id-task-ref"
           id="workflow-and-task-ref-radio-button"
         />
@@ -94,7 +94,7 @@ export const UpdateTaskFormEvent = ({
           >
             <InputComponent
               fullWidth
-              label="Workflow ID"
+              label="Execution ID"
               value={value?.workflowId}
               onChange={(val: any) => {
                 const newValue =

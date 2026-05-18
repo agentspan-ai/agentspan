@@ -2,6 +2,43 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '3.3.5'
     id 'io.spring.dependency-management' version '1.1.7'
+    id 'com.diffplug.spotless' version '7.0.2'
+}
+
+def uiDir = file("${projectDir}/../ui")
+def uiDistDir = file("${uiDir}/dist")
+def serverStaticDir = file("${projectDir}/src/main/resources/static")
+def buildUiProperty = project.findProperty('buildUI')
+def buildUiEnabled = buildUiProperty != null && (
+    buildUiProperty.toString().trim().isEmpty() ||
+    buildUiProperty.toString().toBoolean()
+)
+def nodeOptionsWithMoreHeap = {
+    def current = System.getenv('NODE_OPTIONS')
+    current ? "${current} --max-old-space-size=4096" : '--max-old-space-size=4096'
+}
+def shellCommand = { String command ->
+    org.gradle.internal.os.OperatingSystem.current().isWindows()
+        ? ['cmd', '/c', command]
+        : ['bash', '-lc', command]
+}
+def pnpmCommand = { String args ->
+    org.gradle.internal.os.OperatingSystem.current().isWindows()
+        ? "where pnpm >NUL 2>NUL && pnpm ${args} || (where corepack >NUL 2>NUL && corepack pnpm ${args} || (echo pnpm or corepack is required to build the UI & exit /b 127))"
+        : "if command -v pnpm >/dev/null 2>&1; then pnpm ${args}; elif command -v corepack >/dev/null 2>&1; then corepack pnpm ${args}; else echo 'pnpm or corepack is required to build the UI' >&2; exit 127; fi"
+}
+
+// ── Version catalog ──────────────────────────────────────────────
+ext {
+    conductorVersion   = '3.30.0.rc3'
+    lombokVersion      = '1.18.42'
+    log4jVersion       = '2.24.3'  // managed by Spring BOM, explicit for clarity
+    sqliteJdbcVersion  = '3.47.0.0'
+    springSecVersion   = '6.3.4'
+    jsonSchemaVersion  = '1.0.73'
+    junitVersion       = '5.10.2'
+    assertjVersion     = '3.25.1'
+    mockitoVersion     = '5.10.0'
 }
 
 java {
@@ -15,27 +52,33 @@ repositories {
     mavenLocal()
 }
 
+springBoot {
+    mainClass = 'dev.agentspan.runtime.AgentRuntime'
+    buildInfo()
+}
+
 dependencies {
 
     // Conductor core
-    implementation 'org.conductoross:conductor-core:3.22.2'
-    implementation 'org.conductoross:conductor-rest:3.22.2'
-    implementation 'org.conductoross:conductor-common:3.22.2'
-    implementation 'org.conductoross:conductor-ai:3.22.2'
+    implementation "org.conductoross:conductor-core:${conductorVersion}"
+    implementation "org.conductoross:conductor-rest:${conductorVersion}"
+    implementation "org.conductoross:conductor-common:${conductorVersion}"
+    implementation "org.conductoross:conductor-ai:${conductorVersion}"
+    implementation "org.conductoross:conductor-metrics:${conductorVersion}"
 
     // PostgreSQL persistence + queue + indexing + locking
-    implementation 'org.conductoross:conductor-postgres-persistence:3.22.2'
-    implementation 'org.conductoross:conductor-postgres-external-storage:3.22.2'
+    implementation "org.conductoross:conductor-postgres-persistence:${conductorVersion}"
+    implementation "org.conductoross:conductor-postgres-external-storage:${conductorVersion}"
 
     // SQLite persistence (activate with conductor.db.type=sqlite)
-    implementation 'org.conductoross:conductor-sqlite-persistence:3.22.2'
+    implementation "org.conductoross:conductor-sqlite-persistence:${conductorVersion}"
 
     // Common system tasks
-    implementation 'org.conductoross:conductor-http-task:3.22.2'
-    implementation 'org.conductoross:conductor-json-jq-task:3.22.2'
+    implementation "org.conductoross:conductor-http-task:${conductorVersion}"
+    implementation "org.conductoross:conductor-json-jq-task:${conductorVersion}"
 
-    // Metrics
-    implementation 'org.conductoross:conductor-metrics:3.22.2'
+    // Swagger / OpenAPI UI
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-api:2.6.0'
 
     // Spring Boot
     implementation 'org.springframework.boot:spring-boot-starter-web'
@@ -48,24 +91,24 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-log4j2'
     implementation 'org.apache.logging.log4j:log4j-web'
 
-    compileOnly 'org.projectlombok:lombok:1.18.42'
-    annotationProcessor 'org.projectlombok:lombok:1.18.42'
+    compileOnly "org.projectlombok:lombok:${lombokVersion}"
+    annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
 
     // JSON Schema
-    implementation 'com.networknt:json-schema-validator:1.0.73'
+    implementation "com.networknt:json-schema-validator:${jsonSchemaVersion}"
 
     // SQLite JDBC driver (for credential DataSource)
-    implementation 'org.xerial:sqlite-jdbc:3.47.0.0'
+    implementation "org.xerial:sqlite-jdbc:${sqliteJdbcVersion}"
     // Spring Security Crypto (BCrypt password hashing, no full Security stack)
-    implementation 'org.springframework.security:spring-security-crypto:6.3.4'
+    implementation "org.springframework.security:spring-security-crypto:${springSecVersion}"
 
     // Test dependencies
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
-    testImplementation 'org.assertj:assertj-core:3.25.1'
-    testImplementation 'org.mockito:mockito-core:5.10.0'
-    testCompileOnly 'org.projectlombok:lombok:1.18.42'
-    testAnnotationProcessor 'org.projectlombok:lombok:1.18.42'
+    testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
+    testImplementation "org.assertj:assertj-core:${assertjVersion}"
+    testImplementation "org.mockito:mockito-core:${mockitoVersion}"
+    testCompileOnly "org.projectlombok:lombok:${lombokVersion}"
+    testAnnotationProcessor "org.projectlombok:lombok:${lombokVersion}"
 
     // Logging
     implementation('org.apache.logging.log4j:log4j-core')
@@ -104,17 +147,121 @@ configurations.all {
     // BouncyCastle (~9MB) — crypto provider, JDK built-in is sufficient
     exclude group: 'org.bouncycastle'
 
-    // Micrometer StatsD + Spectator Atlas (~8MB) — we keep basic actuator metrics
+    // Micrometer StatsD + Atlas + Spectator (~8MB) — we keep basic actuator metrics only
     exclude group: 'io.micrometer', module: 'micrometer-registry-statsd'
+    exclude group: 'io.micrometer', module: 'micrometer-registry-atlas'
     exclude group: 'com.netflix.spectator'
-
-    // Swagger UI (~3.5MB) — API docs not needed in production
-    exclude group: 'org.webjars', module: 'swagger-ui'
 
     // Groovy
     exclude group: 'org.apache.groovy'
 }
 
+// ── Code formatting ──────────────────────────────────────────────
+spotless {
+    java {
+        target 'src/main/java/**/*.java', 'src/test/**/*.java'
+        palantirJavaFormat('2.50.0')
+        removeUnusedImports()
+        importOrder('java', 'javax', 'jakarta', 'org', 'com', 'dev')
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
+}
+
+// ── Detect fully qualified names used inline ─────────────────────
+// Catches patterns like: new com.foo.Bar(), java.util.List<>, etc.
+// in code (not import statements). Fails the build with file:line.
+tasks.register('checkNoInlineFQN') {
+    group = 'verification'
+    description = 'Detect fully qualified class names used inline (should be imports)'
+    doLast {
+        def violations = []
+        def fqnPattern = ~/(?:new\s+|[\s(,<])(?:java|javax|jakarta|com|org|net)\.[a-z]+(?:\.[a-z]+)*\.[A-Z]\w+/
+        fileTree('src/main/java').matching { include '**/*.java' }.each { file ->
+            file.eachLine { line, lineNum ->
+                if (line.trim().startsWith('import ') || line.trim().startsWith('package ')
+                    || line.trim().startsWith('//') || line.trim().startsWith('*')) {
+                    return // skip imports, package, comments
+                }
+                def matcher = fqnPattern.matcher(line)
+                if (matcher.find()) {
+                    violations << "${file.path}:${lineNum}: ${line.trim()}"
+                }
+            }
+        }
+        if (violations) {
+            throw new GradleException(
+                "Found ${violations.size()} inline fully qualified name(s). Use imports instead:\n" +
+                violations.collect { "  ${it}" }.join('\n')
+            )
+        }
+    }
+}
+
+// Run both spotless and FQN check as part of the build
+tasks.named('check') {
+    dependsOn 'spotlessCheck', 'checkNoInlineFQN'
+}
+
 test {
     useJUnitPlatform()
+}
+
+tasks.register('installUiDependencies', Exec) {
+    group = 'build'
+    description = 'Install UI dependencies with pnpm when the UI workspace is available'
+    onlyIf { uiDir.exists() }
+    workingDir uiDir
+    commandLine shellCommand(pnpmCommand('install --frozen-lockfile'))
+    environment 'CI', 'true'
+    inputs.files(
+        file("${uiDir}/package.json"),
+        file("${uiDir}/pnpm-lock.yaml")
+    )
+    outputs.file(file("${uiDir}/node_modules/.modules.yaml"))
+}
+
+tasks.register('buildUi', Exec) {
+    group = 'build'
+    description = 'Build the latest UI bundle for the embedded server UI (opt-in via -PbuildUI for bootJar)'
+    onlyIf { uiDir.exists() }
+    dependsOn 'installUiDependencies'
+    workingDir uiDir
+    commandLine shellCommand(pnpmCommand('build'))
+    environment 'CI', 'true'
+    environment 'NODE_OPTIONS', nodeOptionsWithMoreHeap()
+    inputs.files(
+        file("${uiDir}/package.json"),
+        file("${uiDir}/pnpm-lock.yaml"),
+        file("${uiDir}/index.html"),
+        file("${uiDir}/vite.config.ts"),
+        file("${uiDir}/vite-plugin-csp-nonce.ts"),
+        file("${uiDir}/tsconfig.json")
+    )
+    inputs.dir(file("${uiDir}/src"))
+    inputs.dir(file("${uiDir}/public"))
+    outputs.dir(uiDistDir)
+}
+
+tasks.register('syncUiStatic', Sync) {
+    group = 'build'
+    description = 'Sync the latest built UI assets into server/src/main/resources/static'
+    onlyIf { uiDir.exists() }
+    dependsOn 'buildUi'
+    from(uiDistDir)
+    into(serverStaticDir)
+    includeEmptyDirs = false
+}
+
+tasks.named('processResources') {
+    if (buildUiEnabled) {
+        dependsOn 'syncUiStatic'
+    }
+}
+
+tasks.named('bootJar') {
+    if (buildUiEnabled) {
+        dependsOn 'syncUiStatic'
+    }
+    archiveFileName = 'agentspan-runtime.jar'
 }

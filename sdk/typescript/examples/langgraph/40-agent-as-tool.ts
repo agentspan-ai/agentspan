@@ -14,7 +14,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // Specialist agents (as plain compiled graphs)
@@ -119,7 +119,7 @@ const orchBuilder = new StateGraph(MessagesAnnotation)
   .addConditionalEdges('orchestrator', toolsCondition)
   .addEdge('tools', 'orchestrator');
 
-const graph = orchBuilder.compile();
+const graph = orchBuilder.compile({ name: "orchestrator_with_subagents" });
 
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',
@@ -140,10 +140,19 @@ async function main() {
   const runtime = new AgentRuntime();
   try {
     for (const query of queries) {
-      console.log(`\nQuery: ${query}`);
-      const result = await runtime.run(graph, query);
-      result.printResult();
-      console.log('-'.repeat(60));
+    console.log(`\nQuery: ${query}`);
+    const result = await runtime.run(graph, query);
+    result.printResult();
+    console.log('-'.repeat(60));
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(graph);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/langgraph --agents agent_as_tool
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(graph);
     }
   } finally {
     await runtime.shutdown();

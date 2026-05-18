@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Union
 
+from agentspan.agents.claude_code import ClaudeCode
+
 _VALID_NAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_-]*$")
 
 
@@ -88,7 +90,7 @@ class AgentDef:
     """
 
     name: str
-    model: str = ""
+    model: Union[str, Any] = ""
     instructions: Any = ""
     tools: List[Any] = field(default_factory=list)
     guardrails: List[Any] = field(default_factory=list)
@@ -116,7 +118,7 @@ def agent(
     func: Optional[Callable[..., Any]] = None,
     *,
     name: Optional[str] = None,
-    model: str = "",
+    model: Union[str, Any] = "",
     tools: Optional[List[Any]] = None,
     guardrails: Optional[List[Any]] = None,
     agents: Optional[List[Any]] = None,
@@ -217,7 +219,11 @@ def _resolve_agent(obj: Any, parent_model: str = "") -> "Agent":
         return obj
     if callable(obj) and hasattr(obj, "_agent_def"):
         ad: AgentDef = obj._agent_def
-        resolved_model = ad.model or parent_model
+        # Handle ClaudeCode: don't inherit parent model for claude-code agents
+        if isinstance(ad.model, ClaudeCode):
+            resolved_model = ad.model
+        else:
+            resolved_model = ad.model or parent_model
         return Agent(
             name=ad.name,
             model=resolved_model,
@@ -316,7 +322,7 @@ class Agent:
     def __init__(
         self,
         name: str,
-        model: str = "",
+        model: Union[str, "ClaudeCode", Any] = "",
         instructions: Union[str, Callable[..., str], PromptTemplate] = "",
         tools: Optional[List[Any]] = None,
         agents: Optional[List[Any]] = None,
@@ -353,7 +359,11 @@ class Agent:
         thinking_budget_tokens: Optional[int] = None,
         required_tools: Optional[List[str]] = None,
         gate: Optional[Any] = None,
+        base_url: Optional[str] = None,
         credentials: Optional[List[Any]] = None,
+        stateful: bool = False,
+        synthesize: bool = True,
+        masked_fields: Optional[List[str]] = None,
     ) -> None:
         if not name or not isinstance(name, str):
             raise ValueError("Agent name must be a non-empty string")
@@ -374,10 +384,53 @@ class Agent:
             raise ValueError(f"max_turns must be >= 1, got {max_turns}")
 
         self.name = name
-        self.model = model
+
+        # Handle ClaudeCode config object
+        self._claude_code_config: Optional[Any] = None
+        if isinstance(model, ClaudeCode):
+            self._claude_code_config = model
+            self.model = model.to_model_string()
+        else:
+            self.model = model
+
+        self.base_url = base_url
         self.instructions = instructions
         self.tools: List[Any] = list(tools) if tools else []
-        self.agents: List[Agent] = [_resolve_agent(a, model) for a in agents] if agents else []
+
+        # Validate claude-code tools are all strings
+        if self.is_claude_code and self.tools:
+            for t in self.tools:
+                if not isinstance(t, str):
+                    raise ValueError(
+                        "Claude Code agents only support built-in string tools like "
+                        "'Read', 'Edit', 'Bash'. Custom @tool functions are not "
+                        "supported yet (Phase 2)."
+                    )
+
+        self.agents: List[Agent] = [_resolve_agent(a, self.model) for a in agents] if agents else []
+
+        # PARALLEL parents need a model for the server-side aggregation step;
+        # without one, compilation fails with an opaque HTTP 400 ("Cannot
+        # compile external agent directly"). Auto-inherit from the first
+        # child that has a model so the common case
+        # ``Agent(agents=[a1, a2], strategy=PARALLEL)`` works without
+        # repeating ``model=`` on the parent. Picks the *first* match by
+        # design — children may have differing models for their own work,
+        # and the parent's model is only used for aggregation; the caller
+        # can pass an explicit ``model=`` to override. If no child has a
+        # model either, raise a clear error here rather than surfacing the
+        # opaque server 400 later.
+        if strategy == Strategy.PARALLEL and not self.model and self.agents:
+            inherited = next((a.model for a in self.agents if a.model), "")
+            if inherited:
+                self.model = inherited
+            else:
+                raise ValueError(
+                    f"Strategy.PARALLEL agent '{name}' has no ``model=`` and "
+                    "no child agent has one to inherit from. Set ``model=`` "
+                    "on the parent (used for aggregation) or on at least "
+                    "one child."
+                )
         # Validate sub-agent name uniqueness
         if self.agents:
             seen: Dict[str, int] = {}
@@ -408,6 +461,8 @@ class Agent:
         )
         self.introduction = introduction
         self.metadata: Dict[str, Any] = dict(metadata) if metadata else {}
+        self.stateful = stateful
+        self.synthesize = synthesize
         self.planner = planner
         self.callbacks: List[Any] = list(callbacks) if callbacks else []
         self.before_agent_callback = before_agent_callback
@@ -465,46 +520,21 @@ class Agent:
             self._attach_cli_tool()
 
         # ── Credential setup ─────────────────────────────────────────────
-        # When explicit credentials provided, use them as-is.
-        # When not provided, auto-map from cli_allowed_commands via CLI_CREDENTIAL_MAP.
-        from agentspan.agents.runtime.credentials.cli_map import CLI_CREDENTIAL_MAP
-
+        # Credentials must be explicitly declared — no auto-mapping.
         if credentials is not None:
             self.credentials: List[Any] = list(credentials)
-        elif self.cli_config and self.cli_config.allowed_commands:
-            # Check for terraform (None entry) before auto-mapping
-            null_mapped = [
-                cmd
-                for cmd in self.cli_config.allowed_commands
-                if CLI_CREDENTIAL_MAP.get(cmd) is None and cmd in CLI_CREDENTIAL_MAP
-            ]
-            if null_mapped:
-                raise ConfigurationError(
-                    f"CLI command(s) {null_mapped!r} have no credential auto-mapping. "
-                    f"You must provide an explicit credentials=[...] list. "
-                    f"Example: Agent(cli_allowed_commands=['terraform', ...], "
-                    f"credentials=['AWS_ACCESS_KEY_ID', 'TF_VAR_...'])"
-                )
-            # Collect and deduplicate
-            seen: set = set()
-            auto_creds: List[Any] = []
-            for cmd in self.cli_config.allowed_commands:
-                mapped = CLI_CREDENTIAL_MAP.get(cmd)
-                if mapped:
-                    for cred in mapped:
-                        key = cred.env_var if hasattr(cred, "env_var") else cred
-                        if key not in seen:
-                            seen.add(key)
-                            auto_creds.append(cred)
-            self.credentials = auto_creds
         else:
             self.credentials = []
+
+        # Fields whose values are redacted in execution history and UI.
+        self.masked_fields: List[str] = list(masked_fields) if masked_fields else []
 
         # Propagate agent-level credentials to CLI/code tools so the
         # dispatch layer can resolve them per-tool (the dispatch only
         # looks at tool_def.credentials, not agent-level credentials).
         if self.credentials:
             from agentspan.agents.tool import get_tool_def
+
             for t in self.tools:
                 td = getattr(t, "_tool_def", None)
                 if td is not None and not td.credentials and td.tool_type in ("cli", "code"):
@@ -533,6 +563,7 @@ class Agent:
             allowed_languages=cfg.allowed_languages,
             allowed_commands=cfg.allowed_commands,
             timeout=cfg.timeout,
+            agent_name=self.name,
         )
         self.tools.append(code_tool)
 
@@ -547,8 +578,16 @@ class Agent:
                 timeout=cfg.timeout,
                 working_dir=cfg.working_dir,
                 allow_shell=cfg.allow_shell,
+                agent_name=self.name,
             )
         )
+
+    # ── Claude Code detection ──────────────────────────────────────────
+
+    @property
+    def is_claude_code(self) -> bool:
+        """True if this agent uses the Claude Agent SDK runtime."""
+        return isinstance(self.model, str) and self.model.startswith("claude-code")
 
     # ── External detection ────────────────────────────────────────────
 

@@ -12,7 +12,7 @@ Demonstrates:
 Requirements:
     - pip install google-adk
     - Conductor server with Google Gemini LLM integration configured
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=google_gemini/gemini-2.0-flash as environment variable
 """
 
@@ -143,10 +143,21 @@ agent = Agent(
     tools=[search_products, check_inventory, calculate_shipping, apply_coupon],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
         agent,
         "I'm looking for electronics. Show me what you have, check if they're "
         "in stock, and calculate shipping to San Francisco. I have coupon code SAVE10.",
-    )
-    result.print_result()
+        )
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.adk.09_multi_tool_agent
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)

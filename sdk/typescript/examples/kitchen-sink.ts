@@ -17,13 +17,26 @@
  *   - Extended thinking, planner mode, required_tools, include_contents
  *   - GPTAssistantAgent, agentTool(), scatterGather()
  *
+ * MCP Test Server Setup (mcp-testkit):
+ *   pip install mcp-testkit
+ *
+ *   # Start without auth:
+ *   mcp-testkit --transport http
+ *
+ *   # Or start with auth (requires storing the secret as a credential):
+ *   mcp-testkit --transport http --auth <secret>
+ *
+ *   # Store credentials via CLI or Agentspan UI:
+ *   agentspan credentials set MCP_AUTH_TOKEN <secret>
+ *   agentspan credentials set SEARCH_API_KEY <key>
+ *
  * Requirements:
  *   - Conductor server with LLM support
  *   - AGENTSPAN_SERVER_URL, AGENTSPAN_LLM_MODEL env vars
- *   - For full execution: Docker, MCP server, credential store
+ *   - mcp-testkit running on http://localhost:3001 (for MCP/HTTP tools)
+ *   - For full execution: Docker, credential store configured
  */
 
-import { z } from 'zod';
 
 import {
   // Core
@@ -109,7 +122,7 @@ import {
   // Discovery & Tracing
   discoverAgents,
   isTracingEnabled,
-} from '../src/index.js';
+} from '@agentspan-ai/sdk';
 
 import type {
   GuardrailResult,
@@ -118,7 +131,7 @@ import type {
   CodeExecutionConfig,
   CliConfig,
   AgentResult,
-} from '../src/index.js';
+} from '@agentspan-ai/sdk';
 
 // ── Settings ─────────────────────────────────────────────
 
@@ -152,12 +165,16 @@ const callbackLog: Array<{ type: string; data: Record<string, unknown> }> = [];
 // Features: #5 Router, #30 structured output, #63 PromptTemplate, @agent
 // ═══════════════════════════════════════════════════════════════════════
 
-const ClassificationResult = z.object({
-  category: z.enum(['tech', 'business', 'creative']).describe('Article category'),
-  priority: z.number().describe('Priority level (1=highest)'),
-  tags: z.array(z.string()).describe('Relevant tags'),
-  metadata: z.record(z.string(), z.string()).optional().describe('Additional metadata'),
-}).describe('ClassificationResult');
+const ClassificationResult = {
+  type: 'object',
+  properties: {
+    category: { type: 'string', enum: ['tech', 'business', 'creative'], description: 'Article category' },
+    priority: { type: 'number', description: 'Priority level (1=highest)' },
+    tags: { type: 'array', items: { type: 'string' }, description: 'Relevant tags' },
+    metadata: { type: 'object', additionalProperties: { type: 'string' }, description: 'Additional metadata' },
+  },
+  required: ['category', 'priority', 'tags'],
+};
 
 // @agent decorator equivalents
 const techClassifier = agent(
@@ -205,18 +222,24 @@ const intakeRouter = new Agent({
 const researchDatabase = tool(
   async (args: { query: string }, ctx?: ToolContext) => {
     const session = ctx?.sessionId ?? 'unknown';
-    const workflow = ctx?.workflowId ?? 'unknown';
+    const execution = ctx?.executionId ?? 'unknown';
     return {
       query: args.query,
       sessionId: session,
-      workflowId: workflow,
+      executionId: execution,
       results: MOCK_RESEARCH_DATA['quantum_computing'] ?? {},
     };
   },
   {
     name: 'research_database',
     description: 'Search internal research database.',
-    inputSchema: z.object({ query: z.string() }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+      },
+      required: ['query'],
+    },
     credentials: [{ envVar: 'RESEARCH_API_KEY' } as CredentialFile],
   },
 );
@@ -235,7 +258,13 @@ const analyzeTrends = tool(
   {
     name: 'analyze_trends',
     description: 'Analyze trending topics using analytics API.',
-    inputSchema: z.object({ topic: z.string() }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        topic: { type: 'string' },
+      },
+      required: ['topic'],
+    },
     isolated: false,
     credentials: ['ANALYTICS_KEY'],
   },
@@ -262,6 +291,7 @@ const mcpFactChecker = mcpTool({
   name: 'fact_checker',
   description: 'Verify factual claims using knowledge base.',
   toolNames: ['verify_claim', 'check_source'],
+  headers: { Authorization: 'Bearer ${MCP_AUTH_TOKEN}' },
   credentials: ['MCP_AUTH_TOKEN'],
 });
 
@@ -281,10 +311,14 @@ const externalResearchAggregator = tool(
   {
     name: 'external_research_aggregator',
     description: 'Aggregate research from external sources. Runs on remote worker.',
-    inputSchema: z.object({
-      query: z.string(),
-      sources: z.number().optional(),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+        sources: { type: 'number' },
+      },
+      required: ['query'],
+    },
     external: true,
   },
 );
@@ -337,12 +371,18 @@ for (const article of MOCK_PAST_ARTICLES) {
 const recallPastArticles = tool(
   async (args: { query: string }) => {
     const results = semanticMem.search(args.query, 3);
-    return { results: results.map((r) => ({ content: r.content })) };
+    return { results: results.map((content) => ({ content })) };
   },
   {
     name: 'recall_past_articles',
     description: 'Retrieve relevant past articles from semantic memory.',
-    inputSchema: z.object({ query: z.string() }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+      },
+      required: ['query'],
+    },
   },
 );
 
@@ -469,7 +509,13 @@ const safeSearch = tool(
   {
     name: 'safe_search',
     description: 'Search with SQL injection protection.',
-    inputSchema: z.object({ query: z.string() }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+      },
+      required: ['query'],
+    },
     guardrails: [sqlInjectionGuard],
   },
 );
@@ -500,11 +546,15 @@ const publishArticle = tool(
   {
     name: 'publish_article',
     description: 'Publish article to platform. Requires editorial approval.',
-    inputSchema: z.object({
-      title: z.string(),
-      content: z.string(),
-      platform: z.string(),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string' },
+        content: { type: 'string' },
+        platform: { type: 'string' },
+      },
+      required: ['title', 'content', 'platform'],
+    },
     approvalRequired: true,
   },
 );
@@ -614,7 +664,13 @@ const formatCheck = tool(
   {
     name: 'format_check',
     description: 'Check article formatting.',
-    inputSchema: z.object({ content: z.string() }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        content: { type: 'string' },
+      },
+      required: ['content'],
+    },
   },
 );
 
@@ -743,12 +799,16 @@ const gptAssistant = new GPTAssistantAgent({
 });
 
 // -- ArticleReport output schema --
-const ArticleReport = z.object({
-  wordCount: z.number(),
-  sentimentScore: z.number(),
-  readabilityGrade: z.string(),
-  topKeywords: z.array(z.string()),
-}).describe('ArticleReport');
+const ArticleReport = {
+  type: 'object',
+  properties: {
+    wordCount: { type: 'number' },
+    sentimentScore: { type: 'number' },
+    readabilityGrade: { type: 'string' },
+    topKeywords: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['wordCount', 'sentimentScore', 'readabilityGrade', 'topKeywords'],
+};
 
 const analyticsAgent = new Agent({
   name: 'analytics_agent',
@@ -784,6 +844,7 @@ const analyticsAgent = new Agent({
     allowedCommands: ['git', 'gh'],
     timeout: 30,
   },
+  credentials: ['GITHUB_TOKEN', 'GH_TOKEN'],
   metadata: { stage: 'analytics', version: '1.0' },
   planner: true,                          // #69
 });
@@ -830,74 +891,22 @@ async function main() {
   }
 
   const runtime = new AgentRuntime();
-
-  // ── Feature #49: deploy ────────────────────────────────
-  console.log('=== Deploy ===');
-  const deployment = await runtime.deploy(fullPipeline);
-  console.log(`  Deployed: ${deployment.workflowName} (${deployment.agentName})`);
-
-  // ── Feature #51: plan (dry-run) ────────────────────────
-  console.log('\n=== Plan (dry-run) ===');
-  const executionPlan = await runtime.plan(fullPipeline);
-  console.log('  Plan compiled successfully');
-
-  // ── Feature #43: stream (sync SSE + HITL) ──────────────
-  console.log('\n=== Stream Execution ===');
-  const agentStream = await runtime.stream(fullPipeline, PROMPT);
-  console.log(`  Workflow: ${agentStream.workflowId}\n`);
-
-  const hitlState = { approved: 0, rejected: 0, feedback: 0 };
-
-  for await (const event of agentStream) {
-    switch (event.type) {
-      case EventTypes.THINKING:
-        console.log(`  [thinking] ${(event.content ?? '').slice(0, 80)}...`);
-        break;
-      case EventTypes.TOOL_CALL:
-        console.log(`  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`);
-        break;
-      case EventTypes.TOOL_RESULT:
-        console.log(`  [tool_result] ${event.toolName} -> ${String(event.result).slice(0, 80)}...`);
-        break;
-      case EventTypes.HANDOFF:
-        console.log(`  [handoff] -> ${event.target}`);
-        break;
-      case EventTypes.GUARDRAIL_PASS:
-        console.log(`  [guardrail_pass] ${event.guardrailName}`);
-        break;
-      case EventTypes.GUARDRAIL_FAIL:
-        console.log(`  [guardrail_fail] ${event.guardrailName}: ${event.content}`);
-        break;
-      case EventTypes.MESSAGE:
-        console.log(`  [message] ${(event.content ?? '').slice(0, 80)}...`);
-        break;
-      case EventTypes.WAITING:
-        console.log('\n  --- HITL: Approval required ---');
-        if (hitlState.feedback === 0) {
-          await agentStream.send('Please add more details about quantum error correction.');
-          hitlState.feedback++;
-          console.log('  Sent feedback (revision request)\n');
-        } else if (hitlState.rejected === 0) {
-          await agentStream.reject('Title needs improvement');
-          hitlState.rejected++;
-          console.log('  Rejected (title needs work)\n');
-        } else {
-          await agentStream.approve();
-          hitlState.approved++;
-          console.log('  Approved\n');
-        }
-        break;
-      case EventTypes.ERROR:
-        console.log(`  [error] ${event.content}`);
-        break;
-      case EventTypes.DONE:
-        console.log('\n  [done] Pipeline complete');
-        break;
-    }
-  }
-
-  const result = await agentStream.getResult();
+  const result = await runtime.run(fullPipeline, PROMPT);
   result.printResult();
+
+  // Production pattern:
+  // 1. Deploy once during CI/CD:
+  // await runtime.deploy(fullPipeline);
+  // CLI alternative:
+  // agentspan deploy --package sdk/typescript/examples --agents content_publishing_platform
+  //
+  // 2. In a separate long-lived worker process:
+  // await runtime.serve(fullPipeline);
+  //
+  // Additional execution-mode alternatives:
+  // await runtime.plan(fullPipeline);
+  // const agentStream = await runtime.stream(fullPipeline, PROMPT);
+  // const handle = await runtime.start(fullPipeline, PROMPT);
 
   // ── Feature #64: Token tracking ────────────────────────
   if (result.tokenUsage) {
@@ -911,13 +920,6 @@ async function main() {
   for (const ev of callbackLog.slice(0, 5)) {
     console.log(`  ${ev.type}:`, ev.data);
   }
-
-  // ── Feature #48: start + polling ───────────────────────
-  console.log('\n=== Start + Polling ===');
-  const handle = await runtime.start(fullPipeline, PROMPT);
-  console.log(`  Started: ${handle.workflowId}`);
-  const status = await handle.getStatus();
-  console.log(`  Status: ${status.status}, Running: ${status.isRunning}`);
 
   // ── Feature #46: top-level convenience APIs ────────────
   console.log('\n=== Top-Level Convenience API ===');
@@ -1021,6 +1023,4 @@ export {
 };
 
 // Only run main() when executed directly (not imported)
-if (typeof process !== 'undefined' && process.argv[1]?.endsWith('kitchen-sink.ts')) {
-  main().catch(console.error);
-}
+main().catch(console.error);

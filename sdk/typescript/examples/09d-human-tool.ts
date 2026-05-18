@@ -16,14 +16,15 @@
  *   - The LLM using human input to make decisions
  *
  * Requirements:
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api
  *   - AGENTSPAN_LLM_MODEL (default: openai/gpt-4o-mini)
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, humanTool, tool } from '../src/index.js';
-import type { AgentHandle } from '../src/index.js';
-import { llmModel } from './settings.js';
+import * as readline from 'node:readline/promises';
+import { stdin, stdout } from 'node:process';
+import { Agent, AgentRuntime, humanTool, tool } from '@agentspan-ai/sdk';
+import type { AgentHandle } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 const lookupEmployee = tool(
   async (args: { name: string }) => {
@@ -53,9 +54,13 @@ const lookupEmployee = tool(
   {
     name: 'lookup_employee',
     description: 'Look up an employee by name and return their info.',
-    inputSchema: z.object({
-      name: z.string().describe('Employee name to look up'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Employee name to look up' },
+      },
+      required: ['name'],
+    },
   },
 );
 
@@ -71,11 +76,15 @@ const submitTicket = tool(
   {
     name: 'submit_ticket',
     description: 'Submit an IT support ticket.',
-    inputSchema: z.object({
-      title: z.string().describe('Ticket title'),
-      priority: z.string().describe('Priority level'),
-      assignee: z.string().describe('Assignee name'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Ticket title' },
+        priority: { type: 'string', description: 'Priority level' },
+        assignee: { type: 'string', description: 'Assignee name' },
+      },
+      required: ['title', 'priority', 'assignee'],
+    },
   },
 );
 
@@ -85,7 +94,7 @@ const askUser = humanTool({
     'Ask the user a question when you need clarification or additional information.',
 });
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'it_support',
   model: llmModel,
   tools: [lookupEmployee, submitTicket, askUser],
@@ -97,54 +106,64 @@ const agent = new Agent({
     'before submitting.',
 });
 
+async function promptHuman(
+  rl: readline.Interface,
+  pendingTool: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const schema = (pendingTool.response_schema ?? {}) as Record<string, unknown>;
+  const props = (schema.properties ?? {}) as Record<string, Record<string, unknown>>;
+  const response: Record<string, unknown> = {};
+  for (const [field, fs] of Object.entries(props)) {
+    const desc = (fs.description || fs.title || field) as string;
+    if (fs.type === 'boolean') {
+      const val = await rl.question(`  ${desc} (y/n): `);
+      response[field] = ['y', 'yes'].includes(val.trim().toLowerCase());
+    } else {
+      response[field] = await rl.question(`  ${desc}: `);
+    }
+  }
+  return response;
+}
+
+const rl = readline.createInterface({ input: stdin, output: stdout });
 const runtime = new AgentRuntime();
 try {
-  const handle: AgentHandle = await runtime.start(
+  const handle = await runtime.start(
     agent,
     'I need to file a ticket for Alice about a laptop issue',
   );
-  console.log(`Workflow started: ${handle.workflowId}\n`);
+  console.log(`Started: ${handle.executionId}\n`);
 
   for await (const event of handle.stream()) {
-    switch (event.type) {
-      case 'thinking':
-        console.log(`  [thinking] ${event.content}`);
-        break;
-
-      case 'tool_call':
-        console.log(
-          `  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`,
-        );
-        break;
-
-      case 'tool_result':
-        console.log(
-          `  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result)}`,
-        );
-        break;
-
-      case 'waiting':
-        console.log('\n--- Human input required ---');
-        // Auto-respond since we can't do interactive stdin
-        console.log(
-          '  Auto-responding: "The laptop screen is flickering, high priority please"',
-        );
-        await handle.respond({
-          response:
-            'The laptop screen is flickering, high priority please',
-        });
-        console.log();
-        break;
-
-      case 'error':
-        console.log(`  [error] ${event.content}`);
-        break;
-
-      case 'done':
-        console.log(`\nResult: ${JSON.stringify(event.output)}`);
-        break;
+    if (event.type === 'thinking') {
+      console.log(`  [thinking] ${event.content}`);
+    } else if (event.type === 'tool_call') {
+      console.log(`  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`);
+    } else if (event.type === 'tool_result') {
+      console.log(`  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result).slice(0, 100)}`);
+    } else if (event.type === 'waiting') {
+      const status = await handle.getStatus();
+      const pt = (status.pendingTool ?? {}) as Record<string, unknown>;
+      console.log('\n--- Human input required ---');
+      const response = await promptHuman(rl, pt);
+      await handle.respond(response);
+      console.log();
+    } else if (event.type === 'done') {
+      console.log(`\nDone: ${JSON.stringify(event.output)}`);
     }
   }
+
+  // Non-interactive alternative (no HITL, will block on human tasks):
+  // const result = await runtime.run(agent, 'Look up Alice Chen and summarize her department and level.');
+  // result.printResult();
+
+  // Production pattern:
+  // 1. Deploy once during CI/CD:
+  // await runtime.deploy(agent);
+  //
+  // 2. In a separate long-lived worker process:
+  // await runtime.serve(agent);
 } finally {
+  rl.close();
   await runtime.shutdown();
 }

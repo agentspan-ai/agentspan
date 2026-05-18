@@ -5,17 +5,19 @@
 
 package dev.agentspan.runtime.service;
 
-import com.netflix.conductor.model.TaskModel;
-import com.netflix.conductor.model.WorkflowModel;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import dev.agentspan.runtime.model.AgentSSEEvent;
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 import java.util.Map;
 
-import static org.assertj.core.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+
+import com.netflix.conductor.model.TaskModel;
+import com.netflix.conductor.model.WorkflowModel;
+
+import dev.agentspan.runtime.model.AgentSSEEvent;
 
 class AgentHumanTaskTest {
 
@@ -35,10 +37,7 @@ class AgentHumanTaskTest {
 
         TaskModel task = new TaskModel();
         task.setReferenceTaskName("hitl_approve");
-        task.setInputData(Map.of(
-                "tool_name", "publish_article",
-                "parameters", Map.of("title", "Test")
-        ));
+        task.setInputData(Map.of("tool_name", "publish_article", "parameters", Map.of("title", "Test")));
 
         humanTask.start(workflow, task, null);
 
@@ -50,6 +49,7 @@ class AgentHumanTaskTest {
         assertThat(event.getType()).isEqualTo("waiting");
         assertThat(event.getPendingTool()).containsEntry("tool_name", "publish_article");
         assertThat(event.getPendingTool()).containsEntry("taskRefName", "hitl_approve");
+        assertThat(event.getExecutionId()).isEqualTo("wf-1");
     }
 
     @Test
@@ -73,8 +73,7 @@ class AgentHumanTaskTest {
 
     @Test
     void startContinuesEvenIfSseFails() {
-        doThrow(new RuntimeException("SSE send failed"))
-                .when(streamRegistry).send(anyString(), any());
+        doThrow(new RuntimeException("SSE send failed")).when(streamRegistry).send(anyString(), any());
 
         WorkflowModel workflow = new WorkflowModel();
         workflow.setWorkflowId("wf-3");
@@ -82,8 +81,7 @@ class AgentHumanTaskTest {
         task.setReferenceTaskName("hitl");
 
         // Should not throw
-        assertThatCode(() -> humanTask.start(workflow, task, null))
-                .doesNotThrowAnyException();
+        assertThatCode(() -> humanTask.start(workflow, task, null)).doesNotThrowAnyException();
 
         // Task should still be IN_PROGRESS even if SSE failed
         assertThat(task.getStatus()).isEqualTo(TaskModel.Status.IN_PROGRESS);

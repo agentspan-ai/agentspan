@@ -4,9 +4,18 @@
  */
 package dev.agentspan.runtime.auth;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.*;
+
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
+
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,22 +23,23 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.util.Optional;
-import java.util.concurrent.atomic.AtomicReference;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.*;
-
 @ExtendWith(MockitoExtension.class)
 class AuthFilterTest {
 
-    @Mock private UserRepository userRepository;
-    @Mock private ApiKeyRepository apiKeyRepository;
-    @Mock private HttpServletRequest request;
-    @Mock private HttpServletResponse response;
-    @Mock private FilterChain chain;
+    @Mock
+    private UserRepository userRepository;
+
+    @Mock
+    private ApiKeyRepository apiKeyRepository;
+
+    @Mock
+    private HttpServletRequest request;
+
+    @Mock
+    private HttpServletResponse response;
+
+    @Mock
+    private FilterChain chain;
 
     private AuthFilter filter;
     private PrintWriter responseWriter;
@@ -52,9 +62,11 @@ class AuthFilterTest {
         AtomicReference<RequestContext> capturedCtx = new AtomicReference<>();
 
         doAnswer(invocation -> {
-            capturedCtx.set(RequestContextHolder.get().orElse(null));
-            return null;
-        }).when(chain).doFilter(request, response);
+                    capturedCtx.set(RequestContextHolder.get().orElse(null));
+                    return null;
+                })
+                .when(chain)
+                .doFilter(request, response);
 
         anonFilter.doFilterInternal(request, response, chain);
 
@@ -82,9 +94,11 @@ class AuthFilterTest {
         AtomicReference<RequestContext> capturedCtx = new AtomicReference<>();
 
         doAnswer(invocation -> {
-            capturedCtx.set(RequestContextHolder.get().orElse(null));
-            return null;
-        }).when(chain).doFilter(request, response);
+                    capturedCtx.set(RequestContextHolder.get().orElse(null));
+                    return null;
+                })
+                .when(chain)
+                .doFilter(request, response);
 
         filter.doFilterInternal(request, response, chain);
 

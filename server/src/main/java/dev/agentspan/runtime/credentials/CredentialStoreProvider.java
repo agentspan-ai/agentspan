@@ -4,8 +4,9 @@
  */
 package dev.agentspan.runtime.credentials;
 
-import dev.agentspan.runtime.model.credentials.CredentialMeta;
 import java.util.List;
+
+import dev.agentspan.runtime.model.credentials.CredentialMeta;
 
 /**
  * Strategy interface for credential storage backends.

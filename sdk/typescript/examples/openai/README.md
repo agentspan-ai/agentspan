@@ -47,7 +47,7 @@ import { Agent, tool, setTracingDisabled }
   from '@openai/agents';
 // ^^^ replace run() with setTracingDisabled
 import { z } from 'zod';
-import { AgentRuntime } from '@agentspan/sdk';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 // ^^^ add agentspan import
 
 const getWeather = tool({
@@ -86,7 +86,7 @@ await runtime.shutdown();
 
 | What | Change |
 |------|--------|
-| **Imports** | Drop `run` from `@openai/agents`, add `AgentRuntime` from `@agentspan/sdk` |
+| **Imports** | Drop `run` from `@openai/agents`, add `AgentRuntime` from `@agentspan-ai/sdk` |
 | **Agent** | No changes — same `new Agent({ ... })` |
 | **Tools** | No changes — same `tool({ ... })` |
 | **Execution** | `run(agent, prompt)` → `runtime.run(agent, prompt)` |

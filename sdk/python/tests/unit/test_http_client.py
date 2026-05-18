@@ -37,24 +37,24 @@ def _make_client(handler) -> AgentHttpClient:
 
 @pytest.mark.asyncio
 async def test_start_agent():
-    """POST /agent/start returns workflowId."""
+    """POST /agent/start returns executionId."""
 
     async def handler(request: httpx.Request) -> httpx.Response:
         assert request.method == "POST"
         assert request.url.path == "/api/agent/start"
         body = json.loads(request.content)
         assert body["prompt"] == "hello"
-        return httpx.Response(200, json={"workflowId": "wf-123"})
+        return httpx.Response(200, json={"executionId": "wf-123"})
 
     client = _make_client(handler)
     result = await client.start_agent({"prompt": "hello"})
-    assert result["workflowId"] == "wf-123"
+    assert result["executionId"] == "wf-123"
     await client.close()
 
 
 @pytest.mark.asyncio
 async def test_compile_agent():
-    """POST /agent/compile returns workflow def."""
+    """POST /agent/compile returns agent def."""
 
     async def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/api/agent/compile"
@@ -115,7 +115,7 @@ async def test_auth_headers():
     async def handler(request: httpx.Request) -> httpx.Response:
         assert request.headers.get("x-auth-key") == "key1"
         assert request.headers.get("x-auth-secret") == "secret1"
-        return httpx.Response(200, json={"workflowId": "wf-1"})
+        return httpx.Response(200, json={"executionId": "wf-1"})
 
     client = _make_client(handler)
     await client.start_agent({"prompt": "test"})
@@ -202,7 +202,7 @@ async def test_api_key_sends_bearer_auth():
         assert request.headers.get("authorization") == "Bearer my-bearer-token"
         # Should NOT have X-Auth-Key when api_key is used
         assert "x-auth-key" not in request.headers
-        return httpx.Response(200, json={"workflowId": "wf-1"})
+        return httpx.Response(200, json={"executionId": "wf-1"})
 
     client = _make_client_with_api_key(handler)
     await client.start_agent({"prompt": "test"})
@@ -216,7 +216,7 @@ async def test_api_key_takes_precedence_over_auth_key():
     async def handler(request: httpx.Request) -> httpx.Response:
         assert request.headers.get("authorization") == "Bearer my-api-key"
         assert "x-auth-key" not in request.headers
-        return httpx.Response(200, json={"workflowId": "wf-1"})
+        return httpx.Response(200, json={"executionId": "wf-1"})
 
     client = AgentHttpClient(
         server_url="http://test-server/api",
@@ -240,7 +240,7 @@ async def test_legacy_auth_key_still_works():
         assert request.headers.get("x-auth-key") == "legacy-key"
         assert request.headers.get("x-auth-secret") == "legacy-secret"
         assert "authorization" not in request.headers
-        return httpx.Response(200, json={"workflowId": "wf-1"})
+        return httpx.Response(200, json={"executionId": "wf-1"})
 
     client = AgentHttpClient(
         server_url="http://test-server/api",

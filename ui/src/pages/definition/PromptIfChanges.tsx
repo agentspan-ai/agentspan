@@ -106,8 +106,8 @@ export const PromptIfChanges: FunctionComponent<HeaderActionButtonsProps> = ({
 
   return (
     <BlockNavigationWithConfirmation
-      nonBlockPaths={["/workflowDef/.*", "/newWorkflowDef"]}
-      title="Unsaved Workflow"
+      nonBlockPaths={["/agentDef/.*", "/newWorkflowDef"]}
+      title="Unsaved Agent"
       block={showPrompt}
       onSave={handleSave}
       successfulSave={successfulSave}

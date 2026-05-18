@@ -8,7 +8,7 @@
  */
 
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // State schema
@@ -93,12 +93,11 @@ builder.addEdge('positive', END);
 builder.addEdge('negative', END);
 builder.addEdge('neutral', END);
 
-const graph = builder.compile();
+const graph = builder.compile({ name: "sentiment_router" });
 
 // Add agentspan metadata for extraction (no LLM in this pipeline example)
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',
-  tools: [],
   framework: 'langgraph',
 };
 
@@ -109,11 +108,20 @@ async function main() {
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(
-      graph,
-      "I just got promoted at work and I'm thrilled!",
+    graph,
+    "I just got promoted at work and I'm thrilled!",
     );
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(graph);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/langgraph --agents conditional_routing
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(graph);
   } finally {
     await runtime.shutdown();
   }

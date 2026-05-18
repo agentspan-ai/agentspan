@@ -18,17 +18,21 @@ var (
 )
 
 var respondCmd = &cobra.Command{
-	Use:   "respond <workflow-id>",
+	Use:   "respond <execution-id>",
 	Short: "Respond to a human-in-the-loop task",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if respondApprove && respondDeny {
+			return fmt.Errorf("cannot specify both --approve and --deny")
+		}
+		if !respondApprove && !respondDeny {
+			return fmt.Errorf("specify either --approve or --deny")
+		}
+
 		cfg := getConfig()
 		c := newClient(cfg)
 
-		approved := true
-		if respondDeny {
-			approved = false
-		}
+		approved := respondApprove
 
 		if err := c.Respond(args[0], approved, respondReason, respondMessage); err != nil {
 			return fmt.Errorf("failed to respond: %w", err)

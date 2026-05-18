@@ -1,14 +1,19 @@
+import { useSelector } from "@xstate/react";
 import HTTPPollTask from "components/flow/components/shapes/TaskCard/HTTPPollTask";
 import { JDBCTask } from "components/flow/components/shapes/TaskCard/JDBCTask";
 import StartWorkflowTask from "components/flow/components/shapes/TaskCard/StartWorkflowTask";
 import { NodeTaskData } from "components/flow/nodes/mapper";
+import { FlowActorContext } from "components/flow/state/FlowActorContext";
+import { FlowContext } from "components/flow/state/types";
 import { TaskAndCrumbs } from "pages/definition/state/usePerformOperationOnDefintion";
-import { useContext } from "react";
+import { useContext, useMemo } from "react";
+import { State } from "xstate";
 import { ColorModeContext } from "theme/material/ColorModeContext";
 import { colors } from "theme/tokens/variables";
 import { DynamicTaskDef, TaskStatus, TaskType, WaitTaskDef } from "types";
 import { MCPTaskDef } from "types/TaskType";
-import { getCardVariant } from "../styles";
+import { classifyTask } from "utils/agentTaskCategory";
+import { getCardVariant, taskCategoryColors } from "../styles";
 import AddPathButton from "./AddPathButton";
 import CardAttemptsBadge from "./CardAttemptsBadge";
 import CardIcon from "./CardIcon";
@@ -72,8 +77,28 @@ const TaskCard = ({
   const { mode } = useContext(ColorModeContext);
   const darkMode = mode === "dark";
 
+  // Read agentDef from workflow metadata via the flow machine context.
+  // flowActor may be undefined (e.g. in storybook / tests), so guard access.
+  const { flowActor } = useContext(FlowActorContext);
+  const agentDefFromActor = useSelector(
+    flowActor as any,
+    (state: State<FlowContext> | undefined) =>
+      state?.context?.currentWf?.metadata
+        ? ((state.context.currentWf.metadata as Record<string, unknown>)
+            .agentDef as Record<string, unknown> | undefined)
+        : undefined,
+  );
+  const agentDef = flowActor ? agentDefFromActor : undefined;
+
   const { task, status } = nodeData;
   const { name, type, taskReferenceName } = task;
+
+  const category = useMemo(
+    () => classifyTask(name, agentDef ?? null),
+    [name, agentDef],
+  );
+  const categoryColor =
+    category !== "unknown" ? taskCategoryColors[category] : undefined;
 
   const showIterationsNumber = showIterationChip(nodeData);
   return (
@@ -103,7 +128,11 @@ const TaskCard = ({
           boxShadow: darkMode ? `0 0 10px gray` : undefined,
           color: darkMode ? colors.gray14 : undefined,
           background: darkMode ? colors.gray04 : undefined,
+          borderLeft: categoryColor
+            ? `4px solid ${categoryColor}`
+            : undefined,
         }}
+        title={category !== "unknown" ? `Agent task: ${category}` : undefined}
       >
         {/* Execution */}
         <CardStatusBadge status={status} />

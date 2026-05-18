@@ -22,7 +22,7 @@ loop as durable workflow tasks.  This means:
 
 Requirements:
     - Conductor server with LLM support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -106,19 +106,31 @@ agent = Agent(
     ],
 )
 
-with AgentRuntime() as runtime:
-    # This prompt triggers both tools:
-    #   1. get_order_status("ORD-42")   → safe data, passes guardrail
-    #   2. get_customer_info("CUST-7")  → contains credit card, trips guardrail
-    result = runtime.run(
-        agent,
-        "I need a full summary: What's the status of order ORD-42, "
-        "and what's the profile for customer CUST-7?"
-    )
-    result.print_result()
 
-    # Verify the guardrail worked — no raw card number in the output
-    if result.output and "4532-0150-1234-5678" in str(result.output):
-        print("[WARN] PII leaked through the guardrail!")
-    else:
-        print("[OK] PII was redacted from the final output.")
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # This prompt triggers both tools:
+        #   1. get_order_status("ORD-42")   → safe data, passes guardrail
+        #   2. get_customer_info("CUST-7")  → contains credit card, trips guardrail
+        result = runtime.run(
+            agent,
+            "I need a full summary: What's the status of order ORD-42, "
+            "and what's the profile for customer CUST-7?"
+        )
+        result.print_result()
+
+        # Verify the guardrail worked — no raw card number in the output
+        if result.output and "4532-0150-1234-5678" in str(result.output):
+            print("[WARN] PII leaked through the guardrail!")
+        else:
+            print("[OK] PII was redacted from the final output.")
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.10_guardrails
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
+

@@ -5,11 +5,11 @@
 
 package dev.agentspan.runtime.util;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.*;
 
 import java.util.OptionalInt;
 
-import static org.assertj.core.api.Assertions.*;
+import org.junit.jupiter.api.Test;
 
 /**
  * Tests for ModelContextWindows static defaults (no Spring context needed).

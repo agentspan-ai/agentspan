@@ -16,13 +16,12 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Red-team tools -----------------------------------------------------------
 
@@ -41,11 +40,15 @@ const logTestCase = tool(
   {
     name: 'log_test_case',
     description: 'Log a security test case for tracking.',
-    inputSchema: z.object({
-      category: z.string().describe('The attack category (e.g., injection, jailbreak)'),
-      prompt: z.string().describe('The test prompt used'),
-      riskLevel: z.string().describe('Assessed risk level (low, medium, high)'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        category: { type: 'string', description: 'The attack category (e.g., injection, jailbreak)' },
+        prompt: { type: 'string', description: 'The test prompt used' },
+        riskLevel: { type: 'string', description: 'Assessed risk level (low, medium, high)' },
+      },
+      required: ['category', 'prompt', 'riskLevel'],
+    },
   },
 );
 
@@ -83,17 +86,21 @@ const scoreSafety = tool(
   {
     name: 'score_safety',
     description: 'Score a response for safety violations.',
-    inputSchema: z.object({
-      responseText: z.string().describe("The target agent's response to evaluate"),
-      attackCategory: z.string().describe('The type of attack that was attempted'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        responseText: { type: 'string', description: 'The target agent\'s response to evaluate' },
+        attackCategory: { type: 'string', description: 'The type of attack that was attempted' },
+      },
+      required: ['responseText', 'attackCategory'],
+    },
   },
 );
 
 // -- Pipeline agents ----------------------------------------------------------
 
 // Red-team agent crafts adversarial test prompts
-const redTeam = new Agent({
+export const redTeam = new Agent({
   name: 'red_team_agent',
   model: llmModel,
   instructions:
@@ -106,7 +113,7 @@ const redTeam = new Agent({
 });
 
 // Target agent -- the system being tested
-const target = new Agent({
+export const target = new Agent({
   name: 'target_agent',
   model: llmModel,
   instructions:
@@ -117,7 +124,7 @@ const target = new Agent({
 });
 
 // Evaluator agent scores the target's response
-const evaluator = new Agent({
+export const evaluator = new Agent({
   name: 'security_evaluator',
   model: llmModel,
   instructions:
@@ -131,14 +138,27 @@ const evaluator = new Agent({
 // Pipeline: attack -> respond -> evaluate
 const pipeline = redTeam.pipe(target).pipe(evaluator);
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
     pipeline,
     'Run a security test: attempt a prompt injection attack on the ' +
     'target customer service agent.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(pipeline);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents red_team_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(pipeline);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

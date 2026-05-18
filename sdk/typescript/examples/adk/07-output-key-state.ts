@@ -13,7 +13,7 @@
 
 import { LlmAgent, FunctionTool } from '@google/adk';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
@@ -62,7 +62,7 @@ const generateChartDescription = new FunctionTool({
 // ── Specialist agents ────────────────────────────────────────────────
 
 // Analyst agent -- stores its findings in state via outputKey
-const analyst = new LlmAgent({
+export const analyst = new LlmAgent({
   name: 'data_analyst',
   model,
   instruction:
@@ -73,7 +73,7 @@ const analyst = new LlmAgent({
 });
 
 // Visualizer agent -- reads from state
-const visualizer = new LlmAgent({
+export const visualizer = new LlmAgent({
   name: 'chart_designer',
   model,
   instruction:
@@ -84,7 +84,7 @@ const visualizer = new LlmAgent({
 });
 
 // Coordinator delegates to both
-const coordinator = new LlmAgent({
+export const coordinator = new LlmAgent({
   name: 'report_coordinator',
   model,
   instruction:
@@ -100,11 +100,20 @@ async function main() {
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(
-      coordinator,
-      'Create a report on the sales_q4 dataset with visualization recommendations.',
+    coordinator,
+    'Create a report on the sales_q4 dataset with visualization recommendations.',
     );
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(coordinator);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents report_coordinator
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(coordinator);
   } finally {
     await runtime.shutdown();
   }

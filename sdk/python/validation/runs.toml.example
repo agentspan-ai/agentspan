@@ -13,7 +13,7 @@ timeout = 300          # per-example timeout (seconds)
 parallel = true        # run examples within this run concurrently
 max_workers = 8        # max concurrent examples per run
 retries = 0            # retry count on failure
-server_url = "http://localhost:8080/api"
+server_url = "http://localhost:6767/api"
 
 # Global env vars — applied to all runs (and to the orchestrator process)
 [env]
@@ -68,4 +68,4 @@ model = "anthropic/claude-sonnet-4-20250514"
 # max_workers     Max concurrent examples (default: 8)
 # timeout         Per-example timeout in seconds (default: 300)
 # retries         Retry count on failure (default: 0)
-# server_url      Conductor server URL (default: "http://localhost:8080/api")
+# server_url      Conductor server URL (default: "http://localhost:6767/api")

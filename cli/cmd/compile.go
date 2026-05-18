@@ -11,7 +11,7 @@ import (
 
 var compileCmd = &cobra.Command{
 	Use:   "compile <config-file>",
-	Short: "Compile an agent config to a Conductor workflow definition",
+	Short: "Compile an agent config and inspect the execution plan",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		agentConfig, err := loadAgentConfig(args[0])

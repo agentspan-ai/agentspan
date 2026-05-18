@@ -14,28 +14,12 @@
  * Requirements:
  *   - npm install @opentelemetry/api @opentelemetry/sdk-trace-base
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, tool, isTracingEnabled } from '../src/index.js';
-import { llmModel } from './settings.js';
-
-// -- Check if OTel is available --------------------------------------------
-
-console.log(`OpenTelemetry available: ${isTracingEnabled()}`);
-
-if (isTracingEnabled()) {
-  // In a real app you'd configure OTel here:
-  // import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
-  // import { ConsoleSpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-  // const provider = new NodeTracerProvider();
-  // provider.addSpanProcessor(new SimpleSpanProcessor(new ConsoleSpanExporter()));
-  // provider.register();
-  console.log('OTel is configured -- spans will be emitted');
-} else {
-  console.log('OTel not configured -- set OTEL_EXPORTER_OTLP_ENDPOINT or OTEL_SERVICE_NAME to enable');
-}
+import { Agent, AgentRuntime, tool, isTracingEnabled } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Agent with tools ------------------------------------------------------
 
@@ -56,7 +40,7 @@ const lookup = tool(
   },
 );
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'traced_agent',
   model: llmModel,
   tools: [lookup],
@@ -65,15 +49,36 @@ const agent = new Agent({
 
 // -- Run -------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  // The runtime automatically creates spans if OTel is configured.
-  const result = await runtime.run(agent, 'Who created Python?');
-  result.printResult();
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    console.log(`OpenTelemetry available: ${isTracingEnabled()}`);
 
-  if (result.tokenUsage) {
+    if (isTracingEnabled()) {
+    console.log('OTel is configured -- spans will be emitted');
+    } else {
+    console.log('OTel not configured -- set OTEL_EXPORTER_OTLP_ENDPOINT or OTEL_SERVICE_NAME to enable');
+    }
+
+    // The runtime automatically creates spans if OTel is configured.
+    const result = await runtime.run(agent, 'Who created Python?');
+    result.printResult();
+
+    if (result.tokenUsage) {
     console.log(`Tokens: ${result.tokenUsage.totalTokens}`);
+    }
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents traced_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+  } finally {
+    await runtime.shutdown();
   }
-} finally {
-  await runtime.shutdown();
 }
+
+main().catch(console.error);

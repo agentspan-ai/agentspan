@@ -1,15 +1,14 @@
-name: Release JS SDK
+name: Publish JS SDK to npm
 
 on:
+  release:
+    types: [created]
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to publish (e.g. 0.2.0)"
+        description: "Version (e.g. 0.2.0)"
         required: true
         type: string
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 permissions:
   contents: read
@@ -27,14 +26,26 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: "22"
           registry-url: "https://registry.npmjs.org"
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            TAG="${{ github.event.release.tag_name }}"
+            VERSION="${TAG#v}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Publishing version: ${VERSION}"
 
       - name: Install dependencies
         run: npm ci
 
       - name: Update package.json version
-        run: npm version ${{ inputs.version }} --no-git-tag-version --allow-same-version
+        run: npm version ${{ steps.version.outputs.version }} --no-git-tag-version --allow-same-version
 
       - name: Build
         run: npm run build

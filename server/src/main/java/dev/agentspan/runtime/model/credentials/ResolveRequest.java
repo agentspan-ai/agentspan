@@ -4,8 +4,9 @@
  */
 package dev.agentspan.runtime.model.credentials;
 
-import lombok.Data;
 import java.util.List;
+
+import lombok.Data;
 
 /** Request body for POST /api/credentials/resolve */
 @Data

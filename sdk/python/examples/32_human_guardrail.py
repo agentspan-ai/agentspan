@@ -4,22 +4,19 @@
 """Human-in-the-loop guardrail — ``on_fail="human"``.
 
 Demonstrates a guardrail that pauses the workflow for human review when
-the output fails validation.  The human can approve, reject, or edit.
-
-Since the workflow pauses at a HumanTask, this example uses ``start()``
-(async) instead of ``run()`` (blocking).
+the output fails validation.  Uses interactive streaming with schema-driven
+console prompts so the human can approve, reject, or edit inline.
 
 Requirements:
     - Conductor server with LLM support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
-
-import time
 
 from agentspan.agents import (
     Agent,
     AgentRuntime,
+    EventType,
     Guardrail,
     GuardrailResult,
     OnFail,
@@ -80,36 +77,53 @@ agent = Agent(
 )
 
 
-with AgentRuntime() as runtime:
-    # Start the agent (async — doesn't block)
-    handle = runtime.start(
-        agent,
-        "Look up AAPL and explain whether it's a good investment. "
-        "Include your opinion on potential returns.",
-    )
-    print(f"Workflow started: {handle.workflow_id}")
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        handle = runtime.start(
+            agent,
+            "Look up AAPL and explain whether it's a good investment. "
+            "Include your opinion on potential returns.",
+        )
+        print(f"Started: {handle.execution_id}\n")
 
-    # Poll for status
-    for i in range(60):
-        status = handle.get_status()
-        print(f"  Status: {status.status} (waiting={status.is_waiting})")
+        for event in handle.stream():
+            if event.type == EventType.THINKING:
+                print(f"  [thinking] {event.content}")
 
-        if status.is_waiting:
-            print("\n--- Workflow paused for human review ---")
-            print("The guardrail flagged the response for compliance review.")
-            print("Options: approve(), reject(reason), or respond(output)")
+            elif event.type == EventType.TOOL_CALL:
+                print(f"  [tool_call] {event.tool_name}({event.args})")
 
-            # In a real app, a human would review in the Conductor UI.
-            # Here we auto-approve for the demo.
-            print("Auto-approving for demo...")
-            runtime.reject(handle.workflow_id, "bad idea")
-            print("Approved! Resuming workflow...\n")
+            elif event.type == EventType.TOOL_RESULT:
+                print(f"  [tool_result] {event.tool_name} -> {str(event.result)[:100]}")
 
-        if status.is_complete:
-            print(f"\nFinal output: {status.output}")
-            break
+            elif event.type == EventType.WAITING:
+                status = handle.get_status()
+                pt = status.pending_tool or {}
+                schema = pt.get("response_schema", {})
+                props = schema.get("properties", {})
+                print("\n--- Human input required ---")
+                response = {}
+                for field, fs in props.items():
+                    desc = fs.get("description") or fs.get("title", field)
+                    if fs.get("type") == "boolean":
+                        val = input(f"  {desc} (y/n): ").strip().lower()
+                        response[field] = val in ("y", "yes")
+                    else:
+                        response[field] = input(f"  {desc}: ").strip()
+                handle.respond(response)
+                print()
 
-        time.sleep(1)
-    else:
-        print("Timed out waiting for workflow to complete")
-        runtime.cancel(handle.workflow_id)
+            elif event.type == EventType.DONE:
+                print(f"\nDone: {event.output}")
+
+        # Non-interactive alternative (no HITL, will block on human tasks):
+        # result = runtime.run(agent, "Look up AAPL and summarize the latest price movement.")
+        # result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
+

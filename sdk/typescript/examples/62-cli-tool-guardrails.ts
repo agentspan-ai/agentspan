@@ -6,12 +6,12 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, RegexGuardrail } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, RegexGuardrail } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Guardrails --------------------------------------------------------------
 
@@ -40,7 +40,7 @@ const reviewSudo = new RegexGuardrail({
 
 // -- Agent -------------------------------------------------------------------
 
-const opsAgent = new Agent({
+export const opsAgent = new Agent({
   name: 'ops_agent',
   model: llmModel,
   instructions:
@@ -60,17 +60,29 @@ const opsAgent = new Agent({
 
 const prompt = 'Show me the disk usage summary and list files in the current directory.';
 
-console.log('='.repeat(60));
-console.log('  CLI Tool with Guardrails');
-console.log('  Allowed: ls, cat, df, du, git, ps, uname, wc');
-console.log('  Blocked: rm -rf, sudo, mkfs, dd');
-console.log('='.repeat(60));
-console.log(`\nPrompt: ${prompt}\n`);
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('='.repeat(60));
+    console.log('  CLI Tool with Guardrails');
+    console.log('  Allowed: ls, cat, df, du, git, ps, uname, wc');
+    console.log('  Blocked: rm -rf, sudo, mkfs, dd');
+    console.log('='.repeat(60));
+    console.log(`\nPrompt: ${prompt}\n`);
+    const result = await runtime.run(opsAgent, prompt);
+    result.printResult();
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(opsAgent, prompt);
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(opsAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents ops_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(opsAgent);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

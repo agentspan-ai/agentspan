@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agentspan.agents.cli_config import CliConfig, _make_cli_tool, _validate_cli_command
+from agentspan.agents.cli_config import CliConfig, TerminalToolError, _make_cli_tool, _validate_cli_command
 
 
 class TestCliConfig:
@@ -65,7 +65,11 @@ class TestMakeCliTool:
 
     def test_tool_has_correct_name(self):
         tool_fn = _make_cli_tool(allowed_commands=[])
-        assert tool_fn._tool_def.name == "run_command"
+        assert tool_fn._tool_def.name == "run_command"  # No agent prefix when agent_name=""
+
+    def test_tool_has_agent_prefixed_name(self):
+        tool_fn = _make_cli_tool(allowed_commands=["git"], agent_name="my_agent")
+        assert tool_fn._tool_def.name == "my_agent_run_command"
 
     def test_tool_has_description(self):
         tool_fn = _make_cli_tool(allowed_commands=["git"])
@@ -103,6 +107,7 @@ class TestMakeCliTool:
             result = tool_fn.__wrapped__(command="echo", args=["hello"])
             assert result == {
                 "status": "success",
+                "exit_code": 0,
                 "stdout": "output\n",
                 "stderr": "",
             }
@@ -114,31 +119,48 @@ class TestMakeCliTool:
                 cwd=None,
             )
 
-    def test_nonzero_exit_code(self):
+    def test_nonzero_exit_code_returns_error_with_output(self):
         tool_fn = _make_cli_tool(allowed_commands=[])
         with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
-                returncode=1, stdout="", stderr="error msg"
+                returncode=1, stdout="partial output", stderr="error msg"
             )
             result = tool_fn.__wrapped__(command="false")
-            assert result["status"] == "error"
-            assert "Exit code: 1" in result["stderr"]
+            assert result == {
+                "status": "error",
+                "exit_code": 1,
+                "stdout": "partial output",
+                "stderr": "error msg",
+            }
 
-    def test_timeout_handling(self):
+    def test_nonzero_exit_code_preserves_stdout(self):
+        """Verify the LLM sees stdout even when the command fails."""
+        tool_fn = _make_cli_tool(allowed_commands=[])
+        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=128,
+                stdout="remote: Repository not found.\n",
+                stderr="fatal: repository not found",
+            )
+            result = tool_fn.__wrapped__(command="git", args=["push"])
+            assert result["status"] == "error"
+            assert result["exit_code"] == 128
+            assert "Repository not found" in result["stdout"]
+            assert "fatal" in result["stderr"]
+
+    def test_timeout_raises_terminal_error(self):
         tool_fn = _make_cli_tool(allowed_commands=[], timeout=5)
         with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
             mock_run.side_effect = subprocess.TimeoutExpired(cmd="sleep", timeout=5)
-            result = tool_fn.__wrapped__(command="sleep", args=["100"])
-            assert result["status"] == "error"
-            assert "timed out" in result["stderr"]
+            with pytest.raises(TerminalToolError, match="timed out"):
+                tool_fn.__wrapped__(command="sleep", args=["100"])
 
-    def test_command_not_found(self):
+    def test_command_not_found_raises_terminal_error(self):
         tool_fn = _make_cli_tool(allowed_commands=[])
         with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
             mock_run.side_effect = FileNotFoundError()
-            result = tool_fn.__wrapped__(command="nonexistent")
-            assert result["status"] == "error"
-            assert "not found" in result["stderr"]
+            with pytest.raises(TerminalToolError, match="not found"):
+                tool_fn.__wrapped__(command="nonexistent")
 
     def test_cwd_override(self):
         tool_fn = _make_cli_tool(allowed_commands=[], working_dir="/default")
@@ -164,6 +186,64 @@ class TestMakeCliTool:
         tool_fn = _make_cli_tool(allowed_commands=[], timeout=120)
         assert "120s" in tool_fn._tool_def.description
 
+    def test_context_key_saves_stdout_on_success(self):
+        from agentspan.agents.tool import ToolContext
+        tool_fn = _make_cli_tool(allowed_commands=[])
+        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="/tmp/abc123\n", stderr=""
+            )
+            ctx = ToolContext(execution_id="test", agent_name="test", state={})
+            result = tool_fn.__wrapped__(command="mktemp", args=["-d"], context_key="working_dir", context=ctx)
+            assert result["status"] == "success"
+            assert ctx.state["working_dir"] == "/tmp/abc123"
+
+    def test_context_key_not_saved_on_failure(self):
+        from agentspan.agents.tool import ToolContext
+        tool_fn = _make_cli_tool(allowed_commands=[])
+        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=1, stdout="partial output", stderr="error"
+            )
+            ctx = ToolContext(execution_id="test", agent_name="test", state={})
+            result = tool_fn.__wrapped__(command="false", context_key="result", context=ctx)
+            assert result["status"] == "error"
+            assert "result" not in ctx.state
+
+    def test_context_key_with_internal_key_name(self):
+        """context_key='_agent_state' should work without corrupting internals."""
+        from agentspan.agents.tool import ToolContext
+        tool_fn = _make_cli_tool(allowed_commands=[])
+        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="val\n", stderr="")
+            ctx = ToolContext(execution_id="test", agent_name="test", state={})
+            result = tool_fn.__wrapped__(command="echo", args=["val"], context_key="_agent_state", context=ctx)
+            assert result["status"] == "success"
+            assert ctx.state["_agent_state"] == "val"
+
+    def test_context_key_falls_back_to_stderr(self):
+        """When stdout is empty, context_key should fall back to stderr."""
+        from agentspan.agents.tool import ToolContext
+        tool_fn = _make_cli_tool(allowed_commands=[])
+        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="", stderr="Cloning into '/tmp/repo'...\n"
+            )
+            ctx = ToolContext(execution_id="test", agent_name="test", state={})
+            result = tool_fn.__wrapped__(command="gh", args=["repo", "clone", "org/repo"], context_key="repo", context=ctx)
+            assert result["status"] == "success"
+            assert ctx.state["repo"] == "Cloning into '/tmp/repo'..."
+
+    def test_context_key_empty_string_is_noop(self):
+        """Empty context_key should not write anything."""
+        from agentspan.agents.tool import ToolContext
+        tool_fn = _make_cli_tool(allowed_commands=[])
+        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="val\n", stderr="")
+            ctx = ToolContext(execution_id="test", agent_name="test", state={})
+            tool_fn.__wrapped__(command="echo", context_key="", context=ctx)
+            assert ctx.state == {}
+
 
 class TestAgentCliIntegration:
     """Test Agent integration with CLI tools."""
@@ -173,21 +253,21 @@ class TestAgentCliIntegration:
 
         agent = Agent(name="ops", model="openai/gpt-4o", cli_commands=True)
         tool_names = [t._tool_def.name for t in agent.tools if hasattr(t, "_tool_def")]
-        assert "run_command" in tool_names
+        assert any(n.endswith("_run_command") for n in tool_names)
 
     def test_cli_commands_false_no_tool(self):
         from agentspan.agents.agent import Agent
 
         agent = Agent(name="ops", model="openai/gpt-4o", cli_commands=False)
         tool_names = [t._tool_def.name for t in agent.tools if hasattr(t, "_tool_def")]
-        assert "run_command" not in tool_names
+        assert not any(n.endswith("_run_command") for n in tool_names)
 
     def test_default_has_no_cli_tool(self):
         from agentspan.agents.agent import Agent
 
         agent = Agent(name="ops", model="openai/gpt-4o")
         tool_names = [t._tool_def.name for t in agent.tools if hasattr(t, "_tool_def")]
-        assert "run_command" not in tool_names
+        assert not any(n.endswith("_run_command") for n in tool_names)
 
     def test_cli_allowed_commands_propagated(self):
         from agentspan.agents.agent import Agent
@@ -212,7 +292,7 @@ class TestAgentCliIntegration:
         agent = Agent(name="ops", model="openai/gpt-4o", cli_config=cfg)
         assert agent.cli_config is cfg
         tool_names = [t._tool_def.name for t in agent.tools if hasattr(t, "_tool_def")]
-        assert "run_command" in tool_names
+        assert any(n.endswith("_run_command") for n in tool_names)
 
     def test_coexists_with_code_execution(self):
         from agentspan.agents.agent import Agent
@@ -224,8 +304,8 @@ class TestAgentCliIntegration:
             cli_commands=True,
         )
         tool_names = [t._tool_def.name for t in agent.tools if hasattr(t, "_tool_def")]
-        assert "execute_code" in tool_names
-        assert "run_command" in tool_names
+        assert any(n.endswith("_execute_code") for n in tool_names)
+        assert any(n.endswith("_run_command") for n in tool_names)
 
     def test_coexists_with_manual_tools(self):
         from agentspan.agents.agent import Agent
@@ -244,7 +324,7 @@ class TestAgentCliIntegration:
         )
         tool_names = [t._tool_def.name for t in agent.tools if hasattr(t, "_tool_def")]
         assert "search" in tool_names
-        assert "run_command" in tool_names
+        assert any(n.endswith("_run_command") for n in tool_names)
 
     def test_agent_decorator_support(self):
         from agentspan.agents.agent import Agent, _resolve_agent, agent
@@ -258,7 +338,7 @@ class TestAgentCliIntegration:
         assert resolved.cli_config is not None
         assert resolved.cli_config.allowed_commands == ["git"]
         tool_names = [t._tool_def.name for t in resolved.tools if hasattr(t, "_tool_def")]
-        assert "run_command" in tool_names
+        assert any(n.endswith("_run_command") for n in tool_names)
 
     def test_cli_commands_fallback_to_allowed_commands(self):
         """When cli_commands=True with no cli_allowed_commands, falls back to allowed_commands."""
@@ -291,4 +371,4 @@ class TestAgentCliIntegration:
         cfg = CliConfig(enabled=False, allowed_commands=["git"])
         agent = Agent(name="ops", model="openai/gpt-4o", cli_config=cfg)
         tool_names = [t._tool_def.name for t in agent.tools if hasattr(t, "_tool_def")]
-        assert "run_command" not in tool_names
+        assert not any(n.endswith("_run_command") for n in tool_names)

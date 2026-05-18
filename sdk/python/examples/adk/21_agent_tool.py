@@ -18,7 +18,7 @@ Architecture:
 Requirements:
     - pip install google-adk
     - Conductor server with AgentTool support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=google_gemini/gemini-2.0-flash as environment variable
 """
 
@@ -26,6 +26,8 @@ from google.adk.agents import Agent
 from google.adk.tools.agent_tool import AgentTool
 
 from agentspan.agents import AgentRuntime
+
+from settings import settings
 
 
 # ── Child agents (each has their own tools) ──────────────────────
@@ -79,7 +81,6 @@ def compute(expression: str) -> dict:
     """
     import math
 
-from settings import settings
     safe = {"abs": abs, "round": round, "min": min, "max": max,
             "sqrt": math.sqrt, "pow": pow, "pi": math.pi, "e": math.e}
     try:
@@ -115,10 +116,21 @@ manager = Agent(
     ],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
         manager,
         "Look up information about Python and Rust, then calculate "
         "what percentage of Python's 4 key use cases overlap with Rust's 4 use cases.",
-    )
-    result.print_result()
+        )
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(manager)
+        # CLI alternative:
+        # agentspan deploy --package examples.adk.21_agent_tool
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(manager)

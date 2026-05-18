@@ -6,16 +6,16 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Quick answer (single agent) ---------------------------------------------
 
-const quickAnswer = new Agent({
+export const quickAnswer = new Agent({
   name: 'quick_answer_67',
   model: llmModel,
   instructions: 'You give quick, 1-2 sentence answers to simple questions.',
@@ -23,7 +23,7 @@ const quickAnswer = new Agent({
 
 // -- Research pipeline (sequential) ------------------------------------------
 
-const researcher = new Agent({
+export const researcher = new Agent({
   name: 'researcher_67',
   model: llmModel,
   instructions:
@@ -31,7 +31,7 @@ const researcher = new Agent({
     'facts with supporting details.',
 });
 
-const writer = new Agent({
+export const writer = new Agent({
   name: 'writer_67',
   model: llmModel,
   instructions:
@@ -39,7 +39,7 @@ const writer = new Agent({
     'engaging summary. Use headers and bullet points.',
 });
 
-const researchPipeline = new Agent({
+export const researchPipeline = new Agent({
   name: 'research_pipeline_67',
   model: llmModel,
   agents: [researcher, writer],
@@ -48,7 +48,7 @@ const researchPipeline = new Agent({
 
 // -- Router agent ------------------------------------------------------------
 
-const selector = new Agent({
+export const selector = new Agent({
   name: 'selector_67',
   model: llmModel,
   instructions:
@@ -59,7 +59,7 @@ const selector = new Agent({
 
 // -- Team with router --------------------------------------------------------
 
-const team = new Agent({
+export const team = new Agent({
   name: 'team_67',
   model: llmModel,
   agents: [quickAnswer, researchPipeline],
@@ -69,39 +69,52 @@ const team = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  // Scenario 1: Research task (routes to pipeline)
-  console.log('='.repeat(60));
-  console.log('  Scenario 1: Research task (router -> sequential pipeline)');
-  console.log('='.repeat(60));
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    // Scenario 1: Research task (routes to pipeline)
+    console.log('='.repeat(60));
+    console.log('  Scenario 1: Research task (router -> sequential pipeline)');
+    console.log('='.repeat(60));
+    const result = await runtime.run(
     team,
     'Research the current state of quantum computing and write a summary.',
-  );
-  result.printResult();
+    );
+    result.printResult();
 
-  if (result.status === 'COMPLETED') {
+    if (result.status === 'COMPLETED') {
     console.log('[OK] Router -> sequential pipeline completed');
-  } else {
+    } else {
     console.log(`[WARN] Unexpected status: ${result.status}`);
-  }
+    }
 
-  // Scenario 2: Quick question (routes to single agent)
-  console.log('\n' + '='.repeat(60));
-  console.log('  Scenario 2: Quick question (router -> single agent)');
-  console.log('='.repeat(60));
-  const result2 = await runtime.run(
+    // Scenario 2: Quick question (routes to single agent)
+    console.log('\n' + '='.repeat(60));
+    console.log('  Scenario 2: Quick question (router -> single agent)');
+    console.log('='.repeat(60));
+    const result2 = await runtime.run(
     team,
     'What is the capital of France?',
-  );
-  result2.printResult();
+    );
+    result2.printResult();
 
-  if (result2.status === 'COMPLETED') {
+    if (result2.status === 'COMPLETED') {
     console.log('[OK] Router -> quick answer completed');
-  } else {
+    } else {
     console.log(`[WARN] Unexpected status: ${result2.status}`);
+    }
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(team);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents team_67
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(team);
+  } finally {
+    await runtime.shutdown();
   }
-} finally {
-  await runtime.shutdown();
 }
+
+main().catch(console.error);

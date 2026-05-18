@@ -6,13 +6,12 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Domain tools ------------------------------------------------------------
 
@@ -23,9 +22,13 @@ const checkBalance = tool(
   {
     name: 'check_balance',
     description: 'Check the balance of a bank account.',
-    inputSchema: z.object({
-      accountId: z.string().describe('The bank account ID'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        accountId: { type: 'string', description: 'The bank account ID' },
+      },
+      required: ['accountId'],
+    },
   },
 );
 
@@ -36,15 +39,19 @@ const lookupOrder = tool(
   {
     name: 'lookup_order',
     description: 'Look up the status of an order.',
-    inputSchema: z.object({
-      orderId: z.string().describe('The order ID'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        orderId: { type: 'string', description: 'The order ID' },
+      },
+      required: ['orderId'],
+    },
   },
 );
 
 // -- Parallel agents with tools ----------------------------------------------
 
-const financialAnalyst = new Agent({
+export const financialAnalyst = new Agent({
   name: 'financial_analyst',
   model: llmModel,
   instructions:
@@ -53,7 +60,7 @@ const financialAnalyst = new Agent({
   tools: [checkBalance],
 });
 
-const orderAnalyst = new Agent({
+export const orderAnalyst = new Agent({
   name: 'order_analyst',
   model: llmModel,
   instructions:
@@ -63,7 +70,7 @@ const orderAnalyst = new Agent({
 });
 
 // Both analysts run concurrently
-const analysis = new Agent({
+export const analysis = new Agent({
   name: 'parallel_analysis',
   model: llmModel,
   agents: [financialAnalyst, orderAnalyst],
@@ -72,29 +79,42 @@ const analysis = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
     analysis,
     'Check account ACC-200 balance and look up order ORD-300 status.',
-  );
-  result.printResult();
+    );
+    result.printResult();
 
-  const output = String(result.output);
-  const checks: string[] = [];
-  if (output.includes('5432')) {
+    const output = String(result.output);
+    const checks: string[] = [];
+    if (output.includes('5432')) {
     checks.push('[OK] Financial analyst retrieved balance');
-  } else {
+    } else {
     checks.push('[WARN] Expected balance in output');
-  }
-  if (output.toLowerCase().includes('shipped')) {
+    }
+    if (output.toLowerCase().includes('shipped')) {
     checks.push('[OK] Order analyst retrieved order status');
-  } else {
+    } else {
     checks.push('[WARN] Expected order status in output');
-  }
-  for (const c of checks) {
+    }
+    for (const c of checks) {
     console.log(c);
+    }
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(analysis);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents parallel_analysis
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(analysis);
+  } finally {
+    await runtime.shutdown();
   }
-} finally {
-  await runtime.shutdown();
 }
+
+main().catch(console.error);

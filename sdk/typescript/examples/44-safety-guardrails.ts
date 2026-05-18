@@ -16,13 +16,12 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Safety tools -------------------------------------------------------------
 
@@ -52,9 +51,13 @@ const checkPii = tool(
   {
     name: 'check_pii',
     description: 'Check text for personally identifiable information (PII).',
-    inputSchema: z.object({
-      text: z.string().describe('The text to scan for PII'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'The text to scan for PII' },
+      },
+      required: ['text'],
+    },
   },
 );
 
@@ -84,20 +87,21 @@ const sanitizeResponse = tool(
   {
     name: 'sanitize_response',
     description: 'Remove or mask PII from a response before delivering to user.',
-    inputSchema: z.object({
-      text: z.string().describe('The response text to sanitize'),
-      piiTypes: z
-        .string()
-        .optional()
-        .describe('Comma-separated PII types detected'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'The response text to sanitize' },
+        piiTypes: { type: 'string', description: 'Comma-separated PII types detected' },
+      },
+      required: ['text'],
+    },
   },
 );
 
 // -- Pipeline agents ----------------------------------------------------------
 
 // Main assistant generates responses
-const assistant = new Agent({
+export const assistant = new Agent({
   name: 'helpful_assistant',
   model: llmModel,
   instructions:
@@ -107,7 +111,7 @@ const assistant = new Agent({
 });
 
 // Safety checker scans the response for PII
-const safetyChecker = new Agent({
+export const safetyChecker = new Agent({
   name: 'safety_checker',
   model: llmModel,
   instructions:
@@ -121,14 +125,27 @@ const safetyChecker = new Agent({
 // Pipeline: generate -> check and sanitize
 const pipeline = assistant.pipe(safetyChecker);
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
     pipeline,
     'What are the contact details for our support team? ' +
     'Include email support@company.com and phone 555-123-4567.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(pipeline);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents helpful_assistant
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(pipeline);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

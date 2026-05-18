@@ -21,17 +21,17 @@ import { AuthProviderMachineContext } from "shared/state";
 import { User } from "types/User";
 import { getErrors } from "utils";
 import { WORKFLOW_METADATA_BASE_URL } from "utils/constants/api";
-import { WORKFLOW_DEFINITION_URL } from "utils/constants/route";
+import { AGENT_DEFINITION_URL } from "utils/constants/route";
 import { useActionWithPath, useAuthHeaders } from "utils/query";
 import { ActorRef, State } from "xstate";
 import { workflowDefinitionMachine } from "./machine";
 
-const WORKFLOW_FETCH_FAILED = "Failed to fetch workflow";
+const WORKFLOW_FETCH_FAILED = "Failed to fetch agent";
 const WORKFLOW_FETCH_FORBIDDEN =
-  "You don't seem to have access to view this workflow";
+  "You don't seem to have access to view this agent";
 
 const isNewWorkflowFn = (location: Location) =>
-  location.pathname === WORKFLOW_DEFINITION_URL.NEW;
+  location.pathname === "/newAgentDef";
 
 export const useWorkflowDefinition = (currentUser: User) => {
   const queryClient = useQueryClient();
@@ -137,7 +137,7 @@ export const useWorkflowDefinition = (currentUser: User) => {
       }
 
       if (status === 404) {
-        return Promise.reject({ message: "Workflow was not found" });
+        return Promise.reject({ message: "Agent was not found" });
       }
 
       return Promise.reject({ message: WORKFLOW_FETCH_FAILED });
@@ -177,7 +177,7 @@ export const useWorkflowDefinition = (currentUser: User) => {
               removeDeletedWorkflow(currentWf?.name, currentWf?.version);
             });
           } else {
-            return Promise.reject({ message: "Workflow's name is undefined" });
+            return Promise.reject({ message: "Agent's name is undefined" });
           }
         } catch (error) {
           return Promise.reject(error);
@@ -209,18 +209,18 @@ export const useWorkflowDefinition = (currentUser: User) => {
           if (isNewWorkflowUrl) {
             window.location.reload();
           } else {
-            navigate(WORKFLOW_DEFINITION_URL.NEW);
+            navigate(AGENT_DEFINITION_URL.BASE);
           }
         } else if (workflowName) {
           navigate(
-            `${WORKFLOW_DEFINITION_URL.BASE}/${encodeURIComponent(
+            `${AGENT_DEFINITION_URL.BASE}/${encodeURIComponent(
               workflowName,
             )}${currentVersion == null ? "" : "/" + currentVersion}`,
           );
         }
       },
       goBackToDefinitionSelection: (_context) => {
-        navigate(WORKFLOW_DEFINITION_URL.BASE);
+        navigate(AGENT_DEFINITION_URL.BASE);
       },
       redirectToExecutionPage: (
         _context,
@@ -239,7 +239,7 @@ export const useWorkflowDefinition = (currentUser: User) => {
       },
       showSuccessMassage: () => {
         setMessage({
-          text: "Workflow saved successfully.",
+          text: "Agent saved successfully.",
           severity: "success",
         });
       },

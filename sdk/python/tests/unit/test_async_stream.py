@@ -22,7 +22,7 @@ def _make_stream(events: list[AgentEvent]) -> AsyncAgentStream:
     """Create an AsyncAgentStream backed by mock events."""
     runtime = MagicMock()
 
-    async def mock_stream_workflow(wf_id):
+    async def mock_stream_workflow(exec_id):
         for event in events:
             yield event
 
@@ -33,7 +33,7 @@ def _make_stream(events: list[AgentEvent]) -> AsyncAgentStream:
     runtime.resume_async = AsyncMock()
     runtime.cancel_async = AsyncMock()
 
-    handle = AgentHandle(workflow_id="wf-test", runtime=runtime)
+    handle = AgentHandle(execution_id="wf-test", runtime=runtime)
     return AsyncAgentStream(handle=handle, runtime=runtime)
 
 
@@ -41,12 +41,12 @@ def _make_stream(events: list[AgentEvent]) -> AsyncAgentStream:
 async def test_aiter():
     """Async iteration yields all events."""
     events = [
-        AgentEvent(type=EventType.THINKING, content="thinking...", workflow_id="wf-test"),
+        AgentEvent(type=EventType.THINKING, content="thinking...", execution_id="wf-test"),
         AgentEvent(
-            type=EventType.TOOL_CALL, tool_name="calc", args={"x": 1}, workflow_id="wf-test"
+            type=EventType.TOOL_CALL, tool_name="calc", args={"x": 1}, execution_id="wf-test"
         ),
-        AgentEvent(type=EventType.TOOL_RESULT, tool_name="calc", result=42, workflow_id="wf-test"),
-        AgentEvent(type=EventType.DONE, output="answer is 42", workflow_id="wf-test"),
+        AgentEvent(type=EventType.TOOL_RESULT, tool_name="calc", result=42, execution_id="wf-test"),
+        AgentEvent(type=EventType.DONE, output="answer is 42", execution_id="wf-test"),
     ]
 
     stream = _make_stream(events)
@@ -64,9 +64,9 @@ async def test_aiter():
 async def test_get_result():
     """get_result() drains the stream and returns AgentResult."""
     events = [
-        AgentEvent(type=EventType.TOOL_CALL, tool_name="fn", args={}, workflow_id="wf-test"),
-        AgentEvent(type=EventType.TOOL_RESULT, tool_name="fn", result="ok", workflow_id="wf-test"),
-        AgentEvent(type=EventType.DONE, output="final", workflow_id="wf-test"),
+        AgentEvent(type=EventType.TOOL_CALL, tool_name="fn", args={}, execution_id="wf-test"),
+        AgentEvent(type=EventType.TOOL_RESULT, tool_name="fn", result="ok", execution_id="wf-test"),
+        AgentEvent(type=EventType.DONE, output="final", execution_id="wf-test"),
     ]
 
     stream = _make_stream(events)
@@ -77,14 +77,14 @@ async def test_get_result():
     assert result.status == "COMPLETED"
     assert len(result.tool_calls) == 1
     assert result.tool_calls[0]["name"] == "fn"
-    assert result.workflow_id == "wf-test"
+    assert result.execution_id == "wf-test"
 
 
 @pytest.mark.asyncio
 async def test_get_result_after_iteration():
     """get_result() returns cached result after full iteration."""
     events = [
-        AgentEvent(type=EventType.DONE, output="done", workflow_id="wf-test"),
+        AgentEvent(type=EventType.DONE, output="done", execution_id="wf-test"),
     ]
 
     stream = _make_stream(events)
@@ -99,7 +99,7 @@ async def test_get_result_after_iteration():
 async def test_error_result():
     """Error events produce FAILED status."""
     events = [
-        AgentEvent(type=EventType.ERROR, content="something broke", workflow_id="wf-test"),
+        AgentEvent(type=EventType.ERROR, content="something broke", execution_id="wf-test"),
     ]
 
     stream = _make_stream(events)
@@ -112,7 +112,7 @@ async def test_error_result():
 async def test_hitl_methods():
     """HITL convenience methods delegate to handle."""
     events = [
-        AgentEvent(type=EventType.WAITING, content="waiting", workflow_id="wf-test"),
+        AgentEvent(type=EventType.WAITING, content="waiting", execution_id="wf-test"),
     ]
 
     stream = _make_stream(events)
@@ -136,10 +136,10 @@ async def test_hitl_methods():
 
 
 @pytest.mark.asyncio
-async def test_workflow_id_property():
-    """workflow_id property delegates to handle."""
+async def test_execution_id_property():
+    """execution_id property delegates to handle."""
     stream = _make_stream([])
-    assert stream.workflow_id == "wf-test"
+    assert stream.execution_id == "wf-test"
 
 
 @pytest.mark.asyncio

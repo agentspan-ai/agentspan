@@ -9,14 +9,14 @@
  *
  * Requirements:
  *   - Conductor server running
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  */
 
-import { Agent, AgentRuntime } from '../src/index.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
 
 // -- QA Tester: reviews code and runs tests ----------------------------------
 
-const qaTester = new Agent({
+export const qaTester = new Agent({
   name: 'qa_tester',
   model: 'anthropic/claude-sonnet-4-20250514',
   instructions:
@@ -34,7 +34,7 @@ const qaTester = new Agent({
 
 // -- Coder: writes code, hands off to QA for review --------------------------
 
-const coder = new Agent({
+export const coder = new Agent({
   name: 'coder',
   model: 'anthropic/claude-sonnet-4-20250514',
   instructions:
@@ -61,28 +61,40 @@ const prompt =
   'the Sieve of Eratosthenes. Then use it to find all primes up to 100 ' +
   'and calculate their sum.';
 
-console.log('='.repeat(60));
-console.log('  Coding Agent + QA Tester (Swarm)');
-console.log('  coder <-> qa_tester (LLM-driven handoffs)');
-console.log('='.repeat(60));
-console.log(`\nPrompt: ${prompt}\n`);
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('='.repeat(60));
+    console.log('  Coding Agent + QA Tester (Swarm)');
+    console.log('  coder <-> qa_tester (LLM-driven handoffs)');
+    console.log('='.repeat(60));
+    console.log(`\nPrompt: ${prompt}\n`);
+    const result = await runtime.run(coder, prompt);
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(coder, prompt);
-
-  // Swarm output is a dict keyed by agent name
-  const output = result.output;
-  if (output && typeof output === 'object' && !Array.isArray(output)) {
+    // Swarm output is a dict keyed by agent name
+    const output = result.output;
+    if (output && typeof output === 'object' && !Array.isArray(output)) {
     for (const [agentName, text] of Object.entries(output as Record<string, string>)) {
-      console.log(`\n${'─'.repeat(60)}`);
-      console.log(`  [${agentName}]`);
-      console.log('─'.repeat(60));
-      console.log(text);
+    console.log(`\n${'─'.repeat(60)}`);
+    console.log(`  [${agentName}]`);
+    console.log('─'.repeat(60));
+    console.log(text);
     }
-  } else {
+    } else {
     console.log(output);
+    }
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(coder);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents coder
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(coder);
+  } finally {
+    await runtime.shutdown();
   }
-} finally {
-  await runtime.shutdown();
 }
+
+main().catch(console.error);

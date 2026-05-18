@@ -58,7 +58,7 @@ describe("getErrors", () => {
     } as Response;
     const errors = await getErrors(response);
     expect(errors).toMatchObject({
-      message: "Bad request",
+      message: "HTTP 400: Bad request",
     });
   });
 
@@ -75,7 +75,7 @@ describe("getErrors", () => {
     } as Response;
     const errors = await getErrors(response);
     expect(errors).toMatchObject({
-      message: `Error performing action. error number: 502 Bad Gateway`,
+      message: "HTTP 502: Bad Gateway",
     });
   });
 

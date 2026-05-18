@@ -5,11 +5,12 @@
 
 package dev.agentspan.runtime.compiler;
 
+import java.util.*;
+
 import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
+
 import dev.agentspan.runtime.util.JavaScriptBuilder;
 import dev.agentspan.runtime.util.ModelParser;
-
-import java.util.*;
 
 /**
  * Builds a consistent HUMAN task pipeline for Conductor workflows.
@@ -54,10 +55,14 @@ public class HumanTaskBuilder {
         }
 
         /** All workflow tasks in the pipeline. */
-        public List<WorkflowTask> getTasks() { return tasks; }
+        public List<WorkflowTask> getTasks() {
+            return tasks;
+        }
 
         /** Task reference name of the HUMAN task itself. */
-        public String getHumanRef() { return humanRef; }
+        public String getHumanRef() {
+            return humanRef;
+        }
 
         /**
          * Conductor expression to reference the final processed output.
@@ -65,31 +70,31 @@ public class HumanTaskBuilder {
          * <p>Without validation: {@code "humanRef.output"}
          * <p>With validation: {@code "processRef.output.result"}
          */
-        public String getOutputRef() { return outputRef; }
+        public String getOutputRef() {
+            return outputRef;
+        }
     }
 
     // ── Normalizer prompt constants ─────────────────────────────────────
 
-    static final String APPROVAL_NORMALIZER_PROMPT =
-        "Convert the human's response into a JSON object:\n"
-        + "{\"approved\": <boolean>, \"reason\": <string or null>}\n\n"
-        + "Rules:\n"
-        + "- approved=true for: approve, yes, ok, LGTM, looks good, go ahead, etc.\n"
-        + "- approved=false for: reject, no, deny, not approved, etc.\n"
-        + "- If they give a reason, put it in reason.\n"
-        + "- If input is already valid JSON with these fields, return as-is.\n"
-        + "Output ONLY the JSON object.";
+    static final String APPROVAL_NORMALIZER_PROMPT = "Convert the human's response into a JSON object:\n"
+            + "{\"approved\": <boolean>, \"reason\": <string or null>}\n\n"
+            + "Rules:\n"
+            + "- approved=true for: approve, yes, ok, LGTM, looks good, go ahead, etc.\n"
+            + "- approved=false for: reject, no, deny, not approved, etc.\n"
+            + "- If they give a reason, put it in reason.\n"
+            + "- If input is already valid JSON with these fields, return as-is.\n"
+            + "Output ONLY the JSON object.";
 
-    static final String GUARDRAIL_NORMALIZER_PROMPT =
-        "Convert the human's response into a JSON object:\n"
-        + "{\"approved\": <boolean>, \"edited_output\": <string or null>, \"reason\": <string or null>}\n\n"
-        + "Rules:\n"
-        + "- approved=true for: approve, yes, ok, LGTM, looks good, go ahead, etc.\n"
-        + "- approved=false for: reject, no, deny, not approved, etc.\n"
-        + "- If they provide corrected content, put it in edited_output.\n"
-        + "- If they give a reason for rejection, put it in reason.\n"
-        + "- If input is already valid JSON with these fields, return as-is.\n"
-        + "Output ONLY the JSON object.";
+    static final String GUARDRAIL_NORMALIZER_PROMPT = "Convert the human's response into a JSON object:\n"
+            + "{\"approved\": <boolean>, \"edited_output\": <string or null>, \"reason\": <string or null>}\n\n"
+            + "Rules:\n"
+            + "- approved=true for: approve, yes, ok, LGTM, looks good, go ahead, etc.\n"
+            + "- approved=false for: reject, no, deny, not approved, etc.\n"
+            + "- If they provide corrected content, put it in edited_output.\n"
+            + "- If they give a reason for rejection, put it in reason.\n"
+            + "- If input is already valid JSON with these fields, return as-is.\n"
+            + "Output ONLY the JSON object.";
 
     /**
      * Build the normalizer prompt for graph-node HUMAN tasks.
@@ -97,14 +102,15 @@ public class HumanTaskBuilder {
      */
     static String graphNodeNormalizerPrompt(String humanPrompt) {
         return "Convert the human's free-form response into a JSON object with the appropriate fields.\n\n"
-            + (humanPrompt != null && !humanPrompt.isEmpty()
-                ? "Context — the human was asked: \"" + humanPrompt + "\"\n\n" : "")
-            + "Rules:\n"
-            + "- Extract all meaningful key-value pairs from the response.\n"
-            + "- Use snake_case field names that match the context.\n"
-            + "- Preserve the original values (strings, booleans, numbers) as-is.\n"
-            + "- If input is already valid JSON, return as-is.\n"
-            + "Output ONLY the JSON object.";
+                + (humanPrompt != null && !humanPrompt.isEmpty()
+                        ? "Context — the human was asked: \"" + humanPrompt + "\"\n\n"
+                        : "")
+                + "Rules:\n"
+                + "- Extract all meaningful key-value pairs from the response.\n"
+                + "- Use snake_case field names that match the context.\n"
+                + "- Preserve the original values (strings, booleans, numbers) as-is.\n"
+                + "- If input is already valid JSON, return as-is.\n"
+                + "Output ONLY the JSON object.";
     }
 
     // ── Response schema constants ───────────────────────────────────────
@@ -112,87 +118,82 @@ public class HumanTaskBuilder {
     /** Standard approval schema: approved (boolean) + reason (string). */
     public static Map<String, Object> approvalResponseSchema() {
         return Map.of(
-            "type", "object",
-            "required", List.of("approved"),
-            "properties", Map.of(
-                "approved", Map.of(
-                    "type", "boolean",
-                    "title", "Approved",
-                    "description", "Approve or reject the tool execution"
-                ),
-                "reason", Map.of(
-                    "type", "string",
-                    "title", "Reason",
-                    "description", "Reason for rejection"
-                )
-            )
-        );
+                "type", "object",
+                "required", List.of("approved"),
+                "properties",
+                        Map.of(
+                                "approved",
+                                        Map.of(
+                                                "type", "boolean",
+                                                "title", "Approved",
+                                                "description", "Approve or reject the tool execution"),
+                                "reason",
+                                        Map.of(
+                                                "type", "string",
+                                                "title", "Reason",
+                                                "description", "Reason for rejection")));
     }
 
     /** Standard approval UI schema. */
     public static Map<String, Object> approvalResponseUiSchema() {
         return Map.of(
-            "ui:order", List.of("approved", "reason"),
-            "approved", Map.of("ui:widget", "radio"),
-            "reason", Map.of("ui:widget", "textarea")
-        );
+                "ui:order", List.of("approved", "reason"),
+                "approved", Map.of("ui:widget", "radio"),
+                "reason", Map.of("ui:widget", "textarea"));
     }
 
     /** Guardrail review schema: approved + edited_output + reason. */
     public static Map<String, Object> guardrailResponseSchema() {
         return Map.of(
-            "type", "object",
-            "required", List.of("approved"),
-            "properties", Map.of(
-                "approved", Map.of(
-                    "type", "boolean",
-                    "title", "Approved",
-                    "description", "Approve or reject the LLM output"
-                ),
-                "edited_output", Map.of(
-                    "type", "string",
-                    "title", "Edited Output",
-                    "description", "Provide corrected output if editing"
-                ),
-                "reason", Map.of(
-                    "type", "string",
-                    "title", "Reason",
-                    "description", "Reason for rejection"
-                )
-            )
-        );
+                "type", "object",
+                "required", List.of("approved"),
+                "properties",
+                        Map.of(
+                                "approved",
+                                        Map.of(
+                                                "type", "boolean",
+                                                "title", "Approved",
+                                                "description", "Approve or reject the LLM output"),
+                                "edited_output",
+                                        Map.of(
+                                                "type", "string",
+                                                "title", "Edited Output",
+                                                "description", "Provide corrected output if editing"),
+                                "reason",
+                                        Map.of(
+                                                "type", "string",
+                                                "title", "Reason",
+                                                "description", "Reason for rejection")));
     }
 
     /** Guardrail review UI schema. */
     public static Map<String, Object> guardrailResponseUiSchema() {
         return Map.of(
-            "ui:order", List.of("approved", "edited_output", "reason"),
-            "approved", Map.of("ui:widget", "radio"),
-            "edited_output", Map.of("ui:widget", "textarea"),
-            "reason", Map.of("ui:widget", "textarea")
-        );
+                "ui:order", List.of("approved", "edited_output", "reason"),
+                "approved", Map.of("ui:widget", "radio"),
+                "edited_output", Map.of("ui:widget", "textarea"),
+                "reason", Map.of("ui:widget", "textarea"));
     }
 
     /** Graph-node HUMAN schema: a free-form response textarea. */
     public static Map<String, Object> graphNodeResponseSchema() {
         return Map.of(
-            "type", "object",
-            "properties", Map.of(
-                "response", Map.of(
-                    "type", "string",
-                    "title", "Response",
-                    "description", "Provide your response as JSON or plain text"
-                )
-            )
-        );
+                "type",
+                "object",
+                "properties",
+                Map.of(
+                        "response",
+                        Map.of(
+                                "type", "string",
+                                "title", "Response",
+                                "description", "Provide your response as JSON or plain text")));
     }
 
     /** Graph-node HUMAN UI schema. */
     public static Map<String, Object> graphNodeResponseUiSchema() {
         return Map.of(
-            "ui:order", List.of("response"),
-            "response", Map.of("ui:widget", "textarea")
-        );
+                "ui:order", List.of("response"),
+                "response", Map.of("ui:widget", "textarea"));
     }
 
     // ── Builder state ───────────────────────────────────────────────────
@@ -303,8 +304,8 @@ public class HumanTaskBuilder {
      * @param normalizerPrompt  system prompt for the LLM normalizer
      * @param model             LLM model for normalization
      */
-    public HumanTaskBuilder customValidation(String validateScript, String processScript,
-                                             String normalizerPrompt, String model) {
+    public HumanTaskBuilder customValidation(
+            String validateScript, String processScript, String normalizerPrompt, String model) {
         this.validateScript = validateScript;
         this.processScript = processScript;
         this.normalizerPrompt = normalizerPrompt;
@@ -324,11 +325,15 @@ public class HumanTaskBuilder {
         humanTask.setName(refPrefix);
         humanTask.setTaskReferenceName(refPrefix);
         Map<String, Object> inputs = new LinkedHashMap<>();
-        inputs.put("__humanTaskDefinition", Map.of(
-            "assignmentCompletionStrategy", "LEAVE_OPEN",
-            "displayName", displayName,
-            "userFormTemplate", Map.of("version", 0)
-        ));
+        inputs.put(
+                "__humanTaskDefinition",
+                Map.of(
+                        "assignmentCompletionStrategy",
+                        "LEAVE_OPEN",
+                        "displayName",
+                        displayName,
+                        "userFormTemplate",
+                        Map.of("version", 0)));
         if (responseSchema != null) inputs.put("response_schema", responseSchema);
         if (responseUiSchema != null) inputs.put("response_ui_schema", responseUiSchema);
         inputs.putAll(contextInputs);
@@ -363,10 +368,9 @@ public class HumanTaskBuilder {
                 normSwitch.setName(normSwitchRef);
                 normSwitch.setTaskReferenceName(normSwitchRef);
                 normSwitch.setEvaluatorType("graaljs");
-                normSwitch.setExpression(
-                    "$.needs_normalize == true ? 'needs_normalize' : 'skip'");
-                normSwitch.setInputParameters(Map.of("needs_normalize",
-                    "${" + validateRef + ".output.result.needs_normalize}"));
+                normSwitch.setExpression("$.needs_normalize == true ? 'needs_normalize' : 'skip'");
+                normSwitch.setInputParameters(
+                        Map.of("needs_normalize", "${" + validateRef + ".output.result.needs_normalize}"));
 
                 // needs_normalize → LLM_CHAT_COMPLETE
                 WorkflowTask normTask = new WorkflowTask();
@@ -377,11 +381,11 @@ public class HumanTaskBuilder {
                 ModelParser.ParsedModel parsed = ModelParser.parse(model);
                 normInputs.put("llmProvider", parsed.getProvider());
                 normInputs.put("model", parsed.getModel());
-                normInputs.put("messages", List.of(
-                    Map.of("role", "system", "message", normalizerPrompt),
-                    Map.of("role", "user", "message",
-                        "${" + validateRef + ".output.result.raw_text}")
-                ));
+                normInputs.put(
+                        "messages",
+                        List.of(
+                                Map.of("role", "system", "message", normalizerPrompt),
+                                Map.of("role", "user", "message", "${" + validateRef + ".output.result.raw_text}")));
                 normInputs.put("temperature", 0);
                 normInputs.put("jsonOutput", true);
                 normTask.setInputParameters(normInputs);

@@ -5,23 +5,26 @@
  * so the agent returns typed structured data.
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime } from '../src/index.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
 
 const MODEL = process.env.AGENTSPAN_LLM_MODEL ?? 'openai/gpt-4o';
 
 // -- Define a Zod schema for the expected output --
-const ArticleAnalysis = z.object({
-  title: z.string().describe('Article title'),
-  summary: z.string().describe('Brief summary (1-2 sentences)'),
-  category: z.enum(['tech', 'business', 'science', 'creative']).describe('Article category'),
-  sentiment: z.enum(['positive', 'neutral', 'negative']).describe('Overall sentiment'),
-  keyTopics: z.array(z.string()).describe('Key topics covered'),
-  wordCount: z.number().describe('Estimated word count'),
-}).describe('ArticleAnalysis');
+const ArticleAnalysis = {
+  type: 'object',
+  properties: {
+    title: { type: 'string', description: 'Article title' },
+    summary: { type: 'string', description: 'Brief summary (1-2 sentences)' },
+    category: { type: 'string', enum: ['tech', 'business', 'science', 'creative'], description: 'Article category' },
+    sentiment: { type: 'string', enum: ['positive', 'neutral', 'negative'], description: 'Overall sentiment' },
+    keyTopics: { type: 'array', items: { type: 'string' }, description: 'Key topics covered' },
+    wordCount: { type: 'number', description: 'Estimated word count' },
+  },
+  required: ['title', 'summary', 'category', 'sentiment', 'keyTopics', 'wordCount'],
+};
 
 // -- Agent with structured output --
-const analyzerAgent = new Agent({
+export const analyzerAgent = new Agent({
   name: 'article_analyzer',
   model: MODEL,
   instructions:
@@ -32,22 +35,35 @@ const analyzerAgent = new Agent({
 
 async function main() {
   const runtime = new AgentRuntime();
-
-  const result = await runtime.run(
+  try {
+    const result = await runtime.run(
     analyzerAgent,
     'Analyze: "Quantum Computing Breakthrough: New Error Correction Method Achieves 99.9% Fidelity"',
-  );
+    );
 
-  result.printResult();
+    result.printResult();
 
-  // The output conforms to the ArticleAnalysis schema
-  console.log('\nStructured output:');
-  console.log('  Title:', result.output['title']);
-  console.log('  Category:', result.output['category']);
-  console.log('  Sentiment:', result.output['sentiment']);
-  console.log('  Key Topics:', result.output['keyTopics']);
+    // The output conforms to the ArticleAnalysis schema
+    // result.output is the full server envelope { result: {...}, finishReason, context }.
+    // The structured data lives under result.output.result.
+    const structured = result.output['result'] as Record<string, unknown>;
+    console.log('\nStructured output:');
+    console.log('  Title:', structured?.['title']);
+    console.log('  Category:', structured?.['category']);
+    console.log('  Sentiment:', structured?.['sentiment']);
+    console.log('  Key Topics:', structured?.['keyTopics']);
 
-  await runtime.shutdown();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(analyzerAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents article_analyzer
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(analyzerAgent);
+  } finally {
+    await runtime.shutdown();
+  }
 }
 
 main().catch(console.error);

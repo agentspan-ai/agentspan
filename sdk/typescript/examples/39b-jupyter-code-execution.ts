@@ -9,19 +9,19 @@
  * Requirements:
  *   - Conductor server with LLM support
  *   - Jupyter runtime installed (jupyter_client, ipykernel)
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, JupyterCodeExecutor } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, JupyterCodeExecutor } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 const jupyterExecutor = new JupyterCodeExecutor({
   kernelName: 'python3',
   timeout: 30,
 });
 
-const jupyterCoder = new Agent({
+export const jupyterCoder = new Agent({
   name: 'jupyter_coder',
   model: llmModel,
   tools: [jupyterExecutor.asTool('execute_code')],
@@ -35,16 +35,29 @@ const jupyterCoder = new Agent({
     "The 'math' module is already imported for you.",
 });
 
-const runtime = new AgentRuntime();
-try {
-  console.log('--- Jupyter Kernel Code Execution ---');
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('--- Jupyter Kernel Code Execution ---');
+    const result = await runtime.run(
     jupyterCoder,
     "Compute the first 10 Fibonacci numbers using a loop, store them in a " +
     "list called 'fibs', and print them. Then in a second execution, print " +
     "the sum of 'fibs' (it should still exist from the first call).",
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(jupyterCoder);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents jupyter_coder
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(jupyterCoder);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

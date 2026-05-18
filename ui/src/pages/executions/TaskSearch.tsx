@@ -2,7 +2,6 @@ import { Box } from "@mui/material";
 import { Paper } from "components";
 import { DEFAULT_ROWS_PER_PAGE } from "components/DataTable/DataTable";
 import MuiTypography from "components/MuiTypography";
-import AddIcon from "components/v1/icons/AddIcon";
 import _isEmpty from "lodash/isEmpty";
 import _isEqual from "lodash/isEqual";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -13,15 +12,13 @@ import { Navigate } from "react-router";
 import { useQueryState } from "react-router-use-location-state";
 import SectionContainer from "shared/SectionContainer";
 import SectionHeader from "shared/SectionHeader";
-import SectionHeaderActions from "shared/SectionHeaderActions";
 import { colors } from "theme/tokens/variables";
 import { Key } from "ts-key-enum";
 import { TaskExecutionResult } from "types/TaskExecution";
 import { IObject } from "types/common";
 import { dateToEpoch } from "utils";
-import { ERROR_URL, NEW_TASK_DEF_URL } from "utils/constants/route";
+import { ERROR_URL } from "utils/constants/route";
 import { commonlyUsedDateTime, getSearchDateTime } from "utils/date";
-import { usePushHistory } from "utils/hooks/usePushHistory";
 import { useTaskExecutionsSearch } from "utils/query";
 import { getErrors, tryToJson } from "utils/utils";
 import { AdvanceSearch } from "./Task/AdvanceSearch";
@@ -262,8 +259,6 @@ export function TaskSearch() {
     else setStartTimeEnd("");
   };
 
-  const pushHistory = usePushHistory();
-
   // Must be called before any early returns to follow Rules of Hooks
   const filterOn = useMemo(() => {
     if (queryFT.query !== "" || queryFT.freeText !== "*") {
@@ -368,17 +363,6 @@ export function TaskSearch() {
       <SectionHeader
         _deprecate_marginTop={0}
         title="Task Executions"
-        actions={
-          <SectionHeaderActions
-            buttons={[
-              {
-                label: "Define task",
-                onClick: () => pushHistory(NEW_TASK_DEF_URL),
-                startIcon: <AddIcon />,
-              },
-            ]}
-          />
-        }
       />
       <SectionContainer>
         <Paper variant="outlined" sx={{ marginBottom: 6 }}>

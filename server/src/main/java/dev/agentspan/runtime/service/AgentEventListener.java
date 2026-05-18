@@ -5,21 +5,27 @@
 
 package dev.agentspan.runtime.service;
 
-import com.netflix.conductor.core.listener.TaskStatusListener;
-import com.netflix.conductor.core.listener.WorkflowStatusListener;
-import com.netflix.conductor.model.TaskModel;
-import com.netflix.conductor.model.WorkflowModel;
-import dev.agentspan.runtime.credentials.CredentialResolutionService;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
-import dev.agentspan.runtime.model.AgentSSEEvent;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
-import java.util.HashMap;
-import java.util.Map;
+import com.netflix.conductor.core.listener.TaskStatusListener;
+import com.netflix.conductor.core.listener.WorkflowStatusListener;
+import com.netflix.conductor.model.TaskModel;
+import com.netflix.conductor.model.WorkflowModel;
+
+import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import dev.agentspan.runtime.model.AgentSSEEvent;
+
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 
 /**
  * Listens to Conductor task/workflow state changes and translates them into
@@ -34,23 +40,27 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
 
     private static final Logger logger = LoggerFactory.getLogger(AgentEventListener.class);
 
+    /** Conductor AI task types that consume LLM/generation API calls. */
+    private static final Set<String> AI_TASK_TYPES =
+            Set.of("LLM_CHAT_COMPLETE", "GENERATE_IMAGE", "GENERATE_AUDIO", "GENERATE_VIDEO");
+
     private final AgentStreamRegistry streamRegistry;
+    private final MeterRegistry meterRegistry;
 
     @Autowired(required = false)
     private ExecutionTokenService executionTokenService;
 
-    @Autowired(required = false)
-    private CredentialResolutionService credentialResolutionService;
-
     @Autowired
-    public AgentEventListener(AgentStreamRegistry streamRegistry) {
+    public AgentEventListener(AgentStreamRegistry streamRegistry, MeterRegistry meterRegistry) {
         this.streamRegistry = streamRegistry;
+        this.meterRegistry = meterRegistry;
         logger.info("AgentEventListener active (TaskStatusListener + WorkflowStatusListener)");
     }
 
     /** Package-private constructor for testing with token revocation. */
     AgentEventListener(AgentStreamRegistry streamRegistry, ExecutionTokenService tokenService) {
         this.streamRegistry = streamRegistry;
+        this.meterRegistry = null;
         this.executionTokenService = tokenService;
     }
 
@@ -63,13 +73,10 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
         String taskRef = task.getReferenceTaskName();
         logger.debug("onTaskScheduled: wfId={}, type={}, ref={}", wfId, taskType, taskRef);
 
-        // Resolve ${NAME} credential placeholders in MCP task headers
-        if ("CALL_MCP_TOOL".equals(taskType)) {
-            resolveMcpCredentialHeaders(task);
-        }
-
         if ("LLM_CHAT_COMPLETE".equals(taskType)) {
             emit(wfId, AgentSSEEvent.thinking(wfId, taskRef));
+        } else if ("PULL_WORKFLOW_MESSAGES".equals(taskType)) {
+            emit(wfId, AgentSSEEvent.waiting(wfId, Map.of("taskRefName", taskRef)));
         } else if ("SUB_WORKFLOW".equals(taskType)) {
             // Register child workflow alias for event forwarding
             String childWfId = task.getSubWorkflowId();
@@ -79,16 +86,17 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
             String target = extractHandoffTarget(taskRef);
             emit(wfId, AgentSSEEvent.handoff(wfId, target));
         }
-        // Note: HUMAN tasks emit WAITING via AgentHumanTask.start(), not here.
-        // Conductor does NOT call TaskStatusListener for system tasks.
     }
 
     @Override
     public void onTaskInProgress(TaskModel task) {
         // HUMAN tasks are handled by AgentHumanTask.start() directly.
         // This callback is not called for system tasks by Conductor.
-        logger.debug("onTaskInProgress: wfId={}, type={}, ref={}",
-                task.getWorkflowInstanceId(), task.getTaskType(), task.getReferenceTaskName());
+        logger.debug(
+                "onTaskInProgress: wfId={}, type={}, ref={}",
+                task.getWorkflowInstanceId(),
+                task.getTaskType(),
+                task.getReferenceTaskName());
     }
 
     @Override
@@ -96,6 +104,7 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
         String wfId = task.getWorkflowInstanceId();
         String taskRef = task.getReferenceTaskName();
         logger.debug("onTaskCompleted: wfId={}, type={}, ref={}", wfId, task.getTaskType(), taskRef);
+
         Map<String, Object> output = task.getOutputData();
         if (output == null) output = Map.of();
 
@@ -190,7 +199,24 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
 
     @Override
     public void onWorkflowStartedIfEnabled(WorkflowModel workflow) {
-        // No SSE event — client already knows (they started it)
+        // For sub-workflows: register alias so child events forward to parent,
+        // and emit a HANDOFF event on the parent stream.
+        // (onTaskScheduled is not called for system tasks like SUB_WORKFLOW,
+        //  so we detect handoffs here instead.)
+        String parentId = workflow.getParentWorkflowId();
+        if (parentId == null || parentId.isEmpty()) return;
+
+        String childId = workflow.getWorkflowId();
+        String childName = workflow.getWorkflowName();
+
+        // Register alias so future events from this child appear on the parent stream
+        streamRegistry.registerAlias(childId, parentId);
+
+        // Emit HANDOFF on the parent — extract agent name from sub-workflow name
+        // Child workflow names follow patterns like: support_orchestrator_router_wf, tech_support_wf, etc.
+        String target = extractHandoffTarget(childName.replaceAll("_wf$", ""));
+        logger.debug("Sub-workflow started: child={}, parent={}, target={}", childId, parentId, target);
+        emit(parentId, AgentSSEEvent.handoff(parentId, target));
     }
 
     @Override
@@ -208,6 +234,17 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
     private void handleWorkflowCompleted(WorkflowModel workflow) {
         String wfId = workflow.getWorkflowId();
         logger.info("onWorkflowCompleted: wfId={}", wfId);
+        recordWorkflowAIMetrics(workflow);
+
+        // For sub-workflows (children), do NOT emit DONE on the parent stream.
+        // DONE is only emitted for the root (parent) workflow so the SSE client doesn't
+        // close the stream prematurely when an intermediate sub-agent finishes.
+        String parentId = workflow.getParentWorkflowId();
+        if (parentId != null && !parentId.isEmpty()) {
+            streamRegistry.complete(wfId);
+            return;
+        }
+
         Map<String, Object> output = workflow.getOutput();
         emit(wfId, AgentSSEEvent.done(wfId, output));
         if (executionTokenService != null) {
@@ -219,6 +256,7 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
     private void handleWorkflowTerminated(WorkflowModel workflow) {
         String wfId = workflow.getWorkflowId();
         logger.info("onWorkflowTerminated: wfId={}, reason={}", wfId, workflow.getReasonForIncompletion());
+        recordWorkflowAIMetrics(workflow);
         String reason = workflow.getReasonForIncompletion();
         emit(wfId, AgentSSEEvent.error(wfId, "workflow", reason != null ? reason : "Workflow terminated"));
         if (executionTokenService != null) {
@@ -229,8 +267,8 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
 
     private void revokeWorkflowToken(WorkflowModel workflow) {
         try {
-            Object ctx = workflow.getVariables() != null
-                ? workflow.getVariables().get("__agentspan_ctx__") : null;
+            Object ctx =
+                    workflow.getVariables() != null ? workflow.getVariables().get("__agentspan_ctx__") : null;
             if (!(ctx instanceof Map)) return;
             Object tokenObj = ((Map<?, ?>) ctx).get("execution_token");
             if (!(tokenObj instanceof String token)) return;
@@ -238,74 +276,131 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
             executionTokenService.revoke(payload.jti(), payload.exp());
             logger.info("Execution token revoked for terminated workflow {}", workflow.getWorkflowId());
         } catch (Exception e) {
-            logger.debug("Could not revoke execution token for workflow {}: {}",
-                workflow.getWorkflowId(), e.getMessage());
+            logger.debug(
+                    "Could not revoke execution token for workflow {}: {}", workflow.getWorkflowId(), e.getMessage());
         }
+    }
+
+    // ── Metrics ──────────────────────────────────────────────────────
+
+    /**
+     * Record Prometheus metrics for all AI tasks in a completed/terminated workflow.
+     *
+     * <p>System tasks (LLM_CHAT_COMPLETE, GENERATE_IMAGE, etc.) don't trigger
+     * {@code TaskStatusListener.onTaskCompleted}, so we iterate the full task
+     * list when the workflow finishes.</p>
+     *
+     * <p>Publishes two metric families to {@code /actuator/prometheus}:</p>
+     * <ul>
+     *   <li>{@code agentspan_ai_requests_total} — counter per AI API call</li>
+     *   <li>{@code agentspan_ai_tokens_total} — counter per token type (prompt/completion)</li>
+     * </ul>
+     *
+     * <p>Tags: {@code agent}, {@code model}, {@code provider}, {@code task_type}.</p>
+     */
+    private void recordWorkflowAIMetrics(WorkflowModel workflow) {
+        if (meterRegistry == null
+                || workflow.getTasks() == null
+                || workflow.getTasks().isEmpty()) return;
+
+        String agent;
+        try {
+            agent = workflow.getWorkflowName();
+        } catch (Exception e) {
+            agent = "unknown";
+        }
+
+        for (TaskModel task : workflow.getTasks()) {
+            String taskType = task.getTaskType();
+            if (taskType == null || !AI_TASK_TYPES.contains(taskType)) continue;
+
+            Map<String, Object> input = task.getInputData();
+            Map<String, Object> output = task.getOutputData();
+            if (input == null) input = Map.of();
+            if (output == null) output = Map.of();
+
+            String model = input.get("model") != null ? String.valueOf(input.get("model")) : "unknown";
+            String provider = input.get("llmProvider") != null ? String.valueOf(input.get("llmProvider")) : "unknown";
+
+            String taskLabel =
+                    switch (taskType) {
+                        case "LLM_CHAT_COMPLETE" -> "chat";
+                        case "GENERATE_IMAGE" -> "image";
+                        case "GENERATE_AUDIO" -> "audio";
+                        case "GENERATE_VIDEO" -> "video";
+                        default -> taskType.toLowerCase();
+                    };
+
+            // Request counter
+            Counter.builder("agentspan.ai.requests")
+                    .description("Total AI API requests")
+                    .tag("agent", agent)
+                    .tag("model", model)
+                    .tag("provider", provider)
+                    .tag("task_type", taskLabel)
+                    .register(meterRegistry)
+                    .increment();
+
+            // Token counters
+            int promptTokens = toInt(output.get("promptTokens"));
+            int completionTokens = toInt(output.get("completionTokens"));
+            int totalTokens = toInt(output.get("tokenUsed"));
+
+            if (promptTokens > 0) {
+                Counter.builder("agentspan.ai.tokens")
+                        .description("Total AI tokens consumed")
+                        .tag("agent", agent)
+                        .tag("model", model)
+                        .tag("provider", provider)
+                        .tag("task_type", taskLabel)
+                        .tag("token_type", "prompt")
+                        .register(meterRegistry)
+                        .increment(promptTokens);
+            }
+            if (completionTokens > 0) {
+                Counter.builder("agentspan.ai.tokens")
+                        .description("Total AI tokens consumed")
+                        .tag("agent", agent)
+                        .tag("model", model)
+                        .tag("provider", provider)
+                        .tag("task_type", taskLabel)
+                        .tag("token_type", "completion")
+                        .register(meterRegistry)
+                        .increment(completionTokens);
+            }
+            if (totalTokens > 0) {
+                Counter.builder("agentspan.ai.tokens")
+                        .description("Total AI tokens consumed")
+                        .tag("agent", agent)
+                        .tag("model", model)
+                        .tag("provider", provider)
+                        .tag("task_type", taskLabel)
+                        .tag("token_type", "total")
+                        .register(meterRegistry)
+                        .increment(totalTokens);
+            }
+        }
+    }
+
+    private static int toInt(Object value) {
+        if (value instanceof Number n) return n.intValue();
+        if (value instanceof String s) {
+            try {
+                return Integer.parseInt(s);
+            } catch (NumberFormatException e) {
+                return 0;
+            }
+        }
+        return 0;
     }
 
     // ── Internal ─────────────────────────────────────────────────────
 
-    /**
-     * Resolve ${NAME} credential placeholders in CALL_MCP_TOOL task headers.
-     * MCP is a worker task (not a system task), so we resolve before the worker picks it up.
-     */
-    @SuppressWarnings("unchecked")
-    private void resolveMcpCredentialHeaders(TaskModel task) {
-        if (executionTokenService == null || credentialResolutionService == null) return;
-
-        Map<String, Object> input = task.getInputData();
-        Object headers = input.get("headers");
-        Object ctx = input.get("__agentspan_ctx__");
-
-        if (!(headers instanceof Map<?,?> headerMap) || ctx == null) return;
-
-        // Check for ${NAME} patterns
-        boolean hasPlaceholders = false;
-        java.util.regex.Pattern p = java.util.regex.Pattern.compile("\\$\\{(\\w+)}");
-        for (Object v : headerMap.values()) {
-            if (v != null && p.matcher(String.valueOf(v)).find()) {
-                hasPlaceholders = true;
-                break;
-            }
-        }
-        if (!hasPlaceholders) return;
-
-        // Extract userId from execution token
-        String token = null;
-        if (ctx instanceof Map<?,?> ctxMap) {
-            token = (String) ctxMap.get("execution_token");
-        } else if (ctx instanceof String s) {
-            token = s;
-        }
-        if (token == null) return;
-
+    private void emit(String executionId, AgentSSEEvent event) {
         try {
-            String userId = executionTokenService.validate(token).userId();
-            Map<String, String> resolved = new java.util.LinkedHashMap<>();
-            for (Map.Entry<?,?> entry : headerMap.entrySet()) {
-                String value = String.valueOf(entry.getValue());
-                java.util.regex.Matcher m = p.matcher(value);
-                StringBuilder sb = new StringBuilder();
-                while (m.find()) {
-                    String credName = m.group(1);
-                    String credValue = credentialResolutionService.resolve(userId, credName);
-                    m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(
-                        credValue != null ? credValue : ""));
-                }
-                m.appendTail(sb);
-                resolved.put(String.valueOf(entry.getKey()), sb.toString());
-            }
-            input.put("headers", resolved);
+            streamRegistry.send(executionId, event);
         } catch (Exception e) {
-            logger.warn("Failed to resolve MCP credential headers: {}", e.getMessage());
-        }
-    }
-
-    private void emit(String workflowId, AgentSSEEvent event) {
-        try {
-            streamRegistry.send(workflowId, event);
-        } catch (Exception e) {
-            logger.warn("Failed to emit SSE event for workflow {}: {}", workflowId, e.getMessage());
+            logger.warn("Failed to emit SSE event for execution {}: {}", executionId, e.getMessage());
         }
     }
 
@@ -406,17 +501,15 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
         // Matches: <parent>_<strategy>_<idx>_<agent_name>
         // Strategies: handoff (handoff+router), agent (round_robin+swarm),
         //   step (sequential), parallel, and others
-        java.util.regex.Matcher strategyMatcher = java.util.regex.Pattern.compile(
-                "^.+?_(?:handoff|agent|step|sequential|parallel|round_robin|router|swarm|random|manual)_(\\d+)_(.*)"
-        ).matcher(name);
+        Matcher strategyMatcher = Pattern.compile(
+                        "^.+?_(?:handoff|agent|step|sequential|parallel|round_robin|router|swarm|random|manual)_(\\d+)_(.*)")
+                .matcher(name);
         if (strategyMatcher.matches()) {
             return strategyMatcher.group(2);
         }
 
         // Step 3: strip leading N_ index prefix (e.g. "0_billing")
-        java.util.regex.Matcher idxMatcher = java.util.regex.Pattern.compile(
-                "^\\d+_(.*)"
-        ).matcher(name);
+        Matcher idxMatcher = Pattern.compile("^\\d+_(.*)").matcher(name);
         if (idxMatcher.matches()) {
             return idxMatcher.group(1);
         }

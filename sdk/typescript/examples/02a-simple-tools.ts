@@ -9,13 +9,12 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 const getWeather = tool(
   async (args: { city: string }) => {
@@ -24,9 +23,13 @@ const getWeather = tool(
   {
     name: 'get_weather',
     description: 'Get the current weather for a city.',
-    inputSchema: z.object({
-      city: z.string().describe('The city to get weather for'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        city: { type: 'string', description: 'The city to get weather for' },
+      },
+      required: ['city'],
+    },
   },
 );
 
@@ -37,27 +40,44 @@ const getStockPrice = tool(
   {
     name: 'get_stock_price',
     description: 'Get the current stock price for a ticker symbol.',
-    inputSchema: z.object({
-      symbol: z.string().describe('The stock ticker symbol'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        symbol: { type: 'string', description: 'The stock ticker symbol' },
+      },
+      required: ['symbol'],
+    },
   },
 );
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'weather_stock_agent',
   model: llmModel,
   tools: [getWeather, getStockPrice],
   instructions: 'You are a helpful assistant. Use tools to answer questions.',
 });
 
-const runtime = new AgentRuntime();
-try {
-  // The LLM will call get_weather (not get_stock_price)
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    // The LLM will call get_weather (not get_stock_price)
+    const result = await runtime.run(
     agent,
     "What's the weather like in San Francisco?",
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents weather_stock_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

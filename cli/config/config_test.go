@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/agentspan/agentspan/cli/config"
+	"github.com/agentspan-ai/agentspan/cli/config"
 )
 
 func TestIsLocalhost(t *testing.T) {
@@ -15,13 +15,13 @@ func TestIsLocalhost(t *testing.T) {
 		url      string
 		expected bool
 	}{
-		{"localhost with port", "http://localhost:8080", true},
+		{"localhost with port", "http://localhost:6767", true},
 		{"localhost no port", "http://localhost", true},
-		{"127.0.0.1 with port", "http://127.0.0.1:8080", true},
+		{"127.0.0.1 with port", "http://127.0.0.1:6767", true},
 		{"127.0.0.1 no port", "http://127.0.0.1", true},
-		{"https localhost with port", "https://localhost:8080", true},
+		{"https localhost with port", "https://localhost:6767", true},
 		{"https 127.0.0.1", "https://127.0.0.1", true},
-		{"ipv6 loopback", "http://[::1]:8080", true},
+		{"ipv6 loopback", "http://[::1]:6767", true},
 		{"remote http", "http://team.agentspan.io", false},
 		{"remote https", "https://team.agentspan.io", false},
 		{"empty string", "", false},
@@ -39,11 +39,9 @@ func TestIsLocalhost(t *testing.T) {
 
 func TestAPIKeyRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HOME", dir)
-	t.Setenv("AGENTSPAN_AUTH_KEY", "")
-	t.Setenv("CONDUCTOR_AUTH_KEY", "")
-	t.Setenv("AGENTSPAN_AUTH_SECRET", "")
-	t.Setenv("CONDUCTOR_AUTH_SECRET", "")
+	t.Setenv("HOME", dir)        // Unix
+	t.Setenv("USERPROFILE", dir) // Windows
+	t.Setenv("AGENTSPAN_API_KEY", "")
 
 	cfg := config.DefaultConfig()
 	cfg.APIKey = "test-jwt-token-abc123"
@@ -72,11 +70,9 @@ func TestAPIKeyRoundTrip(t *testing.T) {
 
 func TestAPIKeyClearedOnLogout(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HOME", dir)
-	t.Setenv("AGENTSPAN_AUTH_KEY", "")
-	t.Setenv("CONDUCTOR_AUTH_KEY", "")
-	t.Setenv("AGENTSPAN_AUTH_SECRET", "")
-	t.Setenv("CONDUCTOR_AUTH_SECRET", "")
+	t.Setenv("HOME", dir)        // Unix
+	t.Setenv("USERPROFILE", dir) // Windows
+	t.Setenv("AGENTSPAN_API_KEY", "")
 
 	cfg := config.DefaultConfig()
 	cfg.APIKey = "some-token"

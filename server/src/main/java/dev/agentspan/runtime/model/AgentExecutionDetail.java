@@ -5,13 +5,14 @@
 
 package dev.agentspan.runtime.model;
 
+import java.util.Map;
+
 import com.fasterxml.jackson.annotation.JsonInclude;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.util.Map;
 
 @Data
 @Builder
@@ -20,7 +21,7 @@ import java.util.Map;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class AgentExecutionDetail {
 
-    private String workflowId;
+    private String executionId;
     private String agentName;
     private int version;
     private String status;

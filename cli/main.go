@@ -3,7 +3,7 @@
 
 package main
 
-import "github.com/agentspan/agentspan/cli/cmd"
+import "github.com/agentspan-ai/agentspan/cli/cmd"
 
 func main() {
 	cmd.Execute()

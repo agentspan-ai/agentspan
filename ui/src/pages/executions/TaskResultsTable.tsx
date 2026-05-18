@@ -9,9 +9,9 @@ import { SnackbarMessage } from "components/SnackbarMessage";
 import StatusBadge from "components/StatusBadge";
 import { colors } from "theme/tokens/variables";
 import {
-  WORKFLOW_DEFINITION_URL,
-  WORKFLOW_EXECUTION_URL,
-  WORKFLOW_EXPLORER_URL,
+  AGENT_DEFINITION_URL,
+  AGENT_EXECUTION_URL,
+  AGENT_EXPLORER_URL,
 } from "utils/constants/route";
 import { calculateTimeFromMillis, totalPages } from "utils/utils";
 import BulkActionModule from "./BulkActionModule";
@@ -54,7 +54,7 @@ const executionFields: LegacyColumn[] = [
       };
       return (
         <NavLink
-          path={`${WORKFLOW_EXECUTION_URL.BASE}/${
+          path={`${AGENT_EXECUTION_URL.BASE}/${
             row.workflowId
           }${toMaybeQueryString(urlParameters)}`}
         >
@@ -93,12 +93,12 @@ const executionFields: LegacyColumn[] = [
   {
     id: "workflowType",
     name: "workflowType",
-    label: "Workflow Name",
+    label: "Agent Name",
     sortable: true,
     grow: 2,
     renderer: (workflowName) => (
       <NavLink
-        path={`${WORKFLOW_DEFINITION_URL.BASE}/${encodeURIComponent(
+        path={`${AGENT_DEFINITION_URL.BASE}/${encodeURIComponent(
           workflowName,
         )}`}
       >
@@ -147,9 +147,9 @@ const executionFields: LegacyColumn[] = [
   {
     id: "workflowId",
     name: "workflowId",
-    label: "Workflow Id",
+    label: "Execution Id",
     renderer: (executionId) => (
-      <NavLink path={`${WORKFLOW_EXECUTION_URL.BASE}/${executionId}`}>
+      <NavLink path={`${AGENT_EXECUTION_URL.BASE}/${executionId}`}>
         {executionId}
       </NavLink>
     ),
@@ -158,7 +158,7 @@ const executionFields: LegacyColumn[] = [
   {
     id: "workflowPriority",
     name: "workflowPriority",
-    label: "Workflow priority",
+    label: "Execution priority",
     sortable: false,
   },
   {
@@ -241,7 +241,7 @@ export default function ResultsTable({
   }, [resultObj]);
 
   const handleClickBrowseTemplates = () => {
-    pushHistory(WORKFLOW_EXPLORER_URL);
+    pushHistory(AGENT_EXPLORER_URL);
   };
   const handleClickClearSearch = () => {
     handleReset();

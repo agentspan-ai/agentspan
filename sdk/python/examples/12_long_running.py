@@ -9,7 +9,7 @@ monitored from the UI or via the API.
 
 Requirements:
     - Conductor server with LLM support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -27,19 +27,34 @@ agent = Agent(
     ),
 )
 
-# Start agent asynchronously (returns immediately)
-with AgentRuntime() as runtime:
-    handle = runtime.start(agent, "What are the key metrics to track for a SaaS product?")
-    print(f"Agent started: {handle.workflow_id}")
 
-    # Poll for completion
-    for i in range(30):
-        status = handle.get_status()
-        print(f"  [{i}s] Status: {status.status} | Complete: {status.is_complete}")
-        if status.is_complete:
-            print(f"\nResult: {status.output}")
-            break
-        time.sleep(1)
-    else:
-        print("\nAgent still running. Check the Conductor UI:")
-        print(f"  http://localhost:8080/execution/{handle.workflow_id}")
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(agent, "What are the key metrics to track for a SaaS product?")
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.12_long_running
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
+
+        # Async handle alternative:
+        # handle = runtime.start(agent, "What are the key metrics to track for a SaaS product?")
+        # print(f"Agent started: {handle.execution_id}")
+
+        # # Poll for completion
+        # for i in range(30):
+        #     status = handle.get_status()
+        #     print(f"  [{i}s] Status: {status.status} | Complete: {status.is_complete}")
+        #     if status.is_complete:
+        #         print(f"\nResult: {status.output}")
+        #         break
+        #     time.sleep(1)
+        # else:
+        #     print("\nAgent still running. Check the Conductor UI:")
+        #     print(f"  http://localhost:6767/execution/{handle.execution_id}")
+

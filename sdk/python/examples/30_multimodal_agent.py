@@ -15,7 +15,7 @@ Supported media types:
 
 Requirements:
     - Conductor server with LLM support (OpenAI key configured)
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -89,45 +89,55 @@ storyteller = Agent(
 
 creative_pipeline = describer >> storyteller
 
-# ── Run ──────────────────────────────────────────────────────────────
-
 # Sample public-domain images for demonstration
 SAMPLE_IMAGE = "https://orkes.io/Home-Page-Prompt-to-Workflow-1.png"
 SAMPLE_IMAGE_2 = "https://orkes.io/icons/hero-section-workflow_updated.png"
 
-with AgentRuntime() as runtime:
-    # --- 1. Single image analysis ---
-    print("=== Single Image Analysis ===")
-    result = runtime.run(
-        vision_agent,
-        "What do you see in this image? Describe it in detail.",
-        media=[SAMPLE_IMAGE],
-    )
-    result.print_result()
 
-    # --- 2. Image analysis with tools ---
-    print("\n=== Image Analysis with Tools ===")
-    result = runtime.run(
-        vision_with_tools,
-        "Analyze this image, search for similar ones, and save your findings.",
-        media=[SAMPLE_IMAGE],
-    )
-    result.print_result()
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # --- 1. Single image analysis ---
+        print("=== Single Image Analysis ===")
+        result = runtime.run(
+            vision_agent,
+            "What do you see in this image? Describe it in detail.",
+            media=[SAMPLE_IMAGE],
+        )
+        result.print_result()
 
-    # --- 3. Compare multiple images ---
-    print("\n=== Multi-Image Comparison ===")
-    result = runtime.run(
-        comparator,
-        "Compare these two images. What are the key differences?",
-        media=[SAMPLE_IMAGE, SAMPLE_IMAGE_2],
-    )
-    result.print_result()
+        # --- 2. Image analysis with tools ---
+        print("\n=== Image Analysis with Tools ===")
+        result = runtime.run(
+            vision_with_tools,
+            "Analyze this image, search for similar ones, and save your findings.",
+            media=[SAMPLE_IMAGE],
+        )
+        result.print_result()
 
-    # --- 4. Creative pipeline from image ---
-    print("\n=== Creative Pipeline (describe → story) ===")
-    result = runtime.run(
-        creative_pipeline,
-        "Create a story inspired by this image.",
-        media=[SAMPLE_IMAGE_2],
-    )
-    result.print_result()
+        # --- 3. Compare multiple images ---
+        print("\n=== Multi-Image Comparison ===")
+        result = runtime.run(
+            comparator,
+            "Compare these two images. What are the key differences?",
+            media=[SAMPLE_IMAGE, SAMPLE_IMAGE_2],
+        )
+        result.print_result()
+
+        # --- 4. Creative pipeline from image ---
+        print("\n=== Creative Pipeline (describe → story) ===")
+        result = runtime.run(
+            creative_pipeline,
+            "Create a story inspired by this image.",
+            media=[SAMPLE_IMAGE_2],
+        )
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(vision_agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.30_multimodal_agent
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(vision_agent)
+

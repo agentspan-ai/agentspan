@@ -16,10 +16,8 @@ export const searchMachine = createMachine<SearchMachineContext>(
     context: {
       authHeaders: undefined,
       // Core OSS searchable data
-      taskDefinitions: [],
       workflowDefinitions: [],
       schedulers: [],
-      events: [],
       // Plugin-contributed data (populated via hook, not machine)
       pluginData: {},
       searchTerm: "",
@@ -33,17 +31,6 @@ export const searchMachine = createMachine<SearchMachineContext>(
             type: "parallel",
             states: {
               // Core OSS fetchers only
-              [SearchMachineStates.FETCH_TASK_DEFINITIONS]: {
-                invoke: {
-                  src: "fetchForTaskNames",
-                  onDone: {
-                    actions: ["persistTaskNames"],
-                  },
-                  onError: {
-                    actions: ["persistErrorMessage"],
-                  },
-                },
-              },
               [SearchMachineStates.FETCH_WF_DEFINITIONS]: {
                 invoke: {
                   src: "fetchForWorkflowDef",
@@ -60,17 +47,6 @@ export const searchMachine = createMachine<SearchMachineContext>(
                   src: "fetchForScheduleNames",
                   onDone: {
                     actions: ["persistScheduleNames"],
-                  },
-                  onError: {
-                    actions: ["persistErrorMessage"],
-                  },
-                },
-              },
-              [SearchMachineStates.FETCH_EVENTS]: {
-                invoke: {
-                  src: "fetchForEventNames",
-                  onDone: {
-                    actions: ["persistEventNames"],
                   },
                   onError: {
                     actions: ["persistErrorMessage"],

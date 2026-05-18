@@ -15,7 +15,7 @@
 
 import { Agent, setTracingDisabled } from '@openai/agents';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 setTracingDisabled(true);
 
@@ -35,7 +35,7 @@ const MovieList = z.object({
 
 // ── Agent ───────────────────────────────────────────────────────────
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'movie_recommender',
   instructions:
     'You are a movie recommendation expert. When asked for movie suggestions, ' +
@@ -58,6 +58,15 @@ async function main() {
     const result = await runtime.run(agent, prompt);
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/openai --agents movie_recommender
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
   } finally {
     await runtime.shutdown();
   }

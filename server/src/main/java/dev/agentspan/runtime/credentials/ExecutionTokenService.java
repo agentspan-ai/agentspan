@@ -4,19 +4,21 @@
  */
 package dev.agentspan.runtime.credentials;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
-import java.time.Instant;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Mints and validates execution tokens for worker credential resolution.
@@ -35,9 +37,9 @@ public class ExecutionTokenService {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final long ONE_HOUR_SECONDS = 3600;
     private static final String SCOPE = "credentials";
-    private static final String HEADER =
-        Base64.getUrlEncoder().withoutPadding().encodeToString(
-            "{\"alg\":\"HS256\",\"typ\":\"JWT\"}".getBytes(StandardCharsets.UTF_8));
+    private static final String HEADER = Base64.getUrlEncoder()
+            .withoutPadding()
+            .encodeToString("{\"alg\":\"HS256\",\"typ\":\"JWT\"}".getBytes(StandardCharsets.UTF_8));
 
     private final byte[] masterKey;
     private final ConcurrentHashMap<String, Long> denyList = new ConcurrentHashMap<>();
@@ -50,21 +52,20 @@ public class ExecutionTokenService {
      * Mint a new execution token.
      *
      * @param userId         the authenticated user's ID (or username for login tokens)
-     * @param workflowId     the Conductor workflow ID (or "login" for login tokens)
-     * @param declaredNames  credential names declared by the workflow (bounds resolution)
-     * @param workflowTimeoutSeconds workflow timeout; TTL = max(3600, workflowTimeoutSeconds)
+     * @param executionId    the execution ID (or "login" for login tokens)
+     * @param declaredNames  credential names declared by the agent (bounds resolution)
+     * @param executionTimeoutSeconds execution timeout; TTL = max(3600, executionTimeoutSeconds)
      * @return signed token string
      */
-    public String mint(String userId, String workflowId,
-                       List<String> declaredNames, long workflowTimeoutSeconds) {
+    public String mint(String userId, String executionId, List<String> declaredNames, long executionTimeoutSeconds) {
         long now = Instant.now().getEpochSecond();
-        long ttl = Math.max(ONE_HOUR_SECONDS, workflowTimeoutSeconds);
+        long ttl = Math.max(ONE_HOUR_SECONDS, executionTimeoutSeconds);
         long exp = now + ttl;
 
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("jti", UUID.randomUUID().toString());
         payload.put("sub", userId);
-        payload.put("wid", workflowId);
+        payload.put("wid", executionId);
         payload.put("iat", now);
         payload.put("exp", exp);
         payload.put("scope", SCOPE);
@@ -72,8 +73,9 @@ public class ExecutionTokenService {
 
         try {
             String payloadJson = MAPPER.writeValueAsString(payload);
-            String payloadB64 = Base64.getUrlEncoder().withoutPadding()
-                .encodeToString(payloadJson.getBytes(StandardCharsets.UTF_8));
+            String payloadB64 = Base64.getUrlEncoder()
+                    .withoutPadding()
+                    .encodeToString(payloadJson.getBytes(StandardCharsets.UTF_8));
             String signingInput = HEADER + "." + payloadB64;
             String sig = hmacSha256B64(signingInput);
             return signingInput + "." + sig;
@@ -104,8 +106,7 @@ public class ExecutionTokenService {
 
         Map<String, Object> claims;
         try {
-            String payloadJson = new String(
-                Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8);
+            String payloadJson = new String(Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8);
             claims = MAPPER.readValue(payloadJson, Map.class);
         } catch (Exception e) {
             throw new TokenInvalidException("Failed to parse token payload");
@@ -122,18 +123,12 @@ public class ExecutionTokenService {
         }
 
         List<String> names = (List<String>) claims.getOrDefault("declared_names", List.of());
-        return new TokenPayload(
-            jti,
-            (String) claims.get("sub"),
-            (String) claims.get("wid"),
-            exp,
-            names
-        );
+        return new TokenPayload(jti, (String) claims.get("sub"), (String) claims.get("wid"), exp, names);
     }
 
     /**
      * Revoke a token by adding its jti to the deny-list.
-     * Called when a workflow is cancelled or terminated.
+     * Called when an execution is cancelled or terminated.
      *
      * @param jti the unique token ID
      * @param exp the token's expiry epoch second (for self-pruning)
@@ -184,21 +179,23 @@ public class ExecutionTokenService {
 
     // ── Value types ───────────────────────────────────────────────────
 
-    public record TokenPayload(
-        String jti,
-        String userId,
-        String workflowId,
-        long   exp,
-        List<String> declaredNames
-    ) {}
+    public record TokenPayload(String jti, String userId, String executionId, long exp, List<String> declaredNames) {}
 
     public static class TokenInvalidException extends RuntimeException {
-        public TokenInvalidException(String msg) { super(msg); }
+        public TokenInvalidException(String msg) {
+            super(msg);
+        }
     }
+
     public static class TokenExpiredException extends RuntimeException {
-        public TokenExpiredException(String msg) { super(msg); }
+        public TokenExpiredException(String msg) {
+            super(msg);
+        }
     }
+
     public static class TokenRevokedException extends RuntimeException {
-        public TokenRevokedException(String msg) { super(msg); }
+        public TokenRevokedException(String msg) {
+            super(msg);
+        }
     }
 }

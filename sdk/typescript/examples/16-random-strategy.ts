@@ -7,14 +7,14 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
-const creative = new Agent({
+export const creative = new Agent({
   name: 'creative',
   model: llmModel,
   instructions:
@@ -22,7 +22,7 @@ const creative = new Agent({
     'Keep your response to 2-3 sentences.',
 });
 
-const practical = new Agent({
+export const practical = new Agent({
   name: 'practical',
   model: llmModel,
   instructions:
@@ -30,7 +30,7 @@ const practical = new Agent({
     'Keep your response to 2-3 sentences.',
 });
 
-const critical = new Agent({
+export const critical = new Agent({
   name: 'critical',
   model: llmModel,
   instructions:
@@ -39,7 +39,7 @@ const critical = new Agent({
 });
 
 // Random selection: each turn, one of the three agents is picked at random
-const brainstorm = new Agent({
+export const brainstorm = new Agent({
   name: 'brainstorm',
   model: llmModel,
   agents: [creative, practical, critical],
@@ -47,13 +47,26 @@ const brainstorm = new Agent({
   maxTurns: 6,
 });
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
     brainstorm,
     'How should we approach building an AI-powered customer service platform?',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(brainstorm);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents brainstorm
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(brainstorm);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

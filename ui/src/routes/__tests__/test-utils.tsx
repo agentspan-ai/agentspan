@@ -83,9 +83,7 @@ export const mockPageComponents = () => {
     "enterprise/pages/Authentication/AuthListing": "auth-listing",
 
     // Definitions
-    "pages/definition/task": { TaskDefinition: "task-definition" },
     "pages/definition/WorkflowDefinition": "workflow-definition",
-    "../pages/definition/EventHandler/EventHandler": "event-handler-definition",
 
     // Executions
     "pages/executions": {
@@ -114,15 +112,10 @@ export const mockPageComponents = () => {
     },
 
     // Other pages
-    "pages/creatorFlags/CreatorFlags": { CreatorFlags: "creator-flags" },
     "enterprise/pages/envVariables/EnvVariables": {
       EnvVariables: "env-variables",
     },
     "pages/error/ErrorPage": "error-page",
-    "pages/eventMonitor/EventMonitor": { EventMonitor: "event-monitor" },
-    "pages/eventMonitor/EventMonitorDetail/EventMonitorDetail": {
-      EventMonitorDetail: "event-monitor-detail",
-    },
     "enterprise/pages/getStarted/GetStarted": "get-started",
     "enterprise/pages/metrics": "metrics-page",
     "enterprise/pages/secrets/Secrets": "secrets",
@@ -153,21 +146,13 @@ export const mockPageComponents = () => {
       WebhookEditPage: "webhook-edit-page",
     },
 
-    // Kitchen sink
-    "../pages/kitchensink/Examples": "examples",
-    "../pages/kitchensink/Gantt": "gantt",
-    "../pages/kitchensink/KitchenSink": "kitchen-sink",
-    "../pages/kitchensink/ThemeSampler": "theme-sampler",
-
     // Queue and scheduler
     "../pages/queueMonitor/TaskQueue": "task-queue",
     "../pages/scheduler": { Schedule: "schedule" },
 
     // Definitions (additional)
     "pages/definitions": {
-      EventHandler: "event-handler-definitions",
       Schedules: "schedule-definitions",
-      Task: "task-definitions",
       Workflow: "workflow-definitions",
     },
   };

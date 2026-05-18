@@ -5,11 +5,10 @@
  *
  * Requirements:
  *   - Conductor server running
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
 import {
   Agent,
   AgentRuntime,
@@ -18,9 +17,9 @@ import {
   RegexGuardrail,
   guardrail,
   tool,
-} from '../src/index.js';
-import type { GuardrailResult } from '../src/index.js';
-import { llmModel } from './settings.js';
+} from '@agentspan-ai/sdk';
+import type { GuardrailResult } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Test infrastructure -----------------------------------------------------
 
@@ -28,7 +27,7 @@ interface TestResult {
   num: number;
   testId: string;
   passed: boolean;
-  workflowId: string;
+  executionId: string;
   details: string;
 }
 
@@ -48,7 +47,7 @@ class TestRunner {
   ): TestResult {
     const output = opts.result.output != null ? String(opts.result.output) : '';
     const status = String(opts.result.status ?? 'UNKNOWN');
-    const wfId = String(opts.result.workflowId ?? '');
+    const wfId = String(opts.result.executionId ?? '');
     const failures: string[] = [];
 
     if (opts.expectStatus && status !== opts.expectStatus) {
@@ -66,7 +65,7 @@ class TestRunner {
 
     const passed = failures.length === 0;
     const details = passed ? 'OK' : failures.join('; ');
-    const tr: TestResult = { num, testId, passed, workflowId: wfId, details };
+    const tr: TestResult = { num, testId, passed, executionId: wfId, details };
     this.results.push(tr);
 
     const mark = passed ? 'PASS' : 'FAIL';
@@ -280,90 +279,216 @@ const customToutFixGuardrail = guardrail(
 
 const getCcData = tool(
   async (args: { userId: string }) => ({ user: args.userId, card: '4532-0150-1234-5678', name: 'Alice' }),
-  { name: 'get_cc_data', description: 'Look up payment info.', inputSchema: z.object({ userId: z.string() }) },
+  { name: 'get_cc_data', description: 'Look up payment info.', inputSchema: {
+  type: 'object',
+  properties: {
+    userId: { type: 'string' },
+  },
+  required: ['userId'],
+} },
 );
 const getSsnData = tool(
   async (args: { userId: string }) => ({ user: args.userId, ssn: '123-45-6789', name: 'Bob' }),
-  { name: 'get_ssn_data', description: 'Look up identity info.', inputSchema: z.object({ userId: z.string() }) },
+  { name: 'get_ssn_data', description: 'Look up identity info.', inputSchema: {
+  type: 'object',
+  properties: {
+    userId: { type: 'string' },
+  },
+  required: ['userId'],
+} },
 );
 const getSecretData = tool(
   async (args: { query: string }) => ({ result: `The access code is SECRET42, query: ${args.query}` }),
-  { name: 'get_secret_data', description: 'Look up confidential data.', inputSchema: z.object({ query: z.string() }) },
+  { name: 'get_secret_data', description: 'Look up confidential data.', inputSchema: {
+  type: 'object',
+  properties: {
+    query: { type: 'string' },
+  },
+  required: ['query'],
+} },
 );
 
 // Tool INPUT tools
 const tTinRegexRetry = tool(async (args: { query: string }) => `Results: ${args.query} -> [('Alice', 30)]`, {
-  name: 't_tin_regex_retry', description: 'DB query (regex input retry).', inputSchema: z.object({ query: z.string() }),
+  name: 't_tin_regex_retry', description: 'DB query (regex input retry).', inputSchema: {
+  type: 'object',
+  properties: {
+    query: { type: 'string' },
+  },
+  required: ['query'],
+},
   guardrails: [regexTinRetry.toGuardrailDef()],
 });
 const tTinRegexRaise = tool(async (args: { query: string }) => `Results: ${args.query} -> [('Alice', 30)]`, {
-  name: 't_tin_regex_raise', description: 'DB query (regex input raise).', inputSchema: z.object({ query: z.string() }),
+  name: 't_tin_regex_raise', description: 'DB query (regex input raise).', inputSchema: {
+  type: 'object',
+  properties: {
+    query: { type: 'string' },
+  },
+  required: ['query'],
+},
   guardrails: [regexTinRaise.toGuardrailDef()],
 });
 const tTinRegexFix = tool(async (args: { query: string }) => `Results: ${args.query} -> [('Alice', 30)]`, {
-  name: 't_tin_regex_fix', description: 'DB query (regex input fix).', inputSchema: z.object({ query: z.string() }),
+  name: 't_tin_regex_fix', description: 'DB query (regex input fix).', inputSchema: {
+  type: 'object',
+  properties: {
+    query: { type: 'string' },
+  },
+  required: ['query'],
+},
   guardrails: [regexTinFix.toGuardrailDef()],
 });
 const tTinLlmRetry = tool(async (args: { identifier: string }) => `User: ${args.identifier} -> Alice Johnson`, {
-  name: 't_tin_llm_retry', description: 'Look up user (LLM input retry).', inputSchema: z.object({ identifier: z.string() }),
+  name: 't_tin_llm_retry', description: 'Look up user (LLM input retry).', inputSchema: {
+  type: 'object',
+  properties: {
+    identifier: { type: 'string' },
+  },
+  required: ['identifier'],
+},
   guardrails: [llmTinRetry.toGuardrailDef()],
 });
 const tTinLlmRaise = tool(async (args: { identifier: string }) => `User: ${args.identifier} -> Alice Johnson`, {
-  name: 't_tin_llm_raise', description: 'Look up user (LLM input raise).', inputSchema: z.object({ identifier: z.string() }),
+  name: 't_tin_llm_raise', description: 'Look up user (LLM input raise).', inputSchema: {
+  type: 'object',
+  properties: {
+    identifier: { type: 'string' },
+  },
+  required: ['identifier'],
+},
   guardrails: [llmTinRaise.toGuardrailDef()],
 });
 const tTinLlmFix = tool(async (args: { identifier: string }) => `User: ${args.identifier} -> Alice Johnson`, {
-  name: 't_tin_llm_fix', description: 'Look up user (LLM input fix).', inputSchema: z.object({ identifier: z.string() }),
+  name: 't_tin_llm_fix', description: 'Look up user (LLM input fix).', inputSchema: {
+  type: 'object',
+  properties: {
+    identifier: { type: 'string' },
+  },
+  required: ['identifier'],
+},
   guardrails: [llmTinFix.toGuardrailDef()],
 });
 const tTinCustomRetry = tool(async (args: { data: string }) => `Processed: ${args.data}`, {
-  name: 't_tin_custom_retry', description: 'Process data (custom input retry).', inputSchema: z.object({ data: z.string() }),
+  name: 't_tin_custom_retry', description: 'Process data (custom input retry).', inputSchema: {
+  type: 'object',
+  properties: {
+    data: { type: 'string' },
+  },
+  required: ['data'],
+},
   guardrails: [customTinBlock],
 });
 const tTinCustomRaise = tool(async (args: { data: string }) => `Processed: ${args.data}`, {
-  name: 't_tin_custom_raise', description: 'Process data (custom input raise).', inputSchema: z.object({ data: z.string() }),
+  name: 't_tin_custom_raise', description: 'Process data (custom input raise).', inputSchema: {
+  type: 'object',
+  properties: {
+    data: { type: 'string' },
+  },
+  required: ['data'],
+},
   guardrails: [customTinBlockRaise],
 });
 const tTinCustomFix = tool(async (args: { data: string }) => `Processed: ${args.data}`, {
-  name: 't_tin_custom_fix', description: 'Process data (custom input fix).', inputSchema: z.object({ data: z.string() }),
+  name: 't_tin_custom_fix', description: 'Process data (custom input fix).', inputSchema: {
+  type: 'object',
+  properties: {
+    data: { type: 'string' },
+  },
+  required: ['data'],
+},
   guardrails: [customTinBlockFix],
 });
 
 // Tool OUTPUT tools
 const tToutRegexRetry = tool(async (args: { query: string }) => args.query.toLowerCase().includes('secret') ? `INTERNAL_SECRET: classified for ${args.query}` : `Public data: ${args.query}`, {
-  name: 't_tout_regex_retry', description: 'Fetch data (regex output retry).', inputSchema: z.object({ query: z.string() }),
+  name: 't_tout_regex_retry', description: 'Fetch data (regex output retry).', inputSchema: {
+  type: 'object',
+  properties: {
+    query: { type: 'string' },
+  },
+  required: ['query'],
+},
   guardrails: [regexToutRetry.toGuardrailDef()],
 });
 const tToutRegexRaise = tool(async (args: { query: string }) => args.query.toLowerCase().includes('secret') ? `INTERNAL_SECRET: classified for ${args.query}` : `Public data: ${args.query}`, {
-  name: 't_tout_regex_raise', description: 'Fetch data (regex output raise).', inputSchema: z.object({ query: z.string() }),
+  name: 't_tout_regex_raise', description: 'Fetch data (regex output raise).', inputSchema: {
+  type: 'object',
+  properties: {
+    query: { type: 'string' },
+  },
+  required: ['query'],
+},
   guardrails: [regexToutRaise.toGuardrailDef()],
 });
 const tToutRegexFix = tool(async (args: { query: string }) => args.query.toLowerCase().includes('secret') ? `INTERNAL_SECRET: classified for ${args.query}` : `Public data: ${args.query}`, {
-  name: 't_tout_regex_fix', description: 'Fetch data (regex output fix).', inputSchema: z.object({ query: z.string() }),
+  name: 't_tout_regex_fix', description: 'Fetch data (regex output fix).', inputSchema: {
+  type: 'object',
+  properties: {
+    query: { type: 'string' },
+  },
+  required: ['query'],
+},
   guardrails: [regexToutFix.toGuardrailDef()],
 });
 const tToutLlmRetry = tool(async (args: { userId: string }) => `User ${args.userId}: Alice, alice@example.com, SSN 123-45-6789`, {
-  name: 't_tout_llm_retry', description: 'Fetch user data (LLM output retry).', inputSchema: z.object({ userId: z.string() }),
+  name: 't_tout_llm_retry', description: 'Fetch user data (LLM output retry).', inputSchema: {
+  type: 'object',
+  properties: {
+    userId: { type: 'string' },
+  },
+  required: ['userId'],
+},
   guardrails: [llmToutRetry.toGuardrailDef()],
 });
 const tToutLlmRaise = tool(async (args: { userId: string }) => `User ${args.userId}: Alice, alice@example.com, SSN 123-45-6789`, {
-  name: 't_tout_llm_raise', description: 'Fetch user data (LLM output raise).', inputSchema: z.object({ userId: z.string() }),
+  name: 't_tout_llm_raise', description: 'Fetch user data (LLM output raise).', inputSchema: {
+  type: 'object',
+  properties: {
+    userId: { type: 'string' },
+  },
+  required: ['userId'],
+},
   guardrails: [llmToutRaise.toGuardrailDef()],
 });
 const tToutLlmFix = tool(async (args: { userId: string }) => `User ${args.userId}: Alice, alice@example.com, SSN 123-45-6789`, {
-  name: 't_tout_llm_fix', description: 'Fetch user data (LLM output fix).', inputSchema: z.object({ userId: z.string() }),
+  name: 't_tout_llm_fix', description: 'Fetch user data (LLM output fix).', inputSchema: {
+  type: 'object',
+  properties: {
+    userId: { type: 'string' },
+  },
+  required: ['userId'],
+},
   guardrails: [llmToutFix.toGuardrailDef()],
 });
 const tToutCustomRetry = tool(async (args: { query: string }) => `SENSITIVE data for: ${args.query}`, {
-  name: 't_tout_custom_retry', description: 'Fetch data (custom output retry).', inputSchema: z.object({ query: z.string() }),
+  name: 't_tout_custom_retry', description: 'Fetch data (custom output retry).', inputSchema: {
+  type: 'object',
+  properties: {
+    query: { type: 'string' },
+  },
+  required: ['query'],
+},
   guardrails: [customToutRetry],
 });
 const tToutCustomRaise = tool(async (args: { query: string }) => `SENSITIVE data for: ${args.query}`, {
-  name: 't_tout_custom_raise', description: 'Fetch data (custom output raise).', inputSchema: z.object({ query: z.string() }),
+  name: 't_tout_custom_raise', description: 'Fetch data (custom output raise).', inputSchema: {
+  type: 'object',
+  properties: {
+    query: { type: 'string' },
+  },
+  required: ['query'],
+},
   guardrails: [customToutRaise],
 });
 const tToutCustomFixTool = tool(async (args: { query: string }) => `SENSITIVE data for: ${args.query}`, {
-  name: 't_tout_custom_fix', description: 'Fetch data (custom output fix).', inputSchema: z.object({ query: z.string() }),
+  name: 't_tout_custom_fix', description: 'Fetch data (custom output fix).', inputSchema: {
+  type: 'object',
+  properties: {
+    query: { type: 'string' },
+  },
+  required: ['query'],
+},
   guardrails: [customToutFixGuardrail],
 });
 
@@ -379,35 +504,35 @@ const INST_PROC = "You process data. Use the tool with the user's exact input.";
 const INST_FETCH = "You fetch data. Use the tool with the user's query.";
 const INST_UDATA = "You fetch user data. Use the tool with the user's ID.";
 
-const a01 = new Agent({ name: 'e2e_01', model: M, tools: [getCcData], instructions: INST_CC, guardrails: [regexAoutRetry.toGuardrailDef()] });
-const a02 = new Agent({ name: 'e2e_02', model: M, tools: [getSsnData], instructions: INST_SSN, guardrails: [regexAoutRaise.toGuardrailDef()] });
-const a03 = new Agent({ name: 'e2e_03', model: M, tools: [getCcData], instructions: INST_CC, guardrails: [regexAoutFix.toGuardrailDef()] });
-const a04 = new Agent({ name: 'e2e_04', model: M, instructions: INST_MED, guardrails: [llmAoutRetry.toGuardrailDef()] });
-const a05 = new Agent({ name: 'e2e_05', model: M, instructions: INST_MED, guardrails: [llmAoutRaise.toGuardrailDef()] });
-const a06 = new Agent({ name: 'e2e_06', model: M, instructions: INST_MED, guardrails: [llmAoutFix.toGuardrailDef()] });
-const a07 = new Agent({ name: 'e2e_07', model: M, tools: [getSecretData], instructions: INST_SECRET, guardrails: [customAoutBlock] });
-const a08 = new Agent({ name: 'e2e_08', model: M, tools: [getSecretData], instructions: INST_SECRET, guardrails: [{ ...customAoutBlock, onFail: 'raise' as const }] });
-const a09 = new Agent({ name: 'e2e_09', model: M, tools: [getSecretData], instructions: INST_SECRET, guardrails: [customAoutFix] });
+export const a01 = new Agent({ name: 'e2e_01', model: M, tools: [getCcData], instructions: INST_CC, guardrails: [regexAoutRetry.toGuardrailDef()] });
+export const a02 = new Agent({ name: 'e2e_02', model: M, tools: [getSsnData], instructions: INST_SSN, guardrails: [regexAoutRaise.toGuardrailDef()] });
+export const a03 = new Agent({ name: 'e2e_03', model: M, tools: [getCcData], instructions: INST_CC, guardrails: [regexAoutFix.toGuardrailDef()] });
+export const a04 = new Agent({ name: 'e2e_04', model: M, instructions: INST_MED, guardrails: [llmAoutRetry.toGuardrailDef()] });
+export const a05 = new Agent({ name: 'e2e_05', model: M, instructions: INST_MED, guardrails: [llmAoutRaise.toGuardrailDef()] });
+export const a06 = new Agent({ name: 'e2e_06', model: M, instructions: INST_MED, guardrails: [llmAoutFix.toGuardrailDef()] });
+export const a07 = new Agent({ name: 'e2e_07', model: M, tools: [getSecretData], instructions: INST_SECRET, guardrails: [customAoutBlock] });
+export const a08 = new Agent({ name: 'e2e_08', model: M, tools: [getSecretData], instructions: INST_SECRET, guardrails: [{ ...customAoutBlock, onFail: 'raise' as const }] });
+export const a09 = new Agent({ name: 'e2e_09', model: M, tools: [getSecretData], instructions: INST_SECRET, guardrails: [customAoutFix] });
 
-const a10 = new Agent({ name: 'e2e_10', model: M, tools: [tTinRegexRetry], instructions: INST_DB });
-const a11 = new Agent({ name: 'e2e_11', model: M, tools: [tTinRegexRaise], instructions: INST_DB });
-const a12 = new Agent({ name: 'e2e_12', model: M, tools: [tTinRegexFix], instructions: INST_DB });
-const a13 = new Agent({ name: 'e2e_13', model: M, tools: [tTinLlmRetry], instructions: INST_LOOKUP });
-const a14 = new Agent({ name: 'e2e_14', model: M, tools: [tTinLlmRaise], instructions: INST_LOOKUP });
-const a15 = new Agent({ name: 'e2e_15', model: M, tools: [tTinLlmFix], instructions: INST_LOOKUP });
-const a16 = new Agent({ name: 'e2e_16', model: M, tools: [tTinCustomRetry], instructions: INST_PROC });
-const a17 = new Agent({ name: 'e2e_17', model: M, tools: [tTinCustomRaise], instructions: INST_PROC });
-const a18 = new Agent({ name: 'e2e_18', model: M, tools: [tTinCustomFix], instructions: INST_PROC });
+export const a10 = new Agent({ name: 'e2e_10', model: M, tools: [tTinRegexRetry], instructions: INST_DB });
+export const a11 = new Agent({ name: 'e2e_11', model: M, tools: [tTinRegexRaise], instructions: INST_DB });
+export const a12 = new Agent({ name: 'e2e_12', model: M, tools: [tTinRegexFix], instructions: INST_DB });
+export const a13 = new Agent({ name: 'e2e_13', model: M, tools: [tTinLlmRetry], instructions: INST_LOOKUP });
+export const a14 = new Agent({ name: 'e2e_14', model: M, tools: [tTinLlmRaise], instructions: INST_LOOKUP });
+export const a15 = new Agent({ name: 'e2e_15', model: M, tools: [tTinLlmFix], instructions: INST_LOOKUP });
+export const a16 = new Agent({ name: 'e2e_16', model: M, tools: [tTinCustomRetry], instructions: INST_PROC });
+export const a17 = new Agent({ name: 'e2e_17', model: M, tools: [tTinCustomRaise], instructions: INST_PROC });
+export const a18 = new Agent({ name: 'e2e_18', model: M, tools: [tTinCustomFix], instructions: INST_PROC });
 
-const a19 = new Agent({ name: 'e2e_19', model: M, tools: [tToutRegexRetry], instructions: INST_FETCH });
-const a20 = new Agent({ name: 'e2e_20', model: M, tools: [tToutRegexRaise], instructions: INST_FETCH });
-const a21 = new Agent({ name: 'e2e_21', model: M, tools: [tToutRegexFix], instructions: INST_FETCH });
-const a22 = new Agent({ name: 'e2e_22', model: M, tools: [tToutLlmRetry], instructions: INST_UDATA });
-const a23 = new Agent({ name: 'e2e_23', model: M, tools: [tToutLlmRaise], instructions: INST_UDATA });
-const a24 = new Agent({ name: 'e2e_24', model: M, tools: [tToutLlmFix], instructions: INST_UDATA });
-const a25 = new Agent({ name: 'e2e_25', model: M, tools: [tToutCustomRetry], instructions: INST_FETCH });
-const a26 = new Agent({ name: 'e2e_26', model: M, tools: [tToutCustomRaise], instructions: INST_FETCH });
-const a27 = new Agent({ name: 'e2e_27', model: M, tools: [tToutCustomFixTool], instructions: INST_FETCH });
+export const a19 = new Agent({ name: 'e2e_19', model: M, tools: [tToutRegexRetry], instructions: INST_FETCH });
+export const a20 = new Agent({ name: 'e2e_20', model: M, tools: [tToutRegexRaise], instructions: INST_FETCH });
+export const a21 = new Agent({ name: 'e2e_21', model: M, tools: [tToutRegexFix], instructions: INST_FETCH });
+export const a22 = new Agent({ name: 'e2e_22', model: M, tools: [tToutLlmRetry], instructions: INST_UDATA });
+export const a23 = new Agent({ name: 'e2e_23', model: M, tools: [tToutLlmRaise], instructions: INST_UDATA });
+export const a24 = new Agent({ name: 'e2e_24', model: M, tools: [tToutLlmFix], instructions: INST_UDATA });
+export const a25 = new Agent({ name: 'e2e_25', model: M, tools: [tToutCustomRetry], instructions: INST_FETCH });
+export const a26 = new Agent({ name: 'e2e_26', model: M, tools: [tToutCustomRaise], instructions: INST_FETCH });
+export const a27 = new Agent({ name: 'e2e_27', model: M, tools: [tToutCustomFixTool], instructions: INST_FETCH });
 
 // -- Test cases --------------------------------------------------------------
 
@@ -479,19 +604,23 @@ async function runTests(runtime: AgentRuntime, runner: TestRunner) {
 
 // -- Main --------------------------------------------------------------------
 
-console.log('='.repeat(90));
-console.log('  Guardrail E2E Test Suite -- 27-cell matrix');
-console.log('  Position (3) x Type (3) x OnFail (3)');
-console.log('='.repeat(90));
+async function main() {
+  console.log('='.repeat(90));
+  console.log('  Guardrail E2E Test Suite -- 27-cell matrix');
+  console.log('  Position (3) x Type (3) x OnFail (3)');
+  console.log('='.repeat(90));
 
-const runner = new TestRunner();
-const runtime = new AgentRuntime();
+  const runner = new TestRunner();
+  const runtime = new AgentRuntime();
 
-try {
-  await runTests(runtime, runner);
-} finally {
-  await runtime.shutdown();
+  try {
+    await runTests(runtime, runner);
+  } finally {
+    await runtime.shutdown();
+  }
+
+  const failed = runner.printSummary();
+  process.exit(failed > 0 ? 1 : 0);
 }
 
-const failed = runner.printSummary();
-process.exit(failed > 0 ? 1 : 0);
+main().catch(console.error);

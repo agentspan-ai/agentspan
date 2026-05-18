@@ -1,9 +1,4 @@
-import type {
-  GuardrailDef,
-  GuardrailResult,
-  Position,
-  OnFail,
-} from './types.js';
+import type { GuardrailDef, GuardrailResult, Position, OnFail } from "./types.js";
 
 // ── guardrail() function ─────────────────────────────────
 
@@ -24,14 +19,14 @@ export function guardrail(
   fn: (content: string) => GuardrailResult | Promise<GuardrailResult>,
   options: GuardrailOptions,
 ): GuardrailDef {
-  const position = options.position ?? 'output';
-  const onFail = options.onFail ?? 'raise';
+  const position = options.position ?? "output";
+  const onFail = options.onFail ?? "raise";
 
   const def: GuardrailDef = {
     name: options.name,
     position,
     onFail,
-    guardrailType: 'custom',
+    guardrailType: "custom",
     taskName: options.name,
     func: fn,
   };
@@ -55,14 +50,12 @@ export interface ExternalGuardrailOptions {
  * Create an external guardrail definition (no local worker).
  * The task is dispatched to a remote worker.
  */
-guardrail.external = function externalGuardrail(
-  options: ExternalGuardrailOptions,
-): GuardrailDef {
+guardrail.external = function externalGuardrail(options: ExternalGuardrailOptions): GuardrailDef {
   return {
     name: options.name,
-    position: options.position ?? 'output',
-    onFail: options.onFail ?? 'raise',
-    guardrailType: 'external',
+    position: options.position ?? "output",
+    onFail: options.onFail ?? "raise",
+    guardrailType: "external",
     taskName: options.name,
     func: null,
   };
@@ -73,10 +66,11 @@ guardrail.external = function externalGuardrail(
 export interface RegexGuardrailOptions {
   name: string;
   patterns: string[];
-  mode: 'block' | 'allow';
+  mode: "block" | "allow";
   position?: Position;
   onFail?: OnFail;
   message?: string;
+  maxRetries?: number;
 }
 
 /**
@@ -89,17 +83,19 @@ export interface RegexGuardrailOptions {
 export class RegexGuardrail {
   readonly name: string;
   readonly patterns: string[];
-  readonly mode: 'block' | 'allow';
+  readonly mode: "block" | "allow";
   readonly position: Position;
   readonly onFail: OnFail;
   readonly message?: string;
+  readonly maxRetries: number;
 
   constructor(options: RegexGuardrailOptions) {
     this.name = options.name;
     this.patterns = options.patterns;
     this.mode = options.mode;
-    this.position = options.position ?? 'output';
-    this.onFail = options.onFail ?? 'raise';
+    this.position = options.position ?? "output";
+    this.onFail = options.onFail ?? "raise";
+    this.maxRetries = options.maxRetries ?? 3;
     if (options.message !== undefined) {
       this.message = options.message;
     }
@@ -113,9 +109,10 @@ export class RegexGuardrail {
       name: this.name,
       position: this.position,
       onFail: this.onFail,
-      guardrailType: 'regex',
+      guardrailType: "regex",
       patterns: this.patterns,
       mode: this.mode,
+      maxRetries: this.maxRetries,
     };
 
     if (this.message !== undefined) {
@@ -134,6 +131,7 @@ export interface LLMGuardrailOptions {
   policy: string;
   position?: Position;
   onFail?: OnFail;
+  maxRetries?: number;
   maxTokens?: number;
 }
 
@@ -147,14 +145,16 @@ export class LLMGuardrail {
   readonly policy: string;
   readonly position: Position;
   readonly onFail: OnFail;
+  readonly maxRetries: number;
   readonly maxTokens?: number;
 
   constructor(options: LLMGuardrailOptions) {
     this.name = options.name;
     this.model = options.model;
     this.policy = options.policy;
-    this.position = options.position ?? 'output';
-    this.onFail = options.onFail ?? 'raise';
+    this.position = options.position ?? "output";
+    this.onFail = options.onFail ?? "raise";
+    this.maxRetries = options.maxRetries ?? 3;
     if (options.maxTokens !== undefined) {
       this.maxTokens = options.maxTokens;
     }
@@ -168,9 +168,10 @@ export class LLMGuardrail {
       name: this.name,
       position: this.position,
       onFail: this.onFail,
-      guardrailType: 'llm',
+      guardrailType: "llm",
       model: this.model,
       policy: this.policy,
+      maxRetries: this.maxRetries,
     };
 
     if (this.maxTokens !== undefined) {
@@ -183,7 +184,7 @@ export class LLMGuardrail {
 
 // ── @Guardrail decorator ─────────────────────────────────
 
-const GUARDRAIL_DECORATOR_KEY = Symbol('GUARDRAIL_DECORATOR');
+const GUARDRAIL_DECORATOR_KEY = Symbol("GUARDRAIL_DECORATOR");
 
 export interface GuardrailDecoratorOptions {
   name?: string;
@@ -197,11 +198,7 @@ export interface GuardrailDecoratorOptions {
  * Use `guardrailsFrom(instance)` to extract decorated methods as GuardrailDef[].
  */
 export function Guardrail(options?: GuardrailDecoratorOptions) {
-  return function (
-    _target: object,
-    propertyKey: string,
-    descriptor: PropertyDescriptor,
-  ): void {
+  return function (_target: object, propertyKey: string, descriptor: PropertyDescriptor): void {
     const metadata: GuardrailDecoratorOptions & { _methodName: string } = {
       ...options,
       _methodName: propertyKey,
@@ -228,13 +225,13 @@ export function guardrailsFrom(instance: object): GuardrailDef[] {
   const propertyNames = Object.getOwnPropertyNames(proto);
 
   for (const key of propertyNames) {
-    if (key === 'constructor') continue;
+    if (key === "constructor") continue;
     const descriptor = Object.getOwnPropertyDescriptor(proto, key);
-    if (!descriptor?.value || typeof descriptor.value !== 'function') continue;
+    if (!descriptor?.value || typeof descriptor.value !== "function") continue;
 
-    const metadata = (descriptor.value as Record<symbol, unknown>)[
-      GUARDRAIL_DECORATOR_KEY
-    ] as (GuardrailDecoratorOptions & { _methodName: string }) | undefined;
+    const metadata = (descriptor.value as Record<symbol, unknown>)[GUARDRAIL_DECORATOR_KEY] as
+      | (GuardrailDecoratorOptions & { _methodName: string })
+      | undefined;
 
     if (!metadata) continue;
 
@@ -242,14 +239,14 @@ export function guardrailsFrom(instance: object): GuardrailDef[] {
     const boundFn = descriptor.value.bind(instance);
 
     const name = metadata.name ?? methodName;
-    const position = metadata.position ?? 'output';
-    const onFail = metadata.onFail ?? 'raise';
+    const position = metadata.position ?? "output";
+    const onFail = metadata.onFail ?? "raise";
 
     const def: GuardrailDef = {
       name,
       position,
       onFail,
-      guardrailType: 'custom',
+      guardrailType: "custom",
       taskName: name,
       func: boundFn,
     };

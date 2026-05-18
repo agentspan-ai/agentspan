@@ -242,7 +242,7 @@ public record AgentEvent
     [JsonPropertyName("result")]        public object?   Result { get; init; }
     [JsonPropertyName("target")]        public string?   Target { get; init; }
     [JsonPropertyName("output")]        public object?   Output { get; init; }
-    [JsonPropertyName("workflowId")]    public string?   WorkflowId { get; init; }
+    [JsonPropertyName("executionId")]    public string?   ExecutionId { get; init; }
     [JsonPropertyName("guardrailName")] public string?   GuardrailName { get; init; }
     [JsonPropertyName("timestamp")]     public long?     Timestamp { get; init; }
 }
@@ -251,7 +251,7 @@ public record AgentEvent
 public record AgentResult
 {
     [JsonPropertyName("output")]       public Dictionary<string, object>? Output { get; init; }
-    [JsonPropertyName("workflowId")]   public string WorkflowId { get; init; } = "";
+    [JsonPropertyName("executionId")]   public string ExecutionId { get; init; } = "";
     [JsonPropertyName("correlationId")]public string? CorrelationId { get; init; }
     [JsonPropertyName("messages")]     public List<Dictionary<string, object>>? Messages { get; init; }
     [JsonPropertyName("toolCalls")]    public List<Dictionary<string, object>>? ToolCalls { get; init; }
@@ -275,7 +275,7 @@ public record AgentResult
 public record ToolContext
 {
     public string SessionId  { get; init; } = "";
-    public string WorkflowId { get; init; } = "";
+    public string ExecutionId { get; init; } = "";
     public string AgentName  { get; init; } = "";
     public Dictionary<string, object>? Metadata     { get; init; }
     public Dictionary<string, object>? Dependencies { get; init; }
@@ -291,14 +291,14 @@ public record GuardrailResult(
 
 // --- Deployment Info ---
 public record DeploymentInfo(
-    [property: JsonPropertyName("workflowName")] string WorkflowName,
+    [property: JsonPropertyName("registeredName")] string RegisteredName,
     [property: JsonPropertyName("agentName")]    string AgentName
 );
 
 // --- Agent Status (returned by polling) ---
 public record AgentStatus
 {
-    [JsonPropertyName("workflowId")]  public string WorkflowId { get; init; } = "";
+    [JsonPropertyName("executionId")]  public string ExecutionId { get; init; } = "";
     [JsonPropertyName("isComplete")]  public bool IsComplete { get; init; }
     [JsonPropertyName("isRunning")]   public bool IsRunning { get; init; }
     [JsonPropertyName("isWaiting")]   public bool IsWaiting { get; init; }
@@ -580,7 +580,7 @@ Streaming returns `IAsyncEnumerable<AgentEvent>`, consumed with `await foreach`.
 ```csharp
 public interface IAgentStream : IAsyncEnumerable<AgentEvent>, IAsyncDisposable
 {
-    string WorkflowId { get; }
+    string ExecutionId { get; }
     List<AgentEvent> Events { get; }
 
     Task<AgentResult> GetResultAsync(CancellationToken ct = default);
@@ -843,7 +843,7 @@ public sealed class SseClient : IAsyncDisposable
     }
 
     public async IAsyncEnumerable<AgentEvent> StreamEventsAsync(
-        string workflowId,
+        string executionId,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
     {
         _cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -855,7 +855,7 @@ public sealed class SseClient : IAsyncDisposable
             try
             {
                 var request = new HttpRequestMessage(HttpMethod.Get,
-                    $"{_baseUrl}/agent/stream/{workflowId}");
+                    $"{_baseUrl}/agent/stream/{executionId}");
                 request.Headers.Accept.Add(
                     new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("text/event-stream"));
 
@@ -921,7 +921,7 @@ public sealed class SseClient : IAsyncDisposable
                 }
 
                 // Stream ended without a done event -- may reconnect
-                _logger.LogInformation("SSE stream ended for {WorkflowId}, attempting reconnect", workflowId);
+                _logger.LogInformation("SSE stream ended for {ExecutionId}, attempting reconnect", executionId);
             }
             catch (OperationCanceledException) { yield break; }
             catch (HttpRequestException ex)
@@ -954,16 +954,16 @@ public sealed class AgentStream : IAgentStream
     private readonly SseClient _sse;
     private readonly HttpClient _http;
     private readonly string _baseUrl;
-    private readonly string _workflowId;
+    private readonly string _executionId;
     private readonly List<AgentEvent> _events = [];
 
-    public string WorkflowId => _workflowId;
+    public string ExecutionId => _executionId;
     public List<AgentEvent> Events => _events;
 
     public async IAsyncEnumerator<AgentEvent> GetAsyncEnumerator(
         CancellationToken ct = default)
     {
-        await foreach (var evt in _sse.StreamEventsAsync(_workflowId, ct))
+        await foreach (var evt in _sse.StreamEventsAsync(_executionId, ct))
         {
             _events.Add(evt);
             yield return evt;
@@ -978,7 +978,7 @@ public sealed class AgentStream : IAgentStream
         var doneEvent = _events.LastOrDefault(e => e.Type == EventType.Done);
         return new AgentResult
         {
-            WorkflowId = _workflowId,
+            ExecutionId = _executionId,
             Output = doneEvent?.Output as Dictionary<string, object>,
             Status = Status.Completed,
             Events = _events,
@@ -989,7 +989,7 @@ public sealed class AgentStream : IAgentStream
     {
         var payload = JsonSerializer.Serialize(new { approved = true }, AgentspanJson.Options);
         await _http.PostAsync(
-            $"{_baseUrl}/agent/{_workflowId}/respond",
+            $"{_baseUrl}/agent/{_executionId}/respond",
             new StringContent(payload, System.Text.Encoding.UTF8, "application/json"), ct);
     }
 
@@ -998,7 +998,7 @@ public sealed class AgentStream : IAgentStream
         var payload = JsonSerializer.Serialize(
             new { approved = false, reason }, AgentspanJson.Options);
         await _http.PostAsync(
-            $"{_baseUrl}/agent/{_workflowId}/respond",
+            $"{_baseUrl}/agent/{_executionId}/respond",
             new StringContent(payload, System.Text.Encoding.UTF8, "application/json"), ct);
     }
 
@@ -1006,7 +1006,7 @@ public sealed class AgentStream : IAgentStream
     {
         var payload = JsonSerializer.Serialize(new { message }, AgentspanJson.Options);
         await _http.PostAsync(
-            $"{_baseUrl}/agent/{_workflowId}/respond",
+            $"{_baseUrl}/agent/{_executionId}/respond",
             new StringContent(payload, System.Text.Encoding.UTF8, "application/json"), ct);
     }
 
@@ -1014,7 +1014,7 @@ public sealed class AgentStream : IAgentStream
     {
         var payload = JsonSerializer.Serialize(output, AgentspanJson.Options);
         await _http.PostAsync(
-            $"{_baseUrl}/agent/{_workflowId}/respond",
+            $"{_baseUrl}/agent/{_executionId}/respond",
             new StringContent(payload, System.Text.Encoding.UTF8, "application/json"), ct);
     }
 
@@ -1557,7 +1557,7 @@ Console.WriteLine("  Plan compiled successfully");
 // --- Stream with HITL ---
 Console.WriteLine("\n=== Stream Execution ===");
 var agentStream = await runtime.StreamAsync(fullPipeline, Prompt);
-Console.WriteLine($"  Workflow: {agentStream.WorkflowId}\n");
+Console.WriteLine($"  Execution: {agentStream.ExecutionId}\n");
 
 var hitlState = new { Approved = 0, Rejected = 0, Feedback = 0 };
 
@@ -1627,7 +1627,7 @@ if (result.TokenUsage is not null)
 // --- Start + Polling ---
 Console.WriteLine("\n=== Start + Polling ===");
 var handle = await runtime.StartAsync(fullPipeline, Prompt);
-Console.WriteLine($"  Started: {handle.WorkflowId}");
+Console.WriteLine($"  Started: {handle.ExecutionId}");
 var status = await handle.GetStatusAsync();
 Console.WriteLine($"  Status: {status.StatusValue}, Running: {status.IsRunning}");
 

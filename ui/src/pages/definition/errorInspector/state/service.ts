@@ -298,7 +298,7 @@ export const workflowParameterToValidationError = (
   const errorKind = variableName.includes("workflow") ? "workflow" : "task";
   const message = `'${firstKey ? firstKey : ""}' references unknown ${
     errorKind === "workflow"
-      ? `workflow variable - '${variableName}'`
+      ? `agent variable - '${variableName}'`
       : `task variable - '${variableName}'`
   }`;
   const legacyRefWarning = `'${

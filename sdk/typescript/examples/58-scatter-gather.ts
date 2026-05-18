@@ -8,13 +8,12 @@
  *
  * Requirements:
  *   - Conductor server running
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_SECONDARY_LLM_MODEL=openai/gpt-4o as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, scatterGather, tool } from '../src/index.js';
-import { secondaryLlmModel } from './settings.js';
+import { Agent, AgentRuntime, scatterGather, tool } from '@agentspan-ai/sdk';
+import { secondaryLlmModel } from './settings';
 
 // -- Worker tool: simulates a knowledge base lookup --------------------------
 
@@ -32,15 +31,19 @@ const searchKnowledgeBase = tool(
   {
     name: 'search_knowledge_base',
     description: 'Search the knowledge base for information on a topic.',
-    inputSchema: z.object({
-      query: z.string().describe('The search query'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'The search query' },
+      },
+      required: ['query'],
+    },
   },
 );
 
 // -- Worker agent: researches a single country -------------------------------
 
-const researcher = new Agent({
+export const researcher = new Agent({
   name: 'researcher',
   model: 'anthropic/claude-sonnet-4-20250514',
   instructions:
@@ -98,19 +101,31 @@ const coordinator = scatterGather({
 
 const prompt = `Create a comprehensive profile for each of the ${COUNTRIES.length} countries listed.`;
 
-console.log('='.repeat(70));
-console.log(`  Scatter-Gather: ${COUNTRIES.length} Parallel Sub-Agents`);
-console.log('  Coordinator: openai/gpt-4o  |  Workers: anthropic/claude-sonnet');
-console.log('='.repeat(70));
-console.log(`\nPrompt: ${prompt}`);
-console.log(`Countries: ${COUNTRIES.length}`);
-console.log(`Dispatching ${COUNTRIES.length} parallel researcher agents...\n`);
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('='.repeat(70));
+    console.log(`  Scatter-Gather: ${COUNTRIES.length} Parallel Sub-Agents`);
+    console.log('  Coordinator: openai/gpt-4o  |  Workers: anthropic/claude-sonnet');
+    console.log('='.repeat(70));
+    console.log(`\nPrompt: ${prompt}`);
+    console.log(`Countries: ${COUNTRIES.length}`);
+    console.log(`Dispatching ${COUNTRIES.length} parallel researcher agents...\n`);
+    const result = await runtime.run(coordinator, prompt);
+    console.log('--- Coordinator Result ---');
+    result.printResult();
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(coordinator, prompt);
-  console.log('--- Coordinator Result ---');
-  console.log(result.output);
-} finally {
-  await runtime.shutdown();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(coordinator);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents coordinator
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(coordinator);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

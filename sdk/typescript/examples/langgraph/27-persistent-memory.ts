@@ -11,7 +11,7 @@
 import { StateGraph, START, END, Annotation, MemorySaver } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // LLM
@@ -70,12 +70,12 @@ builder.addEdge(START, 'chat');
 builder.addEdge('chat', END);
 
 const checkpointer = new MemorySaver();
-const graph = builder.compile({ checkpointer });
+const graph = builder.compile({ checkpointer, name: "persistent_memory_chatbot" });
 
-// Add agentspan metadata for extraction
+// Add agentspan metadata for graph-structure extraction.
+// Do NOT set tools on StateGraphs — only model + framework.
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',
-  tools: [],
   framework: 'langgraph',
 };
 
@@ -87,18 +87,27 @@ async function main() {
   try {
     console.log('=== Alice\'s conversation ===');
     for (const msg of ['Hi, my name is Alice!', "What's my name?", 'What did I just tell you?']) {
-      const result = await runtime.run(graph, msg, { sessionId: 'alice' });
-      console.log(`Alice: ${msg}`);
-      result.printResult();
-      console.log();
+    const result = await runtime.run(graph, msg, { sessionId: 'alice' });
+    console.log(`Alice: ${msg}`);
+    result.printResult();
+    console.log();
     }
 
     console.log("=== Bob's conversation (separate session) ===");
     for (const msg of ["I'm Bob. I love hiking.", 'What hobby did I mention?']) {
-      const result = await runtime.run(graph, msg, { sessionId: 'bob' });
-      console.log(`Bob: ${msg}`);
-      result.printResult();
-      console.log();
+    const result = await runtime.run(graph, msg, { sessionId: 'bob' });
+    console.log(`Bob: ${msg}`);
+    result.printResult();
+    console.log();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(graph);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/langgraph --agents persistent_memory
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(graph);
     }
   } finally {
     await runtime.shutdown();

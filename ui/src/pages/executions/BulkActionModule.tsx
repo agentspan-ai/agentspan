@@ -62,29 +62,29 @@ export default function BulkActionModule({
   const [tab, setTab] = useState(0);
 
   const { mutate: pauseAction, isLoading: pauseLoading } = useAction(
-    `/workflow/bulk/pause`,
+    `agent/executions/bulk/pause`,
     "put",
     { onSuccess, onError },
   );
   const { mutate: resumeAction, isLoading: resumeLoading } = useAction(
-    `/workflow/bulk/resume`,
+    `agent/executions/bulk/resume`,
     "put",
     { onSuccess, onError },
   );
   const { mutate: restartCurrentAction, isLoading: restartCurrentLoading } =
-    useAction(`/workflow/bulk/restart`, "post", { onSuccess });
+    useAction(`agent/executions/bulk/restart`, "post", { onSuccess });
   const { mutate: restartLatestAction, isLoading: restartLatestLoading } =
-    useAction(`/workflow/bulk/restart?useLatestDefinitions=true`, "post", {
+    useAction(`agent/executions/bulk/restart?useLatestDefinitions=true`, "post", {
       onSuccess,
       onError,
     });
   const { mutate: retryAction, isLoading: retryLoading } = useAction(
-    `/workflow/bulk/retry`,
+    `agent/executions/bulk/retry`,
     "post",
     { onSuccess, onError },
   );
   const { mutate: terminateAction, isLoading: terminateLoading } = useAction(
-    `/workflow/bulk/terminate${maybeTriggerFailureWorkflow()}`,
+    `agent/executions/bulk/terminate${maybeTriggerFailureWorkflow()}`,
     "post",
     { onSuccess, onError },
   );
@@ -97,21 +97,13 @@ export default function BulkActionModule({
     retryLoading ||
     terminateLoading;
 
-  function onSuccess(data: any) {
-    const retval = {
-      bulkErrorResults: Object.entries(data.bulkErrorResults).map(
-        ([key, value]) => ({
-          workflowId: key,
-          message: value,
-        }),
-      ),
-      bulkSuccessfulResults: data.bulkSuccessfulResults.map(
-        (value: string) => ({
-          workflowId: value,
-        }),
-      ),
-    };
-    setResults(retval);
+  function onSuccess() {
+    setResults({
+      bulkErrorResults: [],
+      bulkSuccessfulResults: selectedIds.map((workflowId: string) => ({
+        workflowId,
+      })),
+    });
   }
 
   function onError(error: any) {
@@ -130,7 +122,9 @@ export default function BulkActionModule({
 
   return (
     <Box style={executionsStyles.actionBar}>
-      <Heading level={0}>{selectedRows.length} Workflows Selected.</Heading>
+      <Heading level={0}>
+        {selectedRows.length} {selectedRows.length === 1 ? "Agent" : "Agents"} Selected.
+      </Heading>
       {/*@ts-ignore*/}
       <DropdownButton
         buttonProps={{ disabled: isTrialExpired }}
@@ -205,7 +199,7 @@ export default function BulkActionModule({
                       {
                         id: "workflowId",
                         name: "workflowId",
-                        label: "Workflow Id",
+                        label: "Execution Id",
                       },
                     ]}
                     data={results.bulkSuccessfulResults}
@@ -221,7 +215,7 @@ export default function BulkActionModule({
                       {
                         id: "workflowId",
                         name: "workflowId",
-                        label: "Workflow Id",
+                        label: "Execution Id",
                       },
                       {
                         id: "message",

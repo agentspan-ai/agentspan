@@ -15,13 +15,12 @@
  * Requirements:
  *   - Conductor server with LLM support
  *   - The referenced workers must be running somewhere
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Example 1: Basic external worker reference ------------------------------
 // The function stub defines the schema; no implementation needed.
@@ -35,10 +34,14 @@ const processOrder = tool(
   {
     name: 'process_order',
     description: 'Process a customer order. Actions: refund, cancel, update.',
-    inputSchema: z.object({
-      orderId: z.string().describe('The order ID'),
-      action: z.string().describe('Action to take: refund, cancel, or update'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        orderId: { type: 'string', description: 'The order ID' },
+        action: { type: 'string', description: 'Action to take: refund, cancel, or update' },
+      },
+      required: ['orderId', 'action'],
+    },
     external: true,
   },
 );
@@ -53,10 +56,14 @@ const deleteAccount = tool(
   {
     name: 'delete_account',
     description: 'Permanently delete a user account. Requires manager approval.',
-    inputSchema: z.object({
-      userId: z.string().describe('The user ID to delete'),
-      reason: z.string().describe('Reason for deletion'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        userId: { type: 'string', description: 'The user ID to delete' },
+        reason: { type: 'string', description: 'Reason for deletion' },
+      },
+      required: ['userId', 'reason'],
+    },
     external: true,
     approvalRequired: true,
   },
@@ -73,9 +80,13 @@ const formatResponse = tool(
   {
     name: 'format_response',
     description: 'Format a data dictionary into a human-readable string.',
-    inputSchema: z.object({
-      data: z.record(z.unknown()).describe('Data to format'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        data: { type: 'object', additionalProperties: true, description: 'Data to format' },
+      },
+      required: ['data'],
+    },
   },
 );
 
@@ -86,9 +97,13 @@ const getCustomer = tool(
   {
     name: 'get_customer',
     description: 'Look up customer details from the CRM system.',
-    inputSchema: z.object({
-      customerId: z.string().describe('The customer ID'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        customerId: { type: 'string', description: 'The customer ID' },
+      },
+      required: ['customerId'],
+    },
     external: true,
   },
 );
@@ -100,17 +115,21 @@ const checkInventory = tool(
   {
     name: 'check_inventory',
     description: 'Check product availability in a warehouse.',
-    inputSchema: z.object({
-      productId: z.string().describe('The product ID'),
-      warehouse: z.string().optional().default('default').describe('Warehouse name'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        productId: { type: 'string', description: 'The product ID' },
+        warehouse: { type: 'string', description: 'Warehouse name' },
+      },
+      required: ['productId'],
+    },
     external: true,
   },
 );
 
 // -- Agent: combines local + external tools ----------------------------------
 
-const supportAgent = new Agent({
+export const supportAgent = new Agent({
   name: 'support_agent',
   model: llmModel,
   instructions:
@@ -127,18 +146,31 @@ const supportAgent = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  console.log('=== External Worker Tools ===');
-  console.log('Agent has 1 local tool + 3 external worker references.\n');
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('=== External Worker Tools ===');
+    console.log('Agent has 1 local tool + 3 external worker references.\n');
 
-  const result = await runtime.run(
+    const result = await runtime.run(
     supportAgent,
     'Customer C-1234 wants to cancel order ORD-5678. ' +
     'Look up the customer, check if we have the product in stock, ' +
     'and process the cancellation.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(supportAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents support_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(supportAgent);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

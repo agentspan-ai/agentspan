@@ -11,10 +11,10 @@
 <p align="center">
   <a href="https://pypi.org/project/agentspan/"><img src="https://img.shields.io/pypi/v/agentspan?color=blue" alt="PyPI"></a>
   <a href="https://pypi.org/project/agentspan/"><img src="https://img.shields.io/pypi/dm/agentspan?color=blue" alt="Downloads"></a>
-  <a href="https://github.com/agentspan/agentspan/stargazers"><img src="https://img.shields.io/github/stars/agentspan/agentspan?style=social" alt="Stars"></a>
-  <a href="https://github.com/agentspan/agentspan/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
+  <a href="https://github.com/agentspan-ai/agentspan/stargazers"><img src="https://img.shields.io/github/stars/agentspan-ai/agentspan?style=social" alt="Stars"></a>
+  <a href="https://github.com/agentspan-ai/agentspan/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
   <a href="https://discord.gg/agentspan"><img src="https://img.shields.io/discord/1234567890?label=Discord&logo=discord&color=5865F2" alt="Discord"></a>
-  <a href="https://github.com/agentspan/agentspan/actions"><img src="https://img.shields.io/github/actions/workflow/status/agentspan/agentspan/ci.yml?label=CI" alt="CI"></a>
+  <a href="https://github.com/agentspan-ai/agentspan/actions"><img src="https://img.shields.io/github/actions/workflow/status/agentspan-ai/agentspan/ci.yml?label=CI" alt="CI"></a>
 </p>
 
 <p align="center">
@@ -29,7 +29,7 @@
 
 **Agentspan** is a distributed, durable runtime for running AI agents that survive crashes, scale across machines, and pause for human approval for days — not minutes.
 
-Every other agent SDK runs agents in-memory. When the process dies, the agent dies. Agentspan compiles your agents to durable workflows that execute on a server, giving you reliability, observability, and distributed scaling out of the box.
+Agentspan is the execution layer, not the replacement. Use native Agentspan agents, or bring LangGraph, the OpenAI Agents SDK, or Google ADK — pass your existing agent to `runtime.run()` and it gains crash recovery, human-in-the-loop pauses, and full execution history. Your definitions stay unchanged.
 
 ```python
 from agentspan.agents import Agent, AgentRuntime, tool
@@ -50,27 +50,27 @@ with AgentRuntime() as runtime:
 
 Other frameworks give you a Python library. Agentspan gives you a **production runtime**.
 
-Your agent code compiles to a durable, server-side workflow. The server manages execution, retries, scaling, and state — so your agents keep running even when your process doesn't.
+Your agent code compiles to a durable, server-side execution. The server manages execution, retries, scaling, and state — so your agents keep running even when your process doesn't.
 
 | | CrewAI | LangChain | AutoGen | OpenAI Agents | **Agentspan**                                                          |
 |---|---|---|---|---|------------------------------------------------------------------------|
-| **Execution model** | In-memory | Checkpoints | In-memory | Client-side loop | **Durable workflows**                                                  |
-| **Crash recovery** | Manual replay from checkpoints | Resume from checkpointer (Postgres, Redis) | None (v0.4) | None (Temporal add-on available) | **Automatic — workflow resumes exactly where it left off**             |
+| **Execution model** | In-memory | Checkpoints | In-memory | Client-side loop | **Durable executions**                                                 |
+| **Crash recovery** | Manual replay from checkpoints | Resume from checkpointer (Postgres, Redis) | None (v0.4) | None | **Automatic — execution resumes exactly where it left off**            |
 | **Tool scaling** | Single process | Single process (Platform for managed scaling) | Distributed runtime | Single process | **Distributed workers in any language (Python, Java, Go, etc.)**       |
 | **Human approval** | Stdin-blocking (minutes) | `interrupt()` + checkpointer (days) | Stdin-blocking (minutes) | In-process | **Durable pause — approve from any process, any machine, days later**  |
-| **Cross-process access** | None | Thread ID + checkpointer (rebuild graph) | None | `response_id` (continue only) | **Workflow ID — status, approve, pause, resume, cancel from anywhere** |
+| **Cross-process access** | None | Thread ID + checkpointer (rebuild graph) | None | `response_id` (continue only) | **Execution ID — status, approve, pause, resume, cancel from anywhere** |
 | **Orchestration API** | Crew, Task, Agent, Flow | StateGraph, Node, Edge, ToolNode | AssistantAgent, GroupChat, Swarm, Team | Agent, Runner, Handoff | **One class: `Agent`**                                                 |
 | **Pipeline syntax** | YAML + Python | Graph builder API | Nested class hierarchy | Handoff chains | **`agent_a >> agent_b >> agent_c`**                                    |
 | **Guardrails** | Task guardrails | Middleware-based | Limited | Input, output, tool guardrails | **Custom, regex, LLM — 4 failure modes: retry, raise, fix, human**     |
 | **Code execution** | Docker sandbox | Community packages | Docker, Jupyter | Hosted Code Interpreter | **4 built-in: local, Docker, Jupyter, serverless**                     |
 | **MCP tools** | Manual config | Manual config | Manual config | Manual config | **Auto-discovered, server-side (no worker needed)**                    |
-| **Observability** | OTel + CrewAI AMP | LangSmith + OTel | OTel + AutoGen Studio | Built-in traces | **OTel + Prometheus + visual workflow UI + execution replay**          |
+| **Observability** | OTel + CrewAI AMP | LangSmith + OTel | OTel + AutoGen Studio | Built-in traces | **OTel + Prometheus + visual execution UI + execution replay**         |
 
 ### What makes it different
 
-1. **True durable execution** — Not checkpoints. Not client-side loops. Your agent compiles to a server-side workflow that the Agentspan server executes independently of your process. Deploy new code, restart your machine, kill the process — the agent keeps running. When it finishes, poll for the result from anywhere. This is the same execution model that powers mission-critical systems at scale.
+1. **True durable execution** — Not checkpoints. Not client-side loops. Your agent compiles to a server-side execution that the Agentspan server executes independently of your process. Deploy new code, restart your machine, kill the process — the agent keeps running. When it finishes, poll for the result from anywhere. This is the same execution model that powers mission-critical systems at scale.
 
-2. **Cross-process agent access** — Every running agent has a workflow ID. Any process, on any machine, can use that ID to check status, stream events, approve or reject tool calls, pause, resume, or cancel the agent. No graph rebuilding, no checkpointer setup — just the ID and a runtime connection. LangGraph requires re-instantiating the graph and checkpointer; CrewAI and AutoGen have no cross-process access at all.
+2. **Cross-process agent access** — Every running agent has an execution ID. Any process, on any machine, can use that ID to check status, stream events, approve or reject tool calls, pause, resume, or cancel the agent. No graph rebuilding, no checkpointer setup — just the ID and a runtime connection. LangGraph requires re-instantiating the graph and checkpointer; CrewAI and AutoGen have no cross-process access at all.
 
 3. **Distributed workers in any language** — Tools don't run inside your agent process. They execute as distributed tasks that workers pick up. Write workers in Python, Java, Go, or any language. Scale each tool independently. Load-balance automatically. Your agent process just submits work — the server and workers handle the rest.
 
@@ -78,15 +78,15 @@ Your agent code compiles to a durable, server-side workflow. The server manages 
 
 5. **The `>>` operator** — Compose pipelines with Python syntax: `researcher >> writer >> editor`. No YAML, no graph builders.
 
-6. **Real human-in-the-loop** — `@tool(approval_required=True)` pauses the workflow durably on the server. No process stays alive waiting. Approve from any machine, any process, days later.
+6. **Real human-in-the-loop** — `@tool(approval_required=True)` pauses the execution durably on the server. No process stays alive waiting. Approve from any machine, any process, days later.
 
-7. **Production guardrails** — Custom functions, regex patterns, or LLM judges. Four failure modes: retry, raise, fix, or escalate to human. Guardrails are durable tasks, not post-processing — they survive workflow restarts.
+7. **Production guardrails** — Custom functions, regex patterns, or LLM judges. Four failure modes: retry, raise, fix, or escalate to human. Guardrails are durable tasks, not post-processing — they survive execution restarts.
 
 8. **Server-side tools** — HTTP endpoints and MCP servers execute as server-side tasks. No worker process needed. MCP tools are auto-discovered at compile time.
 
 9. **Code execution sandboxes** — Local subprocess, Docker containers, Jupyter kernels, or serverless functions. Four options, built in.
 
-10. **Full observability** — OpenTelemetry spans, Prometheus metrics, visual workflow UI, execution history, and token/cost tracking — all built in.
+10. **Full observability** — OpenTelemetry spans, Prometheus metrics, visual execution UI, execution history, and token/cost tracking — all built in.
 
 11. **Framework agnostic** — Use Google ADK, Langchain, OpenAI, CrewAI etc to write agents, run on Agentspan's durable execution runtime.
 
@@ -118,7 +118,7 @@ agentspan server logs    # View server logs
 <details><summary>Configure remote Agentspan server connection</summary>
 
 ```bash
-export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+export AGENTSPAN_SERVER_URL=http://localhost:6767/api
 ```
 
 Or use a `.env` file:
@@ -272,7 +272,7 @@ agent = Agent(name="banker", model="openai/gpt-4o", tools=[transfer_funds])
 
 with AgentRuntime() as runtime:
     handle = runtime.start(agent, "Transfer $5000 from checking to savings")
-    # Workflow pauses at transfer_funds...
+    # Execution pauses at transfer_funds...
 
     # Days later, from any process, any machine:
     status = handle.get_status()
@@ -330,7 +330,7 @@ weather_api = http_tool(
     input_schema={"type": "object", "properties": {"city": {"type": "string"}}},
 )
 
-github = mcp_tool(server_url="http://localhost:8080/mcp")  # Auto-discovered
+github = mcp_tool(server_url="http://localhost:6767/mcp")  # Auto-discovered
 
 agent = Agent(name="assistant", model="openai/gpt-4o", tools=[weather_api, github])
 
@@ -452,7 +452,7 @@ Runnable examples covering every feature:
 | [`06_sequential_pipeline.py`](examples/06_sequential_pipeline.py) | `agent >> agent >> agent` |
 | [`07_parallel_agents.py`](examples/07_parallel_agents.py) | Fan-out / fan-in |
 | [`08_router_agent.py`](examples/08_router_agent.py) | LLM routing to specialists |
-| [`09_human_in_the_loop.py`](examples/09_human_in_the_loop.py) | Approval workflows |
+| [`09_human_in_the_loop.py`](examples/09_human_in_the_loop.py) | Approval patterns |
 | [`09b_hitl_with_feedback.py`](examples/09b_hitl_with_feedback.py) | Custom feedback (respond API) |
 | [`09c_hitl_streaming.py`](examples/09c_hitl_streaming.py) | Streaming + HITL approval |
 | [`10_guardrails.py`](examples/10_guardrails.py) | Output validation + retry |
@@ -524,13 +524,13 @@ pipeline = SequentialAgent(name="pipeline", sub_agents=[researcher, writer])
 We're building Agentspan in the open and would love your help.
 
 - **[Discord](https://discord.gg/agentspan)** — Ask questions, share what you're building, get help
-- **[GitHub Issues](https://github.com/agentspan/agentspan/issues)** — Bug reports and feature requests
+- **[GitHub Issues](https://github.com/agentspan-ai/agentspan/issues)** — Bug reports and feature requests
 - **[Contributing Guide](CONTRIBUTING.md)** — How to contribute code, docs, and examples
 
 ### Contributing
 
 ```bash
-git clone https://github.com/agentspan/agentspan.git
+git clone https://github.com/agentspan-ai/agentspan.git
 cd agentspan/sdk/python
 uv venv && source .venv/bin/activate
 uv pip install -e ".[dev]"
@@ -543,10 +543,10 @@ We welcome PRs of all sizes — from typo fixes to new examples to core features
 
 If Agentspan is useful to you, help others find it:
 
-- [Star this repo](https://github.com/agentspan/agentspan) — it helps more than you think
-- [Share on LinkedIn](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/agentspan/agentspan) — tell your network
-- [Share on X/Twitter](https://twitter.com/intent/tweet?text=Agentspan%20%E2%80%94%20AI%20agents%20that%20don%27t%20die%20when%20your%20process%20does.%20Durable%2C%20scalable%2C%20observable.&url=https://github.com/agentspan/agentspan) — spread the word
-- [Share on Reddit](https://www.reddit.com/submit?url=https://github.com/agentspan/agentspan&title=Agentspan%20%E2%80%94%20AI%20agents%20that%20survive%20crashes%2C%20scale%20across%20machines%2C%20and%20pause%20for%20human%20approval%20for%20days) — post in r/MachineLearning or r/LocalLLaMA
+- [Star this repo](https://github.com/agentspan-ai/agentspan) — it helps more than you think
+- [Share on LinkedIn](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/agentspan-ai/agentspan) — tell your network
+- [Share on X/Twitter](https://twitter.com/intent/tweet?text=Agentspan%20%E2%80%94%20AI%20agents%20that%20don%27t%20die%20when%20your%20process%20does.%20Durable%2C%20scalable%2C%20observable.&url=https://github.com/agentspan-ai/agentspan) — spread the word
+- [Share on Reddit](https://www.reddit.com/submit?url=https://github.com/agentspan-ai/agentspan&title=Agentspan%20%E2%80%94%20AI%20agents%20that%20survive%20crashes%2C%20scale%20across%20machines%2C%20and%20pause%20for%20human%20approval%20for%20days) — post in r/MachineLearning or r/LocalLLaMA
 
 ## API Reference
 

@@ -56,7 +56,7 @@ export const runTestTask = async ({
   return tryFunc({
     fn: async () => {
       return await fetchWithContext(
-        "/workflow",
+        "/workflow", // TODO: migrate to agent API
         {},
         {
           method: "POST",
@@ -80,7 +80,7 @@ export const pollForExecutionResult = async ({
   authHeaders: headers,
   testExecutionId,
 }: TestTaskButtonMachineContext) => {
-  const url = `/workflow/${testExecutionId}?summarize=true`;
+  const url = `/workflow/${testExecutionId}?summarize=true`; // TODO: migrate to agent API
   try {
     const result = await queryClient.fetchQuery([fetchContext.stack, url], () =>
       fetchWithContext(url, fetchContext, { headers }),

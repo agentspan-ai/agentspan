@@ -12,12 +12,12 @@
  */
 
 import { LlmAgent, SequentialAgent, LoopAgent } from '@google/adk';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
 // Writer drafts content
-const writer = new LlmAgent({
+export const writer = new LlmAgent({
   name: 'draft_writer',
   model,
   instruction:
@@ -27,7 +27,7 @@ const writer = new LlmAgent({
 });
 
 // Critic reviews and provides feedback
-const critic = new LlmAgent({
+export const critic = new LlmAgent({
   name: 'critic',
   model,
   instruction:
@@ -38,13 +38,13 @@ const critic = new LlmAgent({
 });
 
 // Each iteration: write -> critique
-const iteration = new SequentialAgent({
+export const iteration = new SequentialAgent({
   name: 'write_critique_cycle',
   subAgents: [writer, critic],
 });
 
 // Loop the write-critique cycle 3 times
-const refinementLoop = new LoopAgent({
+export const refinementLoop = new LoopAgent({
   name: 'refinement_loop',
   subAgents: [iteration],
   maxIterations: 3,
@@ -56,11 +56,20 @@ async function main() {
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(
-      refinementLoop,
-      'Write a haiku about autumn leaves',
+    refinementLoop,
+    'Write a haiku about autumn leaves',
     );
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(refinementLoop);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents refinement_loop
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(refinementLoop);
   } finally {
     await runtime.shutdown();
   }

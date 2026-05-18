@@ -343,39 +343,33 @@ export const DataTable: FunctionComponent<DataTableProps> = (props) => {
         (col) => col.id === filterObj.columnName,
       ) as RenderableColumn; // This will search on all columns regardless of the column being omitted
       if (filterObj.substring && filterObj.columnName) {
-        try {
-          const regexp = new RegExp(filterObj.substring, "i");
-          const filterObjFilterFn = (row: any, rowIdx: number) => {
-            let target;
-            if (
-              !_isNil(column?.type) &&
-              (column.type === ColumnCustomType.JSON ||
-                column.type === ColumnCustomType.DATE ||
-                column.searchable === "calculated")
-            ) {
-              target = column.format(row, rowIdx);
+        const searchStr = filterObj.substring.toLowerCase();
+        const filterObjFilterFn = (row: any, rowIdx: number) => {
+          let target;
+          if (
+            !_isNil(column?.type) &&
+            (column.type === ColumnCustomType.JSON ||
+              column.type === ColumnCustomType.DATE ||
+              column.searchable === "calculated")
+          ) {
+            target = column.format(row, rowIdx);
 
-              if (!_isString(target)) {
-                target = JSON.stringify(target);
-              }
-            } else {
-              target = column?.selector(row, rowIdx);
-            }
-
-            // Convert non-string values (including booleans) to strings for regex matching
             if (!_isString(target)) {
-              target = String(target);
+              target = JSON.stringify(target);
             }
+          } else {
+            target = column?.selector(row, rowIdx);
+          }
 
-            return regexp.test(target);
-          };
+          // Convert non-string values (including booleans) to strings for matching
+          if (!_isString(target)) {
+            target = String(target);
+          }
 
-          filtered = filtered.filter(filterObjFilterFn);
-        } catch (e) {
-          // Bad or incomplete Regexp
-          logger.error(e);
-          return [];
-        }
+          return target.toLowerCase().includes(searchStr);
+        };
+
+        filtered = filtered.filter(filterObjFilterFn);
       }
     }
 

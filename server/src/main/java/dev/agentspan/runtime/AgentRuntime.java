@@ -23,15 +23,16 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 import lombok.RequiredArgsConstructor;
 
-@SpringBootApplication(exclude = {DataSourceAutoConfiguration.class, MongoAutoConfiguration.class, MongoDataAutoConfiguration.class})
+@SpringBootApplication(
+        exclude = {DataSourceAutoConfiguration.class, MongoAutoConfiguration.class, MongoDataAutoConfiguration.class})
 @EnableScheduling
 @ComponentScan(
-    basePackages = {
-        "com.netflix.conductor",
-        "io.orkes.conductor",
-        "org.conductoross.conductor",
-        "dev.agentspan.runtime"
-    })
+        basePackages = {
+            "com.netflix.conductor",
+            "io.orkes.conductor",
+            "org.conductoross.conductor",
+            "dev.agentspan.runtime"
+        })
 @RequiredArgsConstructor
 public class AgentRuntime implements ApplicationRunner {
 
@@ -48,7 +49,7 @@ public class AgentRuntime implements ApplicationRunner {
         String dbType = environment.getProperty("conductor.db.type", "memory");
         String queueType = environment.getProperty("conductor.queue.type", "memory");
         String indexingType = environment.getProperty("conductor.indexing.type", "memory");
-        String port = environment.getProperty("server.port", "8080");
+        String port = environment.getProperty("server.port", "6767");
         String contextPath = environment.getProperty("server.servlet.context-path", "");
 
         String hostname;
@@ -69,9 +70,7 @@ public class AgentRuntime implements ApplicationRunner {
         log.info("│  Server Port      : {}", padRight(port, 51) + "│");
         log.info("├────────────────────────────────────────────────────────────────────────┤");
         log.info("│  Server URL       : {}", padRight(serverUrl, 51) + "│");
-        log.info(
-            "│  Swagger UI       : {}",
-            padRight(serverUrl + "/swagger-ui/index.html", 51) + "│");
+        log.info("│  API Docs         : {}", padRight(serverUrl + "/docs/", 51) + "│");
         log.info("└────────────────────────────────────────────────────────────────────────┘");
         log.info("\n\n\n");
 
@@ -80,23 +79,21 @@ public class AgentRuntime implements ApplicationRunner {
 
     private void checkAIProviders(Environment env) {
         Map<String, String> providers = Map.ofEntries(
-            Map.entry("OpenAI", "conductor.ai.openai.api-key"),
-            Map.entry("Anthropic", "conductor.ai.anthropic.api-key"),
-            Map.entry("Google Gemini", "conductor.ai.gemini.api-key"),
-            Map.entry("Mistral", "conductor.ai.mistral.api-key"),
-            Map.entry("Cohere", "conductor.ai.cohere.api-key"),
-            Map.entry("Grok", "conductor.ai.grok.api-key"),
-            Map.entry("Perplexity", "conductor.ai.perplexity.api-key"),
-            Map.entry("HuggingFace", "conductor.ai.huggingface.api-key"),
-            Map.entry("Azure OpenAI", "conductor.ai.azureopenai.api-key"),
-            Map.entry("AWS Bedrock", "conductor.ai.bedrock.access-key")
-        );
+                Map.entry("OpenAI", "conductor.ai.openai.api-key"),
+                Map.entry("Anthropic", "conductor.ai.anthropic.api-key"),
+                Map.entry("Google Gemini", "conductor.ai.gemini.api-key"),
+                Map.entry("Mistral", "conductor.ai.mistral.api-key"),
+                Map.entry("Cohere", "conductor.ai.cohere.api-key"),
+                Map.entry("Grok", "conductor.ai.grok.api-key"),
+                Map.entry("Perplexity", "conductor.ai.perplexity.api-key"),
+                Map.entry("HuggingFace", "conductor.ai.huggingface.api-key"),
+                Map.entry("Azure OpenAI", "conductor.ai.azureopenai.api-key"),
+                Map.entry("AWS Bedrock", "conductor.ai.bedrock.access-key"));
 
-        boolean hasAny = providers.values().stream()
-            .anyMatch(prop -> {
-                String val = env.getProperty(prop);
-                return val != null && !val.isBlank();
-            });
+        boolean hasAny = providers.values().stream().anyMatch(prop -> {
+            String val = env.getProperty(prop);
+            return val != null && !val.isBlank();
+        });
 
         if (!hasAny) {
             log.warn("┌─────────────────────────────────────────────────────────────────┐");
@@ -108,7 +105,7 @@ public class AgentRuntime implements ApplicationRunner {
             log.warn("│    export OPENAI_API_KEY=sk-...                                 │");
             log.warn("│    export ANTHROPIC_API_KEY=sk-ant-...                          │");
             log.warn("│                                                                 │");
-            log.warn("│  Docs: https://github.com/agentspan/agentspan/blob/main/docs/ai-models.md");
+            log.warn("│  Docs: https://github.com/agentspan-ai/agentspan/blob/main/docs/ai-models.md");
             log.warn("└─────────────────────────────────────────────────────────────────┘");
         }
     }

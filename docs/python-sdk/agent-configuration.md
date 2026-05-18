@@ -36,7 +36,7 @@ agent = Agent(
 | `dependencies` | `dict[str, Any]` | `None` | Dependencies injected into tool `ToolContext` at runtime (e.g. DB connections, API clients). |
 | `max_turns` | `int` | `25` | Maximum DoWhile loop iterations. Must be >= 1. |
 | `max_tokens` | `int` | `None` | Maximum tokens for LLM generation. |
-| `timeout_seconds` | `int` | `0` | Workflow-level timeout in seconds. `0` means no timeout. |
+| `timeout_seconds` | `int` | `0` | Execution-level timeout in seconds. `0` means no timeout. |
 | `temperature` | `float` | `None` | LLM sampling temperature. |
 | `stop_when` | `Callable[..., bool]` | `None` | Callable `(context) -> bool` evaluated each loop iteration. Returns `True` to stop the agent. Context dict has `result`, `messages`, `iteration`. |
 | `termination` | `TerminationCondition` | `None` | Composable termination condition. Can be combined with `&` (AND) and `\|` (OR). See [Termination Conditions](#termination-conditions). |
@@ -123,7 +123,7 @@ Tools can request a `ToolContext` by adding a `context` parameter:
 ```python
 @tool
 def my_tool(query: str, context: ToolContext) -> str:
-    print(context.session_id, context.workflow_id, context.agent_name)
+    print(context.session_id, context.execution_id, context.agent_name)
     db = context.dependencies["db"]
     ...
 ```
@@ -131,7 +131,7 @@ def my_tool(query: str, context: ToolContext) -> str:
 | Field | Type | Description |
 |-------|------|-------------|
 | `session_id` | `str` | Session ID for current execution. |
-| `workflow_id` | `str` | Conductor workflow ID. |
+| `execution_id` | `str` | Execution ID. |
 | `agent_name` | `str` | Name of the agent executing this tool. |
 | `metadata` | `dict` | Agent metadata. |
 | `dependencies` | `dict` | User-provided dependencies from `Agent(dependencies={...})`. |
@@ -337,7 +337,7 @@ agent = Agent(
 |-----------|------|---------|-------------|
 | `func` | `Callable` | `None` | Callable that validates content and returns `GuardrailResult`. If `None` and `name` is provided, treated as external (remote worker). |
 | `position` | `str` | `"output"` | `"input"` — validate before LLM call. `"output"` — validate after LLM response. |
-| `on_fail` | `str` | `"retry"` | `"retry"` — re-prompt the LLM with feedback. `"raise"` — terminate the workflow. `"fix"` — use `fixed_output` from `GuardrailResult`. `"human"` — route to human for approval/edit/rejection. |
+| `on_fail` | `str` | `"retry"` | `"retry"` — re-prompt the LLM with feedback. `"raise"` — terminate the execution. `"fix"` — use `fixed_output` from `GuardrailResult`. `"human"` — route to human for approval/edit/rejection. |
 | `name` | `str` | function name | Guardrail name. |
 | `max_retries` | `int` | `3` | Maximum retry attempts for `on_fail="retry"`. After exhausting retries, escalates to `"raise"`. |
 
@@ -609,7 +609,7 @@ agent = Agent(
 ```python
 from agentspan.agents import AgentRuntime
 
-with AgentRuntime(server_url="http://localhost:8080/api") as runtime:
+with AgentRuntime(server_url="http://localhost:6767/api") as runtime:
     result = runtime.run(agent, "Hello!")
 ```
 
@@ -630,7 +630,7 @@ with AgentRuntime(server_url="http://localhost:8080/api") as runtime:
 | `start(agent, prompt, *, media, session_id, idempotency_key)` | `AgentHandle` | Async fire-and-forget. Returns handle for polling/interaction. |
 | `stream(agent, prompt, *, media, session_id)` | `Iterator[AgentEvent]` | Event-based streaming. Yields events as they occur. |
 | `run_async(agent, prompt, *, media, session_id, idempotency_key)` | `AgentResult` | Async execution (awaitable). |
-| `plan(agent)` | `WorkflowDef` | Compile without executing. Returns workflow definition. |
+| `plan(agent)` | `WorkflowDef` | Compile without executing. Returns agent definition. |
 
 Common parameters for execution methods:
 
@@ -646,14 +646,14 @@ Common parameters for execution methods:
 
 | Method | Description |
 |--------|-------------|
-| `get_status(workflow_id)` | Get current agent workflow status. |
-| `respond(workflow_id, output)` | Complete a pending human task with arbitrary output. |
-| `approve(workflow_id)` | Approve a pending human-in-the-loop task. |
-| `reject(workflow_id, reason)` | Reject a pending task. |
-| `send_message(workflow_id, message)` | Send a message to a waiting agent. |
-| `pause(workflow_id)` | Pause an agent workflow. |
-| `resume(workflow_id)` | Resume a paused workflow. |
-| `cancel(workflow_id, reason)` | Cancel an agent workflow. |
+| `get_status(execution_id)` | Get current execution status. |
+| `respond(execution_id, output)` | Complete a pending human task with arbitrary output. |
+| `approve(execution_id)` | Approve a pending human-in-the-loop task. |
+| `reject(execution_id, reason)` | Reject a pending task. |
+| `send_message(execution_id, message)` | Send a message to a waiting agent. |
+| `pause(execution_id)` | Pause an execution. |
+| `resume(execution_id)` | Resume a paused execution. |
+| `cancel(execution_id, reason)` | Cancel an execution. |
 | `shutdown()` | Gracefully shut down runtime and workers. |
 
 ### AgentConfig
@@ -662,7 +662,7 @@ Common parameters for execution methods:
 from agentspan.agents import AgentConfig
 
 config = AgentConfig(
-    server_url="http://localhost:8080/api",
+    server_url="http://localhost:6767/api",
     auth_key="key",
     auth_secret="secret",
     default_timeout_seconds=0,
@@ -678,7 +678,7 @@ config = AgentConfig.from_env()
 | `server_url` | `str` | `""` | `AGENTSPAN_SERVER_URL` | Agentspan server API URL. |
 | `auth_key` | `str` | `None` | `AGENTSPAN_AUTH_KEY` | Auth key. |
 | `auth_secret` | `str` | `None` | `AGENTSPAN_AUTH_SECRET` | Auth secret. |
-| `default_timeout_seconds` | `int` | `0` | `AGENTSPAN_AGENT_TIMEOUT` | Default workflow timeout. `0` = no timeout. |
+| `default_timeout_seconds` | `int` | `0` | `AGENTSPAN_AGENT_TIMEOUT` | Default execution timeout. `0` = no timeout. |
 | `llm_retry_count` | `int` | `3` | `AGENTSPAN_LLM_RETRY_COUNT` | LLM task retry count. |
 | `worker_poll_interval_ms` | `int` | `100` | `AGENTSPAN_WORKER_POLL_INTERVAL` | Worker polling interval (ms). |
 | `worker_thread_count` | `int` | `1` | `AGENTSPAN_WORKER_THREADS` | Threads per worker. |
@@ -701,7 +701,7 @@ from agentspan.agents import AgentResult
 
 result = runtime.run(agent, "Hello!")
 print(result.output)           # Final answer (str or structured type)
-print(result.workflow_id)      # Conductor workflow ID
+print(result.execution_id)     # Execution ID
 print(result.status)           # "COMPLETED", "FAILED", etc.
 print(result.messages)         # Full conversation history
 print(result.tool_calls)       # All tool invocations
@@ -713,17 +713,17 @@ result.print_result()          # Pretty-print output with metadata
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `output` | `Any` | `None` | The agent's final answer. If `output_type` was set, a validated instance of that type. |
-| `workflow_id` | `str` | `""` | Conductor workflow ID (for debugging in the UI). |
+| `execution_id` | `str` | `""` | Execution ID (for debugging in the UI). |
 | `correlation_id` | `str` | `None` | Correlation ID if provided at execution time. |
 | `messages` | `list[dict]` | `[]` | Full conversation history (list of message dicts). |
 | `tool_calls` | `list[dict]` | `[]` | All tool invocations with inputs and outputs. |
 | `status` | `str` | `"COMPLETED"` | Terminal status: `"COMPLETED"`, `"FAILED"`, `"TERMINATED"`, `"TIMED_OUT"`. |
 | `token_usage` | `TokenUsage` | `None` | Aggregated token usage across all LLM calls. |
-| `metadata` | `dict` | `{}` | Extra data from the workflow execution. |
+| `metadata` | `dict` | `{}` | Extra data from the execution. |
 | `finish_reason` | `str` | `None` | LLM finish reason (e.g. `"stop"`, `"LENGTH"`). |
 
 Methods:
-- `print_result()` — Pretty-prints output, tool call count, token usage, finish reason, and workflow ID.
+- `print_result()` — Pretty-prints output, tool call count, token usage, finish reason, and execution ID.
 
 ### TokenUsage
 
@@ -750,7 +750,7 @@ Returned by `start()`. Allows monitoring and interacting with a running agent fr
 from agentspan.agents import AgentHandle
 
 handle = runtime.start(agent, "Analyze reports")
-print(handle.workflow_id)
+print(handle.execution_id)
 
 # Check status
 status = handle.get_status()
@@ -768,18 +768,18 @@ handle.cancel("no longer needed")
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `get_status()` | `AgentStatus` | Fetch current workflow status. |
+| `get_status()` | `AgentStatus` | Fetch current execution status. |
 | `respond(output)` | — | Complete a pending human task with arbitrary output dict. |
 | `approve()` | — | Approve a pending human-in-the-loop task. |
 | `reject(reason)` | — | Reject a pending task with optional reason. |
 | `send(message)` | — | Send a message to a waiting agent (multi-turn). |
-| `pause()` | — | Pause the agent workflow. |
-| `resume()` | — | Resume a paused workflow. |
-| `cancel(reason)` | — | Cancel the workflow with optional reason. |
+| `pause()` | — | Pause the execution. |
+| `resume()` | — | Resume a paused execution. |
+| `cancel(reason)` | — | Cancel the execution with optional reason. |
 
 ### AgentStatus
 
-Returned by `handle.get_status()` or `runtime.get_status(workflow_id)`.
+Returned by `handle.get_status()` or `runtime.get_status(execution_id)`.
 
 ```python
 status = handle.get_status()
@@ -793,12 +793,12 @@ elif status.is_running:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `workflow_id` | `str` | `""` | Conductor workflow ID. |
-| `is_complete` | `bool` | `False` | `True` if the workflow has reached a terminal state. |
-| `is_running` | `bool` | `False` | `True` if the workflow is still executing. |
+| `execution_id` | `str` | `""` | Execution ID. |
+| `is_complete` | `bool` | `False` | `True` if the execution has reached a terminal state. |
+| `is_running` | `bool` | `False` | `True` if the execution is still executing. |
 | `is_waiting` | `bool` | `False` | `True` if paused (e.g. human-in-the-loop). |
 | `output` | `Any` | `None` | Available when `is_complete` is `True`. |
-| `status` | `str` | `""` | Raw Conductor workflow status string. |
+| `status` | `str` | `""` | Raw Conductor status string. |
 | `current_task` | `str` | `None` | Reference name of the currently executing task. |
 | `messages` | `list[dict]` | `[]` | Conversation messages accumulated so far. |
 | `pending_tool` | `dict` | `None` | Tool call awaiting human approval (if `is_waiting`). |
@@ -831,7 +831,7 @@ for event in runtime.stream(agent, "Hello"):
 | `TOOL_CALL` | Agent is invoking a tool. `tool_name` and `args` are set. |
 | `TOOL_RESULT` | Tool returned a result. `tool_name` and `result` are set. |
 | `HANDOFF` | Agent is handing off to another agent. `target` is set. |
-| `WAITING` | Workflow is paused for human input. |
+| `WAITING` | Execution is paused for human input. |
 | `MESSAGE` | Agent produced a text response. `content` is set. |
 | `ERROR` | An error occurred. `content` has the error message. |
 | `DONE` | Execution complete. `output` has the final result. |
@@ -849,7 +849,7 @@ for event in runtime.stream(agent, "Hello"):
 | `result` | `Any` | Tool result (for `TOOL_RESULT`) or final output (for `DONE`). |
 | `target` | `str` | Target agent name (for `HANDOFF`). |
 | `output` | `Any` | Final output (for `DONE`). |
-| `workflow_id` | `str` | Conductor workflow ID. |
+| `execution_id` | `str` | Execution ID. |
 | `guardrail_name` | `str` | Guardrail name (for `GUARDRAIL_PASS/FAIL`). |
 
 ---
@@ -858,7 +858,7 @@ for event in runtime.stream(agent, "Hello"):
 
 ### UserProxyAgent
 
-A human stand-in agent. When it's this agent's turn, the workflow pauses with a `HumanTask` and waits for real human input. Useful in multi-agent conversations where a human participates.
+A human stand-in agent. When it's this agent's turn, the execution pauses with a `HumanTask` and waits for real human input. Useful in multi-agent conversations where a human participates.
 
 ```python
 from agentspan.agents import UserProxyAgent, Agent
@@ -932,7 +932,7 @@ from agentspan.agents import run, start, stream, run_async, plan, shutdown
 | `start(agent, prompt, **kwargs)` | `AgentHandle` | Async fire-and-forget. Returns handle immediately. |
 | `stream(agent, prompt, **kwargs)` | `Iterator[AgentEvent]` | Yields events as they occur. |
 | `run_async(agent, prompt, **kwargs)` | `AgentResult` | Async/await execution. |
-| `plan(agent)` | `WorkflowDef` | Compile without executing. Returns workflow definition. |
+| `plan(agent)` | `WorkflowDef` | Compile without executing. Returns agent definition. |
 | `shutdown()` | — | Explicitly shut down the singleton runtime and workers. |
 
 All execution functions accept `media`, `session_id`, `idempotency_key`, and `runtime` keyword arguments (same as `AgentRuntime` methods).

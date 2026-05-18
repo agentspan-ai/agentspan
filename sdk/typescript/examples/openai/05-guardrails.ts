@@ -20,7 +20,7 @@ import {
 } from '@openai/agents';
 import type { InputGuardrail, OutputGuardrail, GuardrailFunctionOutput } from '@openai/agents';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 setTracingDisabled(true);
 
@@ -115,7 +115,7 @@ const checkOutputSafety: OutputGuardrail = {
 
 // ── Agent with guardrails ───────────────────────────────────────────
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'banking_assistant',
   instructions:
     'You are a secure banking assistant. Help users check account balances ' +
@@ -133,6 +133,15 @@ async function main() {
     const result = await runtime.run(agent, "What's the balance on account ACC-100?");
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/openai --agents banking_assistant
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
   } finally {
     await runtime.shutdown();
   }

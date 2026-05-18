@@ -4,6 +4,11 @@
  */
 package dev.agentspan.runtime.credentials;
 
+import java.util.List;
+import java.util.function.Function;
+
+import javax.crypto.AEADBadTagException;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,9 +16,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
-
-import java.util.List;
-import java.util.function.Function;
 
 /**
  * On startup, seeds the credential store from well-known LLM provider environment variables.
@@ -51,9 +53,11 @@ public class CredentialEnvSeeder implements ApplicationRunner {
     static final List<String> KNOWN_ENV_VARS = List.of(
             // Anthropic (Claude)
             "ANTHROPIC_API_KEY",
+            "ANTHROPIC_BASE_URL",
             // OpenAI (GPT-4, DALL-E, etc.)
             "OPENAI_API_KEY",
             "OPENAI_ORG_ID",
+            "OPENAI_BASE_URL",
             // Google Gemini / AI Studio / Vertex AI
             "GEMINI_API_KEY",
             "GOOGLE_API_KEY",
@@ -62,17 +66,22 @@ public class CredentialEnvSeeder implements ApplicationRunner {
             // Azure OpenAI
             "AZURE_OPENAI_API_KEY",
             "AZURE_OPENAI_ENDPOINT",
+            "AZURE_OPENAI_BASE_URL",
             "AZURE_OPENAI_DEPLOYMENT",
             // Mistral AI
             "MISTRAL_API_KEY",
+            "MISTRAL_BASE_URL",
             // Cohere
             "COHERE_API_KEY",
+            "COHERE_BASE_URL",
             // xAI / Grok
             "XAI_API_KEY",
+            "GROK_BASE_URL",
             // Groq
             "GROQ_API_KEY",
             // Perplexity
             "PERPLEXITY_API_KEY",
+            "PERPLEXITY_BASE_URL",
             // HuggingFace
             "HUGGINGFACE_API_KEY",
             "HUGGINGFACE_API_TOKEN",
@@ -93,8 +102,7 @@ public class CredentialEnvSeeder implements ApplicationRunner {
             "AWS_REGION",
             "BEDROCK_API_KEY",
             // Ollama (local inference)
-            "OLLAMA_HOST"
-    );
+            "OLLAMA_HOST");
 
     private final CredentialStoreProvider storeProvider;
     private final Function<String, String> envLookup;
@@ -130,22 +138,48 @@ public class CredentialEnvSeeder implements ApplicationRunner {
                 continue;
             }
 
-            String existing = storeProvider.get(ANONYMOUS_USER_ID, name);
+            String existing;
+            try {
+                existing = storeProvider.get(ANONYMOUS_USER_ID, name);
+            } catch (Exception e) {
+                if (!(e.getCause() instanceof AEADBadTagException)) {
+                    throw e; // not a key mismatch — propagate (e.g. DB connection failure)
+                }
+                log.warn(
+                        "Credential '{}' could not be decrypted (master key mismatch?) — "
+                                + "re-seeding from environment variable",
+                        name,
+                        e);
+                try {
+                    storeProvider.delete(ANONYMOUS_USER_ID, name);
+                    storeProvider.set(ANONYMOUS_USER_ID, name, value);
+                    created++;
+                } catch (Exception re) {
+                    log.warn("Credential '{}' could not be re-seeded — skipping", name, re);
+                }
+                continue;
+            }
+
             if (existing != null) {
-                log.warn("Credential '{}' already exists in store — skipping env import. " +
-                         "To update the value, use the Credentials UI.", name);
+                log.warn(
+                        "Credential '{}' already exists in store — skipping env import. "
+                                + "To update the value, use the Credentials UI.",
+                        name);
                 skipped++;
                 continue;
             }
 
-            storeProvider.set(ANONYMOUS_USER_ID, name, value);
-            log.info("Credential seeded from environment: {}", name);
-            created++;
+            try {
+                storeProvider.set(ANONYMOUS_USER_ID, name, value);
+                log.info("Credential seeded from environment: {}", name);
+                created++;
+            } catch (Exception e) {
+                log.warn("Credential '{}' could not be seeded — skipping: {}", name, e.getMessage());
+            }
         }
 
         if (created > 0 || skipped > 0) {
-            log.info("Credential env seeding complete: {} created, {} already existed (skipped)",
-                     created, skipped);
+            log.info("Credential env seeding complete: {} created, {} already existed (skipped)", created, skipped);
         }
     }
 }

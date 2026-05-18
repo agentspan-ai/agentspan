@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/agentspan/agentspan/cli/client"
+	"github.com/agentspan-ai/agentspan/cli/client"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
@@ -21,11 +21,10 @@ var (
 var runCmd = &cobra.Command{
 	Use:   "run [prompt]",
 	Short: "Start an agent and stream its output",
-	Long: `Start a registered agent by name with a prompt,
+	Long: `Start an agent by name or config file with a prompt,
 and stream the execution events in real-time.
 
-The agent must have been previously registered via the /api/agent/start endpoint.
-Alternatively, provide a config file with --config.`,
+Use --name for a previously deployed agent, or --config for a local config file.`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: runAgent,
 }
@@ -36,7 +35,7 @@ func init() {
 	runCmd.Flags().StringVar(&runAgentName, "name", "", "Name of a registered agent to run")
 	runCmd.Flags().StringVar(&runConfigFile, "config", "", "Path to agent config file (YAML/JSON)")
 	runCmd.Flags().StringVar(&runSessionID, "session", "", "Session ID for conversation continuity")
-	runCmd.Flags().BoolVar(&runNoStream, "no-stream", false, "Don't stream events, just return the workflow ID")
+	runCmd.Flags().BoolVar(&runNoStream, "no-stream", false, "Don't stream events, just return the execution ID")
 	agentCmd.AddCommand(runCmd)
 }
 
@@ -86,31 +85,27 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to start agent: %w", err)
 	}
 
-	fmt.Printf("Workflow: %s (ID: %s)\n", resp.WorkflowName, resp.WorkflowID)
+	fmt.Printf("Agent: %s (Execution: %s)\n", resp.AgentName, resp.ExecutionID)
 
 	if runNoStream {
 		return nil
 	}
 
 	fmt.Println()
-	return streamWorkflow(c, resp.WorkflowID)
+	return streamExecution(c, resp.ExecutionID, "")
 }
 
-func streamWorkflow(c *client.Client, workflowID string) error {
+func streamExecution(c *client.Client, executionID string, lastEventID string) error {
 	events := make(chan client.SSEEvent, 100)
 	done := make(chan error, 1)
 
-	c.Stream(workflowID, "", events, done)
+	c.Stream(executionID, lastEventID, events, done)
 
-	for {
-		select {
-		case evt, ok := <-events:
-			if !ok {
-				return nil
-			}
-			printSSEEvent(evt)
-		case err := <-done:
-			return err
-		}
+	// Drain all events first, then read the final error from done.
+	// This avoids a non-deterministic select race where Go could pick
+	// the closed events channel over a real error sitting in done.
+	for evt := range events {
+		printSSEEvent(evt)
 	}
+	return <-done
 }

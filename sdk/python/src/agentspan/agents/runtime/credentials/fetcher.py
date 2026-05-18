@@ -3,19 +3,14 @@
 
 """WorkerCredentialFetcher — resolves credentials for a Conductor task.
 
-Resolution order:
-  1. If execution token present: POST /api/credentials/resolve
-     - 401 → raise CredentialAuthError (no fallback)
-     - 429 → raise CredentialRateLimitError (no fallback)
-     - 5xx → raise CredentialServiceError (no fallback)
-     - 200 with missing names → raise CredentialNotFoundError (no env fallback)
-  2. If token absent (local dev, no server): read from os.environ
+Credentials are ALWAYS resolved from the server via POST /api/credentials/resolve.
+There is no env var fallback. If the execution token is missing or credentials
+are not stored on the server, the tool fails with a non-retryable error.
 """
 
 from __future__ import annotations
 
 import logging
-import os
 from typing import Dict, List, Optional
 
 import httpx
@@ -34,13 +29,13 @@ class WorkerCredentialFetcher:
     """Fetches credentials for a worker task execution.
 
     Args:
-        server_url: Base URL of the agentspan server API (e.g. ``"http://localhost:8080/api"``).
+        server_url: Base URL of the agentspan server API (e.g. ``"http://localhost:6767/api"``).
         api_key: Optional Bearer token or API key for the Authorization header.
     """
 
     def __init__(
         self,
-        server_url: str = "http://localhost:8080/api",
+        server_url: str = "http://localhost:6767/api",
         strict_mode: bool = False,
         api_key: Optional[str] = None,
     ) -> None:
@@ -55,18 +50,15 @@ class WorkerCredentialFetcher:
         execution_token: Optional[str],
         names: List[str],
     ) -> Dict[str, str]:
-        """Resolve credential values for *names* in this execution context.
+        """Resolve credential values for *names* from the server.
 
-        When an execution token is present, credentials are fetched from the
-        server. If the server doesn't have a credential, it is reported as
-        missing — there is NO env var fallback for declared credentials.
-
-        When no token is present (local dev), credentials are read from
-        os.environ as a convenience.
+        Credentials are always fetched from the server. There is no env var
+        fallback. If the execution token is missing, this raises
+        CredentialNotFoundError so the task fails with a non-retryable error.
 
         Args:
             execution_token: The ``__agentspan_ctx__`` token from Conductor task
-                variables. ``None`` or empty string means local dev (no server).
+                variables.
             names: Logical credential names to resolve (e.g. ``["GITHUB_TOKEN"]``).
 
         Returns:
@@ -76,14 +68,17 @@ class WorkerCredentialFetcher:
             CredentialAuthError: Token expired/revoked (401).
             CredentialRateLimitError: Rate limit hit (429).
             CredentialServiceError: Server unreachable or 5xx.
-            CredentialNotFoundError: Credential(s) not found on server.
+            CredentialNotFoundError: Credential(s) not found on server or no token.
         """
         if not names:
             return {}
 
         if not execution_token:
-            # Local dev / no server — read from env
-            return self._env_lookup(names)
+            raise CredentialNotFoundError(
+                names,
+                "No execution token available. "
+                "Store credentials on the server with: agentspan credentials set --name <NAME>",
+            )
 
         return self._fetch_from_server(execution_token, names)
 
@@ -134,17 +129,3 @@ class WorkerCredentialFetcher:
 
         return resolved
 
-    def _env_lookup(
-        self,
-        names: List[str],
-    ) -> Dict[str, str]:
-        """Read *names* from ``os.environ`` (local dev only)."""
-        result = {n: os.environ[n] for n in names if n in os.environ}
-        missing = [n for n in names if n not in result]
-        if missing:
-            logger.warning(
-                "Local dev mode (no execution token). "
-                "Credentials not found in os.environ: %s",
-                missing,
-            )
-        return result

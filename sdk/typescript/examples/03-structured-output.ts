@@ -6,20 +6,23 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
-const WeatherReport = z.object({
-  city: z.string(),
-  temperature: z.number(),
-  condition: z.string(),
-  recommendation: z.string(),
-});
+const WeatherReport = {
+  type: 'object',
+  properties: {
+    city: { type: 'string' },
+    temperature: { type: 'number' },
+    condition: { type: 'string' },
+    recommendation: { type: 'string' },
+  },
+  required: ['city', 'temperature', 'condition', 'recommendation'],
+};
 
 const getWeather = tool(
   async (args: { city: string }) => {
@@ -28,13 +31,17 @@ const getWeather = tool(
   {
     name: 'get_weather',
     description: 'Get current weather data for a city.',
-    inputSchema: z.object({
-      city: z.string().describe('The city to get weather for'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        city: { type: 'string', description: 'The city to get weather for' },
+      },
+      required: ['city'],
+    },
   },
 );
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'weather_reporter',
   model: llmModel,
   tools: [getWeather],
@@ -43,10 +50,23 @@ const agent = new Agent({
     'You are a weather reporter. Get the weather and provide a recommendation.',
 });
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(agent, "What's the weather in NYC?");
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(agent, "What's the weather in NYC?");
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents weather_reporter
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

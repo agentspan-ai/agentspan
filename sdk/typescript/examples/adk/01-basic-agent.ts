@@ -12,11 +12,11 @@
  */
 
 import { LlmAgent } from '@google/adk';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
-const agent = new LlmAgent({
+export const agent = new LlmAgent({
   name: 'greeter',
   model,
   instruction: 'You are a friendly assistant. Keep your responses concise and helpful.',
@@ -28,11 +28,20 @@ async function main() {
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(
-      agent,
-      'Say hello and tell me a fun fact about machine learning.',
+    agent,
+    'Say hello and tell me a fun fact about machine learning.',
     );
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents greeter
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
   } finally {
     await runtime.shutdown();
   }

@@ -1,16 +1,16 @@
 <p align="center">
-  <img src="https://github.com/agentspan/agentspan/raw/main/assets/logo-light.png#gh-light-mode-only" alt="Agentspan" width="400">
-  <img src="https://github.com/agentspan/agentspan/raw/main/assets/logo-dark.png#gh-dark-mode-only" alt="Agentspan" width="400">
+  <img src="https://github.com/agentspan-ai/agentspan/raw/main/assets/logo-light.png#gh-light-mode-only" alt="Agentspan" width="400">
+  <img src="https://github.com/agentspan-ai/agentspan/raw/main/assets/logo-dark.png#gh-dark-mode-only" alt="Agentspan" width="400">
 </p>
 
 <p align="center">
-  <a href="https://github.com/agentspan/agentspan/stargazers"><img src="https://img.shields.io/github/stars/agentspan/agentspan?style=social" alt="Stars"></a>
-  <a href="https://github.com/agentspan/agentspan/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
+  <a href="https://github.com/agentspan-ai/agentspan/stargazers"><img src="https://img.shields.io/github/stars/agentspan-ai/agentspan?style=social" alt="Stars"></a>
+  <a href="https://github.com/agentspan-ai/agentspan/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
   <a href="https://discord.gg/agentspan"><img src="https://img.shields.io/discord/1234567890?label=Discord&logo=discord&color=5865F2" alt="Discord"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/agentspan/agentspan">Main Repo</a> &bull;
+  <a href="https://github.com/agentspan-ai/agentspan">Main Repo</a> &bull;
   <a href="https://docs.agentspan.dev">Docs</a> &bull;
   <a href="https://discord.gg/agentspan">Discord</a> &bull;
   <a href="../sdk/python/">Python SDK</a> &bull;
@@ -21,7 +21,7 @@
 
 # Agentspan Server
 
-The durable runtime server that executes AI agents as workflows. Compiles agent definitions into orchestrated workflows, manages LLM interactions, tool execution, streaming, and human-in-the-loop approvals — independently of the client process.
+The durable runtime server that executes AI agents. Compiles agent definitions into orchestrated executions, manages LLM interactions, tool execution, streaming, and human-in-the-loop approvals — independently of the client process.
 
 ## Quickstart
 
@@ -35,8 +35,11 @@ The durable runtime server that executes AI agents as workflows. Compiles agent 
 ```bash
 cd server
 
-# Build
+# Build the server JAR using the checked-in embedded UI
 ./gradlew bootJar
+
+# Refresh the embedded UI and package it into the JAR
+./gradlew bootJar -PbuildUI=true
 
 # Run with default config (SQLite)
 java -jar build/libs/agentspan-runtime.jar
@@ -50,6 +53,14 @@ Or use the CLI:
 ```bash
 agentspan server start --local
 ```
+
+For container builds:
+
+```bash
+docker build -f server/Dockerfile -t agentspan/server:latest .
+```
+
+`bootJar` does not rebuild the UI by default. That keeps local Java builds fast for developers. Release packaging that needs the latest embedded frontend should use `-PbuildUI=true`, or run `./gradlew syncUiStatic` explicitly before building.
 
 ### Set LLM provider API keys
 
@@ -70,9 +81,9 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | `GET` | `/` | Health check |
 | `POST` | `/compile` | Compile AgentConfig → WorkflowDef (no execution) |
 | `POST` | `/start` | Compile, register, and execute an agent |
-| `GET` | `/stream/{workflowId}` | SSE event stream (supports `Last-Event-ID` for reconnection) |
-| `POST` | `/{workflowId}/respond` | HITL response (approve/deny/message) |
-| `GET` | `/{workflowId}/status` | Polling-based execution status |
+| `GET` | `/stream/{executionId}` | SSE event stream (supports `Last-Event-ID` for reconnection) |
+| `POST` | `/{executionId}/respond` | HITL response (approve/deny/message) |
+| `GET` | `/{executionId}/status` | Polling-based execution status |
 | `GET` | `/list` | List all registered agents |
 | `GET` | `/get/{name}` | Get agent definition (`?version=X` optional) |
 | `DELETE` | `/delete/{name}` | Delete agent definition (`?version=X` optional) |
@@ -93,7 +104,26 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | `error` | Error occurred |
 | `done` | Agent execution completed |
 
-Reconnection is supported via `Last-Event-ID` header. Events are buffered in memory (up to 200 per workflow).
+Reconnection is supported via `Last-Event-ID` header. Events are buffered in memory (up to 200 per execution).
+
+### API Documentation
+
+A static API docs page is served at `/docs` (built from `docs/` at compile time). The OpenAPI JSON spec is still available at `/api-docs`.
+
+**Regenerating API Docs** (after changing endpoints):
+
+```bash
+# 1. Save the latest spec from a running server
+curl http://localhost:6767/api-docs > ui/api-docs-ui/api-docs.json
+
+# 2. Regenerate the TypeScript data file
+./docs/regenerate.sh
+
+# 3. Commit both files
+git add ui/api-docs-ui/api-docs.json ui/api-docs-ui/src/generated-api-data.ts
+```
+
+The next `./gradlew build` or `bootRun` picks up the changes automatically.
 
 ## Database
 
@@ -258,7 +288,7 @@ See [`examples/adk/35_rag_agent.py`](../sdk/python/examples/adk/35_rag_agent.py)
 
 | Property | Env Var | Default |
 |----------|---------|---------|
-| `server.port` | `SERVER_PORT` | `8080` |
+| `server.port` | `SERVER_PORT` | `6767` |
 | `conductor.db.type` | — | `sqlite` |
 | `spring.datasource.url` | `SPRING_DATASOURCE_URL` | `jdbc:sqlite:agent-runtime.db` |
 | `spring.datasource.username` | `SPRING_DATASOURCE_USERNAME` | — |
@@ -333,6 +363,9 @@ The server is a Spring Boot application (Java 21) built on top of [Conductor](ht
 
 ```bash
 ./gradlew bootJar
+
+# Or refresh the embedded UI before packaging
+./gradlew bootJar -PbuildUI=true
 ```
 
 ### Run tests
@@ -372,14 +405,14 @@ server/
 ## Community
 
 - **[Discord](https://discord.gg/agentspan)** — Ask questions, share what you're building, get help
-- **[GitHub Issues](https://github.com/agentspan/agentspan/issues)** — Bug reports and feature requests
+- **[GitHub Issues](https://github.com/agentspan-ai/agentspan/issues)** — Bug reports and feature requests
 - **[Contributing Guide](../CONTRIBUTING.md)** — How to contribute
 
 If Agentspan is useful to you, help others find it:
 
-- [Star the repo](https://github.com/agentspan/agentspan) — it helps more than you think
-- [Share on LinkedIn](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/agentspan/agentspan) — tell your network
-- [Share on X/Twitter](https://twitter.com/intent/tweet?text=Agentspan%20%E2%80%94%20AI%20agents%20that%20don%27t%20die%20when%20your%20process%20does.%20Durable%2C%20scalable%2C%20observable.&url=https://github.com/agentspan/agentspan) — spread the word
+- [Star the repo](https://github.com/agentspan-ai/agentspan) — it helps more than you think
+- [Share on LinkedIn](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/agentspan-ai/agentspan) — tell your network
+- [Share on X/Twitter](https://twitter.com/intent/tweet?text=Agentspan%20%E2%80%94%20AI%20agents%20that%20don%27t%20die%20when%20your%20process%20does.%20Durable%2C%20scalable%2C%20observable.&url=https://github.com/agentspan-ai/agentspan) — spread the word
 
 ## License
 

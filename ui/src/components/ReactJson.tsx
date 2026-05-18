@@ -111,19 +111,21 @@ export default function ReactJson({
 
   const toggleDownload = () => {
     const a = window.document.createElement("a");
-    a.href = window.URL.createObjectURL(
+    const url = window.URL.createObjectURL(
       new Blob([JSON.stringify(props.src, null, 2)], {
         type: "application/json",
       }),
     );
+    a.href = url;
     a.download = `${props.workflowName}_${title}.json`;
 
     // Append anchor to body.
     document.body.appendChild(a);
     a.click();
 
-    // Remove anchor from body
+    // Cleanup
     document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
   };
 
   const toggleFullscreen = () => {
@@ -253,7 +255,7 @@ export default function ReactJson({
               )}
             </>
           )}
-          <Tooltip title="Download workflow JSON">
+          <Tooltip title="Download JSON">
             <Button
               variant="text"
               color="inherit"

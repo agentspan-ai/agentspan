@@ -15,14 +15,14 @@
  */
 
 import { LlmAgent } from '@google/adk';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
 // ── Sub-agents ───────────────────────────────────────────────────────
 
 // Sub-agent with no parent context
-const independentSummarizer = new LlmAgent({
+export const independentSummarizer = new LlmAgent({
   name: 'independent_summarizer',
   model,
   description: 'Summarizes text without any prior conversation context.',
@@ -32,7 +32,7 @@ const independentSummarizer = new LlmAgent({
 });
 
 // Sub-agent that sees parent context (default)
-const contextAwareHelper = new LlmAgent({
+export const contextAwareHelper = new LlmAgent({
   name: 'context_aware_helper',
   model,
   description: 'A helpful assistant that builds on prior conversation context.',
@@ -42,7 +42,7 @@ const contextAwareHelper = new LlmAgent({
 
 // ── Coordinator ──────────────────────────────────────────────────────
 
-const coordinator = new LlmAgent({
+export const coordinator = new LlmAgent({
   name: 'coordinator',
   model,
   instruction:
@@ -57,13 +57,22 @@ async function main() {
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(
-      coordinator,
-      "Please summarize this: 'The quick brown fox jumps over the lazy dog. " +
-        'This sentence contains every letter of the alphabet and is commonly ' +
-        "used for typography testing.'",
+    coordinator,
+    "Please summarize this: 'The quick brown fox jumps over the lazy dog. " +
+    'This sentence contains every letter of the alphabet and is commonly ' +
+    "used for typography testing.'",
     );
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(coordinator);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents coordinator
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(coordinator);
   } finally {
     await runtime.shutdown();
   }

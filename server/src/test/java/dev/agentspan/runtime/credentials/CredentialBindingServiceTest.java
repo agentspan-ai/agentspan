@@ -4,6 +4,12 @@
  */
 package dev.agentspan.runtime.credentials;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.time.Instant;
+import java.util.Map;
+import java.util.Optional;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,12 +17,8 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+
 import dev.agentspan.runtime.AgentRuntime;
-
-import java.util.Map;
-import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(classes = AgentRuntime.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @ActiveProfiles("test")
@@ -34,9 +36,15 @@ class CredentialBindingServiceTest {
     @BeforeEach
     void setUp() {
         jdbc.update("DELETE FROM credentials_binding WHERE user_id = :uid", Map.of("uid", USER_ID));
-        jdbc.update("INSERT OR IGNORE INTO users (id, name, email, username, password_hash, created_at) " +
-            "VALUES (:id, 'Binding Test', '', 'binding_test_user', '', datetime('now'))",
-            Map.of("id", USER_ID));
+        // Portable upsert: update first; insert only if the user row doesn't exist yet.
+        // Avoids SQLite-specific "INSERT OR IGNORE" and "datetime('now')" syntax.
+        int updated = jdbc.update("UPDATE users SET name = 'Binding Test' WHERE id = :id", Map.of("id", USER_ID));
+        if (updated == 0) {
+            jdbc.update(
+                    "INSERT INTO users (id, name, email, username, password_hash, created_at) "
+                            + "VALUES (:id, 'Binding Test', '', 'binding_test_user', '', :now)",
+                    Map.of("id", USER_ID, "now", Instant.now().toString()));
+        }
     }
 
     @Test
@@ -76,7 +84,6 @@ class CredentialBindingServiceTest {
 
         var bindings = bindingService.listBindings(USER_ID);
 
-        assertThat(bindings).containsEntry("KEY_A", "store-a")
-                             .containsEntry("KEY_B", "store-b");
+        assertThat(bindings).containsEntry("KEY_A", "store-a").containsEntry("KEY_B", "store-b");
     }
 }

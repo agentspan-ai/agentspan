@@ -248,16 +248,16 @@ module Agentspan
 
   AgentEvent = Data.define(
     :type, :content, :tool_name, :args, :result,
-    :target, :output, :workflow_id, :guardrail_name
+    :target, :output, :execution_id, :guardrail_name
   ) do
     def initialize(type:, content: nil, tool_name: nil, args: nil,
                    result: nil, target: nil, output: nil,
-                   workflow_id: nil, guardrail_name: nil)
+                   execution_id: nil, guardrail_name: nil)
       super
     end
   end
 
-  DeploymentInfo = Data.define(:workflow_name, :agent_name)
+  DeploymentInfo = Data.define(:registered_name, :agent_name)
 
   ExecutionResult = Data.define(:output, :error, :exit_code, :timed_out) do
     def success? = exit_code == 0 && !timed_out
@@ -282,9 +282,9 @@ module Agentspan
   end
 
   ToolContext = Data.define(
-    :session_id, :workflow_id, :agent_name, :metadata, :dependencies, :state
+    :session_id, :execution_id, :agent_name, :metadata, :dependencies, :state
   ) do
-    def initialize(session_id: nil, workflow_id: nil, agent_name: nil,
+    def initialize(session_id: nil, execution_id: nil, agent_name: nil,
                    metadata: {}, dependencies: {}, state: {})
       super
     end
@@ -299,7 +299,7 @@ end
 ```ruby
 module Agentspan
   class AgentResult
-    attr_reader :output, :workflow_id, :correlation_id, :messages,
+    attr_reader :output, :execution_id, :correlation_id, :messages,
                 :tool_calls, :status, :finish_reason, :error,
                 :token_usage, :metadata, :events, :sub_results
 
@@ -319,7 +319,7 @@ module Agentspan
   end
 
   class AgentStatus
-    attr_reader :workflow_id, :is_complete, :is_running, :is_waiting,
+    attr_reader :execution_id, :is_complete, :is_running, :is_waiting,
                 :output, :status, :reason, :current_task, :messages,
                 :pending_tool
 
@@ -665,8 +665,8 @@ require "async/http/internet"
 # Async execution
 Async do |task|
   # Concurrent SSE + polling
-  sse_task = task.async { sse_client.connect(workflow_id) }
-  poll_task = task.async { poller.start(workflow_id) }
+  sse_task = task.async { sse_client.connect(execution_id) }
+  poll_task = task.async { poller.start(execution_id) }
 
   # Wait for first to complete
   result = sse_task.wait
@@ -812,7 +812,7 @@ module Agentspan
       if ctx_data && accepts_context?(@function)
         tool_ctx = ToolContext.new(
           session_id:  ctx_data["sessionId"],
-          workflow_id: ctx_data["workflowId"],
+          execution_id: ctx_data["executionId"],
           agent_name:  ctx_data["agentName"],
           metadata:    ctx_data.fetch("metadata", {}),
           state:       ctx_data.fetch("state", {})
@@ -950,7 +950,7 @@ end
 
 ## 6. SSE Client
 
-The SSE client connects to `GET /agent/stream/{workflowId}`, parses the SSE wire format line by line, handles heartbeats, and reconnects on failure using `Last-Event-ID`.
+The SSE client connects to `GET /agent/stream/{executionId}`, parses the SSE wire format line by line, handles heartbeats, and reconnects on failure using `Last-Event-ID`.
 
 ### Core SSE Client
 
@@ -1057,7 +1057,7 @@ module Agentspan
         return AgentEvent.new(
           type: type,
           content: data["content"],
-          workflow_id: data["workflowId"]
+          execution_id: data["executionId"]
         )
       end
 
@@ -1069,7 +1069,7 @@ module Agentspan
         result:         data["result"],
         target:         data["target"],
         output:         data["output"],
-        workflow_id:    data["workflowId"],
+        execution_id:   data["executionId"],
         guardrail_name: data["guardrailName"]
       )
     end
@@ -1100,10 +1100,10 @@ module Agentspan
   class AgentStream
     include Enumerable
 
-    attr_reader :workflow_id, :events
+    attr_reader :execution_id, :events
 
-    def initialize(workflow_id:, sse_client:, http_client:)
-      @workflow_id = workflow_id
+    def initialize(execution_id:, sse_client:, http_client:)
+      @execution_id = execution_id
       @sse_client  = sse_client
       @http        = http_client
       @events      = []
@@ -1146,14 +1146,14 @@ module Agentspan
     private
 
     def respond_hitl(**payload)
-      @http.post("/agent/#{@workflow_id}/respond", payload.to_json)
+      @http.post("/agent/#{@execution_id}/respond", payload.to_json)
     end
 
     def build_result
       done_event = @events.find { |e| e.type == EventType::DONE }
       AgentResult.new(
         output:      done_event&.output,
-        workflow_id: @workflow_id,
+        execution_id: @execution_id,
         events:      @events,
         status:      done_event ? Status::COMPLETED : Status::FAILED,
         token_usage: extract_token_usage
@@ -1162,7 +1162,7 @@ module Agentspan
 
     def extract_token_usage
       # Pull from status endpoint if not in events
-      status = @http.get("/agent/#{@workflow_id}/status")
+      status = @http.get("/agent/#{@execution_id}/status")
       data = JSON.parse(status.body)
       tu = data["tokenUsage"]
       return nil unless tu
@@ -1368,7 +1368,7 @@ module Agentspan
 
         AgentResult.new(
           output:      output,
-          workflow_id: "mock-#{SecureRandom.uuid}",
+          execution_id: "mock-#{SecureRandom.uuid}",
           status:      Status::COMPLETED,
           events:      events,
           tool_calls:  @tool_calls,
@@ -1495,7 +1495,7 @@ module Agentspan
       def event_to_hash(e)
         { type: e.type, content: e.content, tool_name: e.tool_name,
           args: e.args, result: e.result, target: e.target,
-          output: e.output, workflow_id: e.workflow_id,
+          output: e.output, execution_id: e.execution_id,
           guardrail_name: e.guardrail_name }
       end
     end
@@ -1637,8 +1637,8 @@ research_database = Agentspan::ToolDef.new(
   credentials: [Agentspan::CredentialFile.new(env_var: "RESEARCH_API_KEY")]
 ) do |query:, ctx: nil|
   session  = ctx&.session_id || "unknown"
-  workflow = ctx&.workflow_id || "unknown"
-  { query: query, session_id: session, workflow_id: workflow,
+  execution = ctx&.execution_id || "unknown"
+  { query: query, session_id: session, execution_id: execution,
     results: MOCK_RESEARCH_DATA.fetch("quantum_computing", {}) }
 end
 
@@ -2100,7 +2100,7 @@ begin
   # Deploy
   puts "=== Deploy ==="
   deployments = runtime.deploy(full_pipeline)
-  deployments.each { |dep| puts "  Deployed: #{dep.workflow_name} (#{dep.agent_name})" }
+  deployments.each { |dep| puts "  Deployed: #{dep.registered_name} (#{dep.agent_name})" }
 
   # Plan (dry-run)
   puts "\n=== Plan (dry-run) ==="
@@ -2110,7 +2110,7 @@ begin
   # Stream with HITL
   puts "\n=== Stream Execution ==="
   agent_stream = runtime.stream(full_pipeline, PROMPT)
-  puts "  Workflow: #{agent_stream.workflow_id}\n"
+  puts "  Execution: #{agent_stream.execution_id}\n"
 
   hitl_state = { approved: 0, rejected: 0, feedback: 0 }
 
@@ -2169,7 +2169,7 @@ begin
   # Start + polling
   puts "\n=== Start + Polling ==="
   handle = runtime.start(full_pipeline, PROMPT)
-  puts "  Started: #{handle.workflow_id}"
+  puts "  Started: #{handle.execution_id}"
   status = handle.get_status
   puts "  Status: #{status.status}, Running: #{status.running?}"
   puts "  Reason: #{status.reason}" if status.reason

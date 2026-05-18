@@ -7,7 +7,7 @@
  */
 
 import { z } from 'zod';
-import { Agent, AgentRuntime } from '../../src/index.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
 
 // ── Schema ───────────────────────────────────────────────
 const PersonSchema = z.object({
@@ -20,7 +20,7 @@ const PersonSchema = z.object({
 type Person = z.infer<typeof PersonSchema>;
 
 // ── Native Agent with structured output ──────────────────
-const agent = new Agent({
+export const agent = new Agent({
   name: 'structured_output_agent',
   model: 'openai/gpt-4o-mini',
   instructions: 'Generate fictional but realistic profiles when asked.',
@@ -44,6 +44,15 @@ async function main() {
     console.log('Skills:', person.skills);
 
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/vercel-ai --agents structured_output_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
   } finally {
     await runtime.shutdown();
   }

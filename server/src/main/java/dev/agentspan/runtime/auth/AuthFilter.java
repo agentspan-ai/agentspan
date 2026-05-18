@@ -4,11 +4,18 @@
  */
 package dev.agentspan.runtime.auth;
 
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import java.io.IOException;
+import java.time.Instant;
+import java.util.Base64;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,10 +23,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import java.io.IOException;
-import java.time.Instant;
-import java.util.Optional;
-import java.util.UUID;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import dev.agentspan.runtime.credentials.ExecutionTokenService;
 
 /**
  * Auth filter — populates RequestContextHolder on every request.
@@ -41,8 +47,8 @@ public class AuthFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(AuthFilter.class);
 
-    private static final User ANONYMOUS = new User(
-        "00000000-0000-0000-0000-000000000000", "Anonymous", "", "anonymous");
+    private static final User ANONYMOUS =
+            new User("00000000-0000-0000-0000-000000000000", "Anonymous", "", "anonymous");
 
     private final UserRepository userRepository;
     private final ApiKeyRepository apiKeyRepository;
@@ -52,9 +58,10 @@ public class AuthFilter extends OncePerRequestFilter {
     private ExecutionTokenService executionTokenService;
 
     @Autowired
-    public AuthFilter(UserRepository userRepository,
-                      ApiKeyRepository apiKeyRepository,
-                      @Value("${agentspan.auth.enabled:true}") boolean authEnabled) {
+    public AuthFilter(
+            UserRepository userRepository,
+            ApiKeyRepository apiKeyRepository,
+            @Value("${agentspan.auth.enabled:true}") boolean authEnabled) {
         this.userRepository = userRepository;
         this.apiKeyRepository = apiKeyRepository;
         this.authEnabled = authEnabled;
@@ -67,9 +74,7 @@ public class AuthFilter extends OncePerRequestFilter {
     }
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain chain)
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         try {
             if (!authEnabled) {
@@ -117,11 +122,11 @@ public class AuthFilter extends OncePerRequestFilter {
 
     private void setContext(User user, String token, HttpServletRequest request) {
         RequestContext ctx = RequestContext.builder()
-            .requestId(UUID.randomUUID().toString())
-            .user(user)
-            .executionToken(token)
-            .createdAt(Instant.now())
-            .build();
+                .requestId(UUID.randomUUID().toString())
+                .user(user)
+                .executionToken(token)
+                .createdAt(Instant.now())
+                .build();
         RequestContextHolder.set(ctx);
     }
 
@@ -143,10 +148,10 @@ public class AuthFilter extends OncePerRequestFilter {
         try {
             String[] parts = token.split("\\.");
             if (parts.length != 3) return Optional.empty();
-            String payloadJson = new String(java.util.Base64.getUrlDecoder().decode(parts[1]));
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            String payloadJson = new String(Base64.getUrlDecoder().decode(parts[1]));
+            ObjectMapper mapper = new ObjectMapper();
             @SuppressWarnings("unchecked")
-            java.util.Map<String, Object> claims = mapper.readValue(payloadJson, java.util.Map.class);
+            Map<String, Object> claims = mapper.readValue(payloadJson, Map.class);
             String username = (String) claims.get("sub");
             if (username == null) return Optional.empty();
             return userRepository.findByUsername(username);

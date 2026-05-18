@@ -8,11 +8,12 @@ package dev.agentspan.runtime.controller;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import dev.agentspan.runtime.credentials.CredentialResolutionService;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+
+import dev.agentspan.runtime.credentials.CredentialResolutionService;
+import dev.agentspan.runtime.credentials.ExecutionTokenService;
 
 @ControllerAdvice
 public class AgentExceptionHandler {

@@ -11,7 +11,7 @@ In the Conductor UI you'll see each tool call as a separate task
 
 Requirements:
     - Conductor server with LLM support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -38,7 +38,19 @@ agent = Agent(
     instructions="You are a helpful assistant. Use tools to answer questions.",
 )
 
-with AgentRuntime() as runtime:
-    # The LLM will call get_weather (not get_stock_price)
-    result = runtime.run(agent, "What's the weather like in San Francisco?")
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # The LLM will call get_weather (not get_stock_price)
+        result = runtime.run(agent, "What's the weather like in San Francisco?")
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.02a_simple_tools
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
+

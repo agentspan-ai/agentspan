@@ -106,7 +106,7 @@ export const OPERATOR_TASKS: BaseTaskMenuItem[] = [
   {
     name: "Wait",
     description:
-      "Add timer in your workflow. Wait for specific duration, time or a signal.",
+      "Add timer in your agent. Wait for specific duration, time or a signal.",
     type: TaskType.WAIT,
     category: RichAddMenuTabs.OPERATORS_TAB,
   },
@@ -123,20 +123,20 @@ export const OPERATOR_TASKS: BaseTaskMenuItem[] = [
     category: RichAddMenuTabs.OPERATORS_TAB,
   },
   {
-    name: "Sub Workflow",
-    description: "Execute a sub workflow.",
+    name: "Sub Agent",
+    description: "Execute a sub agent.",
     type: TaskType.SUB_WORKFLOW,
     category: RichAddMenuTabs.OPERATORS_TAB,
   },
   {
-    name: "Terminate Workflow",
-    description: "Terminate another workflow.",
+    name: "Terminate Agent",
+    description: "Terminate another execution.",
     type: TaskType.TERMINATE_WORKFLOW,
     category: RichAddMenuTabs.OPERATORS_TAB,
   },
   {
     name: "Terminate",
-    description: "Terminate the workflow.",
+    description: "Terminate the execution.",
     type: TaskType.TERMINATE,
     category: RichAddMenuTabs.OPERATORS_TAB,
   },
@@ -153,14 +153,14 @@ export const OPERATOR_TASKS: BaseTaskMenuItem[] = [
     category: RichAddMenuTabs.OPERATORS_TAB,
   },
   {
-    name: "Start Workflow Task",
-    description: "Start Workflow starts another workflow.",
+    name: "Start Agent Task",
+    description: "Starts another agent.",
     type: TaskType.START_WORKFLOW,
     category: RichAddMenuTabs.OPERATORS_TAB,
   },
   {
-    name: "Get Workflow",
-    description: "Get workflow details",
+    name: "Get Agent",
+    description: "Get execution details",
     type: TaskType.GET_WORKFLOW,
     category: RichAddMenuTabs.OPERATORS_TAB,
   },
@@ -202,7 +202,7 @@ const getPluginTaskMenuItems = (): BaseTaskMenuItem[] => {
 
 /**
  * AI/LLM Tasks for Agentic Orchestration
- * These are AI-powered tasks for building intelligent workflows.
+ * These are AI-powered tasks for building intelligent agents.
  */
 export const AI_TASKS: BaseTaskMenuItem[] = [
   {

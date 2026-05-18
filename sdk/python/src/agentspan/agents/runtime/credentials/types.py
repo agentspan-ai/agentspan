@@ -37,10 +37,13 @@ class CredentialNotFoundError(AgentspanError):
     ``agentspan credentials set --name <NAME>``.
     """
 
-    def __init__(self, missing_names: List[str]) -> None:
+    def __init__(self, missing_names: List[str], detail: str = "") -> None:
         self.missing_names = list(missing_names)
         names_str = ", ".join(missing_names)
-        super().__init__(f"Required credentials not found: {names_str}")
+        msg = f"Required credentials not found: {names_str}"
+        if detail:
+            msg += f". {detail}"
+        super().__init__(msg)
 
 
 class CredentialAuthError(AgentspanError):

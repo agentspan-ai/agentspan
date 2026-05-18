@@ -1,7 +1,5 @@
 import { Component, ErrorInfo, ReactNode } from "react";
 import { Box } from "@mui/material";
-// import { reportErrorToHeap, isHeapEnabled } from "utils";
-
 import { reportErrorToLogRocket, isLogRocketEnabled } from "utils";
 interface Props {
   children?: ReactNode;
@@ -25,9 +23,6 @@ class ErrorBoundary extends Component<Props, State> {
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("Uncaught error:", error, errorInfo);
 
-    // if (isHeapEnabled()) {
-    //   reportErrorToHeap(error);
-    // }
     if (isLogRocketEnabled()) {
       reportErrorToLogRocket(error);
     }

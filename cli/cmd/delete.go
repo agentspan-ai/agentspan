@@ -14,7 +14,7 @@ var deleteVersion int
 
 var deleteCmd = &cobra.Command{
 	Use:   "delete <name>",
-	Short: "Delete an agent workflow definition",
+	Short: "Delete an agent definition",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := getConfig()

@@ -1,6 +1,6 @@
 export const testWorkflowDefOrExecutionViewPathname = (pathname: string) => {
   return (
-    /^\/workflowDef\/.*$/.test(pathname) ||
+    /^\/agentDef\/.*$/.test(pathname) ||
     /^\/execution\/.*$/.test(pathname) ||
     pathname.startsWith("/newWorkflowDef")
   );

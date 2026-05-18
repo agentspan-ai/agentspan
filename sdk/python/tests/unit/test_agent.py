@@ -462,8 +462,8 @@ class TestAgentCredentials:
         assert "GITHUB_TOKEN" in a.credentials
         assert "OPENAI_API_KEY" in a.credentials
 
-    def test_cli_allowed_commands_automapped_gh(self):
-        """gh → GITHUB_TOKEN, GH_TOKEN auto-mapped when no explicit credentials."""
+    def test_cli_allowed_commands_without_credentials_stays_empty(self):
+        """CLI commands without explicit credentials produce empty credentials list."""
         from agentspan.agents.agent import Agent
         a = Agent(
             name="test_agent",
@@ -471,42 +471,31 @@ class TestAgentCredentials:
             cli_commands=True,
             cli_allowed_commands=["gh", "git"],
         )
-        assert "GITHUB_TOKEN" in a.credentials
-        assert "GH_TOKEN" in a.credentials
+        assert a.credentials == []
 
-    def test_cli_allowed_commands_automapped_aws(self):
+    def test_cli_allowed_commands_with_explicit_credentials(self):
+        """Explicit credentials are required — no auto-mapping from CLI commands."""
         from agentspan.agents.agent import Agent
         a = Agent(
             name="test_agent",
             model="openai/gpt-4o",
             cli_commands=True,
             cli_allowed_commands=["aws"],
+            credentials=["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
         )
         assert "AWS_ACCESS_KEY_ID" in a.credentials
         assert "AWS_SECRET_ACCESS_KEY" in a.credentials
 
-    def test_cli_allowed_commands_no_dup_in_credentials(self):
-        """gh and git both map to GITHUB_TOKEN — deduplication required."""
+    def test_terraform_without_credentials_allowed(self):
+        """terraform in cli_allowed_commands without credentials is allowed (no auto-mapping)."""
         from agentspan.agents.agent import Agent
         a = Agent(
             name="test_agent",
             model="openai/gpt-4o",
             cli_commands=True,
-            cli_allowed_commands=["gh", "git"],
+            cli_allowed_commands=["terraform"],
         )
-        # GITHUB_TOKEN should appear only once
-        assert a.credentials.count("GITHUB_TOKEN") == 1
-
-    def test_terraform_without_credentials_raises_configuration_error(self):
-        """terraform in cli_allowed_commands without explicit credentials is an error."""
-        from agentspan.agents.agent import Agent, ConfigurationError
-        with pytest.raises(ConfigurationError, match="terraform"):
-            Agent(
-                name="test_agent",
-                model="openai/gpt-4o",
-                cli_commands=True,
-                cli_allowed_commands=["terraform"],
-            )
+        assert a.credentials == []
 
     def test_terraform_with_explicit_credentials_does_not_raise(self):
         """terraform is fine when explicit credentials are declared."""
@@ -546,3 +535,38 @@ class TestAgentCredentials:
         # Only explicit credentials, no auto-mapped ones added on top
         assert a.credentials == ["MY_CUSTOM_TOKEN"]
         assert "GITHUB_TOKEN" not in a.credentials
+
+
+class TestMaskedFields:
+    """Tests for masked_fields data masking feature (#181)."""
+
+    def test_masked_fields_default_empty(self):
+        agent = Agent(name="a", model="openai/gpt-4o")
+        assert agent.masked_fields == []
+
+    def test_masked_fields_stored(self):
+        agent = Agent(
+            name="a",
+            model="openai/gpt-4o",
+            masked_fields=["ssn", "api_key", "password"],
+        )
+        assert agent.masked_fields == ["ssn", "api_key", "password"]
+
+    def test_masked_fields_serialized(self):
+        from agentspan.agents.config_serializer import AgentConfigSerializer
+
+        agent = Agent(
+            name="pii_agent",
+            model="openai/gpt-4o",
+            instructions="Help the user.",
+            masked_fields=["ssn", "credit_card"],
+        )
+        config = AgentConfigSerializer().serialize(agent)
+        assert config["maskedFields"] == ["ssn", "credit_card"]
+
+    def test_no_masked_fields_omitted_from_serialization(self):
+        from agentspan.agents.config_serializer import AgentConfigSerializer
+
+        agent = Agent(name="b", model="openai/gpt-4o")
+        config = AgentConfigSerializer().serialize(agent)
+        assert "maskedFields" not in config

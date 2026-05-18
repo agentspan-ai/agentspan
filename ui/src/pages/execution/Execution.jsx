@@ -14,7 +14,7 @@ import ButtonLinks from "components/v1/layout/header/ButtonLinks";
 import { ConductorSectionHeader } from "components/v1/layout/section/ConductorSectionHeader";
 import { SidebarContext } from "components/Sidebar/context/SidebarContext";
 import { path as _path } from "lodash/fp";
-import { useContext, useMemo } from "react";
+import { useContext, useMemo, useState } from "react";
 import { Helmet } from "react-helmet";
 import { useLocation } from "react-router";
 import { colors } from "theme/tokens/variables";
@@ -75,7 +75,7 @@ const SecondaryActions = ({
             endIcon={<LaunchIcon />}
             sx={{ minWidth: "fit-content" }}
           >
-            Parent Workflow
+            Parent Execution
           </Button>
         )}
 
@@ -95,7 +95,7 @@ const SecondaryActions = ({
                 startIcon={<OpenIcon />}
                 sx={{ minWidth: "fit-content" }}
                 component={NavLink}
-                to={`/workflowDef/${encodeURIComponent(
+                to={`/agentDef/${encodeURIComponent(
                   execution.workflowType || execution.workflowName,
                 )}/${execution.workflowVersion}`}
               >
@@ -174,25 +174,53 @@ const FailureAlert = ({ failedWFLink, alertText }) => {
   );
 };
 
-const ReasonForIncompletion = ({ reason, navigate, location }) => {
+const ReasonForIncompletion = ({ reason }) => {
+  const [expanded, setExpanded] = useState(false);
+
   if (!reason) return null;
 
   if (reason.length >= 300) {
     return (
       <Box>
-        {reason.substr(0, 60)}... [
-        <MuiTypography
-          component="span"
-          color="#1976d2"
-          fontWeight="bold"
-          cursor="pointer"
-          onClick={() => {
-            navigate(`${location.pathname}?tab=summary`);
-          }}
-        >
-          View full message
-        </MuiTypography>
-        ]
+        {expanded ? (
+          <>
+            <Box
+              sx={{
+                maxHeight: 300,
+                overflowY: "auto",
+                fontFamily: "monospace",
+                whiteSpace: "pre-wrap",
+                fontSize: "12px",
+                lineHeight: 1.5,
+              }}
+            >
+              {reason}
+            </Box>
+            <MuiTypography
+              component="span"
+              color="#1976d2"
+              fontWeight="bold"
+              cursor="pointer"
+              onClick={() => setExpanded(false)}
+            >
+              [Collapse]
+            </MuiTypography>
+          </>
+        ) : (
+          <>
+            {reason.substring(0, 200)}... [
+            <MuiTypography
+              component="span"
+              color="#1976d2"
+              fontWeight="bold"
+              cursor="pointer"
+              onClick={() => setExpanded(true)}
+            >
+              View full message
+            </MuiTypography>
+            ]
+          </>
+        )}
       </Box>
     );
   }
@@ -206,9 +234,6 @@ const ExecutionAlert = ({
   failedTaskWithReason,
   handleJumpToTask,
 }) => {
-  const navigate = usePushHistory();
-  const location = useLocation();
-
   if (
     execution?.rateLimited ||
     (execution?.reasonForIncompletion &&
@@ -233,8 +258,6 @@ const ExecutionAlert = ({
           ) : (
             <ReasonForIncompletion
               reason={execution?.reasonForIncompletion}
-              navigate={navigate}
-              location={location}
             />
           )}
         </Box>
@@ -611,7 +634,7 @@ export default function Execution() {
                   {failureWorkflowId && (
                     <FailureAlert
                       failedWFLink={failureWorkflowId}
-                      alertText="Triggered by workflow failure"
+                      alertText="Triggered by agent failure"
                     />
                   )}
 
@@ -620,7 +643,7 @@ export default function Execution() {
                       failedWFLink={
                         execution.output["conductor.failure_workflow"]
                       }
-                      alertText="Triggered failure workflow"
+                      alertText="Triggered failure agent"
                     />
                   )}
 

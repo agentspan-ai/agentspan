@@ -25,7 +25,7 @@ terminationGracePeriodSeconds: 30
 
 service:
   type: ClusterIP
-  port: 8080
+  port: 6767
 
 ingress:
   enabled: false
@@ -111,6 +111,10 @@ secrets:
   # Expected keys: POSTGRES_USER, POSTGRES_PASSWORD, provider API key names below.
   existingSecret: ""
   create: true
+
+  # Master key for credential encryption (AES-256-GCM, base64-encoded 32 bytes)
+  # Generate with: openssl rand -base64 32
+  masterKey: ""
 
   postgresUser: agentspan
   postgresPassword: changeme

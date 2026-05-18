@@ -4,9 +4,9 @@
  */
 package dev.agentspan.runtime.ai;
 
-import dev.agentspan.runtime.auth.RequestContextHolder;
-import dev.agentspan.runtime.credentials.CredentialResolutionService;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import java.util.List;
+import java.util.Map;
+
 import org.conductoross.conductor.ai.AIModel;
 import org.conductoross.conductor.ai.AIModelProvider;
 import org.conductoross.conductor.ai.ModelConfiguration;
@@ -14,11 +14,12 @@ import org.conductoross.conductor.ai.models.LLMWorkerInput;
 import org.conductoross.conductor.ai.providers.anthropic.AnthropicConfiguration;
 import org.conductoross.conductor.ai.providers.azureopenai.AzureOpenAIConfiguration;
 import org.conductoross.conductor.ai.providers.cohere.CohereAIConfiguration;
+import org.conductoross.conductor.ai.providers.gemini.GeminiVertex;
+import org.conductoross.conductor.ai.providers.gemini.GeminiVertexConfiguration;
 import org.conductoross.conductor.ai.providers.grok.GrokAIConfiguration;
 import org.conductoross.conductor.ai.providers.huggingface.HuggingFaceConfiguration;
 import org.conductoross.conductor.ai.providers.mistral.MistralAIConfiguration;
 import org.conductoross.conductor.ai.providers.openai.OpenAIConfiguration;
-import org.conductoross.conductor.ai.providers.gemini.GeminiVertexConfiguration;
 import org.conductoross.conductor.ai.providers.perplexity.PerplexityAIConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,8 +27,11 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
-import java.util.Map;
+import com.netflix.conductor.sdk.workflow.executor.task.TaskContext;
+
+import dev.agentspan.runtime.auth.RequestContextHolder;
+import dev.agentspan.runtime.credentials.CredentialResolutionService;
+import dev.agentspan.runtime.credentials.ExecutionTokenService;
 
 /**
  * Per-user LLM model provider that creates fresh AIModel instances with
@@ -49,17 +53,26 @@ public class AgentspanAIModelProvider extends AIModelProvider {
 
     /** Maps Conductor provider names to credential env var names. */
     private static final Map<String, String> PROVIDER_TO_ENV_VAR = Map.ofEntries(
-        Map.entry("openai",      "OPENAI_API_KEY"),
-        Map.entry("anthropic",   "ANTHROPIC_API_KEY"),
-        Map.entry("mistral",     "MISTRAL_API_KEY"),
-        Map.entry("cohere",      "COHERE_API_KEY"),
-        Map.entry("grok",        "XAI_API_KEY"),
-        Map.entry("perplexity",  "PERPLEXITY_API_KEY"),
-        Map.entry("huggingface", "HUGGINGFACE_API_KEY"),
-        Map.entry("azureopenai", "AZURE_OPENAI_API_KEY"),
-        Map.entry("gemini",        "GEMINI_API_KEY"),
-        Map.entry("google_gemini", "GEMINI_API_KEY")
-    );
+            Map.entry("openai", "OPENAI_API_KEY"),
+            Map.entry("anthropic", "ANTHROPIC_API_KEY"),
+            Map.entry("mistral", "MISTRAL_API_KEY"),
+            Map.entry("cohere", "COHERE_API_KEY"),
+            Map.entry("grok", "XAI_API_KEY"),
+            Map.entry("perplexity", "PERPLEXITY_API_KEY"),
+            Map.entry("huggingface", "HUGGINGFACE_API_KEY"),
+            Map.entry("azureopenai", "AZURE_OPENAI_API_KEY"),
+            Map.entry("gemini", "GEMINI_API_KEY"),
+            Map.entry("google_gemini", "GEMINI_API_KEY"));
+
+    /** Maps Conductor provider names to base URL env var names. */
+    private static final Map<String, String> PROVIDER_TO_BASE_URL_ENV = Map.ofEntries(
+            Map.entry("openai", "OPENAI_BASE_URL"),
+            Map.entry("anthropic", "ANTHROPIC_BASE_URL"),
+            Map.entry("mistral", "MISTRAL_BASE_URL"),
+            Map.entry("cohere", "COHERE_BASE_URL"),
+            Map.entry("grok", "GROK_BASE_URL"),
+            Map.entry("perplexity", "PERPLEXITY_BASE_URL"),
+            Map.entry("azureopenai", "AZURE_OPENAI_BASE_URL"));
 
     private final CredentialResolutionService resolutionService;
     private final ExecutionTokenService tokenService;
@@ -82,18 +95,27 @@ public class AgentspanAIModelProvider extends AIModelProvider {
             return super.getModel(input);
         }
 
+        // Resolve per-agent base URL (from task input) or env var fallback
+        String baseUrl = resolveBaseUrl(provider);
+
         // Try per-user credential resolution
-        log.info("getModel called for provider='{}' model='{}'", provider, input.getModel());
+        log.debug("getModel called for provider='{}' model='{}'", provider, input.getModel());
         String userApiKey = resolveUserApiKey(provider);
-        log.info("resolveUserApiKey('{}') returned: {}", provider, userApiKey != null ? "key found" : "null");
-        if (userApiKey != null) {
+        log.debug("resolveUserApiKey('{}') returned: {}", provider, userApiKey != null ? "key found" : "null");
+        if (userApiKey != null || baseUrl != null) {
             try {
-                AIModel model = createModelWithKey(provider, userApiKey);
-                if (model != null) {
-                    log.info("Per-user AIModel created for provider '{}'", provider);
-                    // Register in provider map so Conductor's executor can find it
-                    getProviderToLLM().put(provider.toLowerCase(), model);
-                    return model;
+                // If we have a base URL but no user key, try the server-wide key
+                if (userApiKey == null) {
+                    String envVar = PROVIDER_TO_ENV_VAR.get(provider.toLowerCase());
+                    userApiKey = envVar != null ? System.getenv(envVar) : null;
+                }
+                if (userApiKey != null) {
+                    AIModel model = createModelWithKey(provider, userApiKey, baseUrl);
+                    if (model != null) {
+                        log.debug("Per-user AIModel created for provider '{}' baseUrl='{}'", provider, baseUrl);
+                        getProviderToLLM().put(provider.toLowerCase(), model);
+                        return model;
+                    }
                 }
             } catch (Exception e) {
                 log.warn("Failed to create per-user AIModel for '{}': {}", provider, e.getMessage(), e);
@@ -123,9 +145,8 @@ public class AgentspanAIModelProvider extends AIModelProvider {
 
         // Fall back to RequestContextHolder (works during HTTP request, e.g. compile)
         if (userId == null) {
-            userId = RequestContextHolder.get()
-                .map(ctx -> ctx.getUser().getId())
-                .orElse(null);
+            userId =
+                    RequestContextHolder.get().map(ctx -> ctx.getUser().getId()).orElse(null);
         }
 
         // Fall back to anonymous user (OSS / no-auth mode)
@@ -147,13 +168,12 @@ public class AgentspanAIModelProvider extends AIModelProvider {
     @SuppressWarnings("unchecked")
     private String extractUserIdFromTaskContext() {
         try {
-            com.netflix.conductor.sdk.workflow.executor.task.TaskContext ctx =
-                com.netflix.conductor.sdk.workflow.executor.task.TaskContext.get();
+            TaskContext ctx = TaskContext.get();
             if (ctx == null || ctx.getTask() == null) return null;
 
             Object agentspanCtx = ctx.getTask().getInputData().get("__agentspan_ctx__");
             String token = null;
-            if (agentspanCtx instanceof Map<?,?> ctxMap) {
+            if (agentspanCtx instanceof Map<?, ?> ctxMap) {
                 token = (String) ctxMap.get("execution_token");
             } else if (agentspanCtx instanceof String s) {
                 token = s;
@@ -167,14 +187,25 @@ public class AgentspanAIModelProvider extends AIModelProvider {
     }
 
     /**
+     * Returns true if the provider is available: either configured at startup (via environment
+     * variables / application.properties) or has an API key credential in the current user's store.
+     *
+     * <p>Used by {@link dev.agentspan.runtime.util.ProviderValidator} so that credentials
+     * added via the UI take effect immediately without requiring a server restart.</p>
+     */
+    public boolean isProviderConfigured(String provider) {
+        if (getProviderToLLM().containsKey(provider.toLowerCase())) return true;
+        return resolveUserApiKey(provider) != null;
+    }
+
+    /**
      * Resolve any named credential for the current user.
      */
     private String resolveUserCredential(String credentialName) {
         String userId = extractUserIdFromTaskContext();
         if (userId == null) {
-            userId = RequestContextHolder.get()
-                .map(ctx -> ctx.getUser().getId())
-                .orElse(null);
+            userId =
+                    RequestContextHolder.get().map(ctx -> ctx.getUser().getId()).orElse(null);
         }
         if (userId == null) {
             userId = "00000000-0000-0000-0000-000000000000";
@@ -187,40 +218,66 @@ public class AgentspanAIModelProvider extends AIModelProvider {
     }
 
     /**
-     * Create a fresh AIModel instance with a per-user API key.
-     * Uses the server-wide model's base URL/endpoint config as defaults,
-     * only overriding the API key.
+     * Resolve base URL: per-agent (from task input) &gt; credential store &gt; null.
+     *
+     * <p>The credential store is the single source of truth. Env-var-set base URLs are
+     * seeded into the store at startup by {@link CredentialEnvSeeder}, so
+     * {@code System.getenv()} is never read directly here.</p>
      */
-    private AIModel createModelWithKey(String provider, String apiKey) {
-        // Get the server-wide model to inherit base URL and other config
-        AIModel serverModel = getProviderToLLM().get(provider.toLowerCase());
-        String baseUrl = null;
+    @SuppressWarnings("unchecked")
+    private String resolveBaseUrl(String provider) {
+        // 1. Per-agent base URL from task input
+        try {
+            TaskContext ctx = TaskContext.get();
+            if (ctx != null && ctx.getTask() != null) {
+                Object taskBaseUrl = ctx.getTask().getInputData().get("baseUrl");
+                if (taskBaseUrl instanceof String s && !s.isBlank()) {
+                    log.debug("Using per-agent baseUrl for provider '{}': {}", provider, s);
+                    return s;
+                }
+            }
+        } catch (Exception e) {
+            // ignore
+        }
 
-        ModelConfiguration<? extends AIModel> config = switch (provider.toLowerCase()) {
-            case "openai" -> {
-                var c = new OpenAIConfiguration(apiKey, null, null);
-                yield c;
-            }
-            case "anthropic" -> {
-                var c = new AnthropicConfiguration(apiKey, null, null, null, null);
-                yield c;
-            }
-            case "azureopenai" -> {
-                var c = new AzureOpenAIConfiguration(apiKey, null, null, null);
-                yield c;
-            }
-            case "mistral" -> new MistralAIConfiguration(apiKey, null);
-            case "cohere" -> new CohereAIConfiguration(apiKey, null);
-            case "grok" -> new GrokAIConfiguration(apiKey, null);
-            case "huggingface" -> {
-                var c = new HuggingFaceConfiguration();
-                c.setApiKey(apiKey);
-                yield c;
-            }
-            case "perplexity" -> new PerplexityAIConfiguration(apiKey, null);
-            case "gemini", "google_gemini" -> null; // Handled below
-            default -> null;
-        };
+        String envVarName = PROVIDER_TO_BASE_URL_ENV.get(provider.toLowerCase());
+        if (envVarName == null) return null;
+
+        // 2. Credential store — covers both env-var-seeded credentials (populated at startup
+        //    by CredentialEnvSeeder) and credentials added manually via the UI.
+        //    Direct System.getenv() is intentionally not used here: env vars are always
+        //    seeded into the credential store at startup, so the store is the single
+        //    source of truth and avoids bypassing external credential stores.
+        String credVal = resolveUserCredential(envVarName);
+        if (credVal != null && !credVal.isBlank()) {
+            log.debug("Using credential {} for provider '{}': {}", envVarName, provider, credVal);
+            return credVal;
+        }
+
+        return null;
+    }
+
+    /**
+     * Create a fresh AIModel instance with a per-user API key and optional base URL.
+     */
+    private AIModel createModelWithKey(String provider, String apiKey, String baseUrl) {
+        ModelConfiguration<? extends AIModel> config =
+                switch (provider.toLowerCase()) {
+                    case "openai" -> new OpenAIConfiguration(apiKey, baseUrl, null);
+                    case "anthropic" -> new AnthropicConfiguration(apiKey, baseUrl, null, null, null);
+                    case "azureopenai" -> new AzureOpenAIConfiguration(apiKey, baseUrl, null, null);
+                    case "mistral" -> new MistralAIConfiguration(apiKey, baseUrl);
+                    case "cohere" -> new CohereAIConfiguration(apiKey, baseUrl);
+                    case "grok" -> new GrokAIConfiguration(apiKey, baseUrl);
+                    case "huggingface" -> {
+                        var c = new HuggingFaceConfiguration();
+                        c.setApiKey(apiKey);
+                        yield c;
+                    }
+                    case "perplexity" -> new PerplexityAIConfiguration(apiKey, baseUrl);
+                    case "gemini", "google_gemini" -> null; // Handled below
+                    default -> null;
+                };
 
         if (config != null) {
             return config.get();
@@ -237,7 +294,8 @@ public class AgentspanAIModelProvider extends AIModelProvider {
 
     /**
      * Create a Gemini model using API key auth via REST transport.
-     * This avoids the Vertex AI gRPC path which requires IAM credentials.
+     * Uses the upstream GeminiVertex which handles the API key path properly
+     * with GoogleGenAiChatModel (full tool calling support).
      */
     private AIModel createGeminiApiKeyModel(String apiKey) {
         String projectId = resolveUserCredential("GOOGLE_CLOUD_PROJECT");
@@ -245,6 +303,6 @@ public class AgentspanAIModelProvider extends AIModelProvider {
         config.setApiKey(apiKey);
         config.setProjectId(projectId != null ? projectId : "google-ai-studio");
         config.setLocation("us-central1");
-        return new GeminiApiKeyModel(config, apiKey);
+        return new GeminiVertex(config);
     }
 }

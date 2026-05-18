@@ -16,7 +16,7 @@
  *
  * Setup (one-time, via CLI):
  *   agentspan login                                     # authenticate
- *   agentspan credentials set --name GITHUB_TOKEN       # enter token when prompted
+ *   agentspan credentials set GITHUB_TOKEN <your-github-token> # enter token when prompted
  *
  * Requirements:
  *   - Agentspan server running at AGENTSPAN_SERVER_URL
@@ -24,8 +24,8 @@
  *   - GITHUB_TOKEN stored via `agentspan credentials set` OR set in process.env
  */
 
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Isolated tool: list GitHub repos -----------------------------------------
 
@@ -122,7 +122,7 @@ const createGithubIssue = tool(
 
 // -- Agent definition ---------------------------------------------------------
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'github_agent',
   model: llmModel,
   tools: [listGithubRepos, createGithubIssue],
@@ -135,13 +135,26 @@ const agent = new Agent({
 
 // -- Run ----------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
     agent,
     "List the 5 most recently updated repos for the 'agentspan' GitHub user.",
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents github_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

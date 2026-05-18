@@ -57,7 +57,7 @@ async function callJudge(
   const apiKey = process.env.OPENAI_API_KEY;
   const endpoint = apiKey
     ? 'https://api.openai.com/v1/chat/completions'
-    : `${process.env.AGENTSPAN_SERVER_URL ?? 'http://localhost:8080/api'}/llm/chat/completions`;
+    : `${process.env.AGENTSPAN_SERVER_URL ?? 'http://localhost:6767/api'}/llm/chat/completions`;
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',

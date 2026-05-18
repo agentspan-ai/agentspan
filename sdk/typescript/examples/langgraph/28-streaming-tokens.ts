@@ -11,7 +11,7 @@
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage, AIMessageChunk } from '@langchain/core/messages';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // LLM (streaming enabled)
@@ -49,12 +49,12 @@ const builder = new StateGraph(StreamState);
 builder.addNode('generate', generate);
 builder.addEdge(START, 'generate');
 builder.addEdge('generate', END);
-const graph = builder.compile();
+const graph = builder.compile({ name: "streaming_agent" });
 
-// Add agentspan metadata for extraction
+// Add agentspan metadata for graph-structure extraction.
+// Do NOT set tools on StateGraphs — only model + framework.
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',
-  tools: [],
   framework: 'langgraph',
 };
 
@@ -86,7 +86,25 @@ const PROMPT =
 // Run
 // ---------------------------------------------------------------------------
 async function main() {
-  await streamToConsole(PROMPT);
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(graph, PROMPT);
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(graph);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/langgraph --agents streaming_tokens
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(graph);
+
+    // Native LangGraph token-streaming alternative:
+    // await streamToConsole(PROMPT);
+  } finally {
+    await runtime.shutdown();
+  }
 }
 
 main().catch(console.error);

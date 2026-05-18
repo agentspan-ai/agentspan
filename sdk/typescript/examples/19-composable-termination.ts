@@ -11,7 +11,7 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -23,8 +23,8 @@ import {
   StopMessage,
   MaxMessage,
   TokenUsageCondition,
-} from '../src/index.js';
-import { llmModel } from './settings.js';
+} from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Example 1: Simple text mention ----------------------------------------
 
@@ -45,7 +45,7 @@ const search = tool(
   },
 );
 
-const agent1 = new Agent({
+export const agent1 = new Agent({
   name: 'researcher',
   model: llmModel,
   tools: [search],
@@ -55,7 +55,7 @@ const agent1 = new Agent({
 
 // -- Example 2: OR -- stop on text OR after 20 messages --------------------
 
-const agent2 = new Agent({
+export const agent2 = new Agent({
   name: 'chatbot',
   model: llmModel,
   instructions: "Have a conversation. Say GOODBYE when you're finished.",
@@ -66,7 +66,7 @@ const agent2 = new Agent({
 
 // Only terminate when the agent says "FINAL ANSWER" AND we've had
 // at least 5 messages (ensuring sufficient deliberation)
-const agent3 = new Agent({
+export const agent3 = new Agent({
   name: 'deliberator',
   model: llmModel,
   tools: [search],
@@ -83,7 +83,7 @@ const complexStop = new StopMessage('TERMINATE')
   .or(new TextMention('DONE').and(new MaxMessage(10)))
   .or(new TokenUsageCondition({ maxTotalTokens: 50000 }));
 
-const agent4 = new Agent({
+export const agent4 = new Agent({
   name: 'complex_agent',
   model: llmModel,
   tools: [search],
@@ -93,11 +93,24 @@ const agent4 = new Agent({
 
 // -- Run -------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  console.log('--- Simple text mention termination ---');
-  const result = await runtime.run(agent1, 'What are AI agents?');
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('--- Simple text mention termination ---');
+    const result = await runtime.run(agent1, 'What are AI agents?');
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent1);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents researcher
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent1);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

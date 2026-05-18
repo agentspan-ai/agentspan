@@ -123,8 +123,8 @@ export const GUIDE_STEPS = [
   },
   {
     id: "webhookEvent",
-    title: "Workflows to receive webhook event",
-    description: "Workflows that are supposed to receive this webhook event.",
+    title: "Agents to receive webhook event",
+    description: "Agents that are supposed to receive this webhook event.",
   },
   {
     id: "sourcePlatform",
@@ -144,8 +144,8 @@ export const GUIDE_STEPS = [
   },
   {
     id: "startWf",
-    title: "Start workflow when webhook comes",
-    description: "Start a new workflow when the webhook event comes.",
+    title: "Start agent when webhook comes",
+    description: "Start a new agent when the webhook event comes.",
   },
   {
     id: "secret",

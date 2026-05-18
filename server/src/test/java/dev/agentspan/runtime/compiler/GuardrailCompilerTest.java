@@ -5,26 +5,28 @@
 
 package dev.agentspan.runtime.compiler;
 
-import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
-import org.junit.jupiter.api.Test;
-import dev.agentspan.runtime.model.GuardrailConfig;
+import static org.assertj.core.api.Assertions.*;
 
 import java.util.List;
 
-import static org.assertj.core.api.Assertions.*;
+import org.junit.jupiter.api.Test;
+
+import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
+
+import dev.agentspan.runtime.model.GuardrailConfig;
 
 class GuardrailCompilerTest {
 
     @Test
     void testRegexBlock() {
         GuardrailConfig g = GuardrailConfig.builder()
-            .name("no_ssn")
-            .guardrailType("regex")
-            .position("output")
-            .onFail("retry")
-            .patterns(List.of("\\d{3}-\\d{2}-\\d{4}"))
-            .mode("block")
-            .build();
+                .name("no_ssn")
+                .guardrailType("regex")
+                .position("output")
+                .onFail("retry")
+                .patterns(List.of("\\d{3}-\\d{2}-\\d{4}"))
+                .mode("block")
+                .build();
 
         GuardrailCompiler gc = new GuardrailCompiler();
         var results = gc.compileGuardrailTasks(List.of(g), "agent", "${agent_llm.output.result}");
@@ -39,13 +41,13 @@ class GuardrailCompilerTest {
     @Test
     void testLLMGuardrail() {
         GuardrailConfig g = GuardrailConfig.builder()
-            .name("safety")
-            .guardrailType("llm")
-            .position("output")
-            .model("openai/gpt-4o")
-            .policy("No harmful content")
-            .onFail("retry")
-            .build();
+                .name("safety")
+                .guardrailType("llm")
+                .position("output")
+                .model("openai/gpt-4o")
+                .policy("No harmful content")
+                .onFail("retry")
+                .build();
 
         GuardrailCompiler gc = new GuardrailCompiler();
         var results = gc.compileGuardrailTasks(List.of(g), "agent", "${ref}");
@@ -61,12 +63,12 @@ class GuardrailCompilerTest {
     @Test
     void testCustomGuardrail() {
         GuardrailConfig g = GuardrailConfig.builder()
-            .name("custom_check")
-            .guardrailType("custom")
-            .position("output")
-            .taskName("my_guardrail_worker")
-            .onFail("raise")
-            .build();
+                .name("custom_check")
+                .guardrailType("custom")
+                .position("output")
+                .taskName("my_guardrail_worker")
+                .onFail("raise")
+                .build();
 
         GuardrailCompiler gc = new GuardrailCompiler();
         var results = gc.compileGuardrailTasks(List.of(g), "agent", "${ref}");
@@ -81,59 +83,63 @@ class GuardrailCompilerTest {
     @Test
     void testCustomGuardrailIncludesOpenAICompatibleInputAliases() {
         GuardrailConfig g = GuardrailConfig.builder()
-            .name("custom_check")
-            .guardrailType("custom")
-            .position("output")
-            .taskName("my_guardrail_worker")
-            .build();
+                .name("custom_check")
+                .guardrailType("custom")
+                .position("output")
+                .taskName("my_guardrail_worker")
+                .build();
 
         GuardrailCompiler gc = new GuardrailCompiler();
         var results = gc.compileGuardrailTasks(List.of(g), "agent", "${ref}");
 
         WorkflowTask workerTask = results.get(0).getTasks().get(0);
         assertThat(workerTask.getInputParameters())
-            .containsEntry("content", "${ref}")
-            .containsEntry("input", "${ref}")
-            .containsEntry("input_text", "${ref}")
-            .containsEntry("output", "${ref}")
-            .containsEntry("agentOutput", "${ref}")
-            .containsEntry("agent_output", "${ref}");
+                .containsEntry("content", "${ref}")
+                .containsEntry("input", "${ref}")
+                .containsEntry("input_text", "${ref}")
+                .containsEntry("output", "${ref}")
+                .containsEntry("agentOutput", "${ref}")
+                .containsEntry("agent_output", "${ref}");
     }
 
     @Test
     void testMultipleCustomGuardrailsUseDistinctRefs() {
         GuardrailConfig first = GuardrailConfig.builder()
-            .name("first_check")
-            .guardrailType("custom")
-            .position("output")
-            .taskName("first_worker")
-            .build();
+                .name("first_check")
+                .guardrailType("custom")
+                .position("output")
+                .taskName("first_worker")
+                .build();
 
         GuardrailConfig second = GuardrailConfig.builder()
-            .name("second_check")
-            .guardrailType("custom")
-            .position("output")
-            .taskName("second_worker")
-            .build();
+                .name("second_check")
+                .guardrailType("custom")
+                .position("output")
+                .taskName("second_worker")
+                .build();
 
         GuardrailCompiler gc = new GuardrailCompiler();
         var results = gc.compileGuardrailTasks(List.of(first, second), "agent", "${ref}");
 
         assertThat(results).hasSize(2);
-        assertThat(results).extracting(GuardrailCompiler.GuardrailTaskResult::getRefName)
-            .containsExactly("agent_output_guardrail_first_check", "agent_output_guardrail_second_check");
-        assertThat(results).flatExtracting(r -> r.getTasks().stream().map(WorkflowTask::getTaskReferenceName).toList())
-            .doesNotHaveDuplicates();
+        assertThat(results)
+                .extracting(GuardrailCompiler.GuardrailTaskResult::getRefName)
+                .containsExactly("agent_output_guardrail_first_check", "agent_output_guardrail_second_check");
+        assertThat(results)
+                .flatExtracting(r -> r.getTasks().stream()
+                        .map(WorkflowTask::getTaskReferenceName)
+                        .toList())
+                .doesNotHaveDuplicates();
     }
 
     @Test
     void testRoutingRetry() {
         GuardrailConfig g = GuardrailConfig.builder()
-            .name("test")
-            .guardrailType("regex")
-            .position("output")
-            .onFail("retry")
-            .build();
+                .name("test")
+                .guardrailType("regex")
+                .position("output")
+                .onFail("retry")
+                .build();
 
         GuardrailCompiler gc = new GuardrailCompiler();
         var routing = gc.compileGuardrailRouting(g, "guard_ref", "${content}", "agent", "", true);
@@ -146,34 +152,35 @@ class GuardrailCompilerTest {
     @Test
     void testRoutingRaise() {
         GuardrailConfig g = GuardrailConfig.builder()
-            .name("test")
-            .guardrailType("regex")
-            .position("output")
-            .onFail("raise")
-            .build();
+                .name("test")
+                .guardrailType("regex")
+                .position("output")
+                .onFail("raise")
+                .build();
 
         GuardrailCompiler gc = new GuardrailCompiler();
         var routing = gc.compileGuardrailRouting(g, "guard_ref", "${content}", "agent", "", false);
 
         assertThat(routing.getSwitchTask().getDecisionCases()).containsKey("raise");
-        List<WorkflowTask> raiseTasks = routing.getSwitchTask().getDecisionCases().get("raise");
+        List<WorkflowTask> raiseTasks =
+                routing.getSwitchTask().getDecisionCases().get("raise");
         assertThat(raiseTasks.get(0).getType()).isEqualTo("TERMINATE");
     }
 
     @Test
     void testToolGuardrailCompilation_usesToolPrefix() {
         GuardrailConfig g = GuardrailConfig.builder()
-            .name("no_rm_rf")
-            .guardrailType("regex")
-            .position("input")  // position is not filtered for tool guardrails
-            .onFail("raise")
-            .patterns(List.of("rm\\s+-rf"))
-            .mode("block")
-            .build();
+                .name("no_rm_rf")
+                .guardrailType("regex")
+                .position("input") // position is not filtered for tool guardrails
+                .onFail("raise")
+                .patterns(List.of("rm\\s+-rf"))
+                .mode("block")
+                .build();
 
         GuardrailCompiler gc = new GuardrailCompiler();
-        var results = gc.compileToolGuardrailTasks(
-            List.of(g), "agent", "${agent_format_tool_calls.output.result.formatted}");
+        var results =
+                gc.compileToolGuardrailTasks(List.of(g), "agent", "${agent_format_tool_calls.output.result.formatted}");
 
         assertThat(results).hasSize(1);
         // Ref name uses "_tool" prefix to avoid collision with agent-level guardrails
@@ -187,13 +194,13 @@ class GuardrailCompilerTest {
         // Tool guardrails with position="input" should still compile
         // (unlike agent guardrails which filter to output only)
         GuardrailConfig inputGuard = GuardrailConfig.builder()
-            .name("check_input")
-            .guardrailType("regex")
-            .position("input")
-            .onFail("raise")
-            .patterns(List.of("dangerous"))
-            .mode("block")
-            .build();
+                .name("check_input")
+                .guardrailType("regex")
+                .position("input")
+                .onFail("raise")
+                .patterns(List.of("dangerous"))
+                .mode("block")
+                .build();
 
         GuardrailCompiler gc = new GuardrailCompiler();
 

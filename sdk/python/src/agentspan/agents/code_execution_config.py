@@ -247,18 +247,22 @@ def _make_code_execution_tool(
     allowed_languages: List[str],
     allowed_commands: List[str],
     timeout: int,
+    agent_name: str = "",
 ) -> Any:
     """Create a ``@tool``-decorated function for code execution.
 
     The returned function can be appended to ``Agent.tools`` directly.
+    The tool name is prefixed with the agent name to avoid collisions
+    when multiple agents define code execution with different configs.
     """
     from agentspan.agents.code_executor import LocalCodeExecutor
     from agentspan.agents.tool import tool
 
     validator = CommandValidator(allowed_commands) if allowed_commands else None
     langs_str = ", ".join(allowed_languages)
+    task_name = f"{agent_name}_execute_code" if agent_name else "execute_code"
 
-    @tool(name="execute_code")
+    @tool(name=task_name)
     def execute_code(code: str, language: str = "python") -> dict:
         """Execute code in a sandboxed environment."""
         # Guard against bad parameters (LLM may omit args or send wrong types)

@@ -5,23 +5,24 @@
 
 package dev.agentspan.runtime.model;
 
+import java.util.List;
+import java.util.Map;
+
 import com.fasterxml.jackson.annotation.JsonInclude;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.List;
-import java.util.Map;
-
 /**
- * Full details of a single agent workflow execution.
+ * Full details of a single agent execution.
  *
- * <p>Returned by {@code GET /api/agent/{id}}.  Combines workflow metadata,
+ * <p>Returned by {@code GET /api/agent/{id}}.  Combines execution metadata,
  * the full task list (for sub-workflow traversal by the SDK), and pre-computed
- * token usage for this workflow level.</p>
+ * token usage for this execution level.</p>
  *
- * <p>Token usage covers only LLM tasks in <em>this</em> workflow.  The SDK
+ * <p>Token usage covers only LLM tasks in <em>this</em> execution.  The SDK
  * aggregates across the full sub-agent tree by recursively fetching each
  * {@code SUB_WORKFLOW} task's {@code subWorkflowId}.</p>
  */
@@ -32,7 +33,7 @@ import java.util.Map;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class AgentRun {
 
-    private String workflowId;
+    private String executionId;
     private String agentName;
     private int version;
     private String status;
@@ -41,10 +42,10 @@ public class AgentRun {
     private Map<String, Object> input;
     private Map<String, Object> output;
 
-    /** Token usage for LLM tasks in this workflow only — null if none ran. */
+    /** Token usage for LLM tasks in this execution only — null if none ran. */
     private TokenUsage tokenUsage;
 
-    /** All tasks in this workflow execution. */
+    /** All tasks in this execution. */
     private List<TaskDetail> tasks;
 
     // ── Inner types ──────────────────────────────────────────────────────────
@@ -71,6 +72,7 @@ public class AgentRun {
         private String status;
         /** Populated for {@code SUB_WORKFLOW} tasks — the child workflow ID. */
         private String subWorkflowId;
+
         private Map<String, Object> outputData;
     }
 }

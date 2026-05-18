@@ -14,7 +14,7 @@ import { AuthHeaders } from "types/common";
 
 const fetchContext = fetchContextNonHook();
 
-const BASE_PATH = `/metadata/workflow/`;
+const BASE_PATH = `/metadata/workflow/`; // TODO: migrate to agent API
 
 const fetchForWorkflowDefinition = async ({
   workflowName,
@@ -40,9 +40,9 @@ const fetchForWorkflowDefinition = async ({
     }
     return { tasks: [] };
   } catch (error) {
-    logger.error("Error fetching for workflow definition ", error);
+    logger.error("Error fetching agent definition ", error);
     return Promise.reject({
-      message: "Error searching for workflow definition",
+      message: "Error searching for agent definition",
     });
   }
 };

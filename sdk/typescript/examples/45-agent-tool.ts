@@ -12,13 +12,12 @@
  *
  * Requirements:
  *   - Conductor server with AgentTool support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, agentTool, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, agentTool, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Child agent's tool -------------------------------------------------------
 
@@ -44,9 +43,13 @@ const searchKnowledgeBase = tool(
   {
     name: 'search_knowledge_base',
     description: 'Search an internal knowledge base for information.',
-    inputSchema: z.object({
-      query: z.string().describe('The search query'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'The search query' },
+      },
+      required: ['query'],
+    },
   },
 );
 
@@ -69,15 +72,19 @@ const calculate = tool(
   {
     name: 'calculate',
     description: 'Evaluate a math expression safely.',
-    inputSchema: z.object({
-      expression: z.string().describe('A mathematical expression to evaluate'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        expression: { type: 'string', description: 'A mathematical expression to evaluate' },
+      },
+      required: ['expression'],
+    },
   },
 );
 
 // -- Child agent (has its own tools) ------------------------------------------
 
-const researcher = new Agent({
+export const researcher = new Agent({
   name: 'researcher_45',
   model: llmModel,
   instructions:
@@ -88,7 +95,7 @@ const researcher = new Agent({
 
 // -- Parent agent (uses researcher as a tool) ---------------------------------
 
-const manager = new Agent({
+export const manager = new Agent({
   name: 'manager_45',
   model: llmModel,
   instructions:
@@ -97,14 +104,27 @@ const manager = new Agent({
   tools: [agentTool(researcher), calculate],
 });
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
     manager,
     'Research Python and Rust, then calculate how many use cases they ' +
     'have combined.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(manager);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents manager_45
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(manager);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

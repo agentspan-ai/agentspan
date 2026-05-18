@@ -1,9 +1,9 @@
-import { Agent } from './agent.js';
-import type { AgentOptions } from './agent.js';
+import { Agent } from "./agent.js";
+import type { AgentOptions } from "./agent.js";
 
 // ── UserProxyAgent ──────────────────────────────────────
 
-export type UserProxyMode = 'ALWAYS' | 'TERMINATE' | 'NEVER';
+export type UserProxyMode = "ALWAYS" | "TERMINATE" | "NEVER";
 
 export interface UserProxyAgentOptions {
   name: string;

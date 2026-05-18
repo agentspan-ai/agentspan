@@ -20,7 +20,7 @@ export const fetchForTasksService = async ({
   rowsPerPage = 15,
   filterStatus,
 }: TaskListMachineContext) => {
-  const executionTasksPath = `/workflow/${executionId}/tasks${getQueryString({
+  const executionTasksPath = `agent/executions/${executionId}/tasks${getQueryString({
     status: filterStatus,
     count: rowsPerPage,
     start: startIndex,

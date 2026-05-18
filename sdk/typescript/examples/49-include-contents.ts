@@ -6,13 +6,12 @@
  *
  * Requirements:
  *   - Conductor server with include_contents support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Tool --------------------------------------------------------------------
 
@@ -24,16 +23,20 @@ const summarizeText = tool(
   {
     name: 'summarize_text',
     description: 'Summarize a piece of text.',
-    inputSchema: z.object({
-      text: z.string().describe('The text to summarize'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'The text to summarize' },
+      },
+      required: ['text'],
+    },
   },
 );
 
 // -- Agents ------------------------------------------------------------------
 
 // This sub-agent won't see the parent's conversation history
-const independentSummarizer = new Agent({
+export const independentSummarizer = new Agent({
   name: 'independent_summarizer_49',
   model: llmModel,
   instructions: 'You are a summarizer. Summarize any text given to you concisely.',
@@ -42,13 +45,13 @@ const independentSummarizer = new Agent({
 });
 
 // This sub-agent WILL see the parent's conversation history (default)
-const contextAwareHelper = new Agent({
+export const contextAwareHelper = new Agent({
   name: 'context_aware_helper_49',
   model: llmModel,
   instructions: 'You are a helpful assistant that builds on prior conversation context.',
 });
 
-const coordinator = new Agent({
+export const coordinator = new Agent({
   name: 'coordinator_49',
   model: llmModel,
   instructions:
@@ -60,15 +63,28 @@ const coordinator = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
     coordinator,
     "Please summarize this: 'The quick brown fox jumps over the lazy dog. " +
     "This sentence contains every letter of the alphabet and is commonly " +
     "used for typography testing.'",
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(coordinator);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents coordinator_49
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(coordinator);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

@@ -13,8 +13,6 @@
  * - Circular references → "<circular ref: ClassName>"
  */
 
-import { ConfigurationError } from '../errors.js';
-
 // ── WorkerInfo ──────────────────────────────────────────
 
 /**
@@ -25,6 +23,10 @@ export interface WorkerInfo {
   description: string;
   inputSchema: Record<string, unknown>;
   func: Function | null;
+  /** True if the worker function is already wrapped as a Task→TaskResult handler. */
+  _pre_wrapped?: boolean;
+  /** Extra metadata (e.g. llm_role, subgraph_role, is_dynamic_fanout). */
+  _extra?: Record<string, unknown>;
 }
 
 // ── Public API ──────────────────────────────────────────
@@ -47,12 +49,12 @@ export function serializeFrameworkAgent(
   function serialize(obj: unknown): unknown {
     // Primitives
     if (obj === null || obj === undefined) return obj;
-    if (typeof obj === 'string' || typeof obj === 'number' || typeof obj === 'boolean') {
+    if (typeof obj === "string" || typeof obj === "number" || typeof obj === "boolean") {
       return obj;
     }
 
     // Enum-like: object with a .value primitive property and a constructor name ending in enum patterns
-    if (typeof obj === 'object' && obj !== null && !Array.isArray(obj)) {
+    if (typeof obj === "object" && obj !== null && !Array.isArray(obj)) {
       const asAny = obj as Record<string, unknown>;
       if (_isEnumLike(asAny)) {
         return asAny.value;
@@ -60,11 +62,11 @@ export function serializeFrameworkAgent(
     }
 
     // Pydantic-like model class (used as output_type) → JSON Schema
-    if (typeof obj === 'function' && typeof (obj as any).model_json_schema === 'function') {
+    if (typeof obj === "function" && typeof (obj as any).model_json_schema === "function") {
       try {
         return (obj as any).model_json_schema();
       } catch {
-        return { _type: (obj as any).name ?? 'UnknownClass' };
+        return { _type: (obj as any).name ?? "UnknownClass" };
       }
     }
 
@@ -97,9 +99,9 @@ export function serializeFrameworkAgent(
     }
 
     // Circular reference protection (only for objects, not primitives)
-    if (typeof obj === 'object' && obj !== null) {
+    if (typeof obj === "object" && obj !== null) {
       if (seen.has(obj)) {
-        return `<circular ref: ${obj.constructor?.name ?? 'Object'}>`;
+        return `<circular ref: ${obj.constructor?.name ?? "Object"}>`;
       }
       seen.add(obj);
     }
@@ -140,10 +142,10 @@ export function serializeFrameworkAgent(
       }
 
       // Plain object or class instance
-      if (typeof obj === 'object' && obj !== null) {
+      if (typeof obj === "object" && obj !== null) {
         const result: Record<string, unknown> = {};
         const className = obj.constructor?.name;
-        if (className && className !== 'Object') {
+        if (className && className !== "Object") {
           result._type = className;
         }
 
@@ -160,7 +162,7 @@ export function serializeFrameworkAgent(
         // Enumerate properties
         const keys = _getSerializableKeys(obj);
         for (const key of keys) {
-          if (key.startsWith('_')) continue;
+          if (key.startsWith("_")) continue;
           try {
             const val = (obj as Record<string, unknown>)[key];
             result[key] = serialize(val);
@@ -174,15 +176,15 @@ export function serializeFrameworkAgent(
       // Fallback — string representation
       return String(obj);
     } finally {
-      if (typeof obj === 'object' && obj !== null) {
+      if (typeof obj === "object" && obj !== null) {
         seen.delete(obj);
       }
     }
   }
 
   const config = serialize(agentObj);
-  if (typeof config !== 'object' || config === null || Array.isArray(config)) {
-    return [{ _type: 'unknown', value: config } as Record<string, unknown>, workers];
+  if (typeof config !== "object" || config === null || Array.isArray(config)) {
+    return [{ _type: "unknown", value: config } as Record<string, unknown>, workers];
   }
   return [config as Record<string, unknown>, workers];
 }
@@ -193,24 +195,24 @@ export function serializeFrameworkAgent(
  * Check if an object looks like an enum value (has .value + constructor is not Object).
  */
 function _isEnumLike(obj: Record<string, unknown>): boolean {
-  if (!('value' in obj)) return false;
+  if (!("value" in obj)) return false;
   const val = obj.value;
-  if (typeof val !== 'string' && typeof val !== 'number') return false;
-  const ctorName = obj.constructor?.name ?? '';
+  if (typeof val !== "string" && typeof val !== "number") return false;
+  const ctorName = obj.constructor?.name ?? "";
   // Must not be a plain Object
-  return ctorName !== '' && ctorName !== 'Object';
+  return ctorName !== "" && ctorName !== "Object";
 }
 
 /**
  * Check if an object is a callable function that should be extracted as a worker.
  */
 function _isToolCallable(obj: unknown): boolean {
-  if (typeof obj !== 'function') return false;
+  if (typeof obj !== "function") return false;
   // Skip classes (constructors)
   if (_isClass(obj)) return false;
   // Must have a meaningful name
-  const name = (obj as any).name ?? '';
-  if (!name || name === '' || name === 'anonymous') return false;
+  const name = (obj as any).name ?? "";
+  if (!name || name === "" || name === "anonymous") return false;
   return true;
 }
 
@@ -218,33 +220,25 @@ function _isToolCallable(obj: unknown): boolean {
  * Heuristic to check if a function is actually a class constructor.
  */
 function _isClass(fn: unknown): boolean {
-  if (typeof fn !== 'function') return false;
+  if (typeof fn !== "function") return false;
   const str = Function.prototype.toString.call(fn);
-  return str.startsWith('class ');
+  return str.startsWith("class ");
 }
 
 /**
  * Extract name, description, and schema from a callable function.
  */
 function _extractCallable(func: Function): WorkerInfo {
-  const name =
-    (func as any).toolName ??
-    (func as any).name ??
-    func.name ??
-    'unknown_tool';
+  const name = (func as any).toolName ?? (func as any).name ?? func.name ?? "unknown_tool";
 
-  const description =
-    (func as any).description ??
-    '';
+  const description = (func as any).description ?? "";
 
   // Try to extract schema from function metadata
   const schema = _extractFunctionSchema(func);
 
   return {
     name,
-    description: typeof description === 'string'
-      ? description.trim().split('\n')[0]
-      : '',
+    description: typeof description === "string" ? description.trim().split("\n")[0] : "",
     inputSchema: schema,
     func,
   };
@@ -262,7 +256,7 @@ function _extractFunctionSchema(func: Function): Record<string, unknown> {
     (func as any).parameters ??
     (func as any).schema;
 
-  if (schema && typeof schema === 'object') {
+  if (schema && typeof schema === "object") {
     // If it's a Zod schema, try to convert
     if (_isZodSchema(schema)) {
       const jsonSchema = _zodToJsonSchema(schema);
@@ -271,18 +265,15 @@ function _extractFunctionSchema(func: Function): Record<string, unknown> {
     return schema;
   }
 
-  return { type: 'object', properties: {} };
+  return { type: "object", properties: {} };
 }
 
 /**
  * Try to detect and extract an agent-as-tool wrapper.
  * Returns serialized config dict or null.
  */
-function _tryExtractAgentTool(
-  obj: unknown,
-  workers: WorkerInfo[],
-): Record<string, unknown> | null {
-  if (typeof obj !== 'object' || obj === null) return null;
+function _tryExtractAgentTool(obj: unknown, workers: WorkerInfo[]): Record<string, unknown> | null {
+  if (typeof obj !== "object" || obj === null) return null;
   const asAny = obj as Record<string, unknown>;
 
   if (!asAny._is_agent_tool && !asAny._agent_instance) return null;
@@ -294,9 +285,9 @@ function _tryExtractAgentTool(
   workers.push(...childWorkers);
 
   return {
-    _type: 'AgentTool',
-    name: (asAny.name as string) ?? (childAgent as any).name ?? 'agent_tool',
-    description: (asAny.description as string) ?? '',
+    _type: "AgentTool",
+    name: (asAny.name as string) ?? (childAgent as any).name ?? "agent_tool",
+    description: (asAny.description as string) ?? "",
     agent: childConfig,
   };
 }
@@ -311,19 +302,19 @@ function _tryExtractAgentTool(
  * - An embedded callable
  */
 function _tryExtractToolObject(obj: unknown): WorkerInfo | null {
-  if (typeof obj !== 'object' || obj === null) return null;
-  if (typeof obj === 'function') return null;
+  if (typeof obj !== "object" || obj === null) return null;
+  if (typeof obj === "function") return null;
   const asAny = obj as Record<string, unknown>;
 
   // Must have a name
   const name = asAny.name;
-  if (!name || typeof name !== 'string') return null;
+  if (!name || typeof name !== "string") return null;
 
   // Must have some kind of schema (indicates it's a tool definition)
   let schema: Record<string, unknown> | null = null;
-  for (const schemaKey of ['params_json_schema', 'input_schema', 'parameters', 'schema']) {
+  for (const schemaKey of ["params_json_schema", "input_schema", "parameters", "schema"]) {
     const val = asAny[schemaKey];
-    if (val && typeof val === 'object' && !Array.isArray(val)) {
+    if (val && typeof val === "object" && !Array.isArray(val)) {
       // Might be a Zod schema
       if (_isZodSchema(val)) {
         const jsonSchema = _zodToJsonSchema(val);
@@ -338,7 +329,7 @@ function _tryExtractToolObject(obj: unknown): WorkerInfo | null {
   }
   if (!schema) return null;
 
-  const description = typeof asAny.description === 'string' ? asAny.description : '';
+  const description = typeof asAny.description === "string" ? asAny.description : "";
 
   // Find the embedded callable
   const originalFunc = _findEmbeddedFunction(obj, 2);
@@ -346,7 +337,7 @@ function _tryExtractToolObject(obj: unknown): WorkerInfo | null {
 
   return {
     name,
-    description: description.trim().split('\n')[0],
+    description: description.trim().split("\n")[0],
     inputSchema: schema,
     func: originalFunc,
   };
@@ -358,7 +349,7 @@ function _tryExtractToolObject(obj: unknown): WorkerInfo | null {
  */
 function _findEmbeddedFunction(obj: unknown, maxDepth: number): Function | null {
   if (maxDepth <= 0) return null;
-  if (typeof obj !== 'object' || obj === null) return null;
+  if (typeof obj !== "object" || obj === null) return null;
 
   const asAny = obj as Record<string, unknown>;
 
@@ -367,12 +358,12 @@ function _findEmbeddedFunction(obj: unknown, maxDepth: number): Function | null 
     const val = asAny[key];
     if (val === null || val === undefined) continue;
 
-    if (typeof val === 'function' && !_isClass(val)) {
+    if (typeof val === "function" && !_isClass(val)) {
       return val as Function;
     }
 
     // Nested object — recurse
-    if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
+    if (typeof val === "object" && val !== null && !Array.isArray(val)) {
       const result = _findEmbeddedFunction(val, maxDepth - 1);
       if (result !== null) return result;
     }
@@ -398,13 +389,13 @@ function _getSerializableKeys(obj: object): string[] {
  * Check if an object is a Zod schema.
  */
 function _isZodSchema(obj: unknown): boolean {
-  if (typeof obj !== 'object' || obj === null) return false;
+  if (typeof obj !== "object" || obj === null) return false;
   const asAny = obj as Record<string, unknown>;
   // Zod schemas have _def property with typeName
   return (
-    typeof asAny._def === 'object' &&
+    typeof asAny._def === "object" &&
     asAny._def !== null &&
-    typeof (asAny._def as Record<string, unknown>).typeName === 'string'
+    typeof (asAny._def as Record<string, unknown>).typeName === "string"
   );
 }
 
@@ -415,8 +406,9 @@ function _isZodSchema(obj: unknown): boolean {
 function _zodToJsonSchema(zodSchema: unknown): Record<string, unknown> | null {
   try {
     // Try dynamic import of zod-to-json-schema
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { zodToJsonSchema: convert } = require('zod-to-json-schema');
+
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { zodToJsonSchema: convert } = require("zod-to-json-schema");
     return convert(zodSchema) as Record<string, unknown>;
   } catch {
     return null;

@@ -12,7 +12,7 @@ import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // LLM
@@ -106,7 +106,7 @@ const checkSyntaxTool = new DynamicStructuredTool({
 // Build the graph
 // ---------------------------------------------------------------------------
 const tools = [evaluateExpressionTool, explainCodeTool, checkSyntaxTool];
-const graph = createReactAgent({ llm, tools });
+const graph = createReactAgent({ llm, tools, name: "code_interpreter_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
@@ -126,6 +126,15 @@ async function main() {
     const result = await runtime.run(graph, PROMPT);
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(graph);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/langgraph --agents code_interpreter
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(graph);
   } finally {
     await runtime.shutdown();
   }

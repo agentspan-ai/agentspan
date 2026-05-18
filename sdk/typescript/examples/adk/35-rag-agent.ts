@@ -22,7 +22,7 @@
 
 import { LlmAgent, FunctionTool } from '@google/adk';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
@@ -107,7 +107,7 @@ const DOCUMENTS: Document[] = [
       'completion via WAIT tasks. Configure event handlers with action types: ' +
       'complete_task, fail_task, or update_variables. Event payloads are matched ' +
       'by event name and optionally filtered by expression. For real-time updates, ' +
-      'use the streaming API (SSE) at /api/agent/stream/{workflowId}. Events ' +
+      'use the streaming API (SSE) at /api/agent/stream/{executionId}. Events ' +
       'include: tool_start, tool_end, llm_start, llm_end, agent_start, agent_end, ' +
       'and token events for incremental output.',
   },
@@ -192,7 +192,7 @@ const indexDocument = new FunctionTool({
 
 // ── Agent ────────────────────────────────────────────────────────────
 
-const ragAgent = new LlmAgent({
+export const ragAgent = new LlmAgent({
   name: 'rag_assistant',
   model,
   instruction:
@@ -222,8 +222,8 @@ async function main() {
 
     const indexLines = ['Please index the following documents into the knowledge base:\n'];
     for (const doc of DOCUMENTS) {
-      indexLines.push(`DocID: ${doc.docId}`);
-      indexLines.push(`Text: ${doc.text}\n`);
+    indexLines.push(`DocID: ${doc.docId}`);
+    indexLines.push(`Text: ${doc.text}\n`);
     }
     const indexPrompt = indexLines.join('\n');
 
@@ -237,17 +237,26 @@ async function main() {
     console.log('='.repeat(60));
 
     const queries = [
-      'How do I authenticate my API requests? What are the rate limits?',
-      'What retry policies are available for failed tasks?',
-      'How do I set up vector search with PostgreSQL?',
+    'How do I authenticate my API requests? What are the rate limits?',
+    'What retry policies are available for failed tasks?',
+    'How do I set up vector search with PostgreSQL?',
     ];
 
     for (let i = 0; i < queries.length; i++) {
-      console.log(`\n--- Query ${i + 1}: ${queries[i]}`);
-      const searchResult = await runtime.run(ragAgent, queries[i]);
-      console.log('Status:', searchResult.status);
-      searchResult.printResult();
+    console.log(`\n--- Query ${i + 1}: ${queries[i]}`);
+    const searchResult = await runtime.run(ragAgent, queries[i]);
+    console.log('Status:', searchResult.status);
+    searchResult.printResult();
     }
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(ragAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents rag_assistant
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(ragAgent);
   } finally {
     await runtime.shutdown();
   }

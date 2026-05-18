@@ -9,7 +9,7 @@ directly back to the coordinator).
 
 Requirements:
     - Conductor server
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -97,9 +97,21 @@ coordinator = Agent(
     },
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        coordinator,
-        "Collect data from the sales database, analyze trends, and write a summary.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
+            coordinator,
+            "Collect data from the sales database, analyze trends, and write a summary.",
+        )
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(coordinator)
+        # CLI alternative:
+        # agentspan deploy --package examples.46_transfer_control
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(coordinator)
+

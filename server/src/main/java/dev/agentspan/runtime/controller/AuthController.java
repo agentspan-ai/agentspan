@@ -4,16 +4,17 @@
  */
 package dev.agentspan.runtime.controller;
 
-import dev.agentspan.runtime.auth.User;
-import dev.agentspan.runtime.auth.UserRepository;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import dev.agentspan.runtime.auth.User;
+import dev.agentspan.runtime.auth.UserRepository;
+import dev.agentspan.runtime.credentials.ExecutionTokenService;
 
 /**
  * Auth endpoints for login (username/password → JWT).
@@ -40,13 +41,11 @@ public class AuthController {
         String username = body.get("username");
         String password = body.get("password");
         if (username == null || username.isBlank() || password == null) {
-            return ResponseEntity.badRequest()
-                .body(Map.of("error", "username and password are required"));
+            return ResponseEntity.badRequest().body(Map.of("error", "username and password are required"));
         }
 
         if (!userRepository.checkPassword(username, password)) {
-            return ResponseEntity.status(401)
-                .body(Map.of("error", "Invalid credentials"));
+            return ResponseEntity.status(401).body(Map.of("error", "Invalid credentials"));
         }
 
         Optional<User> userOpt = userRepository.findByUsername(username);
@@ -61,11 +60,12 @@ public class AuthController {
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("token", token);
-        response.put("user", Map.of(
-            "id", user.getId(),
-            "username", user.getUsername(),
-            "name", user.getName() != null ? user.getName() : user.getUsername()
-        ));
+        response.put(
+                "user",
+                Map.of(
+                        "id", user.getId(),
+                        "username", user.getUsername(),
+                        "name", user.getName() != null ? user.getName() : user.getUsername()));
         return ResponseEntity.ok(response);
     }
 }

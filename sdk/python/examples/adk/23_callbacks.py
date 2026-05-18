@@ -16,7 +16,7 @@ Architecture:
 Requirements:
     - pip install google-adk
     - Conductor server with callback support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=google_gemini/gemini-2.0-flash as environment variable
 """
 
@@ -84,9 +84,20 @@ agent = LlmAgent(
     after_model_callback=inspect_after_model,
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
         agent,
         "Explain the difference between supervised and unsupervised machine learning.",
-    )
-    result.print_result()
+        )
+        result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.adk.23_callbacks
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)

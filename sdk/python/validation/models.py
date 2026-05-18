@@ -18,7 +18,7 @@ class RunResult:
     exit_code: int = -1
     status: str = "ERROR"
     duration_s: float = 0.0
-    workflow_id: str = ""
+    execution_id: str = ""
     tool_calls: int = 0
     tokens_total: int = 0
     tokens_prompt: int = 0

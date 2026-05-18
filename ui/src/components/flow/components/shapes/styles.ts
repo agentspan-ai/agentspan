@@ -1,5 +1,20 @@
 import theme from "components/flow/theme";
 import { TaskStatus, TaskType } from "types";
+import { AgentTaskCategory } from "utils/agentTaskCategory";
+
+/** Accent color for the left-border visual hint on agent task cards */
+export const taskCategoryColors: Record<AgentTaskCategory, string> = {
+  tool: "#4A90D9", // Blue
+  agent_tool: "#9B59B6", // Purple
+  guardrail: "#E67E22", // Orange
+  http: "#27AE60", // Green
+  mcp: "#2ECC71", // Light green
+  rag: "#3498DB", // Light blue
+  handoff: "#E74C3C", // Red
+  system: "#95A5A6", // Gray
+  passthrough: "#1ABC9C", // Teal
+  unknown: "#BDC3C7", // Light gray
+};
 
 export const getCardVariant = (
   type: TaskType,

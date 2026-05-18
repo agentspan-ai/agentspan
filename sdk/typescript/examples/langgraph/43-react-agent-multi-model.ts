@@ -15,7 +15,7 @@ import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // Tool definitions
@@ -71,7 +71,7 @@ const dayOfWeekTool = new DynamicStructuredTool({
 const tools = [getTodayTool, daysBetweenTool, dayOfWeekTool];
 const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
 
-const graph = createReactAgent({ llm, tools });
+const graph = createReactAgent({ llm, tools, name: "multi_model_agent" });
 
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',
@@ -93,6 +93,15 @@ async function main() {
     const result = await runtime.run(graph, PROMPT);
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(graph);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/langgraph --agents react_agent_multi_model
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(graph);
   } finally {
     await runtime.shutdown();
   }

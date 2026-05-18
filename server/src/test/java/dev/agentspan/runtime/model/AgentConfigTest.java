@@ -5,13 +5,13 @@
 
 package dev.agentspan.runtime.model;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.*;
 
 import java.util.List;
-import java.util.Map;
 
-import static org.assertj.core.api.Assertions.*;
+import org.junit.jupiter.api.Test;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 class AgentConfigTest {
 
@@ -20,27 +20,23 @@ class AgentConfigTest {
     @Test
     void testSerializeDeserialize() throws Exception {
         AgentConfig config = AgentConfig.builder()
-            .name("test_agent")
-            .model("openai/gpt-4o")
-            .instructions("Be helpful.")
-            .maxTurns(10)
-            .temperature(0.5)
-            .tools(List.of(
-                ToolConfig.builder()
-                    .name("search")
-                    .description("Search")
-                    .toolType("worker")
-                    .build()
-            ))
-            .guardrails(List.of(
-                GuardrailConfig.builder()
-                    .name("no_pii")
-                    .guardrailType("regex")
-                    .patterns(List.of("\\d{3}-\\d{2}-\\d{4}"))
-                    .mode("block")
-                    .build()
-            ))
-            .build();
+                .name("test_agent")
+                .model("openai/gpt-4o")
+                .instructions("Be helpful.")
+                .maxTurns(10)
+                .temperature(0.5)
+                .tools(List.of(ToolConfig.builder()
+                        .name("search")
+                        .description("Search")
+                        .toolType("worker")
+                        .build()))
+                .guardrails(List.of(GuardrailConfig.builder()
+                        .name("no_pii")
+                        .guardrailType("regex")
+                        .patterns(List.of("\\d{3}-\\d{2}-\\d{4}"))
+                        .mode("block")
+                        .build()))
+                .build();
 
         String json = mapper.writeValueAsString(config);
         AgentConfig deserialized = mapper.readValue(json, AgentConfig.class);
@@ -55,10 +51,8 @@ class AgentConfigTest {
 
     @Test
     void testNullFieldsOmitted() throws Exception {
-        AgentConfig config = AgentConfig.builder()
-            .name("minimal")
-            .model("openai/gpt-4o")
-            .build();
+        AgentConfig config =
+                AgentConfig.builder().name("minimal").model("openai/gpt-4o").build();
 
         String json = mapper.writeValueAsString(config);
         assertThat(json).doesNotContain("\"tools\"");
@@ -69,14 +63,19 @@ class AgentConfigTest {
     @Test
     void testNestedAgentSerialization() throws Exception {
         AgentConfig config = AgentConfig.builder()
-            .name("parent")
-            .model("openai/gpt-4o")
-            .strategy("handoff")
-            .agents(List.of(
-                AgentConfig.builder().name("child1").model("openai/gpt-4o").build(),
-                AgentConfig.builder().name("child2").model("anthropic/claude-sonnet-4-20250514").build()
-            ))
-            .build();
+                .name("parent")
+                .model("openai/gpt-4o")
+                .strategy("handoff")
+                .agents(List.of(
+                        AgentConfig.builder()
+                                .name("child1")
+                                .model("openai/gpt-4o")
+                                .build(),
+                        AgentConfig.builder()
+                                .name("child2")
+                                .model("anthropic/claude-sonnet-4-20250514")
+                                .build()))
+                .build();
 
         String json = mapper.writeValueAsString(config);
         AgentConfig deserialized = mapper.readValue(json, AgentConfig.class);
@@ -89,12 +88,17 @@ class AgentConfigTest {
     @Test
     void testTerminationConfigSerialization() throws Exception {
         TerminationConfig term = TerminationConfig.builder()
-            .type("and")
-            .conditions(List.of(
-                TerminationConfig.builder().type("text_mention").text("DONE").build(),
-                TerminationConfig.builder().type("max_message").maxMessages(10).build()
-            ))
-            .build();
+                .type("and")
+                .conditions(List.of(
+                        TerminationConfig.builder()
+                                .type("text_mention")
+                                .text("DONE")
+                                .build(),
+                        TerminationConfig.builder()
+                                .type("max_message")
+                                .maxMessages(10)
+                                .build()))
+                .build();
 
         String json = mapper.writeValueAsString(term);
         TerminationConfig deserialized = mapper.readValue(json, TerminationConfig.class);
@@ -106,10 +110,10 @@ class AgentConfigTest {
     @Test
     void testRequiredToolsSerialization() throws Exception {
         AgentConfig config = AgentConfig.builder()
-            .name("filing_agent")
-            .model("openai/gpt-4o")
-            .requiredTools(List.of("submit_filing", "approve_offer"))
-            .build();
+                .name("filing_agent")
+                .model("openai/gpt-4o")
+                .requiredTools(List.of("submit_filing", "approve_offer"))
+                .build();
 
         String json = mapper.writeValueAsString(config);
         assertThat(json).contains("\"requiredTools\"");
@@ -122,10 +126,8 @@ class AgentConfigTest {
 
     @Test
     void testRequiredToolsNullOmitted() throws Exception {
-        AgentConfig config = AgentConfig.builder()
-            .name("simple")
-            .model("openai/gpt-4o")
-            .build();
+        AgentConfig config =
+                AgentConfig.builder().name("simple").model("openai/gpt-4o").build();
 
         String json = mapper.writeValueAsString(config);
         assertThat(json).doesNotContain("\"requiredTools\"");
@@ -134,10 +136,13 @@ class AgentConfigTest {
     @Test
     void testStartRequestTimeoutSeconds() throws Exception {
         StartRequest request = StartRequest.builder()
-            .agentConfig(AgentConfig.builder().name("test").model("openai/gpt-4o").build())
-            .prompt("hello")
-            .timeoutSeconds(30)
-            .build();
+                .agentConfig(AgentConfig.builder()
+                        .name("test")
+                        .model("openai/gpt-4o")
+                        .build())
+                .prompt("hello")
+                .timeoutSeconds(30)
+                .build();
 
         String json = mapper.writeValueAsString(request);
         assertThat(json).contains("\"timeoutSeconds\":30");
@@ -149,9 +154,12 @@ class AgentConfigTest {
     @Test
     void testStartRequestTimeoutSecondsNullWhenNotSet() throws Exception {
         StartRequest request = StartRequest.builder()
-            .agentConfig(AgentConfig.builder().name("test").model("openai/gpt-4o").build())
-            .prompt("hello")
-            .build();
+                .agentConfig(AgentConfig.builder()
+                        .name("test")
+                        .model("openai/gpt-4o")
+                        .build())
+                .prompt("hello")
+                .build();
 
         assertThat(request.getTimeoutSeconds()).isNull();
     }

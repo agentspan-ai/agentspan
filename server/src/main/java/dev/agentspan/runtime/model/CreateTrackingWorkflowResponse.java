@@ -6,6 +6,7 @@
 package dev.agentspan.runtime.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -15,5 +16,5 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class CreateTrackingWorkflowResponse {
-    private String workflowId;
+    private String executionId;
 }

@@ -10,7 +10,7 @@ Demonstrates:
     - Practical use case: e-commerce order processing pipeline
 
 Requirements:
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
@@ -130,16 +130,24 @@ graph = builder.compile(name="order_state_machine")
 if __name__ == "__main__":
     initial_state = {
         "order_id": "ORD-2025-001",
-        "items": ["Python Book", "Mechanical Keyboard", "USB-C Hub"],
-        "customer": "Alice Smith",
-        "shipping_address": "123 Main St, San Francisco, CA 94105",
-        "current_status": "NEW",
+        "items": ["Widget A", "Gadget B"],
+        "customer": "Alice Johnson",
+        "current_status": "pending",
         "status_history": [],
+        "shipping_address": "123 Main St, Springfield",
         "tracking_number": "",
         "summary": "",
     }
-
     with AgentRuntime() as runtime:
         result = runtime.run(graph, str(initial_state))
         print(f"Status: {result.status}")
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.38_state_machine
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)

@@ -5,10 +5,13 @@
 
 package dev.agentspan.runtime.normalizer;
 
-import dev.agentspan.runtime.model.AgentConfig;
-import org.junit.jupiter.api.Test;
-import java.util.Map;
 import static org.assertj.core.api.Assertions.*;
+
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+
+import dev.agentspan.runtime.model.AgentConfig;
 
 class LangChainNormalizerTest {
 
@@ -22,9 +25,8 @@ class LangChainNormalizerTest {
     @Test
     void normalizeProducesPassthroughConfig() {
         Map<String, Object> raw = Map.of(
-            "name", "my_executor",
-            "_worker_name", "my_executor"
-        );
+                "name", "my_executor",
+                "_worker_name", "my_executor");
 
         AgentConfig config = normalizer.normalize(raw);
 

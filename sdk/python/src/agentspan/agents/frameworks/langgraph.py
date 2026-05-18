@@ -75,6 +75,30 @@ def serialize_langgraph(graph: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
     """
     name = getattr(graph, "name", None) or _DEFAULT_NAME
 
+    # Graphs with checkpointers (MemorySaver, etc.) require the full LangGraph
+    # runtime for session state persistence across turns. Extracting the graph
+    # structure strips the checkpointer, breaking memory. Force passthrough.
+    if getattr(graph, "checkpointer", None) is not None:
+        logger.info(
+            "LangGraph '%s': has checkpointer — using passthrough to "
+            "preserve session state management",
+            name,
+        )
+        raw_config: Dict[str, Any] = {"name": name, "_worker_name": name}
+        worker = WorkerInfo(
+            name=name,
+            description=f"LangGraph passthrough worker for {name}",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "prompt": {"type": "string"},
+                    "session_id": {"type": "string"},
+                },
+            },
+            func=None,
+        )
+        return raw_config, [worker]
+
     # Try full extraction: find model and tools in the compiled graph
     model_str = _find_model_in_graph(graph)
     tool_objs = _find_tools_in_graph(graph)
@@ -418,6 +442,32 @@ def _serialize_graph_structure(
     except Exception:
         pass
 
+    # Fallback: if input_key not found (e.g. StateGraph(dict) with no typed schema),
+    # scan the first node's function source for state access patterns like
+    # state.get("key") or state["key"]. Use the first key found.
+    if "input_key" not in raw_config.get("_graph", {}):
+        _detect_input_key_from_nodes(raw_config, node_funcs)
+
+    # TODO(server): Messages-based graph states (input_key="messages" or
+    # state schema has a "messages" field) need the server to inject the user
+    # prompt as [{"role": "user", "content": prompt}] — not as a plain string.
+    # Until the server supports _input_is_messages, these graphs will fail
+    # with "No non-empty user prompt" because the LLM prep task receives
+    # empty messages. See examples 27 (persistent_memory) and 28 (streaming_tokens).
+    #
+    # Signal to the server that the input field is a messages list:
+    detected_key = raw_config.get("_graph", {}).get("input_key")
+    has_messages = False
+    try:
+        schema = graph.get_input_jsonschema()
+        has_messages = "messages" in schema.get("properties", {})
+    except Exception:
+        pass
+    if detected_key == "messages":
+        has_messages = True
+    if has_messages:
+        raw_config["_graph"]["_input_is_messages"] = True
+
     # Extract state reducer annotations from graph channels
     # (e.g. Annotated[list, operator.add] → {"field": "add"})
     try:
@@ -505,7 +555,8 @@ def _get_node_function(node: Any) -> Optional[Any]:
     bound = getattr(node, "bound", None)
     if bound is None:
         return None
-    func = getattr(bound, "func", None)
+    # LangGraph stores sync functions in bound.func and async in bound.afunc
+    func = getattr(bound, "func", None) or getattr(bound, "afunc", None)
     if func and callable(func):
         # Skip lambda/internal functions
         func_name = getattr(func, "__name__", "")
@@ -1230,7 +1281,7 @@ def _extract_system_prompt_from_graph(graph: Any) -> Optional[str]:
         bound = getattr(node, "bound", None)
         if bound is None:
             continue
-        func = getattr(bound, "func", None)
+        func = getattr(bound, "func", None) or getattr(bound, "afunc", None)
         if func is None or not callable(func):
             continue
         code = getattr(func, "__code__", None)
@@ -1404,6 +1455,7 @@ def make_langgraph_worker(
     server_url: str,
     auth_key: str,
     auth_secret: str,
+    credential_names: Optional[List[str]] = None,
 ) -> Any:
     """Build a pre-wrapped tool_worker(task) -> TaskResult for a LangGraph graph.
 
@@ -1414,8 +1466,11 @@ def make_langgraph_worker(
     from conductor.client.http.models.task_result import TaskResult
     from conductor.client.http.models.task_result_status import TaskResultStatus
 
+    # Capture credential names in closure — avoids race with _workflow_credentials
+    _closure_cred_names = list(credential_names) if credential_names else []
+
     def tool_worker(task: Task) -> TaskResult:
-        workflow_id = task.workflow_instance_id
+        execution_id = task.workflow_instance_id
         prompt = task.input_data.get("prompt", "")
         session_id = (task.input_data.get("session_id") or "").strip()
 
@@ -1429,9 +1484,12 @@ def make_langgraph_worker(
                 _workflow_credentials,
                 _workflow_credentials_lock,
             )
-            wf_id = workflow_id or ""
-            with _workflow_credentials_lock:
-                cred_names = list(_workflow_credentials.get(wf_id, []))
+            # Use closure credential names first, fall back to workflow registry
+            cred_names = list(_closure_cred_names)
+            if not cred_names:
+                exec_id = execution_id or ""
+                with _workflow_credentials_lock:
+                    cred_names = list(_workflow_credentials.get(exec_id, []))
             if cred_names:
                 token = _extract_execution_token(task)
                 if token:
@@ -1441,10 +1499,14 @@ def make_langgraph_worker(
                         if isinstance(v, str):
                             _os.environ[k] = v
                             _injected_cred_keys.append(k)
+                else:
+                    logger.warning(
+                        "No execution token in task for LangGraph worker — "
+                        "credentials %s will not be injected",
+                        cred_names,
+                    )
         except Exception as _cred_err:
-            import logging as _log
-            _log.getLogger("agentspan.agents.frameworks.langgraph").warning(
-                "Failed to resolve credentials for LangGraph: %s", _cred_err)
+            logger.warning("Failed to resolve credentials for LangGraph: %s", _cred_err)
 
         try:
             graph_input = _build_input(graph, prompt)
@@ -1455,23 +1517,23 @@ def make_langgraph_worker(
             final_state = None
             for mode, chunk in graph.stream(graph_input, config, stream_mode=["updates", "values"]):
                 if mode == "updates":
-                    _process_updates_chunk(chunk, workflow_id, server_url, auth_key, auth_secret)
+                    _process_updates_chunk(chunk, execution_id, server_url, auth_key, auth_secret)
                 elif mode == "values":
                     final_state = chunk
 
             output = _extract_output(final_state)
             return TaskResult(
                 task_id=task.task_id,
-                workflow_instance_id=workflow_id,
+                workflow_instance_id=execution_id,
                 status=TaskResultStatus.COMPLETED,
                 output_data={"result": output},
             )
 
         except Exception as exc:
-            logger.error("LangGraph worker error (workflow_id=%s): %s", workflow_id, exc)
+            logger.error("LangGraph worker error (execution_id=%s): %s", execution_id, exc)
             return TaskResult(
                 task_id=task.task_id,
-                workflow_instance_id=workflow_id,
+                workflow_instance_id=execution_id,
                 status=TaskResultStatus.FAILED,
                 reason_for_incompletion=str(exc),
             )
@@ -1484,12 +1546,69 @@ def make_langgraph_worker(
     return tool_worker
 
 
+def _detect_input_key_from_nodes(
+    raw_config: Dict[str, Any], node_funcs: Dict[str, Any]
+) -> None:
+    """Detect input_key by scanning node function source for state access patterns.
+
+    Fallback for StateGraph(dict) where get_input_jsonschema() returns no
+    typed properties. Scans the first node's source for patterns like:
+      state.get("key", ...)
+      state["key"]
+    Sets raw_config["_graph"]["input_key"] if a key is found.
+    """
+    import ast
+    import inspect
+    import textwrap
+
+    for func in node_funcs.values():
+        try:
+            src = textwrap.dedent(inspect.getsource(func))
+            tree = ast.parse(src)
+        except Exception:
+            continue
+
+        for node in ast.walk(tree):
+            # state.get("key", ...)
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "get"
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+            ):
+                raw_config.setdefault("_graph", {})["input_key"] = node.args[0].value
+                return
+            # state["key"]
+            if (
+                isinstance(node, ast.Subscript)
+                and isinstance(node.slice, ast.Constant)
+                and isinstance(node.slice.value, str)
+            ):
+                raw_config.setdefault("_graph", {})["input_key"] = node.slice.value
+                return
+
+
 def _build_input(graph: Any, prompt: str) -> Dict[str, Any]:
     """Auto-detect input format from graph's JSON schema."""
     try:
         schema = graph.get_input_jsonschema()
         props = schema.get("properties", {})
         if "messages" in props:
+            # Detect if the messages field expects plain dicts or LangChain messages.
+            # Plain dict: items.type == "object" with no $ref or anyOf
+            # LangChain: items has anyOf/allOf/$ref pointing to message classes
+            msg_schema = props.get("messages", {})
+            items = msg_schema.get("items", {})
+            is_plain_dict = (
+                items.get("type") == "object"
+                and "anyOf" not in items
+                and "allOf" not in items
+                and "$ref" not in items
+            )
+            if is_plain_dict:
+                return {"messages": [{"role": "user", "content": prompt}]}
             from langchain_core.messages import HumanMessage
 
             return {"messages": [HumanMessage(content=prompt)]}
@@ -1506,7 +1625,7 @@ def _build_input(graph: Any, prompt: str) -> Dict[str, Any]:
 
 def _process_updates_chunk(
     chunk: Dict[str, Any],
-    workflow_id: str,
+    execution_id: str,
     server_url: str,
     auth_key: str,
     auth_secret: str,
@@ -1515,7 +1634,7 @@ def _process_updates_chunk(
     for node_name, state_updates in chunk.items():
         # Always emit a thinking event for each node execution
         _push_event_nonblocking(
-            workflow_id,
+            execution_id,
             {"type": "thinking", "content": node_name},
             server_url,
             auth_key,
@@ -1525,12 +1644,12 @@ def _process_updates_chunk(
         # Check for tool calls and tool results in messages
         messages = state_updates.get("messages", []) if isinstance(state_updates, dict) else []
         for msg in messages if isinstance(messages, list) else []:
-            _emit_message_events(msg, workflow_id, server_url, auth_key, auth_secret)
+            _emit_message_events(msg, execution_id, server_url, auth_key, auth_secret)
 
 
 def _emit_message_events(
     msg: Any,
-    workflow_id: str,
+    execution_id: str,
     server_url: str,
     auth_key: str,
     auth_secret: str,
@@ -1545,7 +1664,7 @@ def _emit_message_events(
             msg.get("content", "") if isinstance(msg, dict) else ""
         )
         _push_event_nonblocking(
-            workflow_id,
+            execution_id,
             {"type": "tool_result", "toolName": name, "result": str(content)},
             server_url,
             auth_key,
@@ -1564,7 +1683,7 @@ def _emit_message_events(
                 tc.get("args", {}) if isinstance(tc, dict) else {}
             )
             _push_event_nonblocking(
-                workflow_id,
+                execution_id,
                 {"type": "tool_call", "toolName": tc_name, "args": tc_args},
                 server_url,
                 auth_key,
@@ -1577,12 +1696,13 @@ def _extract_output(final_state: Optional[Dict[str, Any]]) -> str:
     if final_state is None:
         return ""
     messages = final_state.get("messages", [])
-    # Walk in reverse to find the last AIMessage with content and no tool calls
+    # Walk in reverse to find the last AI/assistant message with content
     for msg in reversed(messages):
         msg_type = getattr(msg, "type", None) or (
             msg.get("type") if isinstance(msg, dict) else None
         )
-        if msg_type == "ai":
+        msg_role = msg.get("role") if isinstance(msg, dict) else None
+        if msg_type == "ai" or msg_role == "assistant":
             content = getattr(msg, "content", "") or (
                 msg.get("content", "") if isinstance(msg, dict) else ""
             )
@@ -1603,19 +1723,19 @@ def _extract_output(final_state: Optional[Dict[str, Any]]) -> str:
 
 
 def _push_event_nonblocking(
-    workflow_id: str,
+    execution_id: str,
     event: Dict[str, Any],
     server_url: str,
     auth_key: str,
     auth_secret: str,
 ) -> None:
-    """Fire-and-forget HTTP POST to {server_url}/agent/events/{workflowId}."""
+    """Fire-and-forget HTTP POST to {server_url}/agent/events/{executionId}."""
 
     def _do_push():
         try:
             import requests
 
-            url = f"{server_url}/agent/events/{workflow_id}"
+            url = f"{server_url}/agent/events/{execution_id}"
             headers = {}
             if auth_key:
                 headers["X-Auth-Key"] = auth_key
@@ -1623,6 +1743,6 @@ def _push_event_nonblocking(
                 headers["X-Auth-Secret"] = auth_secret
             requests.post(url, json=event, headers=headers, timeout=5)
         except Exception as exc:
-            logger.debug("Event push failed (workflow_id=%s): %s", workflow_id, exc)
+            logger.debug("Event push failed (execution_id=%s): %s", execution_id, exc)
 
     _EVENT_PUSH_POOL.submit(_do_push)

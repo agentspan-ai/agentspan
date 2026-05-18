@@ -14,8 +14,7 @@ LangChain, OpenAI, ADK) through Agentspan and need tools inside the
 graph to access credentials from the credential store.
 
 Setup (one-time):
-    agentspan credentials set --name GITHUB_TOKEN
-
+    agentspan credentials set GITHUB_TOKEN <your-github-token>
 Requirements:
     - Agentspan server running at AGENTSPAN_SERVER_URL
     - AGENTSPAN_LLM_MODEL set (or defaults to openai/gpt-5.4)
@@ -66,3 +65,13 @@ if __name__ == "__main__":
             credentials=["GITHUB_TOKEN"],
         )
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.16g_credentials_framework_passthrough
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)
+

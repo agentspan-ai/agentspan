@@ -121,22 +121,22 @@ class TestSSESimpleAgent:
         assert "done" in types, f"Expected 'done' event, got: {types}"
         assert len(events) >= 1
 
-        # All events should have a workflow_id
-        assert all(e.workflow_id for e in events)
+        # All events should have a execution_id
+        assert all(e.execution_id for e in events)
 
         # Done event should have output
         done_events = find_events(events, "done")
         assert len(done_events) == 1
         assert done_events[0].output is not None
 
-    def test_stream_workflow_id_available(self, runtime):
+    def test_stream_execution_id_available(self, runtime):
         agent = Agent(
             name=_unique_name("sse_wfid"),
             model=_model(),
             instructions="Reply briefly.",
         )
         stream = runtime.stream(agent, "Hi")
-        assert stream.workflow_id  # Available immediately
+        assert stream.execution_id  # Available immediately
         collect_all_events(stream)
 
     def test_stream_get_result_after_events(self, runtime):
@@ -283,7 +283,7 @@ class TestSSEHITLAgent:
 class TestSSEEventConsistency:
     """Cross-cutting SSE event quality checks."""
 
-    def test_events_have_workflow_id(self, runtime):
+    def test_events_have_execution_id(self, runtime):
         agent = Agent(
             name=_unique_name("sse_wfid_check"),
             model=_model(),
@@ -292,9 +292,9 @@ class TestSSEEventConsistency:
         stream = runtime.stream(agent, "Hello")
         events = collect_all_events(stream)
 
-        expected_wf_id = stream.workflow_id
+        expected_exec_id = stream.execution_id
         for event in events:
-            assert event.workflow_id, f"Event {event.type} has no workflow_id"
+            assert event.execution_id, f"Event {event.type} has no execution_id"
 
     def test_terminal_event_is_last(self, runtime):
         agent = Agent(

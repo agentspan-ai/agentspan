@@ -13,12 +13,12 @@
  */
 
 import { Agent, setTracingDisabled } from '@openai/agents';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 // Disable OpenAI tracing for cleaner example output
 setTracingDisabled(true);
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'greeter',
   instructions: 'You are a friendly assistant. Keep your responses concise and helpful.',
   model: 'gpt-4o-mini',
@@ -33,6 +33,15 @@ async function main() {
     const result = await runtime.run(agent, prompt);
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/openai --agents greeter
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
   } finally {
     await runtime.shutdown();
   }

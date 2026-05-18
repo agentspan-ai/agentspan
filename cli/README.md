@@ -1,17 +1,17 @@
 <p align="center">
-  <img src="https://github.com/agentspan/agentspan/raw/main/assets/logo-light.png#gh-light-mode-only" alt="Agentspan" width="400">
-  <img src="https://github.com/agentspan/agentspan/raw/main/assets/logo-dark.png#gh-dark-mode-only" alt="Agentspan" width="400">
+  <img src="https://github.com/agentspan-ai/agentspan/raw/main/assets/logo-light.png#gh-light-mode-only" alt="Agentspan" width="400">
+  <img src="https://github.com/agentspan-ai/agentspan/raw/main/assets/logo-dark.png#gh-dark-mode-only" alt="Agentspan" width="400">
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@agentspan/agentspan"><img src="https://img.shields.io/npm/v/@agentspan/agentspan?color=blue" alt="npm"></a>
-  <a href="https://github.com/agentspan/agentspan/stargazers"><img src="https://img.shields.io/github/stars/agentspan/agentspan?style=social" alt="Stars"></a>
-  <a href="https://github.com/agentspan/agentspan/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
+  <a href="https://www.npmjs.com/package/@agentspan-ai/agentspan"><img src="https://img.shields.io/npm/v/@agentspan-ai/agentspan?color=blue" alt="npm"></a>
+  <a href="https://github.com/agentspan-ai/agentspan/stargazers"><img src="https://img.shields.io/github/stars/agentspan-ai/agentspan?style=social" alt="Stars"></a>
+  <a href="https://github.com/agentspan-ai/agentspan/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
   <a href="https://discord.gg/agentspan"><img src="https://img.shields.io/discord/1234567890?label=Discord&logo=discord&color=5865F2" alt="Discord"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/agentspan/agentspan">Main Repo</a> &bull;
+  <a href="https://github.com/agentspan-ai/agentspan">Main Repo</a> &bull;
   <a href="https://docs.agentspan.dev">Docs</a> &bull;
   <a href="https://discord.gg/agentspan">Discord</a> &bull;
   <a href="../sdk/python/">Python SDK</a> &bull;
@@ -26,22 +26,16 @@ Command-line interface for managing the Agentspan runtime — start servers, run
 
 ## Install
 
-### Homebrew (macOS / Linux)
-
-```bash
-brew install agentspan/agentspan/agentspan
-```
-
 ### npm
 
 ```bash
-npm install -g @agentspan/agentspan
+npm install -g @agentspan-ai/agentspan
 ```
 
 ### Shell script
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/agentspan/agentspan/main/cli/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.sh | sh
 ```
 
 ### From source
@@ -101,7 +95,7 @@ The server JAR is downloaded from GitHub releases and cached in `~/.agentspan/se
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--port, -p` | Server port | `8080` |
+| `--port, -p` | Server port | `6767` |
 | `--model, -m` | Default LLM model | — |
 | `--version` | Specific server version | latest |
 | `--jar` | Path to local JAR file | — |
@@ -133,7 +127,7 @@ agentspan agent get mybot --version 2
 agentspan agent delete mybot
 agentspan agent delete mybot --version 1
 
-# Compile agent config to workflow definition (inspect only)
+# Compile agent config to agent definition (inspect only)
 agentspan agent compile mybot.yaml
 ```
 
@@ -191,12 +185,11 @@ agentspan doctor
 ### `agentspan configure` — Configuration
 
 ```bash
-# Set server URL and auth credentials
-agentspan configure --url http://myserver:8080
-agentspan configure --auth-key KEY --auth-secret SECRET
+# Set server URL
+agentspan configure --url http://myserver:6767
 
 # Override server URL for a single command
-agentspan --server http://other:8080 agent list
+agentspan --server http://other:6767 agent list
 ```
 
 ### `agentspan update` — Self-Update
@@ -213,9 +206,8 @@ Configuration is stored in `~/.agentspan/config.json`. Environment variables tak
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `AGENTSPAN_SERVER_URL` | Server URL | `http://localhost:8080` |
-| `AGENTSPAN_AUTH_KEY` | Auth key | — |
-| `AGENTSPAN_AUTH_SECRET` | Auth secret | — |
+| `AGENTSPAN_SERVER_URL` | Server URL | `http://localhost:6767` |
+| `AGENTSPAN_API_KEY` | Bearer token for authenticated servers | — |
 
 **Precedence:** CLI flags > env vars > config file > defaults
 
@@ -285,14 +277,14 @@ This builds all binaries, creates a GitHub release, publishes to npm, and update
 ## Community
 
 - **[Discord](https://discord.gg/agentspan)** — Ask questions, share what you're building, get help
-- **[GitHub Issues](https://github.com/agentspan/agentspan/issues)** — Bug reports and feature requests
+- **[GitHub Issues](https://github.com/agentspan-ai/agentspan/issues)** — Bug reports and feature requests
 - **[Contributing Guide](../CONTRIBUTING.md)** — How to contribute
 
 If Agentspan is useful to you, help others find it:
 
-- [Star the repo](https://github.com/agentspan/agentspan) — it helps more than you think
-- [Share on LinkedIn](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/agentspan/agentspan) — tell your network
-- [Share on X/Twitter](https://twitter.com/intent/tweet?text=Agentspan%20%E2%80%94%20AI%20agents%20that%20don%27t%20die%20when%20your%20process%20does.%20Durable%2C%20scalable%2C%20observable.&url=https://github.com/agentspan/agentspan) — spread the word
+- [Star the repo](https://github.com/agentspan-ai/agentspan) — it helps more than you think
+- [Share on LinkedIn](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/agentspan-ai/agentspan) — tell your network
+- [Share on X/Twitter](https://twitter.com/intent/tweet?text=Agentspan%20%E2%80%94%20AI%20agents%20that%20don%27t%20die%20when%20your%20process%20does.%20Durable%2C%20scalable%2C%20observable.&url=https://github.com/agentspan-ai/agentspan) — spread the word
 
 ## License
 

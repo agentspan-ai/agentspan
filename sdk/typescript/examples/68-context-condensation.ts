@@ -10,13 +10,12 @@
  *
  * Requirements:
  *   - Conductor server with LLM support + agentspan.default-context-window=10000
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, agentTool, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, agentTool, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Domain data -------------------------------------------------------------
 
@@ -120,15 +119,19 @@ const fetchDomainData = tool(
     name: 'fetch_domain_data',
     description:
       'Fetch market data, statistics, and key facts for a technology domain.',
-    inputSchema: z.object({
-      domain: z.string().describe('The technology domain to research'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        domain: { type: 'string', description: 'The technology domain to research' },
+      },
+      required: ['domain'],
+    },
   },
 );
 
 // -- Sub-agent: calls fetchDomainData and writes analysis --------------------
 
-const deepAnalyst = new Agent({
+export const deepAnalyst = new Agent({
   name: 'deep_analyst_68',
   model: llmModel,
   tools: [fetchDomainData],
@@ -153,7 +156,7 @@ const deepAnalyst = new Agent({
 
 const DOMAINS = Object.keys(DOMAIN_DATA);
 
-const orchestrator = new Agent({
+export const orchestrator = new Agent({
   name: 'research_orchestrator_68',
   model: llmModel,
   tools: [agentTool(deepAnalyst)],
@@ -169,16 +172,29 @@ const orchestrator = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
     orchestrator,
     'Produce comprehensive analyses for each of the following technology domains ' +
-    'by calling deep_analyst ONCE PER DOMAIN, one domain at a time (not in parallel). ' +
-    `Complete all ${DOMAINS.length} domains, then summarise cross-domain trends. ` +
-    `Domains: ${DOMAINS.join(', ')}.`,
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    'by calling deep_analyst ONCE PER DOMAIN, one domain at a time (not in parallel). '
+    // + `Complete all ${DOMAINS.length} domains, then summarise cross-domain trends. ` +
+    // `Domains: ${DOMAINS.join(', ')}.`,
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(orchestrator);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents research_orchestrator_68
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(orchestrator);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

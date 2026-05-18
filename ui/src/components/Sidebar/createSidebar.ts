@@ -29,18 +29,16 @@ export const baseSidebar: SidebarItem[] = [
     id: "executionsSubMenu",
     label: "Executions",
     children: [
-      { id: "workflowExeItem", label: "Workflow" },
+      { id: "workflowExeItem", label: "Agent" },
       { id: "queueMonitorItem", label: "Queue Monitor" },
     ],
   },
-  { id: "runWorkflow", label: "Run Workflow" },
+  { id: "runWorkflow", label: "Run Agent" },
   {
     id: "definitionsSubMenu",
     label: "Definitions",
     children: [
-      { id: "workflowDefItem", label: "Workflow" },
-      { id: "taskDefItem", label: "Task" },
-      { id: "eventHandlerDefItem", label: "Event Handler" },
+      { id: "workflowDefItem", label: "Agent" },
     ],
   },
   {

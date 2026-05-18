@@ -10,7 +10,7 @@ Demonstrates:
     - Practical use case: multi-turn chatbot that remembers earlier exchanges
 
 Requirements:
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
@@ -52,15 +52,22 @@ checkpointer = MemorySaver()
 graph = builder.compile(name="persistent_memory_chatbot", checkpointer=checkpointer)
 
 if __name__ == "__main__":
-    # Each turn runs as a Conductor workflow. The graph (chat node with LLM)
-    # is compiled into prep/LLM_CHAT_COMPLETE/finish tasks.
-    # session_id provides per-user isolation on the server side.
     with AgentRuntime() as runtime:
         print("=== Alice's conversation ===")
         for msg in ["Hi, my name is Alice!", "What's my name?", "What did I just tell you?"]:
             result = runtime.run(graph, msg, session_id="alice")
             print(f"Alice: {msg}")
             result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.27_persistent_memory
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)
+
             print()
 
         print("=== Bob's conversation (separate session) ===")

@@ -11,14 +11,14 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
-const developer = new Agent({
+export const developer = new Agent({
   name: 'developer',
   model: llmModel,
   instructions:
@@ -26,7 +26,7 @@ const developer = new Agent({
     'Keep responses focused on code changes.',
 });
 
-const reviewer = new Agent({
+export const reviewer = new Agent({
   name: 'reviewer',
   model: llmModel,
   instructions:
@@ -34,7 +34,7 @@ const reviewer = new Agent({
     'and best practices. Provide specific, actionable feedback.',
 });
 
-const approver = new Agent({
+export const approver = new Agent({
   name: 'approver',
   model: llmModel,
   instructions:
@@ -46,7 +46,7 @@ const approver = new Agent({
 //   developer -> reviewer (code must be reviewed)
 //   reviewer -> developer OR approver (send back for fixes or escalate)
 //   approver -> developer (request revisions)
-const codeReview = new Agent({
+export const codeReview = new Agent({
   name: 'code_review',
   model: llmModel,
   agents: [developer, reviewer, approver],
@@ -61,13 +61,26 @@ const codeReview = new Agent({
 
 // -- Run -------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
     codeReview,
     'Write a Python function to validate email addresses using regex.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(codeReview);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents code_review
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(codeReview);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

@@ -15,13 +15,13 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, RegexGuardrail, guardrail } from '../src/index.js';
-import type { GuardrailResult } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, RegexGuardrail, guardrail } from '@agentspan-ai/sdk';
+import type { GuardrailResult } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- RegexGuardrail: block bullet-point lists --------------------------------
 // Compiles as an InlineTask -- runs entirely on the Conductor server.
@@ -62,7 +62,7 @@ const minLength = guardrail(
 
 // -- Agent (no tools) --------------------------------------------------------
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'essay_writer',
   model: llmModel,
   instructions:
@@ -72,25 +72,38 @@ const agent = new Agent({
   guardrails: [noBulletLists.toGuardrailDef(), minLength],
 });
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(agent, 'Explain why the sky is blue.');
-  result.printResult();
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(agent, 'Explain why the sky is blue.');
+    result.printResult();
 
-  // Verify guardrails
-  const output = String(result.output);
-  const hasBullets = output
-    .split('\n')
-    .some((line) => line.trim().startsWith('-') || line.trim().startsWith('*'));
-  const wordCount = output.split(/\s+/).filter(Boolean).length;
+    // Verify guardrails
+    const output = String(result.output);
+    const hasBullets = output
+    // .split('\n')
+    // .some((line) => line.trim().startsWith('-') || line.trim().startsWith('*'));
+    const wordCount = output.split(/\s+/).filter(Boolean).length;
 
-  if (hasBullets) {
+    if (hasBullets) {
     console.log('[WARN] Output contains bullet points -- guardrail may not have fired');
-  } else if (wordCount < 50) {
+    } else if (wordCount < 50) {
     console.log(`[WARN] Output too short (${wordCount} words)`);
-  } else {
+    } else {
     console.log(`[OK] Prose response, ${wordCount} words -- guardrails passed`);
+    }
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents essay_writer
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+  } finally {
+    await runtime.shutdown();
   }
-} finally {
-  await runtime.shutdown();
 }
+
+main().catch(console.error);

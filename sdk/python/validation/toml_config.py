@@ -24,7 +24,7 @@ class RunConfig:
     max_workers: int = 8
     timeout: int = 300
     retries: int = 0
-    server_url: str = "http://localhost:8080/api"
+    server_url: str = "http://localhost:6767/api"
     env: dict = field(default_factory=dict)
 
 

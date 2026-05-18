@@ -26,7 +26,7 @@ Architecture:
 
 Requirements:
     - Conductor server running
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api in .env or environment
     - gh CLI authenticated (gh auth status)
     - Git configured with push access to the repo
 """
@@ -382,6 +382,7 @@ if __name__ == "__main__":
     print("=" * 60)
     print(f"\nPrompt: {prompt}\n")
 
+
     with AgentRuntime() as runtime:
         result = runtime.run(coding_team, prompt)
 
@@ -400,4 +401,14 @@ if __name__ == "__main__":
             print(output)
 
         print(f"\nFinish reason: {result.finish_reason}")
-        print(f"Workflow ID: {result.workflow_id}")
+        print(f"Execution ID: {result.execution_id}")
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(coding_team)
+        # CLI alternative:
+        # agentspan deploy --package examples.60_github_coding_agent
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(coding_team)
+

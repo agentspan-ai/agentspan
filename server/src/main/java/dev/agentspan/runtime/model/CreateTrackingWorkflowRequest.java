@@ -5,11 +5,12 @@
 
 package dev.agentspan.runtime.model;
 
+import java.util.Map;
+
 import com.fasterxml.jackson.annotation.JsonInclude;
+
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.util.Map;
 
 @Data
 @NoArgsConstructor
@@ -17,4 +18,6 @@ import java.util.Map;
 public class CreateTrackingWorkflowRequest {
     private String workflowName;
     private Map<String, Object> input;
+    private String parentWorkflowId;
+    private String parentWorkflowTaskId;
 }

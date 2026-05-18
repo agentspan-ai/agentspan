@@ -1,7 +1,7 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Conductor Agents SDK — durable, scalable, observable AI agents.
+"""Agentspan Agents SDK — durable, scalable, observable AI agents.
 
 This is the public API surface.  Import everything you need from here::
 
@@ -34,9 +34,12 @@ from agentspan.agents.agent import (
     scatter_gather,
 )
 
+# Claude Code configuration
+from agentspan.agents.claude_code import ClaudeCode
+
 # Callback handlers
 from agentspan.agents.callback import CallbackHandler
-from agentspan.agents.cli_config import CliConfig
+from agentspan.agents.cli_config import CliConfig, TerminalToolError
 
 # Code execution
 from agentspan.agents.code_execution_config import CodeExecutionConfig
@@ -51,6 +54,15 @@ from agentspan.agents.code_executor import (
 
 # Exceptions
 from agentspan.agents.exceptions import AgentAPIError, AgentNotFoundError, AgentspanError
+
+# Skills
+from agentspan.agents.skill import (
+    SkillLoadError,
+    format_prompt_with_params,
+    format_skill_params,
+    load_skills,
+    skill,
+)
 
 # Extended agent types
 from agentspan.agents.ext import GPTAssistantAgent, UserProxyAgent
@@ -94,6 +106,8 @@ from agentspan.agents.run import (
     deploy,
     deploy_async,
     plan,
+    resume,
+    resume_async,
     run,
     run_async,
     serve,
@@ -146,6 +160,7 @@ def resolve_credentials(input_data: dict, names: list) -> dict:
     fetcher = WorkerCredentialFetcher(server_url=config.server_url)
     return fetcher.fetch(token, names)
 
+
 # Agent discovery
 from agentspan.agents.runtime.discovery import discover_agents
 
@@ -164,6 +179,9 @@ from agentspan.agents.termination import (
     TokenUsageTermination,
 )
 
+# OpenAI Agents SDK compatibility
+from agentspan.agents.openai_compat import RunResult, Runner
+
 # Tool decorator and constructors
 from agentspan.agents.tool import (
     ToolContext,
@@ -180,15 +198,24 @@ from agentspan.agents.tool import (
     search_tool,
     tool,
     video_tool,
+    wait_for_message_tool,
 )
+
+# openai-agents name alias — ``from agentspan.agents import function_tool``
+function_tool = tool
 
 # Tracing (optional — only activates if opentelemetry is installed)
 from agentspan.agents.tracing import is_tracing_enabled
 
 __all__ = [
+    # OpenAI Agents SDK compatibility
+    "Runner",
+    "RunResult",
+    "function_tool",
     # Core
     "Agent",
     "AgentDef",
+    "ClaudeCode",
     "PromptTemplate",
     "Strategy",
     "agent",
@@ -207,6 +234,7 @@ __all__ = [
     "http_tool",
     "human_tool",
     "mcp_tool",
+    "wait_for_message_tool",
     "image_tool",
     "audio_tool",
     "video_tool",
@@ -219,6 +247,8 @@ __all__ = [
     "deploy",
     "deploy_async",
     "plan",
+    "resume",
+    "resume_async",
     "run",
     "run_async",
     "serve",
@@ -263,6 +293,7 @@ __all__ = [
     # Code execution
     "CodeExecutionConfig",
     "CliConfig",
+    "TerminalToolError",
     "CodeExecutor",
     "LocalCodeExecutor",
     "DockerCodeExecutor",
@@ -294,4 +325,8 @@ __all__ = [
     "CredentialServiceError",
     # Configuration errors
     "ConfigurationError",
+    # Skills
+    "skill",
+    "load_skills",
+    "SkillLoadError",
 ]

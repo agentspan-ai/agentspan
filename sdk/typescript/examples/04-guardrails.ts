@@ -13,8 +13,8 @@ import {
   RegexGuardrail,
   LLMGuardrail,
   guardrail,
-} from '../src/index.js';
-import type { GuardrailResult } from '../src/index.js';
+} from '@agentspan-ai/sdk';
+import type { GuardrailResult } from '@agentspan-ai/sdk';
 
 const MODEL = process.env.AGENTSPAN_LLM_MODEL ?? 'openai/gpt-4o';
 
@@ -61,7 +61,7 @@ const factChecker = guardrail(
 );
 
 // -- Agent with all guardrails --
-const safeWriter = new Agent({
+export const safeWriter = new Agent({
   name: 'safe_writer',
   model: MODEL,
   instructions: 'Write informative content. Avoid PII and biased language.',
@@ -74,9 +74,21 @@ const safeWriter = new Agent({
 
 async function main() {
   const runtime = new AgentRuntime();
-  const result = await runtime.run(safeWriter, 'Write about AI safety best practices.');
-  result.printResult();
-  await runtime.shutdown();
+  try {
+    const result = await runtime.run(safeWriter, 'Write about AI safety best practices.');
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(safeWriter);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents safe_writer
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(safeWriter);
+  } finally {
+    await runtime.shutdown();
+  }
 }
 
 main().catch(console.error);

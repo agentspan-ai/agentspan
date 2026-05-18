@@ -15,13 +15,12 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // --- Existing worker task implementations ---
 // These mirror @worker_task functions from an existing Conductor deployment.
@@ -40,9 +39,13 @@ const getCustomerData = tool(
   {
     name: 'get_customer_data',
     description: 'Fetch customer data from the database.',
-    inputSchema: z.object({
-      customerId: z.string().describe('The customer ID to look up'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        customerId: { type: 'string', description: 'The customer ID to look up' },
+      },
+      required: ['customerId'],
+    },
   },
 );
 
@@ -66,10 +69,14 @@ const getOrderHistory = tool(
   {
     name: 'get_order_history',
     description: 'Retrieve recent order history for a customer.',
-    inputSchema: z.object({
-      customerId: z.string().describe('The customer ID'),
-      limit: z.number().optional().default(5).describe('Max number of orders to return'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        customerId: { type: 'string', description: 'The customer ID' },
+        limit: { type: 'number', description: 'Max number of orders to return' },
+      },
+      required: ['customerId'],
+    },
   },
 );
 
@@ -87,11 +94,15 @@ const createSupportTicket = tool(
   {
     name: 'create_support_ticket',
     description: 'Create a support ticket for a customer.',
-    inputSchema: z.object({
-      customerId: z.string().describe('The customer ID'),
-      issue: z.string().describe('Description of the issue'),
-      priority: z.string().optional().default('medium').describe('Ticket priority'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        customerId: { type: 'string', description: 'The customer ID' },
+        issue: { type: 'string', description: 'Description of the issue' },
+        priority: { type: 'string', description: 'Ticket priority' },
+      },
+      required: ['customerId', 'issue'],
+    },
   },
 );
 
@@ -103,14 +114,20 @@ const createSupportTicket = tool(
 //   {
 //     name: 'my_deployed_task',
 //     description: 'A task handled by an external Conductor worker.',
-//     inputSchema: z.object({ input: z.string() }),
+//     inputSchema: {
+//       type: 'object',
+//       properties: {
+//         input: { type: 'string' },
+//       },
+//       required: ['input'],
+//     },
 //     external: true,  // No local worker — dispatched to remote handler
 //   },
 // );
 
 // --- Agent that mixes worker-backed and agent-specific tools ---
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'customer_support',
   model: llmModel,
   tools: [getCustomerData, getOrderHistory, createSupportTicket],
@@ -119,13 +136,26 @@ const agent = new Agent({
     'customer information, check order history, and create support tickets.',
 });
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
     agent,
     'Customer C001 is asking about their recent orders. Look them up and summarize.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents customer_support
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

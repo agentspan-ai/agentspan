@@ -6,13 +6,12 @@
  *
  * Requirements:
  *   - Conductor server running
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Tools -------------------------------------------------------------------
 
@@ -23,9 +22,13 @@ const searchDocs = tool(
   {
     name: 'search_docs',
     description: 'Search internal documentation.',
-    inputSchema: z.object({
-      query: z.string().describe('Search query string'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search query string' },
+      },
+      required: ['query'],
+    },
   },
 );
 
@@ -36,22 +39,26 @@ const checkStatus = tool(
   {
     name: 'check_status',
     description: 'Check service health status.',
-    inputSchema: z.object({
-      service: z.string().describe('Name of the service to check'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        service: { type: 'string', description: 'Name of the service to check' },
+      },
+      required: ['service'],
+    },
   },
 );
 
 // -- Define agents -----------------------------------------------------------
 
-const docAssistant = new Agent({
+export const docAssistant = new Agent({
   name: 'doc_assistant',
   model: llmModel,
   tools: [searchDocs],
   instructions: 'Help users find documentation. Use search_docs to look up answers.',
 });
 
-const opsBot = new Agent({
+export const opsBot = new Agent({
   name: 'ops_bot',
   model: llmModel,
   tools: [checkStatus],
@@ -62,14 +69,18 @@ const opsBot = new Agent({
 
 const runtime = new AgentRuntime();
 try {
-  const agents = [docAssistant, opsBot];
-  for (const a of agents) {
-    const info = await runtime.deploy(a);
-    console.log(`Deployed: ${info.agentName} -> ${info.workflowName}`);
-  }
+  const result = await runtime.run(docAssistant, 'How do I reset my password?');
+  result.printResult();
 
-  console.log(`\n${agents.length} agent(s) registered on server.`);
-  console.log('Now run 63b-serve.ts to start workers, then 63c-run-by-name.ts to execute.');
+  // Production pattern:
+  // 1. Deploy once during CI/CD:
+  // await runtime.deploy(docAssistant);
+  // await runtime.deploy(opsBot);
+  // CLI alternative:
+  // agentspan deploy --package sdk/typescript/examples --agents doc_assistant
+  //
+  // 2. In a separate long-lived worker process:
+  // await runtime.serve(docAssistant, opsBot);
 } finally {
   await runtime.shutdown();
 }

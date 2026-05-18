@@ -181,7 +181,7 @@ sealed class Instructions {
 ```kotlin
 @Serializable
 data class AgentResult(
-    val output: JsonElement? = null, val workflowId: String,
+    val output: JsonElement? = null, val executionId: String,
     val status: Status, val finishReason: FinishReason? = null,
     val error: String? = null, val tokenUsage: TokenUsage? = null,
     val messages: List<Message> = emptyList(), val toolCalls: List<ToolCall> = emptyList(),
@@ -193,7 +193,7 @@ data class AgentResult(
 }
 
 data class ToolContext(
-    val sessionId: String, val workflowId: String, val agentName: String,
+    val sessionId: String, val executionId: String, val agentName: String,
     val metadata: Map<String, String> = emptyMap(),
     val state: MutableMap<String, Any> = mutableMapOf(),
 )
@@ -442,7 +442,7 @@ fun runBlocking(agent: Agent, prompt: String): AgentResult =
 ```kotlin
 fun AgentRuntime.stream(agent: Agent, prompt: String): Flow<AgentEvent> = flow {
     val handle = start(agent, prompt)
-    SseClient(httpClient, config).connect(handle.workflowId).collect { emit(it) }
+    SseClient(httpClient, config).connect(handle.executionId).collect { emit(it) }
 }
 
 // Consumer: exhaustive `when` on EventType
@@ -458,18 +458,18 @@ runtime.stream(myAgent, "Write an article").collect { event ->
 
 ### 4.3 AgentHandle and AgentStream
 
-`AgentHandle` wraps a running workflow. Every method is `suspend`. `AgentStream` wraps a `Flow<AgentEvent>` with HITL methods and event accumulation.
+`AgentHandle` wraps a running execution. Every method is `suspend`. `AgentStream` wraps a `Flow<AgentEvent>` with HITL methods and event accumulation.
 
 ```kotlin
-class AgentHandle(val workflowId: String, private val runtime: AgentRuntime) {
-    suspend fun getStatus(): AgentStatus = runtime.httpClient.get("agent/$workflowId/status")
-    suspend fun approve() = runtime.httpClient.post("agent/$workflowId/respond") { setBody(mapOf("approved" to true)) }
-    suspend fun reject(reason: String? = null) = runtime.httpClient.post("agent/$workflowId/respond") { setBody(mapOf("approved" to false, "reason" to reason)) }
-    suspend fun send(message: String) = runtime.httpClient.post("agent/$workflowId/respond") { setBody(mapOf("message" to message)) }
-    suspend fun pause() = runtime.httpClient.post("agent/$workflowId/pause")
-    suspend fun resume() = runtime.httpClient.post("agent/$workflowId/resume")
-    suspend fun cancel(reason: String? = null) = runtime.httpClient.post("agent/$workflowId/cancel") { setBody(mapOf("reason" to reason)) }
-    fun stream(): Flow<AgentEvent> = runtime.streamEvents(workflowId)
+class AgentHandle(val executionId: String, private val runtime: AgentRuntime) {
+    suspend fun getStatus(): AgentStatus = runtime.httpClient.get("agent/$executionId/status")
+    suspend fun approve() = runtime.httpClient.post("agent/$executionId/respond") { setBody(mapOf("approved" to true)) }
+    suspend fun reject(reason: String? = null) = runtime.httpClient.post("agent/$executionId/respond") { setBody(mapOf("approved" to false, "reason" to reason)) }
+    suspend fun send(message: String) = runtime.httpClient.post("agent/$executionId/respond") { setBody(mapOf("message" to message)) }
+    suspend fun pause() = runtime.httpClient.post("agent/$executionId/pause")
+    suspend fun resume() = runtime.httpClient.post("agent/$executionId/resume")
+    suspend fun cancel(reason: String? = null) = runtime.httpClient.post("agent/$executionId/cancel") { setBody(mapOf("reason" to reason)) }
+    fun stream(): Flow<AgentEvent> = runtime.streamEvents(executionId)
 }
 
 class AgentStream(val handle: AgentHandle, private val eventFlow: Flow<AgentEvent>) {
@@ -550,13 +550,13 @@ The SSE client returns a `Flow<AgentEvent>`. Key behaviors: line-by-line SSE par
 ```kotlin
 class SseClient(private val httpClient: HttpClient, private val baseUrl: String, private val authHeaders: Map<String, String>) {
 
-    fun connect(workflowId: String): Flow<AgentEvent> = flow {
+    fun connect(executionId: String): Flow<AgentEvent> = flow {
         var lastEventId: String? = null
         var retryDelay = 1.seconds
 
         retry@ while (true) {
             try {
-                httpClient.prepareGet("$baseUrl/agent/stream/$workflowId") {
+                httpClient.prepareGet("$baseUrl/agent/stream/$executionId") {
                     header("Accept", "text/event-stream")
                     authHeaders.forEach { (k, v) -> header(k, v) }
                     lastEventId?.let { header("Last-Event-ID", it) }
@@ -649,7 +649,7 @@ Use Kotlin's `runCatching` for operations that may fail without throwing:
 
 ```kotlin
 val result = runCatching { runtime.deploy(myAgent) }
-result.onSuccess { println("Deployed: ${it.workflowName}") }
+result.onSuccess { println("Deployed: ${it.registeredName}") }
       .onFailure { println("Deploy failed: ${it.message}") }
 ```
 
@@ -1132,7 +1132,7 @@ fun main() = runBlocking {
     AgentRuntime().use { runtime ->
         // Deploy (compile + register)
         val deployments = runtime.deploy(fullPipeline)
-        deployments.forEach { println("  Deployed: ${it.workflowName}") }
+        deployments.forEach { println("  Deployed: ${it.registeredName}") }
 
         // Plan (dry-run, no execution)
         runtime.plan(fullPipeline)

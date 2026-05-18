@@ -48,7 +48,7 @@ js/
 ### Tool definition — plain JavaScript (primary)
 
 ```js
-const { tool } = require('@agentspan/sdk')
+const { tool } = require('@agentspan-ai/sdk')
 
 const getWeather = tool(
   async function getWeather({ city }) {
@@ -71,7 +71,7 @@ const getWeather = tool(
 > standalone functions. `tool()` is the equivalent for standalone functions.
 
 ```ts
-import { AgentTool, toolsFrom } from '@agentspan/sdk/decorators'
+import { AgentTool, toolsFrom } from '@agentspan-ai/sdk/decorators'
 
 class WeatherTools {
   @AgentTool({
@@ -94,7 +94,7 @@ const tools = toolsFrom(new WeatherTools())
 ### Agent
 
 ```js
-const { Agent } = require('@agentspan/sdk')
+const { Agent } = require('@agentspan-ai/sdk')
 
 const agent = new Agent({
   name: 'weather_agent',
@@ -112,9 +112,9 @@ const agent = new Agent({
 ### Runtime
 
 ```js
-const { AgentRuntime } = require('@agentspan/sdk')
+const { AgentRuntime } = require('@agentspan-ai/sdk')
 
-const runtime = new AgentRuntime({ serverUrl: 'http://localhost:8080' })
+const runtime = new AgentRuntime({ serverUrl: 'http://localhost:6767' })
 
 // Blocking run — awaits completion
 const result = await runtime.run(agent, "What's the weather in SF?")
@@ -149,7 +149,7 @@ runtime.run(agent, prompt)
   │
   ├─2─ POST /api/agent/start  { agentConfig, prompt, sessionId, media }
   │        Server compiles → Conductor workflow
-  │        Returns { workflowId }
+  │        Returns { executionId }
   │
   ├─3─ WorkerManager.registerAll(agent.tools)
   │        For each @tool with a JS func:
@@ -159,8 +159,8 @@ runtime.run(agent, prompt)
   │                ↕
   │          Conductor polls ← worker executes JS fn → result
   │
-  └─4─ Poll GET /api/agent/{workflowId}/status (500ms interval)
-           OR stream SSE  GET /api/agent/stream/{workflowId}
+  └─4─ Poll GET /api/agent/{executionId}/status (500ms interval)
+           OR stream SSE  GET /api/agent/stream/{executionId}
            Until COMPLETED / FAILED / TERMINATED / TIMED_OUT
            → AgentResult
 ```
@@ -220,7 +220,7 @@ AgentRuntime._prepareWorkers(agent)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AGENTSPAN_SERVER_URL` | `http://localhost:8080/api` | Conductor server URL |
+| `AGENTSPAN_SERVER_URL` | `http://localhost:6767/api` | Conductor server URL |
 | `AGENTSPAN_AUTH_KEY` | — | Auth key (Orkes Cloud) |
 | `AGENTSPAN_AUTH_SECRET` | — | Auth secret (Orkes Cloud) |
 | `AGENTSPAN_WORKER_POLL_INTERVAL` | `100` | Worker poll interval (ms) |
@@ -242,22 +242,22 @@ cp .env.example .env
 # Edit .env: set AGENT_LLM_MODEL=openai/gpt-4o
 
 # Run weather example (plain JS)
-AGENTSPAN_SERVER_URL=http://localhost:8080 \
+AGENTSPAN_SERVER_URL=http://localhost:6767 \
 AGENT_LLM_MODEL=openai/gpt-4o \
 node examples/weather.js
 
 # Custom prompt
-AGENTSPAN_SERVER_URL=http://localhost:8080 \
+AGENTSPAN_SERVER_URL=http://localhost:6767 \
 AGENT_LLM_MODEL=openai/gpt-4o \
 node examples/weather.js "What's the weather in Tokyo and London?"
 
 # Run streaming example
-AGENTSPAN_SERVER_URL=http://localhost:8080 \
+AGENTSPAN_SERVER_URL=http://localhost:6767 \
 AGENT_LLM_MODEL=openai/gpt-4o \
 node examples/weather-stream.js
 
 # Run TypeScript decorator example (requires ts-node)
-AGENTSPAN_SERVER_URL=http://localhost:8080 \
+AGENTSPAN_SERVER_URL=http://localhost:6767 \
 AGENT_LLM_MODEL=openai/gpt-4o \
 npx ts-node --project decorators/tsconfig.json examples/weather-decorators.ts
 ```

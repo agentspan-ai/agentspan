@@ -54,7 +54,7 @@ export const TerminateOperatorForm = (props: TaskFormProps) => {
         </Grid>
       </TaskFormSection>
       <TaskFormSection
-        title="Workflow output"
+        title="Agent output"
         accordionAdditionalProps={{ defaultExpanded: true }}
       >
         <Grid container sx={{ width: "100%" }} spacing={2}>

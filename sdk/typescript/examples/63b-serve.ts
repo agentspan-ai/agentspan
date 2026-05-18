@@ -12,13 +12,12 @@
  * Requirements:
  *   - Conductor server running
  *   - Agents already deployed (run 63-deploy.ts first)
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Tools (same definitions as 63-deploy.ts) --------------------------------
 
@@ -29,9 +28,13 @@ const searchDocs = tool(
   {
     name: 'search_docs',
     description: 'Search internal documentation.',
-    inputSchema: z.object({
-      query: z.string().describe('Search query string'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search query string' },
+      },
+      required: ['query'],
+    },
   },
 );
 
@@ -42,22 +45,26 @@ const checkStatus = tool(
   {
     name: 'check_status',
     description: 'Check service health status.',
-    inputSchema: z.object({
-      service: z.string().describe('Name of the service to check'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        service: { type: 'string', description: 'Name of the service to check' },
+      },
+      required: ['service'],
+    },
   },
 );
 
 // -- Define agents -----------------------------------------------------------
 
-const docAssistant = new Agent({
+export const docAssistant = new Agent({
   name: 'doc_assistant',
   model: llmModel,
   tools: [searchDocs],
   instructions: 'Help users find documentation. Use search_docs to look up answers.',
 });
 
-const opsBot = new Agent({
+export const opsBot = new Agent({
   name: 'ops_bot',
   model: llmModel,
   tools: [checkStatus],
@@ -66,13 +73,20 @@ const opsBot = new Agent({
 
 // -- Serve: register workers and block ---------------------------------------
 
-console.log('Serving workers for doc_assistant + ops_bot.');
-console.log('To actually start the blocking serve loop, uncomment the runtime.serve() call.');
-console.log('');
-console.log('Usage:');
-console.log('  const runtime = new AgentRuntime();');
-console.log('  await runtime.serve(docAssistant, opsBot); // blocks until Ctrl+C / SIGTERM');
+const runtime = new AgentRuntime();
+try {
+  const result = await runtime.run(opsBot, 'Check the status of the API gateway.');
+  result.printResult();
 
-// In production, uncomment:
-// const runtime = new AgentRuntime();
-// await runtime.serve(docAssistant, opsBot);  // blocks until Ctrl+C / SIGTERM
+  // Production pattern:
+  // 1. Deploy once during CI/CD:
+  // await runtime.deploy(docAssistant);
+  // await runtime.deploy(opsBot);
+  // CLI alternative:
+  // agentspan deploy --package sdk/typescript/examples --agents doc_assistant
+  //
+  // 2. In a separate long-lived worker process:
+  // await runtime.serve(docAssistant, opsBot);
+} finally {
+  await runtime.shutdown();
+}

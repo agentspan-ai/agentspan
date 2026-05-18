@@ -41,6 +41,19 @@ export interface TokenUsage {
   totalTokens: number;
 }
 
+export interface TaskAttempt {
+  taskId: string;
+  retryCount: number;
+  status: string;
+  startTime?: number;
+  endTime?: number;
+  durationMs: number;
+  workerId?: string;
+  reasonForIncompletion?: string;
+  inputData?: Record<string, unknown>;
+  outputData?: Record<string, unknown>;
+}
+
 export interface AgentEvent {
   id: string;
   type: EventType;
@@ -49,8 +62,10 @@ export interface AgentEvent {
   summary: string;
   /** Full detail - JSON object or text */
   detail?: unknown;
-  /** For TOOL_CALL: tool name */
+  /** For TOOL_CALL: tool name; for LLM: model name */
   toolName?: string;
+  /** For LLM: custom base URL override (for debugging) */
+  baseUrl?: string;
   /** For TOOL_CALL: tool arguments */
   toolArgs?: Record<string, unknown>;
   /** For HANDOFF: target agent name */
@@ -82,6 +97,10 @@ export interface AgentEvent {
     workerId?: string;
     reasonForIncompletion?: string;
     retryCount?: number;
+    /** Total execution attempts (original + retries). Present when > 1. */
+    totalAttempts?: number;
+    /** All task attempts (original + retries) — present when totalAttempts > 1 */
+    allAttempts?: TaskAttempt[];
     pollCount?: number;
     seq?: string;
     queueWaitTime?: number;

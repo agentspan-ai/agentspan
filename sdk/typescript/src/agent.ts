@@ -1,11 +1,17 @@
-import type {
-  Strategy,
-  CredentialFile,
-  CodeExecutionConfig,
-  CliConfig,
-  PromptTemplate as PromptTemplateInterface,
-} from './types.js';
-import { agentTool } from './tool.js';
+import type { Strategy, CredentialFile, CodeExecutionConfig, CliConfig } from "./types.js";
+import { agentTool } from "./tool.js";
+import { ConfigurationError } from "./errors.js";
+import { ClaudeCode } from "./claude-code.js";
+import type { CliConfigOptions } from "./cli-config.js";
+import { makeCliTool } from "./cli-config.js";
+
+// ── Validation constants ──────────────────────────────────
+
+/**
+ * Valid agent name pattern: starts with a letter, followed by letters, digits,
+ * underscores, or hyphens.
+ */
+const VALID_NAME_RE = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
 
 // ── PromptTemplate class ──────────────────────────────────
 
@@ -18,11 +24,7 @@ export class PromptTemplate {
   readonly variables?: Record<string, string>;
   readonly version?: number;
 
-  constructor(
-    name: string,
-    variables?: Record<string, string>,
-    version?: number,
-  ) {
+  constructor(name: string, variables?: Record<string, string>, version?: number) {
     this.name = name;
     this.variables = variables;
     this.version = version;
@@ -67,16 +69,8 @@ export interface CallbackHandler {
   onAgentEnd?(agentName: string, result: unknown): Promise<void>;
   onModelStart?(agentName: string, messages: unknown[]): Promise<void>;
   onModelEnd?(agentName: string, response: unknown): Promise<void>;
-  onToolStart?(
-    agentName: string,
-    toolName: string,
-    args: unknown,
-  ): Promise<void>;
-  onToolEnd?(
-    agentName: string,
-    toolName: string,
-    result: unknown,
-  ): Promise<void>;
+  onToolStart?(agentName: string, toolName: string, args: unknown): Promise<void>;
+  onToolEnd?(agentName: string, toolName: string, result: unknown): Promise<void>;
 }
 
 /**
@@ -92,7 +86,9 @@ export interface ConversationMemory {
  */
 export interface AgentOptions {
   name: string;
-  model?: string;
+  model?: string | ClaudeCode;
+  /** Custom base URL for the LLM provider (overrides env var defaults). */
+  baseUrl?: string;
   instructions?: string | PromptTemplate | ((...args: unknown[]) => string);
   tools?: unknown[]; // Normalized via normalizeToolInput at serialization
   agents?: Agent[];
@@ -114,13 +110,19 @@ export interface AgentOptions {
   metadata?: Record<string, unknown>;
   callbacks?: CallbackHandler[];
   planner?: boolean;
-  includeContents?: 'default' | 'none';
+  includeContents?: "default" | "none";
   thinkingBudgetTokens?: number;
   requiredTools?: string[];
   gate?: GateCondition;
   codeExecutionConfig?: CodeExecutionConfig;
-  cliConfig?: CliConfig;
+  cliConfig?: CliConfig | CliConfigOptions;
+  /** Shorthand: enable CLI command execution. */
+  cliCommands?: boolean;
+  /** Shorthand: allowed CLI commands (implies cliCommands=true). */
+  cliAllowedCommands?: string[];
   credentials?: (string | CredentialFile)[];
+  /** Stateful execution — each run gets a unique domain UUID for worker isolation. */
+  stateful?: boolean;
 }
 
 // ── Agent class ───────────────────────────────────────────
@@ -132,10 +134,9 @@ export interface AgentOptions {
 export class Agent {
   readonly name: string;
   readonly model?: string;
-  readonly instructions?:
-    | string
-    | PromptTemplate
-    | ((...args: unknown[]) => string);
+  /** Custom base URL for the LLM provider (overrides env var defaults). */
+  readonly baseUrl?: string;
+  readonly instructions?: string | PromptTemplate | ((...args: unknown[]) => string);
   readonly tools: unknown[];
   readonly agents: Agent[];
   readonly strategy?: Strategy;
@@ -148,6 +149,7 @@ export class Agent {
   readonly temperature?: number;
   readonly timeoutSeconds: number;
   readonly external: boolean;
+  readonly stateful: boolean;
   readonly stopWhen?: (messages: unknown[], ...args: unknown[]) => boolean;
   readonly termination?: TerminationCondition;
   readonly handoffs: HandoffCondition[];
@@ -156,7 +158,7 @@ export class Agent {
   readonly metadata?: Record<string, unknown>;
   readonly callbacks: CallbackHandler[];
   readonly planner: boolean;
-  readonly includeContents?: 'default' | 'none';
+  readonly includeContents?: "default" | "none";
   readonly thinkingBudgetTokens?: number;
   readonly requiredTools?: string[];
   readonly gate?: GateCondition;
@@ -164,11 +166,31 @@ export class Agent {
   readonly cliConfig?: CliConfig;
   readonly credentials?: (string | CredentialFile)[];
 
+  /** @internal Stored ClaudeCode config when model is ClaudeCode instance. */
+  private readonly _claudeCodeConfig?: ClaudeCode;
+
   constructor(options: AgentOptions) {
+    // ── Name validation ───────────────────────────────────
+    if (!VALID_NAME_RE.test(options.name)) {
+      throw new ConfigurationError(
+        `Invalid agent name '${options.name}'. ` +
+          `Names must start with a letter and contain only letters, digits, underscores, or hyphens.`,
+      );
+    }
+
     this.name = options.name;
-    this.model = options.model;
+
+    // Handle ClaudeCode config object
+    if (options.model instanceof ClaudeCode) {
+      this._claudeCodeConfig = options.model;
+      this.model = options.model.toModelString();
+    } else {
+      this.model = options.model;
+    }
+
+    this.baseUrl = options.baseUrl;
     this.instructions = options.instructions;
-    this.tools = options.tools ?? [];
+    this.tools = [...(options.tools ?? [])];
     this.agents = options.agents ?? [];
     this.strategy = options.strategy;
     this.router = options.router;
@@ -180,6 +202,7 @@ export class Agent {
     this.temperature = options.temperature;
     this.timeoutSeconds = options.timeoutSeconds ?? 0;
     this.external = options.external ?? false;
+    this.stateful = options.stateful ?? false;
     this.stopWhen = options.stopWhen;
     this.termination = options.termination;
     this.handoffs = options.handoffs ?? [];
@@ -193,8 +216,84 @@ export class Agent {
     this.requiredTools = options.requiredTools;
     this.gate = options.gate;
     this.codeExecutionConfig = options.codeExecutionConfig;
-    this.cliConfig = options.cliConfig;
     this.credentials = options.credentials;
+
+    // ── Duplicate sub-agent name detection ────────────────
+    if (this.agents.length > 0) {
+      const names = new Set<string>();
+      for (const sub of this.agents) {
+        if (names.has(sub.name)) {
+          throw new ConfigurationError(
+            `Duplicate sub-agent name '${sub.name}' in agent '${this.name}'. ` +
+              `All sub-agent names must be unique.`,
+          );
+        }
+        names.add(sub.name);
+      }
+    }
+
+    // ── Strategy validation ───────────────────────────────
+    if (this.strategy === "router" && !this.router) {
+      throw new ConfigurationError(
+        `Agent '${this.name}' uses strategy='router' but no 'router' parameter was provided. ` +
+          `Provide an Agent or function as the router.`,
+      );
+    }
+
+    // Validate claude-code tools are all strings
+    if (this.isClaudeCode && this.tools.length > 0) {
+      for (const t of this.tools) {
+        if (typeof t !== "string") {
+          throw new Error(
+            `Claude Code agent '${this.name}' tools must be strings ` +
+              `(e.g. 'Read', 'Edit', 'Bash'), got ${typeof t}`,
+          );
+        }
+      }
+    }
+
+    // CLI command execution setup
+    if (options.cliConfig != null) {
+      // Could be a CliConfig (wire format from types.ts) or CliConfigOptions
+      // Both have the same shape, so assign as wire format
+      this.cliConfig = options.cliConfig as CliConfig;
+    } else if (options.cliCommands || options.cliAllowedCommands) {
+      this.cliConfig = {
+        enabled: true,
+        allowedCommands: options.cliAllowedCommands ?? [],
+        timeout: 30,
+        allowShell: false,
+      };
+    }
+
+    // Auto-attach CLI tool when enabled
+    if (this.cliConfig && this.cliConfig.enabled !== false) {
+      const cliTool = makeCliTool(
+        {
+          allowedCommands: this.cliConfig.allowedCommands,
+          timeout: this.cliConfig.timeout,
+          allowShell: this.cliConfig.allowShell,
+        },
+        this.name,
+      );
+      this.tools.push(cliTool);
+    }
+  }
+
+  // ── Claude Code detection ───────────────────────────────
+
+  /**
+   * True if this agent uses the Claude Agent SDK runtime.
+   */
+  get isClaudeCode(): boolean {
+    return typeof this.model === "string" && this.model.startsWith("claude-code");
+  }
+
+  /**
+   * The ClaudeCode config object, if this agent was created with one.
+   */
+  get claudeCodeConfig(): ClaudeCode | undefined {
+    return this._claudeCodeConfig;
   }
 
   /**
@@ -205,20 +304,22 @@ export class Agent {
    * `a.pipe(b).pipe(c)` → Agent with agents: [a, b, c], NOT nested.
    */
   pipe(other: Agent): Agent {
-    if (this.strategy === 'sequential' && this.agents.length > 0) {
+    if (this.strategy === "sequential" && this.agents.length > 0) {
       // Flatten: merge other into existing sequential pipeline
       return new Agent({
-        name: [...this.agents, other].map((a) => a.name).join('_'),
+        name: [...this.agents, other].map((a) => a.name).join("_"),
+        model: this.model,
         agents: [...this.agents, other],
-        strategy: 'sequential',
+        strategy: "sequential",
       });
     }
 
     // Create new sequential pipeline
     return new Agent({
       name: `${this.name}_${other.name}`,
+      model: this.model,
       agents: [this, other],
-      strategy: 'sequential',
+      strategy: "sequential",
     });
   }
 }
@@ -276,10 +377,10 @@ export function scatterGather(options: ScatterGatherOptions): Agent {
     }),
   );
 
-  const resolvedModel = options.model ?? options.workers[0]?.model ?? 'openai/gpt-4o';
-  const workerNames = options.workers.map((w) => w.name).join(', ');
+  const resolvedModel = options.model ?? options.workers[0]?.model ?? "openai/gpt-4o";
+  const workerNames = options.workers.map((w) => w.name).join(", ");
   const prefix = SCATTER_GATHER_PREFIX(workerNames);
-  const userInstructions = options.instructions ?? options.coordinatorInstructions ?? '';
+  const userInstructions = options.instructions ?? options.coordinatorInstructions ?? "";
   const fullInstructions = userInstructions ? `${prefix}\n${userInstructions}` : prefix;
 
   const allTools = [...workerTools, ...(options.tools ?? [])];
@@ -295,18 +396,14 @@ export function scatterGather(options: ScatterGatherOptions): Agent {
 
 // ── @AgentDec decorator ───────────────────────────────────
 
-const AGENT_DECORATOR_KEY = Symbol('AGENT_DECORATOR');
+const AGENT_DECORATOR_KEY = Symbol("AGENT_DECORATOR");
 
 /**
  * Class method decorator that marks a method as an agent definition.
  * Use `agentsFrom(instance)` to extract decorated methods as Agent instances.
  */
-export function AgentDec(options: Omit<AgentOptions, 'instructions'> & { instructions?: string }) {
-  return function (
-    target: object,
-    propertyKey: string,
-    descriptor: PropertyDescriptor,
-  ): void {
+export function AgentDec(options: Omit<AgentOptions, "instructions"> & { instructions?: string }) {
+  return function (target: object, propertyKey: string, descriptor: PropertyDescriptor): void {
     if (!descriptor.value) return;
 
     Object.defineProperty(descriptor.value, AGENT_DECORATOR_KEY, {
@@ -327,13 +424,13 @@ export function agentsFrom(instance: object): Agent[] {
   const propertyNames = Object.getOwnPropertyNames(proto);
 
   for (const key of propertyNames) {
-    if (key === 'constructor') continue;
+    if (key === "constructor") continue;
     const descriptor = Object.getOwnPropertyDescriptor(proto, key);
-    if (!descriptor?.value || typeof descriptor.value !== 'function') continue;
+    if (!descriptor?.value || typeof descriptor.value !== "function") continue;
 
-    const metadata = (descriptor.value as Record<symbol, unknown>)[
-      AGENT_DECORATOR_KEY
-    ] as (AgentOptions & { _methodName: string }) | undefined;
+    const metadata = (descriptor.value as Record<symbol, unknown>)[AGENT_DECORATOR_KEY] as
+      | (AgentOptions & { _methodName: string })
+      | undefined;
 
     if (!metadata) continue;
 
@@ -369,7 +466,7 @@ export function agentsFrom(instance: object): Agent[] {
  */
 export function agent(
   fn: (...args: unknown[]) => string,
-  options: Omit<AgentOptions, 'instructions'> & { name: string },
+  options: Omit<AgentOptions, "instructions"> & { name: string },
 ): Agent {
   return new Agent({
     ...options,

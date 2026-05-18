@@ -8,16 +8,16 @@
  *
  * Requirements:
  *   - Conductor server
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Parallel research phase -------------------------------------------------
 
-const marketAnalyst = new Agent({
+export const marketAnalyst = new Agent({
   name: 'market_analyst_52',
   model: llmModel,
   instructions:
@@ -25,7 +25,7 @@ const marketAnalyst = new Agent({
     'and key players for the given topic. Be concise (3-4 bullet points).',
 });
 
-const riskAnalyst = new Agent({
+export const riskAnalyst = new Agent({
   name: 'risk_analyst_52',
   model: llmModel,
   instructions:
@@ -34,7 +34,7 @@ const riskAnalyst = new Agent({
 });
 
 // Both analysts run concurrently
-const parallelResearch = new Agent({
+export const parallelResearch = new Agent({
   name: 'research_phase_52',
   model: llmModel,
   agents: [marketAnalyst, riskAnalyst],
@@ -43,7 +43,7 @@ const parallelResearch = new Agent({
 
 // -- Sequential summarizer ---------------------------------------------------
 
-const summarizer = new Agent({
+export const summarizer = new Agent({
   name: 'summarizer_52',
   model: llmModel,
   instructions:
@@ -55,13 +55,26 @@ const summarizer = new Agent({
 
 const pipeline = parallelResearch.pipe(summarizer);
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
     pipeline,
     'Launching an AI-powered healthcare diagnostics tool in the US',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(pipeline);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents research_phase_52
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(pipeline);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

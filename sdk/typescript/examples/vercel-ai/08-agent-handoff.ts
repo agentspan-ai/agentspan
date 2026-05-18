@@ -8,7 +8,7 @@
 
 import { tool as aiTool } from 'ai';
 import { z } from 'zod';
-import { Agent, AgentRuntime } from '../../src/index.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
 
 // ── Specialist tools (Vercel AI SDK format) ──────────────
 
@@ -36,7 +36,7 @@ const analyzeData = aiTool({
 
 // ── Specialist agents ────────────────────────────────────
 
-const codeSpecialist = new Agent({
+export const codeSpecialist = new Agent({
   name: 'code_specialist',
   model: 'openai/gpt-4o-mini',
   instructions:
@@ -44,7 +44,7 @@ const codeSpecialist = new Agent({
   tools: [lookupCode],
 });
 
-const dataSpecialist = new Agent({
+export const dataSpecialist = new Agent({
   name: 'data_specialist',
   model: 'openai/gpt-4o-mini',
   instructions:
@@ -54,7 +54,7 @@ const dataSpecialist = new Agent({
 
 // ── Triage agent with handoff strategy ───────────────────
 
-const triageAgent = new Agent({
+export const triageAgent = new Agent({
   name: 'triage_agent',
   model: 'openai/gpt-4o-mini',
   instructions:
@@ -84,6 +84,15 @@ async function main() {
       result.printResult();
       console.log('-'.repeat(60));
     }
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(triageAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/vercel-ai --agents triage_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(triageAgent);
   } finally {
     await runtime.shutdown();
   }

@@ -13,7 +13,7 @@
 
 import { LlmAgent, FunctionTool } from '@google/adk';
 import { z } from 'zod';
-import { AgentRuntime } from '../../src/index.js';
+import { AgentRuntime } from '@agentspan-ai/sdk';
 
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
@@ -77,7 +77,7 @@ const checkSeoKeywords = new FunctionTool({
 // ── Sub-agents ────────────────────────────────────────────────────
 
 // Research agent gathers information
-const researcher = new LlmAgent({
+export const researcher = new LlmAgent({
   name: 'blog_researcher',
   model,
   description: 'Researches topics and gathers key facts.',
@@ -89,7 +89,7 @@ const researcher = new LlmAgent({
 });
 
 // Writer creates the blog post draft
-const writer = new LlmAgent({
+export const writer = new LlmAgent({
   name: 'blog_writer',
   model,
   description: 'Writes blog post drafts based on research.',
@@ -101,7 +101,7 @@ const writer = new LlmAgent({
 });
 
 // Editor polishes the post
-const editor = new LlmAgent({
+export const editor = new LlmAgent({
   name: 'blog_editor',
   model,
   description: 'Edits and polishes blog posts.',
@@ -113,7 +113,7 @@ const editor = new LlmAgent({
 
 // ── Coordinator ───────────────────────────────────────────────────
 
-const coordinator = new LlmAgent({
+export const coordinator = new LlmAgent({
   name: 'content_coordinator',
   model,
   instruction:
@@ -129,12 +129,21 @@ async function main() {
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(
-      coordinator,
-      'Write a blog post about the conductor oss workflow and how its the best workflow engine for the agentic era. ' +
-        'Make sure to write at-least 5000 word and use markdown to format the content',
+    coordinator,
+    'Write a blog post about the conductor oss workflow and how its the best workflow engine for the agentic era. ' +
+    'Make sure to write at-least 5000 word and use markdown to format the content',
     );
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(coordinator);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents content_coordinator
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(coordinator);
   } finally {
     await runtime.shutdown();
   }

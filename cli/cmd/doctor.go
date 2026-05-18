@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -206,7 +207,11 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	// JAVA_HOME check
 	javaHome := os.Getenv("JAVA_HOME")
 	if javaHome != "" {
-		if _, err := os.Stat(filepath.Join(javaHome, "bin", "java")); err != nil {
+		javaBin := "java"
+		if runtime.GOOS == "windows" {
+			javaBin = "java.exe"
+		}
+		if _, err := os.Stat(filepath.Join(javaHome, "bin", javaBin)); err != nil {
 			yellow.Println("  ⚠ JAVA_HOME is set but java binary not found there")
 			fmt.Printf("    JAVA_HOME=%s\n", javaHome)
 			issues++
@@ -238,7 +243,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	}
 
 	// Port availability
-	port := "8080"
+	port := "6767"
 	if serverPort != "" {
 		port = serverPort
 	}
@@ -289,12 +294,23 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 			dim.Printf("  - %s", p.name)
 			dim.Printf("  (%s)\n", strings.Join(p.envVars, ", "))
 
-			// Still show warnings for partially configured providers
-			for _, w := range p.warns {
-				if w.condition() {
-					yellow.Printf("    ⚠ %s\n", w.message)
-					fmt.Printf("      %s\n", w.fix)
-					issues++
+			// Only show warnings for partially configured providers — i.e. at least
+			// one required env var is set, meaning the user is trying to use this
+			// provider. Skip entirely if no vars are set (provider not opted in).
+			partiallyConfigured := false
+			for _, env := range p.envVars {
+				if os.Getenv(env) != "" {
+					partiallyConfigured = true
+					break
+				}
+			}
+			if partiallyConfigured {
+				for _, w := range p.warns {
+					if w.condition() {
+						yellow.Printf("    ⚠ %s\n", w.message)
+						fmt.Printf("      %s\n", w.fix)
+						issues++
+					}
 				}
 			}
 		}
@@ -330,10 +346,8 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	bold.Println("Server")
 	fmt.Println()
 
-	serverAddr := fmt.Sprintf("http://localhost:%s", port)
-	if serverURL != "" {
-		serverAddr = serverURL
-	}
+	cfg := getConfig()
+	serverAddr := cfg.ServerURL
 	serverOk := checkServer(serverAddr)
 	if serverOk {
 		green.Printf("  ✓ Server reachable at %s\n", serverAddr)
@@ -384,33 +398,35 @@ func isProviderConfigured(p aiProvider) bool {
 	return true
 }
 
-// checkJava returns (meets_minimum, version_string)
+// javaExe returns the java binary path, preferring $JAVA_HOME/bin/java when set.
+func javaExe() string {
+	if jh := os.Getenv("JAVA_HOME"); jh != "" {
+		p := filepath.Join(jh, "bin", "java")
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return "java"
+}
+
+// checkJava returns (meets_minimum, version_string).
+// Prefers $JAVA_HOME/bin/java over PATH when JAVA_HOME is set.
 func checkJava() (bool, string) {
-	out, err := exec.Command("java", "-version").CombinedOutput()
+	out, err := exec.Command(javaExe(), "-version").CombinedOutput()
 	if err != nil {
 		return false, ""
 	}
 
 	// Java version output goes to stderr, but CombinedOutput captures both.
 	// Matches patterns like: "21.0.1", "17.0.2", "1.8.0_292"
-	re := regexp.MustCompile(`"(\d+[\d._]*)"|version "(\d+[\d._]*)"`)
+	re := regexp.MustCompile(`version "(\d+[\d._]*)"`)
 	matches := re.FindStringSubmatch(string(out))
-
-	version := ""
-	if len(matches) > 1 {
-		for _, m := range matches[1:] {
-			if m != "" {
-				version = m
-				break
-			}
-		}
-	}
-
-	if version == "" {
+	if len(matches) < 2 {
 		return false, ""
 	}
+	version := matches[1]
 
-	// Extract major version number
+	// Extract major version number; compare numerically so Java 26+ is accepted.
 	major := version
 	if idx := strings.IndexAny(version, "._"); idx > 0 {
 		major = version[:idx]
@@ -483,4 +499,3 @@ func checkServer(baseURL string) bool {
 	resp.Body.Close()
 	return resp.StatusCode == http.StatusOK
 }
-

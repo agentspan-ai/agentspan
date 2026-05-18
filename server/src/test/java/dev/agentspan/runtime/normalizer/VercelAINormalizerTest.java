@@ -5,15 +5,15 @@
 
 package dev.agentspan.runtime.normalizer;
 
-import dev.agentspan.runtime.model.AgentConfig;
-import dev.agentspan.runtime.model.ToolConfig;
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.*;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.assertj.core.api.Assertions.*;
+import org.junit.jupiter.api.Test;
+
+import dev.agentspan.runtime.model.AgentConfig;
 
 class VercelAINormalizerTest {
 
@@ -69,9 +69,7 @@ class VercelAINormalizerTest {
 
     @Test
     void testModelStringWithProvider() {
-        AgentConfig config = normalizer.normalize(Map.of(
-                "model", "anthropic/claude-sonnet-4-20250514"
-        ));
+        AgentConfig config = normalizer.normalize(Map.of("model", "anthropic/claude-sonnet-4-20250514"));
 
         assertThat(config.getModel()).isEqualTo("anthropic/claude-sonnet-4-20250514");
     }
@@ -98,18 +96,14 @@ class VercelAINormalizerTest {
 
     @Test
     void testInstructionsFromSystem() {
-        AgentConfig config = normalizer.normalize(Map.of(
-                "system", "You are a helpful assistant."
-        ));
+        AgentConfig config = normalizer.normalize(Map.of("system", "You are a helpful assistant."));
 
         assertThat(config.getInstructions()).isEqualTo("You are a helpful assistant.");
     }
 
     @Test
     void testInstructionsFromInstructions() {
-        AgentConfig config = normalizer.normalize(Map.of(
-                "instructions", "Be helpful."
-        ));
+        AgentConfig config = normalizer.normalize(Map.of("instructions", "Be helpful."));
 
         assertThat(config.getInstructions()).isEqualTo("Be helpful.");
     }
@@ -132,14 +126,12 @@ class VercelAINormalizerTest {
         Map<String, Object> tool1 = new LinkedHashMap<>();
         tool1.put("_worker_ref", "get_weather");
         tool1.put("description", "Get current weather");
-        tool1.put("parameters", Map.of("type", "object",
-                "properties", Map.of("city", Map.of("type", "string"))));
+        tool1.put("parameters", Map.of("type", "object", "properties", Map.of("city", Map.of("type", "string"))));
 
         Map<String, Object> tool2 = new LinkedHashMap<>();
         tool2.put("_worker_ref", "calculate");
         tool2.put("description", "Do math");
-        tool2.put("parameters", Map.of("type", "object",
-                "properties", Map.of("expr", Map.of("type", "string"))));
+        tool2.put("parameters", Map.of("type", "object", "properties", Map.of("expr", Map.of("type", "string"))));
 
         Map<String, Object> raw = new LinkedHashMap<>();
         raw.put("name", "tool_agent");
@@ -161,13 +153,9 @@ class VercelAINormalizerTest {
         Map<String, Object> tool = new LinkedHashMap<>();
         tool.put("name", "search");
         tool.put("description", "Search the web");
-        tool.put("parameters", Map.of("type", "object",
-                "properties", Map.of("query", Map.of("type", "string"))));
+        tool.put("parameters", Map.of("type", "object", "properties", Map.of("query", Map.of("type", "string"))));
 
-        AgentConfig config = normalizer.normalize(Map.of(
-                "name", "test",
-                "tools", List.of(tool)
-        ));
+        AgentConfig config = normalizer.normalize(Map.of("name", "test", "tools", List.of(tool)));
 
         assertThat(config.getTools()).hasSize(1);
         assertThat(config.getTools().get(0).getName()).isEqualTo("search");
@@ -180,16 +168,12 @@ class VercelAINormalizerTest {
     void testToolMapStyle() {
         Map<String, Object> toolDef = new LinkedHashMap<>();
         toolDef.put("description", "Search the web");
-        toolDef.put("parameters", Map.of("type", "object",
-                "properties", Map.of("query", Map.of("type", "string"))));
+        toolDef.put("parameters", Map.of("type", "object", "properties", Map.of("query", Map.of("type", "string"))));
 
         Map<String, Object> toolMap = new LinkedHashMap<>();
         toolMap.put("search", toolDef);
 
-        AgentConfig config = normalizer.normalize(Map.of(
-                "name", "test",
-                "tools", toolMap
-        ));
+        AgentConfig config = normalizer.normalize(Map.of("name", "test", "tools", toolMap));
 
         assertThat(config.getTools()).hasSize(1);
         assertThat(config.getTools().get(0).getName()).isEqualTo("search");
@@ -207,10 +191,7 @@ class VercelAINormalizerTest {
         Map<String, Object> toolMap = new LinkedHashMap<>();
         toolMap.put("custom", toolDef);
 
-        AgentConfig config = normalizer.normalize(Map.of(
-                "name", "test",
-                "tools", toolMap
-        ));
+        AgentConfig config = normalizer.normalize(Map.of("name", "test", "tools", toolMap));
 
         assertThat(config.getTools()).hasSize(1);
         // Worker ref name takes precedence over map key
@@ -235,10 +216,7 @@ class VercelAINormalizerTest {
 
     @Test
     void testModelSettingsNested() {
-        Map<String, Object> settings = Map.of(
-                "temperature", 0.5,
-                "max_tokens", 1000
-        );
+        Map<String, Object> settings = Map.of("temperature", 0.5, "max_tokens", 1000);
         Map<String, Object> raw = new LinkedHashMap<>();
         raw.put("name", "test");
         raw.put("model_settings", settings);
@@ -253,10 +231,7 @@ class VercelAINormalizerTest {
 
     @Test
     void testOutputType() {
-        Map<String, Object> schema = Map.of(
-                "type", "object",
-                "properties", Map.of("answer", Map.of("type", "string"))
-        );
+        Map<String, Object> schema = Map.of("type", "object", "properties", Map.of("answer", Map.of("type", "string")));
 
         Map<String, Object> raw = new LinkedHashMap<>();
         raw.put("name", "test");

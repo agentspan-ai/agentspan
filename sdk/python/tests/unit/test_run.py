@@ -71,7 +71,7 @@ class TestStartFunction:
 
     def test_start_delegates_to_runtime(self):
         mock_runtime = MagicMock()
-        mock_runtime.start.return_value = MagicMock(workflow_id="wf-1")
+        mock_runtime.start.return_value = MagicMock(execution_id="wf-1")
         agent = Agent(name="test", model="openai/gpt-4o")
 
         from agentspan.agents.run import start
@@ -79,7 +79,7 @@ class TestStartFunction:
         handle = start(agent, "Go", runtime=mock_runtime)
 
         mock_runtime.start.assert_called_once()
-        assert handle.workflow_id == "wf-1"
+        assert handle.execution_id == "wf-1"
 
 
 class TestStreamFunction:
@@ -223,7 +223,7 @@ class TestDeployFunction:
         from agentspan.agents.run import deploy
 
         mock_runtime = MagicMock()
-        mock_runtime.deploy.return_value = [DeploymentInfo(workflow_name="wf", agent_name="a")]
+        mock_runtime.deploy.return_value = [DeploymentInfo(registered_name="wf", agent_name="a")]
         agent = Agent(name="a", model="openai/gpt-4o")
         result = deploy(agent, runtime=mock_runtime)
         mock_runtime.deploy.assert_called_once_with(agent, packages=None)

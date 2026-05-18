@@ -1,0 +1,68 @@
+name: Release Server - S3
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (e.g. 0.0.10)"
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish-s3:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build bootJar
+        run: ./gradlew bootJar -PbuildUI=true
+
+      - name: Prepare release asset
+        run: cp build/libs/agentspan-runtime.jar ../agentspan-server-${{ inputs.version }}.jar
+
+      - name: Upload to S3 (versioned and latest)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          aws s3 cp ../agentspan-server-${VERSION}.jar \
+            s3://agentspan/agentspan-server-${VERSION}.jar
+          aws s3 cp ../agentspan-server-${VERSION}.jar \
+            s3://agentspan/agentspan-server-latest.jar
+
+      - name: Upload JAR to GitHub release (if release exists)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          gh release upload "v${VERSION}" \
+            ../agentspan-server-${VERSION}.jar \
+            --repo "${{ github.repository }}" \
+            --clobber 2>/dev/null || echo "No release v${VERSION} found, skipping GitHub release upload"

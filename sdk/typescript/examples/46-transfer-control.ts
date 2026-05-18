@@ -7,13 +7,12 @@
  *
  * Requirements:
  *   - Conductor server
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Tools -------------------------------------------------------------------
 
@@ -24,9 +23,13 @@ const collectData = tool(
   {
     name: 'collect_data',
     description: 'Collect data from a source.',
-    inputSchema: z.object({
-      source: z.string().describe('The data source name'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        source: { type: 'string', description: 'The data source name' },
+      },
+      required: ['source'],
+    },
   },
 );
 
@@ -37,9 +40,13 @@ const analyzeData = tool(
   {
     name: 'analyze_data',
     description: 'Analyze collected data.',
-    inputSchema: z.object({
-      dataSummary: z.string().describe('Summary of data to analyze'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dataSummary: { type: 'string', description: 'Summary of data to analyze' },
+      },
+      required: ['dataSummary'],
+    },
   },
 );
 
@@ -50,29 +57,33 @@ const writeSummary = tool(
   {
     name: 'write_summary',
     description: 'Write a summary report.',
-    inputSchema: z.object({
-      findings: z.string().describe('The findings to summarize'),
-    }),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        findings: { type: 'string', description: 'The findings to summarize' },
+      },
+      required: ['findings'],
+    },
   },
 );
 
 // -- Agents ------------------------------------------------------------------
 
-const dataCollector = new Agent({
+export const dataCollector = new Agent({
   name: 'data_collector_46',
   model: llmModel,
   instructions: 'Collect data using collect_data. Then transfer to the analyst.',
   tools: [collectData],
 });
 
-const analyst = new Agent({
+export const analyst = new Agent({
   name: 'analyst_46',
   model: llmModel,
   instructions: 'Analyze data using analyze_data. Transfer to summarizer when done.',
   tools: [analyzeData],
 });
 
-const summarizer = new Agent({
+export const summarizer = new Agent({
   name: 'summarizer_46',
   model: llmModel,
   instructions: 'Write a summary using write_summary.',
@@ -83,7 +94,7 @@ const summarizer = new Agent({
 // - data_collector can only go to analyst (not back to coordinator or peers)
 // - analyst can go to summarizer or coordinator
 // - summarizer can only return to coordinator
-const coordinator = new Agent({
+export const coordinator = new Agent({
   name: 'coordinator_46',
   model: llmModel,
   instructions:
@@ -100,13 +111,26 @@ const coordinator = new Agent({
 
 // -- Run ---------------------------------------------------------------------
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
     coordinator,
     'Collect data from the sales database, analyze trends, and write a summary.',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(coordinator);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents coordinator_46
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(coordinator);
+  } finally {
+    await runtime.shutdown();
+  }
 }
+
+main().catch(console.error);

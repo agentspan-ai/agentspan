@@ -4,7 +4,7 @@ set -e
 VERSION="${VERSION:-dev}"
 COMMIT="${COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || echo 'none')}"
 DATE="${DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
-LDFLAGS="-X github.com/agentspan/agentspan/cli/cmd.Version=${VERSION} -X github.com/agentspan/agentspan/cli/cmd.Commit=${COMMIT} -X github.com/agentspan/agentspan/cli/cmd.Date=${DATE}"
+LDFLAGS="-X github.com/agentspan-ai/agentspan/cli/cmd.Version=${VERSION} -X github.com/agentspan-ai/agentspan/cli/cmd.Commit=${COMMIT} -X github.com/agentspan-ai/agentspan/cli/cmd.Date=${DATE}"
 
 mkdir -p dist
 
@@ -28,7 +28,8 @@ echo "  Built: windows/amd64"
 GOOS=windows GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/agentspan_windows_arm64.exe .
 echo "  Built: windows/arm64"
 
-chmod +x dist/agentspan_*
+# Make Unix binaries executable (Windows .exe files are already executable).
+find dist/ -type f ! -name "*.exe" -exec chmod +x {} +
 
 echo ""
 echo "Build complete! Binaries in dist/"

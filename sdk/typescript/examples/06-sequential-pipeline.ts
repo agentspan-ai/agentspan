@@ -8,16 +8,16 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime } from '../src/index.js';
-import { llmModel } from './settings.js';
+import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { llmModel } from './settings';
 
 // -- Pipeline agents ---------------------------------------------------------
 
-const researcher = new Agent({
+export const researcher = new Agent({
   name: 'researcher',
   model: llmModel,
   instructions:
@@ -25,7 +25,7 @@ const researcher = new Agent({
     'Be thorough but concise. Output raw research findings.',
 });
 
-const writer = new Agent({
+export const writer = new Agent({
   name: 'writer',
   model: llmModel,
   instructions:
@@ -33,7 +33,7 @@ const writer = new Agent({
     'article. Use headers and bullet points where appropriate.',
 });
 
-const editor = new Agent({
+export const editor = new Agent({
   name: 'editor',
   model: llmModel,
   instructions:
@@ -45,24 +45,37 @@ const editor = new Agent({
 
 const pipeline = researcher.pipe(writer).pipe(editor);
 
-const runtime = new AgentRuntime();
-try {
-  const result = await runtime.run(
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(
     pipeline,
     'The impact of AI agents on software development in 2025',
-  );
-  result.printResult();
-} finally {
-  await runtime.shutdown();
+    );
+    result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(pipeline);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents researcher
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(pipeline);
+  } finally {
+    await runtime.shutdown();
+  }
+
+    // // -- Option 2: Using strategy parameter (equivalent) -------------------------
+    // //
+    // // const pipeline = new Agent({
+    // //   name: 'content_pipeline',
+    // //   model: llmModel,
+    // //   agents: [researcher, writer, editor],
+    // //   strategy: 'sequential',
+    // // });
+    // // const runtime = new AgentRuntime();
+    // // const result = await runtime.run(pipeline, 'The impact of AI agents on software development in 2025');
 }
 
-// -- Option 2: Using strategy parameter (equivalent) -------------------------
-//
-// const pipeline = new Agent({
-//   name: 'content_pipeline',
-//   model: llmModel,
-//   agents: [researcher, writer, editor],
-//   strategy: 'sequential',
-// });
-// const runtime = new AgentRuntime();
-// const result = await runtime.run(pipeline, 'The impact of AI agents on software development in 2025');
+main().catch(console.error);
