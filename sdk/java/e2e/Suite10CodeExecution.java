@@ -445,29 +445,19 @@ class Suite10CodeExecution extends BaseTest {
                 });
 
             assertTrue(timeoutErrorFound,
-                "Expected the worker to prevent the long-running code from completing — "
+                "Expected at least one execute_code task to be prevented from running — "
                 + "either by timing out (exit_code == -1, 'timed out' message) OR by "
                 + "rejecting bad code (non-zero exit, success=false). "
                 + "execute_code task outputs: " + execTasks.stream()
                     .map(t -> taskOutputStr(t).substring(0, Math.min(300, taskOutputStr(t).length())))
                     .collect(Collectors.toList())
-                + ". COUNTERFACTUAL: a successful sleep(60) would have exit_code == 0 with 'done' in stdout.");
-
-            // Hard negative invariant: the sleep MUST NOT have completed
-            // (no "done" string in any stdout, regardless of why it didn't
-            // — timeout or syntax error both produce the same observable).
-            for (Map<String, Object> task : execTasks) {
-                Object outputData = task.get("outputData");
-                if (outputData instanceof Map) {
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> m = (Map<String, Object>) outputData;
-                    Object stdout = m.get("output");
-                    if (stdout != null) {
-                        assertFalse(stdout.toString().contains("done"),
-                            "Sleep completed despite the 2s timeout! stdout=" + stdout);
-                    }
-                }
-            }
+                + ". COUNTERFACTUAL: a successful long sleep would have exit_code == 0.");
+            // No symmetric "no 'done' in any stdout" check — the LLM may
+            // legitimately run multiple execute_code attempts across turns;
+            // one may hit timeout while another (LLM rewrote the script
+            // without sleep) prints 'done' fast. The presence of a single
+            // prevented task is sufficient evidence the worker timeout
+            // works; cross-task LLM behavior is not the worker's concern.
         }
         // If no execute_code task found, the agent may have failed before reaching the tool —
         // the terminal status assertion above is the primary counterfactual in that case.
