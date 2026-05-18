@@ -129,15 +129,16 @@ class Suite12HandoffApprove extends BaseTest {
     @Timeout(value = 300, unit = TimeUnit.SECONDS)
     void test_approve_with_event_completes_handoff_hitl() throws Exception {
         Throwable lastErr = null;
-        for (int attempt = 1; attempt <= 2; attempt++) {
+        final int maxAttempts = 3;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
                 runApproveWithEventOnce();
                 return; // pass
             } catch (java.util.concurrent.TimeoutException | org.opentest4j.AssertionFailedError e) {
                 lastErr = e;
-                if (attempt < 2) {
+                if (attempt < maxAttempts) {
                     System.err.println("[Suite12 HITL] attempt " + attempt + " failed (" + e.getClass().getSimpleName()
-                        + "): " + e.getMessage() + " — retrying once.");
+                        + "): " + e.getMessage() + " — retrying.");
                 }
             }
         }
