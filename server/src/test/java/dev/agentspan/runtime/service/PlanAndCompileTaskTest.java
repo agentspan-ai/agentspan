@@ -1599,13 +1599,12 @@ class PlanAndCompileTaskTest {
     @Test
     @SuppressWarnings("unchecked")
     void testRefRewritesToConductorTemplate() {
-        String plan =
-                "{ \"steps\": ["
-                        + "  {\"id\": \"a\", \"operations\": [{\"tool\": \"producer\", \"args\": {\"x\": 1}}]},"
-                        + "  {\"id\": \"b\", \"depends_on\": [\"a\"], \"operations\": ["
-                        + "    {\"tool\": \"consumer\", \"args\": {\"input\": {\"$ref\": \"a\"}}}"
-                        + "  ]}"
-                        + "] }";
+        String plan = "{ \"steps\": ["
+                + "  {\"id\": \"a\", \"operations\": [{\"tool\": \"producer\", \"args\": {\"x\": 1}}]},"
+                + "  {\"id\": \"b\", \"depends_on\": [\"a\"], \"operations\": ["
+                + "    {\"tool\": \"consumer\", \"args\": {\"input\": {\"$ref\": \"a\"}}}"
+                + "  ]}"
+                + "] }";
         Map<String, Object> wf = compilePlan(plan);
         List<Map<String, Object>> all = allTasks(wf);
         Map<String, Object> consumer = all.stream()
@@ -1618,20 +1617,17 @@ class PlanAndCompileTaskTest {
                 .isInstanceOf(String.class);
         // Sequential steps end with a step_output_<id> INLINE that normalises
         // dict-vs-string returns; Ref resolves to its `.output.result`.
-        assertThat((String) input)
-                .startsWith("${step_output_")
-                .endsWith(".output.result}");
+        assertThat((String) input).startsWith("${step_output_").endsWith(".output.result}");
     }
 
     /** $ref to a step that doesn't exist in the plan is a hard compile error. */
     @Test
     void testRefToUnknownStepIsCompileError() {
-        String plan =
-                "{ \"steps\": ["
-                        + "  {\"id\": \"a\", \"operations\": ["
-                        + "    {\"tool\": \"consumer\", \"args\": {\"x\": {\"$ref\": \"missing\"}}}"
-                        + "  ]}"
-                        + "] }";
+        String plan = "{ \"steps\": ["
+                + "  {\"id\": \"a\", \"operations\": ["
+                + "    {\"tool\": \"consumer\", \"args\": {\"x\": {\"$ref\": \"missing\"}}}"
+                + "  ]}"
+                + "] }";
         String err = compilePlanExpectError(plan);
         assertThat(err).contains("$ref").contains("missing");
     }
@@ -1639,14 +1635,13 @@ class PlanAndCompileTaskTest {
     /** $ref to a step that exists but isn't in depends_on is a compile error. */
     @Test
     void testRefWithoutDependsOnIsCompileError() {
-        String plan =
-                "{ \"steps\": ["
-                        + "  {\"id\": \"a\", \"operations\": [{\"tool\": \"producer\", \"args\": {}}]},"
-                        + "  {\"id\": \"b\", \"operations\": ["
-                        // depends_on intentionally missing — must error.
-                        + "    {\"tool\": \"consumer\", \"args\": {\"input\": {\"$ref\": \"a\"}}}"
-                        + "  ]}"
-                        + "] }";
+        String plan = "{ \"steps\": ["
+                + "  {\"id\": \"a\", \"operations\": [{\"tool\": \"producer\", \"args\": {}}]},"
+                + "  {\"id\": \"b\", \"operations\": ["
+                // depends_on intentionally missing — must error.
+                + "    {\"tool\": \"consumer\", \"args\": {\"input\": {\"$ref\": \"a\"}}}"
+                + "  ]}"
+                + "] }";
         String err = compilePlanExpectError(plan);
         assertThat(err).contains("$refs").contains("depends_on");
     }
@@ -1654,12 +1649,11 @@ class PlanAndCompileTaskTest {
     /** Self-Ref is meaningless and surfaces as a compile error instead of an infinite-template trap. */
     @Test
     void testSelfRefIsCompileError() {
-        String plan =
-                "{ \"steps\": ["
-                        + "  {\"id\": \"a\", \"depends_on\": [\"a\"], \"operations\": ["
-                        + "    {\"tool\": \"consumer\", \"args\": {\"x\": {\"$ref\": \"a\"}}}"
-                        + "  ]}"
-                        + "] }";
+        String plan = "{ \"steps\": ["
+                + "  {\"id\": \"a\", \"depends_on\": [\"a\"], \"operations\": ["
+                + "    {\"tool\": \"consumer\", \"args\": {\"x\": {\"$ref\": \"a\"}}}"
+                + "  ]}"
+                + "] }";
         String err = compilePlanExpectError(plan);
         assertThat(err).contains("self-referential").contains("a");
     }
@@ -1672,16 +1666,15 @@ class PlanAndCompileTaskTest {
     @Test
     @SuppressWarnings("unchecked")
     void testRefToParallelStepUsesAggregator() {
-        String plan =
-                "{ \"steps\": ["
-                        + "  {\"id\": \"a\", \"parallel\": true, \"operations\": ["
-                        + "    {\"tool\": \"producer\", \"args\": {\"i\": 0}},"
-                        + "    {\"tool\": \"producer\", \"args\": {\"i\": 1}}"
-                        + "  ]},"
-                        + "  {\"id\": \"b\", \"depends_on\": [\"a\"], \"operations\": ["
-                        + "    {\"tool\": \"consumer\", \"args\": {\"all\": {\"$ref\": \"a\"}}}"
-                        + "  ]}"
-                        + "] }";
+        String plan = "{ \"steps\": ["
+                + "  {\"id\": \"a\", \"parallel\": true, \"operations\": ["
+                + "    {\"tool\": \"producer\", \"args\": {\"i\": 0}},"
+                + "    {\"tool\": \"producer\", \"args\": {\"i\": 1}}"
+                + "  ]},"
+                + "  {\"id\": \"b\", \"depends_on\": [\"a\"], \"operations\": ["
+                + "    {\"tool\": \"consumer\", \"args\": {\"all\": {\"$ref\": \"a\"}}}"
+                + "  ]}"
+                + "] }";
         Map<String, Object> wf = compilePlan(plan);
         List<Map<String, Object>> all = allTasks(wf);
         Map<String, Object> consumer = all.stream()

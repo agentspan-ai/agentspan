@@ -350,8 +350,7 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
                 } else if (target.equals(id)) {
                     errors.add("Step " + id + " has self-referential $ref to '" + target + "'");
                 } else if (!liveDeps.contains(target)) {
-                    errors.add("Step " + id + " $refs step '" + target
-                            + "' but does not declare it in depends_on");
+                    errors.add("Step " + id + " $refs step '" + target + "' but does not declare it in depends_on");
                 }
             }
         }
