@@ -65,7 +65,16 @@ internal static class AgentConfigSerializer
         if (agent.IncludeContents  is not null) cfg["includeContents"]  = agent.IncludeContents;
         if (agent.Introduction     is not null) cfg["introduction"]     = agent.Introduction;
         if (agent.External)                     cfg["external"]         = true;
-        if (agent.Planner)                      cfg["planner"]          = true;
+        // Legacy "plan-first preamble" flag — server expects `enablePlanning`
+        // (Boolean) since the `planner` JSON key was repurposed for the
+        // PAC/PAE sub-agent slot below.
+        if (agent.EnablePlanning)               cfg["enablePlanning"]   = true;
+
+        // PLAN_EXECUTE named slots: planner (required when Strategy=PlanExecute)
+        // + fallback (optional). Both serialize as nested AgentConfig objects.
+        if (agent.Planner  is not null)         cfg["planner"]  = SerializeAgent(agent.Planner);
+        if (agent.Fallback is not null)         cfg["fallback"] = SerializeAgent(agent.Fallback);
+        if (agent.FallbackMaxTurns.HasValue)    cfg["fallbackMaxTurns"] = agent.FallbackMaxTurns.Value;
 
         if (agent.LocalCodeExecution || agent.CodeExecution is not null
             || agent.AllowedLanguages is not null || agent.AllowedCommands is not null)

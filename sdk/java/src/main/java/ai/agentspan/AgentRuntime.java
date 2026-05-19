@@ -107,6 +107,25 @@ public class AgentRuntime implements AutoCloseable {
     }
 
     /**
+     * Execute a {@code Strategy.PLAN_EXECUTE} harness with a deterministic
+     * {@link ai.agentspan.plans.Plan} — skips the planner LLM entirely.
+     *
+     * <p>The SDK forwards the plan as {@code static_plan} on the start
+     * payload; the server's PAC extract_json picks it up as Case-0
+     * (highest priority) and discards whatever the planner sub-agent
+     * emits. Use this for deterministic pipelines, replays of a
+     * previously-emitted plan, or testing.
+     *
+     * @param agent  the PLAN_EXECUTE harness
+     * @param prompt the user's input message
+     * @param plan   the deterministic plan to execute
+     * @return the agent result
+     */
+    public AgentResult run(Agent agent, String prompt, ai.agentspan.plans.Plan plan) {
+        return runAsync(agent, prompt, plan).join();
+    }
+
+    /**
      * Start an agent (fire-and-forget) and return a handle.
      *
      * @param agent  the agent to start
@@ -138,10 +157,18 @@ public class AgentRuntime implements AutoCloseable {
      * @return a CompletableFuture that resolves to the agent result
      */
     public CompletableFuture<AgentResult> runAsync(Agent agent, String prompt) {
+        return runAsync(agent, prompt, null);
+    }
+
+    /**
+     * Async variant of {@link #run(Agent, String, ai.agentspan.plans.Plan)}.
+     */
+    public CompletableFuture<AgentResult> runAsync(
+            Agent agent, String prompt, ai.agentspan.plans.Plan plan) {
         prepareWorkers(agent);
         workerManager.startAll();
 
-        return startAsync(agent, prompt).thenCompose(handle ->
+        return startAsync(agent, prompt, plan).thenCompose(handle ->
             CompletableFuture.supplyAsync(() -> handle.waitForResult())
         );
     }
@@ -154,6 +181,16 @@ public class AgentRuntime implements AutoCloseable {
      * @return a CompletableFuture that resolves to an AgentHandle
      */
     public CompletableFuture<AgentHandle> startAsync(Agent agent, String prompt) {
+        return startAsync(agent, prompt, null);
+    }
+
+    /**
+     * Async variant that forwards a deterministic {@link ai.agentspan.plans.Plan}
+     * to the server as {@code static_plan}. Only meaningful for
+     * {@code Strategy.PLAN_EXECUTE} harnesses; ignored otherwise.
+     */
+    public CompletableFuture<AgentHandle> startAsync(
+            Agent agent, String prompt, ai.agentspan.plans.Plan plan) {
         // Stateful agents get a per-execution domain UUID. The server uses it
         // as taskToDomain for every worker task in this run; local workers are
         // registered under the same domain so they poll the per-execution
@@ -163,6 +200,7 @@ public class AgentRuntime implements AutoCloseable {
         final String runId = hasStatefulTools(agent)
             ? java.util.UUID.randomUUID().toString().replace("-", "")
             : null;
+        final Map<String, Object> staticPlan = plan == null ? null : plan.toJson();
         prepareWorkers(agent, runId);
         workerManager.startAll();
 
@@ -172,7 +210,8 @@ public class AgentRuntime implements AutoCloseable {
 
             logger.debug("Starting agent '{}' with prompt: {}", agent.getName(), prompt);
 
-            Map<String, Object> response = httpApi.startAgent(agentConfig, prompt, sessionId, runId);
+            Map<String, Object> response =
+                httpApi.startAgent(agentConfig, prompt, sessionId, runId, staticPlan);
             String workflowId = extractWorkflowId(response);
 
             logger.info("Agent '{}' started with workflow ID: {}", agent.getName(), workflowId);

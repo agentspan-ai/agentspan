@@ -125,6 +125,12 @@ export class AgentRuntime {
     if (runId) {
       payload.runId = runId;
     }
+    if (options?.plan !== undefined) {
+      const { coercePlan } = await import("./plans.js");
+      // Server reads ${workflow.input.static_plan} as the Case-0 plan source
+      // — wins over the planner LLM's output. See plans.ts for wire shape.
+      payload.static_plan = coercePlan(options.plan as Parameters<typeof coercePlan>[0]);
+    }
 
     // Register tool workers with domain (for stateful isolation)
     await this._registerToolWorkers(nativeAgent, runId);
@@ -243,6 +249,10 @@ export class AgentRuntime {
     }
     if (runId) {
       payload.runId = runId;
+    }
+    if (options?.plan !== undefined) {
+      const { coercePlan } = await import("./plans.js");
+      payload.static_plan = coercePlan(options.plan as Parameters<typeof coercePlan>[0]);
     }
 
     // Register tool workers with domain

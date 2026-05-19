@@ -240,6 +240,15 @@ export interface RunOptions {
    * Required for LangGraph agents that don't use the @agentspan-ai/sdk/langgraph wrapper.
    */
   model?: unknown;
+  /**
+   * Optional deterministic plan for `Strategy.PLAN_EXECUTE` harnesses.
+   * Accepts a typed `Plan` (recommended) or a raw JSON-shaped dict. When
+   * present, the SDK forwards it on the start payload as `static_plan`;
+   * the server's extract_json INLINE picks it up as Case-0, which wins
+   * over the planner LLM's output. The planner sub-agent still runs (the
+   * workflow shape is fixed at compile time) but its output is discarded.
+   */
+  plan?: unknown;
 }
 
 // ── Tool definition ──────────────────────────────────────

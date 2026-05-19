@@ -64,6 +64,22 @@ public class HttpApi {
      */
     public Map<String, Object> startAgent(
             Map<String, Object> agentConfig, String prompt, String sessionId, String runId) {
+        return startAgent(agentConfig, prompt, sessionId, runId, null);
+    }
+
+    /**
+     * Start an agent execution with optional runId AND an optional static plan
+     * for {@code Strategy.PLAN_EXECUTE} harnesses. The server stuffs
+     * {@code staticPlan} into {@code workflow.input.static_plan} where PAC's
+     * extract_json picks it up as Case-0 (highest priority) and discards
+     * planner LLM output.
+     */
+    public Map<String, Object> startAgent(
+            Map<String, Object> agentConfig,
+            String prompt,
+            String sessionId,
+            String runId,
+            Map<String, Object> staticPlan) {
         Map<String, Object> body = new HashMap<>();
         body.put("agentConfig", agentConfig);
         body.put("prompt", prompt);
@@ -72,6 +88,9 @@ public class HttpApi {
         }
         if (runId != null && !runId.isEmpty()) {
             body.put("runId", runId);
+        }
+        if (staticPlan != null) {
+            body.put("static_plan", staticPlan);
         }
 
         return post("/api/agent/start", body);

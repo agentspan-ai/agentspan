@@ -129,11 +129,17 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
     // ── Async API ────────────────────────────────────────────
 
     /// <summary>Run an agent and wait for the result.</summary>
+    /// <param name="plan">
+    /// Optional deterministic plan for <c>Strategy.PlanExecute</c> harnesses.
+    /// When present, the SDK forwards it as <c>static_plan</c> on the start
+    /// payload; the server's PAC extract_json picks it up as Case-0
+    /// (highest priority) and discards the planner LLM's output.
+    /// </param>
     public async Task<AgentResult> RunAsync(
         Agent agent, string prompt, string? sessionId = null,
-        IEnumerable<string>? media = null, CancellationToken ct = default)
+        IEnumerable<string>? media = null, Plans.Plan? plan = null, CancellationToken ct = default)
     {
-        var handle = await StartInternalAsync(agent, prompt, sessionId, media, ct);
+        var handle = await StartInternalAsync(agent, prompt, sessionId, media, plan, ct);
         var result = await handle.WaitAsync(ct);
         await StopWorkersAsync();
         return result;
@@ -150,9 +156,9 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
     /// <summary>Start an agent asynchronously and return a handle for streaming / HITL.</summary>
     public async Task<AgentHandle> StartAsync(
         Agent agent, string prompt, string? sessionId = null,
-        IEnumerable<string>? media = null, CancellationToken ct = default)
+        IEnumerable<string>? media = null, Plans.Plan? plan = null, CancellationToken ct = default)
     {
-        return await StartInternalAsync(agent, prompt, sessionId, media, ct);
+        return await StartInternalAsync(agent, prompt, sessionId, media, plan, ct);
     }
 
     /// <summary>Start a pre-deployed agent by workflow name (no agentConfig payload).</summary>
@@ -169,7 +175,7 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
         IEnumerable<string>? media = null,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
     {
-        var handle = await StartInternalAsync(agent, prompt, sessionId, media, ct);
+        var handle = await StartInternalAsync(agent, prompt, sessionId, media, plan: null, ct);
         await foreach (var evt in handle.StreamAsync(ct))
             yield return evt;
         await StopWorkersAsync();
@@ -281,7 +287,7 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
 
     private async Task<AgentHandle> StartInternalAsync(
         Agent agent, string prompt, string? sessionId,
-        IEnumerable<string>? media, CancellationToken ct)
+        IEnumerable<string>? media, Plans.Plan? plan, CancellationToken ct)
     {
         // Generate a fresh per-execution domain UUID for stateful agents. The
         // server uses this as taskToDomain for every worker task in the run,
@@ -298,6 +304,12 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
 
         var payload      = AgentConfigSerializer.Serialize(agent, prompt, sessionId ?? "", media);
         if (runId is not null) payload["runId"] = runId;
+        if (plan is not null)
+        {
+            // Server reads ${workflow.input.static_plan} as the Case-0 plan source
+            // for Strategy.PlanExecute harnesses — wins over the planner LLM's output.
+            payload["static_plan"] = plan.ToJson();
+        }
         var executionId  = await _http.StartAsync(payload, ct);
         return new AgentHandle(executionId, _http, runId);
     }
