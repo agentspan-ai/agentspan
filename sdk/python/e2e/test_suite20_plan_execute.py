@@ -31,7 +31,7 @@ import os
 import pytest
 import requests
 
-from agentspan.agents import Agent, Strategy, tool
+from agentspan.agents import Agent, Op, Plan, Ref, Step, Strategy, plan_execute, tool
 
 pytestmark = pytest.mark.e2e
 
@@ -159,3 +159,199 @@ class TestSuite20PlanExecute:
                 f"sweeper failed to schedule it. taskId={t.get('taskId')} "
                 f"task_reason={(t.get('reasonForIncompletion') or '')[:200]}"
             )
+
+
+# ── Captured state for deterministic Ref test ────────────────────────────
+
+
+CAPTURED_PIPELINE: dict = {}
+
+
+@tool
+def s20_produce(record_id: str) -> dict:
+    """Step A — emit a known record."""
+    return {"record_id": record_id, "value": 42, "tags": ["alpha", "beta"]}
+
+
+@tool
+def s20_enrich(record: dict) -> dict:
+    """Step B — read Step A's whole dict via Ref('a'). Algorithmic only."""
+    return {**record, "value_squared": (record.get("value", 0)) ** 2}
+
+
+@tool
+def s20_report(record: dict, enriched: dict) -> dict:
+    """Step C — read BOTH upstream steps via two Refs in the same args map."""
+    return {
+        "id": record.get("record_id"),
+        "original_value": record.get("value"),
+        "squared": enriched.get("value_squared"),
+        "tags_joined": ", ".join(record.get("tags") or []),
+    }
+
+
+class TestSuite20PlanExecuteRefs:
+    """Deterministic PAC/PAE tests — no LLM in the assertion path.
+
+    The planner sub-agent is built but its output is discarded by the
+    static-plan path (``runtime.run(plan=...)``). All assertions are
+    algorithmic — per CLAUDE.md, we never use LLM output for validation.
+    """
+
+    def _build_harness(self, model: str) -> Agent:
+        return plan_execute(
+            name="e2e_s20_refs_det",
+            tools=[s20_produce, s20_enrich, s20_report],
+            planner_instructions="(planner unused; static plan supplied)",
+            model=model,
+        )
+
+    def _fetch_step_outputs(self, execution_id: str) -> dict:
+        """Return {tool_name: outputData_dict} from the plan_exec sub-workflow."""
+        wf = _get_workflow(execution_id)
+        sub_id = None
+        for t in wf.get("tasks") or []:
+            if t.get("referenceTaskName", "").endswith("_plan_exec"):
+                sub_id = (t.get("outputData") or {}).get("subWorkflowId")
+                break
+        assert sub_id, f"no plan_exec sub-workflow found in {execution_id}"
+        sub = _get_workflow(sub_id)
+        out = {}
+        for t in sub.get("tasks") or []:
+            name = t.get("taskDefName")
+            if name in ("s20_produce", "s20_enrich", "s20_report"):
+                out[name] = t.get("outputData") or {}
+        return out
+
+    def test_ref_pipes_whole_output_across_steps(self, runtime, model):
+        """Ref('a') wires step A's whole dict into step B's `record` arg.
+
+        Counterfactual: if the SDK didn't rewrite ``{"$ref":"a"}`` to a
+        Conductor template, step B would receive the literal marker dict
+        and ``record.get("value", 0) ** 2`` would be 0 (not 1764). Asserting
+        on the exact squared value rules that out.
+        """
+        harness = self._build_harness(model)
+        plan = Plan(
+            steps=[
+                Step("a", operations=[Op("s20_produce", args={"record_id": "r-001"})]),
+                Step(
+                    "b",
+                    depends_on=["a"],
+                    operations=[Op("s20_enrich", args={"record": Ref("a")})],
+                ),
+            ],
+        )
+
+        result = runtime.run(harness, "go", plan=plan, timeout=PLAN_EXEC_TIMEOUT)
+        assert result.execution_id
+        assert str(result.status) in ("COMPLETED", "completed", "Status.COMPLETED"), (
+            f"workflow did not COMPLETE: status={result.status} error={result.error!r}"
+        )
+
+        outputs = self._fetch_step_outputs(result.execution_id)
+        # Step A — emitted the seed dict.
+        assert outputs["s20_produce"] == {
+            "record_id": "r-001",
+            "value": 42,
+            "tags": ["alpha", "beta"],
+        }, f"unexpected produce output: {outputs['s20_produce']!r}"
+
+        # Step B — proves Ref('a') delivered the whole upstream dict.
+        enrich = outputs["s20_enrich"]
+        assert enrich.get("value_squared") == 1764, (
+            f"value_squared must be 1764 (= 42²) — got {enrich.get('value_squared')!r}. "
+            f"If Ref didn't carry the dict, enrich would have received the literal "
+            f"{{'$ref':'a'}} marker and squared 0. Full enrich output: {enrich!r}"
+        )
+        # Original fields survived the merge.
+        assert enrich.get("value") == 42
+        assert enrich.get("record_id") == "r-001"
+        assert enrich.get("tags") == ["alpha", "beta"]
+
+    def test_two_refs_in_same_args_resolve_independently(self, runtime, model):
+        """A single Op.args map with two Refs resolves both correctly.
+
+        Counterfactual: if the recursive serializer collapsed both Refs to
+        the same upstream, step C would see record == enriched and
+        ``squared`` would equal ``original_value`` (both 42). Asserting
+        squared=1764 ≠ original_value=42 rules that out.
+        """
+        harness = self._build_harness(model)
+        plan = Plan(
+            steps=[
+                Step("a", operations=[Op("s20_produce", args={"record_id": "r-001"})]),
+                Step(
+                    "b",
+                    depends_on=["a"],
+                    operations=[Op("s20_enrich", args={"record": Ref("a")})],
+                ),
+                Step(
+                    "c",
+                    depends_on=["a", "b"],
+                    operations=[
+                        Op("s20_report", args={"record": Ref("a"), "enriched": Ref("b")}),
+                    ],
+                ),
+            ],
+        )
+
+        result = runtime.run(harness, "go", plan=plan, timeout=PLAN_EXEC_TIMEOUT)
+        assert str(result.status) in ("COMPLETED", "completed", "Status.COMPLETED")
+
+        outputs = self._fetch_step_outputs(result.execution_id)
+        report = outputs["s20_report"]
+        assert report == {
+            "id": "r-001",
+            "original_value": 42,
+            "squared": 1764,
+            "tags_joined": "alpha, beta",
+        }, f"unexpected report output: {report!r}"
+
+    def test_ref_to_unknown_step_fails_at_compile_time(self, runtime, model):
+        """A Ref to a step not in depends_on must fail with a clear PAC error.
+
+        Counterfactual: silent acceptance would let the workflow run with
+        an unresolved Conductor template, surfacing later as a hard-to-debug
+        runtime failure deep in the worker. Compile-time rejection is the
+        contract we want.
+        """
+        harness = self._build_harness(model)
+        plan = Plan(
+            steps=[
+                Step("a", operations=[Op("s20_produce", args={"record_id": "r"})]),
+                Step(
+                    "b",
+                    # depends_on intentionally MISSING — must fail
+                    operations=[Op("s20_enrich", args={"record": Ref("a")})],
+                ),
+            ],
+        )
+        result = runtime.run(harness, "go", plan=plan, timeout=PLAN_EXEC_TIMEOUT)
+        # Server validates at compile time and emits an error on the PAC
+        # SystemTask; the harness then routes to fallback or terminates.
+        # The full execution is FAILED/TERMINATED, NOT COMPLETED with the
+        # report tool actually having run.
+        outputs = self._fetch_step_outputs_if_any(result.execution_id)
+        assert "s20_enrich" not in outputs, (
+            f"enrich should never run when Ref points outside depends_on; "
+            f"got outputs={outputs!r}"
+        )
+
+    def _fetch_step_outputs_if_any(self, execution_id: str) -> dict:
+        """Like _fetch_step_outputs but tolerant of missing plan_exec sub-wf."""
+        wf = _get_workflow(execution_id)
+        sub_id = None
+        for t in wf.get("tasks") or []:
+            if t.get("referenceTaskName", "").endswith("_plan_exec"):
+                sub_id = (t.get("outputData") or {}).get("subWorkflowId")
+                break
+        if not sub_id:
+            return {}
+        sub = _get_workflow(sub_id)
+        out = {}
+        for t in sub.get("tasks") or []:
+            name = t.get("taskDefName")
+            if name in ("s20_produce", "s20_enrich", "s20_report"):
+                out[name] = t.get("outputData") or {}
+        return out

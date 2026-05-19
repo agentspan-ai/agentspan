@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, Op, Plan, Ref, Step, tool } from '@agentspan-ai/sdk';
 import { checkServerHealth, MODEL, TIMEOUT } from './helpers';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -514,5 +514,195 @@ Your output MUST end with a JSON fence like this:
     }
     expect(textFiles.length, `no .md/.txt files produced in ${WORK_DIR}`).toBeGreaterThan(0);
     expect(wordCount).toBeGreaterThanOrEqual(MIN_WORD_COUNT);
+  }, TIMEOUT);
+});
+
+// ── Deterministic PAC/PAE tests — no LLM in assertion path ───────────────
+//
+// The planner sub-agent is built but its output is discarded by the
+// static-plan path (`runtime.run(harness, prompt, { plan })`). All
+// assertions are algorithmic — per CLAUDE.md, we never use LLM output
+// for validation.
+
+describe('Suite 20: Plan-Execute Refs (deterministic)', () => {
+  beforeAll(checkServerHealth);
+
+  const produce = tool(
+    async ({ record_id }: { record_id: string }) => ({
+      record_id,
+      value: 42,
+      tags: ['alpha', 'beta'],
+    }),
+    {
+      name: 'ts_s20_produce',
+      description: 'Step A — emit a known record.',
+      inputSchema: {
+        type: 'object',
+        properties: { record_id: { type: 'string' } },
+        required: ['record_id'],
+      },
+    },
+  );
+
+  const enrich = tool(
+    async ({ record }: { record: Record<string, unknown> }) => ({
+      ...record,
+      value_squared: ((record.value as number) ?? 0) ** 2,
+    }),
+    {
+      name: 'ts_s20_enrich',
+      description: 'Step B — read Step A via Ref.',
+      inputSchema: {
+        type: 'object',
+        properties: { record: { type: 'object' } },
+        required: ['record'],
+      },
+    },
+  );
+
+  const report = tool(
+    async ({
+      record,
+      enriched,
+    }: {
+      record: { record_id: string; value: number; tags: string[] };
+      enriched: { value_squared: number };
+    }) => ({
+      id: record.record_id,
+      original_value: record.value,
+      squared: enriched.value_squared,
+      tags_joined: record.tags.join(', '),
+    }),
+    {
+      name: 'ts_s20_report',
+      description: 'Step C — read BOTH upstream steps.',
+      inputSchema: {
+        type: 'object',
+        properties: { record: { type: 'object' }, enriched: { type: 'object' } },
+        required: ['record', 'enriched'],
+      },
+    },
+  );
+
+  function buildHarness(): Agent {
+    const planner = new Agent({
+      name: 'ts_s20_refs_planner',
+      model: MODEL,
+      instructions: '(planner unused; static plan supplied)',
+    });
+    return new Agent({
+      name: 'ts_s20_refs_harness',
+      model: MODEL,
+      strategy: 'plan_execute',
+      planner,
+      tools: [produce, enrich, report],
+    });
+  }
+
+  async function fetchStepOutputs(executionId: string): Promise<Record<string, unknown>> {
+    const base = (process.env.AGENTSPAN_SERVER_URL ?? 'http://localhost:6767/api')
+      .replace(/\/api$/, '')
+      .replace(/\/$/, '');
+    const parent = (await (await fetch(`${base}/api/workflow/${executionId}?includeTasks=true`)).json()) as {
+      tasks?: Array<{ referenceTaskName?: string; outputData?: { subWorkflowId?: string } }>;
+    };
+    let subId: string | undefined;
+    for (const t of parent.tasks ?? []) {
+      if (t.referenceTaskName?.endsWith('_plan_exec')) {
+        subId = t.outputData?.subWorkflowId;
+        break;
+      }
+    }
+    if (!subId) return {};
+    const sub = (await (await fetch(`${base}/api/workflow/${subId}?includeTasks=true`)).json()) as {
+      tasks?: Array<{ taskDefName?: string; outputData?: unknown }>;
+    };
+    const out: Record<string, unknown> = {};
+    for (const t of sub.tasks ?? []) {
+      const n = t.taskDefName ?? '';
+      if (n.startsWith('ts_s20_')) out[n] = t.outputData ?? {};
+    }
+    return out;
+  }
+
+  it('Ref(stepId) pipes the whole output across steps', async () => {
+    const harness = buildHarness();
+    const plan = new Plan({
+      steps: [
+        new Step('a', { operations: [new Op('ts_s20_produce', { args: { record_id: 'r-001' } })] }),
+        new Step('b', {
+          dependsOn: ['a'],
+          operations: [new Op('ts_s20_enrich', { args: { record: new Ref('a') } })],
+        }),
+      ],
+    });
+
+    const runtime = new AgentRuntime();
+    try {
+      const result = await runtime.run(harness, 'go', { plan, timeoutSeconds: 120 });
+      expect(result.status).toBe('COMPLETED');
+
+      const outputs = (await fetchStepOutputs(result.executionId)) as {
+        ts_s20_produce?: Record<string, unknown>;
+        ts_s20_enrich?: Record<string, unknown>;
+      };
+
+      // Step A — seed dict.
+      expect(outputs.ts_s20_produce).toEqual({
+        record_id: 'r-001',
+        value: 42,
+        tags: ['alpha', 'beta'],
+      });
+
+      // Step B — proves Ref('a') delivered the whole upstream dict (squared = 42² = 1764).
+      // Counterfactual: if Ref were unwired, enrich would receive
+      // {"$ref":"a"} and value_squared would be 0 (not 1764).
+      expect(outputs.ts_s20_enrich?.value_squared).toBe(1764);
+      expect(outputs.ts_s20_enrich?.value).toBe(42);
+      expect(outputs.ts_s20_enrich?.record_id).toBe('r-001');
+    } finally {
+      await runtime.shutdown();
+    }
+  }, TIMEOUT);
+
+  it('two Refs in the same args map resolve independently', async () => {
+    const harness = buildHarness();
+    const plan = new Plan({
+      steps: [
+        new Step('a', { operations: [new Op('ts_s20_produce', { args: { record_id: 'r-001' } })] }),
+        new Step('b', {
+          dependsOn: ['a'],
+          operations: [new Op('ts_s20_enrich', { args: { record: new Ref('a') } })],
+        }),
+        new Step('c', {
+          dependsOn: ['a', 'b'],
+          operations: [
+            new Op('ts_s20_report', {
+              args: { record: new Ref('a'), enriched: new Ref('b') },
+            }),
+          ],
+        }),
+      ],
+    });
+
+    const runtime = new AgentRuntime();
+    try {
+      const result = await runtime.run(harness, 'go', { plan, timeoutSeconds: 120 });
+      expect(result.status).toBe('COMPLETED');
+
+      const outputs = (await fetchStepOutputs(result.executionId)) as {
+        ts_s20_report?: Record<string, unknown>;
+      };
+      // Counterfactual: if both Refs collapsed to the same upstream, squared
+      // would equal original_value (both 42). Asserting 1764 ≠ 42 rules it out.
+      expect(outputs.ts_s20_report).toEqual({
+        id: 'r-001',
+        original_value: 42,
+        squared: 1764,
+        tags_joined: 'alpha, beta',
+      });
+    } finally {
+      await runtime.shutdown();
+    }
   }, TIMEOUT);
 });

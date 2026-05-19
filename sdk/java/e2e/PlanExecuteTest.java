@@ -9,6 +9,10 @@ import ai.agentspan.enums.AgentStatus;
 import ai.agentspan.enums.Strategy;
 import ai.agentspan.model.AgentResult;
 import ai.agentspan.model.ToolDef;
+import ai.agentspan.plans.Op;
+import ai.agentspan.plans.Plan;
+import ai.agentspan.plans.Ref;
+import ai.agentspan.plans.Step;
 import org.junit.jupiter.api.*;
 
 import java.io.File;
@@ -648,5 +652,209 @@ class PlanExecuteTest extends BaseTest {
         assertTrue(wordCount >= MIN_WORD_COUNT,
             "Total word count " + wordCount + " < " + MIN_WORD_COUNT
             + ". COUNTERFACTUAL: if max_tokens was ignored, LLM output is truncated short.");
+    }
+
+    // ── Deterministic PAC/PAE tests — no LLM in assertion path ──────────
+    //
+    // The planner sub-agent is built but its output is discarded by the
+    // static-plan path (`runtime.run(harness, prompt, plan)`). All
+    // assertions are algorithmic — per CLAUDE.md, we never use LLM output
+    // for validation.
+
+    static ToolDef jProduceTool() {
+        return ToolDef.builder()
+            .name("j_s20_produce")
+            .description("Step A — emit a known record.")
+            .inputSchema(Map.of(
+                "type", "object",
+                "properties", Map.of("record_id", Map.of("type", "string")),
+                "required", List.of("record_id")))
+            .toolType("worker")
+            .func(input -> Map.of(
+                "record_id", input.get("record_id"),
+                "value", 42,
+                "tags", List.of("alpha", "beta")))
+            .build();
+    }
+
+    static ToolDef jEnrichTool() {
+        return ToolDef.builder()
+            .name("j_s20_enrich")
+            .description("Step B — read Step A via Ref.")
+            .inputSchema(Map.of(
+                "type", "object",
+                "properties", Map.of("record", Map.of("type", "object")),
+                "required", List.of("record")))
+            .toolType("worker")
+            .func(input -> {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> record = (Map<String, Object>) input.get("record");
+                Map<String, Object> out = new LinkedHashMap<>(record);
+                int value = ((Number) record.getOrDefault("value", 0)).intValue();
+                out.put("value_squared", value * value);
+                return out;
+            })
+            .build();
+    }
+
+    static ToolDef jReportTool() {
+        return ToolDef.builder()
+            .name("j_s20_report")
+            .description("Step C — read BOTH upstream steps.")
+            .inputSchema(Map.of(
+                "type", "object",
+                "properties", Map.of(
+                    "record", Map.of("type", "object"),
+                    "enriched", Map.of("type", "object")),
+                "required", List.of("record", "enriched")))
+            .toolType("worker")
+            .func(input -> {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> record = (Map<String, Object>) input.get("record");
+                @SuppressWarnings("unchecked")
+                Map<String, Object> enriched = (Map<String, Object>) input.get("enriched");
+                @SuppressWarnings("unchecked")
+                List<Object> tags = (List<Object>) record.get("tags");
+                Map<String, Object> out = new LinkedHashMap<>();
+                out.put("id", record.get("record_id"));
+                out.put("original_value", record.get("value"));
+                out.put("squared", enriched.get("value_squared"));
+                out.put("tags_joined", String.join(
+                    ", ", tags.stream().map(Object::toString).toList()));
+                return out;
+            })
+            .build();
+    }
+
+    Agent buildRefsHarness() {
+        Agent planner = Agent.builder()
+            .name("j_s20_refs_planner")
+            .model(MODEL)
+            .instructions("(planner unused; static plan supplied)")
+            .build();
+        return Agent.builder()
+            .name("j_s20_refs_harness")
+            .model(MODEL)
+            .strategy(Strategy.PLAN_EXECUTE)
+            .planner(planner)
+            .tools(List.of(jProduceTool(), jEnrichTool(), jReportTool()))
+            .build();
+    }
+
+    @SuppressWarnings("unchecked")
+    Map<String, Map<String, Object>> fetchStepOutputs(String executionId) throws Exception {
+        Map<String, Object> parent = getWorkflow(executionId);
+        String subId = null;
+        for (Map<String, Object> t : (List<Map<String, Object>>) parent.getOrDefault("tasks", List.of())) {
+            String ref = String.valueOf(t.getOrDefault("referenceTaskName", ""));
+            if (ref.endsWith("_plan_exec")) {
+                Map<String, Object> out = (Map<String, Object>) t.get("outputData");
+                subId = out == null ? null : (String) out.get("subWorkflowId");
+                break;
+            }
+        }
+        if (subId == null) return Map.of();
+        Map<String, Object> sub = getWorkflow(subId);
+        Map<String, Map<String, Object>> result = new LinkedHashMap<>();
+        for (Map<String, Object> t : (List<Map<String, Object>>) sub.getOrDefault("tasks", List.of())) {
+            String name = String.valueOf(t.get("taskDefName"));
+            if (name.startsWith("j_s20_")) {
+                result.put(name, (Map<String, Object>) t.get("outputData"));
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Counterfactual: if the SDK didn't rewrite {@code {"$ref":"a"}} to a
+     * Conductor template, step B would receive the literal marker dict and
+     * value_squared would be 0 (not 1764). Asserting the exact squared
+     * value rules that out.
+     */
+    @Test
+    @Order(10)
+    @Timeout(value = 180, unit = TimeUnit.SECONDS)
+    void testRefPipesWholeOutputAcrossSteps() throws Exception {
+        Agent harness = buildRefsHarness();
+        Plan plan = Plan.builder()
+            .step(Step.builder("a")
+                .operation(Op.builder("j_s20_produce")
+                    .args(Map.of("record_id", "r-001"))
+                    .build())
+                .build())
+            .step(Step.builder("b")
+                .dependsOn("a")
+                .operation(Op.builder("j_s20_enrich")
+                    .args(Map.of("record", new Ref("a")))
+                    .build())
+                .build())
+            .build();
+
+        AgentResult result = runtime.run(harness, "go", plan);
+        assertEquals(AgentStatus.COMPLETED, result.getStatus(),
+            "workflow did not COMPLETE: status=" + result.getStatus() + " error=" + result.getError());
+
+        Map<String, Map<String, Object>> outputs = fetchStepOutputs(result.getWorkflowId());
+
+        Map<String, Object> produce = outputs.get("j_s20_produce");
+        assertNotNull(produce, "produce step did not run");
+        assertEquals("r-001", produce.get("record_id"));
+        assertEquals(42, ((Number) produce.get("value")).intValue());
+
+        Map<String, Object> enrich = outputs.get("j_s20_enrich");
+        assertNotNull(enrich, "enrich step did not run — Ref likely unwired");
+        assertEquals(
+            1764, ((Number) enrich.get("value_squared")).intValue(),
+            "value_squared must be 1764 (= 42²). If Ref didn't carry the dict, "
+            + "enrich would have received the literal {\"$ref\":\"a\"} marker and squared 0. "
+            + "Full enrich output: " + enrich);
+        assertEquals("r-001", enrich.get("record_id"));
+        assertEquals(42, ((Number) enrich.get("value")).intValue());
+    }
+
+    /**
+     * Two Refs in the same {@code args} map must resolve independently —
+     * one to step A's output, the other to step B's. Counterfactual: if
+     * the recursive serializer collapsed both, squared would equal
+     * original_value (42); asserting squared=1764 ≠ original_value=42
+     * rules it out.
+     */
+    @Test
+    @Order(11)
+    @Timeout(value = 180, unit = TimeUnit.SECONDS)
+    void testTwoRefsInSameArgsResolveIndependently() throws Exception {
+        Agent harness = buildRefsHarness();
+        Plan plan = Plan.builder()
+            .step(Step.builder("a")
+                .operation(Op.builder("j_s20_produce")
+                    .args(Map.of("record_id", "r-001"))
+                    .build())
+                .build())
+            .step(Step.builder("b")
+                .dependsOn("a")
+                .operation(Op.builder("j_s20_enrich")
+                    .args(Map.of("record", new Ref("a")))
+                    .build())
+                .build())
+            .step(Step.builder("c")
+                .dependsOn("a", "b")
+                .operation(Op.builder("j_s20_report")
+                    .args(Map.of(
+                        "record", new Ref("a"),
+                        "enriched", new Ref("b")))
+                    .build())
+                .build())
+            .build();
+
+        AgentResult result = runtime.run(harness, "go", plan);
+        assertEquals(AgentStatus.COMPLETED, result.getStatus());
+
+        Map<String, Map<String, Object>> outputs = fetchStepOutputs(result.getWorkflowId());
+        Map<String, Object> report = outputs.get("j_s20_report");
+        assertNotNull(report, "report step did not run");
+        assertEquals("r-001", report.get("id"));
+        assertEquals(42, ((Number) report.get("original_value")).intValue());
+        assertEquals(1764, ((Number) report.get("squared")).intValue());
+        assertEquals("alpha, beta", report.get("tags_joined"));
     }
 }
