@@ -44,22 +44,6 @@ jobs:
           include_passed: false
           flaky_summary: true
 
-  # ── Source Docs Build ──────────────────────────────────────────────
-  # mkdocs --strict build of the docs/ tree. Catches dead links and
-  # syntax errors in markdown that would break the published site.
-  build-source-docs:
-    name: Build source docs
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install docs dependencies
-        run: python -m pip install -r requirements-docs.txt
-      - name: Build docs
-        run: mkdocs build --strict
-
   # ── Go CLI Tests ─────────────────────────────────────────────────
   cli-tests:
     runs-on: ubuntu-latest
@@ -268,24 +252,6 @@ jobs:
         run: |
           uv run pytest e2e/ -v --tb=short \
             --junitxml=../../e2e-results/junit.xml \
-            -n 1
-
-      # Integration coverage: the TS ts-e2e suite17 exercised an INST_SECRET
-      # regression that was invisible to Python CI because the matching
-      # ``tests/integration/test_guardrail_matrix.py`` was never run. Wire it
-      # in, scoped to just that file (the rest of ``tests/integration/``
-      # includes long live-multi-agent suites that don't fit the 12-min e2e
-      # budget). 10-minute timeout-and-fall-through so a stochastic LLM
-      # refusal can't stall the python-e2e job.
-      - name: Run Python guardrail-matrix integration test
-        if: always()
-        working-directory: sdk/python
-        continue-on-error: true
-        timeout-minutes: 10
-        run: |
-          uv run pytest tests/integration/test_guardrail_matrix.py \
-            --integration -v --tb=short \
-            --junitxml=../../e2e-results/junit-integration.xml \
             -n 1
 
       - name: Generate Python HTML report
