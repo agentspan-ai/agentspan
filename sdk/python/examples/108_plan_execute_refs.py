@@ -112,6 +112,42 @@ def main() -> None:
         result = runtime.run(harness, "demo", plan=plan, timeout=120)
         result.print_result()
 
+        # The harness's final outputParameters don't surface per-step worker
+        # results by default — print them explicitly so this example doubles
+        # as a proof that `Ref()` actually carried the upstream dicts.
+        _show_pipeline_outputs(result.execution_id)
+
+
+def _show_pipeline_outputs(execution_id: str) -> None:
+    """Walk into the plan_exec sub-workflow and dump the three step outputs."""
+    import json
+
+    import requests
+
+    base = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:6767/api")
+    base_url = base.rstrip("/").replace("/api", "")
+
+    parent = requests.get(
+        f"{base_url}/api/workflow/{execution_id}?includeTasks=true", timeout=10
+    ).json()
+    sub_id = None
+    for t in parent.get("tasks", []):
+        if t.get("referenceTaskName", "").endswith("_plan_exec"):
+            sub_id = (t.get("outputData") or {}).get("subWorkflowId")
+            break
+    if not sub_id:
+        return
+
+    sub = requests.get(
+        f"{base_url}/api/workflow/{sub_id}?includeTasks=true", timeout=10
+    ).json()
+    print("\n── pipeline trace (Ref data flow) ────────────────────────")
+    for t in sub.get("tasks", []):
+        name = t.get("taskDefName")
+        if name in ("produce", "enrich", "report"):
+            print(f"\n{name}:")
+            print(json.dumps(t.get("outputData", {}), indent=2))
+
 
 if __name__ == "__main__":
     main()
