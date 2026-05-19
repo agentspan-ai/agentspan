@@ -19,6 +19,7 @@ import (
 	"github.com/agentspan-ai/agentspan/cli/client"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -40,6 +41,32 @@ Run from the project directory containing agentspan.yaml.`,
 
 func init() {
 	agentCmd.AddCommand(agentBuildCmd)
+}
+
+// agentspanFullSpec is the complete agentspan.yaml shape needed for bundling.
+type agentspanFullSpec struct {
+	Metadata struct {
+		Customer  string `yaml:"customer"`
+		Cluster   string `yaml:"cluster"`
+		Namespace string `yaml:"namespace"`
+		Name      string `yaml:"name"`
+	} `yaml:"metadata"`
+	Spec struct {
+		Runtime    string   `yaml:"runtime"`
+		Entrypoint string   `yaml:"entrypoint"`
+		Install    string   `yaml:"install,omitempty"`
+		Env        []string `yaml:"env,omitempty"`
+		Egress     []string `yaml:"egress,omitempty"`
+	} `yaml:"spec"`
+}
+
+// fcManifest is the manifest.yaml embedded in the bundle for the Firecracker runner.
+type fcManifest struct {
+	Runtime    string   `yaml:"runtime"`
+	Entrypoint string   `yaml:"entrypoint"`
+	Install    string   `yaml:"install,omitempty"`
+	Env        []string `yaml:"env,omitempty"`
+	Egress     []string `yaml:"egress,omitempty"`
 }
 
 // bundleInfo holds metadata about a locally built bundle.
@@ -208,6 +235,30 @@ func handleBuildBundleTask(ctx context.Context, cc *client.ConductorClient, task
 // buildBundle packages the agent source into a tar.gz and returns a bundleInfo.
 // The caller is responsible for calling the returned cleanup function.
 func buildBundle(ctx context.Context, sourceDir string) (*bundleInfo, func(), error) {
+	// Parse full agentspan.yaml spec (needed for manifest.yaml in bundle).
+	data, err := os.ReadFile(filepath.Join(sourceDir, "agentspan.yaml"))
+	if err != nil {
+		return nil, nil, fmt.Errorf("read agentspan.yaml: %w", err)
+	}
+	var spec agentspanFullSpec
+	if err := yaml.Unmarshal(data, &spec); err != nil {
+		return nil, nil, fmt.Errorf("parse agentspan.yaml: %w", err)
+	}
+	if spec.Spec.Runtime == "" {
+		return nil, nil, fmt.Errorf("agentspan.yaml: spec.runtime is required")
+	}
+	if spec.Spec.Entrypoint == "" {
+		return nil, nil, fmt.Errorf("agentspan.yaml: spec.entrypoint is required")
+	}
+
+	manifest := &fcManifest{
+		Runtime:    spec.Spec.Runtime,
+		Entrypoint: spec.Spec.Entrypoint,
+		Install:    spec.Spec.Install,
+		Env:        spec.Spec.Env,
+		Egress:     spec.Spec.Egress,
+	}
+
 	tmpDir, err := os.MkdirTemp("", "agentspan-build-*")
 	if err != nil {
 		return nil, nil, fmt.Errorf("create temp dir: %w", err)
@@ -220,7 +271,6 @@ func buildBundle(ctx context.Context, sourceDir string) (*bundleInfo, func(), er
 		return nil, nil, fmt.Errorf("create lib dir: %w", err)
 	}
 
-	// Install dependencies using uv.
 	uv, err := findUVBinary()
 	if err != nil {
 		cleanup()
@@ -244,9 +294,8 @@ func buildBundle(ctx context.Context, sourceDir string) (*bundleInfo, func(), er
 		}
 	}
 
-	// Create tar.gz.
 	bundlePath := filepath.Join(tmpDir, "agent-bundle.tar.gz")
-	size, err := createBundle(sourceDir, libDir, bundlePath)
+	size, err := createBundle(sourceDir, libDir, bundlePath, manifest)
 	if err != nil {
 		cleanup()
 		return nil, nil, fmt.Errorf("create bundle: %w", err)
@@ -260,9 +309,9 @@ func buildBundle(ctx context.Context, sourceDir string) (*bundleInfo, func(), er
 	}, cleanup, nil
 }
 
-// createBundle builds a tar.gz from lib/ (dependencies) and the source files.
+// createBundle builds a tar.gz with manifest.yaml + lib/ + source files.
 // Returns the compressed size in bytes.
-func createBundle(sourceDir, libDir, outputPath string) (int64, error) {
+func createBundle(sourceDir, libDir, outputPath string, manifest *fcManifest) (int64, error) {
 	f, err := os.Create(outputPath)
 	if err != nil {
 		return 0, fmt.Errorf("create bundle file: %w", err)
@@ -272,7 +321,23 @@ func createBundle(sourceDir, libDir, outputPath string) (int64, error) {
 	gw := gzip.NewWriter(f)
 	tw := tar.NewWriter(gw)
 
-	// Add lib/ — installed dependencies.
+	// manifest.yaml — required by the Firecracker runner.
+	manifestBytes, err := yaml.Marshal(manifest)
+	if err != nil {
+		return 0, fmt.Errorf("marshal manifest.yaml: %w", err)
+	}
+	if err := tw.WriteHeader(&tar.Header{
+		Name: "manifest.yaml",
+		Mode: 0o644,
+		Size: int64(len(manifestBytes)),
+	}); err != nil {
+		return 0, fmt.Errorf("tar header manifest.yaml: %w", err)
+	}
+	if _, err := tw.Write(manifestBytes); err != nil {
+		return 0, fmt.Errorf("write manifest.yaml: %w", err)
+	}
+
+	// lib/ — installed dependencies.
 	if err := filepath.WalkDir(libDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
@@ -283,7 +348,7 @@ func createBundle(sourceDir, libDir, outputPath string) (int64, error) {
 		return 0, fmt.Errorf("walk lib dir: %w", err)
 	}
 
-	// Add source files.
+	// Source files.
 	skipDirs := map[string]bool{".git": true, "__pycache__": true, ".venv": true, "node_modules": true, "lib": true}
 	skipExts := map[string]bool{".pyc": true, ".pyo": true}
 	if err := filepath.WalkDir(sourceDir, func(path string, d fs.DirEntry, err error) error {
