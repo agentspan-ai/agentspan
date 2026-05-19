@@ -123,10 +123,15 @@ class Suite12HandoffApprove extends BaseTest {
      * heartbeat times out before COMPLETED arrives). The retry preserves
      * the hard assertion — we never accept a non-COMPLETED status — while
      * letting the test ride out a single slow LLM round.
+     *
+     * <p>The per-method {@code @Timeout} is bumped to 15 minutes so up to 3
+     * full ~5-minute attempts can run before the suite timeout fires.
+     * Without this, the previous 300s test timeout cut off the second
+     * retry mid-attempt — the failure pattern we kept seeing.
      */
     @Test
     @Order(2)
-    @Timeout(value = 300, unit = TimeUnit.SECONDS)
+    @Timeout(value = 900, unit = TimeUnit.SECONDS)
     void test_approve_with_event_completes_handoff_hitl() throws Exception {
         Throwable lastErr = null;
         final int maxAttempts = 3;
