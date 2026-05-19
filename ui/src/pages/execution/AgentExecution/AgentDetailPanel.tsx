@@ -242,11 +242,68 @@ function TagList({ items, color, bg, border }: { items: string[]; color: string;
   );
 }
 
+const TOOL_TYPE_BADGE: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  tool:  { label: "@tool", color: "#0369a1", bg: "#e0f2fe", border: "#7dd3fc" },
+  http:  { label: "HTTP",  color: "#6b7280", bg: "#f3f4f6", border: "#d1d5db" },
+  mcp:   { label: "MCP",   color: "#7c3aed", bg: "#ede9fe", border: "#c4b5fd" },
+  rag:   { label: "RAG",   color: "#0f766e", bg: "#ccfbf1", border: "#99f6e4" },
+};
+
+function getToolDescription(t: Record<string, unknown>): string | undefined {
+  const d = t.description ?? (t.function as any)?.description;
+  return typeof d === "string" && d ? d : undefined;
+}
+
+function ToolList({ tools, category }: { tools: Array<Record<string, unknown>>; category: string }) {
+  const badge = TOOL_TYPE_BADGE[category] ?? TOOL_TYPE_BADGE.tool;
+  return (
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+      {tools.slice(0, 20).map((t, i) => {
+        const name = getItemName(t);
+        const desc = getToolDescription(t);
+        return (
+          <Box key={i} sx={{
+            display: "flex", alignItems: "flex-start", gap: 1,
+            px: 1, py: 0.75, borderRadius: 1,
+            border: `1px solid ${badge.border}`, backgroundColor: badge.bg,
+          }}>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                <Typography sx={{ fontWeight: 600, fontSize: "0.78rem", color: badge.color, wordBreak: "break-word" }}>
+                  {name}
+                </Typography>
+              </Box>
+              {desc && (
+                <Typography sx={{ fontSize: "0.7rem", color: "text.secondary", lineHeight: 1.4, mt: 0.25 }}>
+                  {desc.length > 120 ? desc.slice(0, 120) + "…" : desc}
+                </Typography>
+              )}
+            </Box>
+            <Box sx={{
+              flexShrink: 0, px: 0.75, py: 0.15, borderRadius: 0.5,
+              backgroundColor: "#fff", border: `1px solid ${badge.border}`,
+              fontSize: "0.62rem", fontWeight: 700, color: badge.color,
+              letterSpacing: "0.03em",
+            }}>
+              {badge.label}
+            </Box>
+          </Box>
+        );
+      })}
+      {tools.length > 20 && (
+        <Box sx={{ fontSize: "0.72rem", color: "text.secondary", pl: 1 }}>+{tools.length - 20} more</Box>
+      )}
+    </Box>
+  );
+}
+
 /** Categorise a tool entry by its toolType field — delegates to shared utility */
 const toolCategory = toolCategoryForPanel;
 
-/** Compact card for an agent_tool entry (shows model + nested tools + instructions) */
+/** Compact card for an agent_tool entry (shows model + nested tools + instructions).
+ *  Expandable on click to show full instructions and all nested tools. */
 function AgentToolCard({ tool }: { tool: Record<string, unknown> }) {
+  const [expanded, setExpanded] = useState(false);
   const name = getItemName(tool);
   const agentConfig = (tool.config as any)?.agentConfig as Record<string, unknown> | undefined;
   const model = (agentConfig?.model ?? tool.model) as string | undefined;
@@ -254,38 +311,57 @@ function AgentToolCard({ tool }: { tool: Record<string, unknown> }) {
   const instructions = (agentConfig?.instructions) as string | undefined;
   const iconPath = getModelIconPath(model);
 
+  const maxInstr = expanded ? Infinity : 100;
+  const maxTools = expanded ? Infinity : 8;
+
   return (
-    <Box sx={{
-      border: "1px solid #d1d9f5", borderRadius: 1,
-      backgroundColor: "#f8f9ff", p: 1, mb: 0.5,
-    }}>
-      {/* Name + model */}
+    <Box
+      onClick={() => setExpanded(e => !e)}
+      sx={{
+        border: "2px solid #93c5fd", borderRadius: 1,
+        backgroundColor: "#f8f9ff", p: 1, mb: 0.5,
+        cursor: "pointer",
+        transition: "border-color 0.15s, box-shadow 0.15s",
+        "&:hover": { borderColor: "#4969e4", boxShadow: "0 1px 4px rgba(73,105,228,0.15)" },
+      }}
+    >
+      {/* Name + model + badge */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.25 }}>
-        <Typography sx={{ fontWeight: 600, fontSize: "0.78rem", color: "#4969e4" }}>{name}</Typography>
+        {iconPath && <img src={iconPath} style={{ width: 13, height: 13, objectFit: "contain", flexShrink: 0 }} alt="" />}
+        <Typography sx={{ fontWeight: 600, fontSize: "0.78rem", color: "#4969e4", flex: 1 }}>{name}</Typography>
         {model && (
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.4 }}>
-            {iconPath && <img src={iconPath} style={{ width: 11, height: 11, objectFit: "contain" }} alt="" />}
-            <Typography sx={{ fontSize: "0.68rem", color: "text.disabled" }}>{model}</Typography>
-          </Box>
+          <Typography sx={{ fontSize: "0.68rem", color: "text.disabled", flexShrink: 0 }}>{model}</Typography>
         )}
+        <Box sx={{
+          flexShrink: 0, px: 0.75, py: 0.15, borderRadius: 0.5,
+          backgroundColor: "#e8eeff", border: "1px solid #93c5fd",
+          fontSize: "0.62rem", fontWeight: 700, color: "#3d5fc0",
+          letterSpacing: "0.03em",
+        }}>
+          AGENT
+        </Box>
       </Box>
       {/* Instructions snippet */}
       {instructions && (
         <Typography sx={{ fontSize: "0.7rem", color: "text.secondary", lineHeight: 1.4, mb: nestedTools?.length ? 0.5 : 0 }}>
-          {instructions.slice(0, 100)}{instructions.length > 100 ? "…" : ""}
+          {instructions.length > maxInstr ? instructions.slice(0, maxInstr) + "…" : instructions}
         </Typography>
       )}
       {/* Nested tools */}
       {nestedTools && nestedTools.length > 0 && (
         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.4 }}>
-          {nestedTools.slice(0, 8).map((nt, i) => (
+          {nestedTools.slice(0, maxTools).map((nt, i) => (
             <Box key={i} sx={{ px: 0.5, py: 0.15, borderRadius: 0.5, backgroundColor: "#e8eeff", border: "1px solid #c7d2fc", fontSize: "0.66rem", color: "#6366f1" }}>
               {getItemName(nt)}
             </Box>
           ))}
-          {nestedTools.length > 8 && <Box sx={{ fontSize: "0.66rem", color: "text.disabled", alignSelf: "center" }}>+{nestedTools.length - 8}</Box>}
+          {!expanded && nestedTools.length > 8 && <Box sx={{ fontSize: "0.66rem", color: "text.disabled", alignSelf: "center" }}>+{nestedTools.length - 8}</Box>}
         </Box>
       )}
+      {/* Expand hint */}
+      <Typography sx={{ fontSize: "0.62rem", color: "text.disabled", mt: 0.5, textAlign: "right" }}>
+        {expanded ? "click to collapse" : "click to expand"}
+      </Typography>
     </Box>
   );
 }
@@ -396,7 +472,7 @@ function AgentDefSection({ agentDef }: { agentDef: Record<string, unknown> }) {
       {regularTools.length > 0 && (
         <SummaryRow
           label={`Tools (${regularTools.length})`}
-          value={<TagList items={regularTools.map(t => getItemName(t))} color="#4969e4" bg="#f0f4ff" border="#d1d9f5" />}
+          value={<ToolList tools={regularTools} category="tool" />}
         />
       )}
 
@@ -404,7 +480,7 @@ function AgentDefSection({ agentDef }: { agentDef: Record<string, unknown> }) {
       {httpTools.length > 0 && (
         <SummaryRow
           label={`HTTP (${httpTools.length})`}
-          value={<TagList items={httpTools.map(t => getItemName(t))} color="#0369a1" bg="#f0f9ff" border="#bae6fd" />}
+          value={<ToolList tools={httpTools} category="http" />}
         />
       )}
 
@@ -412,7 +488,7 @@ function AgentDefSection({ agentDef }: { agentDef: Record<string, unknown> }) {
       {mcpTools.length > 0 && (
         <SummaryRow
           label={`MCP (${mcpTools.length})`}
-          value={<TagList items={mcpTools.map(t => getItemName(t))} color="#7c3aed" bg="#faf5ff" border="#e9d5ff" />}
+          value={<ToolList tools={mcpTools} category="mcp" />}
         />
       )}
 
@@ -420,7 +496,7 @@ function AgentDefSection({ agentDef }: { agentDef: Record<string, unknown> }) {
       {ragTools.length > 0 && (
         <SummaryRow
           label={`RAG (${ragTools.length})`}
-          value={<TagList items={ragTools.map(t => getItemName(t))} color="#b45309" bg="#fffbeb" border="#fde68a" />}
+          value={<ToolList tools={ragTools} category="rag" />}
         />
       )}
 
