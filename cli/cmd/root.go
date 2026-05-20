@@ -58,7 +58,7 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&serverURL, "server", "", "Runtime server URL (default: http://localhost:6767)")
+	rootCmd.PersistentFlags().StringVar(&serverURL, "server", "", "Agentspan API URL (default: http://localhost:6767/api)")
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(tuiCmd)
 }

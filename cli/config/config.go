@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type Config struct {
@@ -78,6 +79,22 @@ func Load() *Config {
 	}
 	var fileCfg Config
 	if json.Unmarshal(data, &fileCfg) == nil {
+		// Backward compat: migrate old server_url (no /api) → agentspan_url (with /api).
+		if fileCfg.AgentspanURL == "" {
+			var raw map[string]json.RawMessage
+			if json.Unmarshal(data, &raw) == nil {
+				if v, ok := raw["server_url"]; ok {
+					var s string
+					if json.Unmarshal(v, &s) == nil && s != "" {
+						base := strings.TrimRight(s, "/")
+						if !strings.HasSuffix(base, "/api") {
+							base += "/api"
+						}
+						fileCfg.AgentspanURL = base
+					}
+				}
+			}
+		}
 		if cfg.AgentspanURL == DefaultAgentspanURL && fileCfg.AgentspanURL != "" {
 			cfg.AgentspanURL = fileCfg.AgentspanURL
 		}
