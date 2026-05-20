@@ -12,6 +12,59 @@ description: PLAN_EXECUTE compiles LLM-generated (or static) plans into determin
 
 The LLM is only invoked where it adds value (planning, per-op content generation). Orchestration, retries, parallelism, and validation are pure Conductor primitives — no token cost, no nondeterminism.
 
+## The deterministic boundary
+
+The whole point of PAC/PAE is to draw a hard line between the **non-deterministic part** (the planner LLM reasoning about *what to do*) and the **deterministic part** (Conductor running the compiled DAG). Once the plan is compiled, the executor is replay-safe, branch-stable, and free of LLM randomness.
+
+```mermaid
+flowchart TB
+    subgraph ND["LLM (non-deterministic)"]
+        direction LR
+        Planner["planner agent<br/>emits JSON plan"]
+    end
+
+    subgraph PAC["PAC compile step (server, pure function)"]
+        direction LR
+        ExtractJSON["extract_json<br/>(static_plan → markdown_plan → planSource)"]
+        Compile["compile to<br/>WorkflowDef"]
+        ExtractJSON --> Compile
+    end
+
+    subgraph DET["Conductor sub-workflow (deterministic)"]
+        direction LR
+        Setup["SET_VARIABLE<br/>_ctx_init"]
+        Fork["FORK_JOIN<br/>(parallel steps)"]
+        Join["JOIN<br/>(aggregate)"]
+        Validate["validation +<br/>SWITCH gate"]
+        Setup --> Fork --> Join --> Validate
+    end
+
+    Prompt[["user prompt"]] --> Planner
+    Planner -- "JSON plan in ```json fence```" --> ExtractJSON
+    Compile -- "workflowDef (Conductor JSON)" --> Setup
+
+    StaticPlan[["static_plan=<br/>(skip planner)"]] -.->|"Case 0:<br/>overrides LLM"| ExtractJSON
+    Validate -- pass --> Done(["COMPLETED"])
+    Validate -- fail --> Fallback{{"fallback agent?"}}
+    Fallback -- yes --> FallbackRun["LLM-loop recovery"]
+    Fallback -- no --> Failed(["FAILED"])
+
+    classDef llm fill:#fff3e0,stroke:#e65100,stroke-width:2px;
+    classDef pure fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px;
+    classDef det fill:#e3f2fd,stroke:#0d47a1,stroke-width:2px;
+    class Planner,FallbackRun llm;
+    class ExtractJSON,Compile pure;
+    class Setup,Fork,Join,Validate det;
+```
+
+**Why this shape gives you determinism:**
+
+- **One planner call, then we're done with the LLM.** The plan is a value; everything downstream is a function of that value. Two identical plans produce two identical workflow defs and two identical executions (modulo tool side effects).
+- **`Ref("step_id")` is resolved at compile time**, not at run time — there is no runtime "interpret-the-plan" loop that could diverge. The wire form (`{"$ref": "fetch"}`) becomes a Conductor template (`${fetch.output.result}`) once, in PAC.
+- **Branching is a SWITCH, not a re-prompt.** `success_condition` is a JS expression evaluated by Conductor's JavaScript engine — same input, same branch, every time.
+- **Parallelism is FORK_JOIN, not "ask the LLM to fan out".** A 5-section parallel report has exactly 5 branches, deterministically.
+- **`plan=` (static plan) bypasses the LLM entirely.** Workflow shape and execution are now fully determined by your code. Use this for tests, replays, or any pipeline where planning lives outside the agent.
+
 ## When to use it
 
 PLAN_EXECUTE wins when the work has **fixed structure but variable content**:
@@ -218,6 +271,54 @@ SIMPLE            (validator)
 INLINE            (val_eval — emits "passed"/"failed")
 SWITCH vsw        ("passed" → on_success, default → TERMINATE/on_failure)
 ```
+
+Visually, for a 3-section parallel-write plan with one validator:
+
+```mermaid
+flowchart TB
+    Start([start]) --> Init["SET_VARIABLE<br/>_ctx_init"]
+    Init --> Fork{{"FORK_JOIN"}}
+
+    Fork --> S1L["LLM_CHAT_COMPLETE<br/>section_1 generate"]
+    S1L --> S1P["INLINE<br/>parse JSON"]
+    S1P --> S1S{"SWITCH<br/>parse ok?"}
+    S1S -- ok --> S1T["SIMPLE<br/>write_file"]
+    S1S -- fail --> S1F["TERMINATE"]
+
+    Fork --> S2L["LLM_CHAT_COMPLETE<br/>section_2 generate"]
+    S2L --> S2P["INLINE<br/>parse JSON"]
+    S2P --> S2S{"SWITCH<br/>parse ok?"}
+    S2S -- ok --> S2T["SIMPLE<br/>write_file"]
+    S2S -- fail --> S2F["TERMINATE"]
+
+    Fork --> S3L["LLM_CHAT_COMPLETE<br/>section_3 generate"]
+    S3L --> S3P["INLINE<br/>parse JSON"]
+    S3P --> S3S{"SWITCH<br/>parse ok?"}
+    S3S -- ok --> S3T["SIMPLE<br/>write_file"]
+    S3S -- fail --> S3F["TERMINATE"]
+
+    S1T --> Join((JOIN))
+    S2T --> Join
+    S3T --> Join
+
+    Join --> Agg["INLINE<br/>step_output_write_all<br/>(Ref normaliser)"]
+    Agg --> Val["SIMPLE<br/>check_word_count"]
+    Val --> VEval["INLINE<br/>val_eval"]
+    VEval --> VSW{"SWITCH<br/>passed?"}
+    VSW -- passed --> OK([COMPLETED])
+    VSW -- failed --> Bad([TERMINATE / on_failure])
+
+    classDef llm fill:#fff3e0,stroke:#e65100;
+    classDef pure fill:#e8f5e9,stroke:#1b5e20;
+    classDef tool fill:#e3f2fd,stroke:#0d47a1;
+    classDef gate fill:#fce4ec,stroke:#880e4f;
+    class S1L,S2L,S3L llm;
+    class S1P,S2P,S3P,Agg,VEval,Init pure;
+    class S1T,S2T,S3T,Val tool;
+    class S1S,S2S,S3S,VSW,Fork,Join gate;
+```
+
+Only the orange `LLM_CHAT_COMPLETE` nodes are non-deterministic. Everything else — parse, gate, tool call, aggregate, validate, branch — is pure Conductor and replay-safe. With a **static plan** (`plan=` argument), the planner LLM call up-front is elided too, leaving a fully deterministic pipeline.
 
 The `## Available tools` block in the planner prompt and PAC's validator share the same source: `harness.tools`. A planner can't emit a tool name that PAC will reject (and PAC will reject anything not in the harness's set — closes the hallucinated-tool-name bug).
 
