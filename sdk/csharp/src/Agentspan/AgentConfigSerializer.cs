@@ -311,6 +311,7 @@ internal static class AgentConfigSerializer
     private static string StrategyToWire(Strategy strategy) => strategy switch
     {
         Strategy.RoundRobin => "round_robin",
+        Strategy.PlanExecute => "plan_execute",
         _ => strategy.ToString().ToLowerInvariant(),
     };
 

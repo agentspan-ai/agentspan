@@ -291,14 +291,15 @@ public sealed class Suite1_BasicValidation
 
         var cases = new (Strategy strategy, string expected)[]
         {
-            (Strategy.Handoff,    "handoff"),
-            (Strategy.Sequential, "sequential"),
-            (Strategy.Parallel,   "parallel"),
-            (Strategy.Router,     "router"),
-            (Strategy.RoundRobin, "round_robin"),
-            (Strategy.Random,     "random"),
-            (Strategy.Swarm,      "swarm"),
-            (Strategy.Manual,     "manual"),
+            (Strategy.Handoff,     "handoff"),
+            (Strategy.Sequential,  "sequential"),
+            (Strategy.Parallel,    "parallel"),
+            (Strategy.Router,      "router"),
+            (Strategy.RoundRobin,  "round_robin"),
+            (Strategy.Random,      "random"),
+            (Strategy.Swarm,       "swarm"),
+            (Strategy.Manual,      "manual"),
+            (Strategy.PlanExecute, "plan_execute"),
         };
 
         foreach (var (strategy, expected) in cases)
@@ -314,6 +315,15 @@ public sealed class Suite1_BasicValidation
                 {
                     Model = Settings.LlmModel, Agents = [c1, c2],
                     Strategy = strategy, Router = router,
+                };
+            }
+            else if (strategy == Strategy.PlanExecute)
+            {
+                // PlanExecute uses named slots (planner=) rather than agents=[…]
+                var planner = new Agent($"s1_strat_{expected}_planner") { Model = Settings.LlmModel };
+                parent = new Agent($"s1_strat_{expected}_parent")
+                {
+                    Model = Settings.LlmModel, Strategy = strategy, Planner = planner,
                 };
             }
             else

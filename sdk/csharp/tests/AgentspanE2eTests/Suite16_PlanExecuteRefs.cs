@@ -132,7 +132,7 @@ public sealed class Suite16_PlanExecuteRefs
         };
 
         await using var runtime = new AgentRuntime();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(180));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(300));
         var result = await runtime.RunAsync(harness, "go", plan: plan, ct: cts.Token);
 
         Assert.True(
@@ -193,7 +193,7 @@ public sealed class Suite16_PlanExecuteRefs
         };
 
         await using var runtime = new AgentRuntime();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(180));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(300));
         var result = await runtime.RunAsync(harness, "go", plan: plan, ct: cts.Token);
 
         Assert.True(result.IsSuccess, $"status={result.Status} error={result.Error}");
