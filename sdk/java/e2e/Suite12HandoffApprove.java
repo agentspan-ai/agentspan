@@ -65,14 +65,21 @@ class Suite12HandoffApprove extends BaseTest {
             .model(MODEL)
             .instructions("You run database statements. Use execute_sql when asked.")
             .tools(dbTools)
+            .maxTurns(2)
             .build();
 
+        // maxTurns(1) on the parent bounds the orchestrator's DO_WHILE: one
+        // LLM call routes the handoff and the loop exits. Without this,
+        // gpt-4o-mini sometimes decides to route a second time after the
+        // sub-agent replies, queueing another HUMAN approval that the test
+        // never sees — the workflow hangs until the JUnit timeout fires.
         return Agent.builder()
             .name(name)
             .model(MODEL)
-            .instructions("Route any database task to the dba sub-agent.")
+            .instructions("Route the database task to the dba sub-agent ONCE, then you are done.")
             .agents(dba)
             .strategy(Strategy.HANDOFF)
+            .maxTurns(1)
             .build();
     }
 
@@ -117,21 +124,18 @@ class Suite12HandoffApprove extends BaseTest {
      * Approving a {@code WAITING} event from a sub-agent must resume the
      * sub-execution and let the workflow run to completion.
      *
-     * <p>Retried on TimeoutException. This test reliably succeeds the first
-     * try locally but flakes on shared CI (gpt-4o-mini occasionally takes
-     * long enough on the sub-agent's response that the SSE event loop's
-     * heartbeat times out before COMPLETED arrives). The retry preserves
-     * the hard assertion — we never accept a non-COMPLETED status — while
-     * letting the test ride out a single slow LLM round.
-     *
-     * <p>The per-method {@code @Timeout} is bumped to 15 minutes so up to 3
-     * full ~5-minute attempts can run before the suite timeout fires.
-     * Without this, the previous 300s test timeout cut off the second
-     * retry mid-attempt — the failure pattern we kept seeing.
+     * <p>After approve, the resumed sub-execution emits its
+     * {@code TOOL_RESULT}/{@code DONE} events on a separate SSE channel from
+     * the one this test is subscribed to, so the original stream's blocking
+     * {@code getResult()} would wait until the HttpClient's 10-minute request
+     * timeout fired — which (a) eats the whole 900s test budget on a single
+     * attempt and (b) the retry loop never actually got a chance to run.
+     * The fix mirrors the TS Suite16 {@code test_hitl_approve_path} pattern:
+     * poll the workflow status via REST after approving.
      */
     @Test
     @Order(2)
-    @Timeout(value = 900, unit = TimeUnit.SECONDS)
+    @Timeout(value = 600, unit = TimeUnit.SECONDS)
     void test_approve_with_event_completes_handoff_hitl() throws Exception {
         Throwable lastErr = null;
         final int maxAttempts = 3;
@@ -139,11 +143,11 @@ class Suite12HandoffApprove extends BaseTest {
             try {
                 runApproveWithEventOnce();
                 return; // pass
-            } catch (java.util.concurrent.TimeoutException | org.opentest4j.AssertionFailedError e) {
+            } catch (RuntimeException | org.opentest4j.AssertionFailedError e) {
                 lastErr = e;
                 if (attempt < maxAttempts) {
-                    System.err.println("[Suite12 HITL] attempt " + attempt + " failed (" + e.getClass().getSimpleName()
-                        + "): " + e.getMessage() + " — retrying.");
+                    System.err.println("[Suite12 HITL] attempt " + attempt + " failed ("
+                        + e.getClass().getSimpleName() + "): " + e.getMessage() + " — retrying.");
                 }
             }
         }
@@ -167,7 +171,9 @@ class Suite12HandoffApprove extends BaseTest {
             }
             assertTrue(approved, "expected a WAITING event from the sub-agent's approval-required tool");
 
-            AgentResult result = stream.getResult();
+            // Poll the server-side workflow status instead of waiting on the
+            // original SSE stream, which won't see the post-approve resume.
+            AgentResult result = stream.waitForResult(180_000, 1_000);
             assertEquals(AgentStatus.COMPLETED, result.getStatus(),
                 "workflow did not complete after approve(event). status=" + result.getStatus()
                 + " error=" + result.getError());
