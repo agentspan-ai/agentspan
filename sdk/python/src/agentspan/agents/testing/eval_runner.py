@@ -37,7 +37,10 @@ Usage::
 
 from __future__ import annotations
 
+import logging
+import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from agentspan.agents.result import AgentResult, EventType
@@ -52,6 +55,8 @@ from agentspan.agents.testing.assertions import (
     assert_tool_used,
 )
 from agentspan.agents.testing.strategy_validators import validate_strategy
+
+logger = logging.getLogger("agentspan.agents.testing.eval_runner")
 
 # ── Eval case definition ───────────────────────────────────────────────
 
@@ -108,6 +113,7 @@ class EvalCase:
 
     # Metadata
     tags: List[str] = field(default_factory=list)
+    semantic_criteria: Optional[str] = None
 
 
 # ── Eval results ───────────────────────────────────────────────────────
@@ -120,6 +126,17 @@ class EvalCheckResult:
     check: str
     passed: bool
     message: str = ""
+    # Populated by semantic (LLM-judge) assertions; None for deterministic checks.
+    score: Optional[float] = None
+    reasoning: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {"check": self.check, "passed": self.passed, "message": self.message}
+        if self.score is not None:
+            d["score"] = self.score
+        if self.reasoning is not None:
+            d["reasoning"] = self.reasoning
+        return d
 
 
 @dataclass
@@ -132,6 +149,25 @@ class EvalCaseResult:
     result: Optional[AgentResult] = None
     error: Optional[str] = None
     tags: List[str] = field(default_factory=list)
+    agent_name: str = ""
+    model: str = ""
+    prompt: str = ""
+    output: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {
+            "name": self.name,
+            "passed": self.passed,
+            "error": self.error,
+            "tags": self.tags,
+            "agentName": self.agent_name,
+            "model": self.model,
+            "prompt": self.prompt,
+            "checks": [c.to_dict() for c in self.checks],
+        }
+        if self.output is not None:
+            d["output"] = self.output
+        return d
 
 
 @dataclass
@@ -139,6 +175,13 @@ class EvalSuiteResult:
     """Aggregated results from running a suite of eval cases."""
 
     cases: List[EvalCaseResult] = field(default_factory=list)
+    eval_run_id: str = ""
+    agent_name: str = ""
+    timestamp: str = ""
+    suite_tags: List[str] = field(default_factory=list)
+    name: Optional[str] = None
+    strategy: Optional[str] = None
+    ran_by: Optional[str] = None
 
     @property
     def all_passed(self) -> bool:
@@ -182,6 +225,24 @@ class EvalSuiteResult:
         """Return only the failed cases."""
         return [c for c in self.cases if not c.passed]
 
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {
+            "id": self.eval_run_id,
+            "agentName": self.agent_name,
+            "timestamp": self.timestamp,
+            "totalCases": self.total,
+            "passedCases": self.pass_count,
+            "tags": self.suite_tags,
+            "cases": [c.to_dict() for c in self.cases],
+        }
+        if self.name is not None:
+            d["name"] = self.name
+        if self.strategy is not None:
+            d["strategy"] = self.strategy
+        if self.ran_by is not None:
+            d["ranBy"] = self.ran_by
+        return d
+
 
 # ── Eval runner ────────────────────────────────────────────────────────
 
@@ -202,40 +263,95 @@ class CorrectnessEval:
         cases: Sequence[EvalCase],
         *,
         tags: Optional[List[str]] = None,
+        suite_tags: Optional[List[str]] = None,
+        name: Optional[str] = None,
+        strategy: Optional[str] = None,
+        ran_by: Optional[str] = None,
     ) -> EvalSuiteResult:
         """Run all eval cases and return aggregated results.
 
         Args:
             cases: List of :class:`EvalCase` definitions.
             tags: If provided, only run cases with at least one matching tag.
+            suite_tags: Optional tags to attach to the eval suite result.
 
         Returns:
             An :class:`EvalSuiteResult` with per-case and aggregated results.
         """
-        suite = EvalSuiteResult()
+        eval_run_id = str(uuid.uuid4())
+        eval_session_id = f"eval:{eval_run_id}"
+        timestamp = datetime.now(timezone.utc).isoformat()
+
+        # Determine the primary agent name from the first case
+        agent_name = ""
+        for case in cases:
+            try:
+                agent_name = case.agent.name
+            except AttributeError:
+                pass
+            if agent_name:
+                break
+
+        suite = EvalSuiteResult(
+            eval_run_id=eval_run_id,
+            agent_name=agent_name,
+            timestamp=timestamp,
+            suite_tags=suite_tags or [],
+            name=name,
+            strategy=strategy,
+            ran_by=ran_by,
+        )
 
         for case in cases:
             if tags and not set(tags) & set(case.tags):
                 continue
-            case_result = self._run_case(case)
+            case_result = self._run_case(case, eval_session_id=eval_session_id)
             suite.cases.append(case_result)
 
+        self._post_eval_result(suite)
         return suite
 
-    def _run_case(self, case: EvalCase) -> EvalCaseResult:
+    def _post_eval_result(self, suite: EvalSuiteResult) -> None:
+        """Send eval suite result to server (best-effort, never raises)."""
+        try:
+            post_fn = getattr(self._runtime, "_post_eval_run", None)
+            if post_fn is not None:
+                post_fn(suite.to_dict())
+        except Exception as exc:
+            logger.warning("Failed to post eval result to server: %s", exc)
+
+    def _run_case(self, case: EvalCase, *, eval_session_id: str = "") -> EvalCaseResult:
         """Run a single eval case."""
         checks: List[EvalCheckResult] = []
         agent_result: Optional[AgentResult] = None
 
-        # Execute the agent
+        agent_name = ""
         try:
-            agent_result = self._runtime.run(case.agent, case.prompt)
+            agent_name = case.agent.name
+        except AttributeError:
+            pass
+
+        # Tag with eval session_id so server can filter these from production views.
+        # Pass session_id only when the runtime supports it (real AgentRuntime does;
+        # test stubs may not) to avoid breaking existing usage.
+        try:
+            if eval_session_id:
+                try:
+                    agent_result = self._runtime.run(
+                        case.agent, case.prompt, session_id=eval_session_id
+                    )
+                except TypeError:
+                    agent_result = self._runtime.run(case.agent, case.prompt)
+            else:
+                agent_result = self._runtime.run(case.agent, case.prompt)
         except Exception as exc:
             return EvalCaseResult(
                 name=case.name,
                 passed=False,
                 error=f"Agent execution failed: {exc}",
                 tags=case.tags,
+                agent_name=agent_name,
+                prompt=case.prompt,
             )
 
         # Run all checks
@@ -284,11 +400,11 @@ class CorrectnessEval:
             )
 
         if case.expect_no_handoff_to:
-            for agent_name in case.expect_no_handoff_to:
+            for no_handoff_agent in case.expect_no_handoff_to:
                 checks.append(
                     self._check(
-                        f"no_handoff_to:{agent_name}",
-                        lambda an=agent_name: _assert_no_handoff(agent_result, an),
+                        f"no_handoff_to:{no_handoff_agent}",
+                        lambda an=no_handoff_agent: _assert_no_handoff(agent_result, an),
                     )
                 )
 
@@ -323,12 +439,18 @@ class CorrectnessEval:
             checks.append(self._check(f"custom_{i}", lambda fn=custom_fn: fn(agent_result)))
 
         passed = all(c.passed for c in checks)
+        output = getattr(agent_result, "output", None)
+        if output is None:
+            output = getattr(agent_result, "text", None)
         return EvalCaseResult(
             name=case.name,
             passed=passed,
             checks=checks,
             result=agent_result,
             tags=case.tags,
+            agent_name=agent_name,
+            prompt=case.prompt,
+            output=str(output) if output is not None else None,
         )
 
     @staticmethod

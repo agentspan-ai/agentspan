@@ -51,6 +51,7 @@ export interface SearchObj {
   freeText?: string;
   query?: string;
   queryId?: string;
+  includeEvalRuns?: boolean;
 }
 
 export interface TaskSearchObj extends Omit<SearchObj, "page"> {
@@ -214,7 +215,7 @@ export function useSearch<T = any>(
   return useQuery<T, FetchError>(
     [fetchContext.stack, pathRoot, searchObj],
     () => {
-      const { rowsPerPage, page, sort, freeText, query } = searchObj;
+      const { rowsPerPage, page, sort, freeText, query, includeEvalRuns } = searchObj;
       let params: IObject = {
         start: (page - 1) * rowsPerPage,
         size: rowsPerPage,
@@ -222,6 +223,9 @@ export function useSearch<T = any>(
         freeText: freeText,
         query: query,
       };
+      if (includeEvalRuns) {
+        params = { ...params, includeEvalRuns: true };
+      }
       if (searchObj.queryId) {
         params = { queryId: searchObj.queryId, ...params };
       }

@@ -256,6 +256,35 @@ class AgentHttpClient:
             elif line.startswith("data:"):
                 data_lines.append(line[5:].strip())
 
+    # ── Eval API endpoints ───────────────────────────────────────────
+
+    def _eval_url(self, path: str) -> str:
+        return f"{self._server_url}/eval{path}"
+
+    async def post_eval_run(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """POST /eval/runs — submit an eval suite result."""
+        client = await self._get_client()
+        url = self._eval_url("/runs")
+        resp = await client.post(url, json=payload)
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            _raise_api_error(exc, url=url)
+        return resp.json() if resp.content else {}
+
+    async def push_dataset(self, name: str, cases: List[Dict[str, Any]], *, pushed_by: Optional[str] = None) -> None:
+        """POST /eval/datasets — upsert a dataset by name."""
+        client = await self._get_client()
+        url = self._eval_url("/datasets")
+        payload: Dict[str, Any] = {"name": name, "cases": cases}
+        if pushed_by is not None:
+            payload["pushedBy"] = pushed_by
+        resp = await client.post(url, json=payload)
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            _raise_api_error(exc, url=url)
+
     # ── Lifecycle ────────────────────────────────────────────────────
 
     async def close(self) -> None:

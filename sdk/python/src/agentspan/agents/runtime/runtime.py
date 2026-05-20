@@ -4647,6 +4647,60 @@ class AgentRuntime:
 
         return AgentHandle(execution_id=execution_id, runtime=self, correlation_id=correlation_id)
 
+    # ── Eval observability ─────────────────────────────────────────────
+
+    def _post_eval_run(self, payload: "Dict[str, Any]") -> None:
+        """Send an eval suite result to the server (best-effort, sync wrapper)."""
+        if self._http is None:
+            return
+        try:
+            self._run_sync(self._http.post_eval_run(payload))
+        except Exception as exc:
+            import logging as _log
+            _log.getLogger("agentspan.agents.runtime.runtime").warning(
+                "Failed to POST eval run to server: %s", exc
+            )
+
+    def push_dataset(self, name: str, cases: "List[Any]", *, pushed_by: "Optional[str]" = None) -> None:
+        """Push a named eval dataset to the server.
+
+        Args:
+            name: Dataset name (unique identifier).
+            cases: List of :class:`EvalCase` objects to store.
+            pushed_by: Optional username or script name to record as the pusher.
+        """
+        if self._http is None:
+            raise RuntimeError("push_dataset requires a server connection")
+
+        serialized = []
+        for c in cases:
+            item: "Dict[str, Any]" = {"name": getattr(c, "name", ""), "prompt": getattr(c, "prompt", "")}
+            tags = getattr(c, "tags", [])
+            if tags:
+                item["tags"] = tags
+            # Assertions summary
+            assertions: "List[str]" = []
+            if getattr(c, "expect_tools", None):
+                for t in c.expect_tools:
+                    assertions.append(f"tool_used:{t}")
+            if getattr(c, "expect_tools_not_used", None):
+                for t in c.expect_tools_not_used:
+                    assertions.append(f"tool_not_used:{t}")
+            if getattr(c, "expect_handoff_to", None):
+                assertions.append(f"handoff_to:{c.expect_handoff_to}")
+            if getattr(c, "expect_output_contains", None):
+                for text in c.expect_output_contains:
+                    assertions.append(f"output_contains:{text}")
+            if getattr(c, "expect_status", None) and c.expect_status != "COMPLETED":
+                assertions.append(f"status:{c.expect_status}")
+            item["assertions"] = assertions
+            semantic = getattr(c, "semantic_criteria", None)
+            if semantic:
+                item["semanticCriteria"] = semantic
+            serialized.append(item)
+
+        self._run_sync(self._http.push_dataset(name, serialized, pushed_by=pushed_by))
+
     # ── Lifecycle ─────────────────────────────────────────────────────
 
     def shutdown(self) -> None:

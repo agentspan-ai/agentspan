@@ -89,6 +89,18 @@ public class SkillNormalizer implements AgentConfigNormalizer {
         orchestrator.setModel(model);
         orchestrator.setInstructions(body);
         orchestrator.setDescription(description);
+        Integer maxTurns = asInteger(rawConfig.get("maxTurns"));
+        if (maxTurns != null && maxTurns > 0) {
+            orchestrator.setMaxTurns(maxTurns);
+        }
+        Integer maxTokens = asInteger(rawConfig.get("maxTokens"));
+        if (maxTokens != null && maxTokens > 0) {
+            orchestrator.setMaxTokens(maxTokens);
+        }
+        Integer timeoutSeconds = asInteger(rawConfig.get("timeoutSeconds"));
+        if (timeoutSeconds != null && timeoutSeconds >= 0) {
+            orchestrator.setTimeoutSeconds(timeoutSeconds);
+        }
 
         // Pass through metadata
         if (frontmatter.containsKey("metadata")) {
@@ -367,5 +379,19 @@ public class SkillNormalizer implements AgentConfigNormalizer {
                 .replaceAll("-+", "-");
         // Remove leading/trailing hyphens
         return slug.replaceAll("^-+|-+$", "");
+    }
+
+    private Integer asInteger(Object value) {
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        if (value instanceof String) {
+            try {
+                return Integer.parseInt((String) value);
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
     }
 }

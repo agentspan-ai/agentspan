@@ -13,6 +13,7 @@ import CodeIcon from "@mui/icons-material/Code";
 import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined";
 import PlayIcon from "@mui/icons-material/PlayArrowOutlined";
 import PlaylistPlayIcon from "@mui/icons-material/PlaylistPlay";
+import ScienceOutlinedIcon from "@mui/icons-material/ScienceOutlined";
 import WebhookOutlinedIcon from "@mui/icons-material/WebhookOutlined";
 import RunAgentButton from "components/Sidebar/RunAgentButton";
 import DiscordIcon from "components/Sidebar/DiscordIcon";
@@ -20,6 +21,7 @@ import { MenuItemType } from "components/Sidebar/types";
 
 import {
   CREDENTIALS_URL,
+  EXPERIMENTS_URL,
   RUN_AGENT_URL,
   TASK_QUEUE_URL,
   AGENT_DEFINITION_URL,
@@ -37,6 +39,7 @@ const CORE_SIDEBAR_POSITIONS = {
     executionsSubMenu: 100,
     runWorkflow: 200,
     definitionsSubMenu: 300,
+    experimentsSubMenu: 400,
     swaggerItem: 500,
     docsItem: 600,
     discordItem: 700,
@@ -51,6 +54,11 @@ const CORE_SIDEBAR_POSITIONS = {
     workflowDefItem: 100,
     credentialsItem: 200,
   },
+  // Experiments submenu children
+  EXPERIMENTS: {
+    evalRunsItem: 100,
+    datasetsItem: 200,
+  },
 } as const;
 
 /**
@@ -62,6 +70,7 @@ export function getCoreSidebarItems(open: boolean): MenuItemType[] {
   const R = CORE_SIDEBAR_POSITIONS.ROOT;
   const E = CORE_SIDEBAR_POSITIONS.EXECUTIONS;
   const D = CORE_SIDEBAR_POSITIONS.DEFINITIONS;
+  const X = CORE_SIDEBAR_POSITIONS.EXPERIMENTS;
 
   return [
     // Executions submenu - core items only
@@ -143,6 +152,41 @@ export function getCoreSidebarItems(open: boolean): MenuItemType[] {
           hotkeys: "",
           hidden: false,
           position: D.credentialsItem,
+        },
+      ],
+    },
+    // Experiments submenu
+    {
+      id: "experimentsSubMenu",
+      title: "Experiments",
+      icon: <ScienceOutlinedIcon />,
+      linkTo: "",
+      shortcuts: [],
+      hotkeys: "",
+      hidden: false,
+      position: R.experimentsSubMenu,
+      items: [
+        {
+          id: "evalRunsItem",
+          title: "Eval Runs",
+          icon: null,
+          linkTo: EXPERIMENTS_URL.EVAL_RUNS,
+          activeRoutes: [EXPERIMENTS_URL.EVAL_RUN_DETAIL],
+          shortcuts: [],
+          hotkeys: "",
+          hidden: false,
+          position: X.evalRunsItem,
+        },
+        {
+          id: "datasetsItem",
+          title: "Datasets",
+          icon: null,
+          linkTo: EXPERIMENTS_URL.DATASETS,
+          activeRoutes: [EXPERIMENTS_URL.DATASET_DETAIL],
+          shortcuts: [],
+          hotkeys: "",
+          hidden: false,
+          position: X.datasetsItem,
         },
       ],
     },
