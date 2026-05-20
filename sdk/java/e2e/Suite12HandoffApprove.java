@@ -180,8 +180,8 @@ class Suite12HandoffApprove extends BaseTest {
                 () -> stream.approve(eventWithNoId));
 
             assertNotNull(thrown.getMessage());
-            assertTrue(thrown.getMessage().contains("workflow id"),
-                "exception should mention the missing workflow id, got: " + thrown.getMessage());
+            assertTrue(thrown.getMessage().contains("execution id"),
+                "exception should mention the missing execution id, got: " + thrown.getMessage());
         }
     }
 }
