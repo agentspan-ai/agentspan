@@ -24,8 +24,8 @@ import java.util.List;
  * {@code dba} sub-workflow, not the orchestrator's workflow.
  *
  * <p>The {@code WAITING} SSE event from the sub-workflow carries that
- * sub-workflow's id in its {@code workflowId} field; the SDK uses it to POST
- * {@code /api/agent/{subWorkflowId}/respond} when {@link AgentStream#approve()}
+ * sub-workflow's id in its {@code executionId} field; the SDK uses it to POST
+ * {@code /api/agent/{executionId}/respond} when {@link AgentStream#approve()}
  * is called. No manual task-tree walking required from the user.
  *
  * <p>Run against a server with an LLM provider configured (e.g. {@code
@@ -67,8 +67,8 @@ public class Example09bHandoffHumanInTheLoop {
             AgentStream stream = runtime.stream(support,
                 "Please run: UPDATE users SET active = true WHERE id = 1");
 
-            String topWorkflowId = stream.getWorkflowId();
-            System.out.println("Top-level workflow id: " + topWorkflowId);
+            String topExecutionId = stream.getExecutionId();
+            System.out.println("Top-level execution id: " + topExecutionId);
 
             for (AgentEvent event : stream) {
                 EventType type = event.getType();
@@ -78,14 +78,14 @@ public class Example09bHandoffHumanInTheLoop {
                     System.out.println("[TOOL_CALL] " + event.getToolName()
                         + " " + event.getArgs());
                 } else if (type == EventType.WAITING) {
-                    // event.workflowId is the SUB-execution id when the HUMAN task lives
+                    // event.executionId is the SUB-execution id when the HUMAN task lives
                     // in a sub-agent (handoff/sequential/parallel). Pass the event to
                     // approve() so the SDK POSTs /respond to the right execution.
                     // (stream.approve() with no args targets the top-level execution and
                     // would 500 here.)
-                    System.out.println("[WAITING] event.workflowId=" + event.getWorkflowId()
+                    System.out.println("[WAITING] event.executionId=" + event.getExecutionId()
                         + " (the sub-execution that owns the HUMAN task)");
-                    System.out.println("          stream.workflowId=" + topWorkflowId
+                    System.out.println("          stream.executionId=" + topExecutionId
                         + " (top-level orchestrator — approve() with no args would 500 here)");
                     System.out.println("Calling stream.approve(event)...");
                     stream.approve(event);

@@ -16,23 +16,23 @@ import java.util.Map;
  */
 public class ToolContext {
     private final String sessionId;
-    private final String workflowId;
+    private final String executionId;
     private final String taskId;
     private final Map<String, Object> state;
 
-    public ToolContext(String sessionId, String workflowId, String taskId) {
-        this(sessionId, workflowId, taskId, new HashMap<>());
+    public ToolContext(String sessionId, String executionId, String taskId) {
+        this(sessionId, executionId, taskId, new HashMap<>());
     }
 
-    public ToolContext(String sessionId, String workflowId, String taskId, Map<String, Object> initialState) {
+    public ToolContext(String sessionId, String executionId, String taskId, Map<String, Object> initialState) {
         this.sessionId = sessionId;
-        this.workflowId = workflowId;
+        this.executionId = executionId;
         this.taskId = taskId;
         this.state = initialState != null ? new HashMap<>(initialState) : new HashMap<>();
     }
 
     public String getSessionId() { return sessionId; }
-    public String getWorkflowId() { return workflowId; }
+    public String getExecutionId() { return executionId; }
     public String getTaskId() { return taskId; }
 
     /**

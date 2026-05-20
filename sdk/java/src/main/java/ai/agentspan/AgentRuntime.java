@@ -173,10 +173,10 @@ public class AgentRuntime implements AutoCloseable {
             logger.debug("Starting agent '{}' with prompt: {}", agent.getName(), prompt);
 
             Map<String, Object> response = httpApi.startAgent(agentConfig, prompt, sessionId, runId);
-            String workflowId = extractWorkflowId(response);
+            String executionId = extractExecutionId(response);
 
-            logger.info("Agent '{}' started with workflow ID: {}", agent.getName(), workflowId);
-            return new AgentHandle(workflowId, httpApi);
+            logger.info("Agent '{}' started with execution ID: {}", agent.getName(), executionId);
+            return new AgentHandle(executionId, httpApi);
         });
     }
 
@@ -208,13 +208,13 @@ public class AgentRuntime implements AutoCloseable {
         workerManager.startAll();
 
         return startAsync(agent, prompt).thenApply(handle -> {
-            String workflowId = handle.getWorkflowId();
-            String sseUrl = config.getServerUrl() + "/api/agent/stream/" + workflowId;
+            String executionId = handle.getExecutionId();
+            String sseUrl = config.getServerUrl() + "/api/agent/stream/" + executionId;
 
             SseClient sseClient = new SseClient(sseUrl, config, httpApi.getHttpClient());
             sseClient.connect();
 
-            return new AgentStream(workflowId, sseClient, httpApi);
+            return new AgentStream(executionId, sseClient, httpApi);
         });
     }
 
@@ -744,11 +744,11 @@ public class AgentRuntime implements AutoCloseable {
         return result;
     }
 
-    private String extractWorkflowId(Map<String, Object> response) {
-        // Try several possible keys — server renamed workflowId → executionId
+    private String extractExecutionId(Map<String, Object> response) {
         Object id = response.get("executionId");
         if (id != null) return id.toString();
 
+        // Legacy fallback — older server versions may still return workflowId
         id = response.get("workflowId");
         if (id != null) return id.toString();
 
@@ -758,11 +758,10 @@ public class AgentRuntime implements AutoCloseable {
         id = response.get("correlationId");
         if (id != null) return id.toString();
 
-        // If only one value in the map, use it
         if (response.size() == 1) {
             return response.values().iterator().next().toString();
         }
 
-        throw new RuntimeException("Cannot extract workflow ID from response: " + response);
+        throw new RuntimeException("Cannot extract execution ID from response: " + response);
     }
 }
